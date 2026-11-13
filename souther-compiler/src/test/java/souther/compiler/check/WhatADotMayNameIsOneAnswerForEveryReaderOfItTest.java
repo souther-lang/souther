@@ -264,9 +264,17 @@ class WhatADotMayNameIsOneAnswerForEveryReaderOfItTest {
             // Resolved and not checked, which is the state these readings are made in: the check
             // refuses the module, and an editor is looking at it while it does.
             Compilation c = Compilation.ofSource(each[1], "Main");
+            List<String> refusedWith = codesOfRefusing(c);
             Symbols scope = Scopes.derived(c.db(), "demo").value();
             Type position = Type.ref(TypeSymbols.declared(new TypeKey("demo", each[0])));
             FieldTypes text = new ResolvedFieldTypes(scope, ScopedDeclarations.wrapsOf(scope));
+            CompileException checked = assertThrows(CompileException.class,
+                    () -> new FieldRead(scope, ScopedDeclarations.sumsOf(scope),
+                            ScopedDeclarations.kindsOf(scope), text, FieldRead.Unreadable.REFUSED)
+                            .at(position));
+            assertTrue(refusedWith.contains(checked.code()),
+                    () -> "the module is refused for what the check's reading refuses: "
+                            + refusedWith);
 
             assertEquals(Map.of(),
                     new FieldRead(scope, ScopedDeclarations.sumsOf(scope), ScopedDeclarations.kindsOf(scope), text,FieldRead.Unreadable.MAKES_NOTHING_READABLE)
@@ -293,12 +301,25 @@ class WhatADotMayNameIsOneAnswerForEveryReaderOfItTest {
                 module demo
                 data A = { x: Int, x: String }
                 """, "Main");
+        assertEquals(List.of("E1011"), codesOfRefusing(c),
+                "the declaration does not read, and is refused");
         Type a = Type.ref(TypeSymbols.declared(new TypeKey("demo", "A")));
         assertEquals(Map.of(),
                 SemanticSnapshot.of(c.db(), "demo").orElseThrow()
                         .fieldsOf(new TypeFact(a, new Evidence.Declared())),
                 "an author writing `.` after a declaration that does not read is told nothing,"
                         + " rather than the buffer refusing to answer");
+    }
+
+    /** The codes a model that does not read is refused with, whether answering it reports them or
+     *  throws the first. */
+    private static List<String> codesOfRefusing(Compilation compilation) {
+        try {
+            compilation.answerEverything();
+        } catch (CompileException refused) {
+            return List.of(refused.code());
+        }
+        return compilation.errors().stream().map(e -> e.diagnostic().code()).toList();
     }
 
     /** A behavior reading the shared name off the sum and answering with {@code answers}. */

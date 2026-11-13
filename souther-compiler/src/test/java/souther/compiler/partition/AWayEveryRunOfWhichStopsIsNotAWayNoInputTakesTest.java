@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.ElementBindings;
@@ -112,7 +113,7 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
 
     @Test
     void aWayEveryInputOfWhichAConstructionRefusesStopsThere() {
-        Compilation bodies = Compilation.ofSource(BODIES, "Main");
+        Compilation bodies = ACompiledModel.answered(BODIES);
         DecisionReading read = readUnderTheOtherRules(bodies, "one");
 
         assertEquals(List.of(), read.impossible(), "some input brings `n > 5` out true");
@@ -127,7 +128,7 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
     /** Of two constructions on the way, the one its inputs get past is not said. */
     @Test
     void ofTwoConstructionsOnAWayOnlyTheOneEveryRunStopsAtIsNamed() {
-        Compilation bodies = Compilation.ofSource(BODIES, "Main");
+        Compilation bodies = ACompiledModel.answered(BODIES);
         DecisionReading read = readUnderTheOtherRules(bodies, "two");
 
         assertEquals(1, read.everyRunStops().size(), () -> "one way: " + read.everyRunStops());
@@ -139,7 +140,7 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
      *  other holds of every one of them. */
     @Test
     void ofTwoClausesOfAConstructionOnlyTheOneTheWayBreaksIsNamed() {
-        Compilation bodies = Compilation.ofSource(BODIES, "Main");
+        Compilation bodies = ACompiledModel.answered(BODIES);
         DecisionReading read = readUnderTheOtherRules(bodies, "three");
 
         assertEquals(1, read.everyRunStops().size(), () -> "one way: " + read.everyRunStops());
@@ -154,7 +155,7 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
      *  the least proof is had without the construction. */
     @Test
     void aWayWhoseConditionsClashIsOneNoInputTakesWhateverItGoesThrough() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module demo
 
                 data Positive = { n: Int }
@@ -165,7 +166,7 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
                 behavior c : (n: Int) -> Positive | No
                     constructs Positive
                 let c (n) = if n < 0 && n > 0 then Positive { n = n } else No
-                """, "Main");
+                """);
         DecisionReading read = readingOf(compilation, RuleReadings.of(compilation, "demo"), "c");
 
         assertEquals(List.of(), read.everyRunStops());
@@ -182,7 +183,7 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
      */
     @Test
     void aWayWhoseSmallerProofTheFigureLeftUnansweredIsUndecided() {
-        Compilation bodies = Compilation.ofSource(BODIES, "Main");
+        Compilation bodies = ACompiledModel.answered(BODIES);
         Allowances allowing = Allowances.DECLARED
                 .with(CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE, SPENT_AT);
         DecisionReading read = allowing.over(() -> readUnderTheOtherRules(bodies, "two"));
@@ -221,7 +222,7 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
 
     /** The body of {@code behavior} of {@link #BODIES}, read under the rules of {@link #RULES}. */
     private static DecisionReading readUnderTheOtherRules(Compilation bodies, String behavior) {
-        Compilation rules = Compilation.ofSource(RULES, "Main");
+        Compilation rules = ACompiledModel.answered(RULES);
         return readingOf(bodies, RuleReadings.of(rules, "demo"), behavior);
     }
 

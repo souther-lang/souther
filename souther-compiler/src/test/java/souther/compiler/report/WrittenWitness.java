@@ -1,6 +1,5 @@
 package souther.compiler.report;
 
-import souther.compiler.diag.Severity;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -53,9 +52,7 @@ final class WrittenWitness {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
 
-        List<String> refused = compilation.diagnostics().values().stream()
-                .flatMap(List::stream)
-                .filter(each -> each.diagnostic().severity() == Severity.ERROR)
+        List<String> refused = compilation.errors().stream()
                 .map(each -> each.diagnostic().code().toString())
                 .sorted()
                 .toList();

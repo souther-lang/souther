@@ -92,6 +92,8 @@ class ABoundaryIsAValueTheRecordCanHoldTest {
                 souther.compiler.query.Compilation.ofSource(model, "Main");
         compilation.measure(souther.compiler.query.Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "the model compiles");
         String module = compilation.modules().get(0);
         java.util.Map<String, List<souther.compiler.query.BorderAssessment>> borders =
                 // The searched reading, which is what the report is written from: whether a value

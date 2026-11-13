@@ -6,6 +6,9 @@ import souther.compiler.query.Db;
 import souther.compiler.query.Shapes;
 import souther.compiler.types.TypeSymbol;
 
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -27,8 +30,29 @@ public final class RuleReadings {
     /** The reading of the one module {@code source} writes, for a test that has the text and no
      *  compilation of its own. */
     public static RuleReadingSource ofSource(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = compiled(source);
         return of(compilation, compilation.modules().get(0));
+    }
+
+    /**
+     * {@code source} compiled and answered in full. A declaration no value satisfies is refused,
+     * and a test about the rules of one is let be; any other refusal is a model whose declarations
+     * were never read.
+     */
+    private static Compilation compiled(String source) {
+        return compiled(source, List.of());
+    }
+
+    /** The same, with {@code alsoRefusedWith} the codes of refusals the test lets be as well. */
+    private static Compilation compiled(String source, List<String> alsoRefusedWith) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                        .map(each -> each.diagnostic().code().toString())
+                        .filter(each -> !each.equals("E1013") && !alsoRefusedWith.contains(each))
+                        .toList(),
+                "the model this reads has to be one somebody could write");
+        return compilation;
     }
 
     /** The same, for a test that holds the database rather than the compilation. */
@@ -65,7 +89,12 @@ public final class RuleReadings {
      * to answering alike without reaching into what a reading is made of.
      */
     public static String admittedByTheValueOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        return admittedByTheValueOf(source, List.of());
+    }
+
+    /** The same, for a model whose refusals by {@code alsoRefusedWith} are let be. */
+    public static String admittedByTheValueOf(String source, List<String> alsoRefusedWith) {
+        Compilation compilation = compiled(source, alsoRefusedWith);
         Symbols symbols = souther.compiler.query.Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey(symbols.module(), "N"));

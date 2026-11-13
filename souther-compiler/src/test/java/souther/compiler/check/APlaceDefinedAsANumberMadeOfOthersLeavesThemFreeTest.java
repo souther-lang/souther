@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.inputs.InputDomain;
@@ -296,7 +297,7 @@ class APlaceDefinedAsANumberMadeOfOthersLeavesThemFreeTest {
                     invariant c == a.value * b
 
                 let loop (d: Decimal): Bool = loop(d)
-                """ + BEHAVIOR);
+                """ + BEHAVIOR, List.of("E2001"));
 
         assertFalse(left.get("n.a").isEmpty(), "a is held by a rule nothing read");
     }
@@ -314,7 +315,7 @@ class APlaceDefinedAsANumberMadeOfOthersLeavesThemFreeTest {
                     invariant c.value == a * b
 
                 let loop (d: Decimal): Bool = loop(d)
-                """ + BEHAVIOR);
+                """ + BEHAVIOR, List.of("E2001"));
 
         assertFalse(left.get("n.a").isEmpty(), "c is held by a rule nothing read");
         assertFalse(left.get("n.b").isEmpty());
@@ -457,11 +458,7 @@ class APlaceDefinedAsANumberMadeOfOthersLeavesThemFreeTest {
     }
 
     private static FieldDomains fieldsOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),
-                "the model this reads has to be one somebody could write");
+        Compilation compilation = ACompiledModel.answered(source);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), "N"));
         return FieldDomains.of(name, RuleReadingContext.unshared(
@@ -470,7 +467,20 @@ class APlaceDefinedAsANumberMadeOfOthersLeavesThemFreeTest {
 
     /** What stands unanswered at each place below the input of {@code probe}, by place. */
     private static Map<String, List<String>> unansweredBelowTheInput(String source) {
+        return unansweredBelowTheInput(ACompiledModel.answered(source));
+    }
+
+    /** The same, for a model refused for {@code errors}, which is what leaves a rule unread. */
+    private static Map<String, List<String>> unansweredBelowTheInput(String source,
+                                                                     List<String> errors) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        assertEquals(errors, compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "what the model is refused for");
+        return unansweredBelowTheInput(compilation);
+    }
+
+    private static Map<String, List<String>> unansweredBelowTheInput(Compilation compilation) {
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

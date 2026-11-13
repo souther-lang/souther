@@ -158,6 +158,8 @@ class ARowThatHandedOverNoValuesIsNotReadAsOneThatCouldNotBeReadTest {
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1910"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "the row that stops");
 
         Adequacy.Filling generated = Adequacy.generatedOf(compilation.db(), "m").get("f");
         List<Adequacy.GenerationDisposition> uncovered = generated.generation().stream()

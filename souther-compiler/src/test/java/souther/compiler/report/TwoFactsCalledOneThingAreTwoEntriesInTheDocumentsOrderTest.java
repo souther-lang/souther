@@ -178,6 +178,9 @@ class TwoFactsCalledOneThingAreTwoEntriesInTheDocumentsOrderTest {
                 Compilation.ofSources(TWO_SOURCES_NOTHING_WAS_READ_FROM, ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1906", "E1906"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(),
+                "each of the two sources redefines a let, which an examples file does not hold");
         return JSON.readTree(
                 AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
     }

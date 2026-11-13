@@ -66,10 +66,17 @@ class AnEditorIsNotToldAnIdentityNothingResolvedTest {
             let f (n) = nowhere
             """;
 
+    /** The sources that write a name nothing denotes, so the compile refuses them. */
+    private static final Set<String> NAMING_NOTHING = Set.of(TYPES, VALUES);
+
     private static Object under(String source, Key<?> key) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(ID, source);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).db().ask(key).value();
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        assertEquals(NAMING_NOTHING.contains(source), !c.errors().isEmpty(),
+                () -> "only a source naming nothing is refused: " + c.errors());
+        return c.db().ask(key).value();
     }
 
     private static TypeSymbol typeAt(int line, int column) {

@@ -37,6 +37,13 @@ class WhatANameOpensOntoIsHandedOnAndNotOpenedAgainTest {
     private static Map<TypeSymbol, Cardinality> countsAlike(Map<String, String> documents) {
         Compilation c = Compilation.ofDocuments(
                 new LinkedHashMap<>(documents), Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        // A declaration no value satisfies is refused, and is what some of these models are about;
+        // any other refusal is a model whose declarations were never read.
+        assertEquals(List.of(), c.errors().stream()
+                        .map(each -> each.diagnostic().code())
+                        .filter(each -> !each.equals("E1013")).toList(),
+                "the model this reads has to be one somebody could write");
         List<Hir.Def> declared = c.module(MODULE).defs().stream()
                 .map(each -> each.declaration().node()).toList();
         RuleReadingSource source = Shapes.ruleReading(c.db(), MODULE).value();
@@ -73,7 +80,7 @@ class WhatANameOpensOntoIsHandedOnAndNotOpenedAgainTest {
     @Test
     void lacksAtEveryDepthCarryTheDeepestOne() {
         Map<TypeSymbol, Cardinality> counts = countsAlike("""
-                module demo exposing ( Several )
+                module demo exposing ( Several, C, B, A, Bad )
 
                 data Bad = Int
                     invariant no = value >= 2 && value <= 1
@@ -93,7 +100,7 @@ class WhatANameOpensOntoIsHandedOnAndNotOpenedAgainTest {
     @Test
     void aChainEndingInANameThatWearsNoValue() {
         Map<TypeSymbol, Cardinality> counts = countsAlike("""
-                module demo exposing ( Several )
+                module demo exposing ( Several, Top, Outer, Holder, Bad )
 
                 data Bad = Int
                     invariant no = value >= 2 && value <= 1
@@ -114,7 +121,7 @@ class WhatANameOpensOntoIsHandedOnAndNotOpenedAgainTest {
     @Test
     void theReadersRulesReachWhatTheChainEndsIn() {
         Map<TypeSymbol, Cardinality> counts = countsAlike("""
-                module demo exposing ( Pair, Wide )
+                module demo exposing ( Pair, Wide, B, A, One )
 
                 data One = Int
                     invariant only = value >= 1 && value <= 1
@@ -140,7 +147,7 @@ class WhatANameOpensOntoIsHandedOnAndNotOpenedAgainTest {
     @Test
     void aChainOfNamesEachWrappingACollectionOfTheOneBefore() {
         Map<TypeSymbol, Cardinality> counts = countsAlike("""
-                module demo exposing ( Several )
+                module demo exposing ( Several, D, C, B, A, Bad )
 
                 data Bad = Int
                     invariant no = value >= 2 && value <= 1
@@ -162,7 +169,7 @@ class WhatANameOpensOntoIsHandedOnAndNotOpenedAgainTest {
     void aChainCrossingOutOfTheModuleItIsReadFrom() {
         Map<String, String> documents = new LinkedHashMap<>();
         documents.put("other.sou", """
-                module other exposing ( C )
+                module other exposing ( C, B, A, Bad )
 
                 data Bad = Int
                     invariant no = value >= 2 && value <= 1
@@ -171,7 +178,7 @@ class WhatANameOpensOntoIsHandedOnAndNotOpenedAgainTest {
                 data C = B
                 """);
         documents.put("demo.sou", """
-                module demo exposing ( Several )
+                module demo exposing ( Several, E, D )
 
                 import other ( C )
 

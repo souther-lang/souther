@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 
@@ -54,7 +55,7 @@ class RequiredRecursiveDefsOrderIsPartOfTheAnswerTest {
     private static Compilation started(String source) {
         Compilation c = Compilation.ofDocuments(Map.of("demo.sou", source), Set.of(), ModulePath.EMPTY)
                 .writtenOn(TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
         return c;
     }

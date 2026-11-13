@@ -233,6 +233,8 @@ class TheRelationAnEditRestatesIsOneACallerReadsTest {
     private static Compilation compiled(List<String> sources) {
         Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
         compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "the corpus compiles");
         return compilation;
     }
 

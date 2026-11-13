@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleRef;
 import souther.compiler.diag.Citation;
 import souther.compiler.query.Adequacy;
@@ -218,9 +219,7 @@ class AnEmptinessCheckDrawsTheLineItsSizeDrawsTest {
                 example gate
                     | "one row" : (Order { lines = [], rank = %s }) -> %s
                 """.formatted(guard, rank, out);
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> lines =
                 Adequacy.boundariesOf(compilation.db(), "demo");
         assertNotNull(lines, "the model under test compiles");
@@ -297,9 +296,6 @@ class AnEmptinessCheckDrawsTheLineItsSizeDrawsTest {
     }
 
     private static Compilation compiled(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(model, Adequacy.Asked.fullReport());
     }
 }

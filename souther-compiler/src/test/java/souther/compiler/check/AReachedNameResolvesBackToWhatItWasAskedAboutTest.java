@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Scopes;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -70,7 +71,8 @@ class AReachedNameResolvesBackToWhatItWasAskedAboutTest {
             """;
 
     private static Symbols scopeOf(String module, String... sources) {
-        Compilation compilation = Compilation.ofSources(List.of(sources), ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(sources), ModulePath.EMPTY));
         return Scopes.derived(compilation.db(), module).value();
     }
 

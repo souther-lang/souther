@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Answer;
@@ -158,6 +159,9 @@ class ANameThatWritesNothingIsReadAsTheNameBeneathItTest {
                 """)) {
             Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
             compilation.answerEverything();
+            assertEquals(List.of("E1013"), compilation.errors().stream()
+                    .map(found -> found.diagnostic().code()).toList(),
+                    "a ring of names holds no value, so nothing can construct one");
 
             for (String each : List.of("A", "B", "C")) {
                 assertEquals(each, ownerOf(compilation, "ring", each),
@@ -267,12 +271,7 @@ class ANameThatWritesNothingIsReadAsTheNameBeneathItTest {
     }
 
     private static Compilation compiled(List<String> sources) {
-        Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                        .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),
-                "the model under test is a program that can be written");
-        return compilation;
+        return ACompiledModel.compiles(Compilation.ofSources(sources, ModulePath.EMPTY));
     }
 
     private static long readingsMadeCompiling(String source) {

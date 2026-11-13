@@ -72,9 +72,7 @@ class AWayNeedingTwoCallsToAnswerApartWantsATableTest {
     }
 
     private static AdequacyReport.BehaviorReport reportOf() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).modules().stream()
                 .flatMap(module -> module.behaviors().stream())
                 .filter(each -> "pick".equals(each.name()))

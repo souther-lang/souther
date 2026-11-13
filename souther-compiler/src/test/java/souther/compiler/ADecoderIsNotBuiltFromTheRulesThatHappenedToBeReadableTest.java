@@ -10,6 +10,7 @@ import souther.compiler.query.Output;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -55,10 +56,12 @@ class ADecoderIsNotBuiltFromTheRulesThatHappenedToBeReadableTest {
     /** The same pair with the cycle gone, which is what says the refusal is about the cycle. */
     private static final String WELL_FOUNDED = OWNER.replace("let floor = floor", "let floor = 1");
 
-    private static Map<String, ClassFileImage> classesOf(String owner) {
+    private static Map<String, ClassFileImage> classesOf(String owner, List<String> errors) {
         Compilation compilation =
                 Compilation.ofSources(List.of(owner, SPREADS), ModulePath.EMPTY);
         compilation.answerEverything();
+        assertEquals(errors, compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "what the pair is refused for");
         return compilation.db().ask(new Output.Classes("app.rows")).present()
                 ? compilation.db().ask(new Output.Classes("app.rows")).value() : Map.of();
     }
@@ -72,10 +75,10 @@ class ADecoderIsNotBuiltFromTheRulesThatHappenedToBeReadableTest {
      */
     @Test
     void aRuleThatCouldNotBeReadStopsTheClassesComingOut() {
-        assertTrue(classesOf(OWNER).isEmpty(),
+        assertTrue(classesOf(OWNER, List.of("E1022")).isEmpty(),
                 "a decoder built from the rules that were readable would hold a value to less than"
                         + " the model states, so the classes do not come out");
-        assertFalse(classesOf(WELL_FOUNDED).isEmpty(),
+        assertFalse(classesOf(WELL_FOUNDED, List.of()).isEmpty(),
                 "and the same module emits once the rule it spreads can be read");
     }
 }

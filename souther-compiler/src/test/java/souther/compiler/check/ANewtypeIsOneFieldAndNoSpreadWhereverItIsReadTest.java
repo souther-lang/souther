@@ -85,7 +85,11 @@ class ANewtypeIsOneFieldAndNoSpreadWhereverItIsReadTest {
     private static Hir.Module resolved() {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", EVERY_FORM);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
-                .db().ask(new Names.Resolved("m")).value();
+        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        compilation.answerEverything();
+        assertEquals(List.of("E1009"), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(),
+                "a newtype over an optional is refused, and is still read as one");
+        return compilation.db().ask(new Names.Resolved("m")).value();
     }
 }

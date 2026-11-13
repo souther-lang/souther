@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -7,6 +8,9 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -105,7 +109,14 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
      */
     @Test
     void soIsALineTheArithmeticHadToRewriteToFind() {
-        String report = report(REWRITTEN_BY_THE_ARITHMETIC);
+        Compilation compilation = Compilation.ofSource(REWRITTEN_BY_THE_ARITHMETIC, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertEquals(List.of("E1905"), compilation.errors().stream()
+                .map(found -> found.diagnostic().code()).toList(),
+                "the example row is one the rewritten comparison refuses");
+        String report = AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
         // The line is where `a` is one below `b`, so the point on it is the pair two apart: the
         // rule is written `<` and the last pair satisfying it is the one before they are one apart.
@@ -163,17 +174,13 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
     /** What {@code --generate --boundaries} offers for the model, which is where a point that is
      *  writable says so. */
     private static String offered(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return souther.compiler.report.GeneratedRows.of(compilation, "example.held", null,
                 SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
     }
 
     private static String report(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

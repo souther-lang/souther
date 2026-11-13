@@ -94,6 +94,9 @@ class EveryRowTheReadingWasGivenIsInOneOfItsCountsTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1903"), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(),
+                "the row whose input the rules refuse is refused where it is written");
         return compilation;
     }
 

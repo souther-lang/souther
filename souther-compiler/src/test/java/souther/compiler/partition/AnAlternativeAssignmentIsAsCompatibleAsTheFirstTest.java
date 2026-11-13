@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.ArmProbe;
 import org.junit.jupiter.api.Test;
 
@@ -77,7 +78,7 @@ class AnAlternativeAssignmentIsAsCompatibleAsTheFirstTest {
     }
 
     private static Model model() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);

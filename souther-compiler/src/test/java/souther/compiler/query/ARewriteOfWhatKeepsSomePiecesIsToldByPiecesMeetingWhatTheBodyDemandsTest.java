@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.partition.Replacement;
 import souther.compiler.partition.ReplacementDisposition;
@@ -90,9 +91,7 @@ class ARewriteOfWhatKeepsSomePiecesIsToldByPiecesMeetingWhatTheBodyDemandsTest {
      */
     private static Collection<Replacements.Searched> searchedAll(String model, String module,
                                                                  String behavior) {
-        Compilation c = Compilation.ofSource(model, "Main");
-        c.measure(Adequacy.Asked.fullReport());
-        c.answerEverything();
+        Compilation c = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return c.db().ask(new Replacements.Witnesses(module, behavior)).value().entrySet()
                 .stream()
                 .filter(each -> each.getKey() instanceof Replacement.OfAnArm)
@@ -504,8 +503,9 @@ class ARewriteOfWhatKeepsSomePiecesIsToldByPiecesMeetingWhatTheBodyDemandsTest {
     @Test
     void aStringPastTheBoundSaysTheFigureItStoppedAt() {
         String many = "x" + String.join("", Collections.nCopies(11, ";AB1"));
+        String eleven = "[" + String.join(", ", Collections.nCopies(11, "Tag(\"AB1\")")) + "]";
         Replacements.Searched came = searched(
-                tags("x(;[A-Z]{2}[0-9])*", "(TagList(\"" + many + "\")) -> [Tag(\"AB1\")]"),
+                tags("x(;[A-Z]{2}[0-9])*", "(TagList(\"" + many + "\")) -> " + eleven),
                 "example.catalog", "tagsOf");
 
         assertInstanceOf(ReplacementDisposition.NoneFound.class, came.disposition(),

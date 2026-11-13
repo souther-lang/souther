@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.RuleWhereARunMayStop;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
@@ -101,7 +102,6 @@ class ALineThroughAnElementIsDrawnWhereTheElementPutsItTest {
         Partitions.Partitioning divided =
                 compilation.db().ask(new Adequacy.Divided("w1", "m")).value();
         assertNotNull(divided, "m was divided");
-        assertEquals(List.of(), compilation.errors(), "the model compiles");
         return divided.rulesWhereARunMayStop();
     }
 
@@ -110,17 +110,16 @@ class ALineThroughAnElementIsDrawnWhereTheElementPutsItTest {
         List<BorderAssessment> lines =
                 compilation.db().ask(new Adequacy.Boundaries("w1", "m")).value();
         assertNotNull(lines, "m was read");
-        assertEquals(List.of(), compilation.errors(), "the model compiles");
         return lines.stream().filter(line -> line.left().equals("a"))
                 .map(BorderAssessment::value).toList();
     }
 
     private static Compilation compiled(String parameters, String answer, String body) {
-        return Compilation.ofSource("""
+        return ACompiledModel.answered("""
                 module w1
                 behavior m : (%s) -> %s
                 let m (%s) = %s
                 """.formatted(parameters, answer, parameters.replaceAll(":\\s*[A-Za-z<>]+", ""),
-                body), "Main");
+                body));
     }
 }

@@ -148,11 +148,16 @@ class EveryElementOfAListFiledInAMapIsComposedTest {
             SOME_AND_EVERY, List.of("Keys([\"x\", \"x\"])", "[(\"x\", \"x\")]",
                     "[(\"x\", \"x\")]"));
 
+    /** {@code source}, measured, whatever the compile says of it: for a test about what it refuses. */
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
+    }
+
+    private static Compilation compiled(String source) {
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     private static String report(Compilation compilation) {
@@ -186,7 +191,7 @@ class EveryElementOfAListFiledInAMapIsComposedTest {
     @Test
     void eachFormIsComposedWithAKeyForEachElementTheListHolds() {
         COMPOSED.forEach((model, expected) -> assertEquals(List.of(expected),
-                composedForTheRules(measured(model)), model));
+                composedForTheRules(compiled(model)), model));
     }
 
     /**
@@ -196,10 +201,9 @@ class EveryElementOfAListFiledInAMapIsComposedTest {
     @Test
     void theRowsComposedTakeTheRuleTheyWereComposedFor() {
         COMPOSED.forEach((model, expected) -> {
-            Compilation answered = measured(model + "    | \"filed\" : ("
+            Compilation answered = compiled(model + "    | \"filed\" : ("
                     + String.join(", ", expected) + ") -> 1\n");
 
-            assertEquals(List.of(), errors(answered), model);
             assertFalse(report(answered).contains("no row takes a decision rule"),
                     () -> report(answered));
         });
@@ -220,7 +224,7 @@ class EveryElementOfAListFiledInAMapIsComposedTest {
      */
     @Test
     void everyElementOfAListKeptEmptyIsComposedHoldingNone() {
-        Compilation measured = measured(INSIDE_EACH_OF_NONE);
+        Compilation measured = compiled(INSIDE_EACH_OF_NONE);
         List<List<String>> rows = new ArrayList<>();
         Adequacy.generatedOf(measured.db(), measured.modules().get(0)).get("pick").generation()
                 .stream()

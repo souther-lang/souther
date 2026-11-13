@@ -17,6 +17,7 @@ import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.query.Shapes;
@@ -205,7 +206,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
     @Test
     void anArtifactOfAnotherModuleIsRefusedWhereTheRunIsMade() {
         Compilation mine = compiled();
-        Compilation other = Compilation.ofSource("""
+        Compilation other = ACompiledModel.answered("""
                 module example.elsewhere
 
                 data Amount = Int
@@ -214,7 +215,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
                     constructs Amount
 
                 let double (a) = Amount(a.value * 99)
-                """, "Main");
+                """);
         other.db().ask(new Output.All());
         String name = mine.modules().get(0);
 
@@ -340,7 +341,7 @@ class WhetherAnythingAppliesABehaviorIsTheRunsAnswerTest {
     }
 
     private static Compilation compiled() {
-        Compilation c = Compilation.ofSource(MODEL, "Main");
+        Compilation c = ACompiledModel.answered(MODEL);
         c.db().ask(new Output.All());
         return c;
     }

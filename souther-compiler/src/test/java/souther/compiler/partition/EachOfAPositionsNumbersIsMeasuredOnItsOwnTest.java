@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -53,7 +54,7 @@ class EachOfAPositionsNumbersIsMeasuredOnItsOwnTest {
 
             behavior onCode : (v: Code) -> Ok
                 constructs Ok
-            let onCode (v) = Ok { size = String.length(v) }
+            let onCode (v) = Ok { size = String.length(v.value) }
             """;
 
     /** A line on the order, and a line on the length. */
@@ -66,7 +67,6 @@ class EachOfAPositionsNumbersIsMeasuredOnItsOwnTest {
                 invariant long = String.length(s) >= 3
 
             behavior f : (v: R) -> Ok
-                constructs Ok
             let f (v) = Ok
             """;
 
@@ -80,7 +80,6 @@ class EachOfAPositionsNumbersIsMeasuredOnItsOwnTest {
                 invariant low  = s >= "m"
 
             behavior f : (v: R) -> Ok
-                constructs Ok
             let f (v) = Ok
             """;
 
@@ -150,7 +149,7 @@ class EachOfAPositionsNumbersIsMeasuredOnItsOwnTest {
 
                 behavior onCode : (v: Code) -> Ok
                     constructs Ok
-                let onCode (v) = Ok { size = String.length(v) }
+                let onCode (v) = Ok { size = String.length(v.value) }
                 """.formatted(rules);
     }
 
@@ -200,18 +199,14 @@ class EachOfAPositionsNumbersIsMeasuredOnItsOwnTest {
     }
 
     private static List<String> notRead(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0)
                 .partition().notRead().stream()
                 .map(PartitionEvidence.NotRead::at).toList();
     }
 
     private static String human(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

@@ -134,6 +134,11 @@ class TwoWalksOfOneBodyNameItsPlacesAlikeTest {
                 () -> "and most places have exactly one: " + byWays);
     }
 
+    /** The conformance corpus whose checked-in answer is a refusal, which its bodies are walked for. */
+    private static final List<String> REFUSED_ON_PURPOSE = ConformanceCorpus.load("booking").sources();
+
+    private static final List<String> REFUSED_ON_PURPOSE_CODES = List.of("E2010", "E1013");
+
     /** The addresses of every place of every body of {@code source}, as text, from a fresh
      *  compile. */
     private static Set<String> namesIn(String source) {
@@ -158,6 +163,9 @@ class TwoWalksOfOneBodyNameItsPlacesAlikeTest {
         for (List<String> each : sources) {
             Compilation compilation = Compilation.ofSources(each, ModulePath.EMPTY);
             compilation.answerEverything();
+            assertEquals(each.equals(REFUSED_ON_PURPOSE) ? REFUSED_ON_PURPOSE_CODES : List.of(),
+                    compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
+                    "the sources compile, but for the corpus checked in as refused");
             int before = out.size();
             for (String module : compilation.modules()) {
                 Bodies.Elaborated checked =

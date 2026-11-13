@@ -5,6 +5,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -118,6 +119,10 @@ class ASearchOverWhatAFilterKeptIsReadAsTheSearchOfEveryCandidateTest {
 
     /** The model, compiled and nothing asked of it yet. */
     private static Compilation compiled(String search, String rule) {
+        return ACompiledModel.compiles(modelOf(search, rule));
+    }
+
+    private static Compilation modelOf(String search, String rule) {
         String source = """
                 module demo exposing (g, V)
 
@@ -170,10 +175,9 @@ class ASearchOverWhatAFilterKeptIsReadAsTheSearchOfEveryCandidateTest {
     /** The partition the report says of {@code g}, the model measured for its report alone. */
     private static JsonNode partition(String search, String rule) {
         return PARTITIONS.computeIfAbsent(search + "\n" + rule, _ -> {
-            Compilation compilation = compiled(search, rule);
+            Compilation compilation = modelOf(search, rule);
             compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
-            compilation.answerEverything();
-            assertEquals(List.of(), compilation.errors(), search + " " + rule);
+            ACompiledModel.compiles(compilation);
             return JSON.readTree(AdequacyReport.of(compilation)
                     .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)))
                     .path("modules").get(0).path("behaviors").get(0).path("partition");

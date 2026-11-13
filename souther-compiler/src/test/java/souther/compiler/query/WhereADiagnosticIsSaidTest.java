@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -59,6 +60,7 @@ class WhereADiagnosticIsSaidTest {
     void aCompileOfOneSourceNamesItLikeAnyOther() {
         Compilation c = Compilation.ofSource(BROKEN, "Main");
         c.answerEverything();
+        assertFalse(c.errors().isEmpty(), "the source has a mistake to say");
 
         Db.Found only = c.db().allReports().get(0);
 
@@ -77,6 +79,7 @@ class WhereADiagnosticIsSaidTest {
                 let f (n: N) = bogus
                 """), souther.compiler.meta.ModulePath.EMPTY);
         c.answerEverything();
+        assertFalse(c.errors().isEmpty(), "the second source has a mistake to say");
 
         List<SourceId> said = c.db().allReports().stream().map(c::filedUnderOf).toList();
 
@@ -89,6 +92,7 @@ class WhereADiagnosticIsSaidTest {
     void aReportIsSaidWhereItPointsAndNowhereElse() {
         Compilation c = Compilation.ofSource(BROKEN, "Main");
         c.answerEverything();
+        assertFalse(c.errors().isEmpty(), "the source has a mistake to say");
 
         for (Db.Found found : c.db().allReports()) {
             List<SourceId> saidAt = c.publishSourceIdsOf(found);

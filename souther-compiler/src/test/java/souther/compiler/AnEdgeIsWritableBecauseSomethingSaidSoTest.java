@@ -295,10 +295,9 @@ at.coverage().made().orElseThrow());
                 example f
                     | "some" : (N(2)) -> Ok
                 """;
-        Compilation compilation = Compilation.ofSource(model, "Main");
         // What a guard's line waits on, and this build does not ask for it.
-        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(
+                model, Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         Map<String, List<BorderAssessment>> boundaries =
                 Adequacy.boundariesOf(compilation.db(), "example.waiting");
 
@@ -391,9 +390,7 @@ at.coverage().made().orElseThrow());
 
     private static List<BorderAssessment.Point> pointsAt(String model, String module,
                                                          String behavior, Adequacy.Level level) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly(level));
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.reportOnly(level));
         // Which question the build puts, which is what the level says. A build that composes values
         // asks for the search; one that does not asks what the rows established and stops there, and
         // the difference shows as there being no attempt rather than as an attempt saying so.

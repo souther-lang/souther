@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -81,11 +82,8 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
     /** The places of {@code source}'s behavior a region is left open at, by what the report
      *  asks of them. */
     private static List<String> leftOpenIn(String source) {
-        Compilation model = Compilation.ofSource(source, "Main");
-        model.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        model.answerEverything();
-        assertEquals(List.of(), model.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "the model compiles");
+        Compilation model = ACompiledModel.measured(source,
+                Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         JsonNode report = new ObjectMapper().readTree(AdequacyReport.of(model)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         List<String> open = new ArrayList<>();
@@ -118,9 +116,8 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
      * shown, then those a run is not shown to get past.
      */
     private static List<String> leftOpenFor(String source) {
-        Compilation model = Compilation.ofSource(source, "Main");
-        model.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        model.answerEverything();
+        Compilation model = ACompiledModel.measured(source,
+                Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         JsonNode report = new ObjectMapper().readTree(AdequacyReport.of(model)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         List<String> out = new ArrayList<>();

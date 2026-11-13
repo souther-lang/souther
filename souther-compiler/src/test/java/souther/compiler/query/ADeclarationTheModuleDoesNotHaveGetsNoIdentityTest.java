@@ -72,7 +72,10 @@ class ADeclarationTheModuleDoesNotHaveGetsNoIdentityTest {
     private static Db db(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(ID, source);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).db();
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        assertEquals(1, c.errors().size(), "the rejected declaration is the one mistake: " + c.errors());
+        return c.db();
     }
 
     /**

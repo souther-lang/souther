@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.RuleRequirement;
@@ -92,9 +93,8 @@ class TheSameStatementIsComposedWhereverTheListStandsTest {
 
     /** What the search came to for each rule of the way, in an order that is no rule's. */
     private static List<String> kinds(String model, String body) {
-        Compilation compilation = Compilation.ofSource(model.replace("BODY", body), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model.replace("BODY", body),
+                Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
         return compilation.db().ask(new Adequacy.DecisionSearch(module, "f")).value().values()
                 .stream().map(each -> each.answer().settlement())

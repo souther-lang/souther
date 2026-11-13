@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
@@ -184,7 +185,7 @@ class WhatAnApplicationStatesComesFromTheDeclarationItAppliesTest {
             compilation.db().ask(new Bodies.ModuleDefinitions(module)).value();
 
     private static Compilation compiled() {
-        return Compilation.ofSource(MODULE, "Main");
+        return ACompiledModel.answered(MODULE);
     }
 
     /** The model these answers are read off compiles, so an answer of nothing here is this reading
@@ -467,14 +468,26 @@ class WhatAnApplicationStatesComesFromTheDeclarationItAppliesTest {
     /** What the declarations of {@code source} state about the value it declares as {@code name} —
      *  for a model this class does not hold, read the same way this one is. */
     private static Type declaredTypeIn(String source, String name) {
-        Compilation read = Compilation.ofSource(source, "Main");
+        Compilation read = looked(Compilation.ofSource(source, "Main"),
+                source.equals(APPLIED_TO_WHAT_IT_DOES_NOT_TAKE)
+                        || source.equals(CONSTRUCTED_FROM_ANOTHER_NUMBER));
         return declaredTypeOf(read, read.modules().get(0), name);
     }
 
     /** The same, for a value one module of a compile of several declares. */
     private static Type declaredTypeAcross(List<String> sources, String module, String name) {
-        Compilation read = Compilation.ofSources(sources, ModulePath.EMPTY);
+        Compilation read = looked(Compilation.ofSources(sources, ModulePath.EMPTY),
+                sources.equals(ACROSS_ONE_THAT_DOES_NOT_CHECK));
         return declaredTypeOf(read, module, name);
+    }
+
+    /** {@code model}, answered in full, and held to be refused where it is meant to be and to
+     *  compile everywhere else. */
+    private static Compilation looked(Compilation model, boolean refused) {
+        model.answerEverything();
+        assertEquals(refused, !model.errors().isEmpty(),
+                refused ? "the check refuses this model" : "the model under test compiles");
+        return model;
     }
 
     private static Type declaredTypeOf(Compilation read, String module, String name) {

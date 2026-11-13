@@ -41,7 +41,7 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
                 let f (%s) = %s
                 """.formatted(parameters, parameters.replaceAll(": *\\w+", ""), body), "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return compilation;
     }
 
@@ -132,7 +132,7 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
         for (String past : new String[] {"268435456", "268435457"}) {
             Compilation compilation = Compilation.ofSource(source.formatted(past), "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            ACompiledModel.compiles(compilation);
             String report = AdequacyReport.of(compilation)
                     .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
@@ -140,7 +140,7 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
         }
         Compilation within = Compilation.ofSource(source.formatted("7"), "Main");
         within.measure(Adequacy.Asked.fullReport());
-        within.answerEverything();
+        ACompiledModel.compiles(within);
         assertTrue(AdequacyReport.of(within)
                 .humanInEnglish(SourceRendering.namedByIdentity(within.texts()))
                 .contains("String.length(s): 7 <= x"), "the control: a class a string reaches");
@@ -173,7 +173,7 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
         for (String past : new String[] {"268435456", "268435457"}) {
             Compilation compilation = Compilation.ofSource(source.formatted(past), "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            ACompiledModel.compiles(compilation);
             String report = AdequacyReport.of(compilation)
                     .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
@@ -183,7 +183,7 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
         for (String within : new String[] {"268435455", "7"}) {
             Compilation compilation = Compilation.ofSource(source.formatted(within), "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            ACompiledModel.compiles(compilation);
             String report = AdequacyReport.of(compilation)
                     .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
@@ -263,14 +263,14 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
                 "Date.year(d) < 1000000000", "Date.year(d) < 1000000001"}) {
             Compilation compilation = Compilation.ofSource(source.formatted(guard), "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            ACompiledModel.compiles(compilation);
             assertFalse(AdequacyReport.of(compilation)
                     .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
                     .contains(owedTheArm), guard);
         }
         Compilation within = Compilation.ofSource(source.formatted("Date.year(d) < 2030"), "Main");
         within.measure(Adequacy.Asked.fullReport());
-        within.answerEverything();
+        ACompiledModel.compiles(within);
         assertTrue(AdequacyReport.of(within)
                 .humanInEnglish(SourceRendering.namedByIdentity(within.texts()))
                 .contains(owedTheArm), "the control: a year a date has");
@@ -306,7 +306,7 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
     private static String armReport(String source, String guard) {
         Compilation compilation = Compilation.ofSource(source.formatted(guard), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -315,7 +315,7 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
         Compilation compilation = Compilation.ofSource(
                 source.formatted(parts[0], parts[1], parts[2], parts[3], parts[4]), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -437,7 +437,7 @@ class ALineBeyondWhatAStringHoldsIsNoLineTest {
     private static long proved(String source, String fragment) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return Adequacy.searchedBoundariesOf(compilation.db(), "m").values().stream()
                 .flatMap(each -> BorderAssessment.pointsOf(each).stream())
                 .filter(point -> point.owed() != null)

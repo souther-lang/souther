@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -94,12 +95,12 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
     }
 
     private static Compilation compiled(String declaration) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module probe.spelling
 
                 data Low
                 data High
-                """ + "\n" + declaration + "\n", "Main");
+                """ + "\n" + declaration + "\n");
         assertEquals(1, compilation.modules().size(), "the model under test compiles");
         return compilation;
     }

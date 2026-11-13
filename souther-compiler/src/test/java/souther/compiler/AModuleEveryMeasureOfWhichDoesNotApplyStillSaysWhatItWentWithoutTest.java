@@ -55,6 +55,8 @@ class AModuleEveryMeasureOfWhichDoesNotApplyStillSaysWhatItWentWithoutTest {
                 DoesNotComeBack.everythingAboutRowsOf("go")));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1923"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "the row that does not come back");
         return compilation;
     }
 

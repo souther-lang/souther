@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
@@ -171,8 +172,8 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsComposedHoldingItTest {
 
     @Test
     void aNumberTheFieldOfTheValueFoundRefusesIsNoMapTheRulesAskFor() {
-        assertNull(composedGiven(quoted("Decimal.compare(q.rate.value, 0.0m) == 0", ""),
-                Map.of()).fields());
+        assertNull(composedOfWhatNothingBuilds(
+                quoted("Decimal.compare(q.rate.value, 0.0m) == 0", "")).fields());
     }
 
     @Test
@@ -251,7 +252,7 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsComposedHoldingItTest {
      */
     @Test
     void aNumberTheValueTypeRefusesIsNotWrittenUnderItsName() {
-        assertNull(composedGiven(POSITIVE_RATES, Map.of()).fields());
+        assertNull(composedOfWhatNothingBuilds(POSITIVE_RATES).fields());
     }
 
     private static String rateSet(String asked) {
@@ -277,7 +278,7 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsComposedHoldingItTest {
      */
     @Test
     void aNumberBetweenTheOnesTheValueTypeAdmitsIsNotWrittenUnderItsName() {
-        assertNull(composedGiven(rateSet("2.0m"), Map.of()).fields());
+        assertNull(composedOfWhatNothingBuilds(rateSet("2.0m")).fields());
         assertTrue(composedGiven(rateSet("3.0m"), Map.of()).fields().get("rates").text()
                 .contains("Rate(3m)"));
     }
@@ -396,8 +397,20 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsComposedHoldingItTest {
 
     private static Partitions.FieldsChosen composedGiven(String source,
                                                          Map<String, FixtureTemplate> given) {
+        return composedGiven(ACompiledModel.answered(source), given);
+    }
+
+    /** The same, of a record no value can be built of, which the model is refused for. */
+    private static Partitions.FieldsChosen composedOfWhatNothingBuilds(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
+        assertEquals(List.of("E1013"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList());
+        return composedGiven(compilation, Map.of());
+    }
+
+    private static Partitions.FieldsChosen composedGiven(Compilation compilation,
+                                                         Map<String, FixtureTemplate> given) {
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule record = TypeSymbols.declared(new TypeKey(symbols.module(), "N"));
         RuleReadingContext reading = RuleReadingContext.unshared(

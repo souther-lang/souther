@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.diag.SourceRendering;
@@ -287,7 +288,7 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
                     | "one" : (Flagged { on = true, n = 3 }) -> Res { m = 3 }
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts()));
         return compilation;
@@ -349,7 +350,7 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
                 }
                 """), ModulePath.of(published));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         AdequacyReport.of(compilation);
         return compilation;
     }

@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -268,7 +269,7 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                 let pick (l) = if l.qty > 3 then 1 else 0
                 """.formatted(clause), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .filter(line -> line.contains("not accounted for"))
@@ -293,9 +294,7 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
     }
 
     private static List<PartitionEvidence.NotRead> notReadIn(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage("demo")).value();
         assertNotNull(coverage, () -> "the model under test compiles: " + model);

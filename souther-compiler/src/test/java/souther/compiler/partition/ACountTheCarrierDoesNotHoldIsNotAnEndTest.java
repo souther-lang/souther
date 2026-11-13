@@ -65,7 +65,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
 
                 behavior f : (s: PastEnd) -> Verdict
                 let f (s) = Ok
-                """));
+                """, List.of("E1013")));
     }
 
     @Test
@@ -76,7 +76,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
 
                 behavior f : (s: BeforeStart) -> Verdict
                 let f (s) = Ok
-                """));
+                """, List.of("E1013")));
     }
 
     /** The same at the end of the calendar, which behaved this way before an enumeration was a
@@ -95,7 +95,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
 
                 behavior f : (s: PastDate) -> Verdict
                 let f (s) = Ok
-                """));
+                """, List.of("E1013")));
     }
 
     /** And a bound the carrier does hold is still an end, so none of the above passes by drawing
@@ -214,7 +214,15 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
 
     /** Every obligation the one position of {@code source}'s behavior owes, written. */
     private static List<String> obligations(String source) {
+        return obligations(source, List.of());
+    }
+
+    /** The same, of a model the compile refuses with {@code refusals} and nothing else. */
+    private static List<String> obligations(String source, List<String> refusals) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        assertEquals(refusals, compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList());
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =

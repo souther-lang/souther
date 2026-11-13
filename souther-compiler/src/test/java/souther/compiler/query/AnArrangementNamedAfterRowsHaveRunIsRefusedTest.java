@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DoesNotComeBack;
 import souther.compiler.observe.ArmObservation;
 import souther.compiler.observe.Disposition;
@@ -43,8 +44,7 @@ class AnArrangementNamedAfterRowsHaveRunIsRefusedTest {
     /** Rows run, and then an arrangement said. */
     @Test
     void anArrangementSaidAfterTheRowsHaveRunIsRefused() {
-        Compilation compilation = Compilation.ofSource(ONE_ROW, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(ONE_ROW);
 
         IllegalStateException refused = assertThrows(IllegalStateException.class,
                 () -> compilation.withJvmExampleDeadlines(
@@ -62,6 +62,8 @@ class AnArrangementNamedAfterRowsHaveRunIsRefusedTest {
         compilation.withJvmExampleDeadlines(
                 DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("run")));
         compilation.answerEverything();
+        assertEquals(List.of("E1923"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList());
 
         assertEquals(Disposition.INCOMPLETE, onlyRowOf(compilation).disposition());
     }

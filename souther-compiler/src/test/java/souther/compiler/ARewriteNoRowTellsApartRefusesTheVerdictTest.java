@@ -111,7 +111,7 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
     void aBuildIsWarnedAtTheArmAndToldWhichRowToWriteDown() {
         Compilation compilation = Compilation.ofSource(NOTHING_HELD, "Main");
         compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         List<Diagnostic> said = compilation.warnings().stream()
                 .map(Located::diagnostic)
                 .filter(d -> "E1939".equals(d.code()))
@@ -215,7 +215,7 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
 
         Compilation warned = Compilation.ofSource(doubled, "Main");
         warned.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        warned.answerEverything();
+        ACompiledModel.compiles(warned);
         List<Message> said = warned.warnings().stream()
                 .map(Located::diagnostic)
                 .filter(d -> "E1939".equals(d.code().toString()))
@@ -263,12 +263,6 @@ class ARewriteNoRowTellsApartRefusesTheVerdictTest {
     }
 
     private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 }

@@ -2,6 +2,9 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -56,5 +59,7 @@ class AskingOneBehaviorForRowsSearchesNoOtherTest {
                 "the behavior this was asked about was searched");
         assertFalse(db.isComputed(new Adequacy.BoundarySearch("example.apart", "second")),
                 "and the one it was not asked about was not");
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
     }
 }

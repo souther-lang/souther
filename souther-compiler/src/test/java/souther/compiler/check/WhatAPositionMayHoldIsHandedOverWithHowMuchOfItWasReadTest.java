@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.ReadAs;
 import org.junit.jupiter.api.Test;
@@ -67,12 +68,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
     }
 
     private static Read read(String source, String named, ReadingPolicy policy) {
-        Compilation compilation = Compilation.ofSource(unreadable(source), "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                .flatMap(List::stream)
-                .map(each -> each.diagnostic().code())
-                .toList(), "the model this reads has to be one somebody could write");
+        Compilation compilation = ACompiledModel.answered(unreadable(source));
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return new Read(FieldDomains.of(name,
@@ -96,8 +92,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
     private static FieldDomains ofRefused(String source, String named) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        assertFalse(compilation.diagnostics().values().stream().flatMap(List::stream).toList()
-                .isEmpty(), "this model is meant to be refused");
+        assertFalse(compilation.errors().isEmpty(), "this model is meant to be refused");
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return FieldDomains.of(name,

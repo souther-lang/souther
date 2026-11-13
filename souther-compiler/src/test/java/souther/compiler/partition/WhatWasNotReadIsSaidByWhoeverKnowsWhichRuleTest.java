@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
@@ -64,7 +65,6 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
             data Basket = { item: Item }
 
             behavior f : (b: Basket) -> Ok
-                constructs Ok
             let f (b) = Ok
             """;
 
@@ -88,7 +88,8 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
      */
     @Test
     void aPositionTheReadingDidNotReachNamesNoRule() {
-        List<PartitionEvidence.NotRead> said = notRead(A_POSITION);
+        List<PartitionEvidence.NotRead> said = notRead(
+                reportOfWhatIsRefused(A_POSITION, List.of("E1319")));
 
         assertTrue(said.stream().anyMatch(each ->
                         each instanceof PartitionEvidence.NotRead.APosition
@@ -112,7 +113,8 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
     void theTwoAreWrittenApart() {
         assertTrue(human(A_RULE).contains("not read: comparison@"), human(A_RULE));
         assertFalse(human(A_RULE).contains("not read: n "), human(A_RULE));
-        assertTrue(human(A_POSITION).contains("not read: b.item ("), human(A_POSITION));
+        String refused = human(reportOfWhatIsRefused(A_POSITION, List.of("E1319")));
+        assertTrue(refused.contains("not read: b.item ("), refused);
     }
 
     private static List<Adequacy.Kind> kinds(String model) {
@@ -127,17 +129,32 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
     }
 
     private static List<PartitionEvidence.NotRead> notRead(String model) {
-        return report(model).modules().get(0).behaviors().get(0).partition().notRead();
+        return notRead(report(model));
+    }
+
+    private static List<PartitionEvidence.NotRead> notRead(AdequacyReport report) {
+        return report.modules().get(0).behaviors().get(0).partition().notRead();
     }
 
     private static String human(String model) {
-        return report(model).humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        return human(report(model));
+    }
+
+    private static String human(AdequacyReport report) {
+        return report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     private static AdequacyReport report(String model) {
+        return AdequacyReport.of(ACompiledModel.measured(model, Adequacy.Asked.fullReport()));
+    }
+
+    /** The report of a model that is refused with {@code codes} and still read. */
+    private static AdequacyReport reportOfWhatIsRefused(String model, List<String> codes) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(codes, compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList());
         return AdequacyReport.of(compilation);
     }
     /**

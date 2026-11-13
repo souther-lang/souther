@@ -1801,6 +1801,8 @@ class EverySchemaWordIsAccountedForTest {
         compilation.withJvmExampleDeadlines(
                 DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go")));
         compilation.answerEverything();
+        assertEquals(List.of("E1923"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "the row that cannot be decided");
 
         JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
                 .json(souther.compiler.diag.SourceRendering.namedByIdentity(compilation.texts())));

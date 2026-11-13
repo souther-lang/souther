@@ -9,7 +9,6 @@ import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Db;
 import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
@@ -195,7 +194,7 @@ class AModuleOnThePathNeedsNothingCompiledHereTest {
      *  is what that report says is not decided: it is said once, as that. */
     @Test
     void aModuleCompiledHereAndOnThePathIsSaidOnlyAsThat() {
-        Compilation compilation = Compilation.ofSources(List.of(COMMON, """
+        List<Object> said = everythingSaid(List.of(COMMON, """
                         module app.user
                         import lib.x ( make )
                         behavior go : (s: String) -> app.common.Tag
@@ -203,7 +202,7 @@ class AModuleOnThePathNeedsNothingCompiledHereTest {
                         """), builtWith(List.of(COMMON, MAKES_A_TAG), "lib.x", "app.common"));
 
         assertEquals(List.of(new ModuleMessage.TheModuleIsCompiledHereAndOnThePath("app.common")),
-                everythingSaid(compilation));
+                said);
     }
 
     /** The module compiled here no longer declares what the path module's declarations name. What
@@ -219,7 +218,7 @@ class AModuleOnThePathNeedsNothingCompiledHereTest {
                 behavior shout : (s: String) -> String
                 let shout (s) = s
                 """;
-        Compilation compilation = Compilation.ofSources(List.of("""
+        List<Object> said = everythingSaid(List.of("""
                         module app.common exposing ( Other )
                         data Other = String
                         """, """
@@ -230,16 +229,20 @@ class AModuleOnThePathNeedsNothingCompiledHereTest {
                         """), builtWith(List.of(COMMON, shouts), "lib.x"));
 
         assertEquals(List.of(new ModuleMessage.AModuleOnThePathNeedsOneCompiledHere("lib.x",
-                "app.common")), everythingSaid(compilation));
+                "app.common")), said);
     }
 
     /** Every report any question of the compilation makes, every question asked: not only what a
      *  build reads before it stops. */
-    private static List<Object> everythingSaid(Compilation compilation) {
+    private static List<Object> everythingSaid(List<String> sources, ModulePath path) {
+        Compilation compilation = Compilation.ofSources(sources, path);
         compilation.answerEverything();
         List<Object> out = new ArrayList<>();
-        for (Db.Found found : compilation.db().allReports()) {
-            out.add(found.report().diagnostic().said());
+        for (Located found : compilation.errors()) {
+            out.add(found.diagnostic().said());
+        }
+        for (Located found : compilation.warnings()) {
+            out.add(found.diagnostic().said());
         }
         return out;
     }

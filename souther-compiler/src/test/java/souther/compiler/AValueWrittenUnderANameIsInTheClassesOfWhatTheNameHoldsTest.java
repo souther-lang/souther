@@ -80,9 +80,7 @@ class AValueWrittenUnderANameIsInTheClassesOfWhatTheNameHoldsTest {
             """;
 
     private static PartitionEvidence.AxisCoverage axis(String source, String path) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         PartitionEvidence partition = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value().get("seat");
         assertNotNull(partition, "the model under test compiles");

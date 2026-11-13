@@ -176,6 +176,9 @@ class AnEvaluationRunsWhatShipsOrWhatIsLeftOfItTest {
         Compilation compilation =
                 Compilation.ofSources(List.of(MODEL.formatted(constructs)), ModulePath.EMPTY);
         compilation.answerEverything();
+        assertEquals(!"1".equals(constructs), !compilation.errors().isEmpty(),
+                () -> "only the model constructing a value the invariant refuses is refused: "
+                        + compilation.errors());
         return compilation;
     }
 }

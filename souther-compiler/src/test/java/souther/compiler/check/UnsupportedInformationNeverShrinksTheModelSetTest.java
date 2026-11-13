@@ -8,6 +8,9 @@ import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbols;
 
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -28,8 +31,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class UnsupportedInformationNeverShrinksTheModelSetTest {
 
-    private static FieldDomains domainsOf(String source, String name) {
+    /**
+     * {@code source} compiled and answered in full. A declaration no value satisfies is refused,
+     * and is what some of these are about; any other refusal is a model whose declarations were
+     * never read.
+     */
+    private static Compilation compiled(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                        .map(each -> each.diagnostic().code().toString())
+                        .filter(each -> !each.equals("E1013")).toList(),
+                "the model this reads has to be one somebody could write");
+        return compilation;
+    }
+
+    private static FieldDomains domainsOf(String source, String name) {
+        Compilation compilation = compiled(source);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         return FieldDomains.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)),
                 RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
@@ -37,7 +55,7 @@ class UnsupportedInformationNeverShrinksTheModelSetTest {
     }
 
     private static OccurrenceCounts countsOf(String source, String name) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = compiled(source);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         return OccurrenceCounts.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)),
                 RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),

@@ -638,6 +638,8 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
     private static List<RowOutcome> rows(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.answerEverything();
+        assertFalse(compilation.errors().isEmpty(),
+                "a row held to what the behavior declares is refused, which is why it stops");
         return compilation.db()
                 .ask(Output.Examples.asked(compilation.db(), compilation.modules().get(0),
                         compilation.sourceIds().get(0)))

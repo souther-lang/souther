@@ -71,7 +71,7 @@ class APositionIsMeasuredAtEveryNumberTheRulesNameOfItTest {
         if (measured == null) {
             Compilation compilation = Compilation.ofSource(MODEL, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            ACompiledModel.compiles(compilation);
             measured = compilation;
         }
         return measured;

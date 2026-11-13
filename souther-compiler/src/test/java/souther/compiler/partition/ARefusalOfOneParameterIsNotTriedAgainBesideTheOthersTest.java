@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.RuleReadingSource;
@@ -207,9 +208,7 @@ class ARefusalOfOneParameterIsNotTriedAgainBesideTheOthersTest {
 
                 let usualLeft = Left { inner = Inner { g = On } }
                 """.formatted(flags(fields));
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         String module = compilation.modules().get(0);
         CheckSurface surface = compilation.db().ask(new Shapes.CheckSurface(module)).value();
         assertNotNull(surface, "the module is assembled");
@@ -295,8 +294,7 @@ class ARefusalOfOneParameterIsNotTriedAgainBesideTheOthersTest {
     private record Model(MeasuredInput subject, CoverageRead.Read read) {
 
         static Model of(String source, String behavior) {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.answerEverything();
+            Compilation compilation = ACompiledModel.answered(source);
             return of(compilation, compilation.modules().get(0), behavior);
         }
 

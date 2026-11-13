@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -82,16 +83,14 @@ class ASumOfSeveralNumbersThatOneValueSettlesIsPartedAtThatValueTest {
 
     private static List<String> classesAt(String declarations, String parameters,
                                           String condition, String path) {
-        Compilation compilation = Compilation.ofSource("module demo\n\n" + declarations + """
+        Compilation compilation = ACompiledModel.measured("module demo\n\n" + declarations + """
 
                 behavior f : %s -> Int
 
                 let f %s =
                     if %s then 1 else 0
                 """.formatted(parameters, parameters.replaceAll(": [A-Za-z]+", ""), condition),
-                "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                Adequacy.Asked.fullReport());
         PartitionEvidence evidence =
                 compilation.db().ask(new Adequacy.Coverage("demo")).value().get("f");
         return evidence.axes().stream().filter(axis -> axis.path().equals(path))
@@ -99,18 +98,14 @@ class ASumOfSeveralNumbersThatOneValueSettlesIsPartedAtThatValueTest {
     }
 
     private static String reportOf(String declarations, String parameters, String condition) {
-        Compilation compilation = Compilation.ofSource("module demo\n\n" + declarations + """
+        Compilation compilation = ACompiledModel.measured("module demo\n\n" + declarations + """
 
                 behavior f : %s -> Int
 
                 let f %s =
                     if %s then 1 else 0
                 """.formatted(parameters, parameters.replaceAll(": [A-Za-z]+", ""), condition),
-                "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code().toString()).toList());
+                Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }

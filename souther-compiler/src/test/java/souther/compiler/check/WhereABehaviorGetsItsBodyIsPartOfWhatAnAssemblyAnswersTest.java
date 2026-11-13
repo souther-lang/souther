@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.DefaultStdlib;
-import souther.compiler.query.Compilation;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Shapes;
 
 import org.junit.jupiter.api.Test;
@@ -35,7 +35,7 @@ class WhereABehaviorGetsItsBodyIsPartOfWhatAnAssemblyAnswersTest {
 
     @Test
     void twoAssembliesThatDifferOnlyInWhereABodyComesFromAreTwoAnswers() {
-        CheckSurface itsOwn = Compilation.ofSource(SOURCE, "Main").db()
+        CheckSurface itsOwn = ACompiledModel.answered(SOURCE).db()
                 .ask(new Shapes.CheckSurface("m")).value();
         assertNotNull(itsOwn);
         assertEquals(Map.of("go", BehaviorImplementation.IMPLEMENTED), itsOwn.bodies().states());

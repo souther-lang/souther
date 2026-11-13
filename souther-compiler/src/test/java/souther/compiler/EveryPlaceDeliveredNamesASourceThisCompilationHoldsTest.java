@@ -118,8 +118,7 @@ class EveryPlaceDeliveredNamesASourceThisCompilationHoldsTest {
                     | (Amount(50)) -> Submitted { cost = Amount(50) }
                 """, "Main");
         compilation.measure(souther.compiler.query.Adequacy.Level.ALL);
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     /** What a place a reader is offered says about which file it is in. */

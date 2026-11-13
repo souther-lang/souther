@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 class ARuleWrittenInMultiplesStillDividesThePositionTest {
 
-    private static List<String> classesOf(String guards) {
+    private static List<String> classesOf(String guards, String answerAtOne) {
         Compilation compilation = Compilation.ofSource("""
                 module example.scaled
 
@@ -44,10 +44,10 @@ class ARuleWrittenInMultiplesStillDividesThePositionTest {
                 }
 
                 example f
-                    | (1) -> Yes { n = 1 }
-                """.formatted(guards), "Main");
+                    | (1) -> %s { n = 1 }
+                """.formatted(guards, answerAtOne), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         assertNotNull(all, "the model under test compiles");
@@ -67,7 +67,7 @@ class ARuleWrittenInMultiplesStillDividesThePositionTest {
     void twoRulesAtDifferentScalesDrawTwoLinesThroughOnePosition() {
         assertEquals(List.of("n: x <= 10", "n: 10 < x <= 20", "n: 20 < x"), classesOf("""
                     guard n > 10 else No { n = n }
-                    guard 2 * n > 40 else No { n = n }"""));
+                    guard 2 * n > 40 else No { n = n }""", "No"));
     }
 
     /**
@@ -80,6 +80,6 @@ class ARuleWrittenInMultiplesStillDividesThePositionTest {
     @Test
     void aThresholdTheFormNeverReachesDividesAtAValueThePositionHolds() {
         assertEquals(List.of("n: x <= 4", "n: 4 < x"),
-                classesOf("    guard 2 * n <= 9 else No { n = n }"));
+                classesOf("    guard 2 * n <= 9 else No { n = n }", "Yes"));
     }
 }

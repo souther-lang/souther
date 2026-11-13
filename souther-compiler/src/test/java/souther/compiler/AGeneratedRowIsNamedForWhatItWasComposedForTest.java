@@ -83,7 +83,7 @@ class AGeneratedRowIsNamedForWhatItWasComposedForTest {
     private static String block(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, Adequacy.Filling> filling = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(filling, "the model under test compiles");
         return GeneratedRows.of(Adequacy.offeredFor(compilation.db(),

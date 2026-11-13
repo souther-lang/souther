@@ -58,7 +58,9 @@ class ExampleOutcomeTest {
             }
             """;
 
-    private record Evaluated(Output.Examples.Of value, List<Report> reports) {}
+    /** What the rows of a model observed, the reports that came of asking, and the codes of every
+     *  error the compile holds, for a row that is meant to be refused. */
+    private record Evaluated(Output.Examples.Of value, List<Report> reports, List<String> errors) {}
 
     private static Evaluated evaluate(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
@@ -66,7 +68,8 @@ class ExampleOutcomeTest {
         String module = compilation.modules().get(0);
         Output.Examples key = Output.Examples.asked(compilation.db(), module,
                 compilation.sourceIds().get(0));
-        return new Evaluated(compilation.db().ask(key).value(), compilation.db().ask(key).reports());
+        return new Evaluated(compilation.db().ask(key).value(), compilation.db().ask(key).reports(),
+                compilation.errors().stream().map(each -> each.diagnostic().code()).toList());
     }
 
     private static RowOutcome onlyRow(Evaluated evaluated) {
@@ -178,7 +181,7 @@ class ExampleOutcomeTest {
                 """);
         Compilation compilation = Compilation.ofDocuments(documents, Set.of(),
                 souther.compiler.meta.ModulePath.EMPTY);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         Output.Examples.Of attached = compilation.db()
                 .ask(new Output.Examples("example.trip", new SourceId("trip-examples.sou"), ArmObservation.OMIT)).value();

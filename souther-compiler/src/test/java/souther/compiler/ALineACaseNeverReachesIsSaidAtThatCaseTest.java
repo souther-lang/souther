@@ -207,7 +207,7 @@ class ALineACaseNeverReachesIsSaidAtThatCaseTest {
                 let f (r) = if %s then 1 else 0
 
                 example f
-                    | "one" : (P { deadline = %s }) -> 0
+                    | "one" : (P { deadline = %s }) -> 1
                 """.formatted(bound, guard, deadline);
     }
 
@@ -249,7 +249,7 @@ class ALineACaseNeverReachesIsSaidAtThatCaseTest {
     private static String report(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation).humanInEnglish(
                 SourceRendering.namedByIdentity(compilation.texts()));
     }

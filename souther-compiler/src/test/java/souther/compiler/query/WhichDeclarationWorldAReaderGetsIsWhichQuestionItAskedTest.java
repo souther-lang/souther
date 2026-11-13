@@ -7,6 +7,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -41,7 +42,12 @@ class WhichDeclarationWorldAReaderGetsIsWhichQuestionItAskedTest {
     private static Db db() {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", SOURCE);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).db();
+        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        compilation.answerEverything();
+        assertEquals(List.of("E1105"), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(),
+                "an invariant that builds is refused, and the two worlds still differ in it");
+        return compilation.db();
     }
 
     private static Hir.Expr clauseOf(Symbols symbols) {

@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
@@ -10,6 +11,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The one way an {@code import List ( ... )} line fails as a library import comes back as a
@@ -37,7 +39,11 @@ class EveryWayALibraryImportCanFailComesBackAsAValueTest {
     /** What the check refused in {@code source}, which declares {@code app.own}. */
     private static List<Exposing.Refusal> refusedIn(String source) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
+        compilation.answerEverything();
+        List<Located> errors = compilation.errors();
         Exposing.Checked checked = compilation.db().ask(new Front.Checked("app.own")).value();
+        assertTrue(errors.size() >= checked.refused().size(),
+                () -> "every refusal is said as an error: " + errors);
         return checked.refused();
     }
 

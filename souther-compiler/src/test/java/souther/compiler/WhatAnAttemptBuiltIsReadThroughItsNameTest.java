@@ -62,10 +62,7 @@ class WhatAnAttemptBuiltIsReadThroughItsNameTest {
             """;
 
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     private static PartitionEvidence evidence(String source, String behavior) {

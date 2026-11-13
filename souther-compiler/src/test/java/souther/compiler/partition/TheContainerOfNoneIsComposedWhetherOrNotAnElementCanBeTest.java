@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
@@ -98,8 +99,16 @@ class TheContainerOfNoneIsComposedWhetherOrNotAnElementCanBeTest {
      * The count of {@code asked} of the numbers of the list at {@code path} in {@code source},
      * each at {@code field} inside an element where it is not null.
      */
-    private static Case theCase(String source, String path, String field, long asked) {
+    private static Case theCase(String source, String path, String field, long asked,
+                                List<String> refusedWith) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
+        if (refusedWith.isEmpty()) {
+            ACompiledModel.compiles(compilation);
+        } else {
+            compilation.answerEverything();
+            assertEquals(refusedWith, compilation.errors().stream()
+                    .map(e -> e.diagnostic().code()).toList(), "what the model is refused for");
+        }
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
@@ -132,11 +141,11 @@ class TheContainerOfNoneIsComposedWhetherOrNotAnElementCanBeTest {
     }
 
     private static Case ofNumbers(long asked) {
-        return theCase(NUMBERS, "xs", null, asked);
+        return theCase(NUMBERS, "xs", null, asked, List.of());
     }
 
     private static Case ofNoNumber(long asked) {
-        return theCase(NO_NUMBER, "xs", "n", asked);
+        return theCase(NO_NUMBER, "xs", "n", asked, List.of("E1013"));
     }
 
     private static TermRealizations.Realization composed(Case made, SearchRegion region) {
@@ -183,7 +192,7 @@ class TheContainerOfNoneIsComposedWhetherOrNotAnElementCanBeTest {
      *  nought. */
     @Test
     void whereNoTotalIsLeftTheContainerOfNoneIsNoContainerEither() {
-        Case made = theCase(NO_TOTAL, "b.xs", null, 0);
+        Case made = theCase(NO_TOTAL, "b.xs", null, 0, List.of("E1013"));
         TermRealizations.Realization composed = composed(made, made.measuring().region());
         assertFalse(holdsTheContainerOfNone(composed), composed.toString());
         assertFalse(composed instanceof TermRealizations.Realization.Built, composed.toString());

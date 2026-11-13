@@ -226,8 +226,7 @@ class ADataThatSpreadsItsWayBackToItselfIsRefusedTest {
         c.answerEverything();
 
         assertEquals(List.of(new DeclarationMessage.CyclicModuleDependency()),
-                c.db().allReports().stream().map(found -> found.report().diagnostic().said())
-                        .toList(),
+                c.errors().stream().map(found -> found.diagnostic().said()).toList(),
                 "the modules a ring would have to span cannot see each other");
     }
 
@@ -280,7 +279,7 @@ class ADataThatSpreadsItsWayBackToItselfIsRefusedTest {
         } catch (CompileException e) {
             said.addAll(e.diagnostics());
         }
-        c.db().allReports().forEach(found -> said.add(found.report().diagnostic()));
+        c.errors().forEach(each -> said.add(each.diagnostic()));
         return new Reported(said);
     }
 
@@ -289,11 +288,14 @@ class ADataThatSpreadsItsWayBackToItselfIsRefusedTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        List<Diagnostic> refused = new ArrayList<>();
         try {
             c.answerEverything();
-        } catch (CompileException _) {
-            // What it refused is another case's; this one reads an answer it reached on the way.
+        } catch (CompileException e) {
+            refused.addAll(e.diagnostics());
         }
+        c.errors().forEach(each -> refused.add(each.diagnostic()));
+        assertFalse(refused.isEmpty(), "the model is one the compiler refuses");
         return c;
     }
 }

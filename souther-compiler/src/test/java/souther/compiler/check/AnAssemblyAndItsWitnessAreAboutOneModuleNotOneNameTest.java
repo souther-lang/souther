@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
@@ -81,8 +82,8 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
      */
     @Test
     void oneSettlingReadAgainstTwoSetsOfNamesDoesNotPair() {
-        Desugared.Module declarations = declarationsOf(WITH_A_CONSTRUCTION);
-        CheckSurface itsOwnAssembly = assemblyOf(WITH_A_CONSTRUCTION);
+        Desugared.Module declarations = declarationsOf(WITH_A_CONSTRUCTION, List.of("E1105"));
+        CheckSurface itsOwnAssembly = assemblyOf(WITH_A_CONSTRUCTION, List.of("E1105"));
         InvariantSettled settling = itsOwnAssembly.settling();
 
         Map<String, Normalized.Def> elsewhere = new LinkedHashMap<>();
@@ -222,6 +223,17 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
             let wrap (n: Int) : Wrapped = Wrapped(n)
             """;
 
+    private static Compilation answered(String source, List<String> refusedFor) {
+        if (refusedFor.isEmpty()) {
+            return ACompiledModel.answered(source);
+        }
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        assertEquals(refusedFor, compilation.errors().stream()
+                .map(found -> found.diagnostic().code()).toList(), "the model is refused");
+        return compilation;
+    }
+
     private static List<Normalized.Def> normalizedIn(Desugared.Module module) {
         List<Normalized.Def> out = new ArrayList<>();
         for (Derived.Def def : module.defs()) {
@@ -231,14 +243,23 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
     }
 
     private static Desugared.Module declarationsOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        return declarationsOf(source, List.of());
+    }
+
+    /** The declarations of a module refused for {@code refusedFor}, which are read all the same. */
+    private static Desugared.Module declarationsOf(String source, List<String> refusedFor) {
+        Compilation compilation = answered(source, refusedFor);
         Desugared.Module module = compilation.db().ask(new Shapes.Desugared("m")).value();
         assertNotNull(module, "the source under test does not get as far as being desugared");
         return module;
     }
 
     private static CheckSurface assemblyOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        return assemblyOf(source, List.of());
+    }
+
+    private static CheckSurface assemblyOf(String source, List<String> refusedFor) {
+        Compilation compilation = answered(source, refusedFor);
         CheckSurface surface = compilation.db().ask(new Shapes.CheckSurface("m")).value();
         assertNotNull(surface, "the source under test does not get as far as being assembled");
         return surface;

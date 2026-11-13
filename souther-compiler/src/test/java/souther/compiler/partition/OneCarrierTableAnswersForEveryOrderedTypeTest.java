@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.RowsOfABlock;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.AfterAll;
@@ -532,10 +533,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
 
     private static synchronized Compilation model() {
         if (measuredModel == null) {
-            Compilation compilation = Compilation.ofSource(MODEL, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            measuredModel = compilation;
+            measuredModel = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         }
         return measuredModel;
     }

@@ -7,6 +7,9 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -28,7 +31,21 @@ class ARuleNoOtherReadingTakesInIsStillSaidHereTest {
     private static String reportOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        return humanReportOf(compilation);
+    }
+
+    /** The report of a model refused with exactly {@code codes}. */
+    private static String reportOfRefused(String source, List<String> codes) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(codes, compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
+                "the model is refused");
+        return humanReportOf(compilation);
+    }
+
+    private static String humanReportOf(Compilation compilation) {
         return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
@@ -48,7 +65,7 @@ class ARuleNoOtherReadingTakesInIsStillSaidHereTest {
      */
     @Test
     void aSizeBoundPastTheEndOfTheWholeNumbersIsNamedAsUnaccountedFor() {
-        String human = reportOf("""
+        String human = reportOfRefused("""
                 module example.sized
 
                 data Tag = String
@@ -59,7 +76,7 @@ class ARuleNoOtherReadingTakesInIsStillSaidHereTest {
 
                 behavior weigh : (t: Tag) -> Short | Long
                 let weigh (t) = if String.length(t.value) > 3 then Long else Short
-                """);
+                """, List.of("E1013"));
 
         assertTrue(human.contains("not accounted for: invariant Tag (long)"), human);
         assertTrue(human.contains("which values may stand at t"), human);

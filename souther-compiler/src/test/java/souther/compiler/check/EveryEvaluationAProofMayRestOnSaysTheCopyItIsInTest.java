@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -73,7 +74,7 @@ class EveryEvaluationAProofMayRestOnSaysTheCopyItIsInTest {
     }
 
     private static <T extends Core> List<T> in(String behavior, Class<T> kind) {
-        Compilation compilation = Compilation.ofSource(SOURCE, "Main");
+        Compilation compilation = ACompiledModel.answered(SOURCE);
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");

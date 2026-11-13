@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -42,10 +43,9 @@ class AStoredStringEqualToTheLowercaseOfAStringIsReadTest {
             """;
 
     private static String report(String pattern, String body) {
-        Compilation compilation = Compilation.ofSource(
-                DECLARATIONS.replace("PATTERN", pattern).replace("BODY", body), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(
+                DECLARATIONS.replace("PATTERN", pattern).replace("BODY", body),
+                Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
@@ -95,9 +95,7 @@ class AStoredStringEqualToTheLowercaseOfAStringIsReadTest {
                 behavior m : (p: P) -> Bool
                 let m (p) = String.lowercase(p.s) /= p.s
                 """)) {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
             String json = AdequacyReport.of(compilation)
                     .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
             assertFalse(json.contains("x can be"), () -> source + json);
@@ -169,9 +167,7 @@ class AStoredStringEqualToTheLowercaseOfAStringIsReadTest {
         for (String pattern : List.of("[a-z0-9.]+", "[A-Za-z0-9.]+")) {
             for (String body : BODIES) {
                 String model = ANSWERING.replace("PATTERN", pattern).replace("BODY", body);
-                Compilation offering = Compilation.ofSource(model, "Main");
-                offering.measure(Adequacy.Asked.fullReport());
-                offering.answerEverything();
+                Compilation offering = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
                 String block = GeneratedRows.of(
                         Adequacy.offeredFor(offering.db(), OfferingRequest.overTheModule("demo")),
                         Map.of(), SourceRendering.namedByIdentity(offering.texts()),
@@ -182,9 +178,13 @@ class AStoredStringEqualToTheLowercaseOfAStringIsReadTest {
                 String examples = offered.stream()
                         .map(row -> "    | " + row.values().replace("<?>", "Same"))
                         .collect(Collectors.joining("\n"));
-                Compilation running = Compilation.ofSource(model + "\nexample f\n" + examples + "\n",
-                        "Main");
+                // Every row is written as answering Same, so each that answers Differ is refused
+                // for not holding, and that is the only thing the model is refused for.
+                Compilation running = Compilation.ofSource(
+                        model + "\nexample f\n" + examples + "\n", "Main");
                 running.answerEverything();
+                assertEquals(Set.of("E1905"), running.errors().stream()
+                        .map(e -> e.diagnostic().code()).collect(Collectors.toSet()));
                 Output.Examples key = Output.Examples.asked(running.db(), "demo",
                         running.sourceIds().get(0));
                 Set<String> answered = running.db().ask(key).value().rows().stream()

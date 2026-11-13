@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.meta.ModulePath;
@@ -10,6 +11,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -82,7 +84,7 @@ class OneCheckedModuleIssuesOneNumberingTest {
      */
     @Test
     void aModuleWhoseBodiesWereNotCheckedHasNoNumbering() {
-        Compilation compilation = compiled(UNCHECKABLE);
+        Compilation compilation = uncheckable();
         String module = compilation.modules().get(0);
 
         assertTrue(compilation.db().ask(new Bodies.Checked(module)).value() == null,
@@ -94,8 +96,13 @@ class OneCheckedModuleIssuesOneNumberingTest {
     }
 
     private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
+        return ACompiledModel.compiles(Compilation.ofSources(List.of(source), ModulePath.EMPTY));
+    }
+
+    private static Compilation uncheckable() {
+        Compilation compilation = Compilation.ofSources(List.of(UNCHECKABLE), ModulePath.EMPTY);
         compilation.answerEverything();
+        assertFalse(compilation.errors().isEmpty(), "the name nothing declares is refused");
         return compilation;
     }
 

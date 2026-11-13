@@ -65,6 +65,8 @@ class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
         Compilation compilation = Compilation.ofSource(UNRESOLVED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertFalse(compilation.errors().isEmpty(),
+                "the model names a type from a module that does not resolve");
         return compilation;
     }
 

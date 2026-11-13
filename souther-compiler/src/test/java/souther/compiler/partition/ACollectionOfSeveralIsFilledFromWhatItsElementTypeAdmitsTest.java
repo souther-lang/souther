@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.OfferedAtTheLines;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
@@ -65,8 +66,19 @@ class ACollectionOfSeveralIsFilledFromWhatItsElementTypeAdmitsTest {
     }
 
     private static FillResult filled(String source) {
+        return filled(ACompiledModel.answered(source));
+    }
+
+    /** As {@link #filled(String)}, of a model the compile refuses with {@code refusedWith}. */
+    private static FillResult filled(String source, List<String> refusedWith) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
+        assertEquals(refusedWith, compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "what the model is refused for");
+        return filled(compilation);
+    }
+
+    private static FillResult filled(Compilation compilation) {
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
@@ -219,7 +231,7 @@ class ACollectionOfSeveralIsFilledFromWhatItsElementTypeAdmitsTest {
      */
     @Test
     void aRowIsOfferedWhereTheValuesExist() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module ex.offered
 
                 data ContactId = String
@@ -240,9 +252,7 @@ class ACollectionOfSeveralIsFilledFromWhatItsElementTypeAdmitsTest {
                 example decide
                     | (Opportunity { makers = DecisionMakers([ContactId("003000000000000")]) })
                         -> Decided { makers = DecisionMakers([ContactId("003000000000000")]) }
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                         .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),
                 "the model under test is a program that can be written");
@@ -276,8 +286,7 @@ class ACollectionOfSeveralIsFilledFromWhatItsElementTypeAdmitsTest {
     }
 
     private static Model modelOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                         .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),
@@ -308,7 +317,8 @@ class ACollectionOfSeveralIsFilledFromWhatItsElementTypeAdmitsTest {
      */
     @Test
     void aTypeOfTooFewValuesIsNotFilledOutToTheCountAsked() {
-        FillResult filled = filled(model("Set<Bool>", "Set.size(xs) >= 3", "Set.size(h.xs)"));
+        FillResult filled = filled(model("Set<Bool>", "Set.size(xs) >= 3", "Set.size(h.xs)"),
+                List.of("E1013"));
 
         assertEquals(List.of(), filled.rows(), "no row holds a set of three booleans");
         assertTrue(!filled.unresolved().isEmpty(), "and the combinations are said to be unresolved");

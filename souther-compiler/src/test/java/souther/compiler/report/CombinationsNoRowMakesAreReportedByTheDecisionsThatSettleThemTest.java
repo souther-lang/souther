@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.CombinationCriterion;
@@ -57,9 +58,8 @@ class CombinationsNoRowMakesAreReportedByTheDecisionsThatSettleThemTest {
      */
     @Test
     void whereNothingWasReadOfTheRowsTheDocumentStillGrowsWithTheDecisions() {
-        Compilation compilation = Compilation.ofSource(lengthOfWhatWasKept(ELEMENTS), "Main");
-        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(lengthOfWhatWasKept(ELEMENTS),
+                Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         AdequacyReport report = AdequacyReport.of(compilation);
 
         String written = report.json(SourceRendering.namedByIdentity(compilation.texts()));
@@ -78,9 +78,8 @@ class CombinationsNoRowMakesAreReportedByTheDecisionsThatSettleThemTest {
 
     @Test
     void theCombinationsOfManyDecisionsAreOneSetForEachDecision() {
-        Compilation compilation = Compilation.ofSource(lengthOfWhatWasKept(ELEMENTS), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(lengthOfWhatWasKept(ELEMENTS),
+                Adequacy.Asked.fullReport());
         AdequacyReport report = AdequacyReport.of(compilation);
         SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
 

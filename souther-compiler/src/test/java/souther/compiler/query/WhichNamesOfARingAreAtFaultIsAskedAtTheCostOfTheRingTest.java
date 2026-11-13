@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.function.IntFunction;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -70,6 +71,7 @@ class WhichNamesOfARingAreAtFaultIsAskedAtTheCostOfTheRingTest {
                 new LinkedHashMap<>(Map.of("chain.sou", ring.apply(names))), Set.of(),
                 ModulePath.EMPTY);
         c.answerEverything();
+        assertFalse(c.errors().isEmpty(), "the ring is a mistake the model says");
         List<String> said = c.db().allReports().stream()
                 .map(each -> each.report().diagnostic().code().toString()).toList();
         assertEquals(1, said.size(), () -> "the ring is reported once and only once: " + said);

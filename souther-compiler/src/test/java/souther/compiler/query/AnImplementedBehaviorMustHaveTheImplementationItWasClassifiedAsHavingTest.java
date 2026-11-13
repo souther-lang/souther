@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.codegen.Backend;
 import souther.compiler.codegen.Emissions;
 import souther.compiler.codegen.LinkageReader;
@@ -74,7 +75,7 @@ class AnImplementedBehaviorMustHaveTheImplementationItWasClassifiedAsHavingTest 
      * same, and what matters here is only that the projection says there is something to build.
      */
     private static Emissions emittedWith(Map<String, LinkageProjection.Realization> claimed) {
-        Compilation compilation = Compilation.ofSource(SOURCE, "Main");
+        Compilation compilation = ACompiledModel.answered(SOURCE);
         Output.Classes.Inputs in = Output.Classes.inputs(compilation.db(), "m",
                 Output.Classes.Elaboration.WHOLE);
         assertNotNull(in, "the module reaches the emitter, or this says nothing");

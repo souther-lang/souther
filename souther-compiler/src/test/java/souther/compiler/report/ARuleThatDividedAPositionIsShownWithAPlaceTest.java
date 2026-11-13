@@ -3,6 +3,7 @@ package souther.compiler.report;
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.RuleEvidenceOrigin;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -169,9 +170,6 @@ class ARuleThatDividedAPositionIsShownWithAPlaceTest {
     }
 
     private static Compilation compiled(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(model, Adequacy.Asked.fullReport());
     }
 }

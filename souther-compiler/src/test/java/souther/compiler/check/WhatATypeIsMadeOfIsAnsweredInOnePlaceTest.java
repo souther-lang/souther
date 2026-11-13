@@ -140,7 +140,7 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
     /** A sum naming itself is refused where it is written; the descent only has to come back. */
     @Test
     void aSumReachingItselfComesBack() {
-        Hir.Module itself = resolved("""
+        Hir.Module itself = resolvedButRefused("""
                 module m
 
                 data A
@@ -400,9 +400,21 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
     }
 
     private static Hir.Module resolved(String source) {
+        return resolved(source, false);
+    }
+
+    /** The same, for a model the compiler refuses. */
+    private static Hir.Module resolvedButRefused(String source) {
+        return resolved(source, true);
+    }
+
+    private static Hir.Module resolved(String source, boolean refused) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
-                .db().ask(new Names.Resolved("m")).value();
+        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        compilation.answerEverything();
+        assertEquals(refused, !compilation.errors().isEmpty(),
+                refused ? "the compiler refuses this model" : "the model under test compiles");
+        return compilation.db().ask(new Names.Resolved("m")).value();
     }
 }

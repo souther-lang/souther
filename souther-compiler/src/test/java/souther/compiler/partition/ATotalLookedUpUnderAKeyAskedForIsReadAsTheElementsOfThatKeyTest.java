@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.check.Carrier;
 import souther.compiler.diag.SourceLayouts;
@@ -335,9 +336,12 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
         String passing = List.of(posting(String.valueOf(Long.MAX_VALUE)), posting("1"),
                 posting("-1")).toString();
         Compilation stops = ran(model.formatted("ps", passing));
+        assertEquals(List.of("E1905"), stops.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(),
+                "the example's answer is not the one a run that stops gives");
         assertTrue(unmetOf(stops).contains("ON"),
                 () -> "a row whose run stops is at no point: " + report(stops));
-        Compilation reversed = ran(model.formatted("List.reverse(ps)", passing));
+        Compilation reversed = ranCompiling(model.formatted("List.reverse(ps)", passing));
         assertFalse(unmetOf(reversed).contains("ON"),
                 () -> "the same elements walked the other way round answer: " + report(reversed));
     }
@@ -671,6 +675,13 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
+    }
+
+    /** {@link #ran} of a source that compiles. */
+    private static Compilation ranCompiling(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        return ACompiledModel.compiles(compilation);
     }
 
     /**

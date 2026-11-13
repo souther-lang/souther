@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Located;
 import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -103,12 +104,24 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     private static InputCaseEvidence input(String source, int at) {
-        Compilation compilation = measured(source);
+        return inputAt(measured(source), at);
+    }
+
+    /** The same reading of a model that is refused, for the codes it is refused with. */
+    private static InputCaseEvidence inputOfRefused(String source, int at, List<String> codes) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertEquals(codes, compilation.errors().stream()
+                .map(found -> found.diagnostic().code()).toList());
+        return inputAt(compilation, at);
+    }
+
+    private static InputCaseEvidence inputAt(Compilation compilation, int at) {
         Adequacy.SignatureEvidence signature = compilation.db()
                 .ask(new Adequacy.Witnesses(compilation.modules().get(0))).value().get("pick");
         assertNotNull(signature, "the model under test compiles");
@@ -195,7 +208,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
                     | "a" : (A) -> Answer(1)
                 """;
 
-        InputCaseEvidence input = input(claimed, 0);
+        InputCaseEvidence input = inputOfRefused(claimed, 0, List.of("E1326"));
 
         assertEquals(List.of(), input.excluded().stream().map(each -> each.name()).toList());
         assertEquals(List.of("B"), input.unspecified().stream().map(each -> each.name()).toList());
@@ -319,9 +332,8 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     private static List<String> errorsIn(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        return compilation.db().allReports().stream()
-                .filter(found -> found.report().isError())
-                .map(found -> found.report().diagnostic().code())
+        return compilation.errors().stream()
+                .map(found -> found.diagnostic().code())
                 .toList();
     }
 
@@ -546,9 +558,9 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         List<String> out = new ArrayList<>();
-        for (Db.Found found : compilation.db().allReports()) {
-            if (found.report().isError() && "E1326".equals(found.report().diagnostic().code())) {
-                found.report().diagnostic().values().values().stream()
+        for (Located found : compilation.errors()) {
+            if ("E1326".equals(found.diagnostic().code())) {
+                found.diagnostic().values().values().stream()
                         .map(String::valueOf).filter(each -> each.startsWith("k"))
                         .findFirst().ifPresent(out::add);
             }
@@ -812,7 +824,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     private static List<Diagnostic> reported(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         List<Diagnostic> out = new ArrayList<>();
         for (Db.Found found : compilation.db().allReports()) {
             Diagnostic d = found.report().diagnostic();
@@ -844,10 +856,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
         assertTrue(rows.contains("| "), () -> "the block offers rows to compile: " + offered);
         String answered = RULED_OUT + "\n" + rows.replace("<?>", "Answer(0)");
         Compilation amended = Compilation.ofSource(answered, "Main");
-        amended.answerEverything();
-        assertEquals(List.of(), amended.db().allReports().stream()
-                .filter(found -> found.report().isError())
-                .map(found -> found.report().diagnostic().code()).toList(), answered);
+        ACompiledModel.compiles(amended);
     }
 
     /** The rows out of a generated block, which are the lines of it that are not prose. */

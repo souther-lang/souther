@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
@@ -53,9 +54,21 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
 
     /** The same, over several modules, reading the behavior out of the {@code nth} of them. */
     private static Read of(List<String> sources, String behavior, int nth) {
-        Compilation compilation = Compilation.ofSources(sources,
+        return of(ACompiledModel.compiles(Compilation.ofSources(sources,
+                souther.compiler.meta.ModulePath.EMPTY)), behavior, nth);
+    }
+
+    /** The same, of a model that is refused with {@code codes} and still read. */
+    private static Read ofWhatIsRefused(String source, String behavior, List<String> codes) {
+        Compilation compilation = Compilation.ofSources(List.of(source),
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.answerEverything();
+        assertEquals(codes, compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList());
+        return of(compilation, behavior, 0);
+    }
+
+    private static Read of(Compilation compilation, String behavior, int nth) {
         String module = compilation.modules().get(nth);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
@@ -65,7 +78,10 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
 
     /** The classes of the one position, off the declarations alone. */
     private static List<String> declared(String source, String behavior) {
-        Read read = of(source, behavior);
+        return declaredOf(of(source, behavior));
+    }
+
+    private static List<String> declaredOf(Read read) {
         RuleReadingContext reading = RuleReadingContext.unshared(read.rules(),
                 ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return classesOf(Partitions.of(read.behavior(), InputDomain.of(read.sig(), reading,
@@ -216,7 +232,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
      */
     @Test
     void aPositionThatCanHoldNoneOfItsClassesIsNotOneDividedNoWay() {
-        assertEquals(List.of("Prospecting", "Qualified", "Won"), declared("""
+        assertEquals(List.of("Prospecting", "Qualified", "Won"), declaredOf(ofWhatIsRefused("""
                 module g
 
                 data Prospecting
@@ -230,7 +246,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 data Accepted = { at: String }
 
                 behavior classify : (s: StageI) -> Accepted
-                """, "classify"));
+                """, "classify", List.of("E1013"))));
     }
 
     /**

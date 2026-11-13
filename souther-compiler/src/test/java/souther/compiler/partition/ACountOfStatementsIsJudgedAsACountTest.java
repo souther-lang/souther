@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
@@ -433,7 +434,7 @@ class ACountOfStatementsIsJudgedAsACountTest {
     private static InputReading inputReading() {
         String fields = IntStream.range(0, FIELDS).mapToObj(at -> "x" + at + ": Int")
                 .collect(Collectors.joining(", "));
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module m
 
                 data R = { %s, flag: Bool }
@@ -441,7 +442,7 @@ class ACountOfStatementsIsJudgedAsACountTest {
 
                 behavior f : (r: R) -> Yes
                 let f (r) = Yes
-                """.formatted(fields), "Main");
+                """.formatted(fields));
         var inputs = compilation.db().ask(new Adequacy.Inputs("m")).value().get("f");
         assertNotNull(inputs, "the model under test compiles");
         return inputs.reading(RuleReadings.of(compilation, "m"));

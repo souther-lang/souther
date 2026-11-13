@@ -73,7 +73,7 @@ class WhatSettlesACombinationOfTwoClassesIsWhereTheValuesFallTest {
     void aCombinationIsSettledWithoutAnAccountOfTheRun() {
         Compilation compilation = Compilation.ofSource(MODEL + EVERY_COMBINATION, "Main");
         compilation.measure(Adequacy.Level.WITNESS);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         assertEquals(List.of(), gapsOf(compilation),
                 () -> "the rows sit in every combination, and no run was watched: "
@@ -97,7 +97,7 @@ class WhatSettlesACombinationOfTwoClassesIsWhereTheValuesFallTest {
                     | (Request { kind = Overseas, cost = Amount(50) })  -> Ok { n = 2 }
                 """, "Main");
         compilation.measure(Adequacy.Level.WITNESS);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         List<Adequacy.Finding> gaps = gapsOf(compilation);
         assertEquals(1, gaps.size(), () -> "the combination nothing is in: " + gaps);

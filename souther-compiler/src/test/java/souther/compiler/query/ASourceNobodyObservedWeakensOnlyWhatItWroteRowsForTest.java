@@ -123,7 +123,7 @@ class ASourceNobodyObservedWeakensOnlyWhatItWroteRowsForTest {
         Compilation compilation = Compilation.ofSources(List.of(MODULE, TWO_MORE_ROWS),
                 ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        refusedAsAnExamplesFile(compilation);
 
         List<Incompleteness.Fact> absent = absent(AdequacyReport.of(compilation).modules().get(0));
 
@@ -150,7 +150,14 @@ class ASourceNobodyObservedWeakensOnlyWhatItWroteRowsForTest {
         Compilation compilation = Compilation.ofSources(List.of(MODULE, ATTACHED),
                 ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        refusedAsAnExamplesFile(compilation);
         return AdequacyReport.of(compilation).modules().get(0);
+    }
+
+    /** The attached file holds a value and not only examples, which is why nothing is read of it. */
+    private static void refusedAsAnExamplesFile(Compilation compilation) {
+        compilation.answerEverything();
+        assertEquals(List.of("E1906"), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList());
     }
 }

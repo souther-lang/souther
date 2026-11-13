@@ -41,7 +41,17 @@ class ARuleIsFiledAtWhatItIsAboutTest {
                 """.formatted(clause), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        onlyTheClauseNamesNoAnswer(compilation);
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).partition();
+    }
+
+    /**
+     * The one thing said against these models: the clause is about the inputs and does not name
+     * the answer, which is what a rule is filed at the quantity of and nothing else is asked of.
+     */
+    private static void onlyTheClauseNamesNoAnswer(Compilation compilation) {
+        assertEquals(List.of("E1616"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList());
     }
 
     private static List<String> filedAt(String clause) {
@@ -66,6 +76,7 @@ class ARuleIsFiledAtWhatItIsAboutTest {
                 """.formatted(clause), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        onlyTheClauseNamesNoAnswer(compilation);
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).partition();
     }
 

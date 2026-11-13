@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -71,7 +72,7 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
     /** A walk over no row ends with its seed, and over one row it draws that row's bound. */
     @Test
     void aTableOfNoRowIsItsSeedAndOfOneRowIsOneBound() {
-        PartitionEvidence none = measured("[]", "r.lowerBound <= monthly", "computed < 2");
+        PartitionEvidence none = measuredRefused("[]", "r.lowerBound <= monthly", "computed < 2");
         assertEquals(List.of(), notRead(none));
         PartitionEvidence one = measured("[ Row { grade = 1, lowerBound = 100 } ]",
                 "r.lowerBound <= monthly", "computed < 1");
@@ -82,7 +83,7 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
     /** What the step selects may be a number as well as a row. */
     @Test
     void aWalkThatSelectsANumberIsReadAsOneThatSelectsARow() {
-        PartitionEvidence measured = measure(Compilation.ofSource("""
+        PartitionEvidence measured = measure("""
                 module demo
 
                 data Row = { grade: Int, lowerBound: Int }
@@ -96,7 +97,7 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
                     guard computed < 2 else No
                     Ok
                 }
-                """.formatted(ASCENDING), "Main"), "f");
+                """.formatted(ASCENDING), "f");
         assertEquals(List.of(), notRead(measured));
         assertEquals(List.of("pay: x < 100", "pay: 100 <= x < 200", "pay: 200 <= x < 300",
                 "pay: 300 <= x"), classesOf(measured, "pay"));
@@ -337,7 +338,7 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
     /** A seed no form says keeps the reason it has. */
     @Test
     void aSeedNoFormSaysKeepsItsReason() {
-        Compilation compilation = Compilation.ofSource("""
+        String source = """
                 module demo
 
                 data Row = { grade: Int, lowerBound: Int }
@@ -351,14 +352,14 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
                     guard computed < 2 else No
                     Ok
                 }
-                """.formatted(ASCENDING), "Main");
-        assertTrue(notRead(measure(compilation, "f")).toString().contains("NON_AFFINE_PRODUCT"));
+                """.formatted(ASCENDING);
+        assertTrue(notRead(measure(source, "f")).toString().contains("NON_AFFINE_PRODUCT"));
     }
 
     /** A table an input decides is no step function written down. */
     @Test
     void aTableTheInputDecidesIsNotAStepFunction() {
-        Compilation compilation = Compilation.ofSource("""
+        String source = """
                 module demo
 
                 data Row = { grade: Int, lowerBound: Int }
@@ -371,12 +372,29 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
                     guard computed < 2 else No
                     Ok
                 }
-                """, "Main");
-        assertFalse(notRead(measure(compilation, "f")).isEmpty());
+                """;
+        assertFalse(notRead(measure(source, "f")).isEmpty());
     }
 
     private static PartitionEvidence measured(String table, String selects, String condition) {
-        return measure(Compilation.ofSource("""
+        return measure(tableModel(table, selects, condition), "f");
+    }
+
+    /** The same, of a table whose type nothing says, which the model is refused for. */
+    private static PartitionEvidence measuredRefused(String table, String selects,
+                                                     String condition) {
+        Compilation compilation = Compilation.ofSource(tableModel(table, selects, condition),
+                "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        assertEquals(List.of("E1321"), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(),
+                "a field is read off an element of a table of no row");
+        return compilation.db().ask(new Adequacy.Coverage("demo")).value().get("f");
+    }
+
+    private static String tableModel(String table, String selects, String condition) {
+        return """
                 module demo
 
                 data Row = { grade: Int, lowerBound: Int }
@@ -392,11 +410,11 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
                     guard %s else No
                     Ok
                 }
-                """.formatted(table, selects, condition), "Main"), "f");
+                """.formatted(table, selects, condition);
     }
 
     private static PartitionEvidence measuredByHand(String grade, String condition) {
-        return measure(Compilation.ofSource("""
+        return measure("""
                 module demo
 
                 data Ok
@@ -407,7 +425,7 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
                     guard %s else No
                     Ok
                 }
-                """.formatted(grade, condition), "Main"), "f");
+                """.formatted(grade, condition), "f");
     }
 
     /** What the condition of the one fork that ends a body written {@code body} states. */
@@ -417,7 +435,7 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
 
     /** The same, over a declaration of {@code Row} as given. */
     private static Proposition stated(String row, String body) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module demo
 
                 %s
@@ -426,11 +444,7 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
                 let f (cur, pay) = {
                 %s
                 }
-                """.formatted(row, body.indent(4).stripTrailing()), "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
-                () -> "the model compiles: " + body);
+                """.formatted(row, body.indent(4).stripTrailing()));
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
@@ -448,9 +462,8 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
                 .proposition();
     }
 
-    private static PartitionEvidence measure(Compilation compilation, String behavior) {
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+    private static PartitionEvidence measure(String source, String behavior) {
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return compilation.db().ask(new Adequacy.Coverage("demo")).value().get(behavior);
     }
 

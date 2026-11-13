@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
@@ -166,9 +167,6 @@ class ARunIsOverEveryOccurrenceOfThePathItIsReadFromTest {
     }
 
     private static Compilation measured() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
     }
 }

@@ -302,8 +302,14 @@ class AReadingUnderASupposingIsTheOneThatStopsThereTest {
         return said;
     }
 
+    /** The module is made of declarations nothing can build, and is refused for exactly those. */
     private static Compilation compiled() {
-        return Compilation.ofSources(List.of(MODULE), ModulePath.EMPTY);
+        Compilation compilation = Compilation.ofSources(List.of(MODULE), ModulePath.EMPTY);
+        compilation.answerEverything();
+        assertEquals(List.of("E1013", "E1013", "E1013", "E1013"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(),
+                "Empty, R1, P1 and Q1 cannot be constructed");
+        return compilation;
     }
 
     private static TypeSymbol.AtModule declared(String declaration) {

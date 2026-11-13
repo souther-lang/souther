@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
@@ -48,7 +49,7 @@ class AContainerPastTheMostAComposerHoldsIsStoppedAndNotAbsentTest {
 
     @Test
     void seventeenNumbersOneAboveHalfOfTheirTotalAreStoppedAtTheFigure() {
-        Compilation compilation = Compilation.ofSources(List.of("""
+        Compilation compilation = ACompiledModel.compiles(Compilation.ofSources(List.of("""
                 module g
 
                 data Box = { xs: List<Int> } invariant List.length(xs) >= 17
@@ -56,7 +57,7 @@ class AContainerPastTheMostAComposerHoldsIsStoppedAndNotAbsentTest {
                 data Ok
 
                 behavior counted : (b: Box) -> Ok
-                """), ModulePath.EMPTY);
+                """), ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext reading = RuleReadingContext.unshared(rules,

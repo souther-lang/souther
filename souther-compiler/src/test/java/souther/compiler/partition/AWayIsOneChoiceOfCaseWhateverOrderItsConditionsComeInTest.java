@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.PathReachability;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.query.Adequacy;
@@ -57,9 +58,7 @@ class AWayIsOneChoiceOfCaseWhateverOrderItsConditionsComeInTest {
 
     @Test
     void theConditionsTurnedRoundOnEveryWayTellTheSameApart() {
-        Compilation c = Compilation.ofSource(MODEL, "Main");
-        c.measure(Adequacy.Asked.fullReport());
-        c.answerEverything();
+        Compilation c = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         CoverageRead.Read read = c.db().ask(new Adequacy.Meets("probe.order")).value()
                 .get("smallOnes");
         assertNotNull(read, () -> "the model compiles: " + c.errors());

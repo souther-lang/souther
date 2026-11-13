@@ -253,7 +253,7 @@ class ARelationOverSharedNamesReachesTheNumbersTheyStandAtTest {
         NumericDomain.Bounds alone = stoppedAt(BESIDE_A_SUM, "h.note", "h.note", 3);
 
         for (String beside : List.of(BESIDE_A_DEAD_CASE, BESIDE_A_DEAD_ELEMENT)) {
-            assertEquals(alone, stoppedAt(beside, "h.note", "h.note", 3),
+            assertEquals(alone, stoppedAt(beside, "h.note", "h.note", 3, List.of("E1013")),
                     "h.note runs where its own rule leaves it, whatever stands beside it");
         }
     }
@@ -261,7 +261,13 @@ class ARelationOverSharedNamesReachesTheNumbersTheyStandAtTest {
     /** Where {@code asked} runs once {@code fixed} stands at {@code at}. */
     private static NumericDomain.Bounds stoppedAt(String source, String asked, String fixed,
                                                   int at) {
-        InputDomain read = reading(source, "read");
+        return stoppedAt(source, asked, fixed, at, List.of());
+    }
+
+    /** The same, for a model refused for {@code errors}. */
+    private static NumericDomain.Bounds stoppedAt(String source, String asked, String fixed,
+                                                  int at, List<String> errors) {
+        InputDomain read = reading(source, "read", errors);
         Quantities quantities = read.quantities(rulesOf(source));
         return quantities
                 .given(new NumericTerm.ValueOf(pathOf(read, fixed)),
@@ -287,9 +293,12 @@ class ARelationOverSharedNamesReachesTheNumbersTheyStandAtTest {
         return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 
-    private static InputDomain reading(String source, String behavior) {
+    private static InputDomain reading(String source, String behavior, List<String> errors) {
         Compilation compilation =
                 Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
+        compilation.answerEverything();
+        assertEquals(errors, compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "what the model is refused for");
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

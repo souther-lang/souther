@@ -107,7 +107,7 @@ class ANamedBaselineValueThatComputesIsRunAsGeneratedCodeTest {
     void theSearchSpreadsAGeneratedRowOverAComputedBaselineNamedByAWrittenRow() {
         Compilation compilation = Compilation.ofSource(A_BASELINE_A_ROW_NAMES, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, Adequacy.Filling> all =
                 Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");
@@ -163,7 +163,7 @@ class ANamedBaselineValueThatComputesIsRunAsGeneratedCodeTest {
     void theSearchSpreadsAGeneratedRowOverAComputedBaselineNoRowEverNames() {
         Compilation compilation = Compilation.ofSource(A_BASELINE_NO_ROW_NAMES, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, Adequacy.Filling> all =
                 Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");
@@ -224,7 +224,7 @@ class ANamedBaselineValueThatComputesIsRunAsGeneratedCodeTest {
                 List.of(LIB_WITH_AN_UNROWED_BASELINE, IMPORTS_AN_UNROWED_BASELINE),
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, Adequacy.Filling> all =
                 Adequacy.generatedOf(compilation.db(), "demo");
         assertNotNull(all, "the model under test compiles");

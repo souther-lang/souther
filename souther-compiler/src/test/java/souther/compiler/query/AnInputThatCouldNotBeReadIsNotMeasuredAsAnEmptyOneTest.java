@@ -53,6 +53,7 @@ class AnInputThatCouldNotBeReadIsNotMeasuredAsAnEmptyOneTest {
         Compilation compilation = Compilation.ofSource(UNRESOLVED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertTrue(!compilation.errors().isEmpty(), "the import does not resolve");
         return compilation;
     }
 

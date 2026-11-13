@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.inputs.InputDomain;
@@ -15,6 +16,7 @@ import souther.compiler.types.TypeSymbols;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -71,7 +73,10 @@ class AListOfRecordsThatDefineANumberFromTheirOthersWithholdsNothingBesideItTest
     }
 
     private static boolean certified(String source, String path) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        return certified(ACompiledModel.answered(source), path);
+    }
+
+    private static boolean certified(Compilation compilation, String path) {
         String module = compilation.modules().get(0);
         RuleReadingContext reading = RuleReadingContext.unshared(
                 RuleReadings.of(compilation, module), ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
@@ -191,8 +196,13 @@ class AListOfRecordsThatDefineANumberFromTheirOthersWithholdsNothingBesideItTest
                         && Decimal.compare(listPrice.value, 0.0m) < 0
                 """);
 
+        Compilation refused = Compilation.ofSource(source, "Main");
+        refused.answerEverything();
+        assertEquals(List.of("E1013"), refused.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "no line can be built");
+
         assertFalse(lineHoldsAValue(source));
-        assertFalse(certified(source, "q.lines[*].discount"));
+        assertFalse(certified(refused, "q.lines[*].discount"));
     }
 
     private static final String NET = """

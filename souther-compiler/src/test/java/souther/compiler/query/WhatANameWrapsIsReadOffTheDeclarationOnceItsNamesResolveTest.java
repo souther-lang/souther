@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
@@ -186,9 +187,8 @@ class WhatANameWrapsIsReadOffTheDeclarationOnceItsNamesResolveTest {
     private static Compilation compiling(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("prices.sou", source);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
-                .writtenOn(TestDay.DATE);
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                .writtenOn(TestDay.DATE));
         assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with: "
                 + c.db().allReports());
         return c;

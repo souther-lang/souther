@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -47,7 +48,11 @@ class ANameLeftUnansweredCountsWhetherOrNotItWasReportedTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("evil.sou", RESERVED);
         byId.put("main.sou", IMPORTER);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        assertEquals(1, c.errors().size(),
+                "only the module that takes a shipped name is refused: " + c.errors());
+        return c;
     }
 
     private static boolean has(Compilation c, String declared) {

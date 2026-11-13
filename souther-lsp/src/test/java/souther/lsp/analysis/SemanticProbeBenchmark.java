@@ -104,8 +104,13 @@ class SemanticProbeBenchmark {
         double workspaceCold = medianMillis(round -> {
             Map<String, String> now = new LinkedHashMap<>(byId);
             now.put(edited, byId.get(edited) + finished(round));
-            resolve(Compilation.ofDocuments(now, Set.of(), ModulePath.EMPTY)
-                    .writtenOn(WrittenOn.DAY), module);
+            Compilation cold = Compilation.ofDocuments(now, Set.of(), ModulePath.EMPTY)
+                    .writtenOn(WrittenOn.DAY);
+            resolve(cold, module);
+            // The first round is a warm-up, so asking about every report is no part of a timing.
+            if (round == 0 && !cold.errors().isEmpty()) {
+                throw new IllegalStateException("the workspace built from nothing does not compile");
+            }
         }, ROUNDS / 4);
 
         System.out.printf("steady: workspace %6.2f ms   probe %6.2f ms%n", settled, probed);
@@ -141,6 +146,11 @@ class SemanticProbeBenchmark {
         long together = retainedBytes(workspace, beside);
         System.out.printf("retained: workspace %5.1f MB   workspace and probe %5.1f MB%n",
                 megabytes(alone), megabytes(together));
+
+        // Asked once everything is measured, so that answering every report is no part of a timing.
+        if (!workspace.errors().isEmpty()) {
+            throw new IllegalStateException("the workspace measured does not compile");
+        }
     }
 
     /** One round of what an editor does: the buffer as it stands, finished off, compiled in the

@@ -145,7 +145,7 @@ class AMeasureWithNoNumberSaysWhyTest {
     void aSignatureWithCasesAndNoRowSaysNobodyMeasuredIt() {
         Compilation compilation = Compilation.ofSource(NO_ROWS, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String judge = behaviorBlock(
                 AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())), "judge");
 
@@ -167,7 +167,7 @@ class AMeasureWithNoNumberSaysWhyTest {
         if (measured == null) {
             Compilation compilation = Compilation.ofSource(MODEL, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            ACompiledModel.compiles(compilation);
             measured = compilation;
         }
         return measured;
@@ -457,7 +457,7 @@ class AMeasureWithNoNumberSaysWhyTest {
     private static Compilation compiledAt(Adequacy.Level level) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(level));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return compilation;
     }
 
@@ -528,6 +528,9 @@ class AMeasureWithNoNumberSaysWhyTest {
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1906"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(),
+                "the attached source holds a declaration the model's own source has");
         return compilation;
     }
 

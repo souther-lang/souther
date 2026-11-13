@@ -57,7 +57,7 @@ class ADateARuleLeavesFreeIsWrittenNearTheDayTest {
     private static Compilation measured(String source, LocalDate day) {
         Compilation compilation = Compilation.ofSource(source, "Main").writtenOn(day);
         compilation.measure(Adequacy.Asked.fullReport());
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     /** The block of rows offered for the module. */

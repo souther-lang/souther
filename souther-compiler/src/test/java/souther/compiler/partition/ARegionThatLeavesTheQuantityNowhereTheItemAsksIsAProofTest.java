@@ -2,7 +2,9 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.DeclaredSig;
@@ -692,7 +694,7 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
                 invariant value >= 1 && value <= 0
 
             behavior counted : (xs: List<Never>, limit: Int) -> Ok
-            """, "counted");
+            """, "counted", List.of("E1013"));
 
     private static SearchRegion region() {
         return READ.input().quantities(READ.rules()).region();
@@ -717,8 +719,20 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
     private record Read(InputDomain input, RuleReadingSource rules) {}
 
     private static Read read(String source, String behavior) {
-        Compilation compilation =
-                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
+        return read(ACompiledModel.compiles(
+                Compilation.ofSources(List.of(source), ModulePath.EMPTY)), behavior);
+    }
+
+    /** As above, of a model the compile refuses with {@code refusedWith}. */
+    private static Read read(String source, String behavior, List<String> refusedWith) {
+        Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
+        compilation.answerEverything();
+        assertEquals(refusedWith, compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "what the model is refused for");
+        return read(compilation, behavior);
+    }
+
+    private static Read read(Compilation compilation, String behavior) {
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

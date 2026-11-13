@@ -62,13 +62,15 @@ class TwoBehaviorsOfOneNameAreTwoBehaviorsTest {
         for (Db.Found found : compilation.db().allReports()) {
             codes.add(found.report().diagnostic().code());
         }
+        List<String> errors = compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList();
+        assertTrue(codes.containsAll(errors), "every error is among what was reported: " + errors);
         return codes;
     }
 
     private static Compilation compiled(String... sources) {
-        Compilation compilation = Compilation.ofSources(List.of(sources), ModulePath.EMPTY);
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(
+                Compilation.ofSources(List.of(sources), ModulePath.EMPTY));
     }
 
     /**
@@ -305,7 +307,7 @@ class TwoBehaviorsOfOneNameAreTwoBehaviorsTest {
                 behavior flow = app.a.f >-> f
                 """;
         Compilation c = Compilation.ofSources(List.of(own), ModulePath.of(published));
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         List<String> codes = new ArrayList<>();
         for (Db.Found found : c.db().allReports()) {
             codes.add(found.report().diagnostic().code());

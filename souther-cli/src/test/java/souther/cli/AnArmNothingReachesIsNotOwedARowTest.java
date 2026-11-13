@@ -437,6 +437,8 @@ class AnArmNothingReachesIsNotOwedARowTest {
     private static List<CoverageSites.ArmSite> armSites() {
         Compilation compilation = Compilation.ofSource(CAPPED, "Main");
         compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "the model compiles");
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         return checked.plan().arms("classify");
@@ -489,6 +491,8 @@ class AnArmNothingReachesIsNotOwedARowTest {
     private static PathReachability.Answers proving() {
         Compilation compilation = Compilation.ofSource(CAPPED, "Main");
         compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "the model compiles");
         return compilation.db()
                 .ask(new Adequacy.PathReached(compilation.modules().get(0))).value()
                 .get("classify");

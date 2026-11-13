@@ -117,7 +117,6 @@ class APointNothingIsAskedForARowAtIsNotOfferedOneTest {
             data Ok
 
             behavior take : (code: Code) -> Ok
-                constructs Ok
 
             let take (code) = Ok
 
@@ -129,7 +128,7 @@ class APointNothingIsAskedForARowAtIsNotOfferedOneTest {
     void aDeclaredPointNothingWasLookedForAtIsNotAnItem() {
         Compilation compilation = Compilation.ofSource(DECLARED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, Adequacy.Filling> generated =
                 Adequacy.generatedOf(compilation.db(), "example.declaredwritten");
         assertNotNull(generated, "the model under test compiles: " + compilation.errors());
@@ -163,7 +162,7 @@ class APointNothingIsAskedForARowAtIsNotOfferedOneTest {
     private static Compilation compiled() {
         Compilation compilation = Compilation.ofSource(ONE_POINT_WRITTEN, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return compilation;
     }
 

@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
@@ -10,6 +11,7 @@ import souther.compiler.types.TypeKey;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -53,7 +55,7 @@ class ACountOfWhatATypeHoldsSaysWhetherItGotEveryRuleTest {
      */
     @Test
     void aCountThatCouldNotReadARuleSaysSo() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         String module = compilation.modules().get(0);
         RuleReadingSource whole = RuleReadings.of(compilation, module);
         List<Hir.Def> declarations =
@@ -87,16 +89,16 @@ class ACountOfWhatATypeHoldsSaysWhetherItGotEveryRuleTest {
     @Test
     void aCountShortOfARuleIsNotAnAnswerAboutWhatHasNoValue() {
         assertInstanceOf(UninhabitableTypes.WithNoValue.NotCounted.class,
-                countedIn("let floor = floor"),
+                countedIn("let floor = floor", List.of("E1022")),
                 "a type left uninhabitable by a rule nobody read would be reported as inhabited");
         assertInstanceOf(UninhabitableTypes.WithNoValue.Counted.class,
-                countedIn("let floor = 1"),
+                countedIn("let floor = 1", List.of()),
                 "and the same model is counted once that rule can be read");
     }
 
     /** What {@code Shapes.TypesWithNoValue} answers about the spreading module, with {@code floor}
-     *  written as {@code written}. */
-    private static UninhabitableTypes.WithNoValue countedIn(String written) {
+     *  written as {@code written}, the pair being refused for {@code errors}. */
+    private static UninhabitableTypes.WithNoValue countedIn(String written, List<String> errors) {
         Compilation compilation = Compilation.ofSources(List.of("""
                 module owner exposing ( Held )
 
@@ -111,6 +113,9 @@ class ACountOfWhatATypeHoldsSaysWhetherItGotEveryRuleTest {
 
                 data Row = { ...Held, m: Int }
                 """), souther.compiler.meta.ModulePath.EMPTY);
+        compilation.answerEverything();
+        assertEquals(errors, compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "what the pair is refused for");
         return compilation.db().ask(new Shapes.TypesWithNoValue("app.rows")).value();
     }
 }

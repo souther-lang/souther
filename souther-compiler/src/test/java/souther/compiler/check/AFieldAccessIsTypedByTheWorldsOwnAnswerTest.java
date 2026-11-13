@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.observe.FieldTypes;
 import souther.compiler.query.Bodies;
@@ -17,6 +18,7 @@ import souther.compiler.types.TypeSymbols;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -53,7 +55,7 @@ class AFieldAccessIsTypedByTheWorldsOwnAnswerTest {
             compilation.db().ask(new Bodies.ModuleDefinitions(module)).value();
 
     private static Compilation compiled() {
-        return Compilation.ofSource(MODULE, "Main");
+        return ACompiledModel.answered(MODULE);
     }
 
     /** What the check settled, which is what an accepted program's readers are handed. */
@@ -139,6 +141,8 @@ class AFieldAccessIsTypedByTheWorldsOwnAnswerTest {
                     { n: Int }
                     invariant broken = n
                 """, "Main");
+        c.answerEverything();
+        assertFalse(c.errors().isEmpty(), "the clause is not a condition, and is refused");
         Symbols scope = Scopes.derived(c.db(), "demo").value();
         TypeSymbol bad = TypeSymbols.declared(new TypeKey("demo", "Bad"));
         assertEquals(Map.of(), c.db().ask(new Shapes.ValueShapes("demo")).value(),

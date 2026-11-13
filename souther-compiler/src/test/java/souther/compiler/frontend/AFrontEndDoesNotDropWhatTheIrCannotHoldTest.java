@@ -93,7 +93,9 @@ class AFrontEndDoesNotDropWhatTheIrCannotHoldTest {
             assertTrue(with.holdsAClause() || with.diagnostics() > without.diagnostics(),
                     kind + ": the clause was neither held by the declaration nor reported."
                             + " It was written and then dropped, which leaves a reader of the IR"
-                            + " unable to tell it from a declaration nobody wrote a rule on");
+                            + " unable to tell it from a declaration nobody wrote a rule on."
+                            + " Errors said with the clause: " + with.errors()
+                            + ", without it: " + without.errors());
         });
     }
 
@@ -142,21 +144,23 @@ class AFrontEndDoesNotDropWhatTheIrCannotHoldTest {
 
     /** What compiling one source came to: how much was said, and whether the declaration kept the
      *  clause. Both from the one compile, since a second one is a second reading. */
-    private record Read(int diagnostics, boolean holdsAClause) {}
+    private record Read(int diagnostics, List<String> errors, boolean holdsAClause) {}
 
     private static Read read(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
+        List<String> errors = compilation.errors().stream()
+                .map(each -> each.diagnostic().code().toString()).toList();
         int said = compilation.diagnostics().values().stream().mapToInt(List::size).sum();
         if (compilation.modules().isEmpty()) {
-            return new Read(said, false);
+            return new Read(said, errors, false);
         }
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         if (symbols == null) {
-            return new Read(said, false);
+            return new Read(said, errors, false);
         }
-        return new Read(said, holdsAClause(
+        return new Read(said, errors, holdsAClause(
                 symbols.declaredNode(new TypeKey(module, "T"))));
     }
 

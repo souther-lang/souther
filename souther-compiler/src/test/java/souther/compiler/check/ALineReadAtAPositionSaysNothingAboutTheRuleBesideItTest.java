@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.query.Compilation;
@@ -38,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
 
     private static FieldDomains readingOf(String source, String type) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model under test compiles");
@@ -151,7 +152,7 @@ class ALineReadAtAPositionSaysNothingAboutTheRuleBesideItTest {
                 module example.parcels
 
                 data Parcel = { label: String, length: Int }
-                    invariant String.matches(label, "[A-Z]+")
+                    invariant String.matches("[A-Z]+", label)
                     invariant length /= 5
                 """, "Parcel");
 

@@ -3,6 +3,7 @@ package souther.compiler.coverage;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
@@ -57,7 +58,7 @@ class OneDeclarationIsReachedUnderOneNameTest {
         Compilation compilation = Compilation.ofSources(List.of(LIB, APP),
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Adequacy.BranchEvidence twice = compilation.db()
                 .ask(new Adequacy.BranchCoverage("ex.app")).value().get("twice");
         assertNotNull(twice, "the models under test compile");

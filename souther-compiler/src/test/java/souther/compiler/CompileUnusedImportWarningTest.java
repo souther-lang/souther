@@ -56,13 +56,16 @@ class CompileUnusedImportWarningTest {
     private static List<String> unused(String... sources) {
         Compilation compilation = Compilation.ofSources(List.of(sources), ModulePath.EMPTY);
         compilation.answerEverything();
+        List<String> errors = compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList();
         List<String> found = new ArrayList<>();
         for (Db.Found report : compilation.db().allReports()) {
             Diagnostic d = report.report().diagnostic();
             if (!"E1922".equals(d.code())) {
                 continue;
             }
-            assertFalse(report.report().isError(), "an unused import does not stop a build");
+            assertFalse(report.report().isError(),
+                    "an unused import does not stop a build, the errors being " + errors);
             SourcePos at = ((Primary.InSource) d.primary()).place().region().start();
             found.add(d.values().get("name") + " at " + compilation.texts().resolve(at));
         }
@@ -84,6 +87,9 @@ class CompileUnusedImportWarningTest {
             Diagnostic d = report.report().diagnostic();
             found.add(d.code() != null ? d.code() : MessageKeys.of(d.said()));
         }
+        List<String> errors = compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList();
+        assertTrue(found.containsAll(errors), "every error is among what was said: " + errors);
         return found;
     }
 

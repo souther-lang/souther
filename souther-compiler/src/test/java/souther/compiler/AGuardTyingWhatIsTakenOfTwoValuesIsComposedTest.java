@@ -218,7 +218,7 @@ class AGuardTyingWhatIsTakenOfTwoValuesIsComposedTest {
     private static String whatTheSearchSaid(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         StringBuilder said = new StringBuilder();
         Map<String, DecisionEvidence> decisions =
                 compilation.db().ask(new Adequacy.Decides("probe")).value();

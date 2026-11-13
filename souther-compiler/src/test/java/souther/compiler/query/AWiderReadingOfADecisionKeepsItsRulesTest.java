@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.partition.CaseCandidates;
@@ -90,10 +91,7 @@ class AWiderReadingOfADecisionKeepsItsRulesTest {
     }
 
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     private static void assertSameRules(String source) {

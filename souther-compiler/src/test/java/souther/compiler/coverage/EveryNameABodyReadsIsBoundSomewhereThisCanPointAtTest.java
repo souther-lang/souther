@@ -9,6 +9,10 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.test.ClosedWorldContract;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
@@ -139,7 +143,7 @@ class EveryNameABodyReadsIsBoundSomewhereThisCanPointAtTest {
 
     private static Set<String> placementsIn(String source) {
         Set<String> out = new LinkedHashSet<>();
-        for (Body body : bodiesOf(List.of(List.of(source)))) {
+        for (Body body : bodiesOf(List.of(SourceSet.compiling(source)))) {
             NodeAddresses places = NodeAddresses.of(body.behavior(), body.body());
             Binders binders = Binders.of(body.module(), places);
             for (Core.Read read : readsIn(body.body())) {
@@ -170,19 +174,51 @@ class EveryNameABodyReadsIsBoundSomewhereThisCanPointAtTest {
 
     private record Body(String module, String behavior, Core body) {}
 
+    /** A set of sources, with the codes of the errors it is checked in as refused with. */
+    private record SourceSet(List<String> sources, List<String> refusedWith) {
+
+        static SourceSet compiling(String source) {
+            return new SourceSet(List.of(source), List.of());
+        }
+    }
+
     private static List<Body> everyBody() {
-        List<List<String>> sources = new ArrayList<>();
-        ConformanceCorpus.all().forEach(corpus -> sources.add(corpus.sources()));
-        sources.add(List.of(SPLICED));
-        sources.add(List.of(BINDING_SHAPES));
+        List<SourceSet> sources = new ArrayList<>();
+        ConformanceCorpus.all().forEach(corpus -> sources.add(
+                new SourceSet(corpus.sources(), checkedInErrors(corpus.name()))));
+        sources.add(SourceSet.compiling(SPLICED));
+        sources.add(SourceSet.compiling(BINDING_SHAPES));
         return bodiesOf(sources);
     }
 
-    private static List<Body> bodiesOf(List<List<String>> sources) {
+    /**
+     * The codes of the errors a corpus is checked in as refused with, in the order they are said;
+     * none where it is checked in with no diagnostics.
+     */
+    private static List<String> checkedInErrors(String corpus) {
+        String resource = "/souther/compiler/conformance/" + corpus + "/expected.diagnostics.txt";
+        try (InputStream in = EveryNameABodyReadsIsBoundSomewhereThisCanPointAtTest.class
+                .getResourceAsStream(resource)) {
+            if (in == null) {
+                return List.of();
+            }
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8).lines()
+                    .filter(line -> line.startsWith("error "))
+                    .map(line -> line.split("\\s+")[1])
+                    .toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private static List<Body> bodiesOf(List<SourceSet> sources) {
         List<Body> out = new ArrayList<>();
-        for (List<String> each : sources) {
-            Compilation compilation = Compilation.ofSources(each, ModulePath.EMPTY);
+        for (SourceSet set : sources) {
+            Compilation compilation = Compilation.ofSources(set.sources(), ModulePath.EMPTY);
             compilation.answerEverything();
+            assertEquals(set.refusedWith(), compilation.errors().stream()
+                    .map(e -> e.diagnostic().code()).toList(),
+                    "the errors this set of sources is checked in with");
             int before = out.size();
             for (String module : compilation.modules()) {
                 Bodies.Elaborated checked =

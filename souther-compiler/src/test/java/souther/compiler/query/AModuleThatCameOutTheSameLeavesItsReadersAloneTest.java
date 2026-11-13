@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.TestDay;
 import souther.compiler.jvm.ClassFileImage;
@@ -78,6 +79,7 @@ class AModuleThatCameOutTheSameLeavesItsReadersAloneTest {
     void aModuleRegeneratedToWhatItWasIsTheProgramThatWasThere() {
         Compilation compilation = Compilation.ofDocuments(
                 Map.of("a.sou", SOURCE), Set.of(), ModulePath.EMPTY).writtenOn(TestDay.DATE);
+        ACompiledModel.compiles(compilation);
         Answer<Map<String, ClassFileImage>> before = compilation.db().ask(new Output.All());
 
         compilation.update(Map.of("a.sou", OTHERWISE), Set.of(), TestDay.DATE);

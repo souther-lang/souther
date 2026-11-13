@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.OwedPoint;
@@ -163,10 +164,13 @@ class EveryPointOwedIsInOneAccountTest {
         Compilation compilation = Compilation.ofSources(List.of(NOT_REACHED), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1013"),
+                compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
+                "a type that comes back to itself holds no value, so it cannot be constructed");
 
         Adequacy.DeclaredBoundaries account =
                 compilation.db().ask(new Adequacy.DeclaredBorders("example.notreached")).value();
-        assertNotNull(account, "the model under test compiles");
+        assertNotNull(account, "the module was measured");
 
         assertFalse(account.weakening().isEmpty(),
                 "and the account says the reading it was made from did not run out, so the debts it"
@@ -270,10 +274,13 @@ class EveryPointOwedIsInOneAccountTest {
                 souther.compiler.DoesNotComeBack.everythingAboutRowsOf("stalls")));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1923"),
+                compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
+                "the row of `stalls` does not come back in time");
 
         Adequacy.DeclaredBoundaries account =
                 compilation.db().ask(new Adequacy.DeclaredBorders("example.stopped")).value();
-        assertNotNull(account, "the model under test compiles");
+        assertNotNull(account, "the module was measured");
         assertFalse(account.owed().isEmpty(), "the clause draws a line both behaviors carry");
 
         // Over both behaviors the debt is undecided, because one of the rows that would settle it
@@ -296,9 +303,8 @@ class EveryPointOwedIsInOneAccountTest {
      */
     @Test
     void aViewOfSomeBehaviorsDropsTheDebtsNoneOfThemCarries() {
-        Compilation compilation = Compilation.ofSource(ONE_ROW_STOPS, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(ONE_ROW_STOPS, Adequacy.Asked.fullReport());
 
         Adequacy.DeclaredBoundaries account =
                 compilation.db().ask(new Adequacy.DeclaredBorders("example.stopped")).value();
@@ -348,11 +354,6 @@ class EveryPointOwedIsInOneAccountTest {
     private static Compilation measured() {
         Compilation compilation = Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.db().allReports().stream()
-                        .filter(each -> each.report().isError())
-                        .map(each -> each.report().diagnostic().code()).toList(),
-                "the model under test compiles");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

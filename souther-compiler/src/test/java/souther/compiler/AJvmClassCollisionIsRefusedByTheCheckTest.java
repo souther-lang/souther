@@ -30,7 +30,8 @@ class AJvmClassCollisionIsRefusedByTheCheckTest {
             """;
 
     /** What the check of {@code source} says, by code. */
-    private static List<String> codesOfTheCheck(Compilation compilation) {
+    private static List<String> codesOfTheCheck(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.db().ask(new Bodies.ModuleCheck("probe"));
         return compilation.errors().stream().map(each -> String.valueOf(each.diagnostic().code()))
                 .toList();
@@ -39,13 +40,13 @@ class AJvmClassCollisionIsRefusedByTheCheckTest {
     @Test
     void aBehaviorCapitalizedOntoADataIsSaidOnce() {
         assertEquals(List.of("E2105"),
-                codesOfTheCheck(Compilation.ofSource(A_BEHAVIOR_ON_A_DATA, "Main")));
+                codesOfTheCheck(A_BEHAVIOR_ON_A_DATA));
     }
 
     @Test
     void twoBehaviorsCapitalizedOntoOneClassAreSaidOnce() {
         // `Run` is a name a behavior does not take on its own account, which is said as well.
-        assertEquals(1, codesOfTheCheck(Compilation.ofSource("""
+        assertEquals(1, codesOfTheCheck("""
                 module probe
 
                 data N = Int
@@ -56,12 +57,12 @@ class AJvmClassCollisionIsRefusedByTheCheckTest {
                 behavior Run : (n: N) -> N
                     constructs N
                 let Run (n) = n
-                """, "Main")).stream().filter("E2105"::equals).count());
+                """).stream().filter("E2105"::equals).count());
     }
 
     @Test
     void aResultUnionCapitalizedOntoADataIsSaidOnce() {
-        assertEquals(List.of("E2105"), codesOfTheCheck(Compilation.ofSource("""
+        assertEquals(List.of("E2105"), codesOfTheCheck("""
                 module probe
 
                 data Req = { n: Int }
@@ -72,12 +73,12 @@ class AJvmClassCollisionIsRefusedByTheCheckTest {
                 behavior bill : (r: Req) -> Ok | NotFound
                     constructs Ok
                 let bill (r) = if r.n > 0 then Ok { v = r.n } else NotFound
-                """, "Main")));
+                """));
     }
 
     @Test
     void namesThatDoNotCollideAreToldNothingOfTheKind() {
-        assertEquals(List.of(), codesOfTheCheck(Compilation.ofSource("""
+        assertEquals(List.of(), codesOfTheCheck("""
                 module probe
 
                 data Quote = { subtotal: Int }
@@ -85,7 +86,7 @@ class AJvmClassCollisionIsRefusedByTheCheckTest {
                 behavior makeQuote : (n: Int) -> Quote
                     constructs Quote
                 let makeQuote (n) = Quote { subtotal = n }
-                """, "Main")));
+                """));
     }
 
     @Test
@@ -94,6 +95,8 @@ class AJvmClassCollisionIsRefusedByTheCheckTest {
         assertFalse(compilation.db().ask(new Bodies.Observable("probe")).present(),
                 "no program to run rows against");
         assertFalse(compilation.db().ask(new Bodies.Checked("probe")).present(), "and none to ship");
+        assertEquals(List.of("E2105"), compilation.errors().stream()
+                .map(each -> String.valueOf(each.diagnostic().code())).toList());
     }
 
     /** A measure asks the check as it asks everything it rests on, and is told the same. */

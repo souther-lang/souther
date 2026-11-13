@@ -17,6 +17,7 @@ import souther.compiler.generated.EvaluationArtifact;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.meta.PublishedClasses;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.jvm.ClassFileImage;
@@ -203,7 +204,8 @@ class ARunIsToldWhichModuleAnAnswersClassesAreShortOfTest {
 
     /** The rows of {@code ROOT}, run against {@code answering}. */
     private static Observations evaluated(Answering answering) {
-        Compilation c = Compilation.ofSources(List.of(SHARED, ROOT), ModulePath.EMPTY);
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(SHARED, ROOT), ModulePath.EMPTY));
         c.db().ask(new Output.All());
         String name = "example.root";
         EvaluationArtifact artifact = c.db()
@@ -234,7 +236,8 @@ class ARunIsToldWhichModuleAnAnswersClassesAreShortOfTest {
 
     /** The classes one build of these sources emits, read for what they were stamped with. */
     private static PublishedClasses declarationsOf(List<String> sources) {
-        Compilation compiled = Compilation.ofSources(sources, ModulePath.EMPTY);
+        Compilation compiled = ACompiledModel.compiles(
+                Compilation.ofSources(sources, ModulePath.EMPTY));
         Map<String, ClassFileImage> classes = compiled.db().ask(new Output.All()).value();
         return ModulePath.of(classes).declarations();
     }

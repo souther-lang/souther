@@ -132,8 +132,10 @@ class TheTwoBoundariesTellUnavailableFromNotDeclaredAlikeTest {
 
     /** Which arm {@code named} is published in. */
     private static String published(String prices, TypeKey named) {
-        Object said = compiled(prices).db().ask(new Shapes.MeaningOf(named)).value();
-        return switch (assertInstanceOf(PublishedDeclarationResult.class, said)) {
+        Compilation c = compiled(prices);
+        Object said = c.db().ask(new Shapes.MeaningOf(named)).value();
+        return switch (assertInstanceOf(PublishedDeclarationResult.class, said,
+                "the model says: " + c.errors())) {
             case PublishedDeclarationResult.Found _ -> "Found";
             case PublishedDeclarationResult.Unavailable _ -> "Unavailable";
             case PublishedDeclarationResult.NotDeclared _ -> "NotDeclared";
@@ -142,8 +144,10 @@ class TheTwoBoundariesTellUnavailableFromNotDeclaredAlikeTest {
 
     /** And which arm its expanded clauses are in, named the same way so a failure compares. */
     private static String expanded(String prices, TypeKey named) {
-        Object said = compiled(prices).db().ask(new Shapes.ClausesExpandedFor(named)).value();
-        return switch (assertInstanceOf(ExpandedClauseResult.class, said)) {
+        Compilation c = compiled(prices);
+        Object said = c.db().ask(new Shapes.ClausesExpandedFor(named)).value();
+        return switch (assertInstanceOf(ExpandedClauseResult.class, said,
+                "the model says: " + c.errors())) {
             case ExpandedClauseResult.Found _ -> "Found";
             case ExpandedClauseResult.Unavailable _ -> "Unavailable";
             case ExpandedClauseResult.NotDeclared _ -> "NotDeclared";

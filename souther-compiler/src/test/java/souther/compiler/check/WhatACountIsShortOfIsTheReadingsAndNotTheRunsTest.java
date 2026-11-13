@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
+import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
 import souther.compiler.query.Shapes;
@@ -57,7 +58,7 @@ class WhatACountIsShortOfIsTheReadingsAndNotTheRunsTest {
      */
     @Test
     void aReadingThatStoppedShortHasStillReadEveryRuleItWasGiven() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = stoppingShort();
         String module = compilation.modules().get(0);
         RuleReadingSource whole = RuleReadings.of(compilation, module);
         ReadingPolicy policy = compilation.db().ask(new Front.Reading()).value();
@@ -93,7 +94,7 @@ class WhatACountIsShortOfIsTheReadingsAndNotTheRunsTest {
      */
     @Test
     void aCountAnsweredOutOfLentReadingsIsShortOfWhatTheyWereShortOf() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = stoppingShort();
         String module = compilation.modules().get(0);
         ReadingPolicy policy = compilation.db().ask(new Front.Reading()).value();
         List<Hir.Def> declarations = declarationsOf(compilation, module);
@@ -113,6 +114,18 @@ class WhatACountIsShortOfIsTheReadingsAndNotTheRunsTest {
                 "and so is the count that was lent those readings");
         assertEquals(read, asked.get(),
                 "which is lent them, rather than reading the clauses a second time");
+    }
+
+    /** The model, answered in full, and refused for the one call the reading stops at. */
+    private static Compilation stoppingShort() {
+        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        compilation.answerEverything();
+        assertEquals(List.of("name.write-a-standard-library-name-qualified"),
+                compilation.errors().stream()
+                        .map(found -> MessageKeys.of(found.diagnostic().said())).distinct().toList(),
+                "the rule of Email calls a standard library function unqualified, which is the rule"
+                        + " the reading stops at");
+        return compilation;
     }
 
     /** {@code source}, with {@code declaration} one nobody could work out. */

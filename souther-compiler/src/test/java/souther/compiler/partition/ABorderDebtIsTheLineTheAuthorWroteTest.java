@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.coverage.Numberings;
@@ -536,9 +537,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
 
     /** The points the comparisons of {@code example.overlap} owe, as the account holds them. */
     private static List<BorderObligationPointAssessment> pointsOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         List<BorderObligationPointAssessment> points = compilation.db().ask(
                 new Adequacy.Obligations("example.overlap", new GenerationScope.Module(),
                         HowALineIsRead.VALUES_COMPOSED)).value();
@@ -759,8 +758,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
      * right whatever it was.
      */
     private static List<Border> bordersOfThePosition(String model, String behavior, String path) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(model);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, souther.compiler.check.DeclaredSig> sigs = compilation.db()
@@ -944,9 +942,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
     /** Every border of {@code module}, as the measure holds them: per behavior, and one entry per
      *  occurrence. For a caller counting them rather than looking one up. */
     private static Map<String, List<BorderAssessment>> boundariesOf(String model, String module) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> boundaries =
                 Adequacy.boundariesOf(compilation.db(), module);
         assertNotNull(boundaries, "the model under test compiles");
@@ -956,9 +952,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
     /** Every border of {@code module}, by the line it is at. Each label names one position, so the
      *  map holds one entry per occurrence and not one per debt. */
     private static Map<String, BorderAssessment> bordersOf(String model, String module) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> boundaries =
                 Adequacy.boundariesOf(compilation.db(), module);
         assertNotNull(boundaries, "the model under test compiles");

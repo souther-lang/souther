@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -122,7 +123,7 @@ class ANumberNamedWhereNoValueIsWrittenIsStillMeasuredTest {
                         RuleReadingSource rules) {}
 
     private static Read of() {
-        Compilation compilation = Compilation.ofSource(SPREAD, "Main");
+        Compilation compilation = ACompiledModel.answered(SPREAD);
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);

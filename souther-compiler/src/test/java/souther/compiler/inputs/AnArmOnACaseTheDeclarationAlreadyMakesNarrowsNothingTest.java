@@ -12,6 +12,7 @@ import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.NoInputTakesIt;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.DecisionEvidence;
 
@@ -301,9 +302,8 @@ class AnArmOnACaseTheDeclarationAlreadyMakesNarrowsNothingTest {
 
     /** What {@code behavior}'s decision is read as. */
     private static DecisionEvidence decided(String behavior) {
-        Compilation c = Compilation.ofSource(NAMED, "Main");
-        c.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        c.answerEverything();
+        Compilation c = ACompiledModel.measured(NAMED,
+                Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
         DecisionEvidence decided = c.db().ask(new Adequacy.Decides(c.modules().get(0))).value()
                 .get(behavior);
         assertNotNull(decided, () -> "the rules of " + behavior + " are read");
@@ -329,8 +329,7 @@ class AnArmOnACaseTheDeclarationAlreadyMakesNarrowsNothingTest {
 
     /** Every location {@code behavior}'s body names, read the way its measurement reads it. */
     private static List<TermPath> named(String behavior) {
-        Compilation compilation = Compilation.ofSource(NAMED, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(NAMED);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");

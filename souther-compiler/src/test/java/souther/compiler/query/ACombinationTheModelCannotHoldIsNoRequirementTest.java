@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.ObligationIdentity;
 
 import org.junit.jupiter.api.Test;
@@ -145,8 +146,7 @@ class ACombinationTheModelCannotHoldIsNoRequirementTest {
         if (ANSWERED == null) {
             Compilation compilation = Compilation.ofSource(MODEL, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            ANSWERED = compilation;
+            ANSWERED = ACompiledModel.compiles(compilation);
         }
         return ANSWERED;
     }

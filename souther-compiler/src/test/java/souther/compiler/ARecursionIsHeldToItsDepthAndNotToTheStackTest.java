@@ -61,7 +61,21 @@ class ARecursionIsHeldToItsDepthAndNotToTheStackTest {
     private static RowOutcome onlyRowOf(String source, EvaluationPolicy policy) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.withEvaluationPolicy(policy);
+        ACompiledModel.compiles(compilation);
+        return onlyRowOf(compilation);
+    }
+
+    /** The row of a recursion the policy stops, which is the one error the model is refused for. */
+    private static RowOutcome onlyRowOfARefusedRecursion(String source, EvaluationPolicy policy) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.withEvaluationPolicy(policy);
         compilation.answerEverything();
+        assertEquals(List.of("E1910"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList());
+        return onlyRowOf(compilation);
+    }
+
+    private static RowOutcome onlyRowOf(Compilation compilation) {
         SourceId sourceId = compilation.exampleSourcesOf("example.deep").getFirst();
         List<RowOutcome> rows =
                 compilation.db().ask(new Output.Examples("example.deep", sourceId, ArmObservation.OMIT)).value().rows();
@@ -73,7 +87,7 @@ class ARecursionIsHeldToItsDepthAndNotToTheStackTest {
      *  from one that spent its steps: what an author does about the two is not the same. */
     @Test
     void aRecursionDeeperThanTheLimitIsReportedForItsDepth() {
-        RowOutcome row = onlyRowOf(countingDownFrom(5_000),
+        RowOutcome row = onlyRowOfARefusedRecursion(countingDownFrom(5_000),
                 EvaluationPolicy.DEFAULT.withRecursionDepthLimit(100));
 
         assertEquals(Disposition.INCOMPLETE, row.disposition());
@@ -99,7 +113,7 @@ class ARecursionIsHeldToItsDepthAndNotToTheStackTest {
      */
     @Test
     void theCountedLimitIsReachedBeforeTheStackRunsOut() {
-        RowOutcome row = onlyRowOf(
+        RowOutcome row = onlyRowOfARefusedRecursion(
                 countingDownFrom(EvaluationPolicy.DEFAULT_RECURSION_DEPTH_LIMIT * 2L),
                 EvaluationPolicy.DEFAULT);
 
@@ -115,7 +129,7 @@ class ARecursionIsHeldToItsDepthAndNotToTheStackTest {
      */
     @Test
     void theCountedLimitIsReachedFirstForAHelperWithWideFramesToo() {
-        RowOutcome row = onlyRowOf(
+        RowOutcome row = onlyRowOfARefusedRecursion(
                 carryingEightMore(EvaluationPolicy.DEFAULT_RECURSION_DEPTH_LIMIT * 2L),
                 EvaluationPolicy.DEFAULT);
 

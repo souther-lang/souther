@@ -64,10 +64,7 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
     }
 
     private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     /**
@@ -164,7 +161,6 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
 
                 behavior findTodo : (id: TodoId) -> Todo | NotFound
                 \tconstructs Todo
-                \tconstructs NotFound
                 \tensures both = Todo -> value.id.value == id.value
                 \t\t| NotFound -> id.value > 0
 
@@ -211,13 +207,17 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
 
                 let wrong (n, k) = if n.value > 5 then Todo { id = n } else NotFound
                 """;
-        Compilation compilation = compiled(source);
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.answerEverything();
+        List<String> errors = compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList();
 
         // The arm names a data that is no case of the answer, so the reading of the contract is
         // refused and the behavior is not among them.
         assertFalse(compilation.db().ask(new Bodies.Contracts("example.todo")).value()
                         .containsKey("wrong"),
-                "the checker could not read this behavior's clause");
+                "the checker could not read this behavior's clause, the errors being " + errors);
 
         String block = GeneratedRows.of(compilation, null, null,
                 SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();

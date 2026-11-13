@@ -53,6 +53,13 @@ class DecomposingACountDoesNotChangeWhatItReportsTest {
                                      Map<String, String> documents) {
         Compilation c = Compilation.ofDocuments(
                 new LinkedHashMap<>(documents), Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        // A declaration no value satisfies is refused, and is what these models are about; any
+        // other refusal is a model whose declarations were never read.
+        assertEquals(List.of(), c.errors().stream()
+                        .map(each -> each.diagnostic().code().toString())
+                        .filter(each -> !each.equals("E1013")).toList(),
+                () -> "the model is refused for nothing but what it is about: " + what);
 
         List<TypeSymbol.AtModule> declared = c.db().ask(new Front.DeclaredTypes(MODULE)).value();
         RuleReadingSource source = Shapes.ruleReading(c.db(), MODULE).value();

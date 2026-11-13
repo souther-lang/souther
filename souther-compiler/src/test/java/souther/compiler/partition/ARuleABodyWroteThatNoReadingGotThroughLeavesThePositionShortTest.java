@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.RuleRef;
@@ -168,9 +169,7 @@ class ARuleABodyWroteThatNoReadingGotThroughLeavesThePositionShortTest {
     }
 
     private static Partitions.Partitioning dividedIn(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                         .flatMap(List::stream).map(Object::toString).toList(),
                 "the model this is about is one this compiler accepts");

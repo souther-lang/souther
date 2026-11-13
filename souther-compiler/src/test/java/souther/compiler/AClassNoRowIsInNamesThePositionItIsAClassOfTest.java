@@ -102,7 +102,7 @@ class AClassNoRowIsInNamesThePositionItIsAClassOfTest {
     private static AdequacyReport report() {
         Compilation compilation = Compilation.ofSource(TWO_POSITIONS, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation);
     }
 

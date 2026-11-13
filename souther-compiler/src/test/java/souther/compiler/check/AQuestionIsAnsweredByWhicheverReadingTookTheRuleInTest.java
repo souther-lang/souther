@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
@@ -46,7 +47,21 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
     }
 
     private static Map<RuleRef.Invariant, RuleAccounting> accountingOf(String source, String type) {
+        return accountingOf(ACompiledModel.answered(source), type);
+    }
+
+    /** The accounting of a model whose compile refuses with {@code refusals} and nothing else. */
+    private static Map<RuleRef.Invariant, RuleAccounting> accountingOfRefused(
+            String source, String type, List<String> refusals) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        assertEquals(refusals, compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList());
+        return accountingOf(compilation, type);
+    }
+
+    private static Map<RuleRef.Invariant, RuleAccounting> accountingOf(
+            Compilation compilation, String type) {
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);
@@ -274,7 +289,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
 
                 data R = { s: String, b: Bool }
                     invariant said = s < "" || (b == true && b == false)
-                """, "R"),
+                """, "R", List.of("E1013")),
                 "and where every branch admits nothing, so does the choice — at every position"
                         + " either of them named");
 
@@ -289,7 +304,11 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
 
     /** The positions of {@code type} that the clauses written over it were not read at. */
     private static Set<String> unansweredOf(String source, String type) {
-        return accountingOf(source, type).values().stream()
+        return unansweredOf(source, type, List.of());
+    }
+
+    private static Set<String> unansweredOf(String source, String type, List<String> refusals) {
+        return accountingOfRefused(source, type, refusals).values().stream()
                 .flatMap(each -> each.unaccounted().stream())
                 .map(Object::toString)
                 .collect(java.util.stream.Collectors.toSet());

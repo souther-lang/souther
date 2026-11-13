@@ -105,6 +105,9 @@ class WhyAValueCouldNotBePlacedIsTheClassifiersToSayTest {
     private static Read read() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.answerEverything();
+        // The third row writes an amount below nought, so its input is refused and never built.
+        assertEquals(List.of("E1903"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList());
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =

@@ -51,7 +51,7 @@ class APointBelowTheCaseAClampedComparisonIsReadInIsStillOwedARowTest {
         Compilation compilation = Compilation.ofSource(model, "Main");
         assertTrue(compilation.errors().isEmpty(), () -> "the model compiles: " + compilation.errors());
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -100,7 +100,7 @@ class APointBelowTheCaseAClampedComparisonIsReadInIsStillOwedARowTest {
     private static List<ItemAssessment.Owed> owedPointsBelowTheLine(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, List<BorderAssessment>> all =
                 Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, () -> "the model compiles: " + compilation.errors());
@@ -201,7 +201,7 @@ class APointBelowTheCaseAClampedComparisonIsReadInIsStillOwedARowTest {
     private static ItemAssessment.Owed theOutClassOf(String source, String position) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, List<BorderAssessment>> all =
                 Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, () -> "the model compiles: " + compilation.errors());
@@ -247,7 +247,7 @@ class APointBelowTheCaseAClampedComparisonIsReadInIsStillOwedARowTest {
     private static ItemAssessment.Owed theOutClassOfEachElement(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, List<BorderAssessment>> all =
                 Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, () -> "the model compiles: " + compilation.errors());

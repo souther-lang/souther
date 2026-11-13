@@ -58,6 +58,9 @@ class WhatANameMeansIsNotDecidedByWhatWasDerivedForItTest {
         byId.put("app.sou", APP);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
         c.answerEverything();
+        assertEquals(List.of("E1023"), c.errors().stream().map(each -> each.diagnostic().code())
+                        .toList(),
+                "the model has the one mistake, a field whose type names nothing");
         return c;
     }
 

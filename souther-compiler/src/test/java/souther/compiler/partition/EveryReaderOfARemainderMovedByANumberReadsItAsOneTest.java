@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.NumericTerm;
@@ -264,7 +265,7 @@ class EveryReaderOfARemainderMovedByANumberReadsItAsOneTest {
     }
 
     private static SearchRegion region() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module m
 
                 data R = { a: Int, d: Int, y: Int, xs: List<Int> }
@@ -272,7 +273,7 @@ class EveryReaderOfARemainderMovedByANumberReadsItAsOneTest {
 
                 behavior f : (r: R) -> Yes
                 let f (r) = Yes
-                """, "Main");
+                """);
         var inputs = compilation.db().ask(new Adequacy.Inputs("m")).value().get("f");
         assertNotNull(inputs, "the model under test compiles");
         return inputs.reading(RuleReadings.of(compilation, "m")).quantities().region();

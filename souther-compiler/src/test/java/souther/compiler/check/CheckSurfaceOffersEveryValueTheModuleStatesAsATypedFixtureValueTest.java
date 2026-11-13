@@ -2,6 +2,8 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.diag.CompileException;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -50,7 +52,7 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
             """;
 
     private static final String IMPORTING = """
-            module example.member exposing ( admit )
+            module example.member
 
             import example.other ( Grade, Customer, vip )
 
@@ -134,8 +136,8 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
      */
     @Test
     void anOwnValueCallingAnImportedHelperIsACandidate() {
-        Compilation compilation = Compilation.ofSources(
-                List.of(HELPER_LIB, CALLED_AN_IMPORTED_HELPER), ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(Compilation.ofSources(
+                List.of(HELPER_LIB, CALLED_AN_IMPORTED_HELPER), ModulePath.EMPTY));
         CheckSurface surface = compilation.db()
                 .ask(new Shapes.CheckSurface("example.calls")).value();
         assertNotNull(surface, "the module under test does not get as far as being assembled");
@@ -171,8 +173,8 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
      */
     @Test
     void anOwnValueCallingAnImportedHelperThatCallsAFurtherHelperIsACandidate() {
-        Compilation compilation = Compilation.ofSources(
-                List.of(HELPER_LIB_A_CHAIN_DEEP, CALLED_AN_IMPORTED_HELPER), ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(Compilation.ofSources(
+                List.of(HELPER_LIB_A_CHAIN_DEEP, CALLED_AN_IMPORTED_HELPER), ModulePath.EMPTY));
         CheckSurface surface = compilation.db()
                 .ask(new Shapes.CheckSurface("example.calls")).value();
         assertNotNull(surface, "the module under test does not get as far as being assembled");
@@ -193,8 +195,8 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
      */
     @Test
     void anImportedValueIsACandidate() {
-        Compilation compilation = Compilation.ofSources(List.of(IMPORTED, IMPORTING),
-                ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(IMPORTED, IMPORTING), ModulePath.EMPTY));
         CheckSurface surface = compilation.db()
                 .ask(new Shapes.CheckSurface("example.member")).value();
         assertNotNull(surface, "the module under test does not get as far as being assembled");
@@ -217,7 +219,7 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
                 let vip = Customer { grade = Gold }
                 let junk = Irrelevant { x = 1 }
                 """);
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         CheckSurface surface = compilation.db()
                 .ask(new Shapes.CheckSurface("example.member")).value();
         assertNotNull(surface, "the module under test does not get as far as being assembled");
@@ -251,9 +253,9 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
                 let vip = Customer { grade = Gold }
                 let stray = A { x = 1 }.x
                 """);
-        // Asked directly and not through Compilation.answerEverything(): the full pipeline reaches
-        // A's declaration too, at a rung that does refuse a field declared twice, and this test is
-        // about CheckSurface's own tolerance and not about whether the module as a whole checks.
+        // Asked directly before the full pipeline: that reaches A's declaration too, at a rung that
+        // does refuse a field declared twice, and what is held first is CheckSurface's own
+        // tolerance and not whether the module as a whole checks.
         Compilation compilation = Compilation.ofSource(source, "Main");
         CheckSurface surface = compilation.db()
                 .ask(new Shapes.CheckSurface("example.member")).value();
@@ -262,6 +264,19 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
         assertEquals(List.of(new ReachName.Own(new ValueName.Helper("example.member", "vip"))),
                 surface.typedFixtureValues().getOrDefault(customerType(compilation,
                         "example.member"), List.of()));
+        assertEquals("E1011", refusalOf(compilation),
+                "A declares a field twice, and the module is refused for it");
+    }
+
+    /** The code {@code model} is refused with, whether answering it throws or it reports it. */
+    private static String refusalOf(Compilation model) {
+        try {
+            model.answerEverything();
+        } catch (CompileException refused) {
+            return refused.code();
+        }
+        return model.errors().stream().map(e -> e.diagnostic().code()).findFirst()
+                .orElse("none");
     }
 
     /**
@@ -274,7 +289,7 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
                 let vip = Customer { grade = Gold }
                 let junk = Accepted { at = "x" }
                 """);
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         CheckSurface surface = compilation.db()
                 .ask(new Shapes.CheckSurface("example.member")).value();
         assertNotNull(surface, "the module under test does not get as far as being assembled");
@@ -315,9 +330,9 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
      */
     @Test
     void aValueWrittenAtAParametersListTypeIsACandidate() {
-        Compilation compilation = Compilation.ofSource(TAKES_A_LIST + """
+        Compilation compilation = ACompiledModel.answered(TAKES_A_LIST + """
                 let regulars: List<Customer> = [ vip, vip ]
-                """, "Main");
+                """);
         CheckSurface surface = compilation.db()
                 .ask(new Shapes.CheckSurface("example.member")).value();
         assertNotNull(surface, "the module under test does not get as far as being assembled");
@@ -335,9 +350,9 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
      */
     @Test
     void aListWhoseDeclarationNamesNoTypeIsNotACandidate() {
-        Compilation compilation = Compilation.ofSource(TAKES_A_LIST + """
+        Compilation compilation = ACompiledModel.answered(TAKES_A_LIST + """
                 let regulars = [ vip, vip ]
-                """, "Main");
+                """);
         CheckSurface surface = compilation.db()
                 .ask(new Shapes.CheckSurface("example.member")).value();
         assertNotNull(surface, "the module under test does not get as far as being assembled");
@@ -359,7 +374,7 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
             """;
 
     private static final String COMPOSED = """
-            module example.composed exposing ( admit )
+            module example.composed
 
             import example.stage ( Raw, Mid, first )
 
@@ -393,8 +408,8 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
      */
     @Test
     void aValueOfACompositionsInputTypeIsNotACandidate() {
-        Compilation compilation = Compilation.ofSources(List.of(STAGE, COMPOSED),
-                ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(STAGE, COMPOSED), ModulePath.EMPTY));
         CheckSurface surface = compilation.db()
                 .ask(new Shapes.CheckSurface("example.composed")).value();
         assertNotNull(surface, "the module under test does not get as far as being assembled");
@@ -413,7 +428,7 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
     }
 
     private static List<ReachName.Declaration> candidatesOf(String source, String module) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         CheckSurface surface = compilation.db().ask(new Shapes.CheckSurface(module)).value();
         assertNotNull(surface, "the module under test does not get as far as being assembled");
         return surface.typedFixtureValues().getOrDefault(customerType(compilation, module),

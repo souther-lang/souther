@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.cst.SourceLayout;
 import souther.compiler.WhereItSits;
 import souther.compiler.source.SourceId;
@@ -37,10 +38,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ResolvedValueNamesTest {
 
-    private static Hir.Module resolve(String source) {
+    private static Compilation documentOf(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", source);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+    }
+
+    private static Hir.Module resolve(String source) {
+        return resolved(ACompiledModel.compiles(documentOf(source)));
+    }
+
+    private static Hir.Module resolved(Compilation c) {
         return c.db().ask(new Names.Resolved("m.a")).value();
     }
 
@@ -69,8 +77,8 @@ class ResolvedValueNamesTest {
     }
 
     /** The name written as {@code written}, whatever state resolution left it in. */
-    private static Hir.Var nameOf(String source, String written) {
-        for (Hir.Expr e : named(resolve(source))) {
+    private static Hir.Var nameOf(Compilation c, String written) {
+        for (Hir.Expr e : named(resolved(c))) {
             Hir.Var v = e instanceof Hir.Var name ? name
                     : ((Hir.Apply) e).function() instanceof Hir.Var f ? f : null;
             if (v != null && v.name().equals(written)) {
@@ -283,11 +291,12 @@ class ResolvedValueNamesTest {
                 let f (n) = nosuch
                 """;
 
-        Hir.Var name = nameOf(source, "nosuch");
+        Compilation c = documentOf(source);
+        Hir.Var name = nameOf(c, "nosuch");
         assertInstanceOf(Hir.Var.Unanswered.class, name);
         // and it holds no stand-in for a reader below to take for a declaration: what a name names
         // is the answered form's to say, and this is not one
-        assertNull(name.answered());
+        assertNull(name.answered(), "the model says: " + c.errors());
     }
 
     /** Every name in every body is answered — nothing is left as a spelling for a later reader to
@@ -325,8 +334,7 @@ class ResolvedValueNamesTest {
      */
     @Test
     void aTypeNamedInABodyIsAUseOfThatType() {
-        Map<String, String> byId = new LinkedHashMap<>();
-        byId.put("a.sou", """
+        Compilation c = ACompiledModel.compiles(documentOf("""
                 module m.a exposing ( Amount, Approved, f )
 
                 data Amount = Int
@@ -335,8 +343,7 @@ class ResolvedValueNamesTest {
                 behavior f : (n: Int) -> Amount | Approved
                     constructs Amount
                 let f (n) = if n > 0 then Amount(n) else Approved
-                """);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+                """));
 
         List<souther.compiler.check.Resolve.TypeUse> amount = c.db()
                 .ask(new Names.UsesOf("m.a", souther.compiler.types.TypeSymbols.declared(new souther.compiler.types.TypeKey("m.a", "Amount"))))
@@ -419,9 +426,7 @@ class ResolvedValueNamesTest {
 
     /** The occurrence an editor is sent to for the declaration of {@code written}. */
     private static WrittenName declaredNameOf(String source, String written) {
-        Map<String, String> byId = new LinkedHashMap<>();
-        byId.put("a.sou", source);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation c = ACompiledModel.compiles(documentOf(source));
         for (Resolve.ValueUse use : c.db().ask(new Names.Facts("m.a")).value().values()) {
             if (use.written().canonical().equals(written)
                     && use.denotes() instanceof ValueName.Local local) {

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -50,9 +51,7 @@ class ARuleThatPartsValuesInsideTheRangeIsNotOutsideItTest {
 
     /** Every line this behavior's positions are held to, wherever it was drawn. */
     private static List<Border> lines(String clause) {
-        Compilation compilation = Compilation.ofSource(model(clause), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model(clause), Adequacy.Asked.fullReport());
         Partitions.Partitioning divided =
                 compilation.db().ask(new Adequacy.Divided(MODULE, "read")).value();
         assertNotNull(divided, "the model under test compiles and is measured");
@@ -107,9 +106,12 @@ class ARuleThatPartsValuesInsideTheRangeIsNotOutsideItTest {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1013"), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(),
+                "no bag can be constructed, and the rule is still read");
         Partitions.Partitioning divided =
                 compilation.db().ask(new Adequacy.Divided(MODULE, "read")).value();
-        assertNotNull(divided, "the model under test compiles and is measured");
+        assertNotNull(divided, "the model under test is measured");
 
         assertEquals(List.of(), divided.between(),
                 "nothing the rules leave is either side of that line");

@@ -191,13 +191,25 @@ class EveryChildANodeHandsOverStandsInANamedSlotTest {
         checked = null;
     }
 
+    /** The corpora written to be refused, and what each is refused for. */
+    private static final Map<String, List<String>> CORPUS_REFUSALS =
+            Map.of("booking", List.of("E2010", "E1013"));
+
     private static List<Core> checkedBodies() {
         List<Core> out = new ArrayList<>();
         List<List<String>> sources = new ArrayList<>();
-        ConformanceCorpus.all().forEach(corpus -> sources.add(corpus.sources()));
+        List<List<String>> refused = new ArrayList<>();
+        ConformanceCorpus.all().forEach(corpus -> {
+            sources.add(corpus.sources());
+            refused.add(CORPUS_REFUSALS.getOrDefault(corpus.name(), List.of()));
+        });
         sources.add(List.of(BESIDE_THE_CORPORA));
-        for (List<String> each : sources) {
-            Compilation compilation = Compilation.ofSources(each, ModulePath.EMPTY);
+        refused.add(List.of());
+        for (int at = 0; at < sources.size(); at++) {
+            Compilation compilation = Compilation.ofSources(sources.get(at), ModulePath.EMPTY);
+            compilation.answerEverything();
+            assertEquals(refused.get(at), compilation.errors().stream()
+                    .map(e -> e.diagnostic().code()).toList(), "what the source set is refused for");
             int before = out.size();
             for (String module : compilation.modules()) {
                 Bodies.Elaborated checked =

@@ -47,6 +47,9 @@ class TwoRowsThatDidNotComeBackAreTwoReasonsTest {
                 DoesNotComeBack.everythingAboutRowsOf(target)));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1923", "E1923"), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(),
+                "each of the two rows that did not come back is refused");
         return compilation;
     }
 

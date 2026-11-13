@@ -7,7 +7,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.GeneratedRows;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -88,9 +87,7 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
             behavior fee""");
 
     private static String block(String source, String module) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         Map<String, Adequacy.Filling> generated =
                 Adequacy.generatedOf(compilation.db(), module);
         assertNotNull(generated, "the model under test compiles");
@@ -196,15 +193,7 @@ class TheBlockAndItsHeaderComeFromOneListOfRowsTest {
                 .filter(line -> !line.startsWith("//"))
                 .reduce("", (all, line) -> all + line + "\n");
 
-        Compilation compiled = Compilation.ofSource(pasted, "Main");
-        compiled.answerEverything();
-        List<String> refused = new ArrayList<>();
-        for (souther.compiler.query.Db.Found found : compiled.db().allReports()) {
-            if (found.report().isError()) {
-                refused.add(found.report().diagnostic().code());
-            }
-        }
-        assertEquals(List.of(), refused, () -> "the block pasted whole compiles:\n" + pasted);
+        ACompiledModel.answered(pasted);
     }
 
     @Test

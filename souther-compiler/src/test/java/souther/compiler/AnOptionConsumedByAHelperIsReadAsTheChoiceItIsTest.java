@@ -35,9 +35,7 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
 
                 %s
                 """.formatted(behavior);
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -340,6 +338,9 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1616"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(),
+                "the clause relates inputs and does not name the answer");
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 

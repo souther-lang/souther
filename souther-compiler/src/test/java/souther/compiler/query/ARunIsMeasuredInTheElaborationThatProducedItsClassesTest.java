@@ -119,6 +119,9 @@ class ARunIsMeasuredInTheElaborationThatProducedItsClassesTest {
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E2010"), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(),
+                "the implementation it cannot make is the seat of nought");
 
         assertEquals(List.of("apart"),
                 new ArrayList<>(compilation.db().ask(new Bodies.Observable("probe.up"))

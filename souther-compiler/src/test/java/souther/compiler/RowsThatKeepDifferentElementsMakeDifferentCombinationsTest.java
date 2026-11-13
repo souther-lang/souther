@@ -248,9 +248,7 @@ class RowsThatKeepDifferentElementsMakeDifferentCombinationsTest {
     }
 
     private static AdequacyReport.BehaviorReport behaviorOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).modules().getFirst().behaviors().getFirst();
     }
 }

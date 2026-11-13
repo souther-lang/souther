@@ -63,9 +63,7 @@ class RowsAreOfferedForEveryChoiceOfKeptElementsTest {
     }
 
     private static void assertEveryChoiceIsOffered(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         String offered = GeneratedRows.of(Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule(compilation.modules().get(0))),
                 Map.of(), SourceRendering.namedByIdentity(compilation.texts()),

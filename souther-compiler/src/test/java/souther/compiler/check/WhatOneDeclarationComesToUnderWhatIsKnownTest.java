@@ -48,6 +48,10 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                                        Object... assumed) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
+        assertEquals(java.util.List.of(), compilation.errors().stream()
+                        .map(each -> each.diagnostic().code().toString())
+                        .filter(each -> !each.equals("E1013")).toList(),
+                "the model this reads has to be one somebody could write");
         // A clause nothing could type is a clause nothing reads, and a model with one in it would
         // give every row it appears in the answer of a model with no rules at all. Everything but the
         // refusal these answers are what decides: a model here is meant to hold types with no value.

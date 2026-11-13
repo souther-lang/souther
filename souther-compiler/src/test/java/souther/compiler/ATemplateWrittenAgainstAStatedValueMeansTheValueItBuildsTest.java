@@ -58,9 +58,7 @@ class ATemplateWrittenAgainstAStatedValueMeansTheValueItBuildsTest {
     }
 
     private static List<FixtureTemplate> composedInputs(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return Adequacy.generatedOf(compilation.db(), compilation.modules().get(0))
                 .get("calc").composed().rows().stream()
                 .flatMap(row -> row.inputs().stream()).toList();

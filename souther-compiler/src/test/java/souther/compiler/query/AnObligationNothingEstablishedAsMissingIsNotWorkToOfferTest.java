@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.ObligationIdentity;
 
 import org.junit.jupiter.api.Test;
@@ -76,7 +77,7 @@ class AnObligationNothingEstablishedAsMissingIsNotWorkToOfferTest {
                     | No -> 0
 
             example shippingFee
-                | (Total(0), Premium, Express, Yes)  -> Fee { charge = 500, cover = 600 }
+                | (Total(0), Premium, Express, Yes)  -> Fee { charge = 600, cover = 600 }
                 | (Total(0), Standard, Regular, No)  -> Fee { charge = 500, cover = 0 }
             """;
 
@@ -150,8 +151,7 @@ class AnObligationNothingEstablishedAsMissingIsNotWorkToOfferTest {
                                     souther.compiler.partition.Budgets.measures().rewriteRuns()),
                             souther.compiler.partition.Budgets.generation()));
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            ANSWERED = compilation;
+            ANSWERED = ACompiledModel.compiles(compilation);
         }
         return ANSWERED;
     }

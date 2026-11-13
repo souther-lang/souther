@@ -2,12 +2,14 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.source.SourceId;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -68,10 +70,20 @@ class ASourceThatOnlyWroteFakesIsNotAnsweredForWhenNothingBuiltThemTest {
 
     private static final SourceId ATTACHED = new SourceId("1");
 
+    /** The wide module, refused for the one thing the JVM will not hold of it. */
+    private static Db tooWide() {
+        Compilation c = Compilation.ofSources(List.of(tooWideForTheJvm(), ONLY_A_FAKE),
+                ModulePath.EMPTY);
+        c.answerEverything();
+        assertEquals(List.of("E2101"),
+                c.errors().stream().map(each -> each.diagnostic().code()).distinct().toList(),
+                "the width is the one thing the JVM refuses");
+        return c.db();
+    }
+
     @Test
     void aSourceWhoseFakesCouldNotBeBuiltIsNotAnsweredFor() {
-        Db db = Compilation.ofSources(List.of(tooWideForTheJvm(), ONLY_A_FAKE),
-                ModulePath.EMPTY).db();
+        Db db = tooWide();
 
         Answer<Output.Examples.Of> answered =
                 db.ask(Output.Examples.asked(db, "example.wide", ATTACHED));
@@ -88,8 +100,7 @@ class ASourceThatOnlyWroteFakesIsNotAnsweredForWhenNothingBuiltThemTest {
      */
     @Test
     void andTheModuleItSaysThisOfIsOneThatChecked() {
-        Db db = Compilation.ofSources(List.of(tooWideForTheJvm(), ONLY_A_FAKE),
-                ModulePath.EMPTY).db();
+        Db db = tooWide();
 
         assertTrue(db.ask(new Bodies.Checked("example.wide")).present(),
                 "the language accepts it; it is the JVM that will not hold it");
@@ -108,7 +119,8 @@ class ASourceThatOnlyWroteFakesIsNotAnsweredForWhenNothingBuiltThemTest {
      */
     @Test
     void andItIsAnsweredForWhereTheyCanBe() {
-        Db db = Compilation.ofSources(List.of(heldByTheJvm(), ONLY_A_FAKE), ModulePath.EMPTY).db();
+        Db db = ACompiledModel.compiles(Compilation.ofSources(
+                List.of(heldByTheJvm(), ONLY_A_FAKE), ModulePath.EMPTY)).db();
 
         Answer<Output.Examples.Of> answered =
                 db.ask(Output.Examples.asked(db, "example.wide", ATTACHED));

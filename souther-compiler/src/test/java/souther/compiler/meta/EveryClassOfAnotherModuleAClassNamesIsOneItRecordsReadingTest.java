@@ -1,5 +1,6 @@
 package souther.compiler.meta;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.GeneratedClass;
@@ -91,7 +92,8 @@ class EveryClassOfAnotherModuleAClassNamesIsOneItRecordsReadingTest {
     void everyClassOfAnotherModuleNamedIsOfADeclarationRecordedAsRead() {
         List<String> unrecorded = new ArrayList<>();
         int checked = 0;
-        Compilation fixture = Compilation.ofSources(REACHING_EVERY_WAY, ModulePath.of(Map.of()));
+        Compilation fixture = ACompiledModel.compiles(
+                Compilation.ofSources(REACHING_EVERY_WAY, ModulePath.of(Map.of())));
         List<Compilation> compilations = new ArrayList<>(List.of(fixture));
         compilations.addAll(RepositoryModels.all());
         for (Compilation compilation : compilations) {

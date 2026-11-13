@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -91,9 +92,7 @@ class OneAuthoredLineIsOneDebtHoweverManyBehaviorsCarryItTest {
 
     /** Every finding the module's declarations are short of. */
     private static List<Adequacy.Finding> declaredFindings(String model, String module) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         List<Adequacy.Finding> findings =
                 compilation.db().ask(new Adequacy.Findings(module)).value();
         assertNotNull(findings, "the model under test compiles");
@@ -212,9 +211,7 @@ class OneAuthoredLineIsOneDebtHoweverManyBehaviorsCarryItTest {
      */
     @Test
     void aReportPrintsTheLineUnderItsDeclarationAndRefusesOverIt() {
-        Compilation compilation = Compilation.ofSource(WELL_INSIDE, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(WELL_INSIDE, Adequacy.Asked.fullReport());
         AdequacyReport report = AdequacyReport.of(compilation);
         String page = report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
@@ -241,9 +238,8 @@ class OneAuthoredLineIsOneDebtHoweverManyBehaviorsCarryItTest {
      */
     @Test
     void aBehaviorWithNoRowsDoesNotHoldOpenALineAnotherSettles() {
-        Compilation compilation = Compilation.ofSource(ONE_WRITES_ROWS, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(ONE_WRITES_ROWS, Adequacy.Asked.fullReport());
         AdequacyReport report = AdequacyReport.of(compilation);
 
         assertEquals(List.of(), report.adequacyGaps().stream()
@@ -288,9 +284,8 @@ class OneAuthoredLineIsOneDebtHoweverManyBehaviorsCarryItTest {
      */
     @Test
     void theDocumentSaysWhichDeclarationIsShortOfALine() {
-        Compilation compilation = Compilation.ofSource(TWO_DECLARATIONS, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(TWO_DECLARATIONS, Adequacy.Asked.fullReport());
         String json = AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts()));
         tools.jackson.databind.JsonNode declarations =
                 tools.jackson.databind.json.JsonMapper.builder().build().readTree(json)
@@ -327,9 +322,7 @@ class OneAuthoredLineIsOneDebtHoweverManyBehaviorsCarryItTest {
 
     /** Every reading of every line of {@code module}, as the measure holds them. */
     private static List<BorderAssessment> readingsOf(String model, String module) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> boundaries =
                 Adequacy.boundariesOf(compilation.db(), module);
         assertNotNull(boundaries, "the model under test compiles");

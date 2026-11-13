@@ -83,10 +83,28 @@ class WhatWentUnbuiltIsAskedOfTheTablesAndNotOfTheMachineTest {
                 | "found" : (MemberId("m-1")) -> Missing { why = "no such member" }
             """;
 
+    /** The sources compiled; the only thing the language may say of them is that the JVM cannot
+     *  hold what they would emit. */
+    private static Db checkedDb(List<String> sources) {
+        return checkedDb(sources, List.of());
+    }
+
+    /** The same, of sources the language refuses for what is written about the fakes and for
+     *  nothing else: {@code refused} is every error said besides the JVM's. */
+    private static Db checkedDb(List<String> sources, List<String> refused) {
+        Compilation c = Compilation.ofSources(sources, ModulePath.EMPTY);
+        c.answerEverything();
+        assertEquals(refused, c.errors().stream()
+                .map(e -> e.diagnostic().code())
+                .filter(code -> !code.equals("E2101")).toList(),
+                refused.isEmpty() ? "the language accepts the sources"
+                        : "the language refuses what is written about the fakes");
+        return c.db();
+    }
+
     @Test
     void aSourceThatWroteNoFakeIsStillAnsweredForWhereNothingCouldBeEmitted() {
-        Db db = Compilation.ofSources(List.of(tooWideForTheJvm(""), A_ROW_AND_NO_FAKE),
-                ModulePath.EMPTY).db();
+        Db db = checkedDb(List.of(tooWideForTheJvm(""), A_ROW_AND_NO_FAKE));
 
         Answer<Output.Examples.Of> answered = db.ask(
                 new Output.Examples("example.wide", ATTACHED, ArmObservation.RECORD));
@@ -109,9 +127,9 @@ class WhatWentUnbuiltIsAskedOfTheTablesAndNotOfTheMachineTest {
      */
     @Test
     void aSourceWritingASecondBlockForOneBehaviorBuildsItAllTheSame() {
-        Db db = Compilation.ofSources(
+        Db db = checkedDb(
                 List.of(tooWideForTheJvm(A_FAKE), A_SECOND_FAKE_FOR_THE_SAME_DEPENDENCY),
-                ModulePath.EMPTY).db();
+                List.of("E1933", "E1933"));
 
         Answer<Output.Examples.Of> answered = db.ask(
                 new Output.Examples("example.wide", ATTACHED, ArmObservation.RECORD));
@@ -124,8 +142,7 @@ class WhatWentUnbuiltIsAskedOfTheTablesAndNotOfTheMachineTest {
      *  state they are written for. */
     @Test
     void andTheModuleItSaysThisOfChecksAndEmitsNothing() {
-        Db db = Compilation.ofSources(List.of(tooWideForTheJvm(""), A_ROW_AND_NO_FAKE),
-                ModulePath.EMPTY).db();
+        Db db = checkedDb(List.of(tooWideForTheJvm(""), A_ROW_AND_NO_FAKE));
 
         assertTrue(db.ask(new Bodies.Checked("example.wide")).present(),
                 "the language accepts it");

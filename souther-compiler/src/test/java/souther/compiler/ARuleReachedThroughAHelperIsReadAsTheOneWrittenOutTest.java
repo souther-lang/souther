@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
@@ -197,14 +198,16 @@ class ARuleReachedThroughAHelperIsReadAsTheOneWrittenOutTest {
 
     /** What the one position of a newtype is left, as the declaration's own reading says it. */
     private static String admitted(String base, String helpers, String clause) {
-        return souther.compiler.check.RuleReadings.admittedByTheValueOf("""
+        // A helper handing its pattern on is refused as a pattern that is not a literal; what the
+        // declaration admits is read all the same.
+        return RuleReadings.admittedByTheValueOf("""
                 module demo
 
                 %s
 
                 data N = %s
                     invariant %s
-                """.formatted(helpers, base, clause));
+                """.formatted(helpers, base, clause), List.of("E1323"));
     }
 
     /**

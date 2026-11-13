@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.reading.WhatABodyStates;
@@ -56,6 +57,7 @@ class WhatABodyStatesIsLentToWhicheverReaderAsksSecondTest {
 
         assertEquals(2, RevisionKnowledge.timesDone(WhatABodyStates.class) - before,
                 "two bodies, each read once however the two readers are ordered");
+        ACompiledModel.compiles(compilation);
     }
 
     @Test
@@ -68,6 +70,7 @@ class WhatABodyStatesIsLentToWhicheverReaderAsksSecondTest {
 
         assertEquals(2, RevisionKnowledge.timesDone(WhatABodyStates.class) - before,
                 "two bodies, each read once however the two readers are ordered");
+        ACompiledModel.compiles(compilation);
     }
 
     @Test
@@ -88,6 +91,7 @@ class WhatABodyStatesIsLentToWhicheverReaderAsksSecondTest {
         assertEquals(2, RevisionKnowledge.timesDone(WhatABodyStates.class) - done,
                 "a revision that moved knows nothing of the last, so each body is read again, and"
                         + " once for both its readers");
+        ACompiledModel.compiles(compilation);
     }
 
     private static Compilation compiled(String model) {

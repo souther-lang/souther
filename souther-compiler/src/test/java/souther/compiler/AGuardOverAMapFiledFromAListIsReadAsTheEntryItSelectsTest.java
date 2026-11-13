@@ -50,6 +50,11 @@ class AGuardOverAMapFiledFromAListIsReadAsTheEntryItSelectsTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private static Compilation measured(String source) {
+        return ACompiledModel.compiles(attempted(source));
+    }
+
+    /** The model measured and answered in full, whether or not it compiles. */
+    private static Compilation attempted(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -238,7 +243,6 @@ class AGuardOverAMapFiledFromAListIsReadAsTheEntryItSelectsTest {
         collectWeakening(JSON.readTree(AdequacyReport.of(open)
                 .json(SourceRendering.namedByIdentity(open.texts()))), mayRepeat);
 
-        assertEquals(List.of(), errors(kept));
         assertFalse(apart.contains("keyed_overwrite_cases_unmeasured"), apart::toString);
         assertTrue(mayRepeat.contains("keyed_overwrite_cases_unmeasured"), mayRepeat::toString);
     }
@@ -431,7 +435,7 @@ class AGuardOverAMapFiledFromAListIsReadAsTheEntryItSelectsTest {
     /** The control: a wrong answer for the repeated key is refused. */
     @Test
     void anAnswerTheLookupDoesNotGiveIsRefused() {
-        Compilation compilation = measured(MODEL + """
+        Compilation compilation = attempted(MODEL + """
 
                 example f
                     | "last row short" : ([LI { sku = "A", q = 5 }], [Row { sku = "A", qty = 10 }, Row { sku = "A", qty = 2 }]) -> 1

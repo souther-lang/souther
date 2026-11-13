@@ -78,22 +78,20 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
             Pattern.compile("Total\\((\\d+)\\),\\s*Standard,\\s*Express");
 
     private static String block(String source) {
-        return block(Compilation.ofSource(source, "Main"));
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        return blockOf(ACompiledModel.compiles(compilation));
     }
 
     /** The same, with the offering held to {@code rowLimit} rows and nothing else about the budget
      *  changed. */
     private static String block(String source, int rowLimit) {
-        return block(UnderABudget.of(Compilation.ofSource(source, "Main"),
+        Compilation compilation = UnderABudget.of(Compilation.ofSource(source, "Main"),
                 new AdequacyPolicy(Budgets.measures(),
                         new AdequacyPolicy.OfTheGeneration(rowLimit,
-                                Budgets.generation().cellsPerGroup()))));
-    }
-
-    private static String block(Compilation compilation) {
+                                Budgets.generation().cellsPerGroup())));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return blockOf(compilation);
+        return blockOf(ACompiledModel.compiles(compilation));
     }
 
     /** The same, for a caller whose compilation is measured and answered already. */
@@ -110,7 +108,16 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
+        return ACompiledModel.compiles(compilation);
+    }
+
+    /** A fresh compilation, measured once, of a model that is told of {@code codes} and still read. */
+    private static Compilation measuredAndToldOf(String source, List<String> codes) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(codes, compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList());
         return compilation;
     }
 
@@ -267,11 +274,11 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
     @Test
     void aClassTheBodyDeclaresUnreachableIsStillOwedAndOfferedNoRow() {
         // One row, so the classes are measured and a class no row is in is a finding at all.
-        Compilation compilation = measured(ABORTING + """
+        Compilation compilation = measuredAndToldOf(ABORTING + """
 
                 example fee
                     | "A C" : (A, C) -> 110
-                """);
+                """, List.of("E1326"));
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         String block = blockOf(compilation);

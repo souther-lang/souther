@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.InvariantChecker;
@@ -674,7 +675,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
      */
     @Test
     void aProofThatNamesAPositionIsSaidUnderTheParameter() {
-        Read read = read(NOTHING_AT_A_FIELD, "take");
+        Read read = readRefused(NOTHING_AT_A_FIELD, "take", List.of("E1013"));
 
         EmptyInput why = read.inputs().quantities(read.rules()).emptiness().orElseThrow();
 
@@ -784,7 +785,19 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     }
 
     private static Read read(String source, String behavior) {
+        return read(ACompiledModel.answered(source), behavior);
+    }
+
+    /** The reading of a model that is refused for {@code refusedFor}, which is read all the same. */
+    private static Read readRefused(String source, String behavior, List<String> refusedFor) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        assertEquals(refusedFor, compilation.errors().stream()
+                .map(found -> found.diagnostic().code()).toList(), "the model is refused");
+        return read(compilation, behavior);
+    }
+
+    private static Read read(Compilation compilation, String behavior) {
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

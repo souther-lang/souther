@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -28,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class APointPastSomethingNothingReadsTheAnswerOfIsOwedAndNoGapTest {
 
     private static String report(String worked) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module w1
                 behavior f : (a: Int, n: Int, b: Int) -> Ok | No
                 let f (a, n, b) = {
@@ -39,9 +40,7 @@ class APointPastSomethingNothingReadsTheAnswerOfIsOwedAndNoGapTest {
                 example f
                     | "low" : (1, 1, 0) -> No
                     | "high" : (1, 1, 9) -> Ok
-                """.formatted(worked), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.formatted(worked), Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -81,7 +80,7 @@ class APointPastSomethingNothingReadsTheAnswerOfIsOwedAndNoGapTest {
      *  read, and the point past it is a gap. */
     @Test
     void aPointPastAProductTheGuardsKeepSmallIsAGap() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module w1
                 behavior f : (a: Int, n: Int, b: Int) -> Ok | No
                 let f (a, n, b) = {
@@ -94,9 +93,7 @@ class APointPastSomethingNothingReadsTheAnswerOfIsOwedAndNoGapTest {
                 example f
                     | "low" : (1, 1, 0) -> No
                     | "high" : (1, 1, 9) -> Ok
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertEquals(List.of(

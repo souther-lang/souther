@@ -151,6 +151,10 @@ class ATableOfDerivedDeclarationsIsNeverReadBackAsNodesTest {
                 data Bad = { value: Nowhere }
                 data Good = { n: Int }
                 """), ModulePath.EMPTY);
+        compilation.answerEverything();
+        assertEquals(List.of("E1023"),
+                compilation.errors().stream().map(each -> each.diagnostic().code()).toList(),
+                "the field naming nothing is the one mistake");
         Db db = compilation.db();
 
         TypeKey bad = new TypeKey("probe.holes", "Bad");

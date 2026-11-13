@@ -2,10 +2,13 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -194,7 +197,7 @@ class AWeightIsOwedToTheComputationThatMakesItTest {
      */
     @Test
     void aRowThatDoesNotHoldFixesNoWeight() {
-        String report = reportOf("""
+        String report = reportOfARowThatDoesNotHold("""
                 module demo
 
                 data N = { v: Int }
@@ -218,9 +221,20 @@ class AWeightIsOwedToTheComputationThatMakesItTest {
     }
 
     private static String reportOf(String source) {
+        return humanReportOf(ACompiledModel.measured(source, Adequacy.Asked.fullReport()));
+    }
+
+    /** The same, for a model whose row states an answer the behavior does not give. */
+    private static String reportOfARowThatDoesNotHold(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1905"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "the row that does not hold");
+        return humanReportOf(compilation);
+    }
+
+    private static String humanReportOf(Compilation compilation) {
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }

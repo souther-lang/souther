@@ -220,11 +220,14 @@ class EveryParameterAnImplementationWroteStandsForSomethingTest {
     /**
      * The module as its names resolved, which is before anything refuses what is written in it.
      *
-     * <p>Where these are asked from. Half of what is asked here is about a definition the check
-     * would refuse, and a model read after the check would have none of them in it.
+     * <p>Half of what is asked here is about a definition the check would refuse, so the model is
+     * held to compile only as written, and every variation of it to be refused.
      */
     private static Hir.Module moduleOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        assertEquals(!source.equals(TWO_OF_EACH), !compilation.errors().isEmpty(),
+                "the model as written compiles, and every variation of it is one the check refuses");
         String module = compilation.modules().get(0);
         Hir.Module resolved = compilation.db().ask(new Names.Resolved(module)).value();
         assertNotNull(resolved, "the source under test resolves");

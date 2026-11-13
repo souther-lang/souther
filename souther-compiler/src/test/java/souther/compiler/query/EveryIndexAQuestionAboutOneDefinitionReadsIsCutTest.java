@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import org.junit.jupiter.api.Test;
@@ -222,7 +223,7 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
             Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
                     .writtenOn(TestDay.DATE);
             c.measure(Adequacy.Asked.fullReport());
-            c.answerEverything();
+            ACompiledModel.compiles(c);
             assertTrue(c.db().allReports().isEmpty(),
                     () -> "the module compiles to begin with: " + said(c));
             IndexEdges.Snapshot before = IndexEdges.Snapshot.of(c.db());

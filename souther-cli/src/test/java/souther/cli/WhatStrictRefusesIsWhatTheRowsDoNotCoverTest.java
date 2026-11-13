@@ -322,6 +322,8 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         Compilation compilation = Compilation.ofSource(ONE_CLASS_OF_TWO, "Main");
         compilation.measure(new Adequacy.Asked(Adequacy.Level.OFF, false));
         compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "the model compiles");
         AdequacyReport report = AdequacyReport.of(compilation);
 
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
@@ -689,6 +691,8 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(level));
         compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "the model compiles");
         return AdequacyReport.of(compilation);
     }
 

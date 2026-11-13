@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -64,10 +65,18 @@ class WhatASourceGotWrongIsSaidEvenWhereNothingCouldBeEmittedTest {
 
     private static final SourceId ATTACHED = new SourceId("1");
 
+    /** The wide module with the file that declares `shared` over again, which is refused. */
+    private static Db refusedForTheClash() {
+        Compilation model = Compilation.ofSources(List.of(tooWideForTheJvm(), DECLARES_IT_AGAIN),
+                ModulePath.EMPTY);
+        model.answerEverything();
+        assertFalse(model.errors().isEmpty(), "the name declared twice is refused");
+        return model.db();
+    }
+
     @Test
     void aNameDeclaredTwiceIsSaidEvenWhereTheModuleCouldNotBeEmitted() {
-        Db db = Compilation.ofSources(List.of(tooWideForTheJvm(), DECLARES_IT_AGAIN),
-                ModulePath.EMPTY).db();
+        Db db = refusedForTheClash();
 
         Answer<Output.Examples.Of> answered =
                 db.ask(Output.Examples.asked(db, "example.wide", ATTACHED));
@@ -86,8 +95,7 @@ class WhatASourceGotWrongIsSaidEvenWhereNothingCouldBeEmittedTest {
      */
     @Test
     void andTheModuleItIsSaidOfIsOneThatChecked() {
-        Db db = Compilation.ofSources(List.of(tooWideForTheJvm(), DECLARES_IT_AGAIN),
-                ModulePath.EMPTY).db();
+        Db db = refusedForTheClash();
 
         assertTrue(db.ask(new Bodies.Checked("example.wide")).present(),
                 "the language accepts it; it is the JVM that will not hold it");
@@ -105,8 +113,7 @@ class WhatASourceGotWrongIsSaidEvenWhereNothingCouldBeEmittedTest {
      */
     @Test
     void andAModuleThatCheckedHasWhatAnEvaluationReads() {
-        Db db = Compilation.ofSources(List.of(tooWideForTheJvm(), DECLARES_IT_AGAIN),
-                ModulePath.EMPTY).db();
+        Db db = refusedForTheClash();
 
         assertNotNull(db.ask(new Bodies.Requirements("example.wide")).value(),
                 "a module that checked knows what its behaviors need supplied");

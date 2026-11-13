@@ -3,6 +3,7 @@ package souther.compiler.examples;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.FakeTables;
 import souther.compiler.check.Prepared;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 import souther.compiler.types.ValueName;
@@ -155,7 +156,7 @@ class WhatStandsInForARequirementIsAskedInOnePlaceTest {
     }
 
     private static Model modelOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         assertNotNull(prepared, "the model under test compiles");

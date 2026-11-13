@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.CheckedEnsures;
 import souther.compiler.meta.ModulePath;
@@ -7,6 +8,7 @@ import souther.compiler.meta.ModulePath;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -51,7 +53,7 @@ class AContractIsOwnedWithWhatReadingItFoundTest {
     }
 
     private static Answer<Map<String, CheckedEnsures>> contracts(String source) {
-        return compiled(source).db().ask(new Bodies.Contracts("m.a"));
+        return ACompiledModel.compiles(compiled(source)).db().ask(new Bodies.Contracts("m.a"));
     }
 
     @Test
@@ -93,8 +95,13 @@ class AContractIsOwnedWithWhatReadingItFoundTest {
      */
     @Test
     void aClauseThatCannotBeReadIsReportedByTheKeyThatReadsIt() {
-        Answer<Map<String, CheckedEnsures>> answered = contracts(HOLDS
+        Compilation c = compiled(HOLDS
                 .replace("Found   -> value.id == id", "Found   -> value.id == value.id"));
+        c.answerEverything();
+        assertEquals(List.of("E1617"),
+                c.errors().stream().map(each -> each.diagnostic().code()).toList(),
+                "the clause is what does not compile");
+        Answer<Map<String, CheckedEnsures>> answered = c.db().ask(new Bodies.Contracts("m.a"));
 
         assertTrue(answered.hasError(),
                 "the reading found it, so the reading is what carries it");

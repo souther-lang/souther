@@ -5,9 +5,11 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -46,7 +48,12 @@ class ADeclarationThatDoesNotComeOutDoesNotTakeItsSiblingsTest {
     private static Compilation compiled() {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", SOURCE);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        assertEquals(List.of("E1023"),
+                c.errors().stream().map(each -> each.diagnostic().code()).toList(),
+                "the field whose type nobody could name is the one mistake");
+        return c;
     }
 
     private static boolean derived(Compilation c, String declared) {

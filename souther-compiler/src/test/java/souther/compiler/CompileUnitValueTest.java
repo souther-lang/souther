@@ -136,10 +136,13 @@ class CompileUnitValueTest {
 
         assertNotNull(compilation.db().ask(new Bodies.CheckedBehavior("demo", "f")).value(),
                 "the body is read, whatever the clause around it says");
+        List<String> errors = compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList();
         assertTrue(compilation.reports().stream()
                         .map(found -> DiagnosticRenderer.legacyBody(found.report().diagnostic()))
                         .noneMatch(said -> said.contains("never builds")),
-                "and the entry is not reported as one the body never built");
+                "and the entry is not reported as one the body never built, the errors being "
+                        + errors);
     }
 
     /** A unit has no fields, so an invariant on it has nothing to observe and nothing it could

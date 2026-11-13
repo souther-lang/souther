@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.InputReading;
@@ -64,7 +65,7 @@ class AWayWithOneAlternativeLeftOpenIsLookedAlongThatOneTest {
     }
 
     private static InputReading reading() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module m
 
                 data A
@@ -74,7 +75,7 @@ class AWayWithOneAlternativeLeftOpenIsLookedAlongThatOneTest {
 
                 behavior f : (k: Kind) -> Yes
                 let f (k) = Yes
-                """, "Main");
+                """);
         var inputs = compilation.db().ask(new Adequacy.Inputs("m")).value().get("f");
         assertNotNull(inputs, "the model under test compiles");
         return inputs.reading(RuleReadings.of(compilation, "m"));

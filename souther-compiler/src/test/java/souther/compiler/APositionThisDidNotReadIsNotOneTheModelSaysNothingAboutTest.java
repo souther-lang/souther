@@ -11,6 +11,7 @@ import souther.compiler.report.AdequacyReport;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -100,7 +101,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
         if (measured == null) {
             Compilation compilation = Compilation.ofSource(MODEL, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            ACompiledModel.compiles(compilation);
             measured = compilation;
         }
         return measured;
@@ -183,6 +184,8 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1013"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList());
         String human = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
@@ -279,7 +282,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     void theRowAtADatesBoundIsWrittenAsADate() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         String block = souther.compiler.report.GeneratedRows.of(
                 compilation, "example.repro", "boundedByADate", SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
@@ -298,7 +301,7 @@ class APositionThisDidNotReadIsNotOneTheModelSaysNothingAboutTest {
     void theRowAtADateTimesLineIsWrittenAsADateTime() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         String block = souther.compiler.report.GeneratedRows.of(
                 compilation, "example.repro", "byDateTime", SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();

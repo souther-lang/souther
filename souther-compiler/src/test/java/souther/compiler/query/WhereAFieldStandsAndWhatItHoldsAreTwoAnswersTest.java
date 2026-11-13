@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
@@ -201,9 +202,9 @@ class WhereAFieldStandsAndWhatItHoldsAreTwoAnswersTest {
     }
 
     private static Compilation compiling(String... sources) {
-        Compilation c = Compilation.ofDocuments(workspace(sources), Set.of(), ModulePath.EMPTY)
-                .writtenOn(TestDay.DATE);
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofDocuments(workspace(sources), Set.of(), ModulePath.EMPTY)
+                        .writtenOn(TestDay.DATE));
         assertTrue(c.db().allReports().isEmpty(),
                 "the workspace compiles to begin with: " + c.db().allReports());
         return c;

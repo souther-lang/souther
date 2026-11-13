@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.meta.ModulePath;
@@ -495,7 +496,7 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                                 Budgets.measures().rewriteRuns()),
                         Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         PartitionEvidence.PairSpace pairs = compilation.db()
                 .ask(new Adequacy.Coverage("probe.charge")).value().get("charge").pairs();
 
@@ -1164,6 +1165,8 @@ class ACombinationIsOwedWhereARunReadsBothTest {
                 example pick
                     | (Paid, [101]) -> Picked { amount = 101 }
                 """), ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
         Measured pick = measured(compilation, "probe.picking", "pick");
 
         assertEquals(Set.of("probe.pickers.firstOver"), pick.shortOf(),
@@ -1389,17 +1392,12 @@ class ACombinationIsOwedWhereARunReadsBothTest {
 
     private static synchronized Measured measured(String source, String behavior) {
         return MEASURED.computeIfAbsent(List.of(source, behavior), _ -> {
-            Compilation compilation = Compilation.ofSource(source, "Main");
+            Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
             return measured(compilation, compilation.modules().get(0), behavior);
         });
     }
 
     private static Measured measured(Compilation compilation, String module, String behavior) {
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
-                "the model under test compiles and its rows hold");
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(module)).value();
         assertNotNull(all, "the model under test is measured");

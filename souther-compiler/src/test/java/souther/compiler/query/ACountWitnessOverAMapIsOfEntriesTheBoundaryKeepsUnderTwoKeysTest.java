@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.Sig;
 import souther.compiler.execute.BoundaryValues;
 import souther.compiler.observe.ObservedValue;
@@ -59,6 +60,7 @@ class ACountWitnessOverAMapIsOfEntriesTheBoundaryKeepsUnderTwoKeysTest {
     private static Compilation compiled() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
         compilation.db().ask(new Adequacy.Coverage("demo"));
         return compilation;
     }

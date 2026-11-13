@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Emitted;
 import souther.compiler.TestDay;
 import souther.compiler.jvm.ClassFileImage;
@@ -93,10 +94,9 @@ class WhatShipsCarriesTheDeclarationsAndWhatRunsDoesNotTest {
     }
 
     private static Compilation started() {
-        Compilation compilation =
+        Compilation compilation = ACompiledModel.compiles(
                 Compilation.ofDocuments(workspace(PRICES), Set.of(), ModulePath.EMPTY)
-                        .writtenOn(TestDay.DATE);
-        compilation.answerEverything();
+                        .writtenOn(TestDay.DATE));
         assertEquals(List.of(), compilation.db().allReports().stream().map(String::valueOf).toList(),
                 "the workspace compiles to begin with");
         return compilation;

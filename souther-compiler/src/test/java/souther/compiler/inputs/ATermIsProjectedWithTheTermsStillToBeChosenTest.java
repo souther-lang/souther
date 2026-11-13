@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -47,19 +48,19 @@ class ATermIsProjectedWithTheTermsStillToBeChosenTest {
     private static final String MODEL = """
             module g
 
-            data Pair = { first: Date, second: Date }
-            data Chain = { a: Date, b: Date, c: Date }
+            data TwoDates = { first: Date, second: Date }
+            data ThreeDates = { a: Date, b: Date, c: Date }
             data Stamp = { d: Date }
             data SideA = { ...Stamp, u: Int }
             data SideB = { ...Stamp, v: Int }
             data Side = SideA | SideB
-            data Dated = { side: Side, m: Date }
+            data Placed = { side: Side, m: Date }
 
             data Ok
 
-            behavior dated : (x: Dated) -> Ok
-            behavior pair : (p: Pair) -> Ok
-            behavior chain : (c: Chain) -> Ok
+            behavior dated : (x: Placed) -> Ok
+            behavior pair : (p: TwoDates) -> Ok
+            behavior chain : (c: ThreeDates) -> Ok
             """;
 
     @Test
@@ -176,8 +177,8 @@ class ATermIsProjectedWithTheTermsStillToBeChosenTest {
     }
 
     private static InputDomain reading(String behavior) {
-        Compilation compilation =
-                Compilation.ofSources(List.of(MODEL), souther.compiler.meta.ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(MODEL), souther.compiler.meta.ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

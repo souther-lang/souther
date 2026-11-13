@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.cst.SourceLayout;
 import souther.compiler.source.SourceId;
@@ -69,7 +70,7 @@ class IncrementalCompilationTest {
     private static Compilation started() {
         Compilation c = Compilation.ofDocuments(workspace(PRICES, CART, CUSTOMERS), Set.of(),
                 ModulePath.EMPTY).writtenOn(TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with");
         return c;
     }
@@ -236,7 +237,7 @@ class IncrementalCompilationTest {
         byId.put("cart.sou", CART_OF_AMOUNT);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
                 .writtenOn(TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with");
         Answer<?> cart = c.db().ask(new Output.Classes("shop.cart"));
 
@@ -351,7 +352,7 @@ class IncrementalCompilationTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("orders.sou", source);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(), () -> "the model parses: " + c.db().allReports());
         return c.db().ask(new Front.Parsed(new SourceId("orders.sou"))).value().module();
     }
@@ -379,7 +380,7 @@ class IncrementalCompilationTest {
     private static Compilation orders(String source) {
         Compilation c = Compilation.ofDocuments(Map.of("orders.sou", source), Set.of(),
                 ModulePath.EMPTY).writtenOn(TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
         return c;
     }
@@ -512,8 +513,7 @@ class IncrementalCompilationTest {
                 workspace(PRICES, CART, "module shop.customers\ndata Name = Nope\n"), Set.of(),
                 ModulePath.EMPTY).writtenOn(TestDay.DATE);
         c.answerEverything();
-        assertTrue(c.db().allReports().stream().anyMatch(f -> f.report().isError()),
-                "an unknown type is an error to begin with");
+        assertFalse(c.errors().isEmpty(), "an unknown type is an error to begin with");
 
         c.update(workspace(PRICES, CART, CUSTOMERS), Set.of(), TestDay.DATE);
         c.answerEverything();
@@ -572,7 +572,7 @@ class IncrementalCompilationTest {
     private static Compilation stating() {
         Compilation c = Compilation.ofDocuments(Map.of("orders.sou", STATING), Set.of(),
                 ModulePath.EMPTY).writtenOn(TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
         return c;
     }
@@ -658,7 +658,7 @@ class IncrementalCompilationTest {
     private static Compilation borrowing() {
         Compilation c = Compilation.ofDocuments(borrowing(CALC), Set.of(), ModulePath.EMPTY)
                 .writtenOn(TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with");
         return c;
     }
@@ -762,7 +762,7 @@ class IncrementalCompilationTest {
     void editingAnInjectedEnsuresRechecksTheBodyItIsInjectedIntoAndNothingBeside() {
         Compilation c = Compilation.ofDocuments(Map.of("injecting.sou", INJECTING), Set.of(),
                 ModulePath.EMPTY).writtenOn(TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
         Answer<?> use = c.db().ask(new Bodies.CheckedBehavior("shop.injecting", "use"));
         Answer<?> beside = c.db().ask(new Bodies.CheckedBehavior("shop.injecting", "beside"));
@@ -871,7 +871,7 @@ class IncrementalCompilationTest {
                 let writing (n) = Amount(Discount(n.value).value)
                 """), Set.of(), ModulePath.EMPTY).writtenOn(TestDay.DATE);
         c.answerEverything();
-        assertFalse(c.db().allReports().isEmpty(), "`Discount` denotes nothing to begin with");
+        assertFalse(c.errors().isEmpty(), "`Discount` denotes nothing to begin with");
         Answer<?> writing = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "writing"));
         Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
 
@@ -958,7 +958,7 @@ class IncrementalCompilationTest {
         Compilation c = Compilation.ofDocuments(Map.of("offering.sou", OFFERING), Set.of(),
                 ModulePath.EMPTY).writtenOn(TestDay.DATE);
         c.answerEverything();
-        assertFalse(c.db().allReports().isEmpty(), "`Q` is not a case of `Inner`, which is reported");
+        assertFalse(c.errors().isEmpty(), "`Q` is not a case of `Inner`, which is reported");
         Answer<?> run = c.db().ask(new Bodies.CheckedBehavior("shop.offering", "run"));
 
         c.update(Map.of("offering.sou", OFFERING + "\ndata Discount = Int\n"), Set.of(),

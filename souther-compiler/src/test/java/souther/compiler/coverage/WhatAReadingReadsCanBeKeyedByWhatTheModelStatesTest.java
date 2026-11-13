@@ -7,6 +7,7 @@ import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
@@ -442,8 +443,8 @@ class WhatAReadingReadsCanBeKeyedByWhatTheModelStatesTest {
     }
 
     private static List<Module> modulesOf(List<String> sources) {
-        Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(sources, ModulePath.EMPTY));
         List<Module> out = new ArrayList<>();
         modulesOf(compilation, out);
         assertTrue(!out.isEmpty(),

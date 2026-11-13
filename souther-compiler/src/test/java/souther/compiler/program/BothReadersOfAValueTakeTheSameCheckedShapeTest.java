@@ -2,6 +2,7 @@ package souther.compiler.program;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.execute.ExampleExecution;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.FieldTypes;
@@ -96,9 +97,7 @@ class BothReadersOfAValueTakeTheSameCheckedShapeTest {
     }
 
     private static Compilation compiled() {
-        Compilation c = Compilation.ofSource(MODULE, "Main");
-        c.answerEverything();
-        return c;
+        return ACompiledModel.answered(MODULE);
     }
 
     /** And the shape itself is what the declarations wrote, so the agreement below is about
@@ -211,8 +210,8 @@ class BothReadersOfAValueTakeTheSameCheckedShapeTest {
      */
     @Test
     void andADeclarationAnotherModuleWroteIsReadFromThatModulesCheck() {
-        Compilation c = Compilation.ofSources(List.of(DECLARING, HOLDING), ModulePath.EMPTY);
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(DECLARING, HOLDING), ModulePath.EMPTY));
         FieldTypes readInDown = compileSide(c, "down");
         TypeSymbol foreign = TypeSymbols.declared(new TypeKey("up", "Foreign"));
 

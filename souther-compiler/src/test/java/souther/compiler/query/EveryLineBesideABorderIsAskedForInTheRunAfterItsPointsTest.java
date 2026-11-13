@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.BorderObligationId;
@@ -301,7 +302,7 @@ class EveryLineBesideABorderIsAskedForInTheRunAfterItsPointsTest {
     private static Set<String> codesIn(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Level.ALL);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Set<String> out = new TreeSet<>();
         for (Db.Found each : compilation.db().allReports()) {
             Diagnostic said = each.report().diagnostic();
@@ -328,11 +329,7 @@ class EveryLineBesideABorderIsAskedForInTheRunAfterItsPointsTest {
     private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
 
     private static Compilation measured(String model) {
-        return MEASURED.computeIfAbsent(model, source -> {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            return compilation;
-        });
+        return MEASURED.computeIfAbsent(model,
+                source -> ACompiledModel.measured(source, Adequacy.Asked.fullReport()));
     }
 }

@@ -6,6 +6,9 @@ import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -48,6 +51,11 @@ class AnOperatorThatStopsEarlyIsNotStrictInBothItsSidesTest {
         String source = TYPES
                 + "let pick (a, flag) = Answer(if " + condition + " then 1 else 2)\n";
         Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        // Emission refuses an abort standing as an operand, where nothing states a type for it to
+        // take. The reading asked about here is of the checked body, which is there all the same.
+        assertEquals(List.of("E1307"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "what the model is refused for");
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles: " + condition);

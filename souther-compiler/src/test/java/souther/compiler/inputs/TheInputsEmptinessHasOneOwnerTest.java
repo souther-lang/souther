@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -248,7 +249,11 @@ class TheInputsEmptinessHasOneOwnerTest {
 
     /** What proves the input holds nothing, read off the one thing that answers. */
     private static Emptiness why(String source) {
-        Read read = read(source, "take");
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        assertEquals(List.of("E1013"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "a data with no value is refused");
+        Read read = read(compilation, "take");
         EmptyInput held = read.inputs().quantities(read.rules()).emptiness().orElseThrow();
         return ((EmptyInput.ProvedByTheDeclarations) held).why();
     }
@@ -256,7 +261,10 @@ class TheInputsEmptinessHasOneOwnerTest {
     private record Read(InputDomain inputs, RuleReadingSource rules) {}
 
     private static Read read(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        return read(ACompiledModel.answered(source), behavior);
+    }
+
+    private static Read read(Compilation compilation, String behavior) {
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

@@ -460,7 +460,7 @@ class CompileFakeExampleDisagreementTest {
     private static WrittenStatements.Readings readingOf(String model, ClassLoader parent) {
         souther.compiler.query.Compilation c =
                 souther.compiler.query.Compilation.ofSource(model, "Main");
-        c.db().ask(new souther.compiler.query.Output.All());
+        ACompiledModel.compiles(c);
         String name = c.modules().get(0);
         souther.compiler.check.Prepared prepared =
                 c.db().ask(new souther.compiler.query.Shapes.Prepared(name)).value();
@@ -657,6 +657,11 @@ class CompileFakeExampleDisagreementTest {
                 codes.add(code);
             }
         }
+        List<String> errorsOutsideTheFamily = compilation.errors().stream()
+                .map(each -> each.diagnostic().code())
+                .filter(code -> code == null || !code.startsWith("E19")).toList();
+        assertEquals(List.of(), errorsOutsideTheFamily,
+                "the model is wrong in the way the case is about and in no other");
         return codes;
     }
 
@@ -913,7 +918,7 @@ class CompileFakeExampleDisagreementTest {
         souther.compiler.query.Compilation compilation =
                 souther.compiler.query.Compilation.ofSource(model, "Main");
         compilation.measure(asked);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         int said = 0;
         for (souther.compiler.query.Db.Found found : compilation.db().allReports()) {
             if ("E1919".equals(found.report().diagnostic().code())) {

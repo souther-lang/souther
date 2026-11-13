@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.ReadingPolicy;
@@ -156,6 +157,7 @@ class AMachineMadeOfAPlanIsLentToEveryReadingThatAsksForItTest {
         byId.put("f0", PATTERNED);
         Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
                 .writtenOn(TestDay.DATE);
+        ACompiledModel.compiles(compilation);
         assertTrue(clean(compilation), "the model under test compiles clean before the edit");
         Db db = compilation.db();
         Map<Machines.OfDeclaration, StringFacts> before = answersIn(db);
@@ -163,6 +165,7 @@ class AMachineMadeOfAPlanIsLentToEveryReadingThatAsksForItTest {
 
         byId.put("f0", PATTERNED.replace("n = n + 1 }", "n = n + 2 }"));
         compilation.update(byId, Set.of(), TestDay.DATE);
+        ACompiledModel.compiles(compilation);
         assertTrue(clean(compilation), "and after it");
 
         assertEquals(before, answersIn(db),
@@ -174,7 +177,7 @@ class AMachineMadeOfAPlanIsLentToEveryReadingThatAsksForItTest {
 
     private static Compilation compiled(String source) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         assertTrue(clean(compilation), "the model under test compiles clean");
         return compilation;
     }

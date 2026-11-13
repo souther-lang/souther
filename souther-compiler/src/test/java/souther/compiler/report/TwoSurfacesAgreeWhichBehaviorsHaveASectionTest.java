@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
@@ -167,9 +168,7 @@ class TwoSurfacesAgreeWhichBehaviorsHaveASectionTest {
     }
 
     private static AdequacyReport report() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation);
     }
 }

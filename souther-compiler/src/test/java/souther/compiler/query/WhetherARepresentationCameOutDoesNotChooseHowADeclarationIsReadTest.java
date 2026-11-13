@@ -10,6 +10,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -70,7 +71,18 @@ class WhetherARepresentationCameOutDoesNotChooseHowADeclarationIsReadTest {
     private static Db db(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).db();
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        List<String> codes = c.errors().stream().map(e -> e.diagnostic().code()).toList();
+        if (source.equals(SOURCE)) {
+            assertTrue(codes.stream().anyMatch(code -> !code.equals("E1105")),
+                    () -> "a mistake beside the constructions is said where `Bad` names no type: "
+                            + codes);
+        } else {
+            assertEquals(List.of("E1105", "E1105"), codes,
+                    "where `Bad` names a type, only the constructions in the two clauses are refused");
+        }
+        return c.db();
     }
 
     private static final TypeKey GOOD = new TypeKey("m", "Good");

@@ -51,6 +51,9 @@ class WhatAProductSaysIsMadeWithoutAskingItWhatItSaysTest {
         assertTrue(c.db().ask(new Shapes.MeaningOf(new TypeKey("shop", "Item"))).present(),
                 "what `Item` says is made before anything else is asked");
         c.answerEverything();
+        assertEquals(List.of(DiagnosticCode.E1203.name()), c.errors().stream()
+                        .map(each -> each.diagnostic().code()).distinct().toList(),
+                "the model is refused for the arm and for nothing else");
         assertEquals(List.of(DiagnosticCode.E1203.name()), c.db().allReports().stream()
                         .map(each -> each.report().diagnostic().code()).distinct().toList(),
                 "the arm is reported as naming no case of `Colour`");

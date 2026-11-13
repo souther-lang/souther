@@ -39,10 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
 
     private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     private static String report(Compilation compilation) {
@@ -263,7 +260,7 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
 
     @Test
     void aShiftOffTheEndOfTheRangeAbortsAndIsNoRowThatReachedALine() {
-        Compilation past = compiled("""
+        Compilation past = Compilation.ofSource("""
                 module m
 
                 behavior f : (b: Date) -> Bool
@@ -271,9 +268,13 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
 
                 example f
                     | (Date("+999999999-12-31")) -> true
-                """);
+                """, "Main");
+        past.measure(Adequacy.Asked.fullReport());
+        past.answerEverything();
 
-        assertEquals(1, past.errors().size(), "the program aborts there: " + report(past));
+        assertEquals(List.of("E1905"),
+                past.errors().stream().map(e -> e.diagnostic().code()).toList(),
+                "the program aborts there: " + report(past));
 
         Compilation near = compiled("""
                 module m

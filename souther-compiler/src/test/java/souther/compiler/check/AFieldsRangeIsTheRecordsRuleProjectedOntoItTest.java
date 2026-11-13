@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.Scopes;
 import souther.compiler.numeric.NumericDomain;
@@ -30,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
 
     private static FieldDomains domainsIn(String source, String type) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model did not compile");
@@ -299,7 +300,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
      */
     @Test
     void anImportedBoundIsReadLikeADeclaredOne() {
-        Compilation compilation = Compilation.ofSources(List.of("""
+        Compilation compilation = ACompiledModel.compiles(Compilation.ofSources(List.of("""
                 module example.money exposing ( Amount )
 
                 data Amount = Decimal
@@ -310,7 +311,7 @@ class AFieldsRangeIsTheRecordsRuleProjectedOntoItTest {
                 import example.money ( Amount )
 
                 data Forecast = { total: Amount }
-                """), souther.compiler.meta.ModulePath.EMPTY);
+                """), souther.compiler.meta.ModulePath.EMPTY));
         Symbols symbols = Scopes.derived(compilation.db(), "example.report").value();
         assertNotNull(symbols, "the model did not compile");
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey("example.report", "Forecast"));

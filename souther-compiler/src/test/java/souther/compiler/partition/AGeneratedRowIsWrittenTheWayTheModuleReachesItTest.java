@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -62,6 +63,11 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
     }
 
     private static Compilation compiled(String source) {
+        return ACompiledModel.compiles(attempted(source));
+    }
+
+    /** {@code source} compiled and answered in full, whatever it reports. */
+    private static Compilation attempted(String source) {
         Compilation compilation =
                 Compilation.ofSources(List.of(LIB, source), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
@@ -218,7 +224,7 @@ class AGeneratedRowIsWrittenTheWayTheModuleReachesItTest {
 
     /** Every diagnostic a compile of {@code source} reports. */
     private static List<String> codesFor(String source) {
-        return compiled(source).diagnostics().values().stream().flatMap(List::stream)
+        return attempted(source).diagnostics().values().stream().flatMap(List::stream)
                 .map(d -> d.diagnostic().code()).toList();
     }
 }

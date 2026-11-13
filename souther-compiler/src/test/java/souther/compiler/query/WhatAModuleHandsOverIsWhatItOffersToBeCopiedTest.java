@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CarriedDefinitions;
 import souther.compiler.copied.CopyTarget;
@@ -43,7 +44,8 @@ class WhatAModuleHandsOverIsWhatItOffersToBeCopiedTest {
 
     @Test
     void whatIsHandedOverIsWhatIsOfferedAsAHelperOrAValue() {
-        Compilation compilation = Compilation.ofSources(List.of(LIB), ModulePath.of(Map.of()));
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(LIB), ModulePath.of(Map.of())));
         Hir.Module resolved = compilation.db().ask(new Names.Resolved("lib.v")).value();
         Hir.Module settled = compilation.db().ask(new Bodies.Settled("lib.v")).value();
 

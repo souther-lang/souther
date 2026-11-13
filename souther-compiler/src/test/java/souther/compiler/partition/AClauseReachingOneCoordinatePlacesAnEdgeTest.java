@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -218,23 +219,23 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
 
             behavior onWrapped : (v: Wrapped) -> Ok
                 constructs Ok
-            let onWrapped (v) = Ok { size = v.n }
+            let onWrapped (v) = Ok { size = v.value.n }
 
             behavior onNonEmpty : (v: NonEmptyBag) -> Ok
                 constructs Ok
-            let onNonEmpty (v) = Ok { size = List.length(v.xs) }
+            let onNonEmpty (v) = Ok { size = List.length(v.value.xs) }
 
             behavior onHeld : (v: Held) -> Ok
                 constructs Ok
-            let onHeld (v) = Ok { size = v.w.n }
+            let onHeld (v) = Ok { size = v.w.value.n }
 
             behavior onHeldBag : (v: HeldBag) -> Ok
                 constructs Ok
-            let onHeldBag (v) = Ok { size = List.length(v.b.xs) }
+            let onHeldBag (v) = Ok { size = List.length(v.b.value.xs) }
 
             behavior onStacked : (v: Stacked) -> Ok
                 constructs Ok
-            let onStacked (v) = Ok { size = v.w.n }
+            let onStacked (v) = Ok { size = v.w.value.value.n }
             """;
 
     /**
@@ -569,9 +570,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     @Test
     void aLineTheRecordPlacedIsSettledLikeOneOnANewtype() {
         Map<String, BorderAssessment> lines = new LinkedHashMap<>();
-        Compilation compilation = Compilation.ofSource(UNMEETABLE, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(UNMEETABLE, Adequacy.Asked.fullReport());
         Adequacy.readingsOf(compilation.db(), "unmeetable")
                 .forEach((behavior, read) -> read
                         .forEach(line -> lines.put(behavior + "/" + line.label(), line)));
@@ -617,7 +617,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
 
             behavior onWrapped : (v: Wrapped) -> Ok
                 constructs Ok
-            let onWrapped (v) = Ok { size = v.a.value }
+            let onWrapped (v) = Ok { size = v.value.a.value }
 
             behavior onBare : (v: Base) -> Ok
                 constructs Ok
@@ -625,7 +625,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
 
             behavior onHeld : (v: Held) -> Ok
                 constructs Ok
-            let onHeld (v) = Ok { size = v.w.a.value }
+            let onHeld (v) = Ok { size = v.w.value.a.value }
             """;
 
     /**
@@ -706,15 +706,15 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
 
             behavior onOuter : (v: Outer) -> Ok
                 constructs Ok
-            let onOuter (v) = Ok { size = v.a.value }
+            let onOuter (v) = Ok { size = v.value.value.a.value }
 
             behavior onBoth : (v: Both) -> Ok
                 constructs Ok
-            let onBoth (v) = Ok { size = v.n.value }
+            let onBoth (v) = Ok { size = v.value.value.n.value }
 
             behavior onIdle : (v: Idle) -> Ok
                 constructs Ok
-            let onIdle (v) = Ok { size = v.a.value }
+            let onIdle (v) = Ok { size = v.value.value.value.a.value }
             """;
 
     /**
@@ -788,7 +788,8 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     @Test
     void aLengthOverSomethingUninhabitedIsNotProvenByTheRange() {
         souther.compiler.query.ItemAssessment.Owed line =
-                onPoint(linesOf(UNINHABITED, "uninhabited"), "onLoopyR/List.length(v.xs) = 1");
+                onPoint(linesOf(UNINHABITED, "uninhabited", List.of("E1013")),
+                        "onLoopyR/List.length(v.xs) = 1");
 
         assertFalse(line.writabilityEvidence().known(),
                 "nothing inhabits `Loop`, so nothing holds a list of one");
@@ -820,9 +821,17 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
 
     /** Every line one module draws, by the behavior and label it is reported under. */
     private static Map<String, BorderAssessment> linesOf(String source, String module) {
+        return linesOf(source, module, List.of());
+    }
+
+    /** The same, of a model the compile refuses with {@code refusals} and nothing else. */
+    private static Map<String, BorderAssessment> linesOf(String source, String module,
+            List<String> refusals) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(refusals, compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList());
         Map<String, BorderAssessment> lines = new LinkedHashMap<>();
         Adequacy.readingsOf(compilation.db(), module)
                 .forEach((behavior, read) -> read
@@ -831,9 +840,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
     }
 
     private static String report(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
@@ -845,9 +852,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
      * worded as much as to what it says.
      */
     private static List<String> notReadIn(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).modules().get(0).behaviors().stream()
                 .filter(each -> each.name().equals(behavior))
                 .flatMap(each -> each.partition().notRead().stream())

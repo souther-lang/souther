@@ -11,6 +11,8 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -60,6 +62,8 @@ class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1319"), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList());
         return AdequacyReport.of(compilation);
     }
 

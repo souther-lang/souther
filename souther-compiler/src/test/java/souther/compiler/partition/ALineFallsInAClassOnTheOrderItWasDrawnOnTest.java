@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Carrier;
@@ -111,9 +112,7 @@ class ALineFallsInAClassOnTheOrderItWasDrawnOnTest {
     }
 
     private static Measured measured(String source, String id) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         String module = compilation.modules().get(0);
         Partitions.Partitioning read = compilation.db()
                 .ask(new Adequacy.Divided(module, "gate")).value();

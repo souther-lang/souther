@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.report.AdequacyReport;
@@ -75,9 +76,8 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
             case THE_CORPORA -> ConformanceCorpus.all()
                     .forEach(corpus -> out.add(corpus.analyse().compilation().db()));
             case A_MODULE_SPOKEN_ABOUT -> {
-                Compilation compilation = Compilation.ofSource(SPOKEN_ABOUT, "Main");
-                compilation.measure(Adequacy.Asked.fullReport());
-                compilation.answerEverything();
+                Compilation compilation =
+                        ACompiledModel.measured(SPOKEN_ABOUT, Adequacy.Asked.fullReport());
                 AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts()));
                 out.add(compilation.db());
             }

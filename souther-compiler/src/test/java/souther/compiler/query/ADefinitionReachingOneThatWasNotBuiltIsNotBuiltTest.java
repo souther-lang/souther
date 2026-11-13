@@ -36,7 +36,12 @@ class ADefinitionReachingOneThatWasNotBuiltIsNotBuiltTest {
     private static Compilation compiled(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", source);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        assertEquals(List.of("E1023"),
+                c.errors().stream().map(each -> each.diagnostic().code()).toList(),
+                "the name that denotes nothing is the one mistake");
+        return c;
     }
 
     private static boolean has(Compilation c, String declared) {

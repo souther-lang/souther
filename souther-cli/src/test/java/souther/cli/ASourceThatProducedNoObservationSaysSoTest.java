@@ -107,6 +107,9 @@ class ASourceThatProducedNoObservationSaysSoTest {
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1906"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(),
+                "the attached file declares a value the module already declares");
 
         List<PublishedIncompleteness> gaps =
                 AdequacyReport.of(compilation).modules().get(0).incompleteness().written();

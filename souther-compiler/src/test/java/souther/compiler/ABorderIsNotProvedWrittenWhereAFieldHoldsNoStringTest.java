@@ -73,7 +73,7 @@ class ABorderIsNotProvedWrittenWhereAFieldHoldsNoStringTest {
                                                          String behavior) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, List<BorderAssessment>> boundaries =
                 Adequacy.searchedBoundariesOf(compilation.db(), module);
         assertNotNull(boundaries, "the model under test compiles");

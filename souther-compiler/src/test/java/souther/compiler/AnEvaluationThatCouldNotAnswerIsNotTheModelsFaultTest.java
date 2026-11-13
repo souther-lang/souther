@@ -54,6 +54,8 @@ class AnEvaluationThatCouldNotAnswerIsNotTheModelsFaultTest {
         Compilation compilation = Compilation.ofSource(COMES_BACK, "Main");
         compilation.withJvmExampleDeadlines(DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("run")));
         compilation.answerEverything();
+        assertEquals(List.of("E1923"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList());
         return compilation;
     }
 

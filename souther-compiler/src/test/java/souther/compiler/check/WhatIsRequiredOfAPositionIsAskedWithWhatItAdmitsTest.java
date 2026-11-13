@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.numeric.CanonicalOrder;
@@ -338,8 +339,7 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
      * settles what it fixes.
      */
     private static boolean settling(int at) {
-        Compilation compilation = Compilation.ofSource(CHOICE, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(CHOICE);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         FieldDomains domains = FieldDomains.of(named(symbols, "Held"),
                 RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
@@ -357,6 +357,10 @@ class WhatIsRequiredOfAPositionIsAskedWithWhatItAdmitsTest {
     private static Emptiness only(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                        .map(each -> each.diagnostic().code().toString())
+                        .filter(each -> !each.equals("E1013")).toList(),
+                "the model this reads has to be one somebody could write");
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                         .flatMap(List::stream).map(each -> each.diagnostic().code().toString())
                         .filter(each -> !each.equals("E1013")).toList(),

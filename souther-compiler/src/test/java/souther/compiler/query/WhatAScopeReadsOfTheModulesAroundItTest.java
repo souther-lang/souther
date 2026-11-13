@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -72,6 +73,7 @@ class WhatAScopeReadsOfTheModulesAroundItTest {
         assertFalse(compilation.db().isComputed(new Front.LibraryClaims("scope.money")),
                 "and nothing it writes is answered by what the module it imports from may write"
                         + " bare");
+        ACompiledModel.compiles(compilation);
     }
 
     @Test
@@ -87,5 +89,6 @@ class WhatAScopeReadsOfTheModulesAroundItTest {
         assertFalse(compilation.db().isComputed(new Names.Declarations("shared.money")),
                 "there is no module of that name, and asking what it declares is asking whether it"
                         + " is in an import cycle — a question about every module there is");
+        assertFalse(compilation.errors().isEmpty(), "the import of a module that is not there is refused");
     }
 }

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import org.junit.jupiter.api.Test;
 import souther.compiler.check.PathReachability;
@@ -41,9 +42,15 @@ class AnAbsentDerivationIsNotAProofAboutTheModelTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
+    }
+
+    /** {@link #STOPPED}, measured: a model the compile stops in. */
+    private static Compilation stopped() {
+        Compilation compilation = Compilation.ofSource(STOPPED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertFalse(compilation.errors().isEmpty(), "this model is one the compile stops in");
         return compilation;
     }
 
@@ -82,7 +89,7 @@ class AnAbsentDerivationIsNotAProofAboutTheModelTest {
     /** A body that was not elaborated is a measurement that could not be finished. */
     @Test
     void aBodyThatWasNotElaboratedIsNotABehaviorWithNoBody() {
-        Compilation compilation = measured(STOPPED);
+        Compilation compilation = stopped();
 
         assertFalse(compilation.errors().isEmpty(), "this model is one the compile stops in");
         assertNull(compilation.db().ask(new Bodies.Checked("example.rooms")).value(),
@@ -119,7 +126,7 @@ class AnAbsentDerivationIsNotAProofAboutTheModelTest {
      */
     @Test
     void theDocumentDoesNotCallAnImplementedBehaviorOneWithNoBody() {
-        JsonNode root = JSON.readTree(AdequacyReport.of(measured(STOPPED))
+        JsonNode root = JSON.readTree(AdequacyReport.of(stopped())
                 .json(souther.compiler.diag.SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         JsonNode behavior = root.get("modules").get(0).get("behaviors").get(0);
 
@@ -141,7 +148,7 @@ class AnAbsentDerivationIsNotAProofAboutTheModelTest {
     /** And the count of rows is left out rather than written as zero, for the same reason. */
     @Test
     void theDocumentLeavesOutACountItCouldNotMake() {
-        JsonNode root = JSON.readTree(AdequacyReport.of(measured(STOPPED))
+        JsonNode root = JSON.readTree(AdequacyReport.of(stopped())
                 .json(souther.compiler.diag.SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         JsonNode behavior = root.get("modules").get(0).get("behaviors").get(0);
 
@@ -285,7 +292,7 @@ class AnAbsentDerivationIsNotAProofAboutTheModelTest {
      */
     @Test
     void thePlacesOfABodyThatWasNotElaboratedAreNotReadAsNoPlaces() {
-        Compilation compilation = measured(STOPPED);
+        Compilation compilation = stopped();
 
         assertFalse(compilation.errors().isEmpty(), "this model is one the compile stops in");
         assertFalse(compilation.db().ask(new Bodies.Checked("example.rooms")).present(),

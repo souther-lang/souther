@@ -41,6 +41,9 @@ class ACaseTheOutputDoesNotHaveIsNoCaseARowExpectsTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1904"), compilation.errors().stream()
+                .map(found -> found.diagnostic().code()).toList(),
+                "the row naming a type the output does not have is refused");
         AdequacyReport report = AdequacyReport.of(compilation);
         SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
 

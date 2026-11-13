@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -17,6 +18,7 @@ import souther.compiler.values.AsACompilationAllows;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -87,8 +89,9 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
      * @param source    the module handed over
      * @param allowance what it is read under, which is one thing and not a pair of settings a
      *                  caller might leave both of
+     * @param refusedFor the codes the model is refused with, empty where it compiles
      */
-    private record Witness(String source, Allowance allowance) {}
+    private record Witness(String source, Allowance allowance, List<String> refusedFor) {}
 
     /**
      * What a compilation of a model here is allowed.
@@ -110,7 +113,12 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
     }
 
     private static Witness of(String source) {
-        return new Witness(source, new Allowance.AsACompilationDoes());
+        return ofRefused(source, List.of());
+    }
+
+    /** A model this compiler refuses for {@code refusedFor} and still writes a document about. */
+    private static Witness ofRefused(String source, List<String> refusedFor) {
+        return new Witness(source, new Allowance.AsACompilationDoes(), refusedFor);
     }
 
     /** {@code t0 = 0.1m} and each {@code tN} the square of the one before it, so that the scale
@@ -137,12 +145,13 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
      * a compilation says and holds them to writing neither word.
      */
     private static Witness spending(String source, PatternPlan.Budget distinctions) {
-        return new Witness(source, new Allowance.ToMeasureWith(distinctions));
+        return new Witness(source, new Allowance.ToMeasureWith(distinctions), List.of());
     }
 
     /** The same, where what is said down is what a reading of the declarations may build with. */
-    private static Witness readingWith(String source, ReadingPolicy reading) {
-        return new Witness(source, new Allowance.ToReadWith(reading));
+    private static Witness readingWith(String source, ReadingPolicy reading,
+                                       List<String> refusedFor) {
+        return new Witness(source, new Allowance.ToReadWith(reading), refusedFor);
     }
 
     /** Room to answer what a position admits, and none to hand each of its rules on as the set it
@@ -189,7 +198,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
         // resolves while nothing expands the clauses of its module
         // ({@link souther.compiler.AnExpansionThatDidNotHappenIsARuleNotReachedTest}); one model
         // apiece would say the word belongs to the route rather than to the hole.
-        out.put(UndividedPosition.Reason.RULES_NOT_READ_AT_ALL, of("""
+        out.put(UndividedPosition.Reason.RULES_NOT_READ_AT_ALL, ofRefused("""
                 module m
 
                 data Ok
@@ -199,7 +208,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
 
                 behavior run : (b: Basket) -> Ok
                 let run (b) = Ok
-                """));
+                """, List.of("E1319")));
         // A position whose own answer is exact and whose rules were not handed on as the sets they
         // leave. What the rules say is contradictory, which is the model's business and not this
         // word's: the word is about the second allowance, and it is the allowance that is lowered.
@@ -214,7 +223,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 data Ok
 
                 behavior f : (c: Code) -> Ok
-                """, NOTHING_TO_HAND_ON_WITH));
+                """, NOTHING_TO_HAND_ON_WITH, List.of("E1013")));
         // A behavior's rule about the strings at a position, under an allowance that will not build
         // the two sides of one rule. Its own word beside the one above because that one is what the
         // declarations leave and this is what a body tells apart.
@@ -386,7 +395,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                 """.formatted(ANSWER)));
         // A newtype spine that comes back to itself: the walk over the names ends with the name
         // still on, so there is no base to read a shape from.
-        out.put(UndividedPosition.Reason.TYPE_UNRESOLVED, of("""
+        out.put(UndividedPosition.Reason.TYPE_UNRESOLVED, ofRefused("""
                 module m
 
                 data Ok
@@ -394,7 +403,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
 
                 behavior run : (x: Cyclic) -> Ok
                 let run (x) = Ok
-                """));
+                """, List.of("E1013")));
         // A comparison over a product of three input values, and over a quotient by one held against a third: the arithmetic met a
         // shape it has no term for, and nothing was made of either position. A quotient held
         // against a number is a line on each sign of the divisor, and only a number times the
@@ -608,7 +617,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
             if (witness.allowance() instanceof Allowance.AsACompilationDoes) {
                 return;
             }
-            Set<String> written = wordsWritten(of(witness.source()));
+            Set<String> written = wordsWritten(ofRefused(witness.source(), witness.refusedFor()));
             if (written.contains(AdequacyReport.word(reason))) {
                 reached.put(AdequacyReport.word(reason), written);
             }
@@ -633,7 +642,13 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                     compilation.withReadingPolicy(reading);
         };
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        if (witness.refusedFor().isEmpty()) {
+            ACompiledModel.compiles(compilation);
+        } else {
+            compilation.answerEverything();
+            assertEquals(witness.refusedFor(), compilation.errors().stream()
+                    .map(found -> found.diagnostic().code()).toList(), "the model is refused");
+        }
         Set<String> out = new LinkedHashSet<>();
         collect(JSON.readTree(AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts()))),
                 out);

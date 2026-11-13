@@ -9,6 +9,7 @@ import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionShortfall;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -109,10 +110,7 @@ class ARuleOfADecisionAFigureStoppedSaysTheFigureTest {
     }
 
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     /** The page of a report, which is built once per compilation and read twice. */

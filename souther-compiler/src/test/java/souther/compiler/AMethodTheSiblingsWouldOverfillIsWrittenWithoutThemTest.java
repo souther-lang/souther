@@ -98,6 +98,9 @@ class AMethodTheSiblingsWouldOverfillIsWrittenWithoutThemTest {
                     compilation.db().ask(Output.Examples.asked(compilation.db(), module, id));
                 }
             }
+            assertEquals(List.of(), compilation.errors().stream()
+                            .map(e -> e.diagnostic().code()).toList(),
+                    "the body compiles as written, and measuring it changes nothing about that");
             measured = compilation;
         }
         return measured;

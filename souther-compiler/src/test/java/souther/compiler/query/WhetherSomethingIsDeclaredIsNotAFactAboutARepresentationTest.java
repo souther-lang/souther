@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.Derived;
 import souther.compiler.check.Registry;
@@ -13,6 +14,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -133,15 +135,18 @@ class WhetherSomethingIsDeclaredIsNotAFactAboutARepresentationTest {
                 "and it is a type its module declares all the same");
         assertNull(derived.identify(new TypeKey("shop.prices", "Nothing")),
                 "while an address nothing declares is still nothing");
+
+        c.answerEverything();
+        assertFalse(c.errors().isEmpty(), "the field names no type, and that is said");
     }
 
     private static Compilation started() {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("prices.sou", DECLARING);
         byId.put("cart.sou", IMPORTING);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
-                .writtenOn(TestDay.DATE);
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                        .writtenOn(TestDay.DATE));
         assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with: "
                 + c.db().allReports());
         return c;

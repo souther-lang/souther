@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.check.PathReachability;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.reach.Reachability;
 
@@ -270,8 +271,6 @@ class AnArmsSiteAndItsPlaceAreOneValueTest {
     }
 
     private static Compilation compiled(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.answered(model);
     }
 }

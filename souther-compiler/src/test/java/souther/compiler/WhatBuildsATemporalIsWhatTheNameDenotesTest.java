@@ -73,8 +73,7 @@ class WhatBuildsATemporalIsWhatTheNameDenotesTest {
             """;
 
     private static List<Core> nodes(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         assertEquals(List.of(),
                 compilation.db().allReports().stream().map(Object::toString).toList(),
                 "the model compiles");
@@ -159,9 +158,7 @@ class WhatBuildsATemporalIsWhatTheNameDenotesTest {
     }
 
     private static String report(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

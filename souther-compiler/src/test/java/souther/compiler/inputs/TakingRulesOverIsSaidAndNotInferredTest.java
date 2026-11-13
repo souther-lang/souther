@@ -170,6 +170,9 @@ class TakingRulesOverIsSaidAndNotInferredTest {
 
     private static InputDomain read(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        assertEquals(List.of("E1319"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "the clause nothing could type");
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

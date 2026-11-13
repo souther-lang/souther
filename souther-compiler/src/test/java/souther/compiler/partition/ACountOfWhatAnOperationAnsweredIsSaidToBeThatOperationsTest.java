@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -50,9 +51,7 @@ class ACountOfWhatAnOperationAnsweredIsSaidToBeThatOperationsTest {
     }
 
     private static void assertStoppedAt(String model, String operation) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         String report = AdequacyReport.of(compilation).humanInEnglish(
                 SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("how many code points of a class what " + operation

@@ -66,6 +66,10 @@ class AConstructionIsWrittenAsOneInTheAnalysisRepresentationTest {
 
     private static void assertNothingLeftToNormalize(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.answerEverything();
+        assertEquals(List.of("E1105"), compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList(),
+                "an invariant that builds is refused, and is still read");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
         Hir.Module settled = compilation.db().ask(new Bodies.Lowering("demo")).value().settled();
 

@@ -291,6 +291,8 @@ class CompileExampleTest {
         List<Report> fails = compilation.db()
                 .ask(Output.Examples.asked(compilation.db(), moduleName,
                         compilation.sourceIds().get(0))).reports();
-        assertEquals(2, fails.size());
+        List<String> errors = compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList();
+        assertEquals(2, fails.size(), "the model's errors are " + errors);
     }
 }

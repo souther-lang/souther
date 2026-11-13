@@ -429,6 +429,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 """;
         Compilation compilation = reading(stands, twiceNaming("lib.deep.Deep", "lib.deep.Deep"));
 
+        assertFalse(compilation.errors().isEmpty(), "the module is refused, which is what is read");
         List<Db.Found> found = compilation.db().allReports();
         assertEquals(List.of("E1506"),
                 found.stream().map(f -> f.report().diagnostic().code()).toList(),
@@ -467,6 +468,7 @@ class AReportAboutAModuleOffThePathIsSaidWhereItWasReachedTest {
                 data Page = { twice: Twice }
                 """, twiceNaming("lib.deep.Deep", "lib.deep.Other"));
 
+        assertFalse(compilation.errors().isEmpty(), "the module is refused, which is what is read");
         assertEquals(List.of("Deep", "Other"),
                 compilation.db().allReports().stream()
                         .map(f -> String.valueOf(f.report().diagnostic().values().get("name")))

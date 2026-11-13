@@ -132,6 +132,8 @@ class CascadeStopsAtTheCauseTest {
                 }
                 """), Set.of("m.broken"), ModulePath.EMPTY);
         Located.diagnosticsOf(c.diagnostics());
+        assertEquals(List.of(), c.errors().stream().map(each -> each.diagnostic().code()).toList(),
+                "nothing is reported here: the module that cannot be followed is the caller's to say");
 
         assertFalse(Boolean.TRUE.equals(c.db().ask(new Names.Sound("m.a")).value()),
                 "m.a is built on a name nothing brought in");

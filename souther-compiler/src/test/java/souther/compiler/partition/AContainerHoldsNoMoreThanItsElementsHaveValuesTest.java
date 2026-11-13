@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ARuleNoReadingTakesIn;
 import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredBounds;
@@ -165,7 +166,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
                     each.most()));
         }
         Map<String, List<BorderAssessment>> read = readingsOf(
-                Compilation.ofSource(model.toString(), "Main"), "p");
+                ACompiledModel.answered(model.toString()), "p");
         for (int i = 0; i < cases.size(); i++) {
             Case each = cases.get(i);
             BorderAssessment line = lineOf(read, "f" + i, Integer.toString(each.most()));
@@ -345,8 +346,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
     /** The line on the count of {@code f} at {@code value}, and not a line drawn there on
      *  anything else. */
     private static BorderAssessment countLineOf(String model, int value, String said) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "p");
         assertNotNull(read, () -> said + ": the model under test compiles");
         return read.get("f").stream()
@@ -420,8 +420,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
 
     /** Every row offered for {@code f}, with what stopped it where something did. */
     private static List<FillResult.Offer> offersOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), "p");
         assertNotNull(all, "the model under test compiles");
         return all.get("f").composed().offers();
@@ -555,8 +554,8 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
     /** A declaration another module makes is counted where it is made. */
     @Test
     void anImportedElementIsCountedAsItsModuleDeclaresIt() {
-        Compilation compilation =
-                Compilation.ofSources(List.of(SERVICES, PICKING), ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(SERVICES, PICKING), ModulePath.EMPTY));
 
         assertEquals(new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                 lineOf(compilation, "app.p", "3").items()
@@ -571,9 +570,9 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
      */
     @Test
     void anEditToTheElementMovesTheEnd() {
-        Compilation compilation = Compilation.ofDocuments(
+        Compilation compilation = ACompiledModel.compiles(Compilation.ofDocuments(
                 Map.of("s", SERVICES, "p", PICKING), Set.of(), ModulePath.EMPTY)
-                .writtenOn(TestDay.DATE);
+                .writtenOn(TestDay.DATE));
         assertEquals(new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
                 lineOf(compilation, "app.p", "3").items()
                         .get(new DomainPoint.BesideTheLine(Towards.ABOVE)));
@@ -586,7 +585,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
     }
 
     private static BorderAssessment lineOf(String model, String module, String value) {
-        return lineOf(Compilation.ofSource(model, "Main"), module, value);
+        return lineOf(ACompiledModel.answered(model), module, value);
     }
 
     private static BorderAssessment lineOf(Compilation compilation, String module, String value) {

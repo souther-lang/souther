@@ -196,8 +196,7 @@ class WhatARuleAdmitsAndWhereItStopsAreAskedTogetherTest {
     private static List<String> saidBy(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        return compilation.diagnostics().values().stream()
-                .flatMap(List::stream)
+        return compilation.errors().stream()
                 .map(souther.compiler.diag.Located::diagnostic)
                 .filter(each -> "E1013".equals(each.code()))
                 .map(each -> each.said().getClass().getSimpleName())
@@ -276,8 +275,8 @@ class WhatARuleAdmitsAndWhereItStopsAreAskedTogetherTest {
     private static Emptiness only(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                        .flatMap(List::stream).map(each -> each.diagnostic().code().toString())
+        assertEquals(List.of(), compilation.errors().stream()
+                        .map(each -> each.diagnostic().code().toString())
                         .filter(each -> !each.equals("E1013")).toList(),
                 "the model this reads has to be one somebody could write");
         List<Hir.Def> defs = compilation.module("demo").defs().stream()

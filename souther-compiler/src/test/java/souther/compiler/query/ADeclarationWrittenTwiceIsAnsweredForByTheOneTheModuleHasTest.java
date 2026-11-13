@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -41,7 +42,9 @@ class ADeclarationWrittenTwiceIsAnsweredForByTheOneTheModuleHasTest {
                 data A = { value: Int }
                 data A = { value: Nowhere }
                 """);
+        c.answerEverything();
 
+        assertEquals(1, c.errors().size(), "the second `A` is the one mistake: " + c.errors());
         assertTrue(has(c, "A"), "what `m.a` declares as `A` is made of `Int`");
     }
 }

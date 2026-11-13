@@ -39,16 +39,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
 
-    private static void grantingLeaves(String source, String granted, String reader) {
+    /**
+     * {@code source} compiled and answered in full. Everything but the refusal these answers decide
+     * is held not to be said: a model refused for anything else is one whose declarations were never
+     * read, and a name that is not declared is answered by the absence of it rather than by
+     * anything here.
+     */
+    private static Compilation compiled(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        // Everything but the refusal these answers decide. A model refused for anything else is one
-        // whose declarations were never read, and a name that is not declared is answered by the
-        // absence of it rather than by anything here.
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                        .flatMap(List::stream).map(each -> each.diagnostic().code().toString())
+        assertEquals(List.of(), compilation.errors().stream()
+                        .map(each -> each.diagnostic().code().toString())
                         .filter(each -> !each.equals("E1013")).toList(),
                 "the model this reads has to be one somebody could write");
+        return compilation;
+    }
+
+    private static void grantingLeaves(String source, String granted, String reader) {
+        Compilation compilation = compiled(source);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeCardinality.Cardinalities solved =
                 CountsByComponent.of(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),
@@ -135,8 +143,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
                 """;
         grantingLeaves(source, "Granted", "Holder");
 
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = compiled(source);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         assertTrue(CountsByComponent.of(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
@@ -169,13 +176,12 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
     /** Nothing is granted while the counts themselves are read, so the reading is what it was. */
     @Test
     void nothingIsGrantedWhileTheCountsAreRead() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = compiled("""
                 module demo
 
                 data A = B
                 data B = { a: A }
-                """, "Main");
-        compilation.answerEverything();
+                """);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeCardinality.Cardinalities solved =
                 CountsByComponent.of(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),

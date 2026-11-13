@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.PathReachability;
 import souther.compiler.coverage.ArmReportAnchor;
 import souther.compiler.coverage.ControlPlace;
@@ -118,7 +119,7 @@ class AProofARunWentAgainstIsTakenBackThroughTheQueryTest {
     private static RowOutcome aRow() {
         Compilation compilation = Compilation.ofSources(List.of(A_ROW), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String module = compilation.modules().getFirst();
         return compilation.exampleSourcesOf(module).stream()
                 .flatMap(id -> compilation.db()
@@ -200,7 +201,7 @@ class AProofARunWentAgainstIsTakenBackThroughTheQueryTest {
     void theQueryTakesInTheRowsOfTheModule() {
         Compilation compilation = Compilation.ofSources(List.of(A_ROW), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String module = compilation.modules().getFirst();
 
         PathReachability.Answers answers = compilation.db().ask(new Adequacy.Arrived(module))

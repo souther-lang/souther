@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.ReadingPolicy;
@@ -17,6 +18,7 @@ import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.ValueSet;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -202,7 +204,11 @@ class AFormatAndALengthRuleTogetherAreReadTest {
             """;
 
     private static Position positionOf(String source, String parameter, ReadingPolicy policy) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        return positionIn(ACompiledModel.answered(source), parameter, policy);
+    }
+
+    private static Position positionIn(Compilation compilation, String parameter,
+            ReadingPolicy policy) {
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
@@ -296,7 +302,7 @@ class AFormatAndALengthRuleTogetherAreReadTest {
     void norWhereAThirdRuleIsReadByNeither() {
         for (String third : new String[] {
                 "String.startsWith(\"a\", String.trim(value))",
-                "String.toUpper(value) == value"}) {
+                "String.uppercase(value) == value"}) {
             String model = """
                     module bounded
 
@@ -324,8 +330,12 @@ class AFormatAndALengthRuleTogetherAreReadTest {
 
     @Test
     void norBesideASiblingNoValueSatisfies() {
+        Compilation refused = Compilation.ofSource(A_SIBLING_NOTHING_SATISFIES, "Main");
+        refused.answerEverything();
+        assertEquals(List.of("E1013"), refused.errors().stream()
+                .map(each -> each.diagnostic().code()).toList());
         assertInstanceOf(AdmissibleSet.Completeness.Wider.class,
-                completenessOf(A_SIBLING_NOTHING_SATISFIES, "pair.email"),
+                positionIn(refused, "pair.email", ReadAs.THE_COMPILATION_DOES).completeness(),
                 "no value of the pair exists, and the rules leave this position nothing at all");
     }
 

@@ -317,8 +317,16 @@ class AQuotientIsALineWhereItsDivisorIsAConstantTest {
         if (compiled == null) {
             compiled = Compilation.ofSource(MODEL, "Main");
             compiled.answerEverything();
+            assertRefusedOnlyForTheDivisionByNought(compiled);
         }
         return compiled;
+    }
+
+    /** The one row of the model the compile refuses is the one that divides by nought, which
+     *  answers nothing. */
+    private static void assertRefusedOnlyForTheDivisionByNought(Compilation compilation) {
+        assertEquals(List.of("E1905"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList());
     }
 
     /** The same, measured, which is a second compilation because the report is what it is for. */
@@ -327,6 +335,7 @@ class AQuotientIsALineWhereItsDivisorIsAConstantTest {
             reported = Compilation.ofSource(MODEL, "Main");
             reported.measure(Adequacy.Asked.fullReport());
             reported.answerEverything();
+            assertRefusedOnlyForTheDivisionByNought(reported);
         }
         return reported;
     }

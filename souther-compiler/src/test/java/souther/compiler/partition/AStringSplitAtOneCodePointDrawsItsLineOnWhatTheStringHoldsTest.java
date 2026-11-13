@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -9,10 +10,8 @@ import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
-import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -71,7 +70,6 @@ class AStringSplitAtOneCodePointDrawsItsLineOnWhatTheStringHoldsTest {
                     | "more" : ("xx") -> true
                 """);
 
-        assertEquals(List.of(), compilation.errors(), "the rows hold");
         String report = AdequacyReport.of(compilation).humanInEnglish(
                 SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("obligations 3/3"), report);
@@ -81,7 +79,7 @@ class AStringSplitAtOneCodePointDrawsItsLineOnWhatTheStringHoldsTest {
     /** The texts a person would try, each as the run time answers. */
     @Test
     void theRowsAPersonWouldWriteHold() {
-        Compilation compilation = measured(LABELS + """
+        measured(LABELS + """
 
                 example hasLabels
                     | "labels" : ("Bug, bug , UI") -> true
@@ -91,8 +89,6 @@ class AStringSplitAtOneCodePointDrawsItsLineOnWhatTheStringHoldsTest {
                     | "ideographic blanks" : ("　,　") -> false
                     | "two" : ("a,b") -> true
                 """);
-
-        assertEquals(List.of(), compilation.errors(), "the rows hold");
     }
 
     private static final String TAGGED = """
@@ -120,7 +116,6 @@ class AStringSplitAtOneCodePointDrawsItsLineOnWhatTheStringHoldsTest {
     @Test
     void theRowsOfferedAreTextsTheTypeAdmits() {
         Compilation compilation = measured(TAGGED);
-        assertEquals(List.of(), compilation.errors(), "the model compiles");
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("example.tagged")),
@@ -162,7 +157,6 @@ class AStringSplitAtOneCodePointDrawsItsLineOnWhatTheStringHoldsTest {
     @Test
     void aTextTheTypeRefusesIsNotOfferedAtAPointNoTextOfTheTypeIsAt() {
         Compilation compilation = measured(DIGITS);
-        assertEquals(List.of(), compilation.errors(), "the model compiles");
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("example.digits")),
@@ -176,9 +170,6 @@ class AStringSplitAtOneCodePointDrawsItsLineOnWhatTheStringHoldsTest {
     }
 
     private static Compilation measured(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(model, Adequacy.Asked.fullReport());
     }
 }

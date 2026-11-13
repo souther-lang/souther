@@ -1,6 +1,7 @@
 package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -93,6 +94,8 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
         compilation.withEvaluationPolicy(BOUNDED);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1910"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList());
         return AdequacyReport.of(compilation);
     }
 
@@ -271,9 +274,8 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
      */
     @Test
     void aModuleHoldsWhatOnlyItsDeclarationsWentWithout() {
-        Compilation compilation = Compilation.ofSource(ROW_WITH_TRUNCATED_VALUE, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(ROW_WITH_TRUNCATED_VALUE, Adequacy.Asked.fullReport());
         AdequacyReport.ModuleReport module =
                 AdequacyReport.of(compilation).modules().getFirst();
 

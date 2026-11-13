@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
@@ -60,7 +61,7 @@ class AGeneratedFixtureSaysWhatItsNamesDenoteTest {
     private static List<Hir.Expr> everyNodeOfEveryRow() {
         Compilation compilation = Compilation.ofSources(List.of(LIB, APP), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Adequacy.Filling filling =
                 compilation.db().ask(new Adequacy.Generated("app", "f")).value();
 

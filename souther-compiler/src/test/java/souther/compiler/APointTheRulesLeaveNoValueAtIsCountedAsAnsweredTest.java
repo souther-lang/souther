@@ -177,7 +177,7 @@ class APointTheRulesLeaveNoValueAtIsCountedAsAnsweredTest {
     private static AdequacyReport measure() {
         compiled = Compilation.ofSource(CLOSED, "Main");
         compiled.measure(Adequacy.Asked.fullReport());
-        compiled.answerEverything();
+        ACompiledModel.compiles(compiled);
         return AdequacyReport.of(compiled);
     }
 

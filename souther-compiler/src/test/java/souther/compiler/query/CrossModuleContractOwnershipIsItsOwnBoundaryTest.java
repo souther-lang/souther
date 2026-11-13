@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.core.EnsuresEnforcement;
 import souther.compiler.meta.ModulePath;
@@ -94,7 +95,8 @@ class CrossModuleContractOwnershipIsItsOwnBoundaryTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("up.sou", DECLARING);
         byId.put("down.sou", CALLING);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
         Output.Classes.Inputs in = Output.Classes.inputs(c.db(), "down",
                 Output.Classes.Elaboration.WHOLE);
         return EnsuresEnforcement.in(in.checks(), "down", about);

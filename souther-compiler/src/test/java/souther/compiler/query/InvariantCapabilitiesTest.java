@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.WhereItSits;
 import souther.compiler.check.CapabilityResult;
 import souther.compiler.check.ClauseDischarge;
@@ -16,6 +17,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -47,7 +49,22 @@ class InvariantCapabilitiesTest {
     }
 
     private static List<ClauseDischarge> of(String source, String type) {
-        Compilation c = Compilation.ofDocuments(Map.of("a.sou", source), Set.of(), ModulePath.EMPTY);
+        return capabilitiesOf(ACompiledModel.compiles(modelOf(source)), type);
+    }
+
+    /** The same, for a declaration a build refuses and an editor is asked about all the same. */
+    private static List<ClauseDischarge> ofARefusedOne(String source, String type) {
+        Compilation c = modelOf(source);
+        c.answerEverything();
+        assertFalse(c.errors().isEmpty(), "a build refuses the declaration under test");
+        return capabilitiesOf(c, type);
+    }
+
+    private static Compilation modelOf(String source) {
+        return Compilation.ofDocuments(Map.of("a.sou", source), Set.of(), ModulePath.EMPTY);
+    }
+
+    private static List<ClauseDischarge> capabilitiesOf(Compilation c, String type) {
         Map<TypeSymbol, List<ClauseDischarge>> caps =
                 c.db().ask(new Shapes.InvariantCapabilities("m.a")).value();
         return caps == null ? List.of() : caps.getOrDefault(TypeSymbols.declared(new TypeKey("m.a", type)), List.of());
@@ -113,7 +130,7 @@ class InvariantCapabilitiesTest {
      */
     @Test
     void aClauseThatHoldsOfNoValueIsSaidNotTo() {
-        List<ClauseDischarge> clauses = of("""
+        List<ClauseDischarge> clauses = ofARefusedOne("""
                 module m.a
                 data Money = Int
                     invariant 1 < 0
@@ -151,7 +168,7 @@ class InvariantCapabilitiesTest {
      */
     @Test
     void aClauseThatSettlesOnlyOnceItIsNormalizedIsSaidToSettle() {
-        List<ClauseDischarge> clauses = of("""
+        List<ClauseDischarge> clauses = ofARefusedOne("""
                 module m.a
                 data Money = Int
                     invariant Int.compare(1, 2) >= 0
@@ -197,7 +214,7 @@ class InvariantCapabilitiesTest {
      */
     @Test
     void aClauseTheReadingCouldNotTypeIsNotAConclusionAboutIt() {
-        List<ClauseDischarge> clauses = of("""
+        List<ClauseDischarge> clauses = ofARefusedOne("""
                 module m.a
                 data Kind = String
                     invariant match value with

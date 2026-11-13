@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -84,9 +85,7 @@ class TheWaysAnElementMayMeetAStatementLeaveOutTheOnesNoElementMeetsTest {
         }
         assertTrue(said, "the ways past the figure are said to be where this compiler stopped");
 
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
         assertEquals(List.of(true, true), compilation.db()
                         .ask(new Adequacy.DecisionSearch(module, "f")).value().values().stream()
@@ -119,10 +118,9 @@ class TheWaysAnElementMayMeetAStatementLeaveOutTheOnesNoElementMeetsTest {
     void aChoiceOneSideOfWhichPassesTheFigureIsComposedAlongWhatWasRead() {
         String past = pastTheFigure();
         for (String body : List.of("x.a == 357 || " + past, past + " || x.a == 357")) {
-            Compilation compilation = Compilation.ofSource(
-                    PAIRS.replace("BODY", "List.any(x -> " + body + ", xs)"), "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            Compilation compilation = ACompiledModel.measured(
+                    PAIRS.replace("BODY", "List.any(x -> " + body + ", xs)"),
+                    Adequacy.Asked.fullReport());
             String module = compilation.modules().getFirst();
 
             assertEquals(List.of(true, true), compilation.db()
@@ -157,9 +155,7 @@ class TheWaysAnElementMayMeetAStatementLeaveOutTheOnesNoElementMeetsTest {
     }
 
     private static Compilation compiled(String body) {
-        Compilation compilation = Compilation.ofSource(THE_INPUT.replace("BODY", body), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(THE_INPUT.replace("BODY", body),
+                Adequacy.Asked.fullReport());
     }
 }

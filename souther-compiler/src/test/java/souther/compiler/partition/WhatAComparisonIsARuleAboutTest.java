@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.core.Contract;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -57,7 +58,16 @@ class WhatAComparisonIsARuleAboutTest {
      * arrives in.
      */
     private static ComparisonAssessment about(String params, String clause) {
-        Read read = read(params, clause);
+        return about(params, clause, List.of());
+    }
+
+    /**
+     * The same, for a clause the model is refused for ({@code refusedWith}) and is read all the
+     * same.
+     */
+    private static ComparisonAssessment about(
+            String params, String clause, List<String> refusedWith) {
+        Read read = read(params, clause, refusedWith);
         return ComparisonAssessment.of("f", read.comparison().stated(),
                 Citation.of(read.binary().pos()), read.reading(), read.reads(),
                 ClosureApplications.OUTSIDE, read.rule(), Arrivals.inTheTree(read.binary()), false,
@@ -70,16 +80,28 @@ class WhatAComparisonIsARuleAboutTest {
                         InputReads reads, BindingId rule) {}
 
     private static Read read(String params, String clause) {
+        return read(params, clause, List.of());
+    }
+
+    private static Read read(String params, String clause, List<String> refusedWith) {
         String source = """
                 module g
 
                 data Ok = { n: Int }
+                data No
                 data Grade = Low | Mid | High
 
-                behavior f : %s -> Ok
-                    ensures %s
+                behavior f : %s -> Ok | No
+                    ensures Ok -> %s
                 """.formatted(params, clause);
         Compilation compilation = Compilation.ofSource(source, "Main");
+        if (refusedWith.isEmpty()) {
+            ACompiledModel.compiles(compilation);
+        } else {
+            compilation.answerEverything();
+            assertEquals(refusedWith, compilation.errors().stream()
+                    .map(e -> e.diagnostic().code()).toList());
+        }
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         StatedContract stated =
@@ -170,12 +192,13 @@ class WhatAComparisonIsARuleAboutTest {
                 "a rule every row satisfies cuts no quantity, and it names a position");
         assertEquals("CutsNothing", named(about("a - a <= 0")),
                 "however the cancelling was spelled");
-        assertEquals("NoInput", named(about("20 <= 30")),
+        assertEquals("NoInput", named(about("(a: Int, b: Int)", "20 <= 30", List.of("E1617"))),
                 "a comparison of two constants says nothing about an input");
         assertEquals("Unread", named(about("a * a <= 9")),
                 "a form the arithmetic does not take apart is a limit of this compiler");
 
-        assertEquals("AnswerDependent", named(about("value.n <= 20")),
+        assertEquals("AnswerDependent",
+                named(about("(a: Int, b: Int)", "value.n <= 20", List.of("E1617"))),
                 "a bound on the answer is not a bound on anything a row chooses");
         assertEquals("AnswerDependent", named(about("value.n <= a")),
                 "and neither is one whose other side is an input");

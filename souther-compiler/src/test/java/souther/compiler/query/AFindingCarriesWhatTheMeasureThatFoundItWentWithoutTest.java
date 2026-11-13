@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.observe.RowRef;
 import souther.compiler.partition.WhereNothingIsAnswered;
@@ -58,7 +59,7 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
                     | Approved | Rejected -> Ok
 
             behavior makes : (id: Int) -> Decision
-                constructs Decision, Approved
+                constructs Approved
             let makes (id) = Approved { id = id }
 
             example weigh
@@ -69,17 +70,13 @@ class AFindingCarriesWhatTheMeasureThatFoundItWentWithoutTest {
             """;
 
     private static List<Adequacy.Finding> findings(String behavior) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         return compilation.db().ask(new Adequacy.Findings("demo")).value().stream()
                 .filter(each -> each.subject().isBehavior(behavior)).toList();
     }
 
     private static Adequacy.SignatureEvidence signature(String behavior) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         return compilation.db().ask(new Adequacy.Witnesses("demo")).value().get(behavior);
     }
 

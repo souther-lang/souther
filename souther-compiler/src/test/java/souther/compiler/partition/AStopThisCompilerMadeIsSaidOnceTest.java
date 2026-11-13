@@ -53,7 +53,6 @@ class AStopThisCompilerMadeIsSaidOnceTest {
                 invariant n >= 0
 
             behavior f : (h: Holder) -> Ok
-                constructs Ok
             let f (h) = Ok
             """;
 
@@ -153,6 +152,9 @@ class AStopThisCompilerMadeIsSaidOnceTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1013"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(),
+                "the type with no base is a value nothing can build");
         Map<String, PartitionEvidence> partitions = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         return List.copyOf(partitions.get(behavior).weakening().causes());

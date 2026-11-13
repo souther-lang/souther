@@ -190,6 +190,7 @@ class AFixedWeightIsOneAWrongWeightFailsARowOnTest {
         for (Written written : Written.values()) {
             Compilation model = compile(source(written, "a.v + b.v", false, 200,
                     List.of(new int[] {1, 1}, new int[] {99, 0}, new int[] {0, 99})));
+            assertEquals(List.of(), model.errors(), () -> written + ": the rows hold of the model");
             String report = reportOf(model);
             assertTrue(report.contains(SAID + " `a.v` weighs"), () -> written + ": " + report);
         }

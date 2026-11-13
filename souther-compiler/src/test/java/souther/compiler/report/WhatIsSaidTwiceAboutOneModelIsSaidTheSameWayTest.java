@@ -110,6 +110,10 @@ class WhatIsSaidTwiceAboutOneModelIsSaidTheSameWayTest {
         Compilation compilation = Compilation.ofSources(SOURCES, ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1906", "E1906"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(),
+                "the two sources that declare `shared` again are refused, and what they leave"
+                        + " unread is what is said twice");
         return AdequacyReport.of(compilation);
     }
 }

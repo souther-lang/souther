@@ -5,10 +5,10 @@ import souther.compiler.diag.Primary;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Located;
 import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Db;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -88,8 +88,11 @@ class ANameAFailedImportStandsInForIsReportedOnceTest {
         Compilation compilation = Compilation.ofSources(List.of(sources), ModulePath.EMPTY);
         compilation.answerEverything();
         List<Diagnostic> found = new ArrayList<>();
-        for (Db.Found report : compilation.db().allReports()) {
-            found.add(report.report().diagnostic());
+        for (Located report : compilation.errors()) {
+            found.add(report.diagnostic());
+        }
+        for (Located report : compilation.warnings()) {
+            found.add(report.diagnostic());
         }
         return found;
     }

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.WhereItSits;
 import souther.compiler.check.CapabilityResult;
 import souther.compiler.check.StaticRoute;
@@ -35,7 +36,8 @@ class HowMuchOfARuleTheCheckReadsIsAskedPerCaseTest {
     private static ContractDischarge of(String source, String behavior) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", source);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
         Map<String, ContractDischarge> byName =
                 c.db().ask(new Bodies.ContractCapabilities("m.a")).value();
         assertNotNull(byName, "the module reads, so its declarations are classified");
@@ -233,6 +235,8 @@ class HowMuchOfARuleTheCheckReadsIsAskedPerCaseTest {
                 let findIt (id) = if id.value > 0 then Found { id = id } else Missing { asked = id }
                 """);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        c.answerEverything();
+        assertFalse(c.errors().isEmpty(), "the arm naming a type that is not a case is refused");
 
         Map<String, ContractDischarge> byName =
                 c.db().ask(new Bodies.ContractCapabilities("m.a")).value();
@@ -256,7 +260,8 @@ class HowMuchOfARuleTheCheckReadsIsAskedPerCaseTest {
                 behavior echo : (id: Id) -> Id
                 let echo (id) = id
                 """);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
         Map<String, ContractDischarge> byName =
                 c.db().ask(new Bodies.ContractCapabilities("m.a")).value();
 

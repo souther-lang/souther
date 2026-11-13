@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.test.ClosedWorldContract;
 import souther.test.Nightly;
@@ -761,9 +762,7 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
     }
 
     private static JsonNode written(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return JSON.readTree(
                 AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
     }

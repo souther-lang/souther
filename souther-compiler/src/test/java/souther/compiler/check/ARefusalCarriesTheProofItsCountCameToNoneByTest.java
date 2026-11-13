@@ -25,13 +25,22 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class ARefusalCarriesTheProofItsCountCameToNoneByTest {
 
-    private static List<UninhabitableTypes.UninhabitableGroup> reported(String source) {
+    /**
+     * {@code source} compiled and answered in full. Everything but the refusal of a type with no
+     * value is held not to be said, since that refusal is what the answers here are about.
+     */
+    private static Compilation compiled(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                        .flatMap(List::stream).map(each -> each.diagnostic().code().toString())
+        assertEquals(List.of(), compilation.errors().stream()
+                        .map(each -> each.diagnostic().code().toString())
                         .filter(each -> !each.equals("E1013")).toList(),
                 "the model this reads has to be one somebody could write");
+        return compilation;
+    }
+
+    private static List<UninhabitableTypes.UninhabitableGroup> reported(String source) {
+        Compilation compilation = compiled(source);
         List<souther.compiler.ast.Hir.Def> defs =
                 compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList();
         return UninhabitableTypes.withNoValueOfTheirOwn(
@@ -48,8 +57,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
 
     /** What every declaration of the model was shown by, before any group is separated out. */
     private static String shownBy(String source, String name) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = compiled(source);
         List<souther.compiler.ast.Hir.Def> defs =
                 compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();

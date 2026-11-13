@@ -17,6 +17,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -84,7 +85,26 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
     private static List<Diagnostic> diagnosticsOf(String source) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        return diagnosticsOf(compilation);
+    }
+
+    /** The diagnostics of a model that is refused, for the codes it is refused with. */
+    private static List<Diagnostic> diagnosticsOfRefused(String source, List<String> codes) {
+        Compilation compilation = refused(source, codes);
+        return diagnosticsOf(compilation);
+    }
+
+    private static Compilation refused(String source, List<String> codes) {
+        Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(codes, compilation.errors().stream()
+                .map(found -> found.diagnostic().code()).toList(), "the model is refused");
+        return compilation;
+    }
+
+    private static List<Diagnostic> diagnosticsOf(Compilation compilation) {
         List<Diagnostic> out = new ArrayList<>();
         compilation.diagnostics().forEach((id, found) -> out.addAll(Located.diagnosticsOf(found)));
         return out;
@@ -95,11 +115,21 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
         return diagnosticsOf(source).stream().filter(d -> "E1926".equals(d.code())).toList();
     }
 
+    /** The same, of a model that is refused for the one row it can never answer. */
+    private static List<Diagnostic> unanswerableInRefused(String source, int rows) {
+        return diagnosticsOfRefused(source, Collections.nCopies(rows, "E1926")).stream()
+                .filter(d -> "E1926".equals(d.code())).toList();
+    }
+
     /** The rows of a model that compiles as far as running them. */
     private static List<RowOutcome> rowsOf(String source) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
+        return rowsOf(compilation);
+    }
+
+    private static List<RowOutcome> rowsOf(Compilation compilation) {
         List<RowOutcome> rows = new ArrayList<>();
         for (String module : compilation.modules()) {
             for (SourceId id : compilation.exampleSourcesOf(module)) {
@@ -134,7 +164,7 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
                     | (MemberId("m-1")) -> Missing { why = "second" }
                 """, "Placed { by = MemberId(\"m-1\") }");
 
-        List<Diagnostic> said = unanswerable(source);
+        List<Diagnostic> said = unanswerableInRefused(source, 1);
 
         assertEquals(1, said.size(), "one row of the two answers nothing");
         assertEquals(lineOf(source, "\"second\""), WhereItSits.in(source, ((Primary.InSource) said.get(0).primary()).place().region()).start().line(),
@@ -152,7 +182,7 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
                     | _ -> Missing { why = "second" }
                 """, "Refused { why = \"second\" }");
 
-        List<Diagnostic> said = unanswerable(source);
+        List<Diagnostic> said = unanswerableInRefused(source, 1);
 
         assertEquals(1, said.size(), "one of the two `_` rows answers nothing");
         assertEquals(lineOf(source, "\"first\""), WhereItSits.in(source, ((Primary.InSource) said.get(0).primary()).place().region()).start().line(),
@@ -171,7 +201,7 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
                     | _ -> Missing { why = "third" }
                 """, "Refused { why = \"third\" }");
 
-        List<Diagnostic> said = unanswerable(source);
+        List<Diagnostic> said = unanswerableInRefused(source, 2);
 
         assertEquals(List.of(lineOf(source, "\"first\""), lineOf(source, "\"second\"")),
                 said.stream().map(d -> WhereItSits.in(source, ((Primary.InSource) d.primary()).place().region()).start().line()).sorted().toList(),
@@ -218,7 +248,7 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
                         -> Placed { by = MemberId("m-1") }
                 """;
 
-        List<Diagnostic> said = diagnosticsOf(source);
+        List<Diagnostic> said = diagnosticsOfRefused(source, List.of("E1926"));
 
         assertEquals(List.of("E1926"), said.stream().map(Diagnostic::code).toList(),
                 "the row is unreachable, and what it would have answered was never asked for");
@@ -233,7 +263,7 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
                         -> Refused { why = "" }
                 """;
 
-        List<Diagnostic> saidWhereReached = diagnosticsOf(reachable);
+        List<Diagnostic> saidWhereReached = diagnosticsOfRefused(reachable, List.of("E1908"));
         assertTrue(saidWhereReached.stream().anyMatch(d -> "E1908".equals(d.code())),
                 "and the same output in a row the table can reach is the error it is: "
                         + saidWhereReached);
@@ -257,7 +287,7 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
                     | "one" : (Order { by = MemberId("m-1") }) -> Refused { why = "" }
                 """;
 
-        List<Diagnostic> said = diagnosticsOf(source);
+        List<Diagnostic> said = diagnosticsOfRefused(source, List.of("E1908"));
 
         assertEquals(1, said.size(), "the first row that cannot be read is what the table is refused for");
         assertTrue(String.valueOf(said.get(0).values().get("why"))
@@ -318,14 +348,17 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
                     | _ -> Missing { why = "second" }
                 """, "Refused { why = \"second\" }");
 
-        assertEquals(Disposition.HELD, onlyRow(shadowing).disposition(),
+        assertEquals(Disposition.HELD, onlyRow(rowsOf(refused(shadowing, List.of("E1926")))).disposition(),
                 "the first of two explicit rows is still what the fake answers with");
-        assertEquals(Disposition.HELD, onlyRow(defaults).disposition(),
+        assertEquals(Disposition.HELD, onlyRow(rowsOf(refused(defaults, List.of("E1926")))).disposition(),
                 "and the last of two `_` rows is still what it falls through to");
     }
 
     private static RowOutcome onlyRow(String source) {
-        List<RowOutcome> rows = rowsOf(source);
+        return onlyRow(rowsOf(source));
+    }
+
+    private static RowOutcome onlyRow(List<RowOutcome> rows) {
         assertEquals(1, rows.size(), "the model writes one row");
         return assertInstanceOf(RowOutcome.class, rows.get(0));
     }

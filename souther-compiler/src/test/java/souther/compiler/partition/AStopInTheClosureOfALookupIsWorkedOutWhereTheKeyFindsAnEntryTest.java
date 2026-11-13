@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -84,13 +85,11 @@ class AStopInTheClosureOfALookupIsWorkedOutWhereTheKeyFindsAnEntryTest {
 
     /** What the run to the last comparison of {@code m} gets past. */
     private static DemandReading.Answered answeredAtTheLast(String body) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module w1
                 behavior m : (k: String, m: Map<String, Int>, xs: List<Int>, d: Int) -> Bool
                 let m (k, m, xs, d) = %s
-                """.formatted(body), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.formatted(body), Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

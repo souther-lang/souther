@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -373,10 +374,9 @@ class ATotalOfWhatTheElementDecidesIsOneNumberHoweverItIsWrittenTest {
                 "compared", "List.filter(i -> i.price > 10, items)",
                 "written", "List.filter(i -> i.code == \"A\", items)");
         kinds.forEach((kind, kept) -> {
-            Compilation compilation = Compilation.ofSource(DECLARATIONS + JUDGED.formatted(kind,
-                    "List.sum(List.map(i -> i.price, " + kept + ")) >= 0"), "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            Compilation compilation = ACompiledModel.measured(DECLARATIONS + JUDGED.formatted(kind,
+                    "List.sum(List.map(i -> i.price, " + kept + ")) >= 0"),
+                    Adequacy.Asked.fullReport());
             JsonNode document = JsonMapper.builder().build().readTree(
                     AdequacyReport.of(compilation)
                             .json(SourceRendering.namedByIdentity(compilation.texts())));

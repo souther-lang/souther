@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.report.InEnglish;
 import souther.compiler.check.RuleReadings;
@@ -41,6 +42,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -159,12 +161,37 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * no composed row moves.
      */
     private static Compilation measured(String source) {
+        List<String> refusedWith = REFUSED_WITH.get();
         return MEASURED.computeIfAbsent(source, written -> {
             Compilation compilation = Compilation.ofSource(written, "Main");
             compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+            if (refusedWith.isEmpty()) {
+                return ACompiledModel.compiles(compilation);
+            }
             compilation.answerEverything();
+            assertEquals(refusedWith, codesOf(compilation), "the model is refused");
             return compilation;
         });
+    }
+
+    /** The codes the models measured by {@code asked} are refused with: none, for a model that
+     *  compiles. */
+    private static final ThreadLocal<List<String>> REFUSED_WITH =
+            ThreadLocal.withInitial(List::of);
+
+    /** What {@code asked} reads of models that are refused with {@code codes}, which is what a
+     *  model with no value of some data is. */
+    private static <T> T whereRefusedWith(List<String> codes, Supplier<T> asked) {
+        REFUSED_WITH.set(codes);
+        try {
+            return asked.get();
+        } finally {
+            REFUSED_WITH.remove();
+        }
+    }
+
+    private static List<String> codesOf(Compilation compilation) {
+        return compilation.errors().stream().map(e -> e.diagnostic().code()).toList();
     }
 
     private static Map<String, String> leftIn(Compilation compilation, String at) {
@@ -303,8 +330,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 besideAHeld("Date", "Date.day(value) + 1 == 2"), "g.value >= r.d.value", 24));
         for (String rule : List.of("Date.day(value) + 9223372036854775807 > 0",
                 "Date.day(value) + 9223372036854775807 - 9223372036854775807 == 1")) {
-            assertEquals(Map.of(), leftAt("g: Yen, r: Rec",
-                    besideAHeld("Date", rule), "g.value >= r.d.value", 24), rule);
+            assertEquals(Map.of(), whereRefusedWith(List.of("E1013"), () -> leftAt("g: Yen, r: Rec",
+                    besideAHeld("Date", rule), "g.value >= r.d.value", 24)), rule);
         }
         assertEquals(Map.of("g", RELATES), leftAt("g: Yen, r: Rec",
                 besideAHeld("String", "String.length(value) == 3"), "g.value >= r.d.value", 24));
@@ -699,10 +726,11 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void partsNoDateHasLeaveNothingToSayOfTheAmount() {
         for (String rule : List.of("Date.day(value) == 31 && Date.month(value) == 2",
                 "Date.year(value) == 2023 && Date.month(value) == 2 && Date.day(value) == 29")) {
-            assertEquals(Map.of(), leftAt("g: Yen, r: Rec", besideAHeld("Date", rule),
-                    "g.value >= r.d.value", 24), rule);
-            assertEquals(List.of(), classesAt("g: Yen, r: Rec", besideAHeld("Date", rule),
-                    "g.value >= r.d.value", "g"), rule);
+            assertEquals(Map.of(), whereRefusedWith(List.of("E1013"), () -> leftAt("g: Yen, r: Rec",
+                    besideAHeld("Date", rule), "g.value >= r.d.value", 24)), rule);
+            assertEquals(List.of(), whereRefusedWith(List.of("E1013"), () -> classesAt(
+                    "g: Yen, r: Rec", besideAHeld("Date", rule), "g.value >= r.d.value", "g")),
+                    rule);
         }
     }
 
@@ -1031,8 +1059,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                     | (2, [0, 0]) -> false
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(0, compilation.errors().size());
+        ACompiledModel.compiles(compilation);
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("adequacy: satisfied"), report);
@@ -1803,8 +1830,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         compilation.observe(RowObservation.RECORD_ARMS);
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     /**
@@ -2209,6 +2235,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(List.of(), classesAt("issues: List<Issue>, atLeast: Int",
                 LABELLED.replace("Set<String>", "Set<Never>")
                         .replace("Set.toList(i.labels)", "List.map(l -> l.value, Set.toList(i.labels))")
+                        .replace("Map<String, Int>", "Map<Int, Int>")
                         + "\n" + NO_VALUE, BUSY, "atLeast"));
     }
 
@@ -2476,7 +2503,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 let m (p) = true
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("p.a holds 4 classes"), report);
@@ -2524,7 +2551,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 let m (d) = true
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         for (String place : List.of("d.from", "d.to")) {
@@ -2564,7 +2591,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                     | (Date("2026-09-01"), Date("2026-07-25")) -> TooEarly { days = 38 }
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("measurement: complete"), report);
@@ -3289,9 +3316,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                     | "equal bounds" : (Pending { me = EmpId("xx"), boss = EmpId("x"), low = 0, high = 0 }, EmpId("x")) -> Granted
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-
-        assertEquals(List.of(), compilation.errors(), "the rows hold");
+        ACompiledModel.compiles(compilation);
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("adequacy: satisfied"), report);
@@ -3453,7 +3478,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 let m (v) = true
                 """.formatted(declaration, name), "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         Map<String, Set<String>> out = new LinkedHashMap<>();
@@ -3958,11 +3983,15 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                             && List.length(ys) - List.length(zs) >= %s""".formatted(apart);
             String body = "v.g.value >= v.d.value";
             boolean none = apart.endsWith("7");
-            assertEquals(none ? List.of("E1013") : List.of(), measured("v: D", declared, "Bool",
-                    body).diagnostics().values().stream().flatMap(List::stream)
-                    .map(each -> each.diagnostic().code().toString()).toList(), apart);
-            assertEquals(none ? Map.of() : Map.of("v.g", RELATES), left("v: D", declared, body,
-                    atThe(">=", declared, "v: D", body)), apart);
+            List<String> refused = none ? List.of("E1013") : List.of();
+            whereRefusedWith(refused, () -> {
+                assertEquals(refused, measured("v: D", declared, "Bool",
+                        body).diagnostics().values().stream().flatMap(List::stream)
+                        .map(each -> each.diagnostic().code().toString()).toList(), apart);
+                assertEquals(none ? Map.of() : Map.of("v.g", RELATES), left("v: D", declared, body,
+                        atThe(">=", declared, "v: D", body)), apart);
+                return null;
+            });
         }
     }
 
@@ -3986,7 +4015,12 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                     let m (x) = true
                     """.formatted(apart), "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            if (apart.endsWith("7")) {
+                compilation.answerEverything();
+                assertEquals(List.of("E1013"), codesOf(compilation), "no two lists hold the rule");
+            } else {
+                ACompiledModel.compiles(compilation);
+            }
             String report = AdequacyReport.of(compilation)
                     .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
             String said = apart.endsWith("7") ? "not shown to reach every value here"

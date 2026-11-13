@@ -61,6 +61,10 @@ class AClauseThatCannotBeReadCostsItsOwnDeclarationAndNoReaderOfTheNameTest {
         return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
     }
 
+    private static List<String> errorCodes(Compilation c) {
+        return c.errors().stream().map(each -> each.diagnostic().code()).toList();
+    }
+
     /** One mistake, in the file that wrote it. */
     @Test
     void theClauseIsTheOnlyThingWrong() {
@@ -80,6 +84,7 @@ class AClauseThatCannotBeReadCostsItsOwnDeclarationAndNoReaderOfTheNameTest {
     void theDeclarationIsStillReadWhereItWasWritten() {
         Compilation c = compiled();
         c.answerEverything();
+        assertEquals(List.of("E1802"), errorCodes(c), "the clause is what does not compile");
         DerivedSymbols symbols = Scopes.derived(c.db(), "lib").value();
 
         Hir.Def wide = symbols.declaredNode(new TypeKey("lib", "Wide"));
@@ -142,6 +147,7 @@ class AClauseThatCannotBeReadCostsItsOwnDeclarationAndNoReaderOfTheNameTest {
     void theImporterReadsTheDeclarationItNamed() {
         Compilation c = compiled();
         c.answerEverything();
+        assertEquals(List.of("E1802"), errorCodes(c), "the clause is what does not compile");
         DerivedSymbols symbols = Scopes.derived(c.db(), "app").value();
 
         assertNotNull(symbols, "`app` has names of its own to mean something");

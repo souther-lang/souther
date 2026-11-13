@@ -53,7 +53,7 @@ class ARowComposedForAnItemSettlesThatItemTest {
     void aRowComposedAtADeclaredLineStandsAtIt() {
         Compilation compilation = Compilation.ofSource(DECLARED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Settlements table = Settlements.of(compilation.db(), composed(compilation));
 
         assertFalse(table.composedFor().isEmpty(),
@@ -73,7 +73,7 @@ class ARowComposedForAnItemSettlesThatItemTest {
     void everyOfferedRowIsAnsweredForAtEveryItem() {
         Compilation compilation = Compilation.ofSource(DECLARED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Settlements table = Settlements.of(compilation.db(), composed(compilation));
 
         assertFalse(table.byRow().isEmpty(), "there are rows to answer for");

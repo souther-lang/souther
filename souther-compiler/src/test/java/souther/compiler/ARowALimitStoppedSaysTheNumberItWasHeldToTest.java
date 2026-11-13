@@ -90,6 +90,7 @@ class ARowALimitStoppedSaysTheNumberItWasHeldToTest {
                 DoesNotComeBack.everythingAboutRowsOf("run")));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1923"), errorCodes(compilation));
 
         List<Incompleteness.Met> gaps = AdequacyReport.of(compilation).modules().get(0)
                 .behaviors().get(0).reading().gaps().stream().toList();
@@ -99,11 +100,17 @@ class ARowALimitStoppedSaysTheNumberItWasHeldToTest {
                 "the wait this compile gave the row, in the milliseconds it is written in");
     }
 
+    /** The codes of the errors {@code compilation} says. */
+    private static List<String> errorCodes(Compilation compilation) {
+        return compilation.errors().stream().map(each -> each.diagnostic().code()).toList();
+    }
+
     /** The figure the one row of {@code source} was stopped at, under {@code policy}. */
     private static Optional<Figure> figureOf(String source, EvaluationPolicy policy) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.withEvaluationPolicy(policy);
         compilation.answerEverything();
+        assertEquals(List.of("E1910"), errorCodes(compilation));
         SourceId sourceId = compilation.exampleSourcesOf("example.loops").getFirst();
         List<Incompleteness> gaps = compilation.db().ask(new Output.Examples("example.loops",
                 sourceId, ArmObservation.OMIT)).value().incompleteness();

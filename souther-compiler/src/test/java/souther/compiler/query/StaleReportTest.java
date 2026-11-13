@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.source.SourceId;
 
@@ -78,6 +79,7 @@ class StaleReportTest {
         Located.diagnosticsOf(c.diagnostics());
         c.update(workspace(NO_ROWS), Set.of(), TestDay.DATE);
         Located.diagnosticsOf(c.diagnostics());
+        ACompiledModel.compiles(c);
 
         assertFalse(c.db().allReports().stream().anyMatch(f -> f.report().isError()),
                 "nothing is wrong with this workspace any more");

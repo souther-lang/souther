@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -126,7 +127,6 @@ class WhatAForkTurnsOnIsReadWhereItIsWrittenTest {
 
                 behavior submit : (t: Trip) -> Int
                 """ + body);
-        assertEquals(List.of(), compilation.errors(), "the rows are the model's answers");
         return AdequacyReport.of(compilation).adequacy();
     }
 
@@ -168,9 +168,6 @@ class WhatAForkTurnsOnIsReadWhereItIsWrittenTest {
     }
 
     private static Compilation compiled(String model) {
-        Compilation compilation = Compilation.ofSource("module demo\n\n" + model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured("module demo\n\n" + model, Adequacy.Asked.fullReport());
     }
 }

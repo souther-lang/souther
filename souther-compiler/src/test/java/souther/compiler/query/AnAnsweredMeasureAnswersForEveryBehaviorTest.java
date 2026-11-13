@@ -63,6 +63,9 @@ class AnAnsweredMeasureAnswersForEveryBehaviorTest {
         Compilation compilation = Compilation.ofSource(EVERY_SHAPE, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1504"), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(),
+                "the import of a module nothing provides is what the model is refused for");
         return compilation;
     }
 

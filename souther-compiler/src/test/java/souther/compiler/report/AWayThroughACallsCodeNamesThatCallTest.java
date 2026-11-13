@@ -1,6 +1,7 @@
 package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.OnTheWay;
 import souther.compiler.query.Adequacy;
@@ -83,9 +84,7 @@ class AWayThroughACallsCodeNamesThatCallTest {
      */
     @Test
     void anArmOverWhatACallAnsweredIsReadOffThatCall() {
-        Compilation compilation = Compilation.ofSource(MATCHED, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MATCHED, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> lines =
                 Adequacy.searchedBoundariesOf(compilation.db(), "example.matched");
         assertNotNull(lines, "the model under test compiles");
@@ -126,9 +125,7 @@ class AWayThroughACallsCodeNamesThatCallTest {
      */
     @Test
     void halvesAskingAlikeOnTheWayToALineNameBothCalls() {
-        Compilation compilation = Compilation.ofSource(EITHER, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(EITHER, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> lines =
                 Adequacy.searchedBoundariesOf(compilation.db(), "example.either");
         assertNotNull(lines, "the model under test compiles");

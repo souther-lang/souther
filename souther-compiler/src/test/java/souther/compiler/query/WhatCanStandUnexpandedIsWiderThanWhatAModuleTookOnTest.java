@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.check.StandingSignature;
 import souther.compiler.meta.ModulePath;
@@ -60,7 +61,9 @@ class WhatCanStandUnexpandedIsWiderThanWhatAModuleTookOnTest {
             """;
 
     private static Db dbOf(String module, String source) {
-        return Compilation.ofDocuments(Map.of(module + ".sou", source), Set.of(), ModulePath.EMPTY)
+        return ACompiledModel.compiles(
+                        Compilation.ofDocuments(Map.of(module + ".sou", source), Set.of(),
+                                ModulePath.EMPTY))
                 .db();
     }
 

@@ -68,7 +68,7 @@ class ACaseIsBuiltAtItsPositionWithoutBeingNamedHereTest {
     private static souther.compiler.partition.FillResult filled() {
         Compilation compilation = Compilation.ofSources(List.of(DOMAIN, CONSUMER), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), "consumer");
         assertNotNull(all, "the model under test compiles");
         return all.get("judge").composed();

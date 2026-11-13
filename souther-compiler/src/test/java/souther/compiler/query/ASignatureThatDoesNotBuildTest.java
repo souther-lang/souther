@@ -42,6 +42,7 @@ class ASignatureThatDoesNotBuildTest {
     private static Compilation compiled() {
         Compilation c = Compilation.ofDocuments(Map.of("a.sou", SOURCE), Set.of(), ModulePath.EMPTY);
         c.answerEverything();
+        assertEquals(1, c.errors().size(), "the signature is the one mistake: " + c.errors());
         return c;
     }
 

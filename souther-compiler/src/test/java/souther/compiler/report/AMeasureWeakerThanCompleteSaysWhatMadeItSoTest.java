@@ -97,6 +97,9 @@ class AMeasureWeakerThanCompleteSaysWhatMadeItSoTest {
         compilation.withEvaluationPolicy(BOUNDED);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1910"),
+                compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
+                "the row that never comes back is stopped at its budget");
         report = AdequacyReport.of(compilation);
     }
 

@@ -233,6 +233,10 @@ class ARunSaysWhatTheBehaviorAnsweredTest {
         Compilation compilation = Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1905", "E1911"),
+                compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
+                "the row stating another answer is refused, and so is the one reaching an"
+                        + " unreachable");
         return compilation;
     }
 

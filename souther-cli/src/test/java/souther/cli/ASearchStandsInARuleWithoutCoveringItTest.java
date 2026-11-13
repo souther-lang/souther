@@ -48,11 +48,18 @@ class ASearchStandsInARuleWithoutCoveringItTest {
                 | "first" : (Count(1), Count(6)) -> No
             """;
 
-    @Test
-    void aSearchFindsSomethingStandingInTheRuleTheRowsLeft() {
+    private static Compilation measuredModel() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of(), compilation.errors().stream()
+                .map(e -> e.diagnostic().code()).toList(), "the model compiles");
+        return compilation;
+    }
+
+    @Test
+    void aSearchFindsSomethingStandingInTheRuleTheRowsLeft() {
+        Compilation compilation = measuredModel();
         String module = compilation.modules().get(0);
 
         DecisionEvidence evidence =
@@ -75,9 +82,7 @@ class ASearchStandsInARuleWithoutCoveringItTest {
     /** And what it built is not a row of the model, so the rules the rows took do not move. */
     @Test
     void andWhatItBuiltCoversNothing() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = measuredModel();
         String module = compilation.modules().get(0);
 
         DecisionEvidence before =

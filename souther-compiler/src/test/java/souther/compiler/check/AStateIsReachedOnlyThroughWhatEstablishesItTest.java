@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import org.junit.jupiter.api.Test;
 import souther.compiler.ast.Ast;
@@ -543,8 +544,9 @@ class AStateIsReachedOnlyThroughWhatEstablishesItTest {
                 data Amount = Int
                     invariant atLeast(value)
                 """;
-        souther.compiler.query.Compilation compilation = souther.compiler.query.Compilation
-                .ofSources(List.of(lib, uses), souther.compiler.meta.ModulePath.EMPTY);
+        souther.compiler.query.Compilation compilation = ACompiledModel.compiles(
+                souther.compiler.query.Compilation
+                        .ofSources(List.of(lib, uses), souther.compiler.meta.ModulePath.EMPTY));
         Hir.Module resolved = compilation.db()
                 .ask(new souther.compiler.query.Names.Resolved("shop")).value();
         assertNotEquals(resolved, HelperNames.withQualifiedInvariants(resolved),

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourceRendering;
@@ -418,9 +419,7 @@ class AValueBehindANameIsMeasuredAsTheValueWrittenOutTest {
     }
 
     private static Map<String, Measured> measuredAfresh(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage(module)).value();

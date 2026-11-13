@@ -408,8 +408,7 @@ class CompileExampleGenerateTest {
         String pasted = tabbed + sourceOf(blockOf(tabbed, "example.tabbed"))
                 .replace("<?>", "Ok { n = 0 }");
 
-        Compilation compilation = Compilation.ofSource(pasted, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(pasted);
         List<souther.compiler.observe.RowOutcome> rows = outcomes(compilation);
 
         assertEquals(2, rows.size(), "the row that was there, and the one generated");
@@ -780,8 +779,7 @@ class CompileExampleGenerateTest {
     void answeringTheBlockGivesRowsThatHoldAndCoverWhatTheyWereFor() {
         String source = answered(TRIP, "Accepted { at = \"now\" }");
 
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         List<souther.compiler.observe.RowOutcome> rows = outcomes(compilation);
 
         assertEquals(3, rows.size(), "the row that was there, and the two generated");
@@ -801,11 +799,13 @@ class CompileExampleGenerateTest {
 
         Compilation compilation = Compilation.ofSource(wrong, "Main");
         compilation.answerEverything();
+        List<String> errors = compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList();
 
         assertTrue(outcomes(compilation).stream()
                         .anyMatch(row -> row.disposition() == souther.compiler.observe.Disposition
                                 .FAILED),
-                "a wrong answer is a failing row");
+                "a wrong answer is a failing row, the model's errors being " + errors);
     }
 
     /**
@@ -825,8 +825,7 @@ class CompileExampleGenerateTest {
     void theBlockPastedUnchangedIsRowsThatStateNoAnswer() {
         String pasted = TRIP + sourceOf(blockOf(TRIP, "example.trip"));
 
-        Compilation compilation = Compilation.ofSource(pasted, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(pasted);
         List<souther.compiler.observe.RowOutcome> rows = outcomes(compilation);
 
         assertEquals(3, rows.size(), "the row that was there, and the two pasted");
@@ -902,8 +901,7 @@ class CompileExampleGenerateTest {
     void theSpreadRowsHoldWhenTheyArePastedBack() {
         String source = answered(AGAINST_A_LET, "Out { n = 0 }");
 
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         List<souther.compiler.observe.RowOutcome> rows = outcomes(compilation);
 
         assertEquals(3, rows.size(), "the row that was there, and the two generated");

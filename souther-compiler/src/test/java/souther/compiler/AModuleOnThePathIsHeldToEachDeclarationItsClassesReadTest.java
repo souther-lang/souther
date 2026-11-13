@@ -1,10 +1,10 @@
 package souther.compiler;
 
+import souther.compiler.diag.Located;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Db;
 
 import org.junit.jupiter.api.Test;
 
@@ -66,8 +66,11 @@ class AModuleOnThePathIsHeldToEachDeclarationItsClassesReadTest {
         Compilation compilation = Compilation.ofSources(List.of(app), ModulePath.of(path));
         compilation.answerEverything();
         List<Object> out = new ArrayList<>();
-        for (Db.Found found : compilation.db().allReports()) {
-            out.add(found.report().diagnostic().said());
+        for (Located found : compilation.errors()) {
+            out.add(found.diagnostic().said());
+        }
+        for (Located found : compilation.warnings()) {
+            out.add(found.diagnostic().said());
         }
         return out;
     }
@@ -298,8 +301,11 @@ class AModuleOnThePathIsHeldToEachDeclarationItsClassesReadTest {
                 """, USES_ONLY_INC), ModulePath.of(path));
         compilation.answerEverything();
         List<Object> said = new ArrayList<>();
-        for (Db.Found found : compilation.db().allReports()) {
-            said.add(found.report().diagnostic().said());
+        for (Located found : compilation.errors()) {
+            said.add(found.diagnostic().said());
+        }
+        for (Located found : compilation.warnings()) {
+            said.add(found.diagnostic().said());
         }
 
         assertEquals(List.of(new ModuleMessage.AModuleOnThePathNeedsOneCompiledHere("lib.b",

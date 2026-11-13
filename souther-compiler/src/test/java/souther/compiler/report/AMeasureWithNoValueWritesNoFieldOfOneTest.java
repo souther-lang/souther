@@ -4,6 +4,7 @@ import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.DocumentShape;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -124,14 +125,15 @@ class AMeasureWithNoValueWritesNoFieldOfOneTest {
                 souther.compiler.DoesNotComeBack.everythingAboutRowsOf("go")));
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
+        assertEquals(List.of("E1923"), compilation.errors().stream()
+                .map(found -> found.diagnostic().code()).toList(),
+                "the row that does not come back is said as an error of the model");
         return JsonMapper.builder().build().readTree(
                 AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
     }
 
     private static JsonNode reportOf(String source, Adequacy.Level level) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly(level));
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.reportOnly(level));
         JsonNode root = JsonMapper.builder().build().readTree(
                 AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
         assertNotNull(root, "the model under test compiles");

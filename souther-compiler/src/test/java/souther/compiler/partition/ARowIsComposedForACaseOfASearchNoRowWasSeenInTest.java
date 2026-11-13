@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.TermPath;
@@ -130,12 +131,10 @@ class ARowIsComposedForACaseOfASearchNoRowWasSeenInTest {
      */
     @Test
     void aCaseIsTheOnlyWorkOwedAndTheOfferKnowsOfIt() {
-        Compilation compilation = Compilation.ofSource(SOME + ROWS_THAT_FIND + """
+        Compilation compilation = ACompiledModel.measured(SOME + ROWS_THAT_FIND + """
                     | "a child that fails" :
                         (Node { v = 0, below = [ Node { v = 0, below = [] } ] }) -> No
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
         RowWork owed = compilation.db().ask(new Adequacy.RowsOwed(module, "f")).value();
 
@@ -242,9 +241,8 @@ class ARowIsComposedForACaseOfASearchNoRowWasSeenInTest {
      */
     @Test
     void aStepThatAsksNothingInsideTheNodesBelowReadsNoPlaceThere() {
-        Compilation compilation = Compilation.ofSource(SOME + ROWS_THAT_FIND, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(SOME + ROWS_THAT_FIND, Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
         DecisionEvidence evidence = compilation.db().ask(new Adequacy.Decides(module)).value()
                 .get("f");
@@ -263,15 +261,13 @@ class ARowIsComposedForACaseOfASearchNoRowWasSeenInTest {
      */
     @Test
     void lookingForTheStepBelowTheStartLeavesThePositionsTheMeasureCountsAlone() {
-        Compilation compilation = Compilation.ofSource(SOME + """
+        Compilation compilation = ACompiledModel.measured(SOME + """
                 example f
                     | "the top" : (Node { v = 9, below = [] }) -> Yes
                     | "a leaf that fails" : (Node { v = 0, below = [] }) -> No
                     | "a child that fails" :
                         (Node { v = 0, below = [ Node { v = 0, below = [] } ] }) -> No
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
         List<String> before = positionsOf(compilation, module);
         assertTrue(!compilation.db().ask(new Adequacy.CaseSearch(module, "f")).value().isEmpty(),
@@ -289,9 +285,8 @@ class ARowIsComposedForACaseOfASearchNoRowWasSeenInTest {
      */
     @Test
     void theMeasurementMakesNoWayAtAPlaceItDidNotRead() {
-        Compilation compilation = Compilation.ofSource(SOME + ROWS_THAT_FIND, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(SOME + ROWS_THAT_FIND, Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
         InputDomain measured = compilation.db().ask(new Adequacy.Inputs(module)).value().get("f");
         TermPath below = TermPath.of("t").then("below").element().then("v");
@@ -319,7 +314,7 @@ class ARowIsComposedForACaseOfASearchNoRowWasSeenInTest {
      */
     @Test
     void aStepBelowTheStartOfASearchDownTwoFieldsIsNoWork() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module m
                 data Tree = { v: Int, left: List<Tree>, right: List<Tree> }
                 data Yes
@@ -331,9 +326,7 @@ class ARowIsComposedForACaseOfASearchNoRowWasSeenInTest {
                 example f
                     | "the top" : (Tree { v = 9, left = [], right = [] }) -> Yes
                     | "a leaf that fails" : (Tree { v = 0, left = [], right = [] }) -> No
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
         DecisionEvidence evidence = compilation.db().ask(new Adequacy.Decides(module)).value()
                 .get("f");
@@ -348,9 +341,7 @@ class ARowIsComposedForACaseOfASearchNoRowWasSeenInTest {
     }
 
     private static String blockOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
         return GeneratedRows.of(
                 Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule(module)),
@@ -365,9 +356,7 @@ class ARowIsComposedForACaseOfASearchNoRowWasSeenInTest {
     }
 
     private static Map<CaseOfAStatement, RowToRun> search(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         String module = compilation.modules().getFirst();
         DecisionEvidence evidence = compilation.db().ask(new Adequacy.Decides(module)).value()
                 .get("f");

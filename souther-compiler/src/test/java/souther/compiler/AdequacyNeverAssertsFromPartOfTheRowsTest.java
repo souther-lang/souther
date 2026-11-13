@@ -49,7 +49,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
      * spends the observation budget, one is past what the backend can emit — so nothing about them
      * overruns.
      */
-    private record Unreadable(String source, JvmExampleDeadlines overrun) {}
+    private record Unreadable(String source, JvmExampleDeadlines overrun, List<String> refusedFor) {}
 
     /** Models where something a measure would want to read was not read, each in a different way. */
     private static List<Unreadable> unreadableInSomeWay() {
@@ -81,12 +81,13 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
 
                 example take
                     | (Draft { flag = Yes, cost = Amount(500) }) -> Big { n = 0 }
-                """, DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("take"))),
+                """, DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("take")),
+                        List.of("E1923")),
                 // a value past the observation's limits: the position is there and unreadable
-                new Unreadable(budgetSpent(), null),
+                new Unreadable(budgetSpent(), null, List.of()),
                 // a module whose classes could not be made: nothing was read, and nothing says
                 // which row would have covered what
-                new Unreadable(classesNotMade(), null));
+                new Unreadable(classesNotMade(), null, List.of("E2102")));
     }
 
     /**
@@ -172,20 +173,28 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
 
     private static Compilation measured(Unreadable model) {
         return COMPILED.computeIfAbsent(model.source(),
-                _ -> measured(model.source(), model.overrun()));
+                _ -> measured(model.source(), model.overrun(), model.refusedFor()));
     }
 
     private static Compilation measured(String source) {
-        return measured(source, null);
+        return measured(source, null, List.of());
     }
 
-    private static Compilation measured(String source, JvmExampleDeadlines overrun) {
+    /** The model measured, and refused for exactly {@code refusedFor}: what could not be read is
+     * said as an error of the model, and the measures are read all the same. */
+    private static Compilation measured(String source, JvmExampleDeadlines overrun,
+                                        List<String> refusedFor) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         if (overrun != null) {
             compilation.withJvmExampleDeadlines(overrun);
         }
         compilation.measure(Adequacy.Asked.fullReport());
+        if (refusedFor.isEmpty()) {
+            return ACompiledModel.compiles(compilation);
+        }
         compilation.answerEverything();
+        assertEquals(refusedFor, compilation.errors().stream()
+                .map(found -> found.diagnostic().code()).toList(), "the model is refused");
         return compilation;
     }
 
