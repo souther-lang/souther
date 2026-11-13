@@ -402,13 +402,12 @@ class ANameReadTwiceIsFollowedOnceTest {
         Map<String, Core> given = Map.of("first", one, "same", one, "different", other);
         Map<Integer, Integer> readAs = new HashMap<>();
         Meaning reading = new Meaning(given, readAs);
-        BindingWalk.Answers<AffineForms.Outcome<String, String>> answers = new BindingWalk.Answers<>();
-        FoldedValue.Kept folds = new FoldedValue.Kept();
+        AffineForms.OfOneReading<String, String> held = new AffineForms.OfOneReading<>(reading);
         Core name = read(Meaning.TARGET);
 
-        LinearForm<String> first = AffineForms.of(name, "first", reading, answers, folds);
-        LinearForm<String> same = AffineForms.of(name, "same", reading, answers, folds);
-        LinearForm<String> different = AffineForms.of(name, "different", reading, answers, folds);
+        LinearForm<String> first = held.form(name, "first");
+        LinearForm<String> same = held.form(name, "same");
+        LinearForm<String> different = held.form(name, "different");
 
         assertEquals(LinearForm.atom("a10"), first);
         assertEquals(first, same);
@@ -426,11 +425,11 @@ class ANameReadTwiceIsFollowedOnceTest {
         chainOf(links, given);
         Map<BindingId, Integer> asked = new HashMap<>();
         Chain reading = new Chain(given, asked);
-        AffineForms.OfOneReading<String, Chain> held = new AffineForms.OfOneReading<>();
+        AffineForms.OfOneReading<String, Chain> held = new AffineForms.OfOneReading<>(reading);
         for (int i = 1; i <= links; i++) {
             Core root = read(new BindingId(OWNER, i));
             if (oneReading) {
-                AffineForms.outcome(root, reading, reading, held);
+                held.outcome(root, reading);
             } else {
                 AffineForms.outcome(root, reading, reading);
             }

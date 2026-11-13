@@ -2787,12 +2787,23 @@ final class Pullback {
     /** What a name comes to, worked out in {@code at}, which is the reading it holds in. */
     private record RangeOfAName(InputReads at, FormRange range) {}
 
-    /** What one asking of {@link #exactRangeOf} has worked out, and the reading it reads with. */
+    /**
+     * What one asking of {@link #exactRangeOf} has worked out, and the reading its roots are read
+     * through.
+     *
+     * <p>Each root is a form of its own: one that names an element of a container is held to that
+     * element, and a form read after it on the same elements is refused the other elements of the
+     * container. The roots share the reading, and what its names came to, only while no root has
+     * met an element — where each of them reads as it would on a reading of its own, and what a
+     * name came to is what it comes to for the next. A root that met one is the last read through
+     * the reading it met it on, and so is a root read where the elements of the comparison being
+     * read are not those the reading was made for.
+     */
     private final class RangesKnown {
         private final Map<BindingId, RangeOfAName> ranges = new HashMap<>();
-        private final AffineForms.Reading<Quantity, InputReads> reading = quantities();
-        private final AffineForms.OfOneReading<Quantity, InputReads> names =
-                new AffineForms.OfOneReading<>();
+        private ElementsMet comparisonOf;
+        private ElementsMet held;
+        private AffineForms.OfOneReading<Quantity, InputReads> names;
 
         RangeOfAName get(BindingId name) {
             return ranges.get(name);
@@ -2803,7 +2814,12 @@ final class Pullback {
         }
 
         AffineForms.Outcome<Quantity, InputReads> outcome(Core e, InputReads reads) {
-            return AffineForms.outcome(e, reads, reading, names);
+            if (names == null || comparisonOf != elementsMet || !held.untouched()) {
+                comparisonOf = elementsMet;
+                held = elementsOfAForm();
+                names = new AffineForms.OfOneReading<>(quantities(null, null, held));
+            }
+            return names.outcome(e, reads);
         }
     }
 
@@ -12711,15 +12727,21 @@ final class Pullback {
      */
     private AffineForms.Reading<Quantity, InputReads> quantities(
             Core asked, Consumer<LinearForm<Quantity>> composedAs) {
-        return new AffineForms.Reading<>() {
+        return quantities(asked, composedAs, elementsOfAForm());
+    }
 
-            // What a form read here holds is held to one element of each container, whether or
-            // not it is a side of a comparison: a form holds a number once, and two elements of
-            // one container stand at one position, so a form holding both would hold one number
-            // twice — and cancel or add up to what was not written. The comparison's own where
-            // one is being read, so that its sides are held together; else this form's.
-            private final ElementsMet held = elementsMet == ElementsMet.NONE ? new ElementsMet()
-                    : elementsMet;
+    // What a form read here holds is held to one element of each container, whether or not it is
+    // a side of a comparison: a form holds a number once, and two elements of one container stand
+    // at one position, so a form holding both would hold one number twice — and cancel or add up
+    // to what was not written. The comparison's own where one is being read, so that its sides
+    // are held together; else this form's.
+    private ElementsMet elementsOfAForm() {
+        return elementsMet == ElementsMet.NONE ? new ElementsMet() : elementsMet;
+    }
+
+    private AffineForms.Reading<Quantity, InputReads> quantities(
+            Core asked, Consumer<LinearForm<Quantity>> composedAs, ElementsMet held) {
+        return new AffineForms.Reading<>() {
 
             @Override
             public void composed(Core operation, LinearForm<Quantity> form) {

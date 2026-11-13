@@ -573,36 +573,42 @@ public final class AffineForms {
     }
 
     /**
-     * {@link #of(Core, Object, Reading)}, holding what each name came to in {@code answered}, which
-     * the caller keeps for as long as it reads with {@code reading}.
+     * One reading, and what the names read through it came to, for every walk made through it.
      *
-     * <p>For a reading that asks itself something while it reads — the fact an operation states of
-     * its arguments, what a condition compares — so that a value it is part way through reading is
-     * read once and not once per question. What is held is keyed by the value and the environment
-     * it is read in ({@link BindingWalk}), so an answer is taken again only for the same question.
-     */
-    static <A, E> LinearForm<A> of(Core raw, E at, Reading<A, E> reading,
-                                   BindingWalk.Answers<Outcome<A, E>> answered,
-                                   FoldedValue.Kept folds) {
-        return of(raw, at, reading, new Walk<>(answered, folds))
-                instanceof Outcome.Composed<A, E> composed ? composed.form() : null;
-    }
-
-    /**
-     * What the names read through one reading came to, for every walk made with it.
+     * <p>What a name came to is the answer of the reading that read it: a reading decides what a
+     * leaf is and which elements it may be read beside, so the same name read through another
+     * reading, or through this one in another state, can come to something else. The answers are
+     * keyed by the value and the environment ({@link BindingWalk}) and not by the reading, so they
+     * are held with the one reading they are of, and a walk made through this is made with it and
+     * no other.
      *
-     * <p>Held by whoever reads several expressions with one reading in one state, so that a name
-     * the roots share is read once for all of them and not once for each root.
+     * <p>Held by whoever reads several expressions with one reading in one state, for as long as
+     * the reading and its state are the same: a name the roots share is then read once for all of
+     * them and not once for each root. It is also what a reading that asks itself something while
+     * it reads is made through — the fact an operation states of its arguments, what a condition
+     * compares — so that a value it is part way through reading is read once and not once per
+     * question.
      */
     public static final class OfOneReading<A, E> {
+        private final Reading<A, E> reading;
         private final BindingWalk.Answers<Outcome<A, E>> answered = new BindingWalk.Answers<>();
         private final FoldedValue.Kept folds = new FoldedValue.Kept();
-    }
 
-    /** {@link #outcome(Core, Object, Reading)}, the names it reads held in {@code held}. */
-    public static <A, E> Outcome<A, E> outcome(Core raw, E at, Reading<A, E> reading,
-                                               OfOneReading<A, E> held) {
-        return of(raw, at, reading, new Walk<>(held.answered, held.folds));
+        public OfOneReading(Reading<A, E> reading) {
+            this.reading = Objects.requireNonNull(reading, "the answers are of a reading");
+        }
+
+        /** What reading {@code raw} in {@code at} came to ({@link #outcome(Core, Object,
+         *  Reading)}), the names it reads held with this reading's. */
+        public Outcome<A, E> outcome(Core raw, E at) {
+            return of(raw, at, reading, new Walk<>(answered, folds));
+        }
+
+        /** {@code raw} as a form, or null where {@link #outcome} is a stop. */
+        public LinearForm<A> form(Core raw, E at) {
+            return outcome(raw, at) instanceof Outcome.Composed<A, E> composed
+                    ? composed.form() : null;
+        }
     }
 
     /** One walk of one expression, reading each name it meets once ({@link BindingWalk}). */

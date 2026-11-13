@@ -585,7 +585,7 @@ final class Terms {
      * to be written.
      */
     LinearForm<FactSubject> affineOf(Core raw, Denotations at) {
-        return AffineForms.of(raw, at, affineReading, affineAnswers, affineFolds);
+        return affine.form(raw, at);
     }
 
     /** {@code raw} as arithmetic over the calls {@code taken} names, read as {@link #affineOf}
@@ -596,31 +596,11 @@ final class Terms {
     }
 
     /**
-     * What each name the affine reading followed came to, by the value it was given and the
-     * environment it was read in.
-     *
-     * <p>Held for as long as this is, because the reading is this one's and the same question has
-     * the same answer every time it is asked. It is asked again from inside itself — the facts an
-     * operation states of what it was given and what a condition compares are read while a value
-     * is being read — and a value named twice by the value before it, over a chain of them, is read
-     * once for each question rather than once for each way down to it.
-     */
-    private final BindingWalk.Answers<AffineForms.Outcome<FactSubject, Denotations>> affineAnswers =
-            new BindingWalk.Answers<>();
-
-    /**
-     * What each name the affine reading folded came to, by the environment it was read in — held
-     * for as long as this is, for the same reason. A walk asks the form of each operator it passes,
-     * and every one of them over a chain of names folds the names under it.
-     */
-    private final FoldedValue.Kept affineFolds = new FoldedValue.Kept();
-
-    /**
      * What {@code stated}, read in {@code at}, states of the arguments of the operation one of its
      * sides is the sign of ({@link TheSignOfAnOrder#read}), read in this check's environment
      * ({@link #signSides}) — or null where it states nothing of them.
      *
-     * <p>Held for as long as this is, for the reason {@link #affineAnswers} is. A clause is read
+     * <p>Held for as long as this is, for the reason {@link #affine} is. A clause is read
      * again wherever the check reads it — on every path that owes it, at every leaf a reading of
      * the clauses meets — and each time its comparison is the same nodes read in the same
      * environment, so the sign is read once for all of them. Asked by those nodes and that
@@ -856,6 +836,21 @@ final class Terms {
                             && !Location.isStep(fa.target().type(), fa.field(), newtypes());
                 }
             };
+
+    /**
+     * The affine reading with what each name it followed came to, by the value it was given and
+     * the environment it was read in, and what each name it folded came to, by the environment.
+     *
+     * <p>Held for as long as this is, because the reading is this one's and the same question
+     * has the same answer every time it is asked. It is asked again from inside itself — the facts
+     * an operation states of what it was given and what a condition compares are read while a
+     * value is being read — and a value named twice by the value before it, over a chain of them,
+     * is read once for each question rather than once for each way down to it. A walk asks the
+     * form of each operator it passes, and every one of them over a chain of names folds the names
+     * under it.
+     */
+    private final AffineForms.OfOneReading<FactSubject, Denotations> affine =
+            new AffineForms.OfOneReading<>(affineReading);
 
     /**
      * The environment {@code li}'s body is read in: {@code li}'s binder entered as what its

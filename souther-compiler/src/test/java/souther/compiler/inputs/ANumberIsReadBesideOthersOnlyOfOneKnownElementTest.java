@@ -61,6 +61,34 @@ class ANumberIsReadBesideOthersOnlyOfOneKnownElementTest {
         assertTrue(met.crowded());
     }
 
+    /**
+     * What has met an element, or was refused for naming another, is touched, and a number that
+     * names no element leaves it as it was: a reader that shares one reading between several
+     * numbers shares it only while none of them has met an element, since the next would be read
+     * beside what the first met and not as a number of its own.
+     */
+    @Test
+    void aComparisonIsTouchedOnceAnElementIsMetOrRefused() {
+        ElementsMet met = new ElementsMet();
+        assertTrue(met.untouched());
+        assertTrue(met.admits(ElementsNamed.NONE));
+        assertTrue(met.untouched());
+
+        assertTrue(met.admits(through(A)));
+        assertFalse(met.untouched());
+
+        ElementsMet refused = new ElementsMet();
+        assertFalse(refused.admits(ElementsNamed.of(List.of(), Set.of(AN_ITEM))));
+        assertFalse(refused.untouched());
+    }
+
+    /** A number read by itself holds nothing, so there is nothing for it to be touched by. */
+    @Test
+    void aNumberReadByItselfIsNeverTouched() {
+        assertTrue(ElementsMet.NONE.admits(through(A)));
+        assertTrue(ElementsMet.NONE.untouched());
+    }
+
     /** A number read by itself is put in no form beside another, and is held to nothing. */
     @Test
     void aNumberReadByItselfIsHeldToNothing() {
