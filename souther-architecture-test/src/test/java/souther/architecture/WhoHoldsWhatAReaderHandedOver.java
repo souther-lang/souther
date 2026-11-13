@@ -87,7 +87,6 @@ final class WhoHoldsWhatAReaderHandedOver {
             "souther/compiler/values/PlanOrder#inOrder",
             "souther/compiler/values/PlanOrder#canonical",
             "souther/compiler/numeric/CanonicalOrder#walking",
-            "souther/compiler/numeric/PlacedOrder#walking",
             "souther/compiler/numeric/CanonicalForm#entriesIn",
             "souther/compiler/numeric/CanonicalForm#atomsIn",
             "souther/compiler/inputs/NumericTerms#inOrder",

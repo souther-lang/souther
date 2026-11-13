@@ -513,6 +513,15 @@ public final class ClosedStates {
             return only == null ? null : closed.get(only);
         }
 
+        /**
+         * {@code order}, walking a form whose positions are all of one part by the places that part
+         * was asked with ({@link PartedOrder}), and {@code order} itself where the rules were not
+         * parted. Made for the rules as they stand, from what the closure already holds.
+         */
+        public CanonicalOrder<A> orderedBy(CanonicalOrder<A> order) {
+            return owner == null || !complete ? order : new PartedOrder<>(partOf, questions, order);
+        }
+
         /** The rules of the part weighing {@code position}; null where {@link #partWeighing} is. */
         public List<AffineConstraint<A>> rulesOfThePartWeighing(A position) {
             Integer at = partOf.get(position);
@@ -697,28 +706,18 @@ public final class ClosedStates {
     }
 
     /**
-     * {@code order}, walking the positions {@code weighed} names by the places this keeps for them
-     * — the places a closure of rules weighing exactly these positions is worked out from — and
-     * {@code order} itself where this keeps nothing.
-     *
-     * <p>Asked for the positions as a function and not as a set, so that where this keeps nothing
-     * no rule is read for them, and where it does they are read when a walk first puts two
-     * positions in order.
-     */
-    <A> CanonicalOrder<A> placing(Supplier<Set<A>> weighed, CanonicalOrder<A> order) {
-        return places == null ? order : new PlacedOrder<>(() -> placed(weighed.get(), order), order);
-    }
-
-    /**
      * {@link ClosureQuestion#placesIn}, kept for the order and the positions it was asked of. The
      * positions are copied into the question, which is held for as long as its answer is.
      */
-    private <A> Map<A, Integer> placed(Set<A> positions, CanonicalOrder<A> order) {
+    <A> Map<A, Integer> placed(Set<A> positions, CanonicalOrder<A> order) {
         PositionsPlaced<A> question = new PositionsPlaced<>(order, Set.copyOf(positions));
         // The cast holds because the answer to a question is only ever the places of its positions.
+        // Placed from the positions as they were handed over, and not from the copy the question
+        // holds: a copy lists them in an order of its own, and a sort that is given the positions in
+        // the order they came in, which over a run of rules is nearly their order, is linear.
         @SuppressWarnings("unchecked")
         Map<A, Integer> placed = (Map<A, Integer>) places.answer(question,
-                _ -> ClosureQuestion.placesIn(question.positions(), question.order()));
+                _ -> ClosureQuestion.placesIn(positions, order));
         return placed;
     }
 

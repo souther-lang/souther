@@ -1412,21 +1412,12 @@ public final class NumericDomain<A> {
         if (had == null) {
             ClosedState<A> state = closed();
             had = FormReach.over(rules(), state.sided(), state.box(), state.differences(),
-                    orderOfTheRules());
+                    parted().orderedBy(order));
             reach = had;
         }
         return had;
     }
 
-    /**
-     * The order a form over the rules' positions is walked in, by places worked out for those
-     * positions when a walk first needs them: a form is walked once for each question put to it, and
-     * its positions are compared by a number rather than by what each is. The order of the domain
-     * itself where the closures are not kept.
-     */
-    private CanonicalOrder<A> orderOfTheRules() {
-        return closedStates.placing(() -> ClosureQuestion.weighedBy(rules()), order);
-    }
 
 
     // --- reading the domain back --------------------------------------------------------------------

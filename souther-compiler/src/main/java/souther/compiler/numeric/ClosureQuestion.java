@@ -66,18 +66,6 @@ final class ClosureQuestion<A> {
     }
 
     /**
-     * The positions {@code rules} weigh, as a set: what a question is stated over and what the
-     * places of a reading are worked out for. A set holds no order, so nothing taking a position
-     * from it takes it by where it is; the order is the atom domain's, put on them where they are
-     * placed ({@link #placesIn}).
-     */
-    static <A> Set<A> weighedBy(List<AffineConstraint<A>> rules) {
-        Set<A> weighed = new LinkedHashSet<>();
-        rules.forEach(each -> weighed.addAll(each.form().coefs().keySet()));
-        return weighed;
-    }
-
-    /**
      * The question {@code rules} put, spaced by {@code spacing} and walked in {@code order}.
      *
      * @throws IllegalStateException where a position a rule weighs has no spacing, which a domain
@@ -100,7 +88,8 @@ final class ClosureQuestion<A> {
     static <A> ClosureQuestion<A> of(List<AffineConstraint<A>> rules,
                                      Function<A, Granularity> spacing, CanonicalOrder<A> order,
                                      Function<Set<A>, Map<A, Integer>> placing) {
-        Set<A> weighed = weighedBy(rules);
+        Set<A> weighed = new LinkedHashSet<>();
+        rules.forEach(each -> weighed.addAll(each.form().coefs().keySet()));
         Map<A, Granularity> spaced = new HashMap<>();
         for (A position : weighed) {
             Granularity it = spacing.apply(position);
@@ -198,6 +187,15 @@ final class ClosureQuestion<A> {
     /** The rules, in the order they are held. */
     List<AffineConstraint<A>> rules() {
         return rules;
+    }
+
+    /**
+     * Where each position the rules weigh stands in the order they are walked in: the places this
+     * question was stated with, which a reader of forms over these positions is handed rather than
+     * working them out again.
+     */
+    Map<A, Integer> places() {
+        return place;
     }
 
     /** How the values at a position the rules weigh are spaced. */
