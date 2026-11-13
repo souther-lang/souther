@@ -123,6 +123,30 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
         }
     }
 
+    /**
+     * A name that stands for a truth with more parts than a step is concluded with is read once for
+     * all its uses: a chain of such names, each used twice, is measured in what grows with the
+     * names and not with the ways down them.
+     */
+    @Test
+    void aTruthPastTheSizeAStepIsConcludedWithIsReadOnceForEachName() {
+        assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
+            StringBuilder body = new StringBuilder("{\n    let a0 = x >= 0\n");
+            for (int i = 1; i <= 40; i++) {
+                body.append("    let a%d = a%d && (j > 3 || a%d)\n".formatted(i, i - 1, i - 1));
+            }
+            body.append("    a40\n}");
+            Compilation compilation = Compilation.ofSource("""
+                    module m
+
+                    behavior f : (x: Int, j: Int) -> Bool
+                    let f (x, j) = %s
+                    """.formatted(body), "Main");
+            compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
+            compilation.answerEverything();
+        });
+    }
+
     /** A place in the report, as {@code line:column} or with the file before: {@code 9:8},
      *  {@code 0:9:8}. */
     private static final Pattern PLACE = Pattern.compile("(?<![\\d:])(?:\\d+:)?(\\d+):(\\d+)(?!\\d)");
