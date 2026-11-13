@@ -195,6 +195,56 @@ class ARuleAListStatesOfEveryElementIsPlacedOnTheElementsTest {
             behavior f : (ns: Ns) -> Ok
             """;
 
+    /** The rule is written on the record that holds the list, and the elements wear a declaration. */
+    private static final String DECLARED_ELEMENTS_IN_A_RECORDS_FIELD = """
+            module bounded
+
+            data Entry = { size: Int, other: Int }
+
+            data R = { entries: List<Entry> } invariant List.all(e -> e.size <= 10, entries)
+
+            data Ok
+
+            behavior f : (r: R) -> Ok
+            """;
+
+    /** Two statements, each about another field of the element. */
+    private static final String EACH_STATEMENT_ABOUT_ANOTHER_FIELD = """
+            module bounded
+
+            data Entry = { size: Int, other: Int }
+
+            data Entries = List<Entry> invariant
+                List.all(e -> e.size <= 10, value) && List.all(e -> e.other <= 5, value)
+
+            data Ok
+
+            behavior f : (entries: Entries) -> Ok
+            """;
+
+    private static final String LISTS_OF_LISTS = """
+            module bounded
+
+            data Ws = List<List<String>> invariant
+                List.all(l -> List.all(s -> String.length(s) <= 10, l), value)
+
+            data Ok
+
+            behavior f : (ws: Ws) -> Ok
+            """;
+
+    /** The statement is about the strings that pass a test, and not about every string. */
+    private static final String ONLY_THE_ELEMENTS_THAT_PASS = """
+            module bounded
+
+            data Ws = List<String> invariant
+                List.all(s -> String.length(s) <= 10, List.filter(s -> String.length(s) > 3, value))
+
+            data Ok
+
+            behavior f : (ws: Ws) -> Ok
+            """;
+
     private static RuleReadingContext readingOf(Compilation compilation) {
         RuleReadingSource rules = RuleReadings.of(compilation, compilation.modules().get(0));
         return RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
@@ -396,6 +446,37 @@ class ARuleAListStatesOfEveryElementIsPlacedOnTheElementsTest {
     void anElementThatIsOneOfSeveralCasesIsSaidToBeUnreadWhereTheListStatesSomething() {
         assertInstanceOf(AdmissibleSet.Completeness.Wider.class,
                 positionOf(ELEMENTS_THAT_ARE_ONE_OF_SEVERAL, "qs[*]").completeness());
+    }
+
+    @Test
+    void asItDoesWhereTheRuleIsOnTheRecordHoldingAListOfRecords() {
+        assertEquals(Endpoint.inclusive(Count.of(10)),
+                positionOf(DECLARED_ELEMENTS_IN_A_RECORDS_FIELD, "r.entries[*].size").bounds()
+                        .getFirst().admissible().max());
+        assertNull(positionOf(DECLARED_ELEMENTS_IN_A_RECORDS_FIELD, "r.entries[*].other").bounds()
+                .getFirst().admissible());
+    }
+
+    @Test
+    void andEachOfTwoStatementsStopsTheFieldItIsAbout() {
+        assertEquals(Endpoint.inclusive(Count.of(10)),
+                positionOf(EACH_STATEMENT_ABOUT_ANOTHER_FIELD, "entries[*].size").bounds()
+                        .getFirst().admissible().max());
+        assertEquals(Endpoint.inclusive(Count.of(5)),
+                positionOf(EACH_STATEMENT_ABOUT_ANOTHER_FIELD, "entries[*].other").bounds()
+                        .getFirst().admissible().max());
+    }
+
+    @Test
+    void andWhatAListOfListsStatesOfEachElementOfEachListStopsTheStringsInThem() {
+        assertEquals(Endpoint.inclusive(Count.of(10)),
+                longest(positionOf(LISTS_OF_LISTS, "ws[*][*]")));
+    }
+
+    /** What is stated of the strings that pass a test says nothing of the ones that do not. */
+    @Test
+    void whatIsStatedOfOnlyTheElementsThatPassATestStopsNoElement() {
+        assertNull(longest(positionOf(ONLY_THE_ELEMENTS_THAT_PASS, "ws[*]")));
     }
 
     /** An element that is a newtype keeps its own rules beside what the list states of it. */

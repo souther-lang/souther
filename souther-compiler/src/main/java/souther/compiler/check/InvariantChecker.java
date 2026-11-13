@@ -1459,16 +1459,23 @@ public final class InvariantChecker {
                 all.add(each);
             }
         }
+        if (all.isEmpty()) {
+            return Map.of();
+        }
+        // Which names each subject answers to, worked out once rather than for every statement.
+        Map<FactSubject, List<RuleKey>> namedBy = new LinkedHashMap<>();
+        for (RuleKey path : written(atoms, keys)) {
+            for (FactSubject subject : named(atoms, keys, path)) {
+                namedBy.computeIfAbsent(subject, _ -> new ArrayList<>()).add(path);
+            }
+        }
         Map<RuleKey, List<ElementGuarantee>> out = new LinkedHashMap<>();
         for (Quantified each : all) {
             ElementGuarantee guarantee = new ElementGuarantee(each.origin(), each.predicate());
-            for (RuleKey path : written(atoms, keys)) {
-                if (named(atoms, keys, path).contains(each.container())) {
-                    List<ElementGuarantee> there =
-                            out.computeIfAbsent(path, _ -> new ArrayList<>());
-                    if (!there.contains(guarantee)) {
-                        there.add(guarantee);
-                    }
+            for (RuleKey path : namedBy.getOrDefault(each.container(), List.of())) {
+                List<ElementGuarantee> there = out.computeIfAbsent(path, _ -> new ArrayList<>());
+                if (!there.contains(guarantee)) {
+                    there.add(guarantee);
                 }
             }
         }
