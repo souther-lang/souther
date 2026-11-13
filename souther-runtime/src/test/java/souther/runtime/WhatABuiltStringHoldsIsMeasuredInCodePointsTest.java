@@ -38,6 +38,36 @@ class WhatABuiltStringHoldsIsMeasuredInCodePointsTest {
     }
 
     @Test
+    void appendIsMeasuredInTheJoinItBuilds() {
+        assertEquals("abcde", Strings.append("ab", "cde", LIMIT));
+        assertThrows(ConstraintViolation.class, () -> Strings.append("ab", "cdef", LIMIT));
+    }
+
+    @Test
+    void appendCountsCodePointsAndNotUnits() {
+        assertEquals(YOSHI.repeat(5), Strings.append(YOSHI.repeat(2), YOSHI.repeat(3), LIMIT));
+        assertThrows(ConstraintViolation.class,
+                () -> Strings.append(YOSHI.repeat(3), YOSHI.repeat(3), LIMIT));
+    }
+
+    /** The two code points of "a" and a combining circumflex join as one, which fits a bound of
+     *  one; the join is measured before it is canonicalized, so it is refused all the same. */
+    @Test
+    void appendIsMeasuredBeforeItIsCanonicalized() {
+        assertEquals("â", Strings.append("a", "̂", 2));
+        assertThrows(ConstraintViolation.class, () -> Strings.append("a", "̂", 1));
+    }
+
+    /** Both are NFC, and the join canonicalizes to three code points: the join is measured as it
+     *  is built as well, and not only as it is handed over. */
+    @Test
+    void appendIsMeasuredAfterItIsCanonicalizedToo() {
+        String joined = Strings.append("ǖ", "̣", 3);
+        assertEquals(3, joined.codePointCount(0, joined.length()));
+        assertThrows(ConstraintViolation.class, () -> Strings.append("ǖ", "̣", 2));
+    }
+
+    @Test
     void repeatOfNothingIsNothingWhateverTheCount() {
         assertEquals("", Strings.repeat("", Long.MAX_VALUE, LIMIT));
         assertEquals("", Strings.repeat("x", 0, LIMIT));
