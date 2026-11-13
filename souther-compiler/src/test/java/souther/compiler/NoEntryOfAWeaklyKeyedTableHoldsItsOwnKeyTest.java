@@ -33,6 +33,7 @@ import souther.compiler.meaning.WaysSamples;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.regex.Language;
+import souther.compiler.report.AdequacyReport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -69,6 +70,22 @@ class NoEntryOfAWeaklyKeyedTableHoldsItsOwnKeyTest {
                         """, "Main");
                 compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
                 compilation.answerEverything();
+                KEPT.add(compilation);
+            },
+            "souther.compiler.partition.OnTheWay$OneOf#MADE", () -> {
+                Compilation compilation = Compilation.ofSource("""
+                        module example.weak
+
+                        behavior pick : (x: Int, j: Int) -> Bool
+                        let pick (x, j) = {
+                            let a0 = x >= 0
+                            let a1 = a0 && (j > 3 || a0)
+                            a1 && (j > 3 || a1)
+                        }
+                        """, "Main");
+                compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
+                compilation.answerEverything();
+                AdequacyReport.of(compilation);
                 KEPT.add(compilation);
             },
             "souther.compiler.regex.EndsOfAMachine#HELD", () -> {
