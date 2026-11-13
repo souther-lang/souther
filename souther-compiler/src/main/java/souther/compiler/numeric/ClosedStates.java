@@ -624,6 +624,15 @@ public final class ClosedStates {
         return premisesMoved.get();
     }
 
+    /**
+     * {@code order}, walking {@code positions} by the places this keeps for them — the places the
+     * closure of rules weighing exactly these positions was worked out from — and {@code order}
+     * itself where this keeps nothing.
+     */
+    <A> CanonicalOrder<A> placing(Set<A> positions, CanonicalOrder<A> order) {
+        return places == null ? order : new PlacedOrder<>(placed(positions, order), order);
+    }
+
     /** {@link ClosureQuestion#placesIn}, kept for the order and the positions it was asked of. */
     private <A> Map<A, Integer> placed(Set<A> positions, CanonicalOrder<A> order) {
         Map<Set<?>, Map<?, Integer>> under =

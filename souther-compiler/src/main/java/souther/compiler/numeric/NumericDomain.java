@@ -1411,10 +1411,24 @@ public final class NumericDomain<A> {
         FormReach<A> had = reach;
         if (had == null) {
             ClosedState<A> state = closed();
-            had = FormReach.over(rules(), state.sided(), state.box(), state.differences(), order);
+            had = FormReach.over(rules(), state.sided(), state.box(), state.differences(),
+                    orderOfTheRules());
             reach = had;
         }
         return had;
+    }
+
+    /**
+     * The order a form over the rules' positions is walked in, by the places the closure of the rules
+     * kept for those positions: a form is walked once for each question put to it, and its positions
+     * are compared by a number rather than by what each is.
+     */
+    private CanonicalOrder<A> orderOfTheRules() {
+        Set<A> positions = new LinkedHashSet<>();
+        for (AffineConstraint<A> rule : rules()) {
+            positions.addAll(rule.form().atomsIn(order));
+        }
+        return closedStates.placing(positions, order);
     }
 
 
