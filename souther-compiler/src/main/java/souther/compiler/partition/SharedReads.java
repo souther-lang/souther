@@ -55,9 +55,28 @@ final class SharedReads<C, E, M, R> {
         /** What a reading made now would depend on. */
         C inputs();
 
-        /** Whether {@code now} are the inputs {@code then} were, those of the aggregates being
-         *  read only where {@code askedAggregates}. */
-        boolean sameInputs(C then, C now, boolean askedAggregates);
+        /**
+         * Whether {@code now} are the inputs {@code then} were, those of the aggregates being read
+         * only where {@code askedAggregates}, and what an input holds only where the reading
+         * {@code consulted} what it holds.
+         */
+        boolean sameInputs(C then, C now, boolean askedAggregates, int consulted);
+
+        /**
+         * Starts telling which of the inputs a reading asks after, and answers which were asked
+         * after before it. A reading is kept for every state of the inputs, and taken again where
+         * they are as they were; what it asked after is told to the reading it is taken in, which
+         * a reading kept to be taken where an input it did not ask after stands otherwise needs
+         * to know ({@code Pullback#kept}).
+         */
+        int startConsulting();
+
+        /** What the reading begun by {@link #startConsulting} consulted; everything consulted
+         *  before it, which is {@code before}, stays consulted. */
+        int endConsulting(int before);
+
+        /** Counts as consulted what a reading that is taken again consulted. */
+        void consultAgain(int consulted);
 
         /** What a reading must leave alone, as it stands. */
         E guards();
@@ -83,11 +102,12 @@ final class SharedReads<C, E, M, R> {
     /** A reading kept to be taken again, with what it asked of the reading it was made in. */
     private record Held<C, M, R>(InputReads at, int hash, HandedAnswers asked,
                                  ElementsMet.Footprint footprint, C inputs,
-                                 boolean askedAggregates, Object key, List<M> met, R result) {}
+                                 boolean askedAggregates, int consulted, Object key, List<M> met,
+                                 R result) {}
 
     /** A reading found, to be taken with {@link #take}. */
     record Found<M, R>(R result, ElementsMet.Footprint footprint, List<M> met,
-                       HandedAnswers asked, InputReads at) {}
+                       HandedAnswers asked, InputReads at, int consulted) {}
 
     private final Scene<C, E, M> scene;
     private final Map<Core, List<Held<C, M, R>>> held = new IdentityHashMap<>();
@@ -145,11 +165,12 @@ final class SharedReads<C, E, M, R> {
             // The key last: it is the dear comparison, a structural one of the program's own
             // nodes, and the state of the reader tells most of the readings kept at a node apart
             // before it is asked.
-            if (scene.sameInputs(one.inputs(), now, one.askedAggregates())
+            if (scene.sameInputs(one.inputs(), now, one.askedAggregates(), one.consulted())
                     && elements.agrees(one.footprint()) && reads.handsAsAsked(one.asked())
                     && reads.sameButForWhatIsHanded(one.at())
                     && Objects.equals(one.key(), key)) {
-                return new Found<>(one.result(), one.footprint(), one.met(), one.asked(), reads);
+                return new Found<>(one.result(), one.footprint(), one.met(), one.asked(), reads,
+                        one.consulted());
             }
         }
         return null;
@@ -165,6 +186,7 @@ final class SharedReads<C, E, M, R> {
         found.at().takingAgain(found.asked());
         elements.takes(found.footprint());
         scene.meetAgain(found.met());
+        scene.consultAgain(found.consulted());
         return found.result();
     }
 
@@ -202,7 +224,14 @@ final class SharedReads<C, E, M, R> {
         int metFrom = scene.metCount();
         int askedBefore = scene.aggregatesAsked();
         ElementsMet.Noting noting = elements.noting();
-        Watched<R> read = reads.watchingWhatIsHanded(fresh);
+        int consultedBefore = scene.startConsulting();
+        Watched<R> read;
+        int consulted;
+        try {
+            read = reads.watchingWhatIsHanded(fresh);
+        } finally {
+            consulted = scene.endConsulting(consultedBefore);
+        }
         ElementsMet.Footprint footprint = noting.ended(elements);
         R result = read.result();
         if (result != null && read.asked().toldApart() && footprint != null
@@ -210,7 +239,7 @@ final class SharedReads<C, E, M, R> {
                 && complete.test(result)) {
             held.computeIfAbsent(node, _ -> new ArrayList<>()).add(new Held<>(reads,
                     reads.hashButForWhatIsHanded(), read.asked(), footprint, inputs,
-                    scene.aggregatesAsked() != askedBefore, key,
+                    scene.aggregatesAsked() != askedBefore, consulted, key,
                     eachOnce(scene.metSince(metFrom)), result));
         }
         return result;

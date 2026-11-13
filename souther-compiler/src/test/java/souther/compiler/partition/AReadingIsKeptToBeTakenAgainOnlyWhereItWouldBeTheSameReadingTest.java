@@ -53,8 +53,10 @@ class AReadingIsKeptToBeTakenAgainOnlyWhereItWouldBeTheSameReadingTest {
         }
 
         @Override
-        public boolean sameInputs(Integer then, Integer now, boolean askedAggregates) {
+        public boolean sameInputs(Integer then, Integer now, boolean askedAggregates,
+                                  int consulted) {
             askedAggregatesWhenCompared = askedAggregates;
+            consultedWhenCompared = consulted;
             return then.equals(now);
         }
 
@@ -88,11 +90,37 @@ class AReadingIsKeptToBeTakenAgainOnlyWhereItWouldBeTheSameReadingTest {
             met.addAll(parts);
         }
 
+        int consulted;
+        /** What the reading compared with was said to have asked after. */
+        int consultedWhenCompared;
+
+        @Override
+        public int startConsulting() {
+            int before = consulted;
+            consulted = 0;
+            return before;
+        }
+
+        @Override
+        public int endConsulting(int before) {
+            int mine = consulted;
+            consulted = before | mine;
+            return mine;
+        }
+
+        @Override
+        public void consultAgain(int more) {
+            consulted |= more;
+        }
+
         @Override
         public int aggregatesAsked() {
             return aggregatesAsked;
         }
     }
+
+    /** The bit the input is consulted by. */
+    private static final int INPUT = 1;
 
     private final AScene scene = new AScene();
     private final SharedReads<Integer, Integer, String, String> reads = new SharedReads<>(scene);
@@ -239,5 +267,57 @@ class AReadingIsKeptToBeTakenAgainOnlyWhereItWouldBeTheSameReadingTest {
         other.shared(NODE, READS, "key", () -> "read", _ -> true);
         other.shared(NODE, READS, "key", () -> "read", _ -> true);
         assertFalse(scene.askedAggregatesWhenCompared);
+    }
+
+    @Test
+    void whatAReadingAskedAfterIsToldToTheReadingAroundIt() {
+        scene.consultAgain(0);
+        reads.shared(NODE, READS, "key", () -> {
+            made++;
+            scene.consultAgain(INPUT);
+            return "read";
+        }, _ -> true);
+
+        assertEquals(INPUT, scene.consulted);
+    }
+
+    @Test
+    void whatAReadingTakenAskedAfterIsToldToTheReadingItIsTakenIn() {
+        reads.shared(NODE, READS, "key", () -> {
+            made++;
+            scene.consultAgain(INPUT);
+            return "read";
+        }, _ -> true);
+        scene.consulted = 0;
+
+        read("key");
+
+        assertEquals(1, made);
+        assertEquals(INPUT, scene.consulted, "taken, it asked after what it asked after when made");
+    }
+
+    @Test
+    void aReadingThatAskedAfterNothingTellsNothingWhenTaken() {
+        read("key");
+        scene.consulted = 0;
+
+        read("key");
+
+        assertEquals(1, made);
+        assertEquals(0, scene.consulted);
+    }
+
+    @Test
+    void whatAReadingAskedAfterIsHandedToTheComparisonThatFindsIt() {
+        reads.shared(NODE, READS, "key", () -> {
+            made++;
+            scene.consultAgain(INPUT);
+            return "read";
+        }, _ -> true);
+
+        read("key");
+
+        assertEquals(1, made);
+        assertEquals(INPUT, scene.consultedWhenCompared);
     }
 }

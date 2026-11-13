@@ -164,6 +164,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.BitSet;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
@@ -5078,10 +5079,10 @@ final class Pullback {
      */
     private Sized sizeOf(Core value, InputReads at) {
         Sized sized = howManyItHolds(value, at);
-        if (countsMet != null && sized instanceof Sized.AsAForm(LinearForm<Quantity> form)) {
+        if (countsMet() != null && sized instanceof Sized.AsAForm(LinearForm<Quantity> form)) {
             for (Quantity atom : form.coefs().keySet()) {
                 if (atom instanceof Quantity.HowManyHold count) {
-                    countsMet.computeIfAbsent(count, _ -> new ArrayList<>())
+                    countsMet().computeIfAbsent(count, _ -> new ArrayList<>())
                             .add(new Denotation(value, at));
                 }
             }
@@ -8738,13 +8739,13 @@ final class Pullback {
                             }
                         }
                         if (!answers.isEmpty()) {
-                            if (answering == null || howItAsks(counted.ofTheElement(),
+                            if (answering() == null || howItAsks(counted.ofTheElement(),
                                     occurrences.stream()
                                             .anyMatch(one -> !one.keptWhere().isEmpty()), false)
                                     != HowTheElementsAreAsked.EVERY_ONE) {
                                 yield new Sized.NotSized(new WhyUnread.WhichElementARunStopsAt());
                             }
-                            answering.addAll(answers);
+                            answering().addAll(answers);
                         }
                         LinearForm<Quantity> settled = LinearForm.constant(ExactRatio.of(meeting));
                         if (unsettled.isEmpty()) {
@@ -8797,11 +8798,11 @@ final class Pullback {
             // Counted where it holds, on the rows every element answers on: an operation counting
             // them works each of them out.
             if (Proposition.mayAnswerNothing(element)) {
-                if (answering == null || howItAsks(counted.ofTheElement(),
+                if (answering() == null || howItAsks(counted.ofTheElement(),
                         !located.kept().isEmpty(), false) != HowTheElementsAreAsked.EVERY_ONE) {
                     return new Sized.NotSized(new WhyUnread.WhichElementARunStopsAt());
                 }
-                answering.add(new Derivation.WhereItIsAnswered(new Derivation.SomeElementMeeting(
+                answering().add(new Derivation.WhereItIsAnswered(new Derivation.SomeElementMeeting(
                         heldAt, answered, true, holdsSomething(heldAt, located, element, over, in),
                         HowTheElementsAreAsked.EVERY_ONE)));
             }
@@ -9887,11 +9888,11 @@ final class Pullback {
      */
     private Derivation whereItsCountsAnswer(Derivation stated) {
         if (stated == null || Derivation.readOff(stated) instanceof Derivation.Stopped
-                || answering.isEmpty()) {
+                || answeringContent().isEmpty()) {
             return stated;
         }
         Derivation answered = null;
-        for (Derivation one : answering) {
+        for (Derivation one : answeringContent()) {
             answered = answered == null ? one
                     : new Derivation.Joined(ConditionJoin.BOTH, answered, one);
         }
@@ -11661,6 +11662,123 @@ final class Pullback {
     private static final ReadingState READING_STATE =
             new ReadingState(Pullback.class, ReadingRoles.OF_A_PULLBACK);
 
+    /**
+     * The inputs of a reading that a reading kept is taken again without regard to unless it asked
+     * after them, each as the bit it is told by in {@link #consulted}: where a reading never asked
+     * what one of these stood as, what it stood as is no part of what the reading came to. Every
+     * place that asks after one of them is the accessor of it, so that the asking is told
+     * ({@code OnlyTheAccessorsAskAfterWhatAReadingMayLeaveUnconsultedTest}).
+     */
+    private enum InputAskedAfter {
+        SIDE(1), ANSWERING(2), COUNTS(4), TELLING(8),
+        /** What {@code answering} holds, asked after as well as whether there is one. */
+        ANSWERING_CONTENT(16),
+        /** What {@code countsMet} holds, asked after as well as whether there is one. */
+        COUNTS_CONTENT(32);
+
+        private final int bit;
+
+        InputAskedAfter(int bit) {
+            this.bit = bit;
+        }
+
+        /** The bit a set of these is told by that has this in it. */
+        int bit() {
+            return bit;
+        }
+    }
+
+    /** For each set of the inputs above that a reading consulted: where the others stand among the
+     *  inputs, which are not compared. */
+    private static final BitSet[] UNCONSULTED = unconsultedForEachSet();
+
+    /** For each set of the inputs above that a reading consulted: where the inputs whose contents
+     *  it asked after stand among the inputs, whose contents are compared. */
+    private static final BitSet[] CONTENT_ASKED = contentAskedForEachSet();
+
+    private static BitSet[] unconsultedForEachSet() {
+        InputAskedAfter[] inputs = {InputAskedAfter.SIDE, InputAskedAfter.ANSWERING,
+                InputAskedAfter.COUNTS, InputAskedAfter.TELLING};
+        int[] places = {READING_STATE.placeOfTheInput("sideAsWritten"),
+                READING_STATE.placeOfTheInput("answering"),
+                READING_STATE.placeOfTheInput("countsMet"),
+                READING_STATE.placeOfTheInput("telling")};
+        BitSet[] out = new BitSet[1 << InputAskedAfter.values().length];
+        for (int consulted = 0; consulted < out.length; consulted++) {
+            BitSet left = new BitSet();
+            for (int each = 0; each < places.length; each++) {
+                if ((consulted & inputs[each].bit()) == 0) {
+                    left.set(places[each]);
+                }
+            }
+            out[consulted] = left;
+        }
+        return out;
+    }
+
+    private static BitSet[] contentAskedForEachSet() {
+        BitSet[] out = new BitSet[1 << InputAskedAfter.values().length];
+        for (int consulted = 0; consulted < out.length; consulted++) {
+            BitSet asked = new BitSet();
+            if ((consulted & InputAskedAfter.ANSWERING_CONTENT.bit()) != 0) {
+                asked.set(READING_STATE.placeOfTheInput("answering"));
+            }
+            if ((consulted & InputAskedAfter.COUNTS_CONTENT.bit()) != 0) {
+                asked.set(READING_STATE.placeOfTheInput("countsMet"));
+            }
+            out[consulted] = asked;
+        }
+        return out;
+    }
+
+    /** Which of the inputs above the reading being made has asked after so far. */
+    private int consulted;
+
+    private Core sideAsWritten() {
+        consulted |= InputAskedAfter.SIDE.bit();
+        return sideAsWritten;
+    }
+
+    private List<Derivation> answering() {
+        consulted |= InputAskedAfter.ANSWERING.bit();
+        return answering;
+    }
+
+    private Map<Quantity.HowManyHold, List<Denotation>> countsMet() {
+        consulted |= InputAskedAfter.COUNTS.bit();
+        return countsMet;
+    }
+
+    /** What {@code answering} holds, which a reading that asks it depends on and not on there being
+     *  one. */
+    private List<Derivation> answeringContent() {
+        consulted |= InputAskedAfter.ANSWERING.bit() | InputAskedAfter.ANSWERING_CONTENT.bit();
+        return answering;
+    }
+
+    /** What {@code countsMet} holds, as {@link #answeringContent} is of {@code answering}. */
+    private Map<Quantity.HowManyHold, List<Denotation>> countsMetContent() {
+        consulted |= InputAskedAfter.COUNTS.bit() | InputAskedAfter.COUNTS_CONTENT.bit();
+        return countsMet;
+    }
+
+    private Set<Notice> telling() {
+        consulted |= InputAskedAfter.TELLING.bit();
+        return telling;
+    }
+
+    private int startConsultingInputs() {
+        int before = consulted;
+        consulted = 0;
+        return before;
+    }
+
+    private int endConsultingInputs(int before) {
+        int mine = consulted;
+        consulted = before | mine;
+        return mine;
+    }
+
     /** What a reading must leave as it found it: the state its fields say so of, and whether it
      *  read another aggregate. */
     private record Guards(List<Object[]> fields, int aggregatesKept) {}
@@ -11693,8 +11811,24 @@ final class Pullback {
 
         @Override
         public boolean sameInputs(ReadingState.Inputs then, ReadingState.Inputs now,
-                                  boolean askedAggregates) {
-            return READING_STATE.sameInputs(then, now, askedAggregates);
+                                  boolean askedAggregates, int consulted) {
+            return READING_STATE.sameInputsBut(then, now, askedAggregates, null,
+                    CONTENT_ASKED[consulted]);
+        }
+
+        @Override
+        public int startConsulting() {
+            return startConsultingInputs();
+        }
+
+        @Override
+        public int endConsulting(int before) {
+            return endConsultingInputs(before);
+        }
+
+        @Override
+        public void consultAgain(int consulted) {
+            Pullback.this.consulted |= consulted;
         }
 
         @Override
@@ -13504,11 +13638,11 @@ final class Pullback {
             if (read.composed().size() < numbers.size()) {
                 return null;
             }
-            if (countsMet.isEmpty() && !restMayCount.getAsBoolean()) {
+            if (countsMetContent().isEmpty() && !restMayCount.getAsBoolean()) {
                 return null;
             }
             if (!(rest.get() instanceof Sized.AsAForm(LinearForm<Quantity> others))
-                    || countsMet.isEmpty()) {
+                    || countsMetContent().isEmpty()) {
                 return null;
             }
             List<LinearForm<Quantity>> weighed = new ArrayList<>(List.of(others));
@@ -13538,7 +13672,8 @@ final class Pullback {
      * the comparison is.
      */
     private Inside.ATotalByKeeping aCountToKeep(Predicate<Quantity.HowManyHold> standsInTheWay) {
-        for (Map.Entry<Quantity.HowManyHold, List<Denotation>> count : countsMet.entrySet()) {
+        for (Map.Entry<Quantity.HowManyHold, List<Denotation>> count
+                : countsMetContent().entrySet()) {
             if (!standsInTheWay.test(count.getKey())) {
                 continue;
             }
@@ -14890,6 +15025,20 @@ final class Pullback {
      * What {@code fresh} comes to, a reading of {@code node} at {@code at} that is read through
      * the names it is made of and so reads the readings of the nodes under it, taken from the
      * reading made before where there is one ({@code table} holds them).
+     *
+     * <p>A reading is taken where the inputs it asked after stand as they did. Of the side being
+     * read, what an answer is collected into, the counts met and whether the candidate is being
+     * told ({@link InputAskedAfter}), that is the ones it asked after and no others: a reading
+     * that did not look at one comes to the same whatever it stands as, and one that wrote into
+     * the lists is not kept at all, since it changed what it must leave alone. What a reading
+     * taken again asked after is asked after by the reading it is taken in, so that is told to it,
+     * as it is for a reading {@link SharedReads} takes. Every other input is compared as it is, so
+     * that which of them are asked after only decides how often a reading is found.
+     *
+     * <p>Only a reading that spent none of the readings the figures allow is kept here, so taking
+     * one never changes where they are reached. A reading {@link SharedReads} keeps may have spent
+     * some, and under another rule for taking it that place moves, which a report says: so the
+     * rule for what is asked after is this one's and not that one's.
      */
     private <R> R kept(Map<Core, List<ReadingTaken<R>>> table, Core node, InputReads at,
                        Supplier<R> fresh) {
@@ -14902,10 +15051,12 @@ final class Pullback {
         ReadingState.Inputs inputs = READING_STATE.inputsOf(this);
         List<ReadingTaken<R>> before = table.computeIfAbsent(node, _ -> new ArrayList<>());
         for (ReadingTaken<R> each : before) {
-            if (each.at() == at && READING_STATE.sameInputs(each.inputs(), inputs, false)
+            if (each.at() == at && READING_STATE.sameInputsBut(each.inputs(), inputs, false,
+                            UNCONSULTED[each.consulted()], CONTENT_ASKED[each.consulted()])
                     && elementsMet.agrees(each.footprint())
                     && Objects.equals(each.said(), said)) {
                 elementsMet.takes(each.footprint());
+                consulted |= each.consulted();
                 met.addAll(each.met());
                 each.told().forEach(this::tell);
                 return each.result();
@@ -14922,14 +15073,20 @@ final class Pullback {
         Set<Notice> outer = telling;
         Set<Notice> mine = new LinkedHashSet<>();
         telling = mine;
+        int consultedBefore = startConsultingInputs();
+        int consultedHere;
         R result;
         ElementsMet.Footprint footprint;
         try {
             result = fresh.get();
         } finally {
             telling = outer;
+            consultedHere = endConsultingInputs(consultedBefore);
             footprint = noting.ended(elementsMet);
         }
+        // What the reading told is told to whoever is noting it, and that there is one is what the
+        // reading is made for; what it read of the notes was its own.
+        consulted |= InputAskedAfter.TELLING.bit();
         if (outer != null) {
             outer.addAll(mine);
         }
@@ -14941,6 +15098,7 @@ final class Pullback {
                 && (told == null || (Objects.equals(said, told.markBesidesTheRemainders())
                         && told.remaindersRead().equals(withTold(remainders, mine))))) {
             before.add(new ReadingTaken<>(result, at, List.copyOf(mine), footprint, inputs, said,
+                    consultedHere & ~InputAskedAfter.TELLING.bit(),
                     List.copyOf(met.subList(metFrom, met.size()))));
         }
         return result;
@@ -14968,7 +15126,7 @@ final class Pullback {
     /** A reading made, with what it told the candidate and left behind. */
     private record ReadingTaken<R>(R result, InputReads at, List<Notice> told,
                                    ElementsMet.Footprint footprint, ReadingState.Inputs inputs,
-                                   Object said, List<Met> met) {}
+                                   Object said, int consulted, List<Met> met) {}
 
     /** {@code remainders}, the two tables the candidate holds, with {@code notices} told. */
     private static List<Map<Core, Core>> withTold(List<Map<Core, Core>> remainders,
@@ -14988,8 +15146,8 @@ final class Pullback {
         } else {
             trial().readByTheFormOf(notice.call(), notice.dividend());
         }
-        if (telling != null) {
-            telling.add(notice);
+        if (telling() != null) {
+            telling().add(notice);
         }
     }
 
@@ -15184,8 +15342,9 @@ final class Pullback {
      * by the operator and the operands it was made of.
      */
     private boolean isTheSideAsWritten(Core.Binary written) {
-        return sideAsWritten != null
-                && AffineForms.asOperator(sideAsWritten) instanceof Core.Binary side
+        Core whole = sideAsWritten();
+        return whole != null
+                && AffineForms.asOperator(whole) instanceof Core.Binary side
                 && side.op() == written.op() && side.left() == written.left()
                 && side.right() == written.right();
     }
@@ -15275,7 +15434,7 @@ final class Pullback {
             AffineForms.Outcome.StoppedAt<Quantity, InputReads> inside) {
         if (inside == null
                 || !(Core.withoutStanding(node) instanceof Core.PreservedCall written)
-                || inside.node() != written || written != sideAsWritten
+                || inside.node() != written || written != sideAsWritten()
                 || !(inside.why() instanceof AffineForms.Halt.NotLinear<Quantity, InputReads>(
                         NonAffineOperation operation, var _))
                 || operation != NonAffineOperation.REMAINDER_BY_NON_CONSTANT_VALUE) {
