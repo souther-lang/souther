@@ -26,12 +26,28 @@ import java.util.function.Function;
  * one over the whole numbers, so the rules in the new coordinates and the rules as they were have
  * the same whole-number solutions, each position being the same value read through it.
  *
- * <p>Chosen only where it comes to something the difference closure holds exactly: every rule is a
- * half-space, every position is a whole number, the rules' supports are prefixes one position
- * longer than the one before, every position is in a prefix, every number the change writes is one
- * the exact arithmetic holds, and every rule it writes is a bound on one coordinate or on the
- * difference of two. Where any of it is not so there is no basis, and the rules are closed as they
- * are stated. Which of two positions of the shortest prefix is the first is not the order the rules
+ * <p><b>What its answer being exact rests on, and where each of it is checked.</b> Chosen only
+ * where it comes to something the difference closure holds exactly, and each assumption has the one
+ * place it is checked at, so that a rule or a question that breaks one is met there and not after:
+ *
+ * <ul>
+ *   <li>every rule is a half-space, every position is a whole number, the rules' supports are
+ *       prefixes one position longer than the one before, and every position is in a prefix:
+ *       {@link #over};</li>
+ *   <li>every number the change writes is one the exact arithmetic holds, every rule it writes is a
+ *       bound on one coordinate or on the difference of two, and every bound is a whole number the
+ *       positions reach — a closure of whole-number differences is exact for these and for no other
+ *       bound, so a rule built as it stands with a bound between two whole numbers has no basis:
+ *       {@link #over};</li>
+ *   <li>every hop of the closure of the differences was one the exact arithmetic could sum, and
+ *       every position's bounds are ones it can write: {@link #over};</li>
+ *   <li>what a question comes to can be summed, which the closure does when it is asked and not
+ *       before: {@link #highest}, which does not answer a form it cannot sum, as it does not
+ *       answer a form that is not one coordinate or the difference of two.</li>
+ * </ul>
+ *
+ * <p>Where any of the first three is not so there is no basis, and the rules are closed as they are
+ * stated. Which of two positions of the shortest prefix is the first is not the order the rules
  * arrived in, and does not change what any position is left.
  *
  * <p>A basis is chosen for a part of the rules and not for all of them at once, since rules of
@@ -127,7 +143,8 @@ final class PrefixBasis<A> {
                     (AffineConstraint.HalfSpace<A>) constraints.get(at);
             AffineConstraint.HalfSpace<Integer> there =
                     half(weighed(walked.get(at), places), half.bound());
-            if (there == null || !DifferenceBounds.canHold(there, BY_PLACE)) {
+            if (there == null || !DifferenceBounds.canHold(there, BY_PLACE)
+                    || !onTheWholeNumbers(there.bound())) {
                 return null;
             }
             moved.add(there);
@@ -138,6 +155,17 @@ final class PrefixBasis<A> {
         }
         PrefixBasis<A> basis = new PrefixBasis<>(places, closed);
         return basis.holdsNothing() || basis.box != null ? basis : null;
+    }
+
+    /**
+     * Whether a bound is one a closure of whole-number differences is exact for: a whole number the
+     * positions reach, which is how a bound on whole-number positions is written when the rules were
+     * read ({@link AffineConstraint#of}). A rule built as it stands, with a bound between two whole
+     * numbers or one they do not reach, is closed by a real-valued closure to a bound no whole number
+     * attains, and is not one this is exact for.
+     */
+    private static boolean onTheWholeNumbers(ExactCut bound) {
+        return bound.inclusive() && bound.at().isWhole();
     }
 
     /** The place of each position, or null where a position is in no prefix or two of the first
@@ -272,7 +300,8 @@ final class PrefixBasis<A> {
                 down = terms.getFirst();
             }
             weight = up.getValue();
-            if (!weight.equals(down.getValue().negated())) {
+            if (!weight.equals(down.getValue().negated())
+                    || !closed.differenceBoundWasComposed(up.getKey(), down.getKey())) {
                 return Highest.NOT_ANSWERED;
             }
             bound = closed.differenceBound(up.getKey(), down.getKey());

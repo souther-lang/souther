@@ -599,6 +599,22 @@ public final class DifferenceBounds<A> {
     }
 
     /**
+     * Whether {@link #differenceBound} of {@code a - b} is the tightest this proves. It is not where
+     * both positions are bounded and their bounds cannot be summed: the route through nought is then
+     * left out, and what comes back is looser than the paths say, or nothing where nothing else
+     * relates them — which is not that nothing bounds the difference.
+     *
+     * <p>{@link #everyHopWasComposed} says as much of the closure, and this of one question put to
+     * it, which sums the two bounds when it is asked and not before.
+     */
+    public boolean differenceBoundWasComposed(A a, A b) {
+        ExactCut most = above.get(a);
+        ExactCut least = below.get(b);
+        return a.equals(b) || most == null || least == null
+                || ExactCut.meetingBoth(most, least) instanceof ExactAnswer.Held<ExactCut>;
+    }
+
+    /**
      * Every difference closed along the rules relating two positions, without going through nought.
      *
      * <p>What carries a bound on one position onto another. A difference through nought is the two

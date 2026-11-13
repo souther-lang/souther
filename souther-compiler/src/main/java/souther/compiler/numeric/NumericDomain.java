@@ -249,15 +249,7 @@ public final class NumericDomain<A> {
      * since are found without comparing anything.
      */
     private record RulesRead<A>(StatedRules<A> of, List<AffineConstraint<A>> rules,
-                                AppendOnly<Object, Integer> places) {
-
-        /**
-         * What a rule is found by among the rules read: the form of a sum held below a bound, which
-         * has one place however much tighter its bound comes to, and the rule itself otherwise.
-         */
-        static <A> Object keyOf(AffineConstraint<A> rule) {
-            return rule instanceof AffineConstraint.HalfSpace<A> half ? half.form() : rule;
-        }
+                                AppendOnly<RuleKey<A>, Integer> places) {
 
         /**
          * The rule among these that {@code rule} is said again of, or null where there is none: the
@@ -267,8 +259,24 @@ public final class NumericDomain<A> {
          * and not a walk of every rule said before it.
          */
         AffineConstraint<A> among(AffineConstraint<A> rule) {
-            Integer at = places.get(keyOf(rule));
+            Integer at = places.get(RuleKey.of(rule));
             return at == null ? null : rules.get(at);
+        }
+    }
+
+    /** What a rule is found by among the rules read. */
+    private sealed interface RuleKey<A> {
+
+        /** A sum held below a bound: its form, which has one place however much tighter its bound
+         *  comes to. */
+        record OfSum<A>(CanonicalForm<A> form) implements RuleKey<A> {}
+
+        /** Any other rule: the rule itself. */
+        record OfRule<A>(AffineConstraint<A> rule) implements RuleKey<A> {}
+
+        static <A> RuleKey<A> of(AffineConstraint<A> rule) {
+            return rule instanceof AffineConstraint.HalfSpace<A> half
+                    ? new OfSum<>(half.form()) : new OfRule<>(rule);
         }
     }
 
@@ -295,9 +303,9 @@ public final class NumericDomain<A> {
             }
         }
         List<AffineConstraint<A>> rules = tightest(stated.distinct());
-        AppendOnly<Object, Integer> places = AppendOnly.empty();
+        AppendOnly<RuleKey<A>, Integer> places = AppendOnly.empty();
         for (int at = 0; at < rules.size(); at++) {
-            places = places.with(RulesRead.keyOf(rules.get(at)), at);
+            places = places.with(RuleKey.of(rules.get(at)), at);
         }
         return new RulesRead<>(stated, rules, places);
     }
@@ -324,7 +332,7 @@ public final class NumericDomain<A> {
                 return read;
             }
             List<AffineConstraint<A>> out = new ArrayList<>(rules);
-            out.set(read.places().get(half.form()),
+            out.set(read.places().get(RuleKey.of(half)),
                     new AffineConstraint.HalfSpace<>(half.form(), kept));
             return new RulesRead<>(read.of(), List.copyOf(out), read.places());
         }
@@ -332,7 +340,7 @@ public final class NumericDomain<A> {
         out.addAll(rules);
         out.add(rule);
         return new RulesRead<>(read.of(), List.copyOf(out),
-                read.places().with(RulesRead.keyOf(rule), rules.size()));
+                read.places().with(RuleKey.of(rule), rules.size()));
     }
 
     /**

@@ -5,9 +5,12 @@ import souther.compiler.numeric.RulesAsWritten.Written;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -16,7 +19,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static souther.compiler.numeric.RulesAsWritten.positionsOf;
 import static souther.compiler.numeric.RulesAsWritten.rule;
 import static souther.compiler.numeric.RulesAsWritten.statedOnly;
 
@@ -33,6 +35,13 @@ import static souther.compiler.numeric.RulesAsWritten.statedOnly;
  * derivation of the same rules: the box is never wider, it holds nothing wherever the closure in
  * one run does, and a form over several positions is proven wherever the closure in one run proves
  * it, and some it does not.
+ *
+ * <p>Which of these is held of rules is decided before the closures are worked out, by whether a
+ * part of them has a basis ({@link #selectsABasis}), and never by whether the closures turned out
+ * alike: a difference between the two that nothing accounts for is the claim failing, where a
+ * difference that is skipped hides whatever else made it. {@link #theSpecialisedContract} is what
+ * is held of rules with a basis part, and the equality of every observable, of those with none
+ * ({@link RulesNamingNoPositionInCommonCloseApartTest}).
  *
  * <p>That the box is within is a claim about the basis and the rounds and not about soundness
  * alone, since both are sound and neither need be within the other. Over every chain drawn the two
@@ -58,28 +67,22 @@ class ASystemWithAPrefixBasisIsClosedNoWiderPartedThanInOneRunTest {
                 ASystemWithAPrefixBasisIsClosedNoWiderPartedThanInOneRunTest::whole, SPELLED);
     }
 
-    private static ClosedState<String> inOneRun(List<AffineConstraint<String>> rules) {
-        return ClosedState.closedTogether(rules,
-                ASystemWithAPrefixBasisIsClosedNoWiderPartedThanInOneRunTest::whole, SPELLED);
+    /** Whether a part of {@code rules} has a basis: the rules are then closed by it, parted. */
+    static boolean selectsABasis(List<AffineConstraint<String>> rules,
+                                 Function<String, Granularity> spacing,
+                                 CanonicalOrder<String> order) {
+        for (List<AffineConstraint<String>> part : ClosureQuestion.independentRules(rules)) {
+            if (PrefixBasis.over(part, spacing, order) != null) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    /** What the canonical closure is, reached the three ways there are, and what each answers. */
-    private static ClosedState<String> canonical(List<AffineConstraint<String>> rules) {
-        ClosedState<String> parted = ClosedState.of(rules,
-                ASystemWithAPrefixBasisIsClosedNoWiderPartedThanInOneRunTest::whole, SPELLED);
-        ClosedState<String> kept = ClosedStates.kept().of(rules,
-                ASystemWithAPrefixBasisIsClosedNoWiderPartedThanInOneRunTest::whole, SPELLED);
-        List<ClosedState<String>> each = new ArrayList<>();
-        for (List<AffineConstraint<String>> part : ClosureQuestion.independentRules(rules)) {
-            each.add(inOneRun(part));
-        }
-        ClosedState<String> product = ClosedState.product(each);
-
-        assertEquals(RulesNamingNoPositionInCommonCloseApartTest.outcome(parted),
-                RulesNamingNoPositionInCommonCloseApartTest.outcome(kept), "kept: " + rules);
-        assertEquals(RulesNamingNoPositionInCommonCloseApartTest.outcome(parted),
-                RulesNamingNoPositionInCommonCloseApartTest.outcome(product), "product: " + rules);
-        return parted;
+    private static Set<String> positionsIn(List<AffineConstraint<String>> rules) {
+        Set<String> out = new LinkedHashSet<>();
+        rules.forEach(each -> out.addAll(each.form().coefs().keySet()));
+        return out;
     }
 
     /** Whether {@code tight} leaves no more than {@code loose} on a side, where null is no end. */
@@ -91,11 +94,40 @@ class ASystemWithAPrefixBasisIsClosedNoWiderPartedThanInOneRunTest {
         return loose == null || (tight != null && ExactCut.tighterLower(tight, loose).equals(tight));
     }
 
-    /** The canonical closure of {@code rules} is no wider than their closure in one run. */
-    private static void partedIsWithinInOneRun(List<AffineConstraint<String>> rules,
-                                               List<String> positions, String where) {
-        ClosedState<String> parted = canonical(rules);
-        ClosedState<String> inOneRun = inOneRun(rules);
+    /**
+     * What is held of rules some part of which has a basis: the canonical closure is one however it
+     * is reached, a part closed in a basis is settled and composed, and the canonical closure is no
+     * wider than the closure in one run.
+     */
+    static void theSpecialisedContract(List<AffineConstraint<String>> rules,
+                                       Function<String, Granularity> spacing,
+                                       CanonicalOrder<String> order, String where) {
+        assertTrue(selectsABasis(rules, spacing, order),
+                "held of rules with a basis part, and these have none: " + where);
+        ClosedState<String> parted = ClosedState.of(rules, spacing, order);
+        ClosedState<String> kept = ClosedStates.kept().of(rules, spacing, order);
+        List<List<AffineConstraint<String>>> parts = ClosureQuestion.independentRules(rules);
+        List<ClosedState<String>> each = new ArrayList<>();
+        for (List<AffineConstraint<String>> part : parts) {
+            each.add(ClosedState.closedTogether(part, spacing, order));
+        }
+
+        assertEquals(RulesNamingNoPositionInCommonCloseApartTest.outcome(parted),
+                RulesNamingNoPositionInCommonCloseApartTest.outcome(kept), "kept: " + where);
+        assertEquals(RulesNamingNoPositionInCommonCloseApartTest.outcome(parted),
+                RulesNamingNoPositionInCommonCloseApartTest.outcome(ClosedState.product(each)),
+                "product: " + where);
+        // What a part closed in a basis says of itself: the rounds are not run, so it stopped, and
+        // every bound it holds was composed.
+        for (int at = 0; at < parts.size(); at++) {
+            if (PrefixBasis.over(parts.get(at), spacing, order) != null
+                    && !each.get(at).holdsNothing()) {
+                assertEquals(ClosedState.Status.STABLE, each.get(at).status(), where);
+                assertTrue(each.get(at).isSettledAndComposed(), where);
+            }
+        }
+
+        ClosedState<String> inOneRun = ClosedState.closedTogether(rules, spacing, order);
         if (inOneRun.holdsNothing()) {
             assertTrue(parted.holdsNothing(), "the rounds showed nothing is left and the basis did"
                     + " not: " + where);
@@ -104,7 +136,7 @@ class ASystemWithAPrefixBasisIsClosedNoWiderPartedThanInOneRunTest {
         if (parted.holdsNothing()) {
             return;
         }
-        for (String position : positions) {
+        for (String position : positionsIn(rules)) {
             assertTrue(noWiderAbove(parted.box().mostOf(position), inOneRun.box().mostOf(position)),
                     "wider above " + position + ": " + where);
             assertTrue(noWiderBelow(parted.box().leastOf(position), inOneRun.box().leastOf(position)),
@@ -115,7 +147,6 @@ class ASystemWithAPrefixBasisIsClosedNoWiderPartedThanInOneRunTest {
     @Test
     void aChainBesideRulesOfItsOwnIsClosedNoWiderPartedThanInOneRun() {
         Random random = new Random(3184);
-        int compared = 0;
         for (int round = 0; round < 300; round++) {
             List<Written> written = new ArrayList<>(
                     PrefixChains.chain(random, 2 + random.nextInt(3)));
@@ -127,10 +158,10 @@ class ASystemWithAPrefixBasisIsClosedNoWiderPartedThanInOneRunTest {
             // Compared where there is a basis to choose and the rules in one run do not choose it.
             assertNotNull(basisOver(chain));
             assertNull(basisOver(rules));
-            partedIsWithinInOneRun(rules, new ArrayList<>(positionsOf(written)), written.toString());
-            compared++;
+            theSpecialisedContract(rules,
+                    ASystemWithAPrefixBasisIsClosedNoWiderPartedThanInOneRunTest::whole, SPELLED,
+                    written.toString());
         }
-        assertEquals(300, compared);
     }
 
     /**
@@ -153,32 +184,35 @@ class ASystemWithAPrefixBasisIsClosedNoWiderPartedThanInOneRunTest {
         Map<String, ExactRatio> cd = new LinkedHashMap<>();
         cd.put("c", ExactRatio.ONE.negated());
         cd.put("d", ExactRatio.ONE.negated());
+        ClosedState<String> parted = ClosedState.of(rules,
+                ASystemWithAPrefixBasisIsClosedNoWiderPartedThanInOneRunTest::whole, SPELLED);
+        ClosedState<String> inOneRun = ClosedState.closedTogether(rules,
+                ASystemWithAPrefixBasisIsClosedNoWiderPartedThanInOneRunTest::whole, SPELLED);
         assertEquals(new PrefixBasis.Highest.Within(ExactCut.inclusive(ExactRatio.of(-5))),
-                canonical(rules).highestInBasis(cd, ExactRatio.ZERO));
-        assertSame(PrefixBasis.Highest.NOT_ANSWERED, inOneRun(rules).highestInBasis(cd,
-                ExactRatio.ZERO));
+                parted.highestInBasis(cd, ExactRatio.ZERO));
+        assertSame(PrefixBasis.Highest.NOT_ANSWERED, inOneRun.highestInBasis(cd, ExactRatio.ZERO));
 
         Map<String, NumberSpace> spaces = new LinkedHashMap<>();
         for (String atom : List.of("a", "b", "c", "d", "x")) {
             spaces.put(atom, NumberSpace.spacedOnly(Granularity.DISCRETE));
         }
-        NumericDomain<String> parted = NumericDomain.top(SPELLED, ClosedStates.kept());
+        NumericDomain<String> keptDomain = NumericDomain.top(SPELLED, ClosedStates.kept());
         NumericDomain<String> unparted = NumericDomain.top(SPELLED, ClosedStates.IN_ONE_RUN);
         for (Written each : written) {
             LinearForm<String> form = new LinearForm<>(each.constant(), each.coefs());
-            parted = parted.assume(form, each.rel(), spaces);
+            keptDomain = keptDomain.assume(form, each.rel(), spaces);
             unparted = unparted.assume(form, each.rel(), spaces);
         }
         Map<String, ExactRatio> sum = new LinkedHashMap<>();
         sum.put("c", ExactRatio.ONE);
         sum.put("d", ExactRatio.ONE);
 
-        assertTrue(parted.entails(new LinearForm<>(ExactRatio.of(-5), sum), Rel.GE));
+        assertTrue(keptDomain.entails(new LinearForm<>(ExactRatio.of(-5), sum), Rel.GE));
         assertFalse(unparted.entails(new LinearForm<>(ExactRatio.of(-5), sum), Rel.GE));
         // What the rounds prove the basis proves: the one is within the other, not the other way.
-        assertTrue(parted.entails(new LinearForm<>(ExactRatio.of(-2), sum), Rel.GE));
+        assertTrue(keptDomain.entails(new LinearForm<>(ExactRatio.of(-2), sum), Rel.GE));
         assertTrue(unparted.entails(new LinearForm<>(ExactRatio.of(-2), sum), Rel.GE));
         assertInstanceOf(NumericDomain.FormProjection.Within.class,
-                parted.projectionOf(new LinearForm<>(ExactRatio.ZERO, sum)));
+                keptDomain.projectionOf(new LinearForm<>(ExactRatio.ZERO, sum)));
     }
 }
