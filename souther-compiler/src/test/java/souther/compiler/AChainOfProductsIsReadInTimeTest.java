@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
+import souther.test.Nightly;
 
 import java.time.Duration;
 
@@ -12,7 +13,11 @@ import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
  * A definition may be 320 deep ({@code source-structural-complexity-is-bounded}), so a chain of
  * {@code let}s that each multiply the one before by an input is a source the language accepts, and
  * the comparison at its end is read in the time its length asks and not the time its cube asks.
+ *
+ * <p>Nightly, for what it costs: the depth is what the definition allows, about ten seconds of
+ * work, and a depth short enough to be cheap is read in about the time the cube takes too.
  */
+@Nightly
 class AChainOfProductsIsReadInTimeTest {
 
     private static final int DEPTH = 300;
