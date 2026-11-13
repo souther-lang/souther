@@ -53,11 +53,10 @@ class AReadingIsKeptToBeTakenAgainOnlyWhereItWouldBeTheSameReadingTest {
         }
 
         @Override
-        public boolean sameInputs(Integer then, Integer now, boolean askedAggregates,
-                                  int consulted) {
+        public boolean sameInputsNow(Integer then, boolean askedAggregates, int consulted) {
             askedAggregatesWhenCompared = askedAggregates;
             consultedWhenCompared = consulted;
-            return then.equals(now);
+            return then.equals(inputs());
         }
 
         @Override

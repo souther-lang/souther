@@ -11810,9 +11810,9 @@ final class Pullback {
         }
 
         @Override
-        public boolean sameInputs(ReadingState.Inputs then, ReadingState.Inputs now,
-                                  boolean askedAggregates, int consulted) {
-            return READING_STATE.sameInputsBut(then, now, askedAggregates, null,
+        public boolean sameInputsNow(ReadingState.Inputs then, boolean askedAggregates,
+                                     int consulted) {
+            return READING_STATE.sameInputsNow(then, Pullback.this, askedAggregates, null,
                     CONTENT_ASKED[consulted]);
         }
 
@@ -15048,10 +15048,9 @@ final class Pullback {
         }
         Trial told = underTrial.peek();
         Object said = told == null ? null : told.markBesidesTheRemainders();
-        ReadingState.Inputs inputs = READING_STATE.inputsOf(this);
-        List<ReadingTaken<R>> before = table.computeIfAbsent(node, _ -> new ArrayList<>());
-        for (ReadingTaken<R> each : before) {
-            if (each.at() == at && READING_STATE.sameInputsBut(each.inputs(), inputs, false,
+        List<ReadingTaken<R>> before = table.get(node);
+        for (ReadingTaken<R> each : before == null ? List.<ReadingTaken<R>>of() : before) {
+            if (each.at() == at && READING_STATE.sameInputsNow(each.inputs(), this, false,
                             UNCONSULTED[each.consulted()], CONTENT_ASKED[each.consulted()])
                     && elementsMet.agrees(each.footprint())
                     && Objects.equals(each.said(), said)) {
@@ -15062,6 +15061,8 @@ final class Pullback {
                 return each.result();
             }
         }
+        ReadingState.Inputs inputs = READING_STATE.inputsOf(this);
+        List<ReadingTaken<R>> entries = table.computeIfAbsent(node, _ -> new ArrayList<>());
         List<Object[]> guards = READING_STATE.guardsOf(this);
         List<Map<Core, Core>> remainders = told == null ? null : told.remaindersRead();
         int metFrom = met.size();
@@ -15097,7 +15098,7 @@ final class Pullback {
                         guard -> guard instanceof Trial)
                 && (told == null || (Objects.equals(said, told.markBesidesTheRemainders())
                         && told.remaindersRead().equals(withTold(remainders, mine))))) {
-            before.add(new ReadingTaken<>(result, at, List.copyOf(mine), footprint, inputs, said,
+            entries.add(new ReadingTaken<>(result, at, List.copyOf(mine), footprint, inputs, said,
                     consultedHere & ~InputAskedAfter.TELLING.bit(),
                     List.copyOf(met.subList(metFrom, met.size()))));
         }

@@ -56,11 +56,11 @@ final class SharedReads<C, E, M, R> {
         C inputs();
 
         /**
-         * Whether {@code now} are the inputs {@code then} were, those of the aggregates being read
-         * only where {@code askedAggregates}, and what an input holds only where the reading
-         * {@code consulted} what it holds.
+         * Whether the inputs as they stand are the inputs {@code then} were, those of the
+         * aggregates being read only where {@code askedAggregates}, and what an input holds only
+         * where the reading {@code consulted} what it holds.
          */
-        boolean sameInputs(C then, C now, boolean askedAggregates, int consulted);
+        boolean sameInputsNow(C then, boolean askedAggregates, int consulted);
 
         /**
          * Starts telling which of the inputs a reading asks after, and answers which were asked
@@ -154,18 +154,14 @@ final class SharedReads<C, E, M, R> {
             return null;
         }
         int hash = reads.hashButForWhatIsHanded();
-        C now = null;
         for (Held<C, M, R> one : before) {
             if (one.hash() != hash) {
                 continue;
             }
-            if (now == null) {
-                now = scene.inputs();
-            }
             // The key last: it is the dear comparison, a structural one of the program's own
             // nodes, and the state of the reader tells most of the readings kept at a node apart
             // before it is asked.
-            if (scene.sameInputs(one.inputs(), now, one.askedAggregates(), one.consulted())
+            if (scene.sameInputsNow(one.inputs(), one.askedAggregates(), one.consulted())
                     && elements.agrees(one.footprint()) && reads.handsAsAsked(one.asked())
                     && reads.sameButForWhatIsHanded(one.at())
                     && Objects.equals(one.key(), key)) {

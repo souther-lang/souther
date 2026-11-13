@@ -13,6 +13,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -207,6 +208,76 @@ final class ReadingState {
             }
         }
         return !askedMatters || Objects.equals(then.asked(), now.asked());
+    }
+
+    /**
+     * The answer of {@link #sameInputsBut} with {@code then} and the inputs {@code owner} stands as
+     * now, without taking those as an {@link Inputs}: each input is read from {@code owner} and
+     * compared as it is read, and the first that differs ends it.
+     *
+     * <p>An input taken as a copy is compared with the collection itself where that is the same
+     * answer as comparing with its copy, and with the copy where it is not (a set or a map that
+     * is not a hash one decides what is in it by another rule). Under {@link #auditing} the
+     * inputs are taken, since taking them is what the audit looks at.
+     */
+    boolean sameInputsNow(Inputs then, Object owner, boolean askedMatters, BitSet unconsulted,
+                          BitSet contentAsked) {
+        if (auditing) {
+            return sameInputsBut(then, inputsOf(owner), askedMatters, unconsulted, contentAsked);
+        }
+        for (int at = 0; at < inputs.length; at++) {
+            if (unconsulted != null && unconsulted.get(at)) {
+                continue;
+            }
+            Object value = read(inputs[at], owner);
+            Object was = then.values().get(at);
+            boolean same = switch (howEachInputIsTaken[at]) {
+                case AS_PRESENT -> was.equals(value != null);
+                case AS_THE_VERY_ONE -> was instanceof Same one && one.of() == value;
+                case AS_A_COPY -> sameAsACopyOf(was, value);
+            };
+            if (!same) {
+                return false;
+            }
+            if (contentAsked != null && contentAsked.get(at)
+                    && !Objects.equals(then.contents().get(at),
+                            writtenInto[at] && value != null ? snapshotOf(value) : null)) {
+                return false;
+            }
+        }
+        return !askedMatters || Objects.equals(then.asked(),
+                asked == null ? null : snapshotOf(read(asked, owner)));
+    }
+
+    /** Whether {@code was} is equal to {@link #copyOf} {@code value}, without making the copy
+     *  where the collection itself answers the same. */
+    private static boolean sameAsACopyOf(Object was, Object value) {
+        return switch (value) {
+            case null -> was == null;
+            case HashSet<?> set -> was instanceof Set<?> that && that.equals(set);
+            case Set<?> set when immutable(set) -> was instanceof Set<?> that && that.equals(set);
+            case Set<?> set -> Objects.equals(was, copyOf(set));
+            case HashMap<?, ?> map -> was instanceof Map<?, ?> that && that.equals(map);
+            case Map<?, ?> map when immutable(map) ->
+                    was instanceof Map<?, ?> that && that.equals(map);
+            case Map<?, ?> map -> Objects.equals(was, copyOf(map));
+            case Collection<?> collection -> was instanceof List<?> that
+                    && sameElements(that, collection);
+            default -> Objects.equals(was, value);
+        };
+    }
+
+    private static boolean sameElements(List<?> list, Collection<?> collection) {
+        if (list.size() != collection.size()) {
+            return false;
+        }
+        Iterator<?> held = list.iterator();
+        for (Object each : collection) {
+            if (!held.hasNext() || !Objects.equals(held.next(), each)) {
+                return false;
+            }
+        }
+        return !held.hasNext();
     }
 
     /** Where the input held in the field called {@code name} stands among the inputs. */
