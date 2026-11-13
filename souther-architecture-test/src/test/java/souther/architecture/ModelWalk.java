@@ -225,6 +225,7 @@ final class ModelWalk {
     private Set<Integer> mutatesAnyAt;
     private Map<Integer, Map<String, Set<Integer>>> tied;
     private final Map<Integer, boolean[]> reached = new HashMap<>();
+    private List<List<Integer>> predecessors;
     private List<Map<Integer, ModelStanding>> in;
     private final Map<Integer, boolean[]> looked = new HashMap<>();
 
@@ -438,6 +439,9 @@ final class ModelWalk {
                             mutations.computeIfAbsent(member, s -> new HashSet<>())
                                     .add(site.at());
                         }
+                        if (givenOnSeveralWays(local.slot(), site.at())) {
+                            mutatesAnyAt.add(site.at());
+                        }
                     } else if (!(site.operand() instanceof Operand.Nothing)) {
                         mutatesAnyAt.add(site.at());
                     }
@@ -543,6 +547,10 @@ final class ModelWalk {
                     for (int member : membersOf(local.slot())) {
                         out.put(member, becomes);
                     }
+                    if (becomes == ModelStanding.UNASKED
+                            && givenOnSeveralWays(local.slot(), site.at())) {
+                        out.replaceAll((slot, standing) -> ModelStanding.UNASKED);
+                    }
                 }
             } else if (site.operand() instanceof Operand.Field field
                     && modelFields.contains(field.key())) {
@@ -564,6 +572,57 @@ final class ModelWalk {
             }
         }
         return out == null ? state : out;
+    }
+
+    /**
+     * Whether the variable is given a value in more than one place, so that the model it holds
+     * where it is changed may be any that it is given and is not told by the variable alone.
+     */
+    private boolean givenOnSeveralWays(int slot, int at) {
+        if (storeCounts.getOrDefault(slot, 0) < 2 && !modelParameters.contains(slot)) {
+            return false;
+        }
+        boolean[] seen = new boolean[flow.size()];
+        Deque<Integer> work = new ArrayDeque<>(predecessorsOf(at));
+        int given = 0;
+        boolean fromTheStart = at == 0;
+        while (!work.isEmpty()) {
+            int node = work.poll();
+            if (seen[node]) {
+                continue;
+            }
+            seen[node] = true;
+            if (flow.get(node) instanceof StoreInstruction store
+                    && store.typeKind() == TypeKind.REFERENCE && store.slot() == slot) {
+                if (!(producer(node, 0) instanceof Operand.Nothing)) {
+                    given++;
+                }
+                continue;
+            }
+            if (node == 0) {
+                fromTheStart = true;
+            }
+            work.addAll(predecessorsOf(node));
+        }
+        return given + (fromTheStart && modelParameters.contains(slot) ? 1 : 0) > 1;
+    }
+
+    private List<Integer> predecessorsOf(int node) {
+        if (predecessors == null) {
+            predecessors = new ArrayList<>();
+            for (int i = 0; i < flow.size(); i++) {
+                predecessors.add(new ArrayList<>());
+            }
+            for (int from = 0; from < flow.size(); from++) {
+                for (int to : next[from]) {
+                    predecessors.get(to).add(from);
+                }
+                for (int to : handlers[from]) {
+                    predecessors.get(to).add(from);
+                }
+            }
+        }
+        return predecessors.get(node);
     }
 
     /** The place a field that holds a model has among the variables the walk keeps standings of. */
@@ -1592,16 +1651,34 @@ final class ModelWalk {
 
     /** Whether the variable is given a model: it is an argument of that type or is made of one. */
     private boolean holdsAModel(int slot) {
+        return holdsAModel(slot, new HashSet<>());
+    }
+
+    /**
+     * Whether the variable may hold a model on some way through the method: it is an argument of
+     * that type, or something it is given is a model, a copy of a variable that may hold one, or a
+     * field that holds one.
+     */
+    private boolean holdsAModel(int slot, Set<Integer> seen) {
         if (modelParameters.contains(slot)) {
             return true;
         }
+        if (!seen.add(slot)) {
+            return false;
+        }
         for (int at = 0; at < flow.size(); at++) {
             if (flow.get(at) instanceof StoreInstruction store
-                    && store.typeKind() == TypeKind.REFERENCE && store.slot() == slot
-                    && producer(at, 0) instanceof Operand.Answer made
-                    && made.call().typeSymbol().returnType().descriptorString()
-                            .equals(COMPILATION_TYPE)) {
-                return true;
+                    && store.typeKind() == TypeKind.REFERENCE && store.slot() == slot) {
+                boolean model = switch (producer(at, 0)) {
+                    case Operand.Answer made -> made.call().typeSymbol().returnType()
+                            .descriptorString().equals(COMPILATION_TYPE);
+                    case Operand.Local copy -> holdsAModel(copy.slot(), seen);
+                    case Operand.Field field -> modelFields.contains(field.key());
+                    default -> false;
+                };
+                if (model) {
+                    return true;
+                }
             }
         }
         return false;

@@ -825,6 +825,66 @@ public final class ModelShapes {
         }
     }
 
+    /** Hands a copy of the variable that holds an asked-about model to a function that changes it. */
+    public static final class CopyHandedToAConsumer {
+
+        private CopyHandedToAConsumer() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            Compilation alias = model;
+            Consumer<Compilation> updater = each -> each.update(Map.of(), Set.of(), LocalDate.MIN);
+            updater.accept(alias);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Hands a variable that is given the asked-about model on some way to a function that changes it. */
+    public static final class ReassignedCopyHandedToAConsumer {
+
+        private ReassignedCopyHandedToAConsumer() { }
+
+        public static AdequacyReport read(String source, boolean other) {
+            Compilation model = TheDoor.answered(source);
+            Compilation alias = TheDoor.answered("module b");
+            if (other) {
+                alias = model;
+            }
+            Consumer<Compilation> updater = each -> each.update(Map.of(), Set.of(), LocalDate.MIN);
+            updater.accept(alias);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Changes an asked-about model by a variable that is given it on some way. */
+    public static final class ReassignedCopyChangedDirectly {
+
+        private ReassignedCopyChangedDirectly() { }
+
+        public static AdequacyReport read(String source, boolean other) {
+            Compilation model = TheDoor.answered(source);
+            Compilation alias = TheDoor.answered("module b");
+            if (other) {
+                alias = model;
+            }
+            alias.update(Map.of(), Set.of(), LocalDate.MIN);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Makes the lambda that changes an asked-about model after the ask, and runs it. */
+    public static final class LambdaMadeAfterTheAskAndRun {
+
+        private LambdaMadeAfterTheAskAndRun() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            Runnable update = () -> model.update(Map.of(), Set.of(), LocalDate.MIN);
+            update.run();
+            return AdequacyReport.of(model);
+        }
+    }
+
     /** Reads the structural reports of a model nobody answered. */
     public static final class StructuralReportsOfAnUnasked {
 
