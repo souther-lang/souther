@@ -124,8 +124,8 @@ class ALengthRuleOnARecordAboutOneFieldIsReadAsARuleOfThatFieldTest {
         List<String> differing = new ArrayList<>();
         for (Shape shape : SHAPES) {
             for (String body : shape.bodies()) {
-                String onRecord = measured(evidence(shape.onTheRecord(body)));
-                String onField = measured(evidence(shape.onTheField(body)));
+                Said onRecord = measured(evidence(shape.onTheRecord(body)));
+                Said onField = measured(evidence(shape.onTheField(body)));
                 if (!onRecord.equals(onField)) {
                     differing.add(body + "\n  on the record " + onRecord + "\n  on the field  "
                             + onField);
@@ -159,9 +159,9 @@ class ALengthRuleOnARecordAboutOneFieldIsReadAsARuleOfThatFieldTest {
                 """;
         List<String> differing = new ArrayList<>();
         for (String place : List.of("email", "name")) {
-            String onRecord = measured(evidence(record.formatted(
+            Said onRecord = measured(evidence(record.formatted(
                     "List.any(own -> own == contact." + place + ", emails)")));
-            String onField = measured(evidence(field.formatted(
+            Said onField = measured(evidence(field.formatted(
                     "List.any(own -> own == contact." + place + ".value, emails)")));
             if (!onRecord.equals(onField)) {
                 differing.add(place + "\n  on the record " + onRecord + "\n  on the field  "
@@ -196,13 +196,30 @@ class ALengthRuleOnARecordAboutOneFieldIsReadAsARuleOfThatFieldTest {
         assertEquals(measured(evidence(inner)), measured(evidence(outer)));
     }
 
-    private static String measured(PartitionEvidence found) {
-        List<String> out = new ArrayList<>();
-        found.unanswered().forEach(each -> out.add(each.at() + " " + each.asked().getClass()
-                .getSimpleName()));
+    /**
+     * What a measurement says of the places of a behavior: whether it was reached, the classes of
+     * each axis, and for every place what was left unanswered, not derivable, blocked or not
+     * separated, and why. Not which rule it cites, which names the declaration it was written on.
+     */
+    private record Said(String state, Map<String, List<String>> classes, List<String> unanswered,
+                        List<String> notDerivable, List<String> blocked,
+                        List<String> notSeparated) {}
+
+    private static Said measured(PartitionEvidence found) {
         Map<String, List<String>> classes = new TreeMap<>();
         found.axes().forEach(axis -> classes.put(axis.path(), axis.classes()));
-        return found.partitioned().getClass().getSimpleName() + " " + out + " " + classes;
+        List<String> unanswered = new ArrayList<>();
+        found.unanswered().forEach(each -> unanswered.add(each.at() + " "
+                + each.asked().getClass().getSimpleName()));
+        List<String> notDerivable = new ArrayList<>();
+        found.notDerivable().forEach(each -> notDerivable.add(each.at() + " "
+                + each.why().getClass().getSimpleName()));
+        List<String> blocked = new ArrayList<>();
+        found.blocked().forEach(each -> blocked.add(each.at() + " " + each.why()));
+        List<String> notSeparated = new ArrayList<>();
+        found.notSeparated().forEach(each -> notSeparated.add(each.at().toString()));
+        return new Said(found.partitioned().getClass().getSimpleName(), classes, unanswered,
+                notDerivable, blocked, notSeparated);
     }
 
     private static PartitionEvidence evidence(String model) {
