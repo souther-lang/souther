@@ -215,8 +215,8 @@ final class ClosureQuestion<A> {
                 return ClosureQuestion.this::placeOf;
             }
 
-            /** The same comparison as {@link #placedBy} over every position a form of these rules
-             *  names, so the walk of such a form is the one {@link #placedBy} keeps. */
+            /** The same comparison as {@code placedBy} over every position a form of these rules
+             *  names, so the walk of such a form is the one {@code placedBy} keeps. */
             @Override
             public List<Map.Entry<A, ExactRatio>> walkOf(
                     CanonicalForm<A> form, Supplier<List<Map.Entry<A, ExactRatio>>> walk) {

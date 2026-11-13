@@ -9,7 +9,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Random;
 import java.util.SequencedMap;
-import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -30,7 +29,6 @@ import static souther.compiler.numeric.RulesAsWritten.statedOnly;
 class TheDifferenceClosureIsTheShortestPathsOverEveryPositionTest {
 
     private static final List<String> POSITIONS = List.of("a", "b", "c", "d", "e", "f", "g");
-    private static final Function<String, Granularity> FILLING = _ -> Granularity.DENSE;
     private static final List<String> RELATIONS = List.of("<=", "<", ">=", ">");
 
     /** The rules as text, and what they state as {@code paths[from][to]}: the tightest bound on
@@ -102,7 +100,9 @@ class TheDifferenceClosureIsTheShortestPathsOverEveryPositionTest {
             ExactCut[][] paths = drawn.paths();
             closeOverEveryPosition(paths);
             DifferenceBounds<String> closed = DifferenceBounds.over(
-                    statedOnly(drawn.rules(), FILLING), CanonicalOrder.asTheyAreSpelled());
+                    statedOnly(drawn.rules(),
+                            TheDifferenceClosureIsTheShortestPathsOverEveryPositionTest::filling),
+                    CanonicalOrder.asTheyAreSpelled());
             boolean nothing = someCycleSumsBelowNought(paths);
             assertEquals(nothing, closed.holdsNothing(), drawn.rules().toString());
             if (nothing) {
@@ -143,7 +143,13 @@ class TheDifferenceClosureIsTheShortestPathsOverEveryPositionTest {
         }
         rules.add(rule(name(0) + " <= 5"));
         rules.add(rule(name(n - 1) + " >= 0"));
-        return statedOnly(rules, FILLING);
+        return statedOnly(rules,
+                TheDifferenceClosureIsTheShortestPathsOverEveryPositionTest::filling);
+    }
+
+    /** Positions that fill, so that a strict bound stays strict. */
+    private static Granularity filling(String ignored) {
+        return Granularity.DENSE;
     }
 
     /** A position's name in letters, which is all a rule written as text names one with. */

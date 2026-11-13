@@ -34,6 +34,10 @@ import java.util.function.Function;
  * are stated. Which of two positions of the shortest prefix is the first is not the order the rules
  * arrived in, and does not change what any position is left.
  *
+ * <p>A basis is chosen for a part of the rules and not for all of them at once, since rules of
+ * another part leave no basis to choose. So the closure of the parts is no wider than the closure of
+ * the rules in one run, and is exact where that is an approximation ({@link ClosedState}).
+ *
  * @param <A> what a position of the rules is
  */
 final class PrefixBasis<A> {
@@ -46,21 +50,40 @@ final class PrefixBasis<A> {
     /** The rules in the coordinates, their differences closed. */
     private final DifferenceBounds<Integer> closed;
 
+    /** What each position is left, which is the whole of what the rules leave it; null where the
+     *  rules leave nothing. */
+    private final Box<A> box;
+
     private PrefixBasis(Map<A, Integer> places, DifferenceBounds<Integer> closed) {
         this.places = places;
         this.closed = closed;
+        this.box = closed.holdsNothing() ? null : boxOf(places.keySet());
+    }
+
+    /** What a basis says of how high a form comes to. */
+    sealed interface Highest {
+
+        /** The form comes to no more than {@code at}, which it reaches. */
+        record Within(ExactCut at) implements Highest {}
+
+        /** Nothing bounds the form above. */
+        record Unbounded() implements Highest {}
+
+        /** This basis does not say: the form is not one it answers, or the exact arithmetic could
+         *  not hold what it comes to. Not that nothing bounds it — the rules as they are stated are
+         *  to be asked. */
+        record NotAnswered() implements Highest {}
+
+        Unbounded UNBOUNDED = new Unbounded();
+        NotAnswered NOT_ANSWERED = new NotAnswered();
     }
 
     /**
-     * How high a form comes to.
-     *
-     * @param at the cut, or null where nothing bounds the form above
-     */
-    record Highest(ExactCut at) {}
-
-    /**
-     * The basis the rules are read in, or null where they have none the difference closure holds
-     * exactly.
+     * The basis the rules are read in, or null where they have none that answers exactly and
+     * completely: the rules, the positions and the closure of their differences are all of a kind
+     * the difference closure holds exactly, every hop of it was one the exact arithmetic could sum,
+     * and every position's bounds are ones it can write. Without that a basis would leave less than
+     * the rules as they are stated do, and this is where that is decided and nowhere after.
      */
     static <A> PrefixBasis<A> over(List<AffineConstraint<A>> constraints,
                                    Function<A, Granularity> spacing, CanonicalOrder<A> order) {
@@ -109,7 +132,12 @@ final class PrefixBasis<A> {
             }
             moved.add(there);
         }
-        return new PrefixBasis<>(places, DifferenceBounds.over(moved, BY_PLACE));
+        DifferenceBounds<Integer> closed = DifferenceBounds.over(moved, BY_PLACE);
+        if (!closed.everyHopWasComposed()) {
+            return null;
+        }
+        PrefixBasis<A> basis = new PrefixBasis<>(places, closed);
+        return basis.holdsNothing() || basis.box != null ? basis : null;
     }
 
     /** The place of each position, or null where a position is in no prefix or two of the first
@@ -183,45 +211,51 @@ final class PrefixBasis<A> {
         return closed.holdsNothing();
     }
 
-    /** Whether every hop of the difference closure was one the exact arithmetic could hold. */
-    boolean everyHopWasComposed() {
-        return closed.everyHopWasComposed();
-    }
-
     /**
      * What each position is left, which is the whole of what the rules leave it: nothing sound
-     * narrows a position this does not.
+     * narrows a position this does not. Asked only where the rules leave something.
      */
     Box<A> box() {
+        return box;
+    }
+
+    /** What each position is left, or null where one of its bounds is not one this can write. */
+    private Box<A> boxOf(Set<A> positions) {
         Map<A, ExactCut> least = new LinkedHashMap<>();
         Map<A, ExactCut> most = new LinkedHashMap<>();
-        for (A position : places.keySet()) {
-            ExactCut above = highest(Map.of(position, ExactRatio.ONE), ExactRatio.ZERO).at();
-            ExactCut below = highest(Map.of(position, ExactRatio.ONE.negated()), ExactRatio.ZERO).at();
-            if (above != null) {
-                most.put(position, above);
+        for (A position : positions) {
+            Highest above = highest(Map.of(position, ExactRatio.ONE), ExactRatio.ZERO);
+            Highest below = highest(Map.of(position, ExactRatio.ONE.negated()), ExactRatio.ZERO);
+            if (above instanceof Highest.Within within) {
+                most.put(position, within.at());
+            } else if (!(above instanceof Highest.Unbounded)) {
+                return null;
             }
-            if (below != null) {
-                least.put(position, new ExactCut(below.at().negated(), below.inclusive()));
+            if (below instanceof Highest.Within within) {
+                least.put(position,
+                        new ExactCut(within.at().at().negated(), within.at().inclusive()));
+            } else if (!(below instanceof Highest.Unbounded)) {
+                return null;
             }
         }
         return new Box<>(least, most);
     }
 
     /**
-     * The highest {@code coefs} weighs, plus {@code constant}, or null where the form is not one
-     * this answers: it is exact for a form that comes to one coordinate or to the difference of
-     * two in the basis, such as a position or a prefix sum, and answers nothing else.
+     * How high {@code coefs} weighs, plus {@code constant}, comes to: exactly, for a form that comes
+     * to one coordinate or to the difference of two in the basis, such as a position or a prefix
+     * sum, and not answered for anything else.
      *
      * <p>Exact because the closure of whole-number differences is: a bound it holds on a coordinate
      * or a difference is reached by a solution of the rules, so nothing sound bounds the form
-     * lower. A bound the exact arithmetic could not hold is left out, which only leaves the answer
-     * wider. Asked only where the rules leave something.
+     * lower, and no bound is missing, every hop of it having been summed ({@link #over}). That the
+     * form is bounded by nothing and that the exact arithmetic could not hold what it comes to are
+     * different answers, and are told apart. Asked only where the rules leave something.
      */
     Highest highest(Map<A, ExactRatio> coefs, ExactRatio constant) {
         Map<Integer, ExactRatio> weights = weighed(coefs.entrySet(), places);
         if (weights == null) {
-            return null;
+            return Highest.NOT_ANSWERED;
         }
         List<Map.Entry<Integer, ExactRatio>> terms = new ArrayList<>(weights.entrySet());
         ExactCut bound;
@@ -239,14 +273,18 @@ final class PrefixBasis<A> {
             }
             weight = up.getValue();
             if (!weight.equals(down.getValue().negated())) {
-                return null;
+                return Highest.NOT_ANSWERED;
             }
             bound = closed.differenceBound(up.getKey(), down.getKey());
         } else {
-            return null;
+            return Highest.NOT_ANSWERED;
         }
-        ExactRatio scaled = bound == null ? null : weight.times(bound.at()).orNull();
+        if (bound == null) {
+            return Highest.UNBOUNDED;
+        }
+        ExactRatio scaled = weight.times(bound.at()).orNull();
         ExactRatio at = scaled == null ? null : scaled.plus(constant).orNull();
-        return new Highest(at == null ? null : new ExactCut(at, bound.inclusive()));
+        return at == null ? Highest.NOT_ANSWERED
+                : new Highest.Within(new ExactCut(at, bound.inclusive()));
     }
 }

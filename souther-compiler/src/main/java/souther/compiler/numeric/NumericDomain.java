@@ -297,7 +297,7 @@ public final class NumericDomain<A> {
     }
 
     /**
-     * {@code rules}, which are {@link #tightest} of the distinct rules said so far, with
+     * The rules of {@code read}, which are {@link #tightest} of the distinct rules said so far, with
      * {@code rule} said after them — what {@link #tightest} of the distinct rules with it comes to.
      *
      * <p>A rule other than a sum held below a bound is in the distinct rules exactly where it is in
@@ -1331,9 +1331,12 @@ public final class NumericDomain<A> {
      */
     private ExactCut highestProven(Goal<A> goal, boolean withRules) {
         if (withRules) {
-            PrefixBasis.Highest exact = highestInThePartsBasis(goal);
-            if (exact != null) {
-                return exact.at();
+            PrefixBasis.Highest exact = highestInTheBasis(goal);
+            if (exact instanceof PrefixBasis.Highest.Within within) {
+                return within.at();
+            }
+            if (exact instanceof PrefixBasis.Highest.Unbounded) {
+                return null;
             }
         }
         FormReach<A> reading = readingFor(goal.coefs());
@@ -1343,23 +1346,20 @@ public final class NumericDomain<A> {
     }
 
     /**
-     * What the one part weighing every position of the goal leaves it, where that part was closed
-     * in a {@link PrefixBasis} and the goal is a form that basis answers exactly; null otherwise.
+     * What the closure weighing every position of the goal leaves it, where that closure was made
+     * in a {@link PrefixBasis} and the goal is a form that basis answers; not answered where it was
+     * not, where the positions are of no part or of several, and where the basis does not answer
+     * the form — in each of which the rules as they are stated are asked.
      *
      * <p>A rule of another part names none of the goal's positions and bounds the goal no tighter
      * than the part's own rules do, so the answer of the one part is the answer of all the rules.
+     * And it is the same answer however the closures are kept, a table that keeps nothing and one
+     * that keeps a part at a time giving a domain the same rules the same to say.
      */
-    private PrefixBasis.Highest highestInThePartsBasis(Goal<A> goal) {
-        ClosedStates.Parted<A> parted = parted();
-        ClosedState<A> part = null;
-        for (A atom : goal.coefs().keySet()) {
-            ClosedState<A> weighing = parted.partWeighing(atom);
-            if (weighing == null || (part != null && weighing != part)) {
-                return null;
-            }
-            part = weighing;
-        }
-        return part == null ? null : part.highestInBasis(goal.coefs(), goal.constant());
+    private PrefixBasis.Highest highestInTheBasis(Goal<A> goal) {
+        ClosedState<A> closure = parted().closureWeighing(goal.coefs().keySet());
+        return closure == null ? PrefixBasis.Highest.NOT_ANSWERED
+                : closure.highestInBasis(goal.coefs(), goal.constant());
     }
 
     /**

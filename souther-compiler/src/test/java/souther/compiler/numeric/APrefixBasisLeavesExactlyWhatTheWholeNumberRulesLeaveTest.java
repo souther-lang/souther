@@ -1,20 +1,26 @@
 package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.numeric.PrefixBasis.Highest;
 import souther.compiler.numeric.RulesAsWritten.Written;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static souther.compiler.numeric.PrefixChains.ATOMS;
+import static souther.compiler.numeric.PrefixChains.REACH;
 import static souther.compiler.numeric.RulesAsWritten.pointsSatisfying;
 import static souther.compiler.numeric.RulesAsWritten.rule;
 import static souther.compiler.numeric.RulesAsWritten.someRuleHoldsNever;
@@ -29,42 +35,41 @@ import static souther.compiler.numeric.RulesAsWritten.statedOnly;
  * written, so what is compared to is arithmetic on the rules and nothing this package derives. Each
  * position is boxed within the range, so no solution is left out of the points. Held beside that:
  * the state is never wider than the closure of the same rules read as they are stated (a rule that
- * is not a half-space keeps the basis from being chosen), and which position of the first prefix
- * is taken first does not change what any position is left.
+ * is not a half-space keeps the basis from being chosen), which position of the first prefix is
+ * taken first does not change what any position is left, and a basis is chosen only where it
+ * answers completely: where the exact arithmetic could not sum a hop there is none, and a form it
+ * cannot sum the answer of is not answered rather than answered as bounded by nothing.
  */
 class APrefixBasisLeavesExactlyWhatTheWholeNumberRulesLeaveTest {
 
-    private static final List<String> ATOMS = List.of("a", "b", "c", "d");
-    private static final Function<String, Granularity> WHOLE = _ -> Granularity.DISCRETE;
     private static final CanonicalOrder<String> SPELLED = CanonicalOrder.asTheyAreSpelled();
-    private static final CanonicalOrder<String> BACKWARDS = (one, other) -> other.compareTo(one);
-    private static final int REACH = 5;
 
-    private static final List<String> RELATIONS = List.of("<=", "<", ">=", ">");
+    /** A bound no sum with a small number has a representation for. */
+    private static final ExactRatio HUGE =
+            ExactRatio.of(new BigDecimal(BigInteger.ONE, -Integer.MAX_VALUE));
 
-    /** Each atom boxed within the reach, and a bound or two on each prefix sum of two atoms or more. */
-    private static List<Written> chain(Random random, List<String> atoms) {
-        List<Written> out = new ArrayList<>();
-        for (String atom : atoms) {
-            out.add(rule(atom + " >= " + (-REACH + random.nextInt(4))));
-            out.add(rule(atom + " <= " + (REACH - random.nextInt(4))));
-        }
-        StringBuilder prefix = new StringBuilder(atoms.getFirst());
-        for (int at = 1; at < atoms.size(); at++) {
-            prefix.append(" + ").append(atoms.get(at));
-            boolean bounded = false;
-            for (String relation : RELATIONS) {
-                if (random.nextInt(4) == 0) {
-                    out.add(rule(prefix + " " + relation + " " + (random.nextInt(15) - 7)));
-                    bounded = true;
-                }
-            }
-            if (!bounded) {
-                out.add(rule(prefix + " " + RELATIONS.get(random.nextInt(4)) + " "
-                        + (random.nextInt(15) - 7)));
-            }
-        }
-        return out;
+    private static Granularity whole(String ignored) {
+        return Granularity.DISCRETE;
+    }
+
+    private static List<AffineConstraint<String>> stated(List<Written> written) {
+        return statedOnly(written, APrefixBasisLeavesExactlyWhatTheWholeNumberRulesLeaveTest::whole);
+    }
+
+    private static boolean holdsNever(List<Written> written) {
+        return someRuleHoldsNever(written,
+                APrefixBasisLeavesExactlyWhatTheWholeNumberRulesLeaveTest::whole);
+    }
+
+    private static PrefixBasis<String> basisOver(List<AffineConstraint<String>> rules) {
+        return PrefixBasis.over(rules,
+                APrefixBasisLeavesExactlyWhatTheWholeNumberRulesLeaveTest::whole, SPELLED);
+    }
+
+    private static ClosedState<String> closed(List<AffineConstraint<String>> rules,
+                                              CanonicalOrder<String> order) {
+        return ClosedState.closedTogether(rules,
+                APrefixBasisLeavesExactlyWhatTheWholeNumberRulesLeaveTest::whole, order);
     }
 
     @Test
@@ -75,17 +80,17 @@ class APrefixBasisLeavesExactlyWhatTheWholeNumberRulesLeaveTest {
         int empty = 0;
         for (int round = 0; round < 600; round++) {
             List<String> atoms = ATOMS.subList(0, 2 + random.nextInt(3));
-            List<Written> written = chain(random, atoms);
-            if (someRuleHoldsNever(written, WHOLE)) {
+            List<Written> written = PrefixChains.chain(random, atoms.size());
+            if (holdsNever(written)) {
                 continue;
             }
-            List<AffineConstraint<String>> rules = statedOnly(written, WHOLE);
+            List<AffineConstraint<String>> rules = stated(written);
             cases++;
-            if (PrefixBasis.over(rules, WHOLE, SPELLED) == null) {
+            if (basisOver(rules) == null) {
                 continue;
             }
             chosen++;
-            ClosedState<String> state = ClosedState.closedTogether(rules, WHOLE, SPELLED);
+            ClosedState<String> state = closed(rules, SPELLED);
             List<Map<String, Integer>> points = pointsSatisfying(written, atoms, -REACH, REACH);
             assertEquals(points.isEmpty(), state.holdsNothing(), written.toString());
             if (points.isEmpty()) {
@@ -114,25 +119,25 @@ class APrefixBasisLeavesExactlyWhatTheWholeNumberRulesLeaveTest {
         int answered = 0;
         for (int round = 0; round < 400; round++) {
             List<String> atoms = ATOMS.subList(0, 2 + random.nextInt(3));
-            List<Written> written = chain(random, atoms);
-            if (someRuleHoldsNever(written, WHOLE)) {
+            List<Written> written = PrefixChains.chain(random, atoms.size());
+            if (holdsNever(written)) {
                 continue;
             }
-            List<AffineConstraint<String>> rules = statedOnly(written, WHOLE);
+            List<AffineConstraint<String>> rules = stated(written);
             List<Map<String, Integer>> points = pointsSatisfying(written, atoms, -REACH, REACH);
-            ClosedState<String> state = ClosedState.closedTogether(rules, WHOLE, SPELLED);
+            ClosedState<String> state = closed(rules, SPELLED);
             if (points.isEmpty() || state.holdsNothing()) {
                 continue;
             }
             for (Map<String, ExactRatio> coefs : formsOver(random, atoms)) {
-                PrefixBasis.Highest highest = state.highestInBasis(coefs, ExactRatio.ZERO);
-                if (highest == null) {
+                Highest highest = state.highestInBasis(coefs, ExactRatio.ZERO);
+                if (highest instanceof Highest.NotAnswered) {
                     continue;
                 }
                 answered++;
                 long most = points.stream().mapToLong(point -> valueAt(coefs, point)).max()
                         .orElseThrow();
-                assertEquals(ExactCut.inclusive(ExactRatio.of(most)), highest.at(),
+                assertEquals(new Highest.Within(ExactCut.inclusive(ExactRatio.of(most))), highest,
                         coefs + " over " + written);
             }
         }
@@ -173,19 +178,19 @@ class APrefixBasisLeavesExactlyWhatTheWholeNumberRulesLeaveTest {
         int compared = 0;
         for (int round = 0; round < 400; round++) {
             List<String> atoms = ATOMS.subList(0, 2 + random.nextInt(3));
-            List<Written> written = chain(random, atoms);
-            if (someRuleHoldsNever(written, WHOLE)) {
+            List<Written> written = PrefixChains.chain(random, atoms.size());
+            if (holdsNever(written)) {
                 continue;
             }
-            List<AffineConstraint<String>> rules = statedOnly(written, WHOLE);
+            List<AffineConstraint<String>> rules = stated(written);
             // An equality over a position the others do not name is a rule that is not a half-space,
             // which keeps the basis from being chosen and leaves the rest as they are stated.
             List<Written> beside = new ArrayList<>(written);
             beside.add(rule("z = 0"));
-            List<AffineConstraint<String>> asStated = statedOnly(beside, WHOLE);
-            assertNull(PrefixBasis.over(asStated, WHOLE, SPELLED));
-            ClosedState<String> basis = ClosedState.closedTogether(rules, WHOLE, SPELLED);
-            ClosedState<String> plain = ClosedState.closedTogether(asStated, WHOLE, SPELLED);
+            List<AffineConstraint<String>> asStated = stated(beside);
+            assertNull(basisOver(asStated));
+            ClosedState<String> basis = closed(rules, SPELLED);
+            ClosedState<String> plain = closed(asStated, SPELLED);
             if (plain.holdsNothing()) {
                 assertTrue(basis.holdsNothing(), written.toString());
                 continue;
@@ -217,17 +222,17 @@ class APrefixBasisLeavesExactlyWhatTheWholeNumberRulesLeaveTest {
     @Test
     void whichPositionOfTheFirstPrefixComesFirstChangesNothing() {
         Random random = new Random(5);
+        CanonicalOrder<String> backwards = (one, other) -> other.compareTo(one);
         for (int round = 0; round < 300; round++) {
-            List<String> atoms = ATOMS.subList(0, 2 + random.nextInt(3));
-            List<Written> written = chain(random, atoms);
-            if (someRuleHoldsNever(written, WHOLE)) {
+            List<Written> written = PrefixChains.chain(random, 2 + random.nextInt(3));
+            if (holdsNever(written)) {
                 continue;
             }
-            List<AffineConstraint<String>> rules = statedOnly(written, WHOLE);
+            List<AffineConstraint<String>> rules = stated(written);
             List<AffineConstraint<String>> shuffled = new ArrayList<>(rules);
             Collections.shuffle(shuffled, random);
-            ClosedState<String> one = ClosedState.closedTogether(rules, WHOLE, SPELLED);
-            ClosedState<String> other = ClosedState.closedTogether(shuffled, WHOLE, BACKWARDS);
+            ClosedState<String> one = closed(rules, SPELLED);
+            ClosedState<String> other = closed(shuffled, backwards);
             assertEquals(one.holdsNothing(), other.holdsNothing(), written.toString());
             if (!one.holdsNothing()) {
                 assertEquals(one.box(), other.box(), written.toString());
@@ -254,15 +259,76 @@ class APrefixBasisLeavesExactlyWhatTheWholeNumberRulesLeaveTest {
         for (String text : texts) {
             written.add(rule(text));
         }
-        assertNull(PrefixBasis.over(statedOnly(written, WHOLE), WHOLE, SPELLED),
-                written.toString());
+        assertNull(basisOver(stated(written)), written.toString());
+    }
+
+    private static Granularity filling(String ignored) {
+        return Granularity.DENSE;
     }
 
     @Test
     void positionsThatAreNotWholeNumbersHaveNoBasis() {
-        Function<String, Granularity> dense = _ -> Granularity.DENSE;
         List<AffineConstraint<String>> rules = statedOnly(
-                List.of(rule("a + b <= 3"), rule("a + b + c <= 4")), dense);
-        assertNull(PrefixBasis.over(rules, dense, SPELLED));
+                List.of(rule("a + b <= 3"), rule("a + b + c <= 4")),
+                APrefixBasisLeavesExactlyWhatTheWholeNumberRulesLeaveTest::filling);
+
+        assertNull(PrefixBasis.over(rules,
+                APrefixBasisLeavesExactlyWhatTheWholeNumberRulesLeaveTest::filling, SPELLED));
+    }
+
+    /**
+     * A closure that could not sum a hop leaves less than the rules do, and a basis is a way of
+     * closing them faster and not a way of leaving less. Here the bound on a + b is so far from the
+     * one a difference puts beside it in scale that the two have no sum, so there is no basis and
+     * the rules are closed as they are stated.
+     */
+    @Test
+    void aClosureThatCouldNotSumAHopHasNoBasis() {
+        List<Written> written = List.of(rule("a <= 1"),
+                new Written(Map.of("a", ExactRatio.ONE, "b", ExactRatio.ONE), HUGE.negated(),
+                        Rel.LE),
+                rule("b >= -3"));
+        List<AffineConstraint<String>> rules = stated(written);
+
+        assertEquals(3, rules.size());
+        assertNull(basisOver(rules));
+        ClosedState<String> state = closed(rules, SPELLED);
+        assertEquals(ExactCut.inclusive(ExactRatio.ONE), state.box().mostOf("a"));
+        assertSame(Highest.NOT_ANSWERED, state.highestInBasis(Map.of("a", ExactRatio.ONE),
+                ExactRatio.ZERO));
+    }
+
+    /**
+     * That nothing bounds a form and that what it comes to cannot be summed are two answers. The
+     * first is the basis's, and the second is the rules as they are stated being asked.
+     */
+    @Test
+    void aFormTheArithmeticCannotSumIsNotAnsweredAndIsNotAnsweredAsUnbounded() {
+        List<AffineConstraint<String>> bounded = stated(List.of(rule("a >= 0"), rule("a <= 5"),
+                rule("b >= 0"), rule("b <= 5"), rule("a + b <= 7")));
+        ClosedState<String> state = closed(bounded, SPELLED);
+
+        assertNotNull(basisOver(bounded));
+        assertEquals(new Highest.Within(ExactCut.inclusive(ExactRatio.of(5))),
+                state.highestInBasis(Map.of("a", ExactRatio.ONE), ExactRatio.ZERO));
+        assertSame(Highest.NOT_ANSWERED,
+                state.highestInBasis(Map.of("a", ExactRatio.ONE), HUGE));
+
+        List<AffineConstraint<String>> open = stated(List.of(rule("a >= 0"), rule("b >= 0"),
+                rule("a + b >= 1")));
+        ClosedState<String> unbounded = closed(open, SPELLED);
+
+        assertNotNull(basisOver(open));
+        assertInstanceOf(Highest.Unbounded.class,
+                unbounded.highestInBasis(Map.of("a", ExactRatio.ONE), ExactRatio.ZERO));
+        assertNull(unbounded.box().mostOf("a"));
+    }
+
+    @Test
+    void aStateNotClosedInABasisAnswersNothingOfAForm() {
+        List<AffineConstraint<String>> rules = stated(List.of(rule("a + b <= 3"), rule("a /= 1")));
+
+        assertSame(Highest.NOT_ANSWERED,
+                closed(rules, SPELLED).highestInBasis(Map.of("a", ExactRatio.ONE), ExactRatio.ZERO));
     }
 }

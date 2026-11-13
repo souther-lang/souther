@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static souther.compiler.numeric.RulesAsWritten.eachWholeAtEveryPlace;
 import static souther.compiler.numeric.RulesAsWritten.inTurn;
@@ -132,6 +133,45 @@ class RulesNamingNoPositionInCommonCloseApartTest {
     }
 
     /**
+     * Whether the closure of {@code rules} parted is not the closure in one run, which only a
+     * basis makes it: a part closed in a {@link PrefixBasis} is a derivation of its own, and the
+     * rules in one run are the derivation by rounds alone.
+     *
+     * <p>What is claimed below is that the two are one. Where a basis part makes them two, what is
+     * claimed of it is {@link ASystemWithAPrefixBasisIsClosedNoWiderPartedThanInOneRunTest}: the
+     * product is never wider, and proves more of a form over several positions. A difference with
+     * no basis part to account for it is not skipped, and is the claim failing.
+     */
+    static boolean closuresDifferOnlyByABasis(List<AffineConstraint<String>> rules,
+                                              CanonicalOrder<String> order) {
+        boolean aPartIsClosedInABasis = false;
+        for (List<AffineConstraint<String>> part : ClosureQuestion.independentRules(rules)) {
+            aPartIsClosedInABasis |= PrefixBasis.over(part,
+                    RulesNamingNoPositionInCommonCloseApartTest::spacing, order) != null;
+        }
+        return aPartIsClosedInABasis
+                && !outcome(ClosedState.closedTogether(rules,
+                        RulesNamingNoPositionInCommonCloseApartTest::spacing, order))
+                .equals(outcome(ClosedState.of(rules,
+                        RulesNamingNoPositionInCommonCloseApartTest::spacing, order)));
+    }
+
+    /** So that no dealing written here is skipped: each is claimed of, as it was. */
+    @Test
+    void noDealingWrittenHereIsLeftToTheBasisClaim() {
+        for (List<List<Written>> pair : pairs()) {
+            List<AffineConstraint<String>> left = read(pair.get(0));
+            List<AffineConstraint<String>> right = read(pair.get(1));
+            for (CanonicalOrder<String> order : ORDERS) {
+                for (List<AffineConstraint<String>> both : eachWholeAtEveryPlace(left, right)) {
+                    assertFalse(closuresDifferOnlyByABasis(both, order),
+                            () -> both + " is closed differently parted, by a basis");
+                }
+            }
+        }
+    }
+
+    /**
      * One dealing of two halves into a list: the closure in one run is the product of the closure of
      * each half, parted, and kept a part at a time. The same claim is asked of the halves written
      * here and, in a nightly class, of halves drawn.
@@ -139,6 +179,9 @@ class RulesNamingNoPositionInCommonCloseApartTest {
     static void theClosureOfADealingIsTheProductOfTheClosureOfEach(
             List<AffineConstraint<String>> left, List<AffineConstraint<String>> right,
             List<AffineConstraint<String>> both, CanonicalOrder<String> order, Seen seen) {
+        if (closuresDifferOnlyByABasis(both, order)) {
+            return;
+        }
         ClosedState<String> leftClosed = ClosedState.closedTogether(left,
                 RulesNamingNoPositionInCommonCloseApartTest::spacing, order);
         ClosedState<String> rightClosed = ClosedState.closedTogether(right,
@@ -187,6 +230,9 @@ class RulesNamingNoPositionInCommonCloseApartTest {
      * either side.
      */
     static int askFormsOverBothHalvesEitherWay(List<Written> both, CanonicalOrder<String> order) {
+        if (closuresDifferOnlyByABasis(read(both), order)) {
+            return 0;
+        }
         int bounded = 0;
         // Parted through a kept table, which is the road a domain over many contexts takes; the
         // road that keeps nothing parts the rules the same way, and is held to the closure in one
@@ -275,6 +321,9 @@ class RulesNamingNoPositionInCommonCloseApartTest {
      */
     static void aDomainLentItsPartsSaysWhatItSaysAlone(List<Written> written,
                                                        CanonicalOrder<String> order) {
+        if (closuresDifferOnlyByABasis(read(written), order)) {
+            return;
+        }
         NumericDomain<String> alone = said(written, order, ClosedStates.IN_ONE_RUN);
         NumericDomain<String> lent = saidAskingOnTheWay(written, order);
         assertEquals(alone.isBottom(), lent.isBottom(), written::toString);
@@ -309,6 +358,9 @@ class RulesNamingNoPositionInCommonCloseApartTest {
     static void aClosureLentItsPartsIsTheClosureInOneRun(List<AffineConstraint<String>> both,
                                                          int cut, CanonicalOrder<String> order,
                                                          Places places) {
+        if (closuresDifferOnlyByABasis(both, order)) {
+            return;
+        }
         Outcome inOneRun = outcome(ClosedState.closedTogether(both,
                 RulesNamingNoPositionInCommonCloseApartTest::spacing, order));
         List<AffineConstraint<String>> first = both.subList(0, cut);

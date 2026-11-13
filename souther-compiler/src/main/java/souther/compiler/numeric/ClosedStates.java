@@ -5,6 +5,7 @@ import souther.compiler.collect.LatelyAsked;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -410,6 +411,34 @@ public final class ClosedStates {
         public ClosedState<A> partWeighing(A position) {
             Integer at = partOf.get(position);
             return at == null || !complete ? null : closed.get(at);
+        }
+
+        /**
+         * The closure that says what the rules leave {@code positions}: the part weighing all of
+         * them where the closures are kept a part at a time, and where they were worked out in one
+         * piece the closure there is, whose bases answer for the parts they are of
+         * ({@link ClosedState#highestInBasis}). Null where the positions are of no part or of
+         * several, which is a question about the parts put together and is not asked here.
+         *
+         * <p>So that what is asked of a form is not decided by how the closures were kept: a table
+         * that keeps nothing and one that keeps a part at a time answer alike.
+         */
+        public ClosedState<A> closureWeighing(Collection<A> positions) {
+            if (owner == null) {
+                return state();
+            }
+            if (!complete) {
+                return null;
+            }
+            Integer only = null;
+            for (A position : positions) {
+                Integer at = partOf.get(position);
+                if (at == null || (only != null && !only.equals(at))) {
+                    return null;
+                }
+                only = at;
+            }
+            return only == null ? null : closed.get(only);
         }
 
         /** The rules of the part weighing {@code position}; null where {@link #partWeighing} is. */
