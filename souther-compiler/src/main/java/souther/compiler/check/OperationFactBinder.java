@@ -1445,11 +1445,11 @@ final class OperationFactBinder {
                 }
             }
         }
-        // The other case is read as a comparison of this argument with a number. Over a number on
-        // a carrier it states what the arm that took the case has established; over a Rational,
-        // which has none, the comparison is the one a model may write and every reader of it
-        // leaves unsaid ({@link Terms#computedBy} gives the number's case no meaning either), so
-        // the case is still told apart and nothing is asserted of it.
+        // The other case is read as a comparison of this argument with a number, which states
+        // what the arm that took the case has established. It is a statement about exact values,
+        // so it holds of a Rational as it does of a number on a carrier. What a Rational has no
+        // way to be is the number a case carries: {@link Terms#computedBy} gives that case no
+        // meaning, and no atom is made for it.
         NumericResult.TheOtherCaseWhen<DeclaredArgument> unless = rule.unless() == null ? null
                 : new NumericResult.TheOtherCaseWhen<>(
                         holdToTheDeclaration(declaration, rule.unless().argument(), null,
