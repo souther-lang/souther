@@ -189,6 +189,15 @@ final class ClosureQuestion<A> {
         return rules;
     }
 
+    /**
+     * Where each position the rules weigh stands in the order they are walked in: the places this
+     * question was stated with, which a reader of forms over these positions is handed rather than
+     * working them out again.
+     */
+    Map<A, Integer> places() {
+        return place;
+    }
+
     /** How the values at a position the rules weigh are spaced. */
     Granularity spacingOf(A position) {
         return known(spacing.get(position), position);

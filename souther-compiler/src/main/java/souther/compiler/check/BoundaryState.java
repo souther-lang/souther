@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.OrderedRuns;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -67,8 +68,16 @@ record BoundaryState(Map<DerivedNumber, BoundaryState.Left> byNumber, Set<OpenEn
     /** What the rules of one reading leave a number they spoke of. */
     sealed interface Left {
 
-        /** They stop it inside {@code range}, which holds a value. */
-        record Known(OrderedInterval range) implements Left {}
+        /**
+         * They stop it inside {@code range}, which holds a value, and leave it the values
+         * {@code runs}.
+         *
+         * <p>Two answers to two questions, from one reading. {@code range} is where the rules put
+         * an end, and a line is drawn from it; {@code runs} are the values they leave, holes and
+         * all. A disequality leaves a hole and puts no end, so the hole is in {@code runs} and
+         * nowhere in {@code range}.
+         */
+        record Known(OrderedInterval range, OrderedRuns runs) implements Left {}
 
         /** They stop it past themselves, so no value of them is at it. */
         record NothingLeft() implements Left {}
@@ -98,7 +107,12 @@ record BoundaryState(Map<DerivedNumber, BoundaryState.Left> byNumber, Set<OpenEn
      * on has to look at the ends to find out.
      */
     static BoundaryState bounded(DerivedNumber number, OrderedInterval range) {
-        return new BoundaryState(Map.of(number, leftBy(range)), Set.of());
+        return bounded(number, range, OrderedRuns.of(range));
+    }
+
+    /** One number the rules stop inside {@code range} and leave the values {@code runs}. */
+    static BoundaryState bounded(DerivedNumber number, OrderedInterval range, OrderedRuns runs) {
+        return new BoundaryState(Map.of(number, leftBy(range, runs)), Set.of());
     }
 
     /** One line stated on a number and placed by nothing. */
@@ -116,6 +130,17 @@ record BoundaryState(Map<DerivedNumber, BoundaryState.Left> byNumber, Set<OpenEn
      */
     OrderedInterval knownAt(DerivedNumber number) {
         return byNumber.get(number) instanceof Left.Known it ? it.range() : null;
+    }
+
+    /**
+     * The values the rules leave {@code number}, holes and all, or null where they leave it none
+     * or nothing spoke of it.
+     *
+     * <p>What {@link #knownAt} says of ends, for a reader of values: the same reading and the same
+     * connectives, so the two cannot come from rules read apart.
+     */
+    OrderedRuns runsAt(DerivedNumber number) {
+        return byNumber.get(number) instanceof Left.Known it ? it.runs() : null;
     }
 
     /** Whether some rule stopped {@code number} anywhere a value of them is. */
@@ -163,7 +188,7 @@ record BoundaryState(Map<DerivedNumber, BoundaryState.Left> byNumber, Set<OpenEn
     /** What two readings that both stopped one number leave it. */
     private static Left met(Left here, Left there) {
         if (here instanceof Left.Known a && there instanceof Left.Known b) {
-            return leftBy(a.range().meet(b.range()));
+            return leftBy(a.range().meet(b.range()), a.runs().meet(b.runs()));
         }
         return NOTHING_LEFT;
     }
@@ -241,7 +266,7 @@ record BoundaryState(Map<DerivedNumber, BoundaryState.Left> byNumber, Set<OpenEn
         OrderedInterval here = knownAt(number);
         OrderedInterval there = other.knownAt(number);
         if (here != null && there != null) {
-            out.put(number, leftBy(here.join(there)));
+            out.put(number, leftBy(here.join(there), runsAt(number).join(other.runsAt(number))));
         }
         if (other.holdsDown(number) || other.openAt(number)) {
             keep(number, new LinkedHashMap<>(), ends);
@@ -262,8 +287,8 @@ record BoundaryState(Map<DerivedNumber, BoundaryState.Left> byNumber, Set<OpenEn
     }
 
     /** Which of the two a range is, asked once where a range becomes a state. */
-    private static Left leftBy(OrderedInterval range) {
-        return Endpoint.someValueLiesBetween(range.low(), range.high())
-                ? new Left.Known(range) : NOTHING_LEFT;
+    private static Left leftBy(OrderedInterval range, OrderedRuns runs) {
+        return Endpoint.someValueLiesBetween(range.low(), range.high()) && !runs.holdsNothing()
+                ? new Left.Known(range, runs) : NOTHING_LEFT;
     }
 }

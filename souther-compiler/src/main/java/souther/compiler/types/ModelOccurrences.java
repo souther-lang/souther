@@ -90,6 +90,11 @@ public final class ModelOccurrences implements Iterable<ModelOccurrence>,
         if (isEmpty()) {
             return other;
         }
+        // A read that stands under two halves is told the same copies by both, and what the two
+        // together say is what each says: gathered again, every copy of it would be hashed again.
+        if (this == other || equals(other)) {
+            return this;
+        }
         Set<ModelOccurrence> both = new LinkedHashSet<>(inOrder());
         both.addAll(other.inOrder());
         return new ModelOccurrences(List.copyOf(both));

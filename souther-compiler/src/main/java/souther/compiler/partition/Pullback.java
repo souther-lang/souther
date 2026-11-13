@@ -1132,7 +1132,7 @@ final class Pullback {
                         asked instanceof Asked.OnASide(AnswerAspect aspect)
                                 ? sharedObservations.shared(denoted.value(), denoted.at(), aspect,
                                         () -> observe(denoted.value(), asked, denoted.at()),
-                                        this::readToTheEnd)
+                                        this::readToTheEndOrToItsSize)
                                 : observe(denoted.value(), asked, denoted.at()));
             }
             case Core.If iff -> {
@@ -12020,6 +12020,22 @@ final class Pullback {
     /** Whether {@code derivation} was read to the end, with no part of it that stopped. */
     private boolean readToTheEnd(Derivation derivation) {
         return !Proposition.leavesSomethingUnread(tried(derivation));
+    }
+
+    /**
+     * Whether {@code derivation} was read to the end, or stopped only at coming to more parts than
+     * a step is concluded with. That stop is told by the derivation alone, so taking it again
+     * gives the same stop wherever it is taken. A name past that size is read once for all its
+     * uses, where reading it again for each use makes a chain of names each used twice cost the
+     * ways down it.
+     *
+     * <p>Asked of the steps under it and not of what it states: a step past that size states one
+     * part nothing read, and a stop that depends on the reading, such as the readings having
+     * run out, is not in that.
+     */
+    private boolean readToTheEndOrToItsSize(Derivation derivation) {
+        trying.of(derivation);
+        return !trying.stoppedBesidesItsSize(derivation);
     }
 
     /** What a law says on {@code applications}, and what else the reading of it turns on. */

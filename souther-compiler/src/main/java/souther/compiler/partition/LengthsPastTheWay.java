@@ -59,7 +59,7 @@ final class LengthsPastTheWay {
      * @param least the fewest, and never below nought; one where there are none
      * @param most  the most, and never past the longest string; nought where there are none
      */
-    record Lengths(BigInteger least, BigInteger most) implements StringsPastTheWay {
+    record Lengths(BigInteger least, BigInteger most) {
 
         Lengths {
             least = least == null || least.signum() < 0 ? BigInteger.ZERO : least;
@@ -81,8 +81,7 @@ final class LengthsPastTheWay {
         }
 
         /** Whether no string has a length of these. */
-        @Override
-        public boolean isEmpty() {
+        boolean isEmpty() {
             return least.compareTo(most) > 0;
         }
 
@@ -118,8 +117,7 @@ final class LengthsPastTheWay {
          * The strings of these lengths, or null where there are none or the ends are past what a
          * pattern counts.
          */
-        @Override
-        public PatternPlan strings() {
+        PatternPlan strings() {
             if (isEmpty() || least.bitLength() >= Integer.SIZE - 1) {
                 return null;
             }
@@ -130,8 +128,7 @@ final class LengthsPastTheWay {
          * The strings of every other length, or null where there are none or the ends are past
          * what a pattern counts.
          */
-        @Override
-        public PatternPlan stringsOutside() {
+        PatternPlan stringsOutside() {
             if (isEmpty()) {
                 return null;
             }

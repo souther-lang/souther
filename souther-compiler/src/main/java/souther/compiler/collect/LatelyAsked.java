@@ -1,6 +1,7 @@
 package souther.compiler.collect;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -39,6 +40,20 @@ public final class LatelyAsked<Q, A> {
         }
         this.keeps = keeps;
         this.answers = new LinkedHashMap<>(16, 0.75f, true);
+    }
+
+    /** The answers kept now, for a caller counting what it holds. */
+    public List<A> kept() {
+        synchronized (answers) {
+            return List.copyOf(answers.values());
+        }
+    }
+
+    /** How many answers are kept now, which is never more than it was made to keep. */
+    public int size() {
+        synchronized (answers) {
+            return answers.size();
+        }
     }
 
     /** The answer to {@code question}: the one kept, or {@code working} applied to it, kept from
