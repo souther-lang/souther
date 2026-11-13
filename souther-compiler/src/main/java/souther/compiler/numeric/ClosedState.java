@@ -155,15 +155,27 @@ public final class ClosedState<A> {
     private final Status status;
     private final boolean everyBoundWasComposed;
 
+    /** The basis the rules were closed in, or null where they were closed as they are stated. */
+    private final PrefixBasis<A> basis;
+
     private ClosedState(Box<A> box, DifferenceBounds<A> differences,
                         Set<AffineConstraint.HalfSpace<A>> sided, boolean holdsNothing,
-                        Status status, boolean everyBoundWasComposed) {
+                        Status status, boolean everyBoundWasComposed, PrefixBasis<A> basis) {
         this.box = box;
         this.differences = differences;
         this.sided = sided;
         this.holdsNothing = holdsNothing;
         this.status = status;
         this.everyBoundWasComposed = everyBoundWasComposed;
+        this.basis = basis;
+    }
+
+    /**
+     * The highest a form comes to over these rules where they were closed in a {@link PrefixBasis}
+     * and the form is one it answers exactly, and null where it is not answered here.
+     */
+    PrefixBasis.Highest highestInBasis(Map<A, ExactRatio> coefs, ExactRatio constant) {
+        return basis == null ? null : basis.highest(coefs, constant);
     }
 
     /**
@@ -265,6 +277,10 @@ public final class ClosedState<A> {
             return empty(differences);
         }
         boolean everyBoundWasComposed = differences.everyHopWasComposed();
+        PrefixBasis<A> prefix = PrefixBasis.over(constraints, spacing, order);
+        if (prefix != null) {
+            return closedInPrefixBasis(prefix, box, differences, positions, everyBoundWasComposed);
+        }
         Set<AffineConstraint.HalfSpace<A>> sided = Set.of();
         Set<AffineConstraint.HalfSpace<A>> folded = Set.of();
         ClosureWork<A> work = into;
@@ -328,6 +344,30 @@ public final class ClosedState<A> {
             sided = tightened.sided();
         }
         return settled(box, differences, sided, Status.BUDGET_EXHAUSTED, everyBoundWasComposed);
+    }
+
+    /**
+     * The state of rules closed in a {@link PrefixBasis}: the box there is the whole of what the
+     * rules leave each position, so no round reads a rule against it and it is where reading stops.
+     * Met with the box the differences of the rules as stated leave, and carried along those
+     * differences, as the box a round leaves is.
+     */
+    private static <A> ClosedState<A> closedInPrefixBasis(PrefixBasis<A> prefix, Box<A> box,
+                                                          DifferenceBounds<A> differences,
+                                                          Set<A> positions,
+                                                          boolean everyBoundWasComposed) {
+        PrefixBasis.Closure<A> closed = prefix.close();
+        if (closed.holdsNothing()) {
+            return empty(differences);
+        }
+        Box<A> met = box.meeting(closed.box().atLeast(), closed.box().atMost());
+        Carried<A> carried = throughDifferences(met, differences, positions);
+        if (!carried.box().holdsAValue()) {
+            return empty(differences);
+        }
+        return settled(carried.box(), differences, Set.of(), Status.STABLE,
+                everyBoundWasComposed && closed.everyBoundWasComposed()
+                        && carried.everyBoundWasComposed(), prefix);
     }
 
     /** The half-spaces among {@code sided} that bound the difference of two positions. */
@@ -438,16 +478,25 @@ public final class ClosedState<A> {
     private static <A> ClosedState<A> settled(Box<A> box, DifferenceBounds<A> differences,
                                               Set<AffineConstraint.HalfSpace<A>> sided,
                                               Status status, boolean everyBoundWasComposed) {
+        return settled(box, differences, sided, status, everyBoundWasComposed, null);
+    }
+
+    private static <A> ClosedState<A> settled(Box<A> box, DifferenceBounds<A> differences,
+                                              Set<AffineConstraint.HalfSpace<A>> sided,
+                                              Status status, boolean everyBoundWasComposed,
+                                              PrefixBasis<A> basis) {
         assert box.equals(carriedAlong(box, differences))
                 : "a difference still narrows the box that is about to be handed back";
-        return new ClosedState<>(box, differences, sided, false, status, everyBoundWasComposed);
+        return new ClosedState<>(box, differences, sided, false, status, everyBoundWasComposed,
+                basis);
     }
 
     private static <A> ClosedState<A> empty(DifferenceBounds<A> differences) {
         // Nothing is left, so there is no box for the arithmetic to have failed to carry a bound
         // onto: emptiness is either the difference closure's own proof or a form the rules leave
         // nothing, and both hold whatever the closure could or could not compose.
-        return new ClosedState<>(Box.unbounded(), differences, Set.of(), true, Status.STABLE, true);
+        return new ClosedState<>(Box.unbounded(), differences, Set.of(), true, Status.STABLE, true,
+                null);
     }
 
     private static <A> Set<A> positionsOf(List<AffineConstraint<A>> constraints,

@@ -1315,10 +1315,36 @@ public final class NumericDomain<A> {
      *                  ranges either, which holds less than this does
      */
     private ExactCut highestProven(Goal<A> goal, boolean withRules) {
+        if (withRules) {
+            PrefixBasis.Highest exact = highestInThePartsBasis(goal);
+            if (exact != null) {
+                return exact.at();
+            }
+        }
         FormReach<A> reading = readingFor(goal.coefs());
         return withRules
                 ? reading.most(goal.coefs(), goal.constant())
                 : reading.mostFromTheEndsAndTheDifferences(goal.coefs(), goal.constant());
+    }
+
+    /**
+     * What the one part weighing every position of the goal leaves it, where that part was closed
+     * in a {@link PrefixBasis} and the goal is a form that basis answers exactly; null otherwise.
+     *
+     * <p>A rule of another part names none of the goal's positions and bounds the goal no tighter
+     * than the part's own rules do, so the answer of the one part is the answer of all the rules.
+     */
+    private PrefixBasis.Highest highestInThePartsBasis(Goal<A> goal) {
+        ClosedStates.Parted<A> parted = parted();
+        ClosedState<A> part = null;
+        for (A atom : goal.coefs().keySet()) {
+            ClosedState<A> weighing = parted.partWeighing(atom);
+            if (weighing == null || (part != null && weighing != part)) {
+                return null;
+            }
+            part = weighing;
+        }
+        return part == null ? null : part.highestInBasis(goal.coefs(), goal.constant());
     }
 
     /**
