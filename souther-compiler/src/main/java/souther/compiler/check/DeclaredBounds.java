@@ -218,34 +218,6 @@ public final class DeclaredBounds {
         return placed == null ? null : placed.range();
     }
 
-    /**
-     * How many the value {@code read} takes off a value of a type may hold ({@link #countsHeld}),
-     * or null where it takes none off one: a value of the type exists only where its rules held.
-     * A newtype's own value holds what the newtype's rules leave it, and a field of a record what
-     * the record's rules on the field and the field's own type leave it.
-     */
-    public static CountRange countsOfTheValueReadOff(Core read, RuleReadingSource rules,
-                                                     DeclarationNewtypes newtypes,
-                                                     RuleReadingContext reading) {
-        Core.FieldAccess access = switch (Core.withoutStanding(read)) {
-            case Core.FieldAccess one -> one;
-            case Core.FieldProjection projection -> projection.lastAccess();
-            default -> null;
-        };
-        if (access == null) {
-            return null;
-        }
-        Type from = access.target().type();
-        if (Location.isStep(from, access.field(), newtypes)
-                && TypeView.shapeOf(from, rules.inners(), rules.symbols(), rules.kinds(),
-                        rules.sums()) instanceof Shape.Product(TypeSymbol.AtModule record, var _)) {
-            return countsHeld(access.type(), reading, FieldDomains.of(record, reading)
-                    .heldAt(TermPath.ruleKeyOf(List.of(new TermPath.Step.Field(access.field())))));
-        }
-        return countsHeld(Location.isStep(from, access.field(), newtypes) ? access.type() : from,
-                reading, null);
-    }
-
     /** What a numeric newtype's own rules leave its value between, for a caller that is asking about
      * the value and not about anything taken of it. */
     public static Range of(TypeView view, RuleReadingContext reading) {

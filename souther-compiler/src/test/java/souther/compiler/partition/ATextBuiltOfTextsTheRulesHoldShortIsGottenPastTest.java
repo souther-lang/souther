@@ -110,6 +110,28 @@ class ATextBuiltOfTextsTheRulesHoldShortIsGottenPastTest {
         notShownReachedAtEveryValue(model(atMost(10), "String.concat(ns) ++ v"));
     }
 
+    /**
+     * A list of the input held to three texts and no shorter ones: each may be as long as a
+     * {@code String}, so the join is not shown to fit however short {@code v} is. A rule on how
+     * many the list holds bounds the texts it holds no further.
+     */
+    @Test
+    void aJoinOfAListHeldToAFewTextsOfAnyLengthIsNotShownToFit() {
+        String joined = """
+                module held
+
+                data V = String invariant String.length(value) <= %s
+                data Ws = List<String> invariant List.length(value) <= 3
+
+                behavior f : (v: V, ns: List<String>, ws: Ws) -> Bool
+                let f (V(v), ns, Ws(ws)) = {
+                    let m = String.join(",", ws) ++ v
+                    List.any(own -> own == v, ns) || String.length(m) > 0
+                }
+                """;
+        notShownReachedAtEveryValue(joined.formatted(10));
+    }
+
     /** What a text built of texts is handed may itself be built, chosen or converted: each is as
      *  long as its own account says at most. */
     @Test
@@ -137,8 +159,7 @@ class ATextBuiltOfTextsTheRulesHoldShortIsGottenPastTest {
     @Test
     void paddingFitsWhereTheWidthDoes() {
         reachedAtEveryValue(model("", "String.padLeft(10, \"0\", v)"));
-        reachedAtEveryValue(model("", "String.padRight(L / 68, \"0\", v)".replace("L / 68",
-                Long.toString(L / 68))));
+        reachedAtEveryValue(model("", "String.padRight(" + L / 68 + ", \"0\", v)"));
         notShownReachedAtEveryValue(model("", "String.padRight(" + (L / 68 + 1) + ", \"0\", v)"));
     }
 }

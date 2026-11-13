@@ -19,9 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * A number rounded to an {@code Int} stops a run only where it rounds past one, so where the
  * numbers it is made of are held small it gets past at every value of {@code v}. Made through a
  * call of the library, those are the numbers the library says the call answers: a call that
- * computes what an operator does is that operator over its arguments ({@code Decimal.add}), and a
- * call that answers a form of its arguments is that form ({@code Rational.fromInt}). With no
- * greatest {@code v}, it may round past.
+ * computes what an operator does is that operator over its arguments ({@code Decimal.add}), a
+ * call that answers a form of its arguments is that form ({@code Decimal.fromInt}), and a name an
+ * arm binds to a quotient is that quotient. With no greatest {@code v}, it may round past.
  */
 class ARangeIsCarriedThroughACallTheLibrarySaysTheArithmeticOfTest {
 

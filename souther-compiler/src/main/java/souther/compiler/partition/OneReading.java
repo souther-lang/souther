@@ -4,6 +4,8 @@ import souther.compiler.inputs.SearchRegion;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.StringsOfAPiece;
 import souther.compiler.semantics.CaseMapping;
+import souther.compiler.values.ValueSet;
+import souther.compiler.values.ValuesWithin;
 
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -18,8 +20,9 @@ import java.util.function.Supplier;
  * answers narrow a region by ({@link Reachability.Reaching#narrowedPast}), what a statement
  * says of its remainder ({@link ARemainderMoved#saidBy}), which operations of a case conversion
  * are not exact over the strings it is done to ({@link #notExactOver}), which pieces of what
- * it answers are pieces of its values ({@link #piecesAConversionAnswers}), and whether the strings
- * a position admits are every string of the lengths its rules leave it ({@link #everyStringOf}).
+ * it answers are pieces of its values ({@link #piecesAConversionAnswers}), whether the strings
+ * a position admits are every string of the lengths its rules leave it ({@link #everyStringOf}),
+ * and those strings made into one set ({@link #stringsAsOneSet}).
  *
  * <p>A reading reads one way over many regions and for many relations, each building the way afresh
  * from the same conditions; and it takes the way to each case, and each way that is split into,
@@ -59,6 +62,8 @@ final class OneReading {
     private final Map<PiecesAsked, Optional<PiecesAnswered>> piecesAnswered = new HashMap<>();
     /** By value, for the same reason: a set of strings and some lengths. */
     private final Map<LengthsOver, Boolean> everyStringOfTheLengths = new HashMap<>();
+    /** By value, for the same reason: a set of strings and the lengths held beside it. */
+    private final Map<ValuesWithin, Optional<ValueSet>> asOneSet = new HashMap<>();
 
     private OneReading() {
     }
@@ -123,6 +128,15 @@ final class OneReading {
         return READING.isBound()
                 ? kept(READING.get().everyStringOfTheLengths,
                         new LengthsOver(strings, lengths), working)
+                : working.get();
+    }
+
+    /** The strings {@code held} holds as one set within the allowance of a piece of a language,
+     *  or null where they are none: as this reading made it already, or {@code working}'s, now. */
+    static ValueSet stringsAsOneSet(ValuesWithin held, Supplier<ValueSet> working) {
+        return READING.isBound()
+                ? kept(READING.get().asOneSet, held, () -> Optional.ofNullable(working.get()))
+                        .orElse(null)
                 : working.get();
     }
 

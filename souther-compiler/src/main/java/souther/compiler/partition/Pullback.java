@@ -2329,45 +2329,46 @@ final class Pullback {
         return null;
     }
 
-    /**
-     * The most code points the string a text read off the input holds, as the place it stands at
-     * says ({@link StringsHeld#lengthBoundAt}): the longest of the places it may stand at, or null
-     * where it stands at none or some place says nothing.
-     */
+    /** The most code points the string a text read off the input holds, as the place it stands
+     *  at says ({@link StringsHeld#lengthBoundAt}), or null where that is not said. */
     private BigInteger mostCodePointsOfTheInputAt(Denotation text) {
-        List<TermPath> places = switch (text.at().pathOf(text.value(), read.rules().newtypes())) {
+        return mostAtThePlacesOf(text, place -> place, StringsHeld::lengthBoundAt);
+    }
+
+    /**
+     * The most {@code ceilingAt} says at the place {@code value}, read off the input, stands at,
+     * or at what {@code step} takes from there: the greatest of the places it may stand at, or
+     * null where it stands at none or some place says nothing.
+     */
+    private BigInteger mostAtThePlacesOf(Denotation value, UnaryOperator<TermPath> step,
+                                         Function<Position, BigInteger> ceilingAt) {
+        List<TermPath> places = switch (value.at().pathOf(value.value(), read.rules().newtypes())) {
             case PathResolution.At(TermPath path) -> List.of(path);
             case PathResolution.MayStandAt(List<TermPath> among) -> among;
             default -> List.of();
         };
-        BigInteger longest = null;
+        BigInteger greatest = null;
         for (TermPath place : places) {
-            Position at = read.domain().at(place);
-            BigInteger bound = at == null ? null : StringsHeld.lengthBoundAt(at);
+            Position at = read.domain().at(step.apply(place));
+            BigInteger bound = at == null ? null : ceilingAt.apply(at);
             if (bound == null) {
                 return null;
             }
-            longest = longest == null ? bound : longest.max(bound);
+            greatest = greatest == null ? bound : greatest.max(bound);
         }
-        return longest;
+        return greatest;
     }
 
-    /**
-     * The most code points a text of {@code e}'s type holds where {@code e} is read: what the
-     * rules of the value it is read off leave it ({@link DeclaredBounds#countsOfTheValueReadOff}),
-     * or else what its type's own rules do, and no more than a {@code String} holds.
-     */
+    /** The most code points a text of {@code e}'s type holds: what its type's own rules leave it,
+     *  and no more than a {@code String} holds. */
     private BigInteger declaredMostCodePointsOf(Core e) {
-        return mostOf(countsOf(e), BigInteger.valueOf(TextExtents.LONGEST_STRING));
+        return mostOf(DeclaredBounds.countsHeld(e.type(), read.ruleReading(), null),
+                BigInteger.valueOf(TextExtents.LONGEST_STRING));
     }
 
-    /** What the rules leave a value {@code e} stands for holding: those of what it is read off,
-     *  or else those of its type. */
-    private DeclaredBounds.CountRange countsOf(Core e) {
-        DeclaredBounds.CountRange readOff = DeclaredBounds.countsOfTheValueReadOff(e, read.rules(),
-                read.rules().newtypes(), read.ruleReading());
-        return readOff != null ? readOff
-                : DeclaredBounds.countsHeld(e.type(), read.ruleReading(), null);
+    /** The least of {@code one} and {@code other}, either of which may be none. */
+    private static BigInteger leastOf(BigInteger one, BigInteger other) {
+        return one == null ? other : other == null ? one : one.min(other);
     }
 
     /** The most {@code counts} leave, no more than {@code ceiling}: {@code Integer.MAX_VALUE} is
@@ -2377,20 +2378,26 @@ final class Pullback {
                 : BigInteger.valueOf(counts.most()).min(ceiling);
     }
 
-    /** The most texts the list {@code e} holds on every run that works it out: as many as it is
-     *  written out with, or what the rules leave it, and no more than a collection holds. */
+    /**
+     * The most texts the list {@code e} holds on every run that works it out: as many as it is
+     * written out with; or the least of what the place it is read off says
+     * ({@link HowManyAPlaceHolds}), what its type's own rules leave it, and what a collection
+     * holds.
+     */
     private BigInteger mostTextsOf(Core e, InputReads reads) {
         Denotation container = reads.standing(e, read.rules().symbols(), read.rules().newtypes());
         if (WrittenOutElements.of(container, read.rules().symbols(), read.rules().newtypes())
                 instanceof WrittenOutElements.Walked.Each each) {
             return BigInteger.valueOf(each.asWritten().size());
         }
-        return mostOf(countsOf(container.value()), GetsPast.MOST_ELEMENTS);
+        return leastOf(mostAtThePlacesOf(container, place -> place, HowManyAPlaceHolds::atMost),
+                mostOf(DeclaredBounds.countsHeld(container.value().type(), read.ruleReading(),
+                        null), GetsPast.MOST_ELEMENTS));
     }
 
     /** The most code points each text the list {@code e} holds holds on every run that works it
-     *  out: the longest it is written out with, or what the rules of the type of its texts leave
-     *  each. */
+     *  out: the longest it is written out with; or the least of what the place of its elements
+     *  says ({@link StringsHeld#lengthBoundAt}) and what the type of its texts leaves each. */
     private BigInteger mostCodePointsOfEach(Core e, InputReads reads,
                                             Map<Denotation, BigInteger> known) {
         Denotation container = reads.standing(e, read.rules().symbols(), read.rules().newtypes());
@@ -2403,12 +2410,14 @@ final class Pullback {
             }
             return longest;
         }
-        return TypeView.shapeOf(container.value().type(), read.rules().inners(),
+        BigInteger ofItsType = TypeView.shapeOf(container.value().type(), read.rules().inners(),
                 read.rules().symbols(), read.rules().kinds(), read.rules().sums())
                 instanceof Shape.Sequence(var _, Type texts)
                 ? mostOf(DeclaredBounds.countsHeld(texts, read.ruleReading(), null),
                         BigInteger.valueOf(TextExtents.LONGEST_STRING))
                 : BigInteger.valueOf(TextExtents.LONGEST_STRING);
+        return leastOf(mostAtThePlacesOf(container, TermPath::element, StringsHeld::lengthBoundAt),
+                ofItsType);
     }
 
     /** The least and the greatest an {@code Int} holds, which a whole number made of a number

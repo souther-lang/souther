@@ -135,14 +135,16 @@ final class StringsHeld {
      */
     static ValueSet at(Position at) {
         ValuesWithin held = within(at);
-        return held == null ? null
-                : asOneSet(held, PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
+        // A function of the strings and lengths alone, asked of every relation a reading reads the
+        // position in, and as long to make as the lengths are: made once for the reading.
+        return held == null ? null : OneReading.stringsAsOneSet(held,
+                () -> asOneSet(held, PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter()));
     }
 
     /**
      * A bound on the code points of every string {@code at} holds, or null where nothing ends
-     * them: the least of the end the rules leave its length and the longest string of the set it
-     * admits.
+     * them: the least of the end the rules leave its length ({@link HowManyAPlaceHolds}) and the
+     * longest string of the set it admits.
      *
      * <p>No string {@code at} holds is longer, and none need be this long, so it asks for less
      * than {@link #at} does. The end a rule leaves the length holds of every value whether or not
@@ -151,15 +153,7 @@ final class StringsHeld {
      * The end is held as a number, so a length no language is written out to is still an end.
      */
     static BigInteger lengthBoundAt(Position at) {
-        BigInteger most = null;
-        for (PositionBounds each : at.bounds()) {
-            if (each.term() instanceof NumericTerm.TakenOf taken
-                    && RepresentationBounds.isALength(taken)
-                    && each.rangeLeft() != null && each.rangeLeft().max() != null) {
-                most = leastOf(most, mostUpTo(each.rangeLeft().max()));
-            }
-        }
-        return leastOf(most, longestOf(at.admitted().approximation()));
+        return leastOf(HowManyAPlaceHolds.atMost(at), longestOf(at.admitted().approximation()));
     }
 
     /** The longest string of {@code set}, or null where it has none or holds strings of every
@@ -205,7 +199,7 @@ final class StringsHeld {
             }
         }
         if (bounds.max() != null) {
-            most = mostUpTo(bounds.max());
+            most = HowManyAPlaceHolds.mostUpTo(bounds.max());
             if (most == null) {
                 return null;
             }
@@ -221,16 +215,5 @@ final class StringsHeld {
             return null;
         }
         return count.exactly().isWhole() && !end.inclusive() ? whole.add(BigInteger.ONE) : whole;
-    }
-
-    /** The most code points the end lets a string have, or null where it is no count. */
-    private static BigInteger mostUpTo(Endpoint end) {
-        if (!(end.at() instanceof Count count)
-                || !(count.exactly().floor() instanceof ExactAnswer.Held<BigInteger>(
-                        BigInteger whole))) {
-            return null;
-        }
-        return count.exactly().isWhole() && !end.inclusive() ? whole.subtract(BigInteger.ONE)
-                : whole;
     }
 }

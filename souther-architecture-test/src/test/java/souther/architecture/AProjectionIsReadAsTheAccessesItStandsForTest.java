@@ -681,12 +681,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                         + "check/DeclaredBounds$Range;", Reading.ONE_ACCESS,
                 "reads the type a value is read off, of the access, or of the last access of a"
                         + " projection, and of nothing under it");
-        row(out, c + "check/DeclaredBounds", "countsOfTheValueReadOff",
-                "(" + core + "L" + c + "check/RuleReadingSource;L" + c
-                        + "check/DeclarationNewtypes;L" + c + "check/RuleReadingContext;)L" + c
-                        + "check/DeclaredBounds$CountRange;", Reading.ONE_ACCESS,
-                "reads the type a value is read off, of the access, or of the last access of a"
-                        + " projection, and of nothing under it");
         row(out, c + "partition/Pullback", "leaveUnsaidWhatMayEndARunUnder",
                 "(" + core + reads + "L" + c + "partition/Pullback$Bound;)V", Reading.STRUCTURE,
                 "asks each node what it ends a run for, of the owner of that: a name read off a"

@@ -4176,26 +4176,34 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return OneReading.notExactOver(conversion, over, () -> notExactOver(conversion, over));
     }
 
-    /** {@link #operationsNotExactOver}, worked out, over strings that are a language. */
+    /**
+     * {@link #operationsNotExactOver}, worked out, over strings that are a language: each
+     * operation in turn is named where some string of {@code over} every operation before it was
+     * exact on is one it is not exact on. Those strings are kept as they narrow, so each step asks
+     * for one complement, of the strings it is exact on.
+     */
     private static List<String> notExactOver(CaseMapping conversion, Language over) {
         List<String> operations = conversion.operations();
         Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
         List<CaseMapping> doneSoFar = conversion.doneSoFar();
         List<String> named = new ArrayList<>();
-        Language notExactBefore = Language.EVERY_STRING.not(meter);
+        Language exactBefore = over;
         for (int step = 0; step < doneSoFar.size(); step++) {
             Language exact = CaseMaps.of(doneSoFar.get(step)).strings(meter);
-            Language notExact = exact == null ? null : over.and(exact.not(meter), meter);
-            Language fresh = notExact == null ? null
-                    : notExact.and(notExactBefore.not(meter), meter);
-            Language notExactNow = notExact == null ? null : notExactBefore.or(notExact, meter);
-            if (fresh == null || notExactNow == null) {
+            Language notExact = exact == null ? null : exact.not(meter);
+            Language fresh = notExact == null ? null : exactBefore.and(notExact, meter);
+            if (fresh == null) {
                 return operations;
             }
             if (!fresh.isEmpty()) {
                 named.add(operations.get(step));
             }
-            notExactBefore = notExactNow;
+            if (step + 1 < doneSoFar.size()) {
+                exactBefore = exactBefore.and(exact, meter);
+                if (exactBefore == null) {
+                    return operations;
+                }
+            }
         }
         return named;
     }
