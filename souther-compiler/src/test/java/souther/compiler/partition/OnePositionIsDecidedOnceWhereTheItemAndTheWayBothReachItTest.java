@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -85,9 +86,7 @@ class OnePositionIsDecidedOnceWhereTheItemAndTheWayBothReachItTest {
     }
 
     private static Generator.GenerationResult boundaries() {
-        Compilation compilation = Compilation.ofSource(STAGE, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(STAGE, Adequacy.Asked.fullReport());
         Map<String, Adequacy.Filling> filled =
                 Adequacy.generatedOf(compilation.db(), "example.stage");
         assertNotNull(filled, "the model under test compiles and is answered about");

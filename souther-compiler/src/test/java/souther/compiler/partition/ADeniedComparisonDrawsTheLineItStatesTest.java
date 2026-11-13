@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
@@ -125,11 +126,10 @@ class ADeniedComparisonDrawsTheLineItStatesTest {
                 behavior take : (r: R) -> Taken
                 let take (r) = Taken
                 """.formatted(clause);
-        Compilation compilation = Compilation.ofSource(source, "Main");
         // Everything there is to answer, which is what holding a fixture to being writable costs
         // and not what these rows read. An ill-typed clause reads perfectly well as far as the rows
         // go and comes back a rule that draws no line, which every spelling here would agree with.
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         assertEquals(List.of(), compilation.diagnostics().values().stream()
                         .flatMap(List::stream).map(each -> each.diagnostic().code()).toList(),
                 "the model under test is a program that can be written");

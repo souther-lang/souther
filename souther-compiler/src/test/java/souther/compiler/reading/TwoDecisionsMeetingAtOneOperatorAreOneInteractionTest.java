@@ -2,9 +2,18 @@ package souther.compiler.reading;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
+
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static souther.compiler.reading.ReadInteractions.read;
 import static souther.compiler.reading.ReadInteractions.shape;
 
@@ -24,6 +33,22 @@ import static souther.compiler.reading.ReadInteractions.shape;
  * what is true of another — and would be right here only for as long as the two were spelled alike.
  */
 class TwoDecisionsMeetingAtOneOperatorAreOneInteractionTest {
+
+    /**
+     * The interactions the reading finds in {@code behavior} of a model whose {@code unreachable}
+     * stands at a case the model admits, which the compile refuses for it and for nothing else.
+     */
+    private static List<Interaction> readRefused(String source, String behavior) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        ACompiledModel.refusedWith(List.of("E1326"), compilation);
+        String module = compilation.modules().get(0);
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
+        assertNotNull(checked, "the model under test has bodies");
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
+        return CoverageRead.of(behavior, checked.run(behavior), inputs.reading(rules))
+                .interactions();
+    }
 
     private static final String SHIPPING = """
             module example.shipping
@@ -255,7 +280,7 @@ class TwoDecisionsMeetingAtOneOperatorAreOneInteractionTest {
      */
     @Test
     void anArmThatAnswersNothingIsNotAWayTheValueIsSettled() {
-        assertEquals(List.of(), read(ABORTING, "fee"),
+        assertEquals(List.of(), readRefused(ABORTING, "fee"),
                 "one of the two arms answers a value, so the left charge is not a factor");
     }
 
@@ -296,7 +321,9 @@ class TwoDecisionsMeetingAtOneOperatorAreOneInteractionTest {
     @Test
     void whatIsInsideAnArmThatAnswersNothingIsNotRead() {
         assertEquals(List.of(),
-                read(INSIDE_AN_ARM.replace("ANSWER", "unreachable \"an A is the only answer\""), "fee"),
+                readRefused(
+                        INSIDE_AN_ARM.replace("ANSWER", "unreachable \"an A is the only answer\""),
+                        "fee"),
                 "nothing arrives at a value down there");
     }
 

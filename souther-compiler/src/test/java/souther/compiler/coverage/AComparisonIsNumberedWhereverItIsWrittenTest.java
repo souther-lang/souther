@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.SourceConstructOrigin;
@@ -55,7 +56,7 @@ class AComparisonIsNumberedWhereverItIsWrittenTest {
 
     /** Every comparison of {@code twice}, by the source construct that wrote it. */
     private static Map<SourceConstructOrigin, ConstructOccurrence> comparisonsOfTwice() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(MODULE)).value();
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get("twice");

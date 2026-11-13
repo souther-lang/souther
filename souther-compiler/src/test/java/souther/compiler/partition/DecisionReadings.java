@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -22,11 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * <p>Read the way whoever asks the account reads it, and held to the model having compiled first: a
  * module the compile stopped in answers every question with nothing, so a measurement taken off one
  * comes back saying the body decides nothing and reads the same as a body that does.
- *
- * <p>Held to what the reading is read off and to nothing past it. A reading is made of the checked
- * bodies, the rules and the inputs, so those are asked and every error they found is refused; what
- * code the module would generate and what its examples would answer are no part of the reading,
- * and a test asking about a decision does not pay for them.
  */
 final class DecisionReadings {
 
@@ -40,11 +36,8 @@ final class DecisionReadings {
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, InputDomain> inputs =
                 compilation.db().ask(new Adequacy.Inputs(module)).value();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(said -> said.diagnostic().code() + " " + said.diagnostic().titleKey())
-                        .toList(),
-                "a model that did not compile answers every question with nothing");
         assertNotNull(checked, "the module's bodies were checked");
+        ACompiledModel.compiles(compilation);
         return new Compiled(checked, rules, inputs);
     }
 

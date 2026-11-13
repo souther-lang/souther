@@ -33,7 +33,7 @@ class ThePartOfAShiftedDateIsNotThePartOfTheDateTest {
     /** The report of a behavior guarded by {@code guard}, with one row at {@code day}, which is a
      *  date the guard is expected to hold of. */
     private static String report(String guard, LocalDate day) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module m
 
                 data Yes = { v: Int }
@@ -50,9 +50,7 @@ class ThePartOfAShiftedDateIsNotThePartOfTheDateTest {
 
                 example f
                     | "r" : (Date("%s")) -> Yes { v = 1 }
-                """.formatted(guard, day), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.formatted(guard, day), Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }

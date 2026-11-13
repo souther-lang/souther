@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
@@ -16,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -534,8 +534,8 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
      */
     @Test
     void whatTheLibrarySaysIsTheSameInAnyOrderLeavesTheOrderToTheRows() {
-        for (String first : List.of("List.length(xs) >= 2", "!List.isEmpty(xs)",
-                "List.all(x -> x != 7, xs)", "List.contains(n, xs)")) {
+        for (String first : List.of("List.length(xs) >= 2", "Bool.not(List.isEmpty(xs))",
+                "List.all(x -> Bool.not(x == 7), xs)", "List.contains(n, xs)")) {
             String guards = "guard " + first + " else No\n"
                     + "    guard List.any(x -> 100 / x >= 1, xs) else No";
             String report = human(OVER_A_LIST.formatted(guards));
@@ -796,21 +796,20 @@ class AComparisonOfAQuotientByAValueIsReadOnEachSignOfTheDivisorTest {
 
     /** Each model measured once for the class: tests ask one model its lines and its report, and
      *  only read them. */
-    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
 
     /** And given back when the class is done with them: a fork keeps its JVM, so what is held
      *  statically is held for every class after this one. */
     @AfterAll
     static void released() {
-        MEASURED.clear();
+        SHARED.release();
     }
 
     private static Compilation measured(String model) {
-        return MEASURED.computeIfAbsent(model, source -> {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            return compilation;
+        return SHARED.compiles(model, () -> {
+            Compilation made = Compilation.ofSource(model, "Main");
+            made.measure(Adequacy.Asked.fullReport());
+            return made;
         });
     }
 }

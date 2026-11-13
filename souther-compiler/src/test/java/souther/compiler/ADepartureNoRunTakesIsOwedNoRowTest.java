@@ -535,10 +535,7 @@ class ADepartureNoRunTakesIsOwedNoRowTest {
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     private static String report(Compilation compilation) {

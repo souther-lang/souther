@@ -347,14 +347,13 @@ class AProductOrARoundingOfEachElementIsReadAsTheTotalItComesToTest {
      */
     @Test
     void aProductIsReadAsOneValueAndStopsWhereItIsWrittenToStop() {
-        Compilation stops = measured(PARENTHESISED.formatted("(x.a * x.b) * x.c"));
+        Compilation stops = attempted(PARENTHESISED.formatted("(x.a * x.b) * x.c"));
+        ACompiledModel.refusedWith(List.of("E1905"), stops);
         Compilation answers = measured(PARENTHESISED.formatted("x.a * (x.b * x.c)"));
-        for (Compilation each : List.of(stops, answers)) {
-            assertTrue(report(each).contains("List.sum({1·a·b·c + 0 | xs[*]}): = 1"),
-                    () -> report(each));
-        }
-        assertEquals(List.of("E1905"), codesOf(stops), () -> report(stops));
-        assertEquals(List.of(), codesOf(answers), () -> report(answers));
+        assertTrue(report(stops).contains("List.sum({1·a·b·c + 0 | xs[*]}): = 1"),
+                () -> report(stops));
+        assertTrue(report(answers).contains("List.sum({1·a·b·c + 0 | xs[*]}): = 1"),
+                () -> report(answers));
         assertTrue(report(stops).contains("! no row is at the OFF point"), () -> report(stops));
         assertFalse(report(answers).contains("! no row is at the OFF point"),
                 () -> report(answers));
@@ -376,10 +375,6 @@ class AProductOrARoundingOfEachElementIsReadAsTheTotalItComesToTest {
         assertTrue(atTheLeast.contains("round(-2147483648, HALF_UP, 1·a + 0)"), atTheLeast);
         String past = report(measured(model.formatted("2147483648")));
         assertFalse(past.contains("round(2147483648"), past);
-    }
-
-    private static List<String> codesOf(Compilation compilation) {
-        return compilation.errors().stream().map(each -> each.diagnostic().code()).toList();
     }
 
     private static List<List<FixtureTemplate>> composedForTheRules(Compilation compilation) {
@@ -405,6 +400,11 @@ class AProductOrARoundingOfEachElementIsReadAsTheTotalItComesToTest {
     private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
 
     private static Compilation measured(String source) {
+        return ACompiledModel.compiles(attempted(source));
+    }
+
+    /** The model measured and answered in full, whether or not it compiles. */
+    private static Compilation attempted(String source) {
         return MEASURED.computeIfAbsent(source, text -> {
             Compilation compilation = Compilation.ofSource(text, "Main");
             compilation.measure(Adequacy.Asked.fullReport());

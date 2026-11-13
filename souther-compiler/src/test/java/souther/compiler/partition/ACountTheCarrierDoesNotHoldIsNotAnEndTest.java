@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
@@ -65,7 +66,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
 
                 behavior f : (s: PastEnd) -> Verdict
                 let f (s) = Ok
-                """));
+                """, List.of("E1013")));
     }
 
     @Test
@@ -76,7 +77,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
 
                 behavior f : (s: BeforeStart) -> Verdict
                 let f (s) = Ok
-                """));
+                """, List.of("E1013")));
     }
 
     /** The same at the end of the calendar, which behaved this way before an enumeration was a
@@ -95,7 +96,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
 
                 behavior f : (s: PastDate) -> Verdict
                 let f (s) = Ok
-                """));
+                """, List.of("E1013")));
     }
 
     /** And a bound the carrier does hold is still an end, so none of the above passes by drawing
@@ -169,14 +170,14 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
 
                 data PastMoment = DateTime
                     invariant value > DateTime("+999999999-12-31T23:59:59.999999999")
-                """, "PastMoment"));
+                """, "PastMoment", List.of("E1322")));
         assertEquals(List.of("BeforeMoment(DateTime(\"" + START_OF_THE_DAY + "\"))"),
                 representatives("""
                 module example.beforemoment
 
                 data BeforeMoment = DateTime
                     invariant value < DateTime("-999999999-01-01T00:00:00")
-                """, "BeforeMoment"));
+                """, "BeforeMoment", List.of("E1013")));
     }
 
     /** And a range inside the calendar still gives up a value from inside itself, so the two above
@@ -200,7 +201,14 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
 
     /** What stands for a position of {@code name}, written. */
     private static List<String> representatives(String source, String name) {
+        return representatives(source, name, List.of());
+    }
+
+    /** The same, of a model the compile refuses with {@code refusals} and nothing else. */
+    private static List<String> representatives(String source, String name,
+                                                List<String> refusals) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        ACompiledModel.refusedWith(refusals, compilation);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return Partitions.representativesOf(
@@ -214,7 +222,13 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
 
     /** Every obligation the one position of {@code source}'s behavior owes, written. */
     private static List<String> obligations(String source) {
+        return obligations(source, List.of());
+    }
+
+    /** The same, of a model the compile refuses with {@code refusals} and nothing else. */
+    private static List<String> obligations(String source, List<String> refusals) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        ACompiledModel.refusedWith(refusals, compilation);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =

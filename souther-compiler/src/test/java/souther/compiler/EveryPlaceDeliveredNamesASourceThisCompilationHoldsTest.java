@@ -76,8 +76,7 @@ class EveryPlaceDeliveredNamesASourceThisCompilationHoldsTest {
 
                 data Page = { held: Held }
                 """), ModulePath.of(published()));
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1504", "E1504"), compilation);
     }
 
     /**
@@ -90,8 +89,7 @@ class EveryPlaceDeliveredNamesASourceThisCompilationHoldsTest {
 
                 let counted (ns: List<Int>): Int = List.length(List.filter(n -> n, ns))
                 """, "Main");
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1805"), compilation);
     }
 
     /** A model of this compile's own with a rule its rows do not reach, so the adequacy document has
@@ -118,8 +116,7 @@ class EveryPlaceDeliveredNamesASourceThisCompilationHoldsTest {
                     | (Amount(50)) -> Submitted { cost = Amount(50) }
                 """, "Main");
         compilation.measure(souther.compiler.query.Adequacy.Level.ALL);
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     /** What a place a reader is offered says about which file it is in. */
@@ -194,20 +191,23 @@ class EveryPlaceDeliveredNamesASourceThisCompilationHoldsTest {
      */
     @Test
     void everyCitationDeliveredEitherPointsSomewhereHeldOrSaysWhereTheCodeIs() {
-        for (Compilation compilation : List.of(reaching(), overTheLibrary())) {
-            Set<SourceId> held = new LinkedHashSet<>(compilation.sourceIds());
-            List<Citation> delivered = citations(compilation);
+        assertEveryCitationIsPlaced(reaching());
+        assertEveryCitationIsPlaced(overTheLibrary());
+    }
 
-            assertFalse(delivered.isEmpty(), "the fixture reports something, or this checks nothing");
-            assertEquals(List.of(), delivered.stream().filter(citation -> switch (citation) {
-                case Citation.Written w -> !isHeld(w.at(), held);
-                case Citation.Reached r -> !isHeld(r.at(), held);
-                case Citation.Unplaced _ -> true;
-                case Citation.UnplacedElsewhere u -> u.provenance().reachedBy().isEmpty();
-                case Citation.OutOfSight out -> out.provenance().reachedBy().isEmpty();
-            }).toList(), "a reader is sent to a file this compilation holds, or told where the code"
-                    + " is written");
-        }
+    private static void assertEveryCitationIsPlaced(Compilation compilation) {
+        Set<SourceId> held = new LinkedHashSet<>(compilation.sourceIds());
+        List<Citation> delivered = citations(compilation);
+
+        assertFalse(delivered.isEmpty(), "the fixture reports something, or this checks nothing");
+        assertEquals(List.of(), delivered.stream().filter(citation -> switch (citation) {
+            case Citation.Written w -> !isHeld(w.at(), held);
+            case Citation.Reached r -> !isHeld(r.at(), held);
+            case Citation.Unplaced _ -> true;
+            case Citation.UnplacedElsewhere u -> u.provenance().reachedBy().isEmpty();
+            case Citation.OutOfSight out -> out.provenance().reachedBy().isEmpty();
+        }).toList(), "a reader is sent to a file this compilation holds, or told where the code"
+                + " is written");
     }
 
     private static boolean isHeld(SourcePos at, Set<SourceId> held) {

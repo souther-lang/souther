@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -33,7 +34,12 @@ class ACountHeldAgainstItsOwnContainersSizeNeverExceedsItTest {
 
     private static final String EXCLUDED = "no_value_can_stand_there";
 
-    private static String model(String guard, String moreRows) {
+    /** What the three rows every model here carries answer when the guard is that the priced deals
+     *  are as many as the deals: all priced, none, and one missing. */
+    private static final List<String> WHEN_PRICED_MATCH_DEALS = List.of("Ok", "Ok", "Short");
+
+    /** The model with the answers its three base rows give under {@code guard}. */
+    private static String model(String guard, String moreRows, List<String> answers) {
         return """
                 module probe.count exposing ( check, Deal, Code, Table, Ok, Short )
 
@@ -59,18 +65,15 @@ class ACountHeldAgainstItsOwnContainersSizeNeverExceedsItTest {
                 let known = Table { rates = Map.fromList([ (Code("USD"), 1) ]) }
 
                 example check
-                    | "all priced" : ([ usd ], [ usd ], known) -> Ok
-                    | "none" : ([ ], [ ], known) -> Ok
-                    | "one missing" : ([ usd, eur ], [ usd, eur ], known) -> Short
+                    | "all priced" : ([ usd ], [ usd ], known) -> %s
+                    | "none" : ([ ], [ ], known) -> %s
+                    | "one missing" : ([ usd, eur ], [ usd, eur ], known) -> %s
                 %s
-                """.formatted(guard, moreRows);
+                """.formatted(guard, answers.get(0), answers.get(1), answers.get(2), moreRows);
     }
 
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     /**
@@ -79,7 +82,16 @@ class ACountHeldAgainstItsOwnContainersSizeNeverExceedsItTest {
      * row stands at it.
      */
     private static List<String> pointsOf(String guard, String moreRows) {
-        Compilation compilation = measured(model(guard, moreRows));
+        return pointsOf(guard, moreRows, WHEN_PRICED_MATCH_DEALS);
+    }
+
+    /** The same, for a guard whose three base rows answer {@code answers}. */
+    private static List<String> pointsOf(String guard, List<String> answers) {
+        return pointsOf(guard, "", answers);
+    }
+
+    private static List<String> pointsOf(String guard, String moreRows, List<String> answers) {
+        Compilation compilation = measured(model(guard, moreRows, answers));
         JsonNode document = JSON.readTree(AdequacyReport.of(compilation).json(
                 SourceRendering.namedByIdentity(compilation.texts())));
         List<String> out = new ArrayList<>();
@@ -138,7 +150,8 @@ class ACountHeldAgainstItsOwnContainersSizeNeverExceedsItTest {
      */
     @Test
     void aLevelBelowNoughtStillOwesTheValueBesideItThatIsNought() {
-        List<String> points = pointsOf("List.length(priced) + 1 == List.length(deals)");
+        List<String> points = pointsOf("List.length(priced) + 1 == List.length(deals)",
+                List.of("Short", "Short", "Ok"));
 
         assertEquals(List.of("out:excluded"), excludedIn(points), points::toString);
         assertTrue(points.contains("on:owed -1 hit"), points::toString);
@@ -148,12 +161,14 @@ class ACountHeldAgainstItsOwnContainersSizeNeverExceedsItTest {
     /** A level above nought is one the quantity never holds, and the report says so. */
     @Test
     void aLevelAboveNoughtIsALineOutsideWhatTheQuantityHolds() {
+        List<String> everyRowShort = List.of("Short", "Short", "Short");
         Compilation compilation = measured(model(
-                "List.length(priced) == List.length(deals) + 1", ""));
+                "List.length(priced) == List.length(deals) + 1", "", everyRowShort));
         String said = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
-        assertEquals(List.of(), pointsOf("List.length(priced) == List.length(deals) + 1"));
+        assertEquals(List.of(),
+                pointsOf("List.length(priced) == List.length(deals) + 1", everyRowShort));
         assertTrue(said.contains("draws its line outside what the quantity it cuts ever holds"),
                 said);
     }
@@ -177,7 +192,8 @@ class ACountHeldAgainstItsOwnContainersSizeNeverExceedsItTest {
     /** Its own size added and not taken away is a different quantity, above nought as it may be. */
     @Test
     void theSizeOfItsOwnContainerAddedLeavesItUnbounded() {
-        List<String> points = pointsOf("List.length(priced) + List.length(deals) == 2");
+        List<String> points = pointsOf("List.length(priced) + List.length(deals) == 2",
+                List.of("Ok", "Short", "Short"));
 
         assertEquals(List.of(), excludedIn(points), points::toString);
         assertFalse(points.isEmpty());
@@ -186,7 +202,8 @@ class ACountHeldAgainstItsOwnContainersSizeNeverExceedsItTest {
     @Test
     void theSizeOfAnotherContainerBesideItsOwnLeavesItUnbounded() {
         List<String> points = pointsOf(
-                "List.length(priced) == List.length(deals) + List.length(others)");
+                "List.length(priced) == List.length(deals) + List.length(others)",
+                List.of("Short", "Ok", "Short"));
 
         assertEquals(List.of(), excludedIn(points), points::toString);
         assertFalse(points.isEmpty());

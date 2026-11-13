@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.jvm.ClassFileImage;
@@ -58,7 +59,8 @@ class WhatAModuleIsBuiltAgainstIsWhatItReadTest {
      */
     @Test
     void workingOutWhatAModuleProvidesReadsWhatItsProjectionsRestOn() {
-        Compilation compilation = Compilation.ofSources(List.of(C, B), ModulePath.of(Map.of()));
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(C, B), ModulePath.of(Map.of())));
 
         Linkages.Of provided = compilation.db().ask(new Linkages.Provided("lib.b")).value();
 

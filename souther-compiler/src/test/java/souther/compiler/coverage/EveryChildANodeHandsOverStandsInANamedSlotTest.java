@@ -3,6 +3,7 @@ package souther.compiler.coverage;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
@@ -191,13 +192,23 @@ class EveryChildANodeHandsOverStandsInANamedSlotTest {
         checked = null;
     }
 
+    /** The corpora written to be refused, and what each is refused for. */
+    private static final Map<String, List<String>> CORPUS_REFUSALS =
+            Map.of("booking", List.of("E2010", "E1013"));
+
     private static List<Core> checkedBodies() {
         List<Core> out = new ArrayList<>();
         List<List<String>> sources = new ArrayList<>();
-        ConformanceCorpus.all().forEach(corpus -> sources.add(corpus.sources()));
+        List<List<String>> refused = new ArrayList<>();
+        ConformanceCorpus.all().forEach(corpus -> {
+            sources.add(corpus.sources());
+            refused.add(CORPUS_REFUSALS.getOrDefault(corpus.name(), List.of()));
+        });
         sources.add(List.of(BESIDE_THE_CORPORA));
-        for (List<String> each : sources) {
-            Compilation compilation = Compilation.ofSources(each, ModulePath.EMPTY);
+        refused.add(List.of());
+        for (int at = 0; at < sources.size(); at++) {
+            Compilation compilation = Compilation.ofSources(sources.get(at), ModulePath.EMPTY);
+            ACompiledModel.refusedWith(refused.get(at), compilation);
             int before = out.size();
             for (String module : compilation.modules()) {
                 Bodies.Elaborated checked =

@@ -211,10 +211,7 @@ class ACalledBehaviorsExamplesSeedItsCallersRowsTest {
     void aSeededRowStandsInEveryDependencyItsCallerRequires() {
         Compilation compilation = Compilation.ofSource(WITH_A_DEPENDENCY, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
-                "the model compiles");
+        ACompiledModel.compiles(compilation);
         var offering = Adequacy.offeredFor(compilation.db(),
                 OfferingRequest.overTheModule("repro.dep"));
         var rows = offering.rowsByBehavior().getOrDefault("total", List.of());
@@ -378,7 +375,7 @@ class ACalledBehaviorsExamplesSeedItsCallersRowsTest {
     private static RowWork owedForScore(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return compilation.db().ask(new Adequacy.RowsOwed("repro.split", "score")).value();
     }
 
@@ -389,7 +386,7 @@ class ACalledBehaviorsExamplesSeedItsCallersRowsTest {
     private static List<String> offered(String source, String module, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule(module))
                 .rowsByBehavior().getOrDefault(behavior, List.of()).stream()
                 .map(row -> String.join(", ",
@@ -401,7 +398,7 @@ class ACalledBehaviorsExamplesSeedItsCallersRowsTest {
     private static List<String> seededOnly(String source, String module, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return compilation.db().ask(new Adequacy.Generated(module, behavior)).value()
                 .callSeeds().stream()
                 .map(row -> String.join(", ",

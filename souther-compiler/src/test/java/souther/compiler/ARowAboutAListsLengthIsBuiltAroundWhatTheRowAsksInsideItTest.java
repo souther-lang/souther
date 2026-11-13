@@ -183,7 +183,7 @@ class ARowAboutAListsLengthIsBuiltAroundWhatTheRowAsksInsideItTest {
     private static List<Adequacy.GenerationDisposition> generated(String guard, String rows) {
         Compilation compilation = Compilation.ofSource(MODEL.formatted(guard) + rows, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Offering offering = Adequacy.offeredFor(compilation.db(),
                 OfferingRequest.overTheModule("example.quote"));
         List<Adequacy.GenerationDisposition> out = new ArrayList<>();

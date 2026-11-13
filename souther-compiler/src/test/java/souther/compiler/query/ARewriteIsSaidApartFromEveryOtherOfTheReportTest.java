@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceRendering;
@@ -95,7 +96,7 @@ class ARewriteIsSaidApartFromEveryOtherOfTheReportTest {
     void twoForksOfOneLibraryDefinitionAreTwoWarnings() {
         Compilation compilation = compiled(CLAMPED_TWICE);
         compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         List<String> said = compilation.warnings().stream()
                 .map(Located::diagnostic)
@@ -117,7 +118,7 @@ class ARewriteIsSaidApartFromEveryOtherOfTheReportTest {
     void theWarningsAreToldApartInJapaneseInJapanese() {
         Compilation compilation = compiled(CLAMPED_TWICE);
         compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         List<String> said = compilation.warnings().stream()
                 .map(Located::diagnostic)
@@ -137,7 +138,7 @@ class ARewriteIsSaidApartFromEveryOtherOfTheReportTest {
 
     private static AdequacyReport reported(Compilation compilation) {
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation);
     }
 

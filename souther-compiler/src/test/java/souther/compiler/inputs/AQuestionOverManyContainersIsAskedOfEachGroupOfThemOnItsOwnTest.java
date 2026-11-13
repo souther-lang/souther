@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -46,7 +47,7 @@ class AQuestionOverManyContainersIsAskedOfEachGroupOfThemOnItsOwnTest {
         for (int each = 0; each < LISTS; each++) {
             fields.append(each == 0 ? "" : ", ").append("x").append(each).append(": List<Int>");
         }
-        Compilation compilation = Compilation.ofSources(List.of("""
+        Compilation compilation = ACompiledModel.compiles(Compilation.ofSources(List.of("""
                 module g
 
                 data Box = { %s }
@@ -54,7 +55,7 @@ class AQuestionOverManyContainersIsAskedOfEachGroupOfThemOnItsOwnTest {
                 data Ok
 
                 behavior counted : (b: Box) -> Ok
-                """.formatted(fields)), ModulePath.EMPTY);
+                """.formatted(fields)), ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         RuleReadingContext reading = RuleReadingContext.unshared(rules,
@@ -99,7 +100,7 @@ class AQuestionOverManyContainersIsAskedOfEachGroupOfThemOnItsOwnTest {
                 rules.append("                    invariant none").append(each)
                         .append(" = List.length(x").append(each).append(") == 0\n");
             }
-            Compilation compilation = Compilation.ofSources(List.of("""
+            Compilation compilation = ACompiledModel.compiles(Compilation.ofSources(List.of("""
                     module g
 
                     data Box = { %s }
@@ -107,7 +108,7 @@ class AQuestionOverManyContainersIsAskedOfEachGroupOfThemOnItsOwnTest {
                     data Ok
 
                     behavior counted : (b: Box) -> Ok
-                    """.formatted(fields, rules)), ModulePath.EMPTY);
+                    """.formatted(fields, rules)), ModulePath.EMPTY));
             String module = compilation.modules().get(0);
             RuleReadingSource source = RuleReadings.of(compilation, module);
             RuleReadingContext reading = RuleReadingContext.unshared(source,
@@ -149,7 +150,7 @@ class AQuestionOverManyContainersIsAskedOfEachGroupOfThemOnItsOwnTest {
                 for (int each = 1; each <= unrelated; each++) {
                     fields.append(", x").append(each).append(": List<Int>");
                 }
-                Compilation compilation = Compilation.ofSources(List.of("""
+                Compilation compilation = ACompiledModel.compiles(Compilation.ofSources(List.of("""
                         module g
 
                         data Box = { %s }
@@ -158,7 +159,7 @@ class AQuestionOverManyContainersIsAskedOfEachGroupOfThemOnItsOwnTest {
                         data Ok
 
                         behavior counted : (b: Box) -> Ok
-                        """.formatted(fields)), ModulePath.EMPTY);
+                        """.formatted(fields)), ModulePath.EMPTY));
                 String module = compilation.modules().get(0);
                 RuleReadingSource rules = RuleReadings.of(compilation, module);
                 RuleReadingContext reading = RuleReadingContext.unshared(rules,

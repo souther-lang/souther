@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlPlace;
@@ -323,8 +324,7 @@ class AReadingAnswersAboutThePlacesOfOnePlanTest {
     }
 
     private static Read read(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(model);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         Map<String, PathReachability.Answers> answers =

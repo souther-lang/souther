@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class AnEnsuresBetweenTwoPositionsSinglesNothingOutTest {
 
     private static AdequacyReport.BehaviorReport measured(String clause) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module m
 
                 data R = { a: Int, other: Int }
@@ -38,11 +38,18 @@ class AnEnsuresBetweenTwoPositionsSinglesNothingOutTest {
                 let f (r) = No
 
                 example f
-                    | "one" : (R { a = 1, other = 2 }) -> No
-                """.formatted(clause), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                    | "one" : (%s) -> No
+                """.formatted(clause, rowWhere(clause)), Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0);
+    }
+
+    /** An {@code R} the clause holds of, so that a row answering {@code No} keeps the clause. */
+    private static String rowWhere(String clause) {
+        return switch (clause) {
+            case "r.a == r.other" -> "R { a = 1, other = 1 }";
+            case "r.a == 20" -> "R { a = 20, other = 2 }";
+            default -> "R { a = 1, other = 2 }";
+        };
     }
 
     /** The classes the clause divides the behavior's positions into. */
@@ -81,7 +88,7 @@ class AnEnsuresBetweenTwoPositionsSinglesNothingOutTest {
 
     /** The same comparison as a body's guard, the other producer of the line. */
     private static Compilation guarded(String condition) {
-        Compilation compilation = Compilation.ofSource("""
+        return ACompiledModel.measured("""
                 module m
 
                 data R = { a: Int, other: Int }
@@ -92,11 +99,8 @@ class AnEnsuresBetweenTwoPositionsSinglesNothingOutTest {
                 let f (r) = if %s then No else Ok
 
                 example f
-                    | "one" : (R { a = 1, other = 2 }) -> Ok
-                """.formatted(condition), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+                    | "one" : (%s) -> No
+                """.formatted(condition, rowWhere(condition)),Adequacy.Asked.fullReport());
     }
 
     /** While one about a single position still puts the value in a class of its own. */
@@ -114,7 +118,7 @@ class AnEnsuresBetweenTwoPositionsSinglesNothingOutTest {
      */
     @Test
     void andTheSameComparisonInABodyDividesItAlike() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module m
 
                 data R = { a: Int, other: Int }
@@ -126,9 +130,7 @@ class AnEnsuresBetweenTwoPositionsSinglesNothingOutTest {
 
                 example f
                     | "one" : (R { a = 1, other = 2 }) -> No
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
 
         assertEquals(classes("r.a == 20"),
                 AdequacyReport.of(compilation).modules().get(0).behaviors().get(0)

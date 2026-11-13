@@ -1,5 +1,7 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -23,9 +25,7 @@ class ARuleHandedToALibraryFunctionSurvivesTheLambdaItIsWrittenInTest {
     private static final String MODULE = "example.rules";
 
     private static Adequacy.BranchEvidence arms(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Adequacy.BranchEvidence said = compilation.db()
                 .ask(new Adequacy.BranchCoverage(MODULE)).value().get("sweep");
         assertNotNull(said, "the model under test compiles");

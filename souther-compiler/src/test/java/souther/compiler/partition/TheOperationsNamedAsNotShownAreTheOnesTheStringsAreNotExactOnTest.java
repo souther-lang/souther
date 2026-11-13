@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -31,9 +32,7 @@ class TheOperationsNamedAsNotShownAreTheOnesTheStringsAreNotExactOnTest {
             "\"imagesNotShown\"\\s*:\\s*\\[([^\\]]*)\\]");
 
     private static NavigableSet<String> named(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         String json = AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
         NavigableSet<String> out = new TreeSet<>();

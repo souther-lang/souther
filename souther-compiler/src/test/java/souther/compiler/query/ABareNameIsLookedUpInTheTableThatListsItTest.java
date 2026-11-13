@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.Scoping;
 import souther.compiler.types.ValueName;
@@ -38,7 +39,7 @@ class ABareNameIsLookedUpInTheTableThatListsItTest {
             import up ( price )
             import String ( length )
 
-            let own (n) = n + price
+            let own (n: Int): Int = n + price
 
             behavior sizes : (s: String) -> Int
             let sizes (s) = own(length(s))
@@ -51,9 +52,9 @@ class ABareNameIsLookedUpInTheTableThatListsItTest {
             """;
 
     private static Compilation compiled() {
-        return Compilation.ofDocuments(
+        return ACompiledModel.compiles(Compilation.ofDocuments(
                 Map.of("file:///up.sou", UP, "file:///down.sou", DOWN), Set.of(),
-                souther.compiler.meta.ModulePath.EMPTY);
+                souther.compiler.meta.ModulePath.EMPTY));
     }
 
     private static Resolve.Reachable reachable(Compilation compilation) {

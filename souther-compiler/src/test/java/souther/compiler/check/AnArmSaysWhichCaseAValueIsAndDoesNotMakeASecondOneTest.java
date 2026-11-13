@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.TestDay;
 import souther.compiler.types.ConstructOccurrence;
@@ -501,8 +502,8 @@ class AnArmSaysWhichCaseAValueIsAndDoesNotMakeASecondOneTest {
         java.util.Map<String, String> byId = new java.util.LinkedHashMap<>();
         byId.put("m.sou", source);
         return TypeChecker.symbols(
-                souther.compiler.query.Compilation.ofDocuments(byId, java.util.Set.of(),
-                                souther.compiler.meta.ModulePath.EMPTY)
+                ACompiledModel.compiles(souther.compiler.query.Compilation.ofDocuments(byId,
+                                java.util.Set.of(), souther.compiler.meta.ModulePath.EMPTY))
                         .db().ask(new souther.compiler.query.Names.Resolved("demo")).value(), DefaultStdlib.get());
     }
 

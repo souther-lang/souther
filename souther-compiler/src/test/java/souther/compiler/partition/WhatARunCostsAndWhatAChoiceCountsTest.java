@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.Rewriting;
@@ -345,11 +346,11 @@ class WhatARunCostsAndWhatAChoiceCountsTest {
     }
 
     private static SiteNumbering numbering() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module example.one
                 behavior one : (n: Int) -> Int
                 let one (n) = if n > 0 then n else 0
-                """, "Main");
+                """);
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().getFirst())).value();
         assertNotNull(checked);

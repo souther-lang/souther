@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Severity;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.report.AdequacyReport;
@@ -9,6 +10,7 @@ import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -148,13 +150,16 @@ class TheBlockAnsweredIsTheFixedPointOfTheAccountTest {
         String missed = answeredThroughoutWith(MODEL, offered, "Yes");
 
         // Everything the rows were composed to reach is discharged, and one thing is not.
-        assertEquals(List.of("! no row expects `No`"), marked(report(missed)),
-                () -> "what the answers missed, and nothing else:\n" + report(missed));
-        assertTrue(report(missed).contains("adequacy: not satisfied"), () -> report(missed));
+        assertEquals(List.of("! no row expects `No`"), marked(reportOfWhatTheBodyRefuses(missed)),
+                () -> "what the answers missed, and nothing else:\n"
+                        + reportOfWhatTheBodyRefuses(missed));
+        assertTrue(reportOfWhatTheBodyRefuses(missed).contains("adequacy: not satisfied"),
+                () -> reportOfWhatTheBodyRefuses(missed));
 
         // Not closed by the body having answered with it: the rows are what state a case.
-        assertTrue(report(missed).contains("out specified 1/2  observed 2/2"),
-                () -> "what was answered and what was expected are two columns:\n" + report(missed));
+        assertTrue(reportOfWhatTheBodyRefuses(missed).contains("out specified 1/2  observed 2/2"),
+                () -> "what was answered and what was expected are two columns:\n"
+                        + reportOfWhatTheBodyRefuses(missed));
 
         // And the next run says it again, in the words of the thing that could compose no row.
         assertTrue(block(missed).contains("nothing aims a row at `No` in `judge`"),
@@ -205,8 +210,8 @@ class TheBlockAnsweredIsTheFixedPointOfTheAccountTest {
     void everyTargetOfAProposalIsDischargedByWhateverIsAnsweredToIt() {
         List<String> offered = rowsOffered(MODEL);
         List<String> owed = whereTheRowsWent(report(withRows(MODEL, offered)));
-        List<String> believed =
-                whereTheRowsWent(report(answeredThroughoutWith(MODEL, offered, "Yes")));
+        List<String> believed = whereTheRowsWent(
+                reportOfWhatTheBodyRefuses(answeredThroughoutWith(MODEL, offered, "Yes")));
 
         assertFalse(offered.isEmpty(), "there are proposals whose targets this is about");
         assertFalse(owed.isEmpty(), "and measures of where their rows went");
@@ -218,7 +223,7 @@ class TheBlockAnsweredIsTheFixedPointOfTheAccountTest {
         // readings of one unchanged report.
         assertTrue(report(withRows(MODEL, offered)).contains("out specified 2/2"),
                 "the completion that answers what the model owes states both cases");
-        assertTrue(report(answeredThroughoutWith(MODEL, offered, "Yes"))
+        assertTrue(reportOfWhatTheBodyRefuses(answeredThroughoutWith(MODEL, offered, "Yes"))
                         .contains("out specified 1/2"),
                 "and the one that does not, states one");
     }
@@ -242,7 +247,7 @@ class TheBlockAnsweredIsTheFixedPointOfTheAccountTest {
      *  nothing (#1579). */
     private static List<String> errorsIn(String model) {
         List<String> out = new ArrayList<>();
-        measured(model).diagnostics().forEach((_, said) -> said.forEach(each -> {
+        ACompiledModel.refusedOnlyWith(Set.of("E1905"), measured(model)).diagnostics().forEach((_, said) -> said.forEach(each -> {
             if (each.diagnostic().severity() == Severity.ERROR) {
                 out.add(String.valueOf(each.diagnostic().code()));
             }
@@ -309,7 +314,17 @@ class TheBlockAnsweredIsTheFixedPointOfTheAccountTest {
     }
 
     private static String report(String model) {
+        return humanReport(ACompiledModel.compiles(measured(model)));
+    }
+
+    /** The report of a model whose rows state answers the body refuses, which it says it does. */
+    private static String reportOfWhatTheBodyRefuses(String model) {
         Compilation measured = measured(model);
+        ACompiledModel.refusedWith(List.of("E1905", "E1905"), measured);
+        return humanReport(measured);
+    }
+
+    private static String humanReport(Compilation measured) {
         return AdequacyReport.of(measured)
                 .humanInEnglish(SourceRendering.namedByIdentity(measured.texts()));
     }

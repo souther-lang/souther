@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.UndividedPosition;
@@ -186,8 +187,6 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
         compilation.measure(Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
 
         PartitionEvidence.NotRead year = notRead(evidence, "dated").get("Date.year(deals[*].on)");
         assertEquals(UndividedPosition.Reason.RELATION_NOT_SHOWN_REACHED_AT_EVERY_VALUE,
@@ -209,6 +208,7 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
         document.findValues("shownReachedAt").forEach(values ->
                 values.forEach(each -> written.add(each.asString(""))));
         assertTrue(written.containsAll(List.of("2026", "\"Z\"")), written.toString());
+        ACompiledModel.compiles(compilation);
     }
 
     @Test
@@ -217,14 +217,13 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
         compilation.measure(Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
 
         Map<String, PartitionEvidence.NotRead> covered = notRead(evidence, "covered");
         assertEquals(List.of("\"Y\"", "\"W\""), covered.get("deals[*].currency").shownReachedAt(),
                 covered.toString());
         assertEquals(List.of("\"Y\""), covered.get("rates.rates[key]").shownReachedAt(),
                 covered.toString());
+        ACompiledModel.compiles(compilation);
     }
 
     /**
@@ -272,8 +271,7 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
         compilation.measure(Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         return evidence;
     }
 
@@ -296,12 +294,11 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
         compilation.measure(Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
 
         Map<String, PartitionEvidence.NotRead> byPlace = notRead(evidence, "priced");
         assertTrue(!byPlace.isEmpty(), byPlace.toString());
         byPlace.forEach((at, each) -> assertEquals(List.of(), each.shownReachedAt(), at));
+        ACompiledModel.compiles(compilation);
     }
 
     /** A compilation writing rows on a day the test fixes, so that what a search generates where the model

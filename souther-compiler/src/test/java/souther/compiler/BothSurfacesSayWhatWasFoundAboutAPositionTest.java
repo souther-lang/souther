@@ -56,9 +56,7 @@ class BothSurfacesSayWhatWasFoundAboutAPositionTest {
     }
 
     private static Made reportOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return new Made(AdequacyReport.of(compilation),
                 SourceRendering.namedByIdentity(compilation.texts()));
     }

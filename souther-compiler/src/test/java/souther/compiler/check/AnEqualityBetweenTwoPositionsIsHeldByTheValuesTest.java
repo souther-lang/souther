@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Located;
 import souther.compiler.query.Compilation;
 
@@ -38,9 +39,8 @@ class AnEqualityBetweenTwoPositionsIsHeldByTheValuesTest {
 
             """;
 
-    private static List<String> saidOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+    private static List<String> saidOf(List<String> codes, String source) {
+        Compilation compilation = ACompiledModel.refusedWith(codes, Compilation.ofSource(source, "Main"));
         return compilation.diagnostics().values().stream()
                 .flatMap(List::stream)
                 .map(Located::diagnostic)
@@ -49,13 +49,14 @@ class AnEqualityBetweenTwoPositionsIsHeldByTheValuesTest {
     }
 
     private static void refuses(String said, String source) {
-        assertEquals(List.of(said), saidOf(source), "no value of this can be written");
+        assertEquals(List.of(said), saidOf(List.of("E1013"), source),
+                "no value of this can be written");
     }
 
     /** The places a refusal names, as it writes them. */
     private static String named(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.refusedWith(List.of("E1013"),
+                Compilation.ofSource(source, "Main"));
         return compilation.diagnostics().values().stream()
                 .flatMap(List::stream)
                 .map(Located::diagnostic)
@@ -67,7 +68,7 @@ class AnEqualityBetweenTwoPositionsIsHeldByTheValuesTest {
     }
 
     private static void admits(String source) {
-        assertEquals(List.of(), saidOf(source), "a value of this can be written");
+        assertEquals(List.of(), saidOf(List.of(), source), "a value of this can be written");
     }
 
     /**

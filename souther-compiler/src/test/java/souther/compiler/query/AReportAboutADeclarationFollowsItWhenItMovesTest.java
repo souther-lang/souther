@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticPlace;
@@ -111,7 +112,8 @@ class AReportAboutADeclarationFollowsItWhenItMovesTest {
      */
     @Test
     void aWarningAboutAnImportedRuleFollowsItWithoutCheckingTheBodyAgain() {
-        Compilation c = compiling(RULED);
+        Compilation c = workspace(RULED);
+        ACompiledModel.compiles(c);
         Answer<?> judged = c.db().ask(new Bodies.CheckedBehavior("shop.cart", "make"));
         int primary = whereTheWarningIs(c);
         int secondary = whereTheRuleIsQuoted(c);
@@ -165,18 +167,14 @@ class AReportAboutADeclarationFollowsItWhenItMovesTest {
         edited.put("prices.sou", prices);
         edited.put("cart.sou", BUILDING);
         c.update(edited, Set.of(), TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
     }
 
-    private static Compilation compiling(String prices) {
+    private static Compilation workspace(String prices) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("prices.sou", prices);
         byId.put("cart.sou", BUILDING);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
-                .writtenOn(TestDay.DATE);
-        c.answerEverything();
-        assertEquals(List.of(), c.errors(), "this workspace is supposed to compile");
-        return c;
+        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).writtenOn(TestDay.DATE);
     }
 
     /** The line the one report about this workspace puts its caret on. */

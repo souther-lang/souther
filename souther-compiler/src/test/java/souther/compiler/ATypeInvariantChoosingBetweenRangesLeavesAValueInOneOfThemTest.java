@@ -50,10 +50,9 @@ class ATypeInvariantChoosingBetweenRangesLeavesAValueInOneOfThemTest {
                 SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();
     }
 
-    private static List<String> codesFor(String type, String invariant) {
-        Compilation compilation = Compilation.ofSource(
-                model(type, invariant, BESIDE_ANOTHER_INPUT), "Main");
-        compilation.answerEverything();
+    private static List<String> codesFor(List<String> refusedWith, String type, String invariant) {
+        Compilation compilation = ACompiledModel.refusedWith(refusedWith,
+                Compilation.ofSource(model(type, invariant, BESIDE_ANOTHER_INPUT), "Main"));
         return compilation.diagnostics().values().stream()
                 .flatMap(List::stream)
                 .map(Located::diagnostic)
@@ -529,9 +528,10 @@ class ATypeInvariantChoosingBetweenRangesLeavesAValueInOneOfThemTest {
     @Test
     void aChoiceTheRestOfTheRulesLeaveNothingOfIsRefused() {
         assertEquals(List.of("E1013"),
-                codesFor("Int", "(value > 100 || value < 0) && value >= 0 && value <= 100"));
+                codesFor(List.of("E1013"), "Int",
+                        "(value > 100 || value < 0) && value >= 0 && value <= 100"));
         assertEquals(List.of(),
-                codesFor("Int", "(value > 100 || value < 0) && value >= 0 && value <= 101"),
+                codesFor(List.of(), "Int", "(value > 100 || value < 0) && value >= 0 && value <= 101"),
                 "one value is left, and it is a value of the type");
     }
 }

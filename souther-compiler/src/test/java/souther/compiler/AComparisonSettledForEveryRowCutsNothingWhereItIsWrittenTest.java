@@ -52,7 +52,7 @@ class AComparisonSettledForEveryRowCutsNothingWhereItIsWrittenTest {
         if (report == null) {
             Compilation compilation = Compilation.ofSource(MODEL, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            ACompiledModel.compiles(compilation);
             report = AdequacyReport.of(compilation);
         }
         return report;

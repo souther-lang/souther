@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.Sig;
@@ -232,8 +233,8 @@ class ARunSaysWhatTheBehaviorAnsweredTest {
     private static Compilation compiled() {
         Compilation compilation = Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        // The row stating another answer is refused, and so is the one reaching an unreachable.
+        return ACompiledModel.refusedWith(List.of("E1905", "E1911"), compilation);
     }
 
     private static RowOutcome rowNamed(Compilation compilation, String name) {

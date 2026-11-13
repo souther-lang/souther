@@ -74,9 +74,7 @@ class TheLinesOfAComparisonAreNumberedByTheLinesAndNotByTheWalkTest {
             """;
 
     private static Map<String, List<BorderAssessment>> readingsOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return Adequacy.readingsOf(compilation.db(), "m");
     }
 

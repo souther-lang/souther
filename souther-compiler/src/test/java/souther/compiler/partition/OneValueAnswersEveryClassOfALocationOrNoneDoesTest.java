@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.RowsOfABlock;
 import souther.compiler.TestDay;
 import souther.compiler.check.Carrier;
@@ -498,7 +499,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
     void theRowsForTheClassesOfTheLengthAreWrittenWithAValueOfEach() {
         Compilation compilation = Compilation.ofSource(THREE_STRINGS, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String rows = GeneratedRows.of(compilation, "example.named", "gate",
                 SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
 
@@ -615,7 +616,7 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
 
             Compilation compilation = Compilation.ofSource(source, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            ACompiledModel.compiles(compilation);
             String rows = GeneratedRows.of(compilation, "example.named", "gate",
                     SourceRendering.namedByIdentity(SourceLayouts.NONE)).textInEnglish();
             assertFalse(rows.contains("would have to hold two values at once"), rows);
@@ -630,14 +631,14 @@ class OneValueAnswersEveryClassOfALocationOrNoneDoesTest {
 
         private Model(String source) {
             Compilation read = Compilation.ofSource(source, "Main").writtenOn(TestDay.DATE);
-            read.answerEverything();
+            ACompiledModel.compiles(read);
             RuleReadingSource rules = RuleReadings.of(read, read.modules().get(0));
             InputReading reading = read.db().ask(new Adequacy.Inputs(read.modules().get(0)))
                     .value().get("gate").reading(rules);
 
             Compilation divided = Compilation.ofSource(source, "Main").writtenOn(TestDay.DATE);
             divided.measure(Adequacy.Asked.fullReport());
-            divided.answerEverything();
+            ACompiledModel.compiles(divided);
             this.partitioning = divided.db()
                     .ask(new Adequacy.Divided(divided.modules().get(0), "gate")).value();
             assertNotNull(partitioning, "the model under test divides its position");

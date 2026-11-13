@@ -84,14 +84,14 @@ class AMethodTheSiblingsWouldOverfillIsWrittenWithoutThemTest {
      * says, and none changes it; asked where the first test asks it rather than when the class is
      * loaded, so a model that fails to measure fails the test that asked and not the class.
      *
-     * <p>Its classes and its examples are asked, which is what says whether it compiles and runs.
-     * The warnings are not: none is read here, and the reachability of every path through the
-     * sums is most of what asking them would cost.
+     * <p>Its classes and its examples are asked, which is what says whether it compiles and runs,
+     * and it is held to compile as written, whatever measuring it changes.
      */
     private static Compilation measured() {
         if (measured == null) {
             Compilation compilation = Compilation.ofSource(model(), "Main");
             compilation.measure(Adequacy.Asked.fullReport());
+            ACompiledModel.compiles(compilation);
             compilation.db().ask(new Output.All());
             for (String module : compilation.modules()) {
                 for (SourceId id : compilation.exampleSourcesOf(module)) {
@@ -114,9 +114,7 @@ class AMethodTheSiblingsWouldOverfillIsWrittenWithoutThemTest {
     void aMeasuredBuildOfABodyTheJvmHoldsCompiles() {
         Compilation compilation = measured();
 
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code()).toList(),
-                "the body compiles as written, and measuring it changes nothing about that");
+        ACompiledModel.compiles(compilation);
     }
 
     /**
@@ -126,7 +124,7 @@ class AMethodTheSiblingsWouldOverfillIsWrittenWithoutThemTest {
      */
     @Test
     void theRewritesTheClassesCouldNotCarryAreSaidToBeThose() {
-        Compilation compilation = measured();
+        Compilation compilation = ACompiledModel.compiles(measured());
         Map<String, ReplacementEvidence> measured = compilation.db()
                 .ask(new Replacements.Measured(compilation.modules().getFirst())).value();
 
@@ -146,7 +144,7 @@ class AMethodTheSiblingsWouldOverfillIsWrittenWithoutThemTest {
      */
     @Test
     void aRewriteTheJvmHadNoRoomForIsOneNoWiderRunAnswers() {
-        Compilation compilation = measured();
+        Compilation compilation = ACompiledModel.compiles(measured());
         ReplacementEvidence measured = compilation.db()
                 .ask(new Replacements.Measured(compilation.modules().getFirst())).value().get("f");
 

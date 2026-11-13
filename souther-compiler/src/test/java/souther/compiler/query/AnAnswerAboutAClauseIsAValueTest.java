@@ -1,10 +1,12 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.StatedContract;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -47,20 +49,27 @@ class AnAnswerAboutAClauseIsAValueTest {
 
             behavior findIt : (id: Int) -> Found
                 constructs Found
-                ensures value.id >= 0
+                ensures value.id == id
 
             let findIt (id) = Found { id = id }
             """;
 
     private static Map<String, StatedContract> contractsOf(String source) {
-        Compilation c = Compilation.ofDocuments(Map.of("a.sou", source), Set.of(), ModulePath.EMPTY);
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofDocuments(Map.of("a.sou", source), Set.of(), ModulePath.EMPTY));
+        return c.db().ask(new Bodies.StatedContracts("m.a")).value();
+    }
+
+    private static Map<String, StatedContract> contractsOfARuleThatStops() {
+        Compilation c = Compilation.ofDocuments(Map.of("a.sou", STOPS), Set.of(), ModulePath.EMPTY);
+        ACompiledModel.refusedWith(List.of("E1506"), c);
         return c.db().ask(new Bodies.StatedContracts("m.a")).value();
     }
 
     @Test
     void aRuleWhoseTypingDidNotFinishAnswersTheSameTwice() {
-        Map<String, StatedContract> once = contractsOf(STOPS);
-        Map<String, StatedContract> again = contractsOf(STOPS);
+        Map<String, StatedContract> once = contractsOfARuleThatStops();
+        Map<String, StatedContract> again = contractsOfARuleThatStops();
 
         assertNotNull(once, "the module reads, so its behaviors are stated");
         assertEquals(once, again, "one source, one answer — whatever the typing did");
@@ -75,7 +84,7 @@ class AnAnswerAboutAClauseIsAValueTest {
     /** Two different sources do not answer alike, so the equality above is saying something. */
     @Test
     void twoSourcesDoNotAnswerAlike() {
-        assertEquals(false, contractsOf(STOPS).equals(contractsOf(READS)),
+        assertEquals(false, contractsOfARuleThatStops().equals(contractsOf(READS)),
                 "a rule nothing was made of and a rule read as a bound are different answers");
     }
 }

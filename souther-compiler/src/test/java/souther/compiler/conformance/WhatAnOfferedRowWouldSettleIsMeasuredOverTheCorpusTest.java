@@ -1,9 +1,12 @@
 package souther.compiler.conformance;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
 import souther.compiler.query.Composition;
+import souther.compiler.query.GenerationScope;
 import souther.compiler.query.OfferingRequest;
 import souther.compiler.query.RowKey;
 import souther.compiler.query.Settlement;
@@ -61,9 +64,10 @@ class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
         int settledNotComposedFor = 0;
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
             ConformanceCorpus.Analysed analysed = RepositoryModels.analysed(corpus);
-            for (String module : analysed.compilation().modules()) {
-                java.util.Map<String, Adequacy.Filling> filled =
-                        Adequacy.generatedOf(analysed.compilation().db(), module);
+            Compilation compilation = ACompiledModel.compiles(analysed.compilation());
+            for (String module : compilation.modules()) {
+                Map<String, Adequacy.Filling> filled =
+                        Adequacy.generatedOf(compilation.db(), module);
                 if (filled == null) {
                     continue;
                 }
@@ -72,10 +76,9 @@ class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
                 // to be asked about.
                 Composition offering = Composition.composed(
                         OfferingRequest.overTheModule(module), filled,
-                        Adequacy.accountFor(analysed.compilation().db(), module,
-                                new souther.compiler.query.GenerationScope.Module()));
-                Settlements settlements =
-                        Settlements.of(analysed.compilation().db(), offering);
+                        Adequacy.accountFor(compilation.db(), module,
+                                new GenerationScope.Module()));
+                Settlements settlements = Settlements.of(compilation.db(), offering);
                 rows += settlements.byRow().size();
                 items += settlements.requested().size();
 

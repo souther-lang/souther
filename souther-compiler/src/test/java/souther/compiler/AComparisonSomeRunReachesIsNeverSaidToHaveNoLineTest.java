@@ -342,10 +342,8 @@ class AComparisonSomeRunReachesIsNeverSaidToHaveNoLineTest {
     /** For each behavior, whether the comparison on the gate was said to have no line. */
     private static Map<String, Boolean> noLineAtTheGate(String source) {
         Compilation made = Compilation.ofSource(source, "Main");
-        assertEquals(List.of(), made.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
         made.measure(Adequacy.Asked.fullReport());
-        made.answerEverything();
+        ACompiledModel.compiles(made);
         Map<String, Boolean> out = new LinkedHashMap<>();
         AdequacyReport.of(made).modules().getFirst().behaviors().forEach(behavior -> {
             Set<String> without = behavior.partition().notRead().stream()

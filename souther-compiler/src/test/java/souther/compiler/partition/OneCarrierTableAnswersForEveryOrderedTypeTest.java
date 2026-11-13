@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.RowsOfABlock;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.AfterAll;
@@ -532,10 +533,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
 
     private static synchronized Compilation model() {
         if (measuredModel == null) {
-            Compilation compilation = Compilation.ofSource(MODEL, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            measuredModel = compilation;
+            measuredModel = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         }
         return measuredModel;
     }
@@ -549,7 +547,7 @@ class OneCarrierTableAnswersForEveryOrderedTypeTest {
 
     /** What the measures answered for each named behavior. */
     private static Map<String, Measured> measured(Iterable<String> behaviors) {
-        Compilation compilation = model();
+        Compilation compilation = ACompiledModel.compiles(model());
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage("example.matrix")).value();
         assertNotNull(coverage, "the model under test compiles");

@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -114,7 +115,7 @@ class WhatIsKnownBesideTheRulesIsSolvedWithThemTest {
     }
 
     private static SearchRegion region() {
-        Compilation compilation = Compilation.ofSource(TWO_RELATED_AND_A_THIRD, "Main");
+        Compilation compilation = ACompiledModel.answered(TWO_RELATED_AND_A_THIRD);
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

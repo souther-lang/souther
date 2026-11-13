@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
@@ -132,9 +133,7 @@ class ADeclarationsPointIsWrittenFromTheDeclarationTest {
      */
     @Test
     void readingsThatAskAlikeAreStillPutInAnOrderAndPublished() {
-        Compilation compilation = Compilation.ofSource(TWO_CALLS, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(TWO_CALLS, Adequacy.Asked.fullReport());
         AdequacyReport report = AdequacyReport.of(compilation);
 
         BorderObligationPointAssessment debt = report.modules().get(0).debts().get(0).debt();
@@ -160,9 +159,8 @@ class ADeclarationsPointIsWrittenFromTheDeclarationTest {
     }
 
     private static AdequacyReport measured() {
-        Compilation compilation = Compilation.ofSource(TWO_READINGS, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(TWO_READINGS, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation);
     }
 

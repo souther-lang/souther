@@ -45,10 +45,8 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
 
     private static Said of(String behavior, String name) {
         Compilation compilation = Compilation.ofSource(HEAD + behavior, "Main");
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         AdequacyReport report = AdequacyReport.of(compilation);
         List<String> notRead = new ArrayList<>();
         for (AdequacyReport.BehaviorReport each : report.modules().get(0).behaviors()) {
@@ -112,10 +110,8 @@ class TheSizeOfASetMadeOfInputsIsReadThroughItsLawTest {
                     | "the first empty" : ([], ["y"]) -> 1
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
 
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
+        ACompiledModel.compiles(compilation);
     }
 
     @Test

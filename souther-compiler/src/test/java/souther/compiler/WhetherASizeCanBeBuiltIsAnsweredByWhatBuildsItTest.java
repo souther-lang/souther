@@ -6,8 +6,6 @@ import souther.compiler.partition.Generator;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -58,9 +56,7 @@ class WhetherASizeCanBeBuiltIsAnsweredByWhatBuildsItTest {
     private static Generator.GenerationResult boundaries(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                .flatMap(List::stream).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         assertNotNull(Adequacy.generatedOf(compilation.db(), compilation.modules().get(0)),
                 "the rows come back");
         // Both authorities, because the lines here are an `invariant`'s: one is owed once over

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
@@ -78,7 +79,7 @@ class ABoundaryRowWearsEveryNameThePositionDeclaresTest {
 
     /** What a row carries at each boundary of the one behavior in {@code source}. */
     private static List<String> rowsAtBoundaries(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);

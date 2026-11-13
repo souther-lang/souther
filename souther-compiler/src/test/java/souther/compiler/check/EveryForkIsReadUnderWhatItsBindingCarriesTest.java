@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ControlPlace;
@@ -32,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EveryForkIsReadUnderWhatItsBindingCarriesTest {
 
     private static List<Reachability> armsOf(String source, String module, String behavior) {
-        Compilation c = Compilation.ofSource(source, module);
+        Compilation c = ACompiledModel.compiles(Compilation.ofSource(source, module));
         Map<String, PathReachability.Answers> byBehavior =
                 c.db().ask(new Adequacy.PathReached(module)).value();
         return byBehavior == null || byBehavior.get(behavior) == null ? List.of()
@@ -167,7 +168,7 @@ class EveryForkIsReadUnderWhatItsBindingCarriesTest {
                 """;
         Compilation c = Compilation.ofSource(model, "demo");
         c.measure(Adequacy.Asked.fullReport());
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         List<String> codes = c.reports().stream()
                 .map(each -> each.report().diagnostic().code())
                 .filter("E1327"::equals)

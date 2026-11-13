@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.test.RepositoryJavaSources;
 import souther.test.RepositoryLayout;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.msg.MessageValues;
@@ -140,7 +141,7 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
     /** A sum naming itself is refused where it is written; the descent only has to come back. */
     @Test
     void aSumReachingItselfComesBack() {
-        Hir.Module itself = resolved("""
+        Hir.Module itself = resolvedButRefused("""
                 module m
 
                 data A
@@ -400,9 +401,21 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
     }
 
     private static Hir.Module resolved(String source) {
+        Compilation compilation = modelOf(source);
+        ACompiledModel.compiles(compilation);
+        return compilation.db().ask(new Names.Resolved("m")).value();
+    }
+
+    /** The same, for a model the compiler refuses. */
+    private static Hir.Module resolvedButRefused(String source) {
+        Compilation compilation = modelOf(source);
+        ACompiledModel.refusedWith(List.of("E1021"), compilation);
+        return compilation.db().ask(new Names.Resolved("m")).value();
+    }
+
+    private static Compilation modelOf(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
-                .db().ask(new Names.Resolved("m")).value();
+        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
     }
 }

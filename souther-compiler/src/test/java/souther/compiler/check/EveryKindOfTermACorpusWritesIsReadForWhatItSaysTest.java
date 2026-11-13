@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
@@ -103,26 +104,33 @@ class EveryKindOfTermACorpusWritesIsReadForWhatItSaysTest {
             }
             """;
 
+    /** The corpora written to be refused, and what each is refused for. */
+    private static final Map<String, List<String>> CORPUS_REFUSALS =
+            Map.of("booking", List.of("E2010", "E1013"));
+
     /** Every checked body of every corpus, and the same again with every line moved down. */
     private static List<Core> bodies(String before) {
         List<Core> out = new ArrayList<>();
         List<Map<String, String>> workspaces = new ArrayList<>();
+        List<List<String>> refused = new ArrayList<>();
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
             Map<String, String> byId = new LinkedHashMap<>();
             for (int i = 0; i < corpus.sources().size(); i++) {
                 byId.put(corpus.files().get(i), before + corpus.sources().get(i));
             }
             workspaces.add(byId);
+            refused.add(CORPUS_REFUSALS.getOrDefault(corpus.name(), List.of()));
         }
         workspaces.add(Map.of("wide.sou", before + WIDE));
+        refused.add(List.of());
         boolean wide = false;
-        for (Map<String, String> byId : workspaces) {
+        for (int at = 0; at < workspaces.size(); at++) {
+            Map<String, String> byId = workspaces.get(at);
             wide = byId.containsKey("wide.sou");
             Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-            // What is read below is asked where it is read. The module written here is asked
-            // everything, since what it is held to is that it compiles.
+            ACompiledModel.refusedWith(refused.get(at), c);
+            // The module written here is held to say nothing at all, warnings included.
             if (wide) {
-                c.answerEverything();
                 assertEquals(List.of(), c.db().allReports().stream().map(Object::toString).toList(),
                         "the module written to reach the rest of the kinds compiles");
             }

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -103,10 +104,8 @@ class TwoNamesForElementsOfOneContainerAreTwoValuesTest {
                 let %s (x) = %s
                 """.formatted(name, name, body)));
         Compilation made = Compilation.ofSource(source.toString(), "Main");
-        assertEquals(List.of(), made.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
         made.measure(Adequacy.Asked.fullReport());
-        made.answerEverything();
+        ACompiledModel.compiles(made);
         Map<String, Set<String>> out = new LinkedHashMap<>();
         AdequacyReport.of(made).modules().getFirst().behaviors().forEach(behavior ->
                 out.put(behavior.name(), behavior.partition().notRead().stream()

@@ -14,7 +14,6 @@ import souther.compiler.query.OfferingRequest;
 import souther.compiler.report.GeneratedRows;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -68,8 +67,8 @@ class CompileExampleGenerateTest {
      * reads of them, and no test here reads the rest.
      */
     private static Compilation compiledOf(String source) {
-        return MEASURED.computeIfAbsent(source, each -> {
-            Compilation compilation = Compilation.ofSource(each, "Main").writtenOn(TestDay.DATE);
+        return SHARED.compiles(source, () -> {
+            Compilation compilation = Compilation.ofSource(source, "Main").writtenOn(TestDay.DATE);
             // What `souther examples` asks for. A line a `guard` drew is only decidable where the
             // arms were measured, so below this the generator has nothing to say about one.
             compilation.measure(Adequacy.Asked.fullReport());
@@ -77,13 +76,13 @@ class CompileExampleGenerateTest {
         });
     }
 
-    private static final Map<String, Compilation> MEASURED = new HashMap<>();
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
 
     /** And given back when the class is done with them: a fork keeps its JVM, so what is held
      *  statically is held for every class after this one. */
     @AfterAll
     static void released() {
-        MEASURED.clear();
+        SHARED.release();
     }
 
     /**
@@ -408,8 +407,7 @@ class CompileExampleGenerateTest {
         String pasted = tabbed + sourceOf(blockOf(tabbed, "example.tabbed"))
                 .replace("<?>", "Ok { n = 0 }");
 
-        Compilation compilation = Compilation.ofSource(pasted, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(pasted);
         List<souther.compiler.observe.RowOutcome> rows = outcomes(compilation);
 
         assertEquals(2, rows.size(), "the row that was there, and the one generated");
@@ -780,8 +778,7 @@ class CompileExampleGenerateTest {
     void answeringTheBlockGivesRowsThatHoldAndCoverWhatTheyWereFor() {
         String source = answered(TRIP, "Accepted { at = \"now\" }");
 
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         List<souther.compiler.observe.RowOutcome> rows = outcomes(compilation);
 
         assertEquals(3, rows.size(), "the row that was there, and the two generated");
@@ -800,7 +797,7 @@ class CompileExampleGenerateTest {
         String wrong = answered(TRIP, "Accepted { at = \"later\" }");
 
         Compilation compilation = Compilation.ofSource(wrong, "Main");
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1905", "E1905"), compilation);
 
         assertTrue(outcomes(compilation).stream()
                         .anyMatch(row -> row.disposition() == souther.compiler.observe.Disposition
@@ -825,8 +822,7 @@ class CompileExampleGenerateTest {
     void theBlockPastedUnchangedIsRowsThatStateNoAnswer() {
         String pasted = TRIP + sourceOf(blockOf(TRIP, "example.trip"));
 
-        Compilation compilation = Compilation.ofSource(pasted, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(pasted);
         List<souther.compiler.observe.RowOutcome> rows = outcomes(compilation);
 
         assertEquals(3, rows.size(), "the row that was there, and the two pasted");
@@ -902,8 +898,7 @@ class CompileExampleGenerateTest {
     void theSpreadRowsHoldWhenTheyArePastedBack() {
         String source = answered(AGAINST_A_LET, "Out { n = 0 }");
 
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         List<souther.compiler.observe.RowOutcome> rows = outcomes(compilation);
 
         assertEquals(3, rows.size(), "the row that was there, and the two generated");
@@ -1071,7 +1066,7 @@ class CompileExampleGenerateTest {
                 + """
 
                         example submit
-                            | "a near one" : (near) -> Accepted { at = "now" }
+                            | "a near one" : (near) -> Accepted { at = "wide" }
                         """;
 
         // Every row offered, whatever it was composed for. A row through an arm is written against

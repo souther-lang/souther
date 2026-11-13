@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.msg.TypeMessage;
 import souther.compiler.meta.ModulePath;
 
@@ -41,8 +42,7 @@ class ASignatureThatDoesNotBuildTest {
 
     private static Compilation compiled() {
         Compilation c = Compilation.ofDocuments(Map.of("a.sou", SOURCE), Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
-        return c;
+        return ACompiledModel.refusedWith(List.of("E1613"), c);
     }
 
     @Test

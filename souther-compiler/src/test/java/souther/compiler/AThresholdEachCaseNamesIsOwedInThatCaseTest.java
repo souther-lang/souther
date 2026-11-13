@@ -36,6 +36,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AThresholdEachCaseNamesIsOwedInThatCaseTest {
 
     private static String model(String condition, String twoYears, String rows) {
+        return model(condition, twoYears, rows, List.of("Yen(9500)", "Yen(0)", "Yen(9500)"));
+    }
+
+    /** {@code answers} are what the three rows of the model state, in the order they are written. */
+    private static String model(String condition, String twoYears, String rows,
+                                List<String> answers) {
         return """
                 module example.fee
 
@@ -56,10 +62,11 @@ class AThresholdEachCaseNamesIsOwedInThatCaseTest {
                         | TwoYear -> %s
 
                 example cancelFee
-                    | "one year, month 12" : (OneYear, Month(12)) -> Yen(9500)
-                    | "one year, month 13" : (OneYear, Month(13)) -> Yen(0)
-                    | "two years, month 24" : (TwoYear, Month(%s)) -> Yen(9500)
-                %s""".formatted(condition, twoYears, twoYears, rows);
+                    | "one year, month 12" : (OneYear, Month(12)) -> %s
+                    | "one year, month 13" : (OneYear, Month(13)) -> %s
+                    | "two years, month 24" : (TwoYear, Month(%s)) -> %s
+                %s""".formatted(condition, twoYears, answers.get(0), answers.get(1), twoYears,
+                answers.get(2), rows);
     }
 
     private static final String WITHIN = "month.value <= minimum(term)";
@@ -163,11 +170,15 @@ class AThresholdEachCaseNamesIsOwedInThatCaseTest {
      *  number, as it is of the comparison alone. */
     @Test
     void aComparisonOfSeveralLinesHoldsBelowItsNumberAsOneLineDoes() {
-        List<String> alone = readingsOf(model("month.value <= 12", "24", ""));
+        List<String> within = List.of("Yen(9500)", "Yen(0)", "Yen(0)");
+        List<String> beyond = List.of("Yen(0)", "Yen(9500)", "Yen(9500)");
+        List<String> alone = readingsOf(model("month.value <= 12", "24", "", within));
         assertEquals(List.of("IN in 1 <= month < 12"), alone);
-        assertEquals(alone, readingsOf(model("Int.max(month.value, 3) <= 12", "24", "")));
-        List<String> above = readingsOf(model("month.value >= 13", "24", ""));
-        assertEquals(above, readingsOf(model("Int.max(month.value, 3) >= 13", "24", "")),
+        assertEquals(alone,
+                readingsOf(model("Int.max(month.value, 3) <= 12", "24", "", within)));
+        List<String> above = readingsOf(model("month.value >= 13", "24", "", beyond));
+        assertEquals(above,
+                readingsOf(model("Int.max(month.value, 3) >= 13", "24", "", beyond)),
                 "and above it, written the other way round");
     }
 
@@ -344,9 +355,7 @@ class AThresholdEachCaseNamesIsOwedInThatCaseTest {
     }
 
     private static List<String> read(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         String human = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         Pattern point = Pattern.compile("no row is at (?:an|the) (IN|OUT|ON|OFF) point");

@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.meta.ModulePath;
@@ -183,7 +184,7 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
                 .withEvaluationPolicy(EvaluationPolicy.of(100_000)
                         .withCompilerTimeout(Duration.ofSeconds(30)));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         ReplacementEvidence its = compilation.db()
                 .ask(new Replacements.Measured(compilation.modules().getFirst())).value()
                 .get("f");
@@ -239,7 +240,7 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
                     | (Rec { n = 0, xs = [] }) -> true
                 """), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         AdequacyReport report = AdequacyReport.of(compilation);
         SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
 
@@ -299,10 +300,6 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
                                 PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS, rewriteRuns),
                         Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code()).toList(),
-                "the model under test compiles");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

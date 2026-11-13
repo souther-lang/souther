@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -21,6 +22,7 @@ import souther.compiler.query.ReadAs;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -45,8 +47,9 @@ class StringsReachedKnowTheLengthsTakenOutTest {
             """;
 
     private static StringsReached reachedBy(String rule, NumericTerm[] length) {
-        Compilation compilation = Compilation.ofSources(List.of(MODEL.formatted(rule)),
-                souther.compiler.meta.ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.refusedOnlyWith(Set.of("E1013"),
+                Compilation.ofSources(List.of(MODEL.formatted(rule)),
+                        souther.compiler.meta.ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

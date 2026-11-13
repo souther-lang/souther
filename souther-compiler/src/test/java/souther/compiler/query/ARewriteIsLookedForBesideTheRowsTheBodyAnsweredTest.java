@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.ReplacementDisposition;
 
 import java.util.Collection;
@@ -74,9 +75,7 @@ class ARewriteIsLookedForBesideTheRowsTheBodyAnsweredTest {
             """;
 
     private static ReplacementDisposition searched(String model, String behavior) {
-        Compilation c = Compilation.ofSource(model, "Main");
-        c.measure(Adequacy.Asked.fullReport());
-        c.answerEverything();
+        Compilation c = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Collection<Replacements.Searched> all = c.db()
                 .ask(new Replacements.Witnesses("example.hr", behavior)).value().values();
         assertEquals(1, all.size(), "the one answer the rows came to is the one rewrite");

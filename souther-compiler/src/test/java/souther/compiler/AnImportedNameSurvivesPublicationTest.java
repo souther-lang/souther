@@ -138,7 +138,7 @@ class AnImportedNameSurvivesPublicationTest {
      *  compiled to, in a project that has no source for it. */
     private static Set<ValueName.Stdlib> libraryNamesDenotedBy(String source) {
         Compilation compilation = Compilation.ofSources(List.of(IMPORTING), published(source));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Resolve.ResolutionIndex facts =
                 compilation.db().ask(new Names.Facts("lib.text")).value();
         Set<ValueName.Stdlib> denoted = new LinkedHashSet<>();

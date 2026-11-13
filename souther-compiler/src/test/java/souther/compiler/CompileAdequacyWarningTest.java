@@ -70,7 +70,7 @@ class CompileAdequacyWarningTest {
     private static List<Db.Found> warningsAt(Adequacy.Level level) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(level);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         List<Db.Found> found = new ArrayList<>();
         for (Db.Found each : compilation.db().allReports()) {
             Diagnostic d = each.report().diagnostic();
@@ -166,7 +166,7 @@ class CompileAdequacyWarningTest {
     void noneOfThemIsAnError() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Level.ALL);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         for (Db.Found found : compilation.db().allReports()) {
             String code = found.report().diagnostic().code();
@@ -187,7 +187,7 @@ class CompileAdequacyWarningTest {
                 """;
         Compilation compilation = Compilation.ofSource(covered, "Main");
         compilation.measure(Adequacy.Level.ALL);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         List<String> codes = new ArrayList<>();
         for (Db.Found found : compilation.db().allReports()) {

@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.numeric.Count;
@@ -281,8 +282,8 @@ class WhatOneReadingDecidesIsLentWithItTest {
     }
 
     private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(source), ModulePath.EMPTY));
         assertTrue(compilation.diagnostics().values().stream().allMatch(List::isEmpty),
                 () -> "the model under test compiles clean: " + compilation.diagnostics());
         return compilation;

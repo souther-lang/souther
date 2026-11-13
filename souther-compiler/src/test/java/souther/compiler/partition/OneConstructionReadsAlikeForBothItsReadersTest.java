@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -73,9 +74,7 @@ class OneConstructionReadsAlikeForBothItsReadersTest {
     /** And the measure draws the line the same comparison states, at the same number. */
     @Test
     void theMeasureDrawsTheLineTheSameComparisonStates() {
-        Compilation compilation = Compilation.ofSource(MODULE, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODULE, Adequacy.Asked.fullReport());
 
         assertEquals(Map.of("throughARecord", "n: x < 100, n: 100 <= x",
                         "throughANewtype", "n: x < 100, n: 100 <= x"),

@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleRef;
 import souther.compiler.report.InEnglish;
 import souther.compiler.numeric.Towards;
@@ -198,9 +199,7 @@ class TwoReadingsAreOnePointOnlyWhereOneRowAnswersBothTest {
 
     /** The points the body comparisons of the module {@code example.turned} owe. */
     private static List<BorderObligationPointAssessment> pointsOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         List<BorderObligationPointAssessment> points = compilation.db().ask(
                 new Adequacy.Obligations("example.turned", new GenerationScope.Module(),
                         HowALineIsRead.VALUES_COMPOSED)).value();
@@ -249,9 +248,6 @@ class TwoReadingsAreOnePointOnlyWhereOneRowAnswersBothTest {
     }
 
     private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSource(CAPPED_APART, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(CAPPED_APART, Adequacy.Asked.fullReport());
     }
 }

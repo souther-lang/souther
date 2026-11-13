@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -63,10 +64,10 @@ class AWarningIsSaidWhateverTheBodyBesideItCameToTest {
         // What there is to say about this construction, said of the file that has nothing else
         // wrong with it. Named rather than counted, so that the comparison below is between one
         // warning and the same warning.
-        assertEquals(List.of("E2011"), codesWarnedAbout(ONE_BODY),
+        assertEquals(List.of("E2011"), codesWarnedAbout(ONE_BODY, List.of()),
                 "the construction this is about is supposed to be warned about on its own");
 
-        assertEquals(List.of("E2011"), codesWarnedAbout(TWO_BODIES),
+        assertEquals(List.of("E2011"), codesWarnedAbout(TWO_BODIES, List.of("E1321")),
                 "and it stops being warned about once the behavior under it does not type");
     }
 
@@ -74,28 +75,28 @@ class AWarningIsSaidWhateverTheBodyBesideItCameToTest {
      *  about a module that did not come out and not about a second clean one. */
     @Test
     void andTheWorkspaceWithBothReallyIsRefused() {
-        assertEquals(List.of(), errorCodesOf(ONE_BODY), "one body, and nothing wrong with it");
-        List<String> refusedWithTwo = errorCodesOf(TWO_BODIES);
+        assertEquals(List.of(), errorCodesOf(ONE_BODY, List.of()),
+                "one body, and nothing wrong with it");
+        List<String> refusedWithTwo = errorCodesOf(TWO_BODIES, List.of("E1321"));
         assertEquals(1, refusedWithTwo.size(),
                 "two bodies, one of which names nothing: " + refusedWithTwo);
     }
 
-    private static List<String> codesWarnedAbout(String importing) {
-        return compiled(importing).warnings().stream().map(w -> w.diagnostic().code()).sorted()
-                .toList();
+    private static List<String> codesWarnedAbout(String importing, List<String> refused) {
+        return compiled(importing, refused).warnings().stream().map(w -> w.diagnostic().code())
+                .sorted().toList();
     }
 
-    private static List<String> errorCodesOf(String importing) {
-        return compiled(importing).errors().stream().map(e -> e.diagnostic().code()).sorted()
-                .toList();
+    private static List<String> errorCodesOf(String importing, List<String> refused) {
+        return compiled(importing, refused).errors().stream().map(e -> e.diagnostic().code())
+                .sorted().toList();
     }
 
-    private static Compilation compiled(String importing) {
+    private static Compilation compiled(String importing, List<String> refused) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("prices.sou", RULED);
         byId.put("cart.sou", importing);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
-        return c;
+        return ACompiledModel.refusedWith(refused,
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
     }
 }

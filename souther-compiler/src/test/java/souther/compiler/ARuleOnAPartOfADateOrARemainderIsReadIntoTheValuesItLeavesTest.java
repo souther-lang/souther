@@ -44,7 +44,7 @@ class ARuleOnAPartOfADateOrARemainderIsReadIntoTheValuesItLeavesTest {
                 %s
                 """.formatted(type, clause, body, rows), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }

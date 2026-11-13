@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -59,9 +60,7 @@ class ANameGivenABuildIsReadWhereTheValueIsDefinedTest {
 
     private static Read read() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         Bodies.Elaborated checked =
                 compilation.db().ask(new Bodies.Checked("probe.built")).value();
         RuleReadingSource rules = RuleReadings.of(compilation, "probe.built");

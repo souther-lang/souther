@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.OfferedAtTheLines;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -53,10 +54,7 @@ class ATotalOfBoundedElementsReachesWhatSeveralElementsComeToTest {
                 """.formatted(DECLARATIONS, inputs,
                 inputs.replaceAll(": (List<[^>]*>|[A-Za-z<>]+)", ""), body), "Main");
         compilation.measure(asked);
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     private static String report(String inputs, String body) {

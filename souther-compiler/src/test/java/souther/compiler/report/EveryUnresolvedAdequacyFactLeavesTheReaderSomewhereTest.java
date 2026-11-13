@@ -1,5 +1,7 @@
 package souther.compiler.report;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.query.Compilation;
@@ -11,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -80,7 +83,9 @@ class EveryUnresolvedAdequacyFactLeavesTheReaderSomewhereTest {
 
     private static List<AdequacyUncertainty> everythingUnresolved() {
         List<AdequacyUncertainty> out = new ArrayList<>();
-        for (Compilation compilation : RepositoryModels.all()) {
+        for (Map.Entry<String, Compilation> carried : RepositoryModels.byCorpus().entrySet()) {
+            Compilation compilation = ACompiledModel.refusedWith(
+                    ConformanceCorpus.load(carried.getKey()).refusedWith(), carried.getValue());
             AdequacyReport whole = AdequacyReport.of(compilation);
             for (ReportScopes scope : ReportScopes.of(String.valueOf(compilation.modules()),
                     whole)) {

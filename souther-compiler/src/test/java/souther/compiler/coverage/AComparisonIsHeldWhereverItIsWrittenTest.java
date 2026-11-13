@@ -10,6 +10,7 @@ import souther.compiler.types.SourceConstruct;
 import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
@@ -41,7 +42,7 @@ class AComparisonIsHeldWhereverItIsWrittenTest {
     private record Checked(String module, Map<String, Core> bodies) {}
 
     private static Checked bodiesOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(module)).value();

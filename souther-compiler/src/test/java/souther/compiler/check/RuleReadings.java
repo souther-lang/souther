@@ -1,10 +1,13 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
 import souther.compiler.query.Shapes;
 import souther.compiler.types.TypeSymbol;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -27,8 +30,24 @@ public final class RuleReadings {
     /** The reading of the one module {@code source} writes, for a test that has the text and no
      *  compilation of its own. */
     public static RuleReadingSource ofSource(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = compiled(source);
         return of(compilation, compilation.modules().get(0));
+    }
+
+    /** The same, of a model that is refused for {@code refusedWith}, which is read all the same. */
+    public static RuleReadingSource ofSource(String source, List<String> refusedWith) {
+        Compilation compilation = compiled(source, refusedWith);
+        return of(compilation, compilation.modules().get(0));
+    }
+
+    /** {@code source} compiled and answered in full, held to compile. */
+    private static Compilation compiled(String source) {
+        return ACompiledModel.compiles(Compilation.ofSource(source, "Main"));
+    }
+
+    /** The same, of a model that is refused for {@code refusedWith}, which is read all the same. */
+    private static Compilation compiled(String source, List<String> refusedWith) {
+        return ACompiledModel.refusedWith(refusedWith, Compilation.ofSource(source, "Main"));
     }
 
     /** The same, for a test that holds the database rather than the compilation. */
@@ -65,7 +84,12 @@ public final class RuleReadings {
      * to answering alike without reaching into what a reading is made of.
      */
     public static String admittedByTheValueOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        return admittedByTheValueOf(source, List.of());
+    }
+
+    /** The same, for a model that is refused for {@code refusedWith}. */
+    public static String admittedByTheValueOf(String source, List<String> refusedWith) {
+        Compilation compilation = compiled(source, refusedWith);
         Symbols symbols = souther.compiler.query.Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey(symbols.module(), "N"));

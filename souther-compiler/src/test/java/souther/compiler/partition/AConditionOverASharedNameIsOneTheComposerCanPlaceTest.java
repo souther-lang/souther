@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.ast.Hir;
@@ -176,8 +177,7 @@ class AConditionOverASharedNameIsOneTheComposerCanPlaceTest {
         // Measured, because the lines under test are drawn by the body: what the declarations alone
         // divide is the sum's cases, and a guard is read where a behavior is measured.
         made.measure(souther.compiler.query.Adequacy.Asked.fullReport());
-        made.answerEverything();
-        return made;
+        return ACompiledModel.compiles(made);
     }
 
     private static String module() {

@@ -4,6 +4,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -88,7 +89,7 @@ class AValueNamedThatComesToANumberNotHeldIsSaidBesideTheWalkTest {
     }
 
     private static SearchRegion region() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module example.named
 
                 data Code = Int
@@ -100,7 +101,7 @@ class AValueNamedThatComesToANumberNotHeldIsSaidBesideTheWalkTest {
                     constructs Ok
 
                 let f (c) = Ok { v = 1 }
-                """, "Main");
+                """);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("f");

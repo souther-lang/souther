@@ -3,6 +3,7 @@ package souther.compiler.query;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.DecisionRule;
@@ -16,7 +17,6 @@ import java.util.Set;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -95,8 +95,9 @@ class HowManyCandidatesFitIsADecisionOverTheCasesTest {
         Compilation compilation = measured(three(THREE));
         assertEquals(List.of(), errorsOf(compilation),
                 "none fitting is NoneFits, one is One, and two are NotOne");
-        assertFalse(errorsOf(measured(source(THREE, THREE, "One"))).isEmpty(),
-                "control: two fitting is not One, and a row saying so does not hold");
+        Compilation control = Compilation.ofSource(source(THREE, THREE, "One"), "Main");
+        control.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.refusedWith(List.of("E1905"), control);
     }
 
     @Test
@@ -166,15 +167,12 @@ class HowManyCandidatesFitIsADecisionOverTheCasesTest {
     }
 
     private static synchronized Compilation measured(String source) {
-        return MEASURED.computeIfAbsent(source,
-                HowManyCandidatesFitIsADecisionOverTheCasesTest::measuredAfresh);
+        return ACompiledModel.compiles(MEASURED.computeIfAbsent(source,
+                HowManyCandidatesFitIsADecisionOverTheCasesTest::measuredAfresh));
     }
 
     private static Compilation measuredAfresh(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     private static List<String> errorsOf(Compilation compilation) {

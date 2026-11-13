@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.ClauseMeaning;
 import souther.compiler.check.DeclarationMeaning;
@@ -84,9 +85,8 @@ class ARulePartReadsOnePlaceAloneOnlyWhereItReadsThatPlaceAndNothingElseTest {
     private static Compilation started() {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("rules.sou", MODULE);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
-                .writtenOn(TestDay.DATE);
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).writtenOn(TestDay.DATE));
         assertTrue(c.db().allReports().isEmpty(), "the module compiles: " + c.db().allReports());
         return c;
     }

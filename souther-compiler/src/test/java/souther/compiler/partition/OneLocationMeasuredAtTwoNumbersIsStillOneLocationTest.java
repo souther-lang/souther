@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.BlockReason;
@@ -161,8 +162,7 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
     /** What the reading of that input says about its numbers, which is what a subject is asked
      *  through. */
     private static souther.compiler.inputs.InputReading readingOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return compilation.db().ask(new Adequacy.Inputs(module)).value().get("gate")
@@ -174,9 +174,7 @@ class OneLocationMeasuredAtTwoNumbersIsStillOneLocationTest {
     }
 
     private static Partitions.Partitioning partitioningOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return compilation.db()
                 .ask(new Adequacy.Divided(compilation.modules().get(0), "gate")).value();
     }

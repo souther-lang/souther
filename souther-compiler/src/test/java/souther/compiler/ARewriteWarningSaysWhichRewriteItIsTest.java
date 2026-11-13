@@ -102,10 +102,7 @@ class ARewriteWarningSaysWhichRewriteItIsTest {
     private static List<Diagnostic> rewriteWarnings(List<String> sources) {
         Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         return compilation.warnings().stream()
                 .map(Located::diagnostic)
                 .filter(d -> "E1939".equals(d.code().toString()))

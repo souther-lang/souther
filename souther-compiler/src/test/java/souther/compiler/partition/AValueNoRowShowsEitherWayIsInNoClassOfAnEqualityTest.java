@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.Carrier;
 import souther.compiler.numeric.Count;
 import souther.compiler.query.Adequacy;
@@ -36,9 +37,7 @@ class AValueNoRowShowsEitherWayIsInNoClassOfAnEqualityTest {
 
     /** The classes the model's body divides {@code cap} into, which is what a reader is handed. */
     private static List<PartitionClass> classesOfCap() {
-        Compilation compilation = Compilation.ofSource(SOURCE, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(SOURCE, Adequacy.Asked.fullReport());
         Partitions.Partitioning partitioning = compilation.db()
                 .ask(new Adequacy.Divided(compilation.modules().get(0), "check")).value();
         assertNotNull(partitioning, "the body divides a position");

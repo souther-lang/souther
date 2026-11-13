@@ -236,8 +236,7 @@ class AComparisonOfAnAnswerWithAnElementOfTheInputIsComposedWithThatElementTest 
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     /** Compiled and run and not measured, for a question about what its rows answer: a row that
@@ -322,7 +321,6 @@ class AComparisonOfAnAnswerWithAnElementOfTheInputIsComposedWithThatElementTest 
         COMPOSED.forEach((model, composed) -> {
             Compilation answered = measured(withRows(model, composed, true));
 
-            assertEquals(List.of(), errors(answered), model);
             assertFalse(report(answered).contains("no row takes a decision rule"),
                     () -> report(answered));
         });

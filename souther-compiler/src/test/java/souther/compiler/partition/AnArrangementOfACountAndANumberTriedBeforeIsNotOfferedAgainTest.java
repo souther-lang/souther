@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.Carrier;
@@ -57,8 +58,8 @@ class AnArrangementOfACountAndANumberTriedBeforeIsNotOfferedAgainTest {
 
     @Test
     void anotherSplitOfTheNumbersIsOfferedForTheSameCount() {
-        Compilation compilation =
-                Compilation.ofSources(List.of(MODEL), souther.compiler.meta.ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(MODEL), souther.compiler.meta.ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

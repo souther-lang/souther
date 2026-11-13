@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -253,7 +254,7 @@ class ARelationOverSharedNamesReachesTheNumbersTheyStandAtTest {
         NumericDomain.Bounds alone = stoppedAt(BESIDE_A_SUM, "h.note", "h.note", 3);
 
         for (String beside : List.of(BESIDE_A_DEAD_CASE, BESIDE_A_DEAD_ELEMENT)) {
-            assertEquals(alone, stoppedAt(beside, "h.note", "h.note", 3),
+            assertEquals(alone, stoppedAt(beside, "h.note", "h.note", 3, List.of("E1013")),
                     "h.note runs where its own rule leaves it, whatever stands beside it");
         }
     }
@@ -261,8 +262,14 @@ class ARelationOverSharedNamesReachesTheNumbersTheyStandAtTest {
     /** Where {@code asked} runs once {@code fixed} stands at {@code at}. */
     private static NumericDomain.Bounds stoppedAt(String source, String asked, String fixed,
                                                   int at) {
-        InputDomain read = reading(source, "read");
-        Quantities quantities = read.quantities(rulesOf(source));
+        return stoppedAt(source, asked, fixed, at, List.of());
+    }
+
+    /** The same, for a model refused for {@code errors}. */
+    private static NumericDomain.Bounds stoppedAt(String source, String asked, String fixed,
+                                                  int at, List<String> errors) {
+        InputDomain read = reading(source, "read", errors);
+        Quantities quantities = read.quantities(rulesOf(source, errors));
         return quantities
                 .given(new NumericTerm.ValueOf(pathOf(read, fixed)),
                         Count.of(BigDecimal.valueOf(at)))
@@ -281,15 +288,16 @@ class ARelationOverSharedNamesReachesTheNumbersTheyStandAtTest {
                                 .map(Position::path).toList()));
     }
 
-    private static RuleReadingSource rulesOf(String source) {
-        Compilation compilation =
-                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
+    private static RuleReadingSource rulesOf(String source, List<String> errors) {
+        Compilation compilation = ACompiledModel.refusedWith(errors,
+                Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY));
         return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 
-    private static InputDomain reading(String source, String behavior) {
+    private static InputDomain reading(String source, String behavior, List<String> errors) {
         Compilation compilation =
                 Compilation.ofSources(List.of(source), souther.compiler.meta.ModulePath.EMPTY);
+        ACompiledModel.refusedWith(errors, compilation);
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

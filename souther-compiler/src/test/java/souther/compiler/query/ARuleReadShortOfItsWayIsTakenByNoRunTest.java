@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.Observation;
@@ -66,7 +67,7 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
 
     @Test
     void aPathThatIsNotWholeIsSetAside() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         assertEquals(new RulesTaken.WhichRule.CouldNotTell(
                         RulesTaken.WhichRule.Why.NO_RULE_IS_RECOGNISABLE),
                 rulesOf(compilation, reading(ruled(NO_DISTINCTION, false)))
@@ -75,7 +76,7 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
 
     @Test
     void aWholePathWithNoConditionIsTakenByEveryRun() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         assertEquals(new RulesTaken.WhichRule.TookThis(NO_DISTINCTION),
                 rulesOf(compilation, reading(ruled(NO_DISTINCTION, true)))
                         .takenBy(InputsOfTheBody.aRunSeen(nothingSeen(compilation))));
@@ -154,7 +155,7 @@ class ARuleReadShortOfItsWayIsTakenByNoRunTest {
 
     /** What the rows of {@code read} took where nobody wrote a row, as the account makes it. */
     private static DecisionEvidence evidenceWithNoRows(DecisionReading read) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         return new DecisionEvidence(read, DecisionEvidence.of("decides",
                 rulesOf(compilation, read), read.rules(), List.of(), WeakeningSet.none(),
                 CasesTheRowsTook.none()), Map.of());

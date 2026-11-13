@@ -35,9 +35,7 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
 
                 %s
                 """.formatted(behavior);
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -141,11 +139,10 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
                     | "absent" : (H { qty = None, q = 0 }) -> false
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
-        assertEquals(0, compilation.errors().size(), report);
         assertFalse(report.contains("!"), report);
         assertTrue(report.contains("adequacy: satisfied"), report);
     }
@@ -207,8 +204,7 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
                 %s
                 """.formatted(body.formatted(operation), rows), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(0, compilation.errors().size(), operation);
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -339,7 +335,7 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
                 let f (xs, q) = Ok { v = q }
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1616"), compilation);
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 

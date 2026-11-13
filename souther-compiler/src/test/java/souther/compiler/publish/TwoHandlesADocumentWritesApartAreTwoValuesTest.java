@@ -1,5 +1,6 @@
 package souther.compiler.publish;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -401,7 +402,7 @@ class TwoHandlesADocumentWritesApartAreTwoValuesTest {
         Compilation compilation =
                 Compilation.ofSources(List.of(MODEL), ModulePath.of(published));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         // Read off the page rather than off a reading, because a reading holds no place: what a
         // sentence about one of these is written from is what the page was assembled with, and
         // this is asking that.

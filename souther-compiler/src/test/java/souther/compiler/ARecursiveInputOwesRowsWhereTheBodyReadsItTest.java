@@ -139,8 +139,7 @@ class ARecursiveInputOwesRowsWhereTheBodyReadsItTest {
     private static List<String> declaredReadingsOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(0, compilation.errors().size(), "the model compiles");
+        ACompiledModel.compiles(compilation);
         JsonNode module = JsonMapper.builder().build()
                 .readTree(AdequacyReport.of(compilation)
                         .json(SourceRendering.namedByIdentity(compilation.texts())))
@@ -159,8 +158,7 @@ class ARecursiveInputOwesRowsWhereTheBodyReadsItTest {
     private static String humanReportOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(0, compilation.errors().size(), "the model compiles");
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }

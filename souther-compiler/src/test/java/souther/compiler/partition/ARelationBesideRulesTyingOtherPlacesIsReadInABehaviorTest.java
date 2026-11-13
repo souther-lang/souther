@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
@@ -58,8 +59,7 @@ class ARelationBesideRulesTyingOtherPlacesIsReadInABehaviorTest {
                 let f (p, cap) = p.total.value <= cap
                 """.formatted(rules), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     /** What is said of the relations of the behavior, apart from the rest of a report. */
@@ -130,12 +130,12 @@ class ARelationBesideRulesTyingOtherPlacesIsReadInABehaviorTest {
     /** And a value of the record alone is the one value of the strings tied together. */
     @Test
     void aValueOfTheRecordHoldsTheStringsTiedTogether() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module demo
 
                 data Priced = { total: Int, a: String, b: String }
                     invariant String.contains("q", a) && String.contains(a, b)
-                """, "Main");
+                """);
         String module = compilation.modules().get(0);
         RuleReadingContext reading = RuleReadingContext.unshared(
                 RuleReadings.of(compilation, module), ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
@@ -164,7 +164,7 @@ class ARelationBesideRulesTyingOtherPlacesIsReadInABehaviorTest {
      */
     @Test
     void aFieldGivenIsHeldInTheValueOfTheStringsTiedToIt() {
-        Compilation compilation = Compilation.ofSource(PAIR, "Main");
+        Compilation compilation = ACompiledModel.answered(PAIR);
         String module = compilation.modules().get(0);
         RuleReadingContext reading = RuleReadingContext.unshared(
                 RuleReadings.of(compilation, module), ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
@@ -190,7 +190,7 @@ class ARelationBesideRulesTyingOtherPlacesIsReadInABehaviorTest {
                 let f (p) = p.a == "xy"
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String rows = offered(compilation);
 
         assertTrue(rows.contains("Pair { a = \"xy\", b = \"xy\" }"),
@@ -261,8 +261,7 @@ class ARelationBesideRulesTyingOtherPlacesIsReadInABehaviorTest {
     private static Compilation measuredRows(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     /** The {@code a} and {@code b} of each pair offered as a row. */

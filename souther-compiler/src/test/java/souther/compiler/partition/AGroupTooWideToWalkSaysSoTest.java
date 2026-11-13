@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.ArmProbe;
 import org.junit.jupiter.api.Test;
 
@@ -304,14 +305,10 @@ class AGroupTooWideToWalkSaysSoTest {
         Compilation compilation = UnderABudget.of(Compilation.ofSource(source, "Main"),
                 new AdequacyPolicy(Budgets.measures(), atMost(3)));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
         // The rows have to have run for what is owed to be what the arms established. A model whose
         // examples failed is owed nothing for a reason of its own, and an empty answer from one of
         // those would look exactly like the answer this test is about.
-        assertEquals(List.of(), compilation.db().allReports().stream()
-                        .filter(found -> found.report().isError())
-                        .map(found -> found.report().diagnostic().code().toString()).toList(),
-                "the model compiles and its rows run");
+        ACompiledModel.compiles(compilation);
         Map<String, Adequacy.Filling> filling =
                 Adequacy.generatedOf(compilation.db(), "example.wide");
         assertNotNull(filling, "the module was asked for rows");
@@ -417,8 +414,7 @@ class AGroupTooWideToWalkSaysSoTest {
         }
 
         static Model of(String source) {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.answerEverything();
+            Compilation compilation = ACompiledModel.answered(source);
             String module = compilation.modules().get(0);
             Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
             Map<String, Sig> sigs = compilation.db().ask(new Bodies.Signatures(module)).value();

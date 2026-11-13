@@ -2,11 +2,14 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
+
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
@@ -19,14 +22,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 class AComparisonWithWhatACaseConversionAnswersIsReadOverItsImageTest {
 
     private static String report(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
-    private static String comparing(String body) {
+    /** {@code body} compared with a row whose {@code b} is what the conversion makes of "ab". */
+    private static String comparing(String body, String converted) {
         return """
                 module p1
 
@@ -34,16 +36,18 @@ class AComparisonWithWhatACaseConversionAnswersIsReadOverItsImageTest {
                 let same (a, b) = BODY
 
                 example same
-                    | "equal" : ("ab", "ab") -> true
+                    | "equal" : ("ab", "CONVERTED") -> true
                     | "differ" : ("ab", "cd") -> false
-                """.replace("BODY", body);
+                """.replace("BODY", body).replace("CONVERTED", converted);
     }
 
     @Test
     void aStringAgainstTheLowercaseOfAnyStringIsNotOpenForTheImage() {
+        Map<String, String> convertedBy = Map.of("String.lowercase(a) == b", "ab",
+                "String.uppercase(a) == b", "AB");
         for (String body : new String[] {"String.lowercase(a) == b",
                 "String.uppercase(a) == b"}) {
-            String json = report(comparing(body));
+            String json = report(comparing(body, convertedBy.get(body)));
             assertFalse(json.contains("\"imagesNotShown\""), () -> body + " " + json);
             // Nothing is left unanswered for either place: the classes cover every value.
             assertFalse(json.contains("regionNotDetermined"), () -> body + " " + json);

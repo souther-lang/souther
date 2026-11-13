@@ -31,11 +31,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
 
-    private static souther.compiler.query.PartitionEvidence measured(String type, String guards) {
-        return measured(type, guards,
-                "    | \"one\" : (" + (type.equals("Decimal") ? "0.1m" : "1") + ") -> Yes { v = 1 }");
-    }
-
     /** The lines the behavior's positions met, whosever the row at each point is. */
     private static List<BorderAssessment> lines(String type, String guards, String rows) {
         Compilation compilation = compiled(type, guards, rows);
@@ -54,7 +49,7 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
     }
 
     private static Compilation compiled(String type, String guards, String rows) {
-        Compilation compilation = Compilation.ofSource("""
+        return ACompiledModel.measured("""
                 module example.exact
 
                 data No = { why: Int }
@@ -71,14 +66,16 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
 
                 example f
                 %s
-                """.formatted(type, guards, rows), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+                """.formatted(type, guards, rows), Adequacy.Asked.fullReport());
     }
 
     private static List<String> classesOf(String type, String guards) {
-        PartitionEvidence evidence = measured(type, guards);
+        return classesOf(type, guards,
+                "    | \"one\" : (" + (type.equals("Decimal") ? "0.1m" : "1") + ") -> Yes { v = 1 }");
+    }
+
+    private static List<String> classesOf(String type, String guards, String rows) {
+        PartitionEvidence evidence = measured(type, guards, rows);
         assertEquals(1, evidence.axes().size(),
                 "the behavior takes one position and the model divides it");
         return evidence.axes().get(0).classes();
@@ -126,7 +123,8 @@ class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
         assertEquals(List.of("n: 3 * x <= 1", "n: 1 < 3 * x <= 2", "n: 2 < 3 * x"),
                 classesOf("Decimal", """
                     guard 3m * n > 1m else No { why = 0 }
-                    guard 3m * n > 2m else No { why = 1 }"""));
+                    guard 3m * n > 2m else No { why = 1 }""",
+                "    | \"one\" : (0.1m) -> No { why = 0 }"));
     }
 
     /**

@@ -51,7 +51,7 @@ class ARunStoppedAtAnUnreachableSaysTheModuleItIsWrittenInTest {
     void anUnreachableOfAnInlinedHelperIsPlacedInTheHelpersModule() {
         Compilation compilation = Compilation.ofSources(List.of(LIB, APP), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         int at = LIB.indexOf(UNREACHABLE);
         String before = LIB.substring(0, at);
         int line = (int) before.chars().filter(c -> c == '\n').count() + 1;

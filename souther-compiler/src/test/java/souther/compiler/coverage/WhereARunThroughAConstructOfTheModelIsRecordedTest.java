@@ -6,6 +6,7 @@ import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.WrittenOwner;
@@ -137,7 +138,8 @@ class WhereARunThroughAConstructOfTheModelIsRecordedTest {
      */
     private static List<Compiled> everyModule() {
         List<Compiled> out = new ArrayList<>();
-        for (Compilation compilation : RepositoryModels.all()) {
+        for (Compilation carried : RepositoryModels.all()) {
+            Compilation compilation = ACompiledModel.compiles(carried);
             int before = out.size();
             modulesOf(compilation, out);
             assertTrue(out.size() > before,
@@ -149,8 +151,8 @@ class WhereARunThroughAConstructOfTheModelIsRecordedTest {
     }
 
     private static List<Compiled> compiled(List<String> sources) {
-        Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(sources, ModulePath.EMPTY));
         List<Compiled> out = new ArrayList<>();
         modulesOf(compilation, out);
         assertTrue(!out.isEmpty(),

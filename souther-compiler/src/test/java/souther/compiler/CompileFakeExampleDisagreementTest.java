@@ -20,6 +20,7 @@ import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.msg.ExampleMessage.NotComparedTheTableDidNotAnswer;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -196,7 +197,7 @@ class CompileFakeExampleDisagreementTest {
      */
     @Test
     void twoTablesForOneBehaviorAreHeldAgainstNoRow() {
-        List<String> codes = allCodesOf(BASE + """
+        refusedAs(List.of("E1933", "E1933"), BASE + """
 
                 example findMember
                     | "m-1 is a member" : (MemberId("m-1")) -> Found { id = MemberId("m-1") }
@@ -207,8 +208,6 @@ class CompileFakeExampleDisagreementTest {
                 fake findMember
                     | (MemberId("m-1")) -> Missing { why = "no such member" }
                 """);
-
-        assertEquals(List.of("E1933", "E1933"), codes, codes.toString());
     }
 
     /**
@@ -218,7 +217,7 @@ class CompileFakeExampleDisagreementTest {
      */
     @Test
     void aTableWithAnUnbuildableRowAnswersNothing() {
-        assertEquals(List.of("E1908"), allCodesOf("""
+        refusedAs(List.of("E1908"), """
                 module example.clash
                 import String ( length )
 
@@ -243,7 +242,7 @@ class CompileFakeExampleDisagreementTest {
 
                 example place
                     | "runs" : (MemberId("m-1")) -> Missing { why = "none" }
-                """));
+                """);
     }
 
     /**
@@ -252,7 +251,7 @@ class CompileFakeExampleDisagreementTest {
      */
     @Test
     void aRowExpectingACaseTheBehaviorCannotAnswerWithStatesNothing() {
-        assertEquals(List.of("E1904"), allCodesOf("""
+        refusedAs(List.of("E1904"), """
                 module example.clash
 
                 data Found = { id: String }
@@ -266,7 +265,7 @@ class CompileFakeExampleDisagreementTest {
 
                 fake find
                     | ("m-1") -> Missing { why = "none" }
-                """));
+                """);
     }
 
     /**
@@ -460,7 +459,7 @@ class CompileFakeExampleDisagreementTest {
     private static WrittenStatements.Readings readingOf(String model, ClassLoader parent) {
         souther.compiler.query.Compilation c =
                 souther.compiler.query.Compilation.ofSource(model, "Main");
-        c.db().ask(new souther.compiler.query.Output.All());
+        ACompiledModel.compiles(c);
         String name = c.modules().get(0);
         souther.compiler.check.Prepared prepared =
                 c.db().ask(new souther.compiler.query.Shapes.Prepared(name)).value();
@@ -562,7 +561,7 @@ class CompileFakeExampleDisagreementTest {
      */
     @Test
     void aRowThatWillNotFinishDoesNotTakeTheRestOfTheModuleWithIt() {
-        assertEquals(List.of("E1923", "E1919"), allCodesOf("""
+        assertEquals(List.of("E1919"), disagreementsOfModelRefusedAs(List.of("E1923"), """
                 module example.b2
 
                 data N = Int
@@ -595,7 +594,7 @@ class CompileFakeExampleDisagreementTest {
      */
     @Test
     void aCaseAHelperAnsweredWithIsWhatTheFakeStates() {
-        assertEquals(List.of("E1919"), allCodesOf("""
+        assertEquals(List.of("E1919"), disagreementsOfModelRefusedAs(List.of(), """
                 module example.m3b
 
                 data Found = { id: String }
@@ -610,7 +609,7 @@ class CompileFakeExampleDisagreementTest {
 
                 fake lookup
                     | _ -> missing("none")
-                """));
+                """, null));
     }
 
     /**
@@ -620,7 +619,7 @@ class CompileFakeExampleDisagreementTest {
      */
     @Test
     void aPrimitiveCaseOfAUnionIsACaseLikeAnyOther() {
-        assertEquals(List.of("E1919"), allCodesOf("""
+        assertEquals(List.of("E1919"), disagreementsOfModelRefusedAs(List.of(), """
                 module example.prim
 
                 data Missing = { why: String }
@@ -632,32 +631,38 @@ class CompileFakeExampleDisagreementTest {
 
                 fake lookup
                     | _ -> 1
-                """));
+                """, null));
     }
 
-    /** Every example-family code the compile reported, in order. Read off the reports so that the
-     * error a case is really about is visible beside the E1919s, and a test cannot pass by the whole
-     * comparison having stopped working. */
-    private static List<String> allCodesOf(String model) {
-        return allCodesOf(model, null);
+    /** {@code model} held to be refused with {@code codes} and nothing else. */
+    private static void refusedAs(List<String> codes, String model) {
+        refusedAs(codes, model, null);
     }
 
-    /** As {@link #allCodesOf(String)}, for a model with a row that does not come back. */
-    private static List<String> allCodesOf(String model, JvmExampleDeadlines overrun) {
-        souther.compiler.query.Compilation compilation =
-                souther.compiler.query.Compilation.ofSource(model, "Main");
+    /** As {@link #refusedAs(List, String)}, for a model with a row that does not come back. */
+    private static void refusedAs(List<String> codes, String model, JvmExampleDeadlines overrun) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
         if (overrun != null) {
             compilation.withJvmExampleDeadlines(overrun);
         }
-        compilation.answerEverything();
-        List<String> codes = new ArrayList<>();
-        for (souther.compiler.query.Db.Found found : compilation.db().allReports()) {
-            String code = found.report().diagnostic().code();
-            if (code != null && code.startsWith("E19")) {
-                codes.add(code);
-            }
+        ACompiledModel.refusedWith(codes, compilation);
+    }
+
+    /**
+     * {@code model} held to be refused with {@code codes} and nothing else, and the codes of the
+     * disagreements it said, which are warnings beside what it refused.
+     */
+    private static List<String> disagreementsOfModelRefusedAs(List<String> codes, String model,
+            JvmExampleDeadlines overrun) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        if (overrun != null) {
+            compilation.withJvmExampleDeadlines(overrun);
         }
-        return codes;
+        ACompiledModel.refusedWith(codes, compilation);
+        return compilation.db().allReports().stream()
+                .map(found -> found.report().diagnostic().code())
+                .filter("E1919"::equals)
+                .toList();
     }
 
     // --- a row that names only a case ---------------------------------------------------------
@@ -913,7 +918,7 @@ class CompileFakeExampleDisagreementTest {
         souther.compiler.query.Compilation compilation =
                 souther.compiler.query.Compilation.ofSource(model, "Main");
         compilation.measure(asked);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         int said = 0;
         for (souther.compiler.query.Db.Found found : compilation.db().allReports()) {
             if ("E1919".equals(found.report().diagnostic().code())) {

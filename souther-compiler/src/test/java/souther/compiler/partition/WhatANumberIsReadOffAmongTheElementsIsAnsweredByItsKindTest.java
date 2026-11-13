@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.Extreme;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -202,7 +203,7 @@ class WhatANumberIsReadOffAmongTheElementsIsAnsweredByItsKindTest {
      *  list's is of none of them. */
     @Test
     void aNumberTakenOverTheContainerIsOfAllOfIt() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module probe
 
                 data Forecast = { currency: String, amount: Int }
@@ -210,7 +211,7 @@ class WhatANumberIsReadOffAmongTheElementsIsAnsweredByItsKindTest {
                 data Taken
 
                 behavior take : (fs: List<Forecast>, gs: List<Forecast>) -> Taken
-                """, "Main");
+                """);
         RuleReadingSource rules = RuleReadings.of(compilation, compilation.modules().get(0));
         ValueName.Stdlib sum = ValueName.Stdlib.operation("List", "sum");
         NumericTerm overThese = NumericTerm.TakenOver.of(sum,

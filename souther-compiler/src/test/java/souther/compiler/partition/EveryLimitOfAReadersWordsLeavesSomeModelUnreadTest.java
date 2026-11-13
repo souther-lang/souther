@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PathReachability;
@@ -195,16 +196,8 @@ class EveryLimitOfAReadersWordsLeavesSomeModelUnreadTest {
         return out;
     }
 
-    private static final Compilation COMPILATION = compiled();
-
-    private static Compilation compiled() {
-        Compilation made = Compilation.ofSource(MODEL, "Main");
-        made.measure(Adequacy.Asked.fullReport());
-        made.answerEverything();
-        assertEquals(List.of(), made.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
-        return made;
-    }
+    private static final Compilation COMPILATION =
+            ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
 
     @Test
     void everyLimitHasAModel() {

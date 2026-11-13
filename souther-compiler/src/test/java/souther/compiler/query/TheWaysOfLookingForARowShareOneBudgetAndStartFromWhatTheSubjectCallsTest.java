@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.AdequacyPolicy;
@@ -222,10 +223,6 @@ class TheWaysOfLookingForARowShareOneBudgetAndStartFromWhatTheSubjectCallsTest {
                                 PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS, rewriteRuns),
                         Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code()).toList(),
-                "the model under test compiles");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

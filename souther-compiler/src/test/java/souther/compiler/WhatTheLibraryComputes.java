@@ -1,7 +1,6 @@
 package souther.compiler;
 
 import souther.compiler.check.DeclaredArgument;
-import souther.compiler.diag.CompileException;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -195,10 +194,7 @@ public final class WhatTheLibraryComputes {
     private static Map<String, ClassFileImage> classesOf(String source) {
         Compilation compilation = Compilation.ofSource(source, ImplicitModuleName.OF_A_TEXT);
         Map<String, ClassFileImage> classes = compilation.classes();
-        CompileException failure = compilation.failure();
-        if (failure != null) {
-            throw failure;
-        }
+        ACompiledModel.compiles(compilation);
         return classes;
     }
 

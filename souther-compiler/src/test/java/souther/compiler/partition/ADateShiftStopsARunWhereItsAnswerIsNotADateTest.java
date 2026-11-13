@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.check.PathReachability;
 import souther.compiler.diag.Diagnostic;
@@ -51,9 +52,7 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
     }
 
     private static String reportOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -682,14 +681,14 @@ class ADateShiftStopsARunWhereItsAnswerIsNotADateTest {
     /** What the reading of where a run arrives answers about {@code body}, read whole: every
      *  comparison and arm, and not only those a line is drawn at. */
     private static PathReachability.Answers arrivals(String body) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module w1
                 behavior f : (n: Int, d: Date, b: Int, size: Int) -> Ok | No
                 let f (n, d, b, size) = {
                 %s
                     Ok
                 }
-                """.formatted(body), "Main");
+                """.formatted(body));
         PathReachability.Answers answers = compilation.db().ask(new Adequacy.Arrived("w1"))
                 .value().get("f").answers();
         assertFalse(answers.arrivals().arriving().isEmpty(), "the comparisons were read");

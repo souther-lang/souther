@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.PathReachability;
@@ -97,7 +98,7 @@ class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
     }
 
     private static Read readAnew(int calls) {
-        Compilation compilation = Compilation.ofSource(model(calls), "Main");
+        Compilation compilation = ACompiledModel.answered(model(calls));
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         assertNotNull(checked, "the chain under test compiles");
         AnalysisBody analysis = checked.analysisBodies().get("draw");

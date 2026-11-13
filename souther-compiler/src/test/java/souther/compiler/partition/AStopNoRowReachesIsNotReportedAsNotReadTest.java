@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -248,13 +249,13 @@ class AStopNoRowReachesIsNotReportedAsNotReadTest {
 
     /** Each body is measured once, however many of the questions above ask about it. */
     private static PartitionEvidence evidenceOf(String body) {
-        return MEASURED.computeIfAbsent(body, written -> {
-            Compilation compilation = Compilation.ofSource(MODEL.formatted(written), "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            assertEquals(List.of(), compilation.errors(), written);
-            return compilation;
-        }).db().ask(new Adequacy.Coverage("demo")).value().get("f");
+        Compilation compilation = MEASURED.computeIfAbsent(body, written -> {
+            Compilation made = Compilation.ofSource(MODEL.formatted(written), "Main");
+            made.measure(Adequacy.Asked.fullReport());
+            return ACompiledModel.compiles(made);
+        });
+        ACompiledModel.compiles(compilation);
+        return compilation.db().ask(new Adequacy.Coverage("demo")).value().get("f");
     }
 
     /** And given back when the class is done with them: a fork keeps its JVM. */

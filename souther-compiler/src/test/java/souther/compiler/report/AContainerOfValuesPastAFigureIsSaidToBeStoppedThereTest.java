@@ -6,6 +6,7 @@ import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.DomainPoint;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -44,10 +45,7 @@ class AContainerOfValuesPastAFigureIsSaidToBeStoppedThereTest {
     private static final int PAST = CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS.maximum() + 1;
 
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     private static BorderAssessment lineAtTwo(Compilation compilation) {

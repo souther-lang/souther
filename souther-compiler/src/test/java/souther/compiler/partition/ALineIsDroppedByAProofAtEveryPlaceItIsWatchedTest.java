@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.diag.Citation;
@@ -619,7 +620,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
      */
     @Test
     void aBodyIsDividedByWhatArrivesOnceTheRowsHaveRun() {
-        Compilation compilation = Compilation.ofSources(List.of("""
+        Compilation compilation = ACompiledModel.compiles(Compilation.ofSources(List.of("""
                 module g
 
                 data Small
@@ -627,7 +628,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
 
                 behavior size : (n: Int) -> Small | Large
                 let size (n) = if n > 10 then Large else Small
-                """), ModulePath.EMPTY);
+                """), ModulePath.EMPTY));
         String module = compilation.modules().get(0);
 
         assertNotNull(compilation.db().ask(new Adequacy.Divided(module, "size")).value(),
@@ -719,7 +720,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     private static final Applied APPLIED = applied();
 
     private static Applied applied() {
-        Compilation compilation = Compilation.ofSources(List.of("""
+        Compilation compilation = ACompiledModel.compiles(Compilation.ofSources(List.of("""
                 module g
 
                 data Small
@@ -727,7 +728,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
 
                 behavior size : (xs: List<Int>) -> Small | Large
                 let size (xs) = if List.isEmpty(xs) then Small else Large
-                """), ModulePath.EMPTY);
+                """), ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         PathReachability.Answers read =
                 compilation.db().ask(new Adequacy.PathReached(module)).value().get("size");
@@ -903,8 +904,8 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
     private record Read(InputDomain input, RuleReadingSource rules) {}
 
     private static Read read() {
-        Compilation compilation = Compilation.ofSources(List.of(ONE), ModulePath.EMPTY);
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.compiles(Compilation.ofSources(List.of(ONE), ModulePath.EMPTY));
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

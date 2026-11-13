@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -77,10 +78,7 @@ class AHelperCalledOnWhatItAnsweredBeforeIsReadOnEveryCallTest {
                                                                    String behavior) {
         String module = source.lines().findFirst().orElseThrow().substring("module ".length());
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().literalMessage())
-                .toList(), "the model compiles");
+        ACompiledModel.compiles(compilation);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");
         AnalysisBody analysis = checked.analysisBodies().get(behavior);

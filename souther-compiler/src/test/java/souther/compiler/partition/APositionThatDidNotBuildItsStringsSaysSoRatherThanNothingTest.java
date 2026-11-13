@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.query.Adequacy;
@@ -165,11 +166,13 @@ class APositionThatDidNotBuildItsStringsSaysSoRatherThanNothingTest {
      */
     @Test
     void andAPositionWhoseAnswerStandsSaysWhenItsRulesCouldNotBeHandedOn() {
-        assertEquals(List.of(), reasonsIn(ONE_THE_ANSWER_DOES_NOT_NEED, WITH_ROOM),
+        assertEquals(List.of(), reasonsIn(ONE_THE_ANSWER_DOES_NOT_NEED, WITH_ROOM,
+                        List.of("E1013")),
                 "with room to hand them on there is nothing outstanding: the rule leaves the"
                         + " position every string and every string is where it was found");
         assertEquals(List.of("RulesNotHandedOnAsSets"),
-                reasonsIn(ONE_THE_ANSWER_DOES_NOT_NEED, WITH_NOTHING_TO_HAND_ON_WITH),
+                reasonsIn(ONE_THE_ANSWER_DOES_NOT_NEED, WITH_NOTHING_TO_HAND_ON_WITH,
+                        List.of("E1013")),
                 "and with none, the position says the set its rule leaves was not worked out —"
                         + " without naming the rule, which was affordable, and without saying"
                         + " anything about what the position admits, which is exact");
@@ -205,8 +208,14 @@ class APositionThatDidNotBuildItsStringsSaysSoRatherThanNothingTest {
     }
 
     private static List<String> reasonsIn(String model, ReadingPolicy policy) {
+        return reasonsIn(model, policy, List.of());
+    }
+
+    /** As above, of a model that is refused for {@code refusedFor}, which is read all the same. */
+    private static List<String> reasonsIn(String model, ReadingPolicy policy,
+                                          List<String> refusedFor) {
         List<String> out = new ArrayList<>();
-        for (PartitionEvidence evidence : read(model, policy)) {
+        for (PartitionEvidence evidence : read(model, policy, refusedFor)) {
             for (RuleWithoutALine each : evidence.rulesWithoutALine()) {
                 out.add(each.why().getClass().getSimpleName());
             }
@@ -239,10 +248,15 @@ class APositionThatDidNotBuildItsStringsSaysSoRatherThanNothingTest {
     }
 
     private static List<PartitionEvidence> read(String model, ReadingPolicy policy) {
+        return read(model, policy, List.of());
+    }
+
+    private static List<PartitionEvidence> read(String model, ReadingPolicy policy,
+                                                List<String> refusedFor) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.db().set(new Front.Reading(), policy);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(refusedFor, compilation);
 
         List<PartitionEvidence> out = new ArrayList<>();
         for (String module : compilation.modules()) {

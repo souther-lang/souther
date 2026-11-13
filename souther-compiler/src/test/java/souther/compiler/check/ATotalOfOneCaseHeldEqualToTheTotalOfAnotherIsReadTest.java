@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.inputs.InputDomain;
@@ -207,7 +208,7 @@ class ATotalOfOneCaseHeldEqualToTheTotalOfAnotherIsReadTest {
 
                 behavior probe : (n: N) -> Int
                 let probe (n) = 1
-                """).isEmpty());
+                """, List.of("E2001")).isEmpty());
     }
 
     /**
@@ -240,12 +241,18 @@ class ATotalOfOneCaseHeldEqualToTheTotalOfAnotherIsReadTest {
 
                 behavior probe : (n: N) -> Int
                 let probe (n) = 1
-                """).isEmpty());
+                """, List.of("E2001")).isEmpty());
     }
 
     /** What stands unanswered at the list of the input of {@code probe}. */
     private static List<String> unansweredAtTheList(String source) {
+        return unansweredAtTheList(source, List.of());
+    }
+
+    /** The same for a model that is refused for {@code refusedFor}, which is read all the same. */
+    private static List<String> unansweredAtTheList(String source, List<String> refusedFor) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        ACompiledModel.refusedWith(refusedFor, compilation);
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

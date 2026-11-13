@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.query.Adequacy;
@@ -74,9 +75,7 @@ class ADifferenceHeldAgainstAThresholdIsReadWithTheThresholdHeldStillTest {
     /** How many places a rule of {@code behavior} is said to leave undivided by relating two
      *  values. */
     private static long relatingTwoValues(String behavior) {
-        Compilation compilation = Compilation.ofSource(DECLARED, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(DECLARED, Adequacy.Asked.fullReport());
         PartitionEvidence evidence = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value().get(behavior);
         assertNotNull(evidence, "the model under test compiles");

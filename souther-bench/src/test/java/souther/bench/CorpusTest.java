@@ -3,6 +3,7 @@ package souther.bench;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.ChoicesRead;
 import souther.compiler.query.Compilation;
 import souther.test.ClosedWorldContract;
@@ -82,7 +83,7 @@ class CorpusTest {
     @Test
     void everyCorpusCompiles() {
         for (Corpus corpus : Corpus.all()) {
-            corpus.check(compiled(corpus));
+            corpus.check(ACompiledModel.compiles(compiled(corpus)));
         }
     }
 

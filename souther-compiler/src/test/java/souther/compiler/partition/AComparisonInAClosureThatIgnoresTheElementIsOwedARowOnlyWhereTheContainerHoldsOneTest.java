@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -138,9 +139,7 @@ class AComparisonInAClosureThatIgnoresTheElementIsOwedARowOnlyWhereTheContainerH
     }
 
     private static String jsonOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
@@ -159,7 +158,8 @@ class AComparisonInAClosureThatIgnoresTheElementIsOwedARowOnlyWhereTheContainerH
     @Test
     void aRowOfferedOverAContainerThatMayBeEmptyIsOneReadBackOrSaysItWasNot() {
         String source = MODEL.replace("GUARD",
-                "List.any(x -> atLeast > 5, List.filter(y -> y > 100, xs))");
+                "List.any(x -> atLeast > 5, List.filter(y -> y > 100, xs))")
+                .replace("(9, [1])", "(9, [101])");
         List<ItemAssessment.Owed> searched = searchedPointsOn(source, "pick");
         assertFalse(searched.isEmpty(), "the line on atLeast has points to search");
         for (ItemAssessment.Owed owed : searched) {
@@ -218,9 +218,7 @@ class AComparisonInAClosureThatIgnoresTheElementIsOwedARowOnlyWhereTheContainerH
     }
 
     private static List<BorderAssessment> lines(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> all =
                 Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, () -> "the model under test compiles: " + compilation.errors().stream()

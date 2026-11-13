@@ -3,6 +3,7 @@ package souther.compiler.report;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -177,7 +178,7 @@ class TwoFactsCalledOneThingAreTwoEntriesInTheDocumentsOrderTest {
         Compilation compilation =
                 Compilation.ofSources(TWO_SOURCES_NOTHING_WAS_READ_FROM, ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1906", "E1906"), compilation);
         return JSON.readTree(
                 AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
     }

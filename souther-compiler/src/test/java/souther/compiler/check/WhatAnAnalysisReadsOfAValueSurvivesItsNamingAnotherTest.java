@@ -1,9 +1,11 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
 import souther.compiler.types.WrittenOwner;
 
 import java.util.ArrayList;
@@ -26,7 +28,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class WhatAnAnalysisReadsOfAValueSurvivesItsNamingAnotherTest {
 
     private static AnalysisBody analysed(String source, String behavior) {
-        return Compiler.compiled(source, "m").db()
+        Compilation compiled = ACompiledModel.compiles(Compiler.compiled(source, "m"));
+        return compiled.db()
                 .ask(new Bodies.Checked("m")).value().analysisBodies().get(behavior);
     }
 

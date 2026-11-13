@@ -55,7 +55,7 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
     private static AdequacyReport.BehaviorReport page() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0);
     }
 
@@ -135,7 +135,7 @@ class AGuardsQuestionIsCitedByWhereItIsWrittenTest {
                     | "one" : (Length(5)) -> 1
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         PartitionEvidence evidence = AdequacyReport.of(compilation)
                 .modules().get(0).behaviors().get(0).partition();
 

@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.ast.DefinitionName;
 import souther.compiler.ast.Hir;
@@ -52,20 +53,21 @@ class AValueBuiltForTwoRegionsIsTwoOccurrencesTest {
             """;
 
     private static void accepted(String tail) {
-        assertEquals("{0=[]}", String.valueOf(Compiler.compiled(HEAD + tail, "m").diagnostics()));
+        assertEquals("{0=[]}", String.valueOf(
+                ACompiledModel.compiles(Compiler.compiled(HEAD + tail, "m")).diagnostics()));
     }
 
     /** The bodies a behavior of {@code source} is lowered to, for a reader counting what stands in
      *  them. */
     private static Hir.Expr loweredBody(String source, String behavior) {
-        return Compiler.compiled(source, "m").db()
+        return ACompiledModel.compiles(Compiler.compiled(source, "m")).db()
                 .ask(new Bodies.LoweredBody("m", new DefinitionName(behavior)))
                 .value().value().definition().writtenBody();
     }
 
     /** The body a behavior is read as where the language's own operations stand. */
     private static Hir.Expr analysisBody(String source, String behavior) {
-        return Compiler.compiled(source, "m").db()
+        return ACompiledModel.compiles(Compiler.compiled(source, "m")).db()
                 .ask(new Bodies.BodyForInvariantDischarge("m", behavior))
                 .value().value().writtenBody();
     }
@@ -112,7 +114,8 @@ class AValueBuiltForTwoRegionsIsTwoOccurrencesTest {
                 behavior g : (n: Int) -> Bool
                 let g (n) = inner
                 """;
-        assertEquals("{0=[]}", String.valueOf(Compiler.compiled(source, "m").diagnostics()));
+        assertEquals("{0=[]}", String.valueOf(
+                ACompiledModel.compiles(Compiler.compiled(source, "m")).diagnostics()));
 
         assertEquals(List.of(new MaterialisationSite.Body(new WrittenOwner.Body("m", "f"))),
                 buildsOfInner(loweredBody(source, "f")));
@@ -222,7 +225,8 @@ class AValueBuiltForTwoRegionsIsTwoOccurrencesTest {
                 behavior f : (xs: List<Int>) -> Bool
                 let f (xs) = List.any(big, xs)
                 """;
-        assertEquals("{0=[]}", String.valueOf(Compiler.compiled(source, "m").diagnostics()));
+        assertEquals("{0=[]}", String.valueOf(
+                ACompiledModel.compiles(Compiler.compiled(source, "m")).diagnostics()));
 
         List<MaterialisationSite> built = new ArrayList<>();
         collect(analysisBody(source, "f"), each -> each.endsWith("limit"), built);

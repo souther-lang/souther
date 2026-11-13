@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Located;
 import souther.compiler.diag.msg.ExampleMessage;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.Expectation;
@@ -175,7 +176,7 @@ class ARowWhoseAnswerIsOwedIsARowAndAssertsNothingTest {
     @Test
     void anotherRowThatCouldNotBeReadDoesNotSettleThisOne() {
         String alongside = OWED
-                + "    | \"runs away\" : (Amount(1)) -> Waiting { cost = Amount(1) }\n";
+                + "    | \"runs away\" : (Amount(1)) -> Submitted { cost = Amount(1) }\n";
 
         assertTrue(rowsOwedIn(alongside).contains("over it"),
                 () -> "the owed row is owed whatever became of the rows beside it: "
@@ -254,7 +255,7 @@ class ARowWhoseAnswerIsOwedIsARowAndAssertsNothingTest {
     private static AdequacyReport.AdequacyStatus verdictOn(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(new Adequacy.Asked(Adequacy.Level.ALL, false));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation).adequacy();
     }
 
@@ -270,6 +271,11 @@ class ARowWhoseAnswerIsOwedIsARowAndAssertsNothingTest {
     // --- reading what a compile came to ---------------------------------------------------------
 
     private static Compilation compiled(String source) {
+        return ACompiledModel.compiles(attempted(source));
+    }
+
+    /** The model measured and answered in full, whether or not it compiles. */
+    private static Compilation attempted(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Level.ALL);
         compilation.answerEverything();
@@ -278,10 +284,8 @@ class ARowWhoseAnswerIsOwedIsARowAndAssertsNothingTest {
 
     private static List<String> errorsIn(String source) {
         List<String> said = new ArrayList<>();
-        for (Db.Found each : compiled(source).db().allReports()) {
-            if (each.report().isError()) {
-                said.add(each.report().diagnostic().code() + " " + each.report().diagnostic().said());
-            }
+        for (Located each : attempted(source).errors()) {
+            said.add(each.diagnostic().code() + " " + each.diagnostic().said());
         }
         return said;
     }

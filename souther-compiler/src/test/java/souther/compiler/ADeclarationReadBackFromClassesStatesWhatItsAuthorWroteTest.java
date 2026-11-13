@@ -102,7 +102,7 @@ class ADeclarationReadBackFromClassesStatesWhatItsAuthorWroteTest {
         Compilation compilation =
                 Compilation.ofSource(CONSUMER, "Main", ModulePath.of(published));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         JsonNode document = JSON.readTree(
                 AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
         Map<String, JsonNode> out = new LinkedHashMap<>();
@@ -172,7 +172,7 @@ class ADeclarationReadBackFromClassesStatesWhatItsAuthorWroteTest {
                     | "one" : (ThroughHelper("a")) -> Yes
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         JsonNode document = JSON.readTree(
                 AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
         for (JsonNode module : document.get("modules")) {

@@ -1,11 +1,11 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Position;
 import souther.compiler.values.Value;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -46,9 +46,7 @@ class WhatAPositionAdmitsTakesInEveryRuleAboutItTest {
     private static Position positionOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(java.util.List.of(), compilation.errors(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         InputDomain domain = compilation.db()
                 .ask(new Adequacy.Inputs(compilation.modules().get(0))).value().get("seat");
         return domain.positions().stream().filter(each -> each.path().toString().equals("t"))

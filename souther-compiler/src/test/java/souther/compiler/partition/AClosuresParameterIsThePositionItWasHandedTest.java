@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -55,9 +56,7 @@ class AClosuresParameterIsThePositionItWasHandedTest {
             """;
 
     private static Map<String, PartitionEvidence> measured() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage(MODULE)).value();
         assertNotNull(coverage, "the model under test compiles");
@@ -132,9 +131,7 @@ class AClosuresParameterIsThePositionItWasHandedTest {
                 List.filter(s -> s.value >= 18,
                     List.filterMap(q -> List.get(0, [Score(q.age.value + 100)]), people))
             """;
-        Compilation compilation = Compilation.ofSource(derived, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(derived, Adequacy.Asked.fullReport());
         PartitionEvidence scored =
                 compilation.db().ask(new Adequacy.Coverage(MODULE)).value().get("scored");
         assertNotNull(scored, "the model under test compiles");

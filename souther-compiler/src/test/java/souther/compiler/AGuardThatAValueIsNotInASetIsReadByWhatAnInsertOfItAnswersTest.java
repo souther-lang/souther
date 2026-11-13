@@ -450,9 +450,7 @@ class AGuardThatAValueIsNotInASetIsReadByWhatAnInsertOfItAnswersTest {
 
     static List<String> warnings(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
+        ACompiledModel.compiles(compilation);
         return compilation.warnings().stream().map(each -> each.diagnostic().code()).toList();
     }
 }

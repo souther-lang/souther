@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.meta.ModulePath;
@@ -24,7 +25,7 @@ class AnArmForSeveralCasesPlacesACellTest {
 
     @Test
     void aGroupWithAFactorSettledByAnArmForSeveralCasesIsOffered() {
-        Compilation compilation = Compiler.analyzedModules(List.of("""
+        Compilation compilation = ACompiledModel.compiles(Compiler.analyzedModules(List.of("""
                 module example.several
 
                 data A
@@ -48,7 +49,7 @@ class AnArmForSeveralCasesPlacesACellTest {
                                         + (match f with
                                             | On -> 10
                                             | Off -> 0))
-                """), ModulePath.EMPTY, new ArrayList<>(), Adequacy.Asked.fullReport());
+                """), ModulePath.EMPTY, new ArrayList<>(), Adequacy.Asked.fullReport()));
         CoverageRead.Read read = compilation.db()
                 .ask(new Adequacy.Meets("example.several")).value().get("total");
         MeasuredInput.MeasuredAxes axes = MeasuredInput.of("total",

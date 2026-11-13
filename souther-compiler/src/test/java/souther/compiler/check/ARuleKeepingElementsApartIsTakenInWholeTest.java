@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
@@ -48,12 +49,7 @@ class ARuleKeepingElementsApartIsTakenInWholeTest {
             """;
 
     private static FieldDomains read(String declaration) {
-        Compilation compilation = Compilation.ofSource(ITEM + "\n" + declaration, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                .flatMap(List::stream)
-                .map(each -> each.diagnostic().code())
-                .toList(), "the model this reads has to be one somebody could write");
+        Compilation compilation = ACompiledModel.answered(ITEM + "\n" + declaration);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), "N"));
         return FieldDomains.of(name, RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),

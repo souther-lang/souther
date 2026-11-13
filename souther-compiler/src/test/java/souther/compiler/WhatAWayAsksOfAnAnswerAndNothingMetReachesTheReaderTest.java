@@ -13,7 +13,6 @@ import souther.compiler.report.AdequacyReport;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -299,9 +298,7 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
     }
 
     private static AdequacyReport.BehaviorReport reportOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).modules().stream()
                 .flatMap(module -> module.behaviors().stream())
                 .filter(each -> "decides".equals(each.name()))
@@ -310,12 +307,7 @@ class WhatAWayAsksOfAnAnswerAndNothingMetReachesTheReaderTest {
     }
 
     private static String human(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.query.Adequacy;
@@ -78,13 +79,15 @@ class ARuleWhoseReadingStoppedLeavesAQuestionTest {
 
     /** A clause of an `ensures` stated in a form nothing reads. */
     private static final String AN_ENSURES_NOBODY_READS = """
-            module probe.ensures
+            module probe.promises
 
             data Item = { price: Int }
             data Ok = { at: Int }
+            data Dear
 
-            behavior look : (item: Item) -> Ok
-                ensures Bool.not(item.price > 100)
+            behavior look : (item: Item) -> Ok | Dear
+                ensures Ok -> Bool.not(item.price > 100)
+            let look (item) = if item.price > 100 then Dear else Ok { at = item.price }
             """;
 
     /** A predicate over the strings of a value an operation handed out, which is about those
@@ -108,6 +111,7 @@ class ARuleWhoseReadingStoppedLeavesAQuestionTest {
         List<String> alone = new ArrayList<>();
         int stopped = 0;
         for (Compilation compilation : every()) {
+            ACompiledModel.compiles(compilation);
             for (String module : compilation.modules()) {
                 Map<String, PartitionEvidence> coverage =
                         compilation.db().ask(new Adequacy.Coverage(module)).value();
@@ -147,7 +151,6 @@ class ARuleWhoseReadingStoppedLeavesAQuestionTest {
                 AN_ENSURES_NOBODY_READS, A_PREDICATE_OVER_A_MADE_VALUE)) {
             Compilation one = Compilation.ofSource(each, "Main");
             one.measure(Adequacy.Asked.fullReport());
-            one.answerEverything();
             out.add(one);
         }
         return out;

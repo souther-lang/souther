@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
@@ -114,18 +115,20 @@ class AChoiceComesOutAlikeWhicheverArmTakesTheTieTest {
         assertEquals(List.of(), valuesOfTheLinesOn("f/x", lines).stream()
                 .filter(value -> !value.equals("0")).toList());
         assertTrue(everyRowBelowNoughtComesToNo(prelude, "x: NonNeg, c: Decimal",
-                "Decimal.compare(Decimal.min(x.value, 0.0m), c) <= 0"));
+                "Decimal.compare(Decimal.min(x.value, 0.0m), c) <= 0", List.of()));
         // The control: with x free, a row below nought holds the comparison, and is caught.
         assertTrue(!everyRowBelowNoughtComesToNo("", "x: Decimal, c: Decimal",
-                "Decimal.compare(Decimal.min(x, 0.0m), c) <= 0"));
+                "Decimal.compare(Decimal.min(x, 0.0m), c) <= 0", List.of("E1905", "E1905")));
     }
 
     /**
      * Whether every row built for {@code f} with its second input, {@code c}, below nought, written
      * out as an example coming to {@code No}, is run and holds — some such row being built.
+     * {@code refused} is what the examples are refused with: a row is refused only for what it
+     * states.
      */
     private static boolean everyRowBelowNoughtComesToNo(String prelude, String parameters,
-                                                        String condition) {
+                                                        String condition, List<String> refused) {
         List<List<String>> belowNought = new ArrayList<>();
         for (BorderAssessment line : linesOf(compiled(prelude, parameters, condition, ""))) {
             for (List<String> row : rowsBuiltFor(line)) {
@@ -140,9 +143,12 @@ class AChoiceComesOutAlikeWhicheverArmTakesTheTieTest {
             examples.append("    | \"below nought ").append(i).append("\" : (")
                     .append(String.join(", ", belowNought.get(i))).append(") -> No\n");
         }
-        String human = human(compiled(prelude, parameters, condition, examples.toString()));
+        Compilation run = attempted(prelude, parameters, condition, examples.toString(), refused);
+        String human = human(run);
         assertTrue(human.contains("rows " + belowNought.size()), human);
-        return !human.contains("does not hold");
+        boolean holds = !human.contains("does not hold");
+        assertEquals(holds, refused.isEmpty(), "a row that does not hold is a refused example");
+        return holds;
     }
 
     /** What each row built for some point of {@code line} was written as, one text per input. */
@@ -293,9 +299,25 @@ class AChoiceComesOutAlikeWhicheverArmTakesTheTieTest {
      *  {@code prelude} writes and with the examples after it. */
     private static Compilation compiled(String prelude, String parameters, String condition,
                                         String examples) {
+        return ACompiledModel.measured(sourceOf(prelude, parameters, condition, examples),
+                Adequacy.Asked.fullReport());
+    }
+
+    /** The same, held to be refused with {@code refused}: the examples may state an answer the
+     *  behavior does not give. */
+    private static Compilation attempted(String prelude, String parameters, String condition,
+                                         String examples, List<String> refused) {
+        Compilation compilation =
+                Compilation.ofSource(sourceOf(prelude, parameters, condition, examples), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        return ACompiledModel.refusedWith(refused, compilation);
+    }
+
+    private static String sourceOf(String prelude, String parameters, String condition,
+                                   String examples) {
         String names = String.join(", ", List.of(parameters.split(", ")).stream()
                 .map(each -> each.substring(0, each.indexOf(':'))).toList());
-        Compilation compilation = Compilation.ofSource("""
+        return ("""
                 module demo
 
                 data Ok
@@ -309,9 +331,6 @@ class AChoiceComesOutAlikeWhicheverArmTakesTheTieTest {
                     Ok
                 }
                 %s
-                """.formatted(prelude, parameters, names, condition, examples), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+                """).formatted(prelude, parameters, names, condition, examples);
     }
 }

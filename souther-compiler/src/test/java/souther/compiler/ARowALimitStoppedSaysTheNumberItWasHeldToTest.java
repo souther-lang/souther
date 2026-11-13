@@ -89,7 +89,7 @@ class ARowALimitStoppedSaysTheNumberItWasHeldToTest {
         compilation.withJvmExampleDeadlines(DoesNotComeBack.overrunningOn(
                 DoesNotComeBack.everythingAboutRowsOf("run")));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1923"), compilation);
 
         List<Incompleteness.Met> gaps = AdequacyReport.of(compilation).modules().get(0)
                 .behaviors().get(0).reading().gaps().stream().toList();
@@ -103,7 +103,7 @@ class ARowALimitStoppedSaysTheNumberItWasHeldToTest {
     private static Optional<Figure> figureOf(String source, EvaluationPolicy policy) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.withEvaluationPolicy(policy);
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1910"), compilation);
         SourceId sourceId = compilation.exampleSourcesOf("example.loops").getFirst();
         List<Incompleteness> gaps = compilation.db().ask(new Output.Examples("example.loops",
                 sourceId, ArmObservation.OMIT)).value().incompleteness();

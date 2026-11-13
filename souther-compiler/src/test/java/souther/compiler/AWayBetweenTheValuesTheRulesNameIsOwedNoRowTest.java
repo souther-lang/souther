@@ -449,17 +449,11 @@ class AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest {
     private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
 
     private static Compilation measured(String model) {
-        return MEASURED.computeIfAbsent(model,
-                AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest::measure);
+        return ACompiledModel.compiles(MEASURED.computeIfAbsent(model,
+                AWayBetweenTheValuesTheRulesNameIsOwedNoRowTest::measure));
     }
 
     private static Compilation measure(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
-        return compilation;
+        return ACompiledModel.measured(model, Adequacy.Asked.fullReport());
     }
 }

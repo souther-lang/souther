@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
@@ -47,7 +48,7 @@ class EveryValueComposedForAnAimIsATryAgainstTheFigureTest {
     }
 
     private static Set<Figure> stoppedAt(int aims) {
-        Compilation compilation = Compilation.ofSource(MODULE, "Main");
+        Compilation compilation = ACompiledModel.answered(MODULE);
         RuleReadingContext reading = RuleReadingContext.unshared(
                 RuleReadings.of(compilation, compilation.modules().get(0)),
                 ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);

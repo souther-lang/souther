@@ -139,10 +139,6 @@ class ABodyThatCallsNoBehaviorIsOfferedAListOfOneElementTest {
         Compilation compilation = Compilation.ofSource(MODEL.formatted(each.declarations(),
                 each.element(), each.result(), body, each.answeredAtNone()), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                () -> each + " compiles");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

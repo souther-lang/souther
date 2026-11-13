@@ -2,14 +2,15 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.ReadAs;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -26,35 +27,34 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ATypeIsGrantedAValueOnlyWhereOneIsShownTest {
 
-    private static Map<String, Cardinality> solved(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        // Everything but the check this replaces: a model refused for some other reason is one whose
-        // rules were never read, and every row of it would answer from the absence of them.
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                        .flatMap(List::stream).map(each -> each.diagnostic().code().toString())
-                        .filter(each -> !each.equals("E1013")).toList(),
-                "the model this reads has to be one somebody could write");
+    /**
+     * What the reading grants each declaration of {@code source}, a model refused with exactly
+     * {@code refused}: a model refused for some other reason is one whose rules were never read,
+     * and every row of it would answer from the absence of them.
+     */
+    private static Map<String, Cardinality> solved(List<String> refused, String source) {
+        Compilation compilation = ACompiledModel.refusedWith(refused,
+                Compilation.ofSource(source, "Main"));
         Map<TypeSymbol, Cardinality> solution =
                 CountsByComponent.of(
                         compilation.module("demo").defs().stream()
                                 .map(each -> each.declaration().node()).toList(),
                         RuleReadings.of(compilation, "demo"),
-                        souther.compiler.query.ReadAs.THE_COMPILATION_DOES).all();
+                        ReadAs.THE_COMPILATION_DOES).all();
         Map<String, Cardinality> byName = new LinkedHashMap<>();
         solution.forEach((name, each) -> byName.put(name.name(), each));
         return byName;
     }
 
-    private static void hasNoValue(String source, String... names) {
-        Map<String, Cardinality> solved = solved(source);
+    private static void hasNoValue(List<String> refused, String source, String... names) {
+        Map<String, Cardinality> solved = solved(refused, source);
         for (String each : names) {
             assertTrue(solved.get(each).none(), each + " has no value");
         }
     }
 
     private static void hasAValue(String source, String... names) {
-        Map<String, Cardinality> solved = solved(source);
+        Map<String, Cardinality> solved = solved(List.of(), source);
         for (String each : names) {
             assertFalse(solved.get(each).none(), each + " has one");
         }
@@ -62,7 +62,7 @@ class ATypeIsGrantedAValueOnlyWhereOneIsShownTest {
 
     @Test
     void twoRecordsWrittenInTermsOfEachOtherHaveNoValue() {
-        hasNoValue("""
+        hasNoValue(List.of("E1013"), """
                 module demo
 
                 data A = { b: B }
@@ -72,7 +72,7 @@ class ATypeIsGrantedAValueOnlyWhereOneIsShownTest {
 
     @Test
     void aSumWhoseEveryCaseHoldsTheSumHasNoValue() {
-        hasNoValue("""
+        hasNoValue(List.of("E1013"), """
                 module demo
 
                 data Leaf = { s: Shape }
@@ -83,7 +83,7 @@ class ATypeIsGrantedAValueOnlyWhereOneIsShownTest {
 
     @Test
     void aCycleRoutedThroughASumHasNoValueEither() {
-        hasNoValue("""
+        hasNoValue(List.of("E1013"), """
                 module demo
 
                 data Leaf = { t: Trunk }
@@ -108,7 +108,7 @@ class ATypeIsGrantedAValueOnlyWhereOneIsShownTest {
 
     @Test
     void aRecordHoldingSomethingWithNoValueHasNone() {
-        hasNoValue("""
+        hasNoValue(List.of("E1013"), """
                 module demo
 
                 data Leaf = { s: Shape }
@@ -121,7 +121,7 @@ class ATypeIsGrantedAValueOnlyWhereOneIsShownTest {
 
     @Test
     void aNameWhoseValueIsANonEmptyCollectionOfItselfHasNoValue() {
-        hasNoValue("""
+        hasNoValue(List.of("E1013"), """
                 module demo
 
                 data Nest = List<Nest>
@@ -151,7 +151,7 @@ class ATypeIsGrantedAValueOnlyWhereOneIsShownTest {
 
     @Test
     void aSetAskingForMoreValuesThanItsElementHasHasNone() {
-        hasNoValue("""
+        hasNoValue(List.of("E1013"), """
                 module demo
 
                 data One = Int
@@ -186,7 +186,7 @@ class ATypeIsGrantedAValueOnlyWhereOneIsShownTest {
      */
     @Test
     void aCountReachingASetThroughASumIsNotRoundedAway() {
-        hasNoValue("""
+        hasNoValue(List.of("E1013"), """
                 module demo
 
                 data One = Int
@@ -205,7 +205,7 @@ class ATypeIsGrantedAValueOnlyWhereOneIsShownTest {
     /** And where the count arrives through a set of a set. */
     @Test
     void aCountReachingASetThroughASetIsCountedToo() {
-        hasNoValue("""
+        hasNoValue(List.of("E1013"), """
                 module demo
 
                 data One = Int
@@ -235,7 +235,7 @@ class ATypeIsGrantedAValueOnlyWhereOneIsShownTest {
 
     @Test
     void rulesThatCannotAllHoldLeaveNoValue() {
-        hasNoValue("""
+        hasNoValue(List.of("E1013"), """
                 module demo
 
                 data Bad = Int

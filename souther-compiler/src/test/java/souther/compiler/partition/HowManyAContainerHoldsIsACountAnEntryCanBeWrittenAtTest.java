@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
@@ -64,6 +65,7 @@ class HowManyAContainerHoldsIsACountAnEntryCanBeWrittenAtTest {
 
     /** Whether a container of {@code type} is shown to be held at nought, one, two and three. */
     private static List<Boolean> heldAt(String type) {
+        boolean needsNever = type.contains("Never");
         Compilation compilation = Compilation.ofSource("""
                 module example.held
 
@@ -83,8 +85,10 @@ class HowManyAContainerHoldsIsACountAnEntryCanBeWrittenAtTest {
                 behavior check : (h: Holder) -> Ok | No
 
                 let check (h) = Ok
-                """.formatted(NEVER, type), "Main");
-        assertEquals(List.of(), compilation.errors(), "the model compiles");
+                """.formatted(needsNever ? NEVER : "", type), "Main");
+        // A type no value is has no value to build, which the compiler refuses it for; the reading
+        // asked below is of what such a type leaves a container.
+        ACompiledModel.refusedWith(needsNever ? List.of("E1013") : List.of(), compilation);
         String module = compilation.modules().get(0);
         InputDomain domain = compilation.db().ask(new Adequacy.Inputs(module)).value()
                 .get("check");

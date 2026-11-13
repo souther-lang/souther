@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -338,13 +339,10 @@ class WhatADeclarationsLineLeavesOutIsSaidOnceTest {
     private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
 
     private static Compilation compiled(String source) {
-        return MEASURED.computeIfAbsent(source, each -> {
+        return ACompiledModel.compiles(MEASURED.computeIfAbsent(source, each -> {
             Compilation compilation = Compilation.ofSource(each, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            assertTrue(compilation.errors().isEmpty(), () -> "the model compiles: "
-                    + compilation.errors());
             return compilation;
-        });
+        }));
     }
 }

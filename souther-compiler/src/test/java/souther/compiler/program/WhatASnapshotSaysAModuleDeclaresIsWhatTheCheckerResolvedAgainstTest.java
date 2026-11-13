@@ -1,5 +1,6 @@
 package souther.compiler.program;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.types.TypeKey;
 import souther.compiler.check.ScopedDeclarations;
@@ -156,7 +157,8 @@ class WhatASnapshotSaysAModuleDeclaresIsWhatTheCheckerResolvedAgainstTest {
                         Symbols symbols) {}
 
     private static Read read() {
-        Compilation compilation = Compilation.ofSources(List.of(MODULE), ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSources(List.of(MODULE), ModulePath.EMPTY));
         Symbols symbols = Names.derivedSymbols(compilation.db(), "demo").value();
         assertNotNull(symbols, "the module has a declaration world");
         Map<TypeSymbol.AtModule, Hir.Def> world = new LinkedHashMap<>();

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -290,8 +291,7 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
             }
             Compilation compilation = Compilation.ofSource(model.toString(), "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors());
+            ACompiledModel.compiles(compilation);
             JsonNode report = reportOf(compilation);
             assertEquals(List.of(READ), reasonsOfBehavior(report, "plain", "hs[*]"), order::toString);
             // The sum stops at {@code a} from 1 up, so the elements above nought are divided
@@ -508,8 +508,6 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
                 condition);
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors());
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

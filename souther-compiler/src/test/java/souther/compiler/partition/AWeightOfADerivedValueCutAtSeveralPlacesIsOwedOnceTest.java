@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -112,9 +113,7 @@ class AWeightOfADerivedValueCutAtSeveralPlacesIsOwedOnceTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private static Document documentOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         AdequacyReport report = AdequacyReport.of(compilation);
         JsonNode json = JSON.readTree(report.json(SourceRendering.namedByIdentity(
                 compilation.texts())));

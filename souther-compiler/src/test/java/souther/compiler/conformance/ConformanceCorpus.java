@@ -1,5 +1,6 @@
 package souther.compiler.conformance;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.TestDay;
 import souther.compiler.diag.Located;
@@ -61,6 +62,13 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
 
     /** What a line of the manifest begins with where it declares a purpose rather than uses one. */
     private static final String DECLARES = "purpose";
+
+    /**
+     * The errors a corpus is written to be refused with, in the order the compiler gives them. A
+     * corpus not named here compiles.
+     */
+    private static final Map<String, List<String>> REFUSED_WITH =
+            Map.of("booking", List.of("E2010", "E1013"));
 
     /** Where the answers about them are, which is this module's own resources. */
     static final String ROOT = "/souther/compiler/conformance/";
@@ -213,6 +221,11 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
         return Compilation.ofSources(sources, ModulePath.EMPTY).writtenOn(TestDay.DATE);
     }
 
+    /** The errors this corpus is written to be refused with, in the order the compiler gives them. */
+    public List<String> refusedWith() {
+        return REFUSED_WITH.getOrDefault(name, List.of());
+    }
+
     /**
      * This corpus analysed, with everything the report needs measured and every warning collected.
      *
@@ -229,8 +242,10 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
      */
     public Analysed analyse() {
         List<Located> warnings = new ArrayList<>();
-        Compilation compilation = Compiler.analyzedModules(sources, ModulePath.EMPTY, warnings,
-                Adequacy.Asked.fullReport(), TestDay.DATE);
+        Compilation compilation = ACompiledModel.refusedWith(
+                REFUSED_WITH.getOrDefault(name, List.of()),
+                Compiler.analyzedModules(sources, ModulePath.EMPTY, warnings,
+                        Adequacy.Asked.fullReport(), TestDay.DATE));
         return new Analysed(this, compilation, compilation.errors(), warnings,
                 AdequacyReport.of(compilation));
     }
@@ -251,6 +266,14 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
      */
     public record Analysed(ConformanceCorpus corpus, Compilation compilation,
                            List<Located> errors, List<Located> warnings, AdequacyReport report) {
+
+        /** The compilation, held to be refused with what its corpus is meant to be refused with
+         *  and nothing else, for a reader that takes the model out of this record. */
+        public Compilation answered() {
+            Compilation held = compilation;
+            return ACompiledModel.refusedWith(REFUSED_WITH.getOrDefault(corpus.name(), List.of()),
+                    held);
+        }
 
         /** Everything said about this corpus, errors before warnings, as the report writes them. */
         public List<Located> said() {

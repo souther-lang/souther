@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.ReadAs;
 import org.junit.jupiter.api.Test;
@@ -67,12 +68,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
     }
 
     private static Read read(String source, String named, ReadingPolicy policy) {
-        Compilation compilation = Compilation.ofSource(unreadable(source), "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                .flatMap(List::stream)
-                .map(each -> each.diagnostic().code())
-                .toList(), "the model this reads has to be one somebody could write");
+        Compilation compilation = ACompiledModel.answered(unreadable(source));
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return new Read(FieldDomains.of(name,
@@ -93,11 +89,9 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
     /** The same, for a model the compiler refuses: what this hands over afterwards is still read by
      * whatever ran before the refusal reached the caller. */
-    private static FieldDomains ofRefused(String source, String named) {
+    private static FieldDomains ofRefused(List<String> codes, String source, String named) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertFalse(compilation.diagnostics().values().stream().flatMap(List::stream).toList()
-                .isEmpty(), "this model is meant to be refused");
+        ACompiledModel.refusedWith(codes, compilation);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return FieldDomains.of(name,
@@ -604,7 +598,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
      */
     @Test
     void aClauseNothingCouldTypeLeavesNoPositionSpokenFor() {
-        FieldDomains read = ofRefused("""
+        FieldDomains read = ofRefused(List.of("E1319"), """
                 module demo
 
                 data Pair = { left: String, right: Int }
@@ -624,7 +618,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
      */
     @Test
     void aClauseNothingCouldTypeInsideAFieldsTypeLeavesThatFieldSpokenForByNothing() {
-        FieldDomains read = ofRefused("""
+        FieldDomains read = ofRefused(List.of("E1319"), """
                 module demo
 
                 data Inner = String
@@ -709,7 +703,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
      */
     @Test
     void aStopUnderOneFieldDoesNotSpoilTheFieldBesideIt() {
-        FieldDomains read = ofRefused("""
+        FieldDomains read = ofRefused(List.of("E1319"), """
                 module demo
 
                 data Inner = String

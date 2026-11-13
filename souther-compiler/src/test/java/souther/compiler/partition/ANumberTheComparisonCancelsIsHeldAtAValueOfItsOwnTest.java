@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -40,10 +41,7 @@ class ANumberTheComparisonCancelsIsHeldAtAValueOfItsOwnTest {
     private static final BigInteger LEAST = BigInteger.valueOf(Long.MIN_VALUE);
 
     private static Compilation measuredSource(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     private static Compilation measured(String commutingRule, String comparison) {

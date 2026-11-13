@@ -3,6 +3,7 @@ package souther.compiler.meta;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.query.Compilation;
 import souther.compiler.meta.ModulePath;
@@ -1172,10 +1173,9 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
     /** The classes one build of a model spread over several sources emits. */
     private static PublishedClasses declarationsOf(List<String> sources) {
         return BUILT_FROM_SEVERAL.computeIfAbsent(List.copyOf(sources), _ -> {
-            Compilation compiled = Compilation.ofSources(sources, ModulePath.EMPTY);
+            Compilation compiled =
+                    ACompiledModel.compiles(Compilation.ofSources(sources, ModulePath.EMPTY));
             Map<String, ClassFileImage> classes = compiled.db().ask(new Output.All()).value();
-            assertEquals(List.of(), diagnosed(compiled),
-                    "the model this is measured against compiles");
             return ModulePath.of(classes).declarations();
         });
     }
@@ -1190,22 +1190,9 @@ class TheDeclarationsAnAnswerReadsByAreHeldToTheEvaluatedModuleTest {
      */
     private static PublishedClasses declarationsOf(String source) {
         return BUILT.computeIfAbsent(source, _ -> {
-            Compilation compiled = Compilation.ofSource(source, "Main");
+            Compilation compiled = ACompiledModel.answered(source);
             Map<String, ClassFileImage> classes = compiled.db().ask(new Output.All()).value();
-            assertEquals(List.of(), diagnosed(compiled),
-                    "the model this is measured against compiles");
             return ModulePath.of(classes).declarations();
         });
-    }
-
-    /** What a compile refused, as codes — nothing, for every model measured here.
-     *
-     * <p>Refused, not said: a warning is what a build carries rather than what stops it, and a model
-     * measured here may carry one on purpose. An import nothing writes is exactly that, and is what
-     * one of these measures. */
-    private static List<String> diagnosed(Compilation compiled) {
-        return compiled.diagnostics().values().stream().flatMap(List::stream)
-                .filter(d -> d.diagnostic().severity() == souther.compiler.diag.Severity.ERROR)
-                .map(d -> String.valueOf(d.diagnostic().code())).toList();
     }
 }

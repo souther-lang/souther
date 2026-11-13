@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.diag.Severity;
 import souther.compiler.jvm.ClassFileImage;
@@ -10,6 +11,7 @@ import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.ArmObservation;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -140,7 +142,7 @@ class WhatMayBeRunIsClosedUnderWhatAnImplementationReferencesTest {
      */
     @Test
     void whereEveryImplementationCameOutEveryOneOfThemMayBeRun() {
-        Compiled clean = compile("1", MODEL);
+        Compiled clean = compile("1", List.of(), MODEL);
 
         assertEquals(List.of(), clean.refusals(),
                 () -> "nothing is refused about this model, and it was refused about "
@@ -160,7 +162,7 @@ class WhatMayBeRunIsClosedUnderWhatAnImplementationReferencesTest {
      */
     @Test
     void aRefusedBodyTakesEveryImplementationThatReachesIt() {
-        Compiled refused = compile("0", MODEL);
+        Compiled refused = compile("0", List.of(THE_REFUSED_CONSTRUCTION), MODEL);
 
         assertEquals(List.of(THE_REFUSED_CONSTRUCTION), refused.refusals(),
                 () -> "this model is refused about the construction alone, and it was refused"
@@ -177,7 +179,7 @@ class WhatMayBeRunIsClosedUnderWhatAnImplementationReferencesTest {
      */
     @Test
     void aRefusedBodyTakesACallerInAnotherModuleWithIt() {
-        Compiled refused = compile("0", DOWN, UP);
+        Compiled refused = compile("0", List.of(THE_REFUSED_CONSTRUCTION), DOWN, UP);
 
         assertEquals(List.of(THE_REFUSED_CONSTRUCTION), refused.refusals(),
                 () -> "this model is refused about the construction alone, and it was refused"
@@ -196,15 +198,16 @@ class WhatMayBeRunIsClosedUnderWhatAnImplementationReferencesTest {
      */
     @Test
     void andAnEvaluationOfThatCallersModuleIsEntitledToEmitNothing() {
-        Compiled refused = compile("0", DOWN, UP);
+        Compilation refused = attempted("0", DOWN, UP);
+        ACompiledModel.refusedWith(List.of(THE_REFUSED_CONSTRUCTION), refused);
 
         Answer<Bodies.Elaborated> observed =
-                refused.compilation().db().ask(new Bodies.Observable("example.up"));
+                refused.db().ask(new Bodies.Observable("example.up"));
         assertTrue(observed.present(), "the module's names came out, so there is an answer here");
         assertEquals(Set.of(), observed.value().emits(),
                 "nothing of this module may be run, so it is entitled to no implementation");
 
-        Set<String> classes = refused.compilation().db()
+        Set<String> classes = refused.db()
                 .ask(new Output.Evaluated("example.up", ArmObservation.RECORD))
                 .value().classes().keySet();
         assertFalse(classes.contains(SoutherJvmAbi.nameOf(
@@ -216,7 +219,7 @@ class WhatMayBeRunIsClosedUnderWhatAnImplementationReferencesTest {
     /** And where the module it imports from came out, the caller may be run. */
     @Test
     void whereTheModuleItImportsFromCameOutTheCallerMayBeRun() {
-        Compiled clean = compile("1", DOWN, UP);
+        Compiled clean = compile("1", List.of(), DOWN, UP);
 
         assertEquals(List.of(), clean.refusals(),
                 () -> "nothing is refused about this model, and it was refused about "
@@ -240,8 +243,9 @@ class WhatMayBeRunIsClosedUnderWhatAnImplementationReferencesTest {
      */
     @Test
     void whatAModuleOwnsDoesNotMoveWithWhatHappenedToCheck() {
-        Compiled stops = compile("1", STOPS.formatted("    depends on foo"));
-        Compiled finishes = compile("1", STOPS.formatted(""));
+        Compiled stops = compile("1", List.of(THE_REFUSED_DEPENDENCY),
+                STOPS.formatted("    depends on foo"));
+        Compiled finishes = compile("1", List.of(), STOPS.formatted(""));
 
         assertEquals(List.of(THE_REFUSED_DEPENDENCY), stops.refusals(),
                 () -> "this model is refused about the dependency alone, and it was refused about "
@@ -264,7 +268,8 @@ class WhatMayBeRunIsClosedUnderWhatAnImplementationReferencesTest {
      */
     @Test
     void nothingOfAModuleThatEmitsNoClassMayBeRunNorACallerOfOne() {
-        Compiled stops = compile("1", STOPS.formatted("    depends on foo"), CALLS_IT);
+        Compiled stops = compile("1", List.of(THE_REFUSED_DEPENDENCY),
+                STOPS.formatted("    depends on foo"), CALLS_IT);
 
         assertEquals(Set.of("foo", "beside"), stops.owned("example.stops"));
         assertEquals(Set.of(), stops.runnable("example.stops"));
@@ -300,8 +305,8 @@ class WhatMayBeRunIsClosedUnderWhatAnImplementationReferencesTest {
                 behavior use : (n: Int) -> Ok
                 let use (n) = made(n)
                 """), ModulePath.of(published));
-        against.answerEverything();
-        Compiled reading = new Compiled(against);
+        ACompiledModel.compiles(against);
+        Compiled reading = new Compiled(against, List.of());
 
         assertEquals(Set.of("made"), reading.runnable("example.built"),
                 "what the path holds was made when it was built");
@@ -309,8 +314,9 @@ class WhatMayBeRunIsClosedUnderWhatAnImplementationReferencesTest {
                 "so a caller of it may be run");
     }
 
-    /** A compilation of the model, and the answers this asks of it. */
-    private record Compiled(Compilation compilation) {
+    /** A compilation of the model, the codes it is refused with, and the answers this asks of
+     *  it. */
+    private record Compiled(Compilation compilation, List<String> codes) {
 
         Set<String> runnable(String module) {
             return implementations(module).runnable();
@@ -321,8 +327,9 @@ class WhatMayBeRunIsClosedUnderWhatAnImplementationReferencesTest {
         }
 
         private Bodies.Implementations implementations(String module) {
+            Compilation asked = ACompiledModel.refusedWith(codes, compilation);
             Answer<Bodies.Implementations> answer =
-                    compilation.db().ask(new Bodies.RunnableImplementations(module));
+                    asked.db().ask(new Bodies.RunnableImplementations(module));
             assertTrue(answer.present(), "a module that settled is one this answers about");
             return answer.value();
         }
@@ -337,13 +344,18 @@ class WhatMayBeRunIsClosedUnderWhatAnImplementationReferencesTest {
         }
     }
 
-    private static Compiled compile(String constructs, String... sources) {
-        List<String> texts = new java.util.ArrayList<>();
+    private static Compiled compile(String constructs, List<String> codes, String... sources) {
+        Compilation compilation = ACompiledModel.refusedWith(codes,
+                attempted(constructs, sources));
+        return new Compiled(compilation, codes);
+    }
+
+    /** The sources, with {@code constructs} filled in where one asks for it, not yet answered. */
+    private static Compilation attempted(String constructs, String... sources) {
+        List<String> texts = new ArrayList<>();
         for (String source : sources) {
             texts.add(source.contains("%s") ? source.formatted(constructs) : source);
         }
-        Compilation compilation = Compilation.ofSources(texts, ModulePath.EMPTY);
-        compilation.answerEverything();
-        return new Compiled(compilation);
+        return Compilation.ofSources(texts, ModulePath.EMPTY);
     }
 }

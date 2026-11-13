@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.cst.SourceLayout;
 import souther.compiler.source.SourceId;
 
@@ -78,7 +79,7 @@ class AnEditorIsOnlyToldAboutNamesTheAuthorWroteTest {
     private static ValueName under(String source, int line, int column) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(ID, source);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).db()
+        return ACompiledModel.compiles(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)).db()
                 .ask(new Names.ValueAt(caret(source, line, column))).value();
     }
 

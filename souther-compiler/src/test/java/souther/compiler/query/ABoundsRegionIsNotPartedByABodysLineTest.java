@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.OwedPoint;
 import souther.compiler.partition.PointAnswer;
@@ -129,9 +130,7 @@ class ABoundsRegionIsNotPartedByABodysLineTest {
 
     /** What became of each point the module's declarations are owed, as role, said and met. */
     private static List<String> accountOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Adequacy.DeclaredBoundaries account =
                 compilation.db().ask(new Adequacy.DeclaredBorders("example.counted")).value();
         assertNotNull(account, "the model under test compiles");
@@ -142,9 +141,7 @@ class ABoundsRegionIsNotPartedByABodysLineTest {
     }
 
     private static Map<String, List<BorderAssessment>> readingsOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> boundaries =
                 Adequacy.boundariesOf(compilation.db(), "example.counted");
         assertNotNull(boundaries, "the model under test compiles");

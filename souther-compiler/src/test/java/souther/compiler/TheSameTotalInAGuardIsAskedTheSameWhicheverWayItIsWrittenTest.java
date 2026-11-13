@@ -87,10 +87,8 @@ class TheSameTotalInAGuardIsAskedTheSameWhicheverWayItIsWrittenTest {
 
     private static AdequacyReport.BehaviorReport measured(String way) {
         return MEASURED.computeIfAbsent(way, each -> {
-            Compilation compilation = Compilation.ofSource(
-                    model(WAYS.get(each), FIRST_ONLY + SECOND_ONLY), "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            Compilation compilation = ACompiledModel.measured(
+                    model(WAYS.get(each), FIRST_ONLY + SECOND_ONLY), Adequacy.Asked.fullReport());
             return AdequacyReport.of(compilation).modules().getFirst().behaviors().getFirst();
         });
     }
@@ -145,10 +143,8 @@ class TheSameTotalInAGuardIsAskedTheSameWhicheverWayItIsWrittenTest {
 
     /** The lines of a report that say which values a total draws its borders at. */
     private static Set<String> bordersRead(String total) {
-        Compilation compilation = Compilation.ofSource(
-                model(total, FIRST_ONLY + SECOND_ONLY), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(
+                model(total, FIRST_ONLY + SECOND_ONLY), Adequacy.Asked.fullReport());
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         return report.lines().map(String::strip).filter(line -> line.startsWith("· read as"))

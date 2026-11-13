@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -36,6 +38,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ClosedWorldContract
 class EveryDeclarationACorpusImportsStatesOneThingWhoeverAsksTest {
 
+    /** The corpora whose checked-in answer holds errors, and the codes of them. */
+    private static final Map<String, List<String>> REFUSED =
+            Map.of("booking", List.of("E2010", "E1013"));
+
     @Test
     void everyDeclarationACorpusImportsStatesOneThingWhoeverAsks() {
         int edges = 0;
@@ -43,6 +49,8 @@ class EveryDeclarationACorpusImportsStatesOneThingWhoeverAsksTest {
         List<String> stopped = new ArrayList<>();
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
             Compilation compilation = Compilation.ofSources(corpus.sources(), ModulePath.EMPTY);
+            ACompiledModel.refusedWith(REFUSED.getOrDefault(corpus.name(), List.of()),
+                    compilation);
             Db db = compilation.db();
             for (ClauseReadings.Edge edge
                     : ClauseReadings.importsOf(db, compilation.modules())) {

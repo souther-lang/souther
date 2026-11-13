@@ -6,6 +6,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 
 import souther.compiler.check.ElementProvenance.CopyableFactKind;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.types.BindingId;
@@ -235,7 +236,7 @@ class WhatWasProvedOfABodyIsSaidAgainOfEveryCopyOfItTest {
             """;
 
     private static ElementBindings elements(String behavior) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         Bodies.CheckedBody checked = compilation.db().ask(new Bodies.CheckedBehavior(
                 compilation.modules().get(0), behavior)).value();
         return checked.elements();

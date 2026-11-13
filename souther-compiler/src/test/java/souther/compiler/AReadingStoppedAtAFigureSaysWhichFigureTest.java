@@ -80,8 +80,7 @@ class AReadingStoppedAtAFigureSaysWhichFigureTest {
     private static void assertNamed(String model, CompositionBudget figure) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model compiles");
+        ACompiledModel.compiles(compilation);
         AdequacyReport report = AdequacyReport.of(compilation);
         SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
 

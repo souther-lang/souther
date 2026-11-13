@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.revision.RevisionKnowledge;
@@ -127,7 +128,8 @@ class WorkARevisionLendsIsReadForWhoeverItIsLentToTest {
     }
 
     private static Compilation compiled() {
-        return Compilation.ofDocuments(Map.of("demo.sou", BEFORE), Set.of(), ModulePath.EMPTY)
-                .writtenOn(TestDay.DATE);
+        return ACompiledModel.compiles(
+                Compilation.ofDocuments(Map.of("demo.sou", BEFORE), Set.of(), ModulePath.EMPTY)
+                        .writtenOn(TestDay.DATE));
     }
 }

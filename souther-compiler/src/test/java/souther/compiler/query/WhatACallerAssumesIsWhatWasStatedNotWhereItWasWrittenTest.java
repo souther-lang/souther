@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AssumedContract;
 import souther.compiler.check.StatedContract;
 import souther.compiler.conformance.ConformanceCorpus;
@@ -64,12 +65,18 @@ class WhatACallerAssumesIsWhatWasStatedNotWhereItWasWrittenTest {
         return out;
     }
 
-    private static Compilation compiled(List<String> files, List<String> sources, String before) {
+    /** The corpora written to be refused, and what each is refused for. */
+    private static final Map<String, List<String>> CORPUS_REFUSALS =
+            Map.of("booking", List.of("E2010", "E1013"));
+
+    private static Compilation compiled(ConformanceCorpus corpus, String before) {
         Map<String, String> byId = new LinkedHashMap<>();
-        for (int i = 0; i < sources.size(); i++) {
-            byId.put(files.get(i), before + sources.get(i));
+        for (int i = 0; i < corpus.sources().size(); i++) {
+            byId.put(corpus.files().get(i), before + corpus.sources().get(i));
         }
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        return ACompiledModel.refusedWith(
+                CORPUS_REFUSALS.getOrDefault(corpus.name(), List.of()), compilation);
     }
 
     @Test
@@ -77,9 +84,9 @@ class WhatACallerAssumesIsWhatWasStatedNotWhereItWasWrittenTest {
         List<String> checked = new ArrayList<>();
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
             Map<ValueName.Behavior, AssumedContract> where =
-                    assumed(compiled(corpus.files(), corpus.sources(), ""));
+                    assumed(compiled(corpus, ""));
             Map<ValueName.Behavior, AssumedContract> moved =
-                    assumed(compiled(corpus.files(), corpus.sources(), "\n\n\n"));
+                    assumed(compiled(corpus, "\n\n\n"));
 
             assertEquals(where.keySet(), moved.keySet(),
                     corpus.name() + " states the same contracts wherever its lines are");

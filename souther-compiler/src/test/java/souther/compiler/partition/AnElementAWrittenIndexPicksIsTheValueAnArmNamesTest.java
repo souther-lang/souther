@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -271,10 +272,7 @@ class AnElementAWrittenIndexPicksIsTheValueAnArmNamesTest {
     private static Compilation compiled(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors()
-                .stream().map(e -> e.diagnostic().code()).toList());
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     private static JsonNode reportOf(String model) {

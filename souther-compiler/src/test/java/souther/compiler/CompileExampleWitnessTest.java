@@ -47,14 +47,23 @@ class CompileExampleWitnessTest {
             """;
 
     private static Map<String, Adequacy.SignatureEvidence> evidence(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
         // Asked for, because a measure nobody asks for is not made: what this reads is what a
         // report of this model would hold.
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         Map<String, Adequacy.SignatureEvidence> out = compilation.db()
                 .ask(new Adequacy.Witnesses(compilation.modules().get(0))).value();
         assertNotNull(out, "the witnesses of a module that compiled");
+        return out;
+    }
+
+    /** The same, for a model whose rows state an answer the behavior does not give. */
+    private static Map<String, Adequacy.SignatureEvidence> evidenceOfADisagreeingRow(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.refusedWith(List.of("E1905"), compilation);
+        Map<String, Adequacy.SignatureEvidence> out = compilation.db()
+                .ask(new Adequacy.Witnesses(compilation.modules().get(0))).value();
+        assertNotNull(out, "the witnesses of a module whose row disagrees");
         return out;
     }
 
@@ -65,7 +74,7 @@ class CompileExampleWitnessTest {
     /** A row that disagreed is no evidence for what it expected and is evidence for what it saw. */
     @Test
     void whatARowExpectsAndWhatItSawAreCountedApart() {
-        Adequacy.SignatureEvidence lookup = evidence(BASE + """
+        Adequacy.SignatureEvidence lookup = evidenceOfADisagreeingRow(BASE + """
 
                 example lookup
                     | "active"    : (MemberId("m-1"), Active)    -> Found { id = MemberId("m-1") }
@@ -158,7 +167,7 @@ class CompileExampleWitnessTest {
      */
     @Test
     void theCaseOfAComputedExpectationIsNotTheCaseTheBehaviorAnswered() {
-        Adequacy.SignatureEvidence lookup = evidence(BASE + """
+        Adequacy.SignatureEvidence lookup = evidenceOfADisagreeingRow(BASE + """
 
                 let asFound (id: MemberId) = Found { id = id }
 

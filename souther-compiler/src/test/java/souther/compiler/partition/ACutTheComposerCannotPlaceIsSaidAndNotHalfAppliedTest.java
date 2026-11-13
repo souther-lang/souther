@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.ast.Hir;
@@ -271,7 +272,7 @@ class ACutTheComposerCannotPlaceIsSaidAndNotHalfAppliedTest {
 
     // The compilation, read once and answered from. Every helper below asks it for one thing, and a
     // compile apiece would be the same model built as many times as this file has questions.
-    private static final Compilation COMPILATION = compiled();
+    private static final Compilation COMPILATION = ACompiledModel.compiles(compiled());
 
     private static Compilation compiled() {
         return Compilation.ofSource(BOUNDED, "Main");

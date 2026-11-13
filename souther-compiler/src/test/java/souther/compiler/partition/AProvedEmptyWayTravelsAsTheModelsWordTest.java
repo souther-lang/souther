@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Prepared;
@@ -53,6 +54,8 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
             data Res = { n: Int }
 
             behavior f : (r: Req) -> Res
+
+            let f (r) = Res { n = 0 }
             """;
 
     /**
@@ -191,7 +194,7 @@ class AProvedEmptyWayTravelsAsTheModelsWordTest {
     private static final Compilation COMPILATION = compiled();
 
     private static Compilation compiled() {
-        return Compilation.ofSource(BOUNDED, "Main");
+        return ACompiledModel.compiles(Compilation.ofSource(BOUNDED, "Main"));
     }
 
     private static String module() {

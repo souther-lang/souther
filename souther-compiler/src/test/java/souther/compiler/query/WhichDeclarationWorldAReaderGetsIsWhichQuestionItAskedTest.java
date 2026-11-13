@@ -1,12 +1,14 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Symbols;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -41,7 +43,8 @@ class WhichDeclarationWorldAReaderGetsIsWhichQuestionItAskedTest {
     private static Db db() {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", SOURCE);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).db();
+        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        return ACompiledModel.refusedWith(List.of("E1105"), compilation).db();
     }
 
     private static Hir.Expr clauseOf(Symbols symbols) {

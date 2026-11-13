@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
@@ -43,7 +44,7 @@ class ANameAValueWasBoundToIsExpandedWhereItIsWrittenTest {
                 example add
                   | "two of them" : ([1, 2]) -> Total(3)
                 """, "Main");
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         assertEquals(List.of("m"), compilation.modules(),
                 "a lambda a `let` bound and a call was handed by name is a model this compiles");

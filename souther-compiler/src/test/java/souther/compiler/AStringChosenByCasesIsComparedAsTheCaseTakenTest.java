@@ -25,14 +25,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AStringChosenByCasesIsComparedAsTheCaseTakenTest {
 
     private static String report(String behavior) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module p
                 data H = { x: Int, s: String, name: Option<String> }
                 behavior f : (h: H) -> Bool
                 %s
-                """.formatted(behavior), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.formatted(behavior), Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }

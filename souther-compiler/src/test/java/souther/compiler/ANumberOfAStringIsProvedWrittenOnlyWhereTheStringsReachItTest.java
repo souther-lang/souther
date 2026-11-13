@@ -278,7 +278,7 @@ class ANumberOfAStringIsProvedWrittenOnlyWhereTheStringsReachItTest {
     private static String human(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return souther.compiler.report.AdequacyReport.of(compilation).humanInEnglish(
                 souther.compiler.diag.SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -304,7 +304,7 @@ class ANumberOfAStringIsProvedWrittenOnlyWhereTheStringsReachItTest {
     private static List<BorderAssessment.Point> owedPoints(String model, String module) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, List<BorderAssessment>> boundaries =
                 Adequacy.searchedBoundariesOf(compilation.db(), module);
         assertNotNull(boundaries, "the model under test compiles");

@@ -169,10 +169,7 @@ class ARuleOverATotalOfTheElementsIsComposedAContainerComingToItTest {
             // which is all this asks of the rows.
             Compilation answeredBy = Compilation.ofSource(model + "example pick\n"
                     + String.join("\n", examples) + "\n", "Main");
-            answeredBy.answerEverything();
-            assertEquals(List.of(), answeredBy.errors().stream()
-                    .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
-                    .toList(), () -> "each row is answered as its inputs say: " + examples);
+            ACompiledModel.compiles(answeredBy);
         });
     }
 
@@ -285,12 +282,12 @@ class ARuleOverATotalOfTheElementsIsComposedAContainerComingToItTest {
     private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
 
     private static Compilation measured(String source) {
-        return MEASURED.computeIfAbsent(source, text -> {
-            Compilation compilation = Compilation.ofSource(text, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            return compilation;
+        Compilation compilation = MEASURED.computeIfAbsent(source, text -> {
+            Compilation made = Compilation.ofSource(text, "Main");
+            made.measure(Adequacy.Asked.fullReport());
+            return ACompiledModel.compiles(made);
         });
+        return ACompiledModel.compiles(compilation);
     }
 
     private static String report(Compilation compilation) {

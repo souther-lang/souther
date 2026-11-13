@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -91,9 +92,7 @@ class ABodyThatBindsItsInputBeforeComparingItComparesItsInputTest {
             List.of("openedInTheParameter", "openedInTheBody", "aliasedInTheBody");
 
     private static Map<String, PartitionEvidence> measured() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         return compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
     }
@@ -106,9 +105,7 @@ class ABodyThatBindsItsInputBeforeComparingItComparesItsInputTest {
 
     /** The lines each behavior's positions met, whosever the row at each point is. */
     private static Map<String, List<BorderAssessment>> lines() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         return Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
     }
 

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -50,9 +51,7 @@ class AMembershipIsReadAsTheComparisonOfEachElementTest {
     private static String reportOf(String body) {
         Compilation model = Compilation.ofSource(SOURCE.formatted(body), "Main");
         model.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        model.answerEverything();
-        assertEquals(List.of(), model.errors().stream().map(each ->
-                each.diagnostic().code() + " " + each.diagnostic().said()).toList(), body);
+        ACompiledModel.compiles(model);
         JsonNode report = new ObjectMapper().readTree(AdequacyReport.of(model)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         JsonNode partition = report.path("modules").get(0).path("behaviors").get(0)

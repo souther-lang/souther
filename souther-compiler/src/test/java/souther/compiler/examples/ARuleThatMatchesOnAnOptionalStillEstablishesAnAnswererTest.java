@@ -3,7 +3,7 @@ package souther.compiler.examples;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.FailurePhase;
-import souther.compiler.query.Compilation;
+import souther.compiler.ACompiledModel;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.query.Output;
 
@@ -111,7 +111,7 @@ class ARuleThatMatchesOnAnOptionalStillEstablishesAnAnswererTest {
 
     private static BoundExamples boundTo(String implementation) throws Exception {
         Map<String, ClassFileImage> generated =
-                Compilation.ofSource(MODEL, "Main").db().ask(new Output.All()).value();
+                ACompiledModel.answered(MODEL).db().ask(new Output.All()).value();
         return SoutherExamples.ofSource(MODEL).bind(builtElsewhere(generated, implementation));
     }
 

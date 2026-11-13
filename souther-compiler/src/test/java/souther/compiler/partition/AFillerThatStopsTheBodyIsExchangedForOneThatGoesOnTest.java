@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -87,7 +88,7 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
     private static boolean modelRefuses(String model, String row) {
         Compilation compilation = Compilation.ofSource(
                 model + "\nexample settle\n    | (" + row + ") -> Refused\n", "Main");
-        compilation.answerEverything();
+        ACompiledModel.refusedOnlyWith(Set.of("E1905"), compilation);
         return compilation.diagnostics().values().stream().flatMap(List::stream).findAny().isEmpty();
     }
 
@@ -650,9 +651,7 @@ class AFillerThatStopsTheBodyIsExchangedForOneThatGoesOnTest {
     }
 
     private static FillResult generated(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), "example.settle");
         assertNotNull(all, "the model under test compiles");
         return all.get("settle").composed();
