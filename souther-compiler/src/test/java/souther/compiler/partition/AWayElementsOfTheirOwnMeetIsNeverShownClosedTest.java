@@ -19,6 +19,7 @@ import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -147,6 +148,21 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
             }
             quantifiers.forEach(each -> out.add(new Shape(false, List.of(), List.of(each))));
             return out;
+        }
+
+        /**
+         * What the body is made of with the numbers left out: how deep, whether the items are two
+         * at least, which bounds are on the group's {@code m}, and for each quantifier whether it
+         * asks every item or some item, and of each bound in each way whether it is against the
+         * group's {@code m}.
+         */
+        String structure() {
+            return deeper + "|" + twoItems + "|" + onTheGroup.stream()
+                    .map(bound -> bound.ofTheGroup() ? "m" : "n").toList() + "|"
+                    + quantifiers.stream().map(each -> (each.every() ? "every" : "some")
+                            + each.ways().stream().map(way -> way.stream()
+                                    .map(bound -> bound.ofTheGroup() ? "m" : "n").toList())
+                                    .toList()).toList();
         }
 
         String written() {
@@ -307,14 +323,26 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
         assertEquals(List.of(), closed, "some group meets each of these");
     }
 
+    /**
+     * The first shape of each structure some group meets. Composing a row walks the parts of the
+     * way the body states, and a structure is those parts with the numbers left out. The way to
+     * every shape is asked above, which is cheap; composing a row past each is not.
+     */
+    private static List<Integer> ofEachStructure() {
+        Map<String, Integer> first = new LinkedHashMap<>();
+        for (int i = 0; i < SHAPES.size(); i++) {
+            if (SHAPES.get(i).met()) {
+                first.putIfAbsent(SHAPES.get(i).structure(), i);
+            }
+        }
+        return List.copyOf(first.values());
+    }
+
     @Test
     void noRowComposedPastAWaySomeGroupMeetsIsShownImpossible() {
         List<String> impossible = new ArrayList<>();
-        for (int i = 0; i < SHAPES.size(); i++) {
+        for (int i : ofEachStructure()) {
             Shape shape = SHAPES.get(i);
-            if (!shape.met()) {
-                continue;
-            }
             Generator.BoundaryAttempt attempt = composedPast(i);
             boolean proved = (attempt instanceof Generator.BoundaryAttempt.Unresolved unresolved
                     && unresolved.why().reason().provesInfeasible())
