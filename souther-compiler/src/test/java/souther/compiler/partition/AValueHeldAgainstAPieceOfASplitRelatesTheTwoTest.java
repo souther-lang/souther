@@ -81,10 +81,16 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
                 + " says about the values here is not worked out, about `" + position + "`";
     }
 
+    /**
+     * Each statement is read. The second is reached only where the first holds, which ties
+     * {@code d} to the pieces of {@code email}: both sides of the second, so its strings are not
+     * shown as the declarations leave them, and which values of {@code d} it is reached at is not
+     * worked out.
+     */
     @Test
     void severalStatementsAboutTheFirstFewPiecesAreEachRead() {
         assertEquals(Set.of(relates("7:27", "email"), relates("8:27", "email"),
-                        overARegion("7:27", "d"), overARegion("8:27", "d")),
+                        overARegion("7:27", "d"), notShown("8:27", "d")),
                 Set.copyOf(said("""
                         module w1
                         data A
@@ -102,7 +108,9 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
     /**
      * A string with a piece that is the value and one that is not satisfies both of these, so a
      * path that holds both is one some row can take, and the report does not shut it out as a
-     * statement and its denial.
+     * statement and its denial. The second is reached only where the first holds, which ties
+     * {@code d} to the pieces of {@code email}, so which values of {@code d} it is reached at is
+     * not worked out.
      */
     @Test
     void aPieceThatIsTheValueAndAPieceThatIsNotCanBothBeSaid() {
@@ -119,7 +127,7 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
                 """;
         assertEquals(Set.of(relates("6:24", "email"), overARegion("6:24", "d"),
                         ofTheFork("6:5", "email"),
-                        overARegion("7:32", "d"), relates("7:32", "email")),
+                        notShown("7:32", "d"), relates("7:32", "email")),
                 Set.copyOf(said(source)));
         List<String> report = fullReport(source).stream().map(String::strip).toList();
         boolean bothOnOnePath = false;

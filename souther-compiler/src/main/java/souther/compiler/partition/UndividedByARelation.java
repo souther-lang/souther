@@ -82,6 +82,7 @@ import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.numeric.WholeNumberSet;
 import souther.compiler.observe.Figure;
+import souther.compiler.observe.WorkFigure;
 import souther.compiler.regex.CodeMap;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.PatternPlan;
@@ -105,6 +106,7 @@ import souther.compiler.values.TextExtents;
 import souther.compiler.values.UnreadReason;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
+import souther.compiler.values.ValuesWithin;
 
 import net.unit8.notation199x.Normalization;
 import net.unit8.notation199x.pattern.CodePoints;
@@ -792,10 +794,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /**
          * This, with the strings each position's partner can hold. A position so parted is no
          * longer shown undivided: its strings are what the relation shows of it, over the region
-         * the run gets to the relation at.
+         * the run gets to the relation at. And with the figures making a partner's strings stopped
+         * at, which are figures this stopped at.
          */
-        WhatItLeaves partnered(
-                Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> strings) {
+        private WhatItLeaves partnered(Partnering partnering) {
+            Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> strings = partnering.strings();
+            Set<Figure> stopped = new LinkedHashSet<>(stoppedAt);
+            stopped.addAll(partnering.stoppedAt());
             Set<FilingCoordinate> parted = new LinkedHashSet<>();
             strings.keySet().forEach(term -> parted.add(FilingCoordinate.of(term)));
             Set<FilingCoordinate> stillUndivided = new LinkedHashSet<>(undivided);
@@ -804,7 +809,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             stops.removeAll(parted);
             Map<FilingCoordinate, GettingThere> shown = new LinkedHashMap<>(gettingThere);
             shown.keySet().removeAll(parted);
-            return new WhatItLeaves(stillUndivided, settled, rowsArrive, stoppedAt, rowsStopped,
+            return new WhatItLeaves(stillUndivided, settled, rowsArrive, stopped, rowsStopped,
                     stops, strings, shown, numbersPartnered);
         }
 
@@ -971,18 +976,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * some row can have the equality come out true at, as far as each is shown.
      *
      * <p>Three regions of this side's strings, and none stands for another. A string of
-     * {@code canBe} no longer than {@code upTo} is shown to be some value of the partner, so a row
-     * has the equality true there. A string outside {@code mayBe} is shown to be none, so the
-     * equality is false there whatever the partner holds. Every other string — of {@code mayBe}
-     * and not of {@code canBe}, or of {@code canBe} and longer — is shown neither, and no class of
-     * this side is drawn over it.
+     * {@code canBe} no longer than {@code upTo} and of a length of {@code shownAt} is shown to be
+     * some value of the partner, so a row has the equality true there. A string outside
+     * {@code mayBe} is shown to be none, so the equality is false there whatever the partner
+     * holds. Every other string — of {@code mayBe} and not of {@code canBe}, or of {@code canBe}
+     * and longer or of another length — is shown neither, and no class of this side is drawn over
+     * it.
      *
      * @param canBe   the strings shown to be some value of the partner, as far as {@code upTo}
      *                goes; empty where none is
      * @param mayBe   the strings outside which no value of the partner is, which hold
      *                {@code canBe}
      * @param upTo    the most code points a string of {@code canBe} is shown to be a value of the
-     *                partner at, or null where every one of them is
+     *                partner at, for the longest string a value of the partner can be written
+     *                round it in; or null where every one of them is
+     * @param shownAt the lengths a string of {@code canBe} is shown to be a value of the partner
+     *                at, for the operations: the partner is held to them, and a string of another
+     *                length is the answer for one of them only through what the operations'
+     *                image is not shown of. Null where it is shown at every length
      * @param reached the lengths at which a run is shown to get to the equality with a string of
      *                this side, or null where it is at every length; a string of any other length
      *                is shown neither way, whichever side of the equality it would be on
@@ -997,7 +1008,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                the relation past only where it is shown to
      */
     record StringsAPartnerCanHold(ValueSet canBe, ValueSet mayBe, Long upTo,
-                                  StringsPastTheWay reached,
+                                  LengthsPastTheWay.Lengths shownAt, StringsPastTheWay reached,
                                   StringsPastTheWay partnerHeldTo, String partner,
                                   BlockReason.OperationsNotShown operations)
             implements BehaviorSetStatements.PartnerHolds {
@@ -1016,7 +1027,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          */
         static StringsAPartnerCanHold unreached(ValueSet canBe, ValueSet mayBe, Long upTo,
                                                 String partner) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, null, null, partner,
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, null, null, null, partner,
                     BlockReason.OperationsNotShown.NONE);
         }
 
@@ -1028,15 +1039,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         /** The same strings, with the operations whose image is not shown beyond them. */
         StringsAPartnerCanHold withTheImagesNotShownOf(List<String> named) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, reached, partnerHeldTo, partner,
-                    operations.andImagesOf(named));
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, shownAt, reached, partnerHeldTo,
+                    partner, operations.andImagesOf(named));
         }
 
         /** The same strings, with the operations a run is not shown to get past for some of
          *  them. */
         StringsAPartnerCanHold notShownGottenPast(List<String> named) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, reached, partnerHeldTo, partner,
-                    operations.andNotGottenPast(named));
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, shownAt, reached, partnerHeldTo,
+                    partner, operations.andNotGottenPast(named));
+        }
+
+        /** The same strings, shown to be the partner's values only at {@code lengths}, the
+         *  partner being held to them. */
+        StringsAPartnerCanHold shownAt(LengthsPastTheWay.Lengths lengths) {
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, lengths, reached, partnerHeldTo,
+                    partner, operations);
         }
 
         /**
@@ -1045,26 +1063,37 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * strings alone is shown at every length, and the reach it was given is gone.
          */
         StringsAPartnerCanHold showing(ValueSet canBe, ValueSet mayBe, Long upTo) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, reached, partnerHeldTo, partner,
-                    operations);
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, shownAt, reached, partnerHeldTo,
+                    partner, operations);
         }
 
         /** These, shown only at the lengths {@code lengths}, which every other length is left
          *  open at. */
         StringsAPartnerCanHold reachedAt(StringsPastTheWay lengths) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, lengths, partnerHeldTo, partner,
-                    operations);
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, shownAt, lengths, partnerHeldTo,
+                    partner, operations);
         }
 
-        /** These, where the partner is the other side's only at the lengths {@code lengths}. */
+        /**
+         * These, where the partner is the other side's only at the lengths {@code lengths} as well
+         * as at those it was already held to: at the lengths of both, which are worked out only
+         * where each is a run of lengths.
+         */
         StringsAPartnerCanHold partnerHeldTo(StringsPastTheWay lengths) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, reached, lengths, partner,
+            StringsPastTheWay both = switch (partnerHeldTo) {
+                case null -> lengths;
+                case LengthsPastTheWay.Lengths had
+                        when lengths instanceof LengthsPastTheWay.Lengths more -> had.and(more);
+                default -> throw new IllegalArgumentException("the partner is held to "
+                        + partnerHeldTo + ", and " + lengths + " is no run of lengths beside it");
+            };
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, shownAt, reached, both, partner,
                     operations);
         }
 
         /** Whether every string is shown on one side or the other, so that none is open. */
         boolean leavesNoneOpen() {
-            return upTo == null && reached == null && partnerHeldTo == null
+            return upTo == null && shownAt == null && reached == null && partnerHeldTo == null
                     && canBe.equals(mayBe);
         }
 
@@ -1072,6 +1101,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         boolean showsTheStringsOf(StringsAPartnerCanHold other) {
             return other != null && canBe.equals(other.canBe) && mayBe.equals(other.mayBe)
                     && Objects.equals(upTo, other.upTo)
+                    && Objects.equals(shownAt, other.shownAt)
                     && Objects.equals(reached, other.reached)
                     && Objects.equals(partnerHeldTo, other.partnerHeldTo);
         }
@@ -1080,10 +1110,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          *  partners' where it is shown to be either's. */
         StringsAPartnerCanHold orAnother(StringsAPartnerCanHold other) {
             StringsAPartnerCanHold named = partner.equals(other.partner) ? this
-                    : new StringsAPartnerCanHold(canBe, mayBe, upTo, reached, partnerHeldTo,
-                            partner + " or " + other.partner, operations);
-            return new StringsAPartnerCanHold(named.canBe, named.mayBe, named.upTo, named.reached,
-                    named.partnerHeldTo, named.partner, operations.and(other.operations));
+                    : new StringsAPartnerCanHold(canBe, mayBe, upTo, shownAt, reached,
+                            partnerHeldTo, partner + " or " + other.partner, operations);
+            return new StringsAPartnerCanHold(named.canBe, named.mayBe, named.upTo, named.shownAt,
+                    named.reached, named.partnerHeldTo, named.partner,
+                    operations.and(other.operations));
         }
     }
 
@@ -2822,7 +2853,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     taken.demand() instanceof RowDemand.ForTheRun run
                             && run.partedStrings().isPresent() ? run : null,
                     taken.demand() instanceof RowDemand.OnARemainder on ? on : null,
-                    taken.demand() instanceof RowDemand.ForTheRun run ? run.statement() : null));
+                    taken.demand() instanceof RowDemand.ForTheRun run ? run.statement() : null,
+                    taken.demand() instanceof RowDemand.ForAll every
+                            ? every.ofEachElement() : null));
         });
         way.requirements().refinements().keySet()
                 .forEach(at -> out.add(new OnAWay(Set.of(at), true, null, null)));
@@ -2884,11 +2917,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param onARemainder the remainder it holds a form of the input's numbers to, where it is
      *                   that, so that what it leaves of the form's numbers can be asked of the
      *                   remainder itself and not of the places it names
+     * @param statedOfTheRun what it states, where it is a statement the run says whether it held,
+     *                   which places no row — or null
+     * @param byEvery    what it asks every element of {@code elementsOf} to meet, where it asks
+     *                   that of every element — or null
      */
     record OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
                   TermPath elementsOf, RowDemand.AnElementMeets bySome,
                   PartsLeftAlone leavesAlone, RowDemand.ForTheRun ofThePieces,
-                  RowDemand.OnARemainder onARemainder, Proposition statedOfTheRun) {
+                  RowDemand.OnARemainder onARemainder, Proposition statedOfTheRun,
+                  RowDemand.AnElementMeets byEvery) {
 
         /** The parts of a date a statement of the other parts says nothing of. */
         enum PartsLeftAlone { NONE, YEARS, MONTHS_AND_DAYS }
@@ -2897,7 +2935,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                TermPath elementsOf, RowDemand.AnElementMeets bySome, PartsLeftAlone leavesAlone,
                RowDemand.ForTheRun ofThePieces, RowDemand.OnARemainder onARemainder) {
             this(positions, whatStands, relation, elementsOf, bySome, leavesAlone, ofThePieces,
-                    onARemainder, null);
+                    onARemainder, null, null);
         }
 
         OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
@@ -2913,7 +2951,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         OnAWay leavingAlone(PartsLeftAlone parts) {
             return new OnAWay(positions, whatStands, relation, elementsOf, bySome, parts,
-                    ofThePieces, onARemainder, statedOfTheRun);
+                    ofThePieces, onARemainder, statedOfTheRun, byEvery);
         }
         /** Whether this says nothing of {@code term} because it is a part of a date this leaves
          *  alone. */
@@ -2925,6 +2963,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         case YEARS -> part == TakenAs.DatePart.YEAR;
                         case MONTHS_AND_DAYS -> part != TakenAs.DatePart.YEAR;
                     };
+        }
+
+        /**
+         * Every place this turns on, or empty where that is not said. Its {@link #positions} are
+         * where it places a row, which a statement the run says whether it held does not do: it
+         * places none, and turns on the places what it states reads ({@link
+         * PositionsAStatementReads#everyPlaceItTurnsOn}) — any place at all where that reads
+         * something other than places. A reader that asks of the places alone, and not of the
+         * rows that meet the statement, asks here.
+         */
+        Optional<Set<TermPath>> turnsOn() {
+            if (statedOfTheRun == null) {
+                return Optional.of(positions);
+            }
+            return PositionsAStatementReads.everyPlaceItTurnsOn(statedOfTheRun).map(places -> {
+                Set<TermPath> out = new LinkedHashSet<>(positions);
+                out.addAll(places);
+                return out;
+            });
         }
 
         /** What it states as a form of the input's numbers held against nought, or null where it
@@ -3030,8 +3087,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // for everything below that reads it. Where a value of the numbers it ties a length to is
         // shown for every length the string has, what it states of the length leaves its strings
         // as they were.
-        RoomOnTheWay lengthsRoom = heldWhole
-                ? roomAmongTheSides(carriers, written, past, declined, read) : null;
+        RoomOnTheWay lengthsRoom = heldWhole ? roomAmongTheSides(carriers,
+                withoutWhatAFreeValueMeets(unfree, declined, past, read), past, declined, read)
+                : null;
         if (!offItsLine && lengthsRoom != null && lengthsRoom.counts() == null) {
             unfree = unfree.stream()
                     .filter(each -> !lengthsRoom.statements().contains(each)).toList();
@@ -3136,7 +3194,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (heldWhole && standApart(0, 1, independent)) {
                 Partnering partnering = stringsAPartnerCanHold(carriers, out, read, lengthsRoom,
                         written, reachExactlyOn(past, read, along, written, declined));
-                shown = shown.partnered(partnering.strings());
+                shown = shown.partnered(partnering);
                 accounted = partnering.accountedFor();
             }
             return reachedAlong(shown, past, read, along, written, declined, accounted,
@@ -3247,7 +3305,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (sides.size() == 2 && heldWhole && standApart(0, 1, independent)) {
             Partnering partnering = stringsAPartnerCanHold(carriers, out, read, lengthsRoom,
                     written, reachExactlyOn(past, read, along, written, declined));
-            shown = shown.partnered(partnering.strings());
+            shown = shown.partnered(partnering);
             accountedFor = partnering.accountedFor();
         }
         return reachedAlong(shown, past, read, along, written, declined, accountedFor,
@@ -3265,11 +3323,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                     way that reads only such places is not one the run may stop on. A place
      *                     is here for the claim made of that place itself, and never for a claim
      *                     made of the other side
+     * @param stoppedAt    the figures making the strings a partner holds stopped at, for a side
+     *                     that is parted by nothing for that
      */
     private record Partnering(Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> strings,
-                              Set<TermPath> accountedFor) {
+                              Set<TermPath> accountedFor, Set<Figure> stoppedAt) {
 
-        static final Partnering NONE = new Partnering(Map.of(), Set.of());
+        static final Partnering NONE = new Partnering(Map.of(), Set.of(), Set.of());
     }
 
     /**
@@ -3391,6 +3451,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         boolean inside = kind.inside() != null;
         Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> out = new LinkedHashMap<>();
         Set<TermPath> accountedFor = new LinkedHashSet<>();
+        Set<Figure> stoppedAt = new LinkedHashSet<>();
         for (int at = 0; at < 2; at++) {
             Side here = sides.get(at);
             Side there = sides.get(1 - at);
@@ -3411,22 +3472,36 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (room.counts() == null && room.place() != null) {
                 accountedFor.add(room.place());
             }
-            ValueSet theirStrings = stringsShownAt(theirs.subjectPath(), read);
+            ValuesWithin theirStrings = stringsWithinAt(theirs.subjectPath(), read);
             if (theirStrings == null) {
                 continue;
             }
-            // A string is inside the partner's only if the partner is a string the run gets to the
-            // relation with, so the strings it is inside are those of the lengths it gets there at.
             boolean partnerHeld = room.counts() != null
-                    && room.limitedTo().equals(theirs.subjectPath());
-            if (inside && partnerHeld) {
-                Language partner = languageOf(theirStrings);
-                Language reaching = partner == null ? null : Partitions.ofTheLengths(partner,
-                        room.counts(), PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
-                if (reaching == null) {
+                    && room.limitedTo().equals(theirs.subjectPath());            // The lengths the declarations hold the partner to are read as the numbers they are
+            // where this reading of the two sides can, and made into one set of strings where it
+            // cannot. A set past the allowance is a figure the reading stopped at.
+            if (theirStrings.bounded()
+                    && !readsTheLengthsAsNumbers(here, there, partnerHeld, room)) {
+                Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
+                ValueSet one = StringsHeld.asOneSet(theirStrings, meter);
+                if (one == null) {
+                    partnersStringsRefusedBy(meter).ifPresent(stoppedAt::add);
                     continue;
                 }
-                theirStrings = ValueSet.matching(reaching);
+                theirStrings = ValuesWithin.all(one);
+            }
+            // A string is inside the partner's only if the partner is a string the run gets to the
+            // relation with, so the strings it is inside are those of the lengths it gets there at.
+            if (inside && partnerHeld) {
+                Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
+                Language partner = languageOf(theirStrings.values());
+                Language reaching = partner == null ? null : Partitions.ofTheLengths(partner,
+                        room.counts(), meter);
+                if (reaching == null) {
+                    partnersStringsRefusedBy(meter).ifPresent(stoppedAt::add);
+                    continue;
+                }
+                theirStrings = ValuesWithin.all(ValueSet.matching(reaching));
             }
             String called = inside ? calledInside(at == 0, there.text(), theirs.subjectPath())
                     : there.piece() != null
@@ -3446,15 +3521,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (heldToALanguage && ofThePieces == null) {
                 continue;
             }
-            ValueSet partnerOfThis = theirStrings;
+            ValuesWithin partnerOfThis = theirStrings;
             if (ofThePieces != null && here.piece() != null) {
-                Language partner = languageOf(theirStrings);
+                Language partner = languageOf(theirStrings.values());
                 Language both = partner == null ? null : partner.and(ofThePieces,
                         PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
                 if (both == null) {
                     continue;
                 }
-                partnerOfThis = ValueSet.matching(both);
+                partnerOfThis = ValuesWithin.all(ValueSet.matching(both));
             }
             StringsAPartnerCanHold strings = partnerCanHold(at == 0, here, there, partnerOfThis,
                     mineHolds, called);
@@ -3498,7 +3573,53 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 accountedFor.add(place.subjectPath());
             }
         });
-        return new Partnering(out, accountedFor);
+        return new Partnering(out, accountedFor, stoppedAt);
+    }
+
+    /**
+     * Whether the strings the partner is held to by {@code theirs}, a set and the lengths its
+     * declarations leave a string of it, are read with those lengths as numbers. Each kind of
+     * equality says what it can read of a length held as a number, and a reading that needs the
+     * strings as one set is handed them made into one.
+     *
+     * <p>Two kinds can. A string equal to the partner's string is one of its values only at the
+     * lengths the partner is held to, and none of them at any other ({@link
+     * StringsAPartnerCanHold#partnerHeldTo}), which meets the lengths the run gets past with only
+     * where those are lengths as well. A string equal to a case conversion of the partner's is
+     * shown to be one of its values where it is one the conversion answers exactly or leaves as it
+     * stands, and either of those is as long as the string it is the answer for; so such a string
+     * of a length the partner is held to is the answer for a string of the partner
+     * ({@link StringsAPartnerCanHold#shownAt}). One of another length is shown neither way: the
+     * conversion lengthens a code point and its normalization may join two, so a string the
+     * conversion answers may be the answer for a longer or a shorter one, which is what its image
+     * not being shown leaves open.
+     *
+     * <p>A converted string on this side is not read so: its length is not the length of the
+     * string it is held equal to. Nor are a piece of a string and a string inside another, whose
+     * strings are made out of the partner's.
+     */
+    private boolean readsTheLengthsAsNumbers(Side here, Side there, boolean partnerHeld,
+                                             RoomOnTheWay room) {
+        if (kind.inside() != null || here.piece() != null || there.piece() != null
+                || here.text() != null) {
+            return false;
+        }
+        return there.text() != null || !partnerHeld
+                || room.counts() instanceof LengthsPastTheWay.Lengths;
+    }
+
+    /**
+     * The figure {@code meter}, of the allowance of a piece of a language, refused a machine for
+     * the strings a partner holds at, or nothing where it refused none: a machine that came back
+     * as nothing for another reason is not one a limit stopped.
+     */
+    private static Optional<Figure> partnersStringsRefusedBy(Meter meter) {
+        Meter.Stopped stopped = meter.stoppedBy();
+        return stopped == null ? Optional.empty()
+                : Optional.of(new PatternPlan.Refused(
+                        PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE, stopped).as(
+                                WorkFigure.STRINGS_A_PARTNER_HOLDS_ONE_MACHINE,
+                                WorkFigure.STRINGS_A_PARTNER_HOLDS_IN_ALL));
     }
 
     /**
@@ -3673,7 +3794,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         BigInteger fewest = BigInteger.valueOf(
                 ends == null || length instanceof NumericTerm.CodePointClassCount
                         ? 0 : ends.least());
-        BigInteger most = BigInteger.valueOf(longestOf(strings));
+        BigInteger most = BigInteger.valueOf(lengthBoundOf(strings));
         // Whether the place holds a string of one of these counts is not asked here. The counts
         // are a proof about numbers; the strings of the place at them are met with what it admits
         // where the classes are made, under the allowance of the place, and a side that holds
@@ -3919,19 +4040,27 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * The strings of this side {@code there}, the other, can come to, as far as each is shown
-     * ({@link StringsAPartnerCanHold}), or null where none is: {@code theirStrings} are what its
-     * place holds, and {@code mine} what this side's does.
+     * ({@link StringsAPartnerCanHold}), or null where none is: {@code theirs} are what its place
+     * holds, and {@code mine} what this side's does.
+     *
+     * <p>{@code theirs} holds its strings to some lengths only where this kind of equality reads
+     * those as numbers ({@link #readsTheLengthsAsNumbers}): a string equal to the partner's is
+     * its value only at those lengths, and one equal to a conversion of it is shown so only at
+     * them.
      */
     private StringsAPartnerCanHold partnerCanHold(boolean hereIsFirst, Side here, Side there,
-                                                  ValueSet theirStrings, ValueSet mine,
+                                                  ValuesWithin theirs, ValueSet mine,
                                                   String called) {
+        ValueSet theirStrings = theirs.values();
         if (kind.inside() != null) {
             return stringsThroughConversions(hereIsFirst, here.text(), there.text(), theirStrings,
                     mine, called);
         }
         if (here.text() != null || there.text() != null) {
-            return stringsThroughConversions(hereIsFirst, textOf(here), textOf(there),
-                    theirStrings, mine, called);
+            StringsAPartnerCanHold through = stringsThroughConversions(hereIsFirst, textOf(here),
+                    textOf(there), theirStrings, mine, called);
+            return through == null || !theirs.bounded() ? through
+                    : through.shownAt(LengthsPastTheWay.Lengths.of(theirs));
         }
         if (there.piece() != null) {
             return stringsThatAreThePiece(there.piece(), theirStrings, mine, called);
@@ -3939,8 +4068,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (here.piece() != null) {
             return stringsWithAPiece(here.piece(), theirStrings, mine, called);
         }
-        return theirStrings.isEmpty() ? null
-                : StringsAPartnerCanHold.unreached(theirStrings, called);
+        if (theirStrings.isEmpty()) {
+            return null;
+        }
+        StringsAPartnerCanHold held = StringsAPartnerCanHold.unreached(theirStrings, called);
+        return theirs.bounded() ? held.partnerHeldTo(LengthsPastTheWay.Lengths.of(theirs)) : held;
     }
 
     /**
@@ -3954,7 +4086,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private StringsAPartnerCanHold onlyWhereTheRunGetsPast(
             StringsAPartnerCanHold strings, List<ConvertedOn> conversions, boolean hereIsFirst,
-            Side here, Side there, TermPath mine, TermPath theirs, ValueSet theirStrings,
+            Side here, Side there, TermPath mine, TermPath theirs, ValuesWithin theirStrings,
             ValueSet mineHolds) {
         if (conversions.isEmpty()) {
             return strings;
@@ -3981,13 +4113,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         StringsAPartnerCanHold out = strings;
         if (onTheirs != null) {
-            Language partnerHolds = languageOf(theirStrings);
+            Language partnerHolds = languageOf(theirStrings.values());
             Language reaching = partnerHolds == null ? null : partnerHolds.and(onTheirs, meter);
             if (reaching == null) {
                 return null;
             }
             StringsAPartnerCanHold narrowed = partnerCanHold(hereIsFirst, here, there,
-                    ValueSet.matching(reaching), mineHolds, strings.partner());
+                    theirStrings.over(ValueSet.matching(reaching)), mineHolds, strings.partner());
             out = narrowed == null ? strings.showing(ValueSet.NONE, strings.mayBe(), null)
                     : strings.showing(narrowed.canBe(), strings.mayBe(), narrowed.upTo());
         }
@@ -4014,7 +4146,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (ConvertedOn each : conversions) {
             operations.addAll(operationsNotExactOver(each.conversion(),
                     each.place().equals(mine) ? languageOf(mineHolds)
-                            : languageOf(theirStrings)));
+                            : languageOf(theirStrings.values())));
         }
         List<String> images = out.operations().images();
         return out.notShownGottenPast(operations.stream()
@@ -4044,26 +4176,34 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return OneReading.notExactOver(conversion, over, () -> notExactOver(conversion, over));
     }
 
-    /** {@link #operationsNotExactOver}, worked out, over strings that are a language. */
+    /**
+     * {@link #operationsNotExactOver}, worked out, over strings that are a language: each
+     * operation in turn is named where some string of {@code over} every operation before it was
+     * exact on is one it is not exact on. Those strings are kept as they narrow, so each step asks
+     * for one complement, of the strings it is exact on.
+     */
     private static List<String> notExactOver(CaseMapping conversion, Language over) {
         List<String> operations = conversion.operations();
         Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
         List<CaseMapping> doneSoFar = conversion.doneSoFar();
         List<String> named = new ArrayList<>();
-        Language notExactBefore = Language.EVERY_STRING.not(meter);
+        Language exactBefore = over;
         for (int step = 0; step < doneSoFar.size(); step++) {
             Language exact = CaseMaps.of(doneSoFar.get(step)).strings(meter);
-            Language notExact = exact == null ? null : over.and(exact.not(meter), meter);
-            Language fresh = notExact == null ? null
-                    : notExact.and(notExactBefore.not(meter), meter);
-            Language notExactNow = notExact == null ? null : notExactBefore.or(notExact, meter);
-            if (fresh == null || notExactNow == null) {
+            Language notExact = exact == null ? null : exact.not(meter);
+            Language fresh = notExact == null ? null : exactBefore.and(notExact, meter);
+            if (fresh == null) {
                 return operations;
             }
             if (!fresh.isEmpty()) {
                 named.add(operations.get(step));
             }
-            notExactBefore = notExactNow;
+            if (step + 1 < doneSoFar.size()) {
+                exactBefore = exactBefore.and(exact, meter);
+                if (exactBefore == null) {
+                    return operations;
+                }
+            }
         }
         return named;
     }
@@ -4079,6 +4219,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // any of its strings ({@link #takes}).
         return at == null || sourceOf(new NumericTerm.ValueOf(place), read) == null ? null
                 : StringsHeld.at(at);
+    }
+
+    /**
+     * The same strings with their lengths held as numbers beside the set
+     * ({@link StringsHeld#within}), or null where they are not shown.
+     */
+    private static ValuesWithin stringsWithinAt(TermPath place, InputReading read) {
+        Position at = read.domain().at(place);
+        return at == null || sourceOf(new NumericTerm.ValueOf(place), read) == null ? null
+                : StringsHeld.within(at);
     }
 
     /**
@@ -4205,8 +4355,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         Language held = mine instanceof ValueSet.Matching(Language strings) ? strings : null;
-        long longest = longestOf(held);
-        if (shown.allUpTo(longest)) {
+        long bound = lengthBoundOf(held);
+        if (shown.allUpTo(bound)) {
             return StringsAPartnerCanHold.unreached(ValueSet.matching(shown.ofTheStrings()),
                     called);
         }
@@ -4225,7 +4375,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         return StringsAPartnerCanHold.unreached(ValueSet.matching(shown.ofTheValues()),
                 ValueSet.matching(alike ? shown.ofTheValues() : shown.ofTheStrings()),
-                longest <= shown.upTo() ? null : shown.upTo(), called);
+                bound <= shown.upTo() ? null : shown.upTo(), called);
     }
 
     /**
@@ -4259,9 +4409,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     called).withTheImagesNotShownOf(notShown);
         }
         Language held = mine instanceof ValueSet.Matching(Language strings) ? strings : null;
-        long longest = longestOf(held);
         return StringsAPartnerCanHold.unreached(ValueSet.matching(shown.ofTheValues()),
-                ValueSet.matching(mayBe), longest <= shown.upTo() ? null : shown.upTo(), called)
+                ValueSet.matching(mayBe), lengthBoundOf(held) <= shown.upTo() ? null : shown.upTo(),
+                called)
                 .withTheImagesNotShownOf(notShown);
     }
 
@@ -4287,10 +4437,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The most code points a string of {@code held} has: what the language bounds, and the most a
-     * {@code String} holds where that is no bound or the strings are not a language.
+     * A bound on the code points of every string of {@code held}: the longest string of the
+     * language where it has one, and the most a {@code String} holds where it has none or the
+     * strings are not a language. In the second, no string of {@code held} need be that long.
      */
-    private static long longestOf(Language held) {
+    private static long lengthBoundOf(Language held) {
         Language.Ends lengths = held == null ? null : held.lengths();
         return lengths != null && lengths.most() != null ? lengths.most()
                 : TextExtents.LONGEST_STRING;
@@ -4428,8 +4579,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * stands at the place or under it is theirs ({@link TermPath#standsAtOrUnder}).
      */
     private static boolean reaches(OnAWay statement, TermPath place) {
-        return statement.positions().stream().anyMatch(at -> statement.whatStands()
-                ? at.standsAtOrUnder(place) : at.bearsOn(place));
+        Optional<Set<TermPath>> turnsOn = statement.turnsOn();
+        return turnsOn.isEmpty() || turnsOn.get().stream().anyMatch(at ->
+                statement.whatStands() ? at.standsAtOrUnder(place) : at.bearsOn(place));
     }
 
     /**
@@ -5128,8 +5280,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * <p>A conversion of the string at a place a side reads ends a run for the strings whose answer
      * is longer than a {@code String} holds, and for no other ({@link GetsPast.WhereTheTextFits}).
-     * The strings the conversion is exactly a map on ({@link CodeMap}) are not among them, so a run
-     * gets to the relation at every one of those, and which of the others it stops on is not said.
+     * The strings the conversion is exactly a map on ({@link CodeMap}) are not among them, nor is
+     * any where the place holds none too long for any answer to be
+     * ({@link #getsPastAtEveryStringHeld}), so a run gets to the relation at every one of those,
+     * and which of the others it stops on is not said.
      * Said of a reader that parts the strings it reads by what it is shown over, which asks for
      * {@code exactlyOnConversions}: it answers the conversions here and shows nothing of the
      * strings they are not exact on. Any other reader takes a conversion of a string it reads as
@@ -5258,6 +5412,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     return true;
                 }
                 for (TermPath place : text.places()) {
+                    // A place holding no string too long for the conversion to answer within a
+                    // String gets the run past it at every string, whatever stands beside it and
+                    // whatever application converts it.
+                    if (getsPastAtEveryStringHeld(place, text.conversion(), read)) {
+                        continue;
+                    }
                     if (reads.contains(place)) {
                         // The string a side reads is exactly the string every application
                         // converts only where the place is one value of the row, or where the
@@ -5306,6 +5466,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param conversion what they make of it, outermost last
      */
     private record ConvertedOn(TermPath place, CaseMapping conversion) {}
+
+    /**
+     * Whether a run gets past {@code conversion} of the string at {@code place} at every string the
+     * place holds: none of them is longer than a length up to which the conversion is shown to
+     * answer within a {@code String} at whatever code points it holds
+     * ({@link CaseMaps#gottenPastAtEveryStringUpTo}). Both are bounds, so a place past one is not
+     * shown to stop a run, only not shown to get past. A place no position is declared for is
+     * ended by nothing.
+     */
+    private static boolean getsPastAtEveryStringHeld(TermPath place, CaseMapping conversion,
+                                                     InputReading read) {
+        Position at = read.domain().at(place);
+        BigInteger bound = at == null ? null : StringsHeld.lengthBoundAt(at);
+        return bound != null && bound.compareTo(
+                BigInteger.valueOf(CaseMaps.gottenPastAtEveryStringUpTo(conversion))) <= 0;
+    }
 
     /**
      * What {@code owed}, a case conversion of the text at {@code operand}, is done to: the string
@@ -6512,58 +6688,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private boolean freeToMeet(NumericTerm term, OnAWay statement, List<OnAWay> conditions,
                                Optional<Set<String>> declined, DemandReading.Answered past,
                                InputReading read) {
-        if (!(term instanceof NumericTerm.FromOnePosition number)
-                || past.unsaidOrOwedOnWhatNoPlaceHolds()) {
+        if (!(term instanceof NumericTerm.FromOnePosition number)) {
             return false;
         }
-        for (Side side : sides) {
-            Optional<List<TermPath>> reads = placesItIsReadOff(side);
-            if (reads.isEmpty() || reads.get().stream().anyMatch(place ->
-                    number.placesReadOff().stream().anyMatch(place::bearsOn))) {
-                return false;
-            }
-        }
-        for (OnAWay other : conditions) {
-            if (!other.equals(statement) && !sameRemainder(statement, other)
-                    && touches(number, other.positions())) {
-                return false;
-            }
-            // A statement the run says whether it held names no place, though what it states is
-            // about numbers of the input ({@link RowDemand.ForTheRun}), so nothing here says which
-            // it turns on: a remainder is taken away only where none such stands beside it.
-            if (statement.onARemainder() != null && !other.equals(statement)
-                    && !sameRemainder(statement, other) && other.positions().isEmpty()
-                    && !other.whatStands()) {
-                return false;
-            }
-        }
-        for (Set<TermPath> ties : past.tiedOrOwed()) {
-            if (touches(number, ties)) {
-                return false;
-            }
-        }
-        if (declined.isEmpty() || number.placesReadOff().stream()
-                .anyMatch(at -> declined.get().contains(at.head()))) {
+        NumericDomain.Bounds takes = valuesFreeToChoose(number, statement, conditions, declined,
+                past, read);
+        if (takes == null) {
             return false;
         }
-        Source source = sourceOf(number, read);
-        if (source == null || source.named()) {
-            return false;
-        }
-        // The values it takes are those the run leaves it: a number the run narrows is taken at
-        // the values the run lets a row hold, whatever the declarations leave it.
-        // Each narrowing is of one number alone, so only those naming this one move its values.
-        List<TakenConstraint> ofIt = past.narrowing().stream()
-                .filter(each -> each.terms().contains(number)).toList();
-        SearchRegion left = read.quantities().region();
-        if (!ofIt.isEmpty()) {
-            left = TakenConstraint.narrowedBy(ofIt, left);
-            if (left.emptiness().isPresent()) {
-                return false;
-            }
-        }
-        NumericDomain.Bounds takes = realized(number, source, left,
-                ofIt.isEmpty() ? Way.UNTOUCHED : Way.NARROWED);
         if (statement.onARemainder() != null) {
             List<RowDemand.OnARemainder> together = new ArrayList<>();
             together.add(statement.onARemainder());
@@ -6575,6 +6707,163 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return choosesEveryRemainder(number, together, takes, read);
         }
         return takesTwoValues(takes) && workedOutBeside(statement.affine(), number, takes, read);
+    }
+
+    /**
+     * {@code conditions} without the statements a value free in them meets whatever the rest of
+     * the row holds, on the terms a number is free to meet a form ({@link #freeToMeet}): a
+     * statement the run says whether it held ({@link #metByAFreeValue}), and one every element of
+     * a container is free to meet ({@link #everyElementFreeToMeet}).
+     *
+     * <p>For what the way leaves of the strings alone ({@link #roomOnTheWay}). Such a statement
+     * takes no string of the sides away, since a row meets it at every one; but what it asks of an
+     * element was taken into the region, which keeps it ({@link Rebuilding}), and one the run says
+     * whether it held is asked of every row the way is read on.
+     */
+    private List<OnAWay> withoutWhatAFreeValueMeets(List<OnAWay> conditions,
+                                                    Optional<Set<String>> declined,
+                                                    DemandReading.Answered past,
+                                                    InputReading read) {
+        List<OnAWay> out = new ArrayList<>(conditions);
+        for (OnAWay each : conditions) {
+            if ((each.statedOfTheRun() != null
+                    && metByAFreeValue(each.statedOfTheRun(), each, out, declined, past, read))
+                    || (each.byEvery() != null
+                            && everyElementFreeToMeet(each, out, declined, past, read))) {
+                out.remove(each);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Whether a value free in {@code stated} meets it whatever the rest of the row holds, so that
+     * a row of the way stands at every value of everything else: a statement the run says whether
+     * it held, which places no row.
+     *
+     * <p>Two quantities held unequal are met by either of them that is the value at a place free to
+     * take two values or more ({@link #valuesFreeToChoose}): one of them is not what the other
+     * comes to. No element of a container meeting a statement is met where every element is free
+     * to fail it, each chosen apart from the rest of the row, whatever the container holds; and a
+     * choice of statements by any one of them. Nothing else is said to be met.
+     */
+    private boolean metByAFreeValue(Proposition stated, OnAWay statement,
+                                    List<OnAWay> conditions, Optional<Set<String>> declined,
+                                    DemandReading.Answered past, InputReading read) {
+        return switch (stated) {
+            case Proposition.Compared compared
+                    when compared.relation() instanceof Relation.Affine(var form, Rel rel)
+                    && rel == Rel.EQ && !compared.holds() && form.constant().signum() == 0
+                    && form.coefs().size() == 2
+                    && form.coefs().values().stream().mapToInt(ExactRatio::signum).sum() == 0
+                    && form.coefs().values().stream()
+                            .allMatch(weight -> weight.abs().compareTo(ExactRatio.ONE) == 0) ->
+                    form.coefs().keySet().stream().anyMatch(quantity ->
+                            quantity instanceof DecisionAtom.OfTheInput(
+                                    NumericTerm.ValueOf value, var _)
+                                    && takesTwoValues(valuesFreeToChoose(value, statement,
+                                            conditions, declined, past, read)));
+            case Proposition.Some some when !some.holds() ->
+                    metByAFreeValue(some.ofTheElement().denied(), statement, conditions,
+                            declined, past, read);
+            case Proposition.Any any -> any.parts().stream().anyMatch(part ->
+                    metByAFreeValue(part, statement, conditions, declined, past, read));
+            default -> false;
+        };
+    }
+
+    /**
+     * Whether every element of the container {@code statement} asks of is free to meet what it
+     * asks, whatever the rest of the row holds: one way it may be met asks the element only to be
+     * unequal to one value — that value, or a form of the element held unequal to nought that the
+     * element is free to meet as a number is ({@link #freeToMeet}) — and the element is free to
+     * take two values or more ({@link #valuesFreeToChoose}). Every element is then written as one
+     * value apart from that one, whatever the container holds.
+     */
+    private boolean everyElementFreeToMeet(OnAWay statement, List<OnAWay> conditions,
+                                           Optional<Set<String>> declined,
+                                           DemandReading.Answered past, InputReading read) {
+        NumericTerm.ValueOf element = new NumericTerm.ValueOf(statement.elementsOf().element());
+        NumericDomain.Bounds takes = valuesFreeToChoose(element, statement, conditions, declined,
+                past, read);
+        if (!takesTwoValues(takes)) {
+            return false;
+        }
+        return statement.byEvery().ways().stream().anyMatch(way -> way.size() == 1
+                && (way.get(0) instanceof RowDemand.DifferentFrom
+                        || (way.get(0) instanceof RowDemand.Relational(
+                                TakenConstraint.Affine affine)
+                                && affine.rel() == Rel.NE
+                                && affine.form().coefs().containsKey(element)
+                                && workedOutBeside(affine, element, takes, read))));
+    }
+
+    /**
+     * The values {@code number} is free to be chosen at beside {@code statement}, or null where it
+     * is not free ({@link #freeToMeet}): what the declarations and the run leave it, where nothing
+     * the way says of the input but {@code statement} may name it.
+     *
+     * <p>What another statement of the way turns on is asked of the statement
+     * ({@link OnAWay#turnsOn}): one the run says whether it held places no row, and still reads
+     * the places what it states reads, or may read any where that is not said.
+     */
+    private NumericDomain.Bounds valuesFreeToChoose(NumericTerm.FromOnePosition number,
+                                                    OnAWay statement, List<OnAWay> conditions,
+                                                    Optional<Set<String>> declined,
+                                                    DemandReading.Answered past,
+                                                    InputReading read) {
+        if (past.unsaidOrOwedOnWhatNoPlaceHolds()) {
+            return null;
+        }
+        for (Side side : sides) {
+            Optional<List<TermPath>> reads = placesItIsReadOff(side);
+            if (reads.isEmpty() || reads.get().stream().anyMatch(place ->
+                    number.placesReadOff().stream().anyMatch(place::bearsOn))) {
+                return null;
+            }
+        }
+        for (OnAWay other : conditions) {
+            if (other.equals(statement) || sameRemainder(statement, other)) {
+                continue;
+            }
+            Optional<Set<TermPath>> otherTurnsOn = other.turnsOn();
+            if (otherTurnsOn.isEmpty() || touches(number, otherTurnsOn.get())) {
+                return null;
+            }
+            // A statement that places no row and says nothing of what stands is one whose places
+            // are not told by its positions: a remainder is taken away only where none such
+            // stands beside it.
+            if (statement.onARemainder() != null && other.positions().isEmpty()
+                    && !other.whatStands()) {
+                return null;
+            }
+        }
+        for (Set<TermPath> ties : past.tiedOrOwed()) {
+            if (touches(number, ties)) {
+                return null;
+            }
+        }
+        if (declined.isEmpty() || number.placesReadOff().stream()
+                .anyMatch(at -> declined.get().contains(at.head()))) {
+            return null;
+        }
+        Source source = sourceOf(number, read);
+        if (source == null || source.named()) {
+            return null;
+        }
+        // The values it takes are those the run leaves it: a number the run narrows is taken at
+        // the values the run lets a row hold, whatever the declarations leave it.
+        // Each narrowing is of one number alone, so only those naming this one move its values.
+        List<TakenConstraint> ofIt = past.narrowing().stream()
+                .filter(each -> each.terms().contains(number)).toList();
+        SearchRegion left = read.quantities().region();
+        if (!ofIt.isEmpty()) {
+            left = TakenConstraint.narrowedBy(ofIt, left);
+            if (left.emptiness().isPresent()) {
+                return null;
+            }
+        }
+        return realized(number, source, left, ofIt.isEmpty() ? Way.UNTOUCHED : Way.NARROWED);
     }
 
     /** Whether {@code other} holds the remainder {@code statement} does: the same division of the

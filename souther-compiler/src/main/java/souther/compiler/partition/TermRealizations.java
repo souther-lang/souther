@@ -39,6 +39,7 @@ import souther.compiler.numeric.Text;
 import souther.compiler.numeric.UsualPlace;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.regex.CodeMap;
 import souther.compiler.regex.Language;
 import souther.compiler.values.ValueSet;
 import souther.compiler.semantics.Arithmetic;
@@ -3854,18 +3855,23 @@ final class TermRealizations {
     }
 
     /**
-     * Strings of {@code many} ASCII code points of {@code counted} that {@code through} leaves as
-     * they are, one string for each such code point: the strings a conversion keeps the count of
-     * wherever the class is written with them, whichever of them the plain letters come first by.
+     * Strings of {@code many} code points of {@code counted} that {@code through} sends to
+     * themselves ({@link #sentToThemselves}), one string for each such code point: the strings a
+     * conversion keeps the count of wherever the class is written with them. The printable ASCII
+     * ones, where there are any, whichever of them the plain letters come first by; otherwise the
+     * least of them.
      */
     private static List<String> leftAsTheyAre(CodePointClass counted, CaseMapping through,
                                               int many) {
+        CodePoints kept = sentToThemselves(counted, through);
         List<String> out = new ArrayList<>();
         for (int member = 0x21; member < 0x7F; member++) {
-            String own = Character.toString(member);
-            if (counted.contains(member) && own.equals(BoundUnderEvaluation.mapped(through, own))) {
-                out.add(own.repeat(many));
+            if (kept.has(member)) {
+                out.add(Character.toString(member).repeat(many));
             }
+        }
+        if (out.isEmpty() && !kept.isEmpty()) {
+            out.add(Character.toString(kept.least()).repeat(many));
         }
         return out;
     }
@@ -3873,21 +3879,22 @@ final class TermRealizations {
     /**
      * Whether every whole number from nought up is how many code points of {@code counted}
      * {@code through} makes of some string. As it stands, a string of that many of one of them is
-     * one. Converted, it is where one of the ASCII code points the class counts is left as it is,
-     * since a string of that many of it is made into itself: an ASCII code point is converted
-     * alone and composes with none beside it.
+     * one. Converted, it is where some code point the class counts is sent to itself
+     * ({@link #sentToThemselves}), since a string of that many of it is made into itself.
      */
     static boolean writesEveryCountOf(CodePointClass counted, CaseMapping through) {
-        if (through.equals(CaseMapping.NONE)) {
-            return true;
-        }
-        for (int member = 0; member <= 0x7F; member++) {
-            String own = Character.toString(member);
-            if (counted.contains(member) && own.equals(BoundUnderEvaluation.mapped(through, own))) {
-                return true;
-            }
-        }
-        return false;
+        return !sentToThemselves(counted, through).isEmpty();
+    }
+
+    /**
+     * The code points of {@code counted} that {@code through} sends to themselves wherever they
+     * stand: every one where nothing converts the string, and otherwise those of the domain of the
+     * map the conversion is exactly ({@link CodeMap#sentToThemselves}), which a string of them is
+     * converted to code point by code point.
+     */
+    private static CodePoints sentToThemselves(CodePointClass counted, CaseMapping through) {
+        return through.equals(CaseMapping.NONE) ? counted.held()
+                : CaseMaps.of(through).sentToThemselves().and(counted.held());
     }
 
     /**

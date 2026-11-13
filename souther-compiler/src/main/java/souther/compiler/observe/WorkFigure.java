@@ -93,6 +93,14 @@ public enum WorkFigure {
      *  look at. */
     STRINGS_PARTED_IN_ALL(new SearchMessage.StringsPartedInAll()),
 
+    /** States one machine for the strings the other side of an equality holds may have, and
+     *  what making it may look at. */
+    STRINGS_A_PARTNER_HOLDS_ONE_MACHINE(new SearchMessage.StringsAPartnerHoldsOneMachine()),
+
+    /** What building the machines for the strings the other side of an equality holds may make
+     *  and look at. */
+    STRINGS_A_PARTNER_HOLDS_IN_ALL(new SearchMessage.StringsAPartnerHoldsInAll()),
+
     /** How many steps the run of one row may take. */
     EVALUATION_STEPS(new SearchMessage.EvaluationSteps()),
 

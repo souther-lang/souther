@@ -199,6 +199,16 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.Pullback.exactRangeOf",
                     "hands the operator a run works out to the arithmetic of the runs of its"
                             + " operands, where no form says what it comes to"),
+            new Held("souther.compiler.partition.Pullback.productOfWrittenOut",
+                    "multiplies the runs of the elements of a list written out, which is the"
+                            + " number a product the library multiplies out exactly comes to"),
+            new Held("souther.compiler.partition.Pullback.theSpanFits",
+                    "takes the run of the first number of a span from that of the last, which is"
+                            + " how much longer than one element the span is"),
+            new Held("souther.compiler.semantics.WhereAnOperatorAnswers.ofAProduct",
+                    "names the multiplication a product the library multiplies out exactly is"
+                            + " held to its type as, for every reader of where such a product"
+                            + " answers"),
             new Held("souther.compiler.partition.Pullback.theDivisorItAloneStopsOn",
                     "which operand of a quotient it stops a run on, the one it divides by and not"
                             + " the one it divides, where the operator's account says its divisor"
