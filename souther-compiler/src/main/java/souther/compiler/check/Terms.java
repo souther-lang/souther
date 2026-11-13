@@ -3369,7 +3369,7 @@ final class Terms {
         // remove. `asOperator` still writes a call as the operator it stands for, which is what
         // names the value; what it computes is answered here.
         NumericResult<DeclaredArgument> result = DischargeRules.numericResult(operationOf(e));
-        if (result != null && answersIn(result, answered)) {
+        if (result != null && answersIn(result, answered) && carriesANumber(answered)) {
             return Computed.in(computedBy(result, argsOf(e), answered), at);
         }
         Computed whole = aWholeNumberOfAQuotient(e, at);

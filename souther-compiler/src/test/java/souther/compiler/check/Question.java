@@ -655,8 +655,10 @@ enum Question {
     FORM("what it answers, counted, in what its arguments are counted as") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
-            return Carrier.countsToANumber(signature.result())
-                    && signature.params().stream().anyMatch(Carrier::countsToANumber);
+            return (Carrier.countsToANumber(signature.result())
+                    || BinaryElaborator.exactlyReadable(signature.result()))
+                    && signature.params().stream().anyMatch(each ->
+                    Carrier.countsToANumber(each) || BinaryElaborator.exactlyReadable(each));
         }
 
         @Override
@@ -705,7 +707,12 @@ enum Question {
                     op("Date", "addYears"), op("DateTime", "minutesBetween"), op("Date", "year"),
                     op("Date", "month"), op("Date", "day"), op("Time", "hour"),
                     op("Time", "minute"), op("Time", "second"), op("DateTime", "toDate"),
-                    op("DateTime", "toTime"), op("Rational", "toDecimal"));
+                    op("DateTime", "toTime"), op("Rational", "toDecimal"),
+                    // Taken as arithmetic over a Rational, which is on no carrier. A product and a
+                    // quotient are forms of neither argument, as `Int.multiply` is none; the others
+                    // answer a number of their own.
+                    op("Rational", "multiply"), op("Rational", "divide"),
+                    op("Rational", "toInt"), op("Rational", "compare"));
         }
     },
 
@@ -724,7 +731,8 @@ enum Question {
     NUMERIC_RESULT("what number it computes, and where it answers it") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
-            Type number = NumericAnswers.in(signature.result());
+            Type number = BinaryElaborator.exactlyReadable(signature.result())
+                    ? signature.result() : NumericAnswers.in(signature.result());
             return number != null && signature.params().size() >= 2
                     && number.equals(signature.params().get(0))
                     && number.equals(signature.params().get(1));

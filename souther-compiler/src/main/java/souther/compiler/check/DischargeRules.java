@@ -188,21 +188,33 @@ final class DischargeRules {
     /**
      * The declared forms, by name, for the test that holds each to a construction it discharges.
      *
-     * <p>Every one of them, and not a subset this check can carry. What this check can do with a
-     * form is settled by whether it can name the counts the form is written over, and that is the
-     * requirement every declared form was held to where it was bound
-     * ({@link TypeRequirement#COUNTED}, on the result and on every argument named) — so a form that
-     * is bound is a form this carries, and a second reading of the carriers here would be the
-     * binder's question asked again below the binding.
+     * <p>Every one of them whose answer is counted. What this check can do with a form is settled
+     * by whether it can name the counts the form is written over, which a form answering a number
+     * on a carrier can. A form answering a {@code Rational} is stated of the arithmetic and read
+     * where a call is taken as that arithmetic; it has no count for this check to carry, so no
+     * construction fires it here.
      *
      * <p>Over the declared forms and not over everything that answers the question. A sum and a
      * difference answer it by being the arithmetic they are, and what reads them is the grammar; a
      * program firing one would be firing the operator.
      */
-    static Set<String> formNames() {
+    static Set<String> formNames(Stdlib stdlib) {
         Set<String> names = new LinkedHashSet<>();
-        facts().answersAFormOfItsArguments().forEach(operation -> names.add(operation.toString()));
+        for (ValueName operation : facts().answersAFormOfItsArguments()) {
+            if (answersOnACarrier(stdlib, operation)) {
+                names.add(operation.toString());
+            }
+        }
         return names;
+    }
+
+    /** Whether what {@code operation} answers counts to a number on a carrier. */
+    private static boolean answersOnACarrier(Stdlib stdlib, ValueName operation) {
+        if (!(operation instanceof ValueName.Stdlib.Operation library)) {
+            return false;
+        }
+        Stdlib.Entry entry = stdlib.entry(library);
+        return entry != null && Carrier.countsToANumber(entry.signature().result());
     }
 
     /** Those of them the building table has, by name, for the test that holds each to a construction

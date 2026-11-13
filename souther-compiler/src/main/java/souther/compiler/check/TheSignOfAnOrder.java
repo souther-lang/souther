@@ -160,6 +160,10 @@ public final class TheSignOfAnOrder {
         return switch (of(operation, counted.spacing(), sign.written(), sign.against())) {
             case null -> null;
             case Stands.Settled _ -> new Read.Settled<>(compared);
+            // The order of two arguments is a relation between numbers on a carrier. Two exact
+            // numbers on none — Rationals — have no atoms to stand in it, and what is said of
+            // them is left unread by every reader alike.
+            case Stands.Between _ when !argumentsCount(greater, lesser, sides) -> null;
             case Stands.Between(Rel between, boolean isTheCondition) ->
                     new Read.OfTheArguments<>(compared,
                             new StatedComparison(ComparisonClaim.stating(between), greater, lesser,
@@ -169,6 +173,12 @@ public final class TheSignOfAnOrder {
                                     Core.BinaryReading.AS_THEY_STAND),
                             sign.at(), isTheCondition);
         };
+    }
+
+    private static <E> boolean argumentsCount(Core greater, Core lesser, Sides<E> sides) {
+        Carrier first = Carrier.ofValue(greater.type(), sides.declarations());
+        Carrier second = Carrier.ofValue(lesser.type(), sides.declarations());
+        return first != null && first.counts() && second != null && second.counts();
     }
 
     /** The two arguments of {@code operation} whose order its answer is the sign of, the greater

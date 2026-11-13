@@ -38,6 +38,12 @@ enum TypeRequirement {
     /** A type whose values count to a number, which is wider than being one ({@link Carrier}). */
     COUNTED("something that counts to a number"),
 
+    /** A value an arithmetic equation can be written over: what counts to a number, or has an
+     *  exact value ({@link BinaryElaborator#exactlyReadable}) and counts on no carrier, as a
+     *  {@code Rational} does. What a fact says a call computes is held to this, and a reader that
+     *  gives the answer a meaning on a carrier asks the carrier itself. */
+    ARITHMETIC("a value arithmetic is written over"),
+
     /** A construction holding elements a rule can speak of ({@link Type#elementOfAContainer}). */
     CONTAINER("a container"),
 
@@ -91,6 +97,7 @@ enum TypeRequirement {
             case NUMBER -> NumericAnswers.isANumber(type);
             case EXACT -> BinaryElaborator.exactlyReadable(type);
             case COUNTED -> Carrier.countsToANumber(type);
+            case ARITHMETIC -> Carrier.countsToANumber(type) || BinaryElaborator.exactlyReadable(type);
             case CONTAINER -> Type.elementOfAContainer(type) != null;
             case TEXT -> Type.STRING.equals(type);
             case LIST_OF_TEXT -> new Type.ListOf(Type.STRING).equals(type);

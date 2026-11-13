@@ -835,20 +835,21 @@ final class OperationFactBinder {
      * passed, that argument being an {@code Int}, while what it answers is a list and has no count
      * for the equation to be about.
      *
-     * <p>Counted rather than a number, because that is what the fact says. A date is no number and
-     * counts days. And counted is what the discharge check needs of every part to carry a form —
-     * a carrier that counts has the coordinate it reasons over — so a form held here is a form
-     * that check carries, and it does not ask again.
+     * <p>Counted or exactly readable, rather than a number, because that is what the fact says. A
+     * date is no number and counts days, and a {@code Rational} is a number on no carrier. The
+     * statement is about the arithmetic, so it is held here to what an equation can be written
+     * over ({@link TypeRequirement#ARITHMETIC}); what carries the form on a carrier is asked by the
+     * reader that gives the answer a meaning there.
      */
     private static LinearForm<DeclaredArgument> holdAFormOfItsArguments(
             CompleteSignature declaration, LinearForm<ArgumentRef> form) {
-        holdTheResultToTheDeclaration(declaration, TypeRequirement.COUNTED,
+        holdTheResultToTheDeclaration(declaration, TypeRequirement.ARITHMETIC,
                 "what a form of its arguments is about");
         LinearForm<DeclaredArgument> bound = LinearForm.constant(form.constant());
         for (Map.Entry<ArgumentRef, ExactRatio> each
                 : form.coefs().entrySet()) {
             DeclaredArgument argument = holdToTheDeclaration(declaration, each.getKey(), null,
-                    TypeRequirement.COUNTED, "an argument the result is a form of");
+                    TypeRequirement.ARITHMETIC, "an argument the result is a form of");
             // Numbers a library declares and no model writes, so a sum of them is held.
             bound = bound.plus(LinearForm.weighing(argument, each.getValue()))
                     .orFail("a form a library declares of its arguments has a number no ratio holds");
@@ -1397,7 +1398,11 @@ final class OperationFactBinder {
     private static NumericResult<DeclaredArgument> holdNumericResult(
             Stdlib stdlib, CompleteSignature declaration, NumericResult<ArgumentRef> rule) {
         DeclaredOperation operation = declaration.declaring();
-        Type answers = NumericAnswers.in(declaration.result());
+        // What the operation computes is a statement about its arguments, which a number on no
+        // carrier has as much as one on a carrier does. Where its answer is one of those it is that
+        // number, and no reader that needs the answer on a carrier is handed it here.
+        Type answers = BinaryElaborator.exactlyReadable(declaration.result())
+                ? declaration.result() : NumericAnswers.in(declaration.result());
         List<Arithmetic.Reads> reads = rule.computes().reads();
         if (declaration.params().size() != reads.size()) {
             throw new IllegalStateException(operation + " takes " + declaration.params().size()
@@ -1412,7 +1417,7 @@ final class OperationFactBinder {
         }
         switch (rule.at()) {
             case NumericResult.Answered.Directly _ ->
-                    holdTheResultToTheDeclaration(declaration, TypeRequirement.NUMBER,
+                    holdTheResultToTheDeclaration(declaration, TypeRequirement.EXACT,
                             "where the arithmetic it computes is answered");
             case NumericResult.Answered.InTheCaseCarrying(Type carried) -> {
                 if (!(declaration.result()
