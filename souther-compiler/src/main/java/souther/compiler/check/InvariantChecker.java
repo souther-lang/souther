@@ -2685,9 +2685,13 @@ public final class InvariantChecker {
             Set<FactSubject> names = byName.namesAt(each);
             boolean left = false;
             for (FactSubject name : names) {
+                // Which reading adopted the statement is what the set of values being exact for it
+                // turns on, and `here` is what any of the four readings adopted.
+                if (adopted.byValues().took(name)) {
+                    took.valuesAdopted(statement);
+                }
                 if (here.contains(name)) {
                     took.record(rule, name);
-                    took.valuesAdopted(statement);
                 } else if (!constrained.contains(name)
                         && !took.isFreedByDefinition(rule, name)) {
                     standing.add(name);

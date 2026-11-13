@@ -173,6 +173,20 @@ class AFormatAndALengthRuleTogetherAreReadTest {
             behavior f : (pair: Pair) -> Ok
             """;
 
+    private static final String A_SIBLING_THAT_NARROWS_THE_LENGTH = """
+            module bounded
+
+            data Pair = { email: String, code: String }
+                invariant tied = String.matches("[a-z]+", email)
+                    && String.length(email) <= 5
+                    && String.length(email) == String.length(code)
+                    && String.matches("b{2}", code)
+
+            data Ok
+
+            behavior f : (pair: Pair) -> Ok
+            """;
+
     private static final String A_HELPER_WHOSE_FORMAT_IS_A_CHOICE = """
             module bounded
 
@@ -313,6 +327,13 @@ class AFormatAndALengthRuleTogetherAreReadTest {
         assertInstanceOf(AdmissibleSet.Completeness.Wider.class,
                 completenessOf(A_SIBLING_NOTHING_SATISFIES, "pair.email"),
                 "no value of the pair exists, and the rules leave this position nothing at all");
+    }
+
+    @Test
+    void norBesideASiblingWhoseRulesNarrowTheLengthsLeftHere() {
+        assertInstanceOf(AdmissibleSet.Completeness.Wider.class,
+                completenessOf(A_SIBLING_THAT_NARROWS_THE_LENGTH, "pair.email"),
+                "the lengths left here are the sibling's, which are two, and not one to five");
     }
 
     @Test
