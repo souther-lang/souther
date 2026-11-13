@@ -54,14 +54,20 @@ final class UncheckedModelReports {
 
     private final Set<String> exempt;
 
+    private final Set<String> validating;
+
     /**
-     * @param helper the class a test goes through to ask that a model compiles
-     * @param exempt the methods, as {@link AMethod} says them, that read a model they did not
-     *               compile and say so
+     * @param helper     the class a test goes through to ask that a model compiles
+     * @param exempt     the methods, as {@link AMethod} says them, that read a model they did not
+     *                   compile and say so
+     * @param validating the methods of the compiler, not walked, that read what a model found and
+     *                   stop unless it compiles, so that a model handed to one is asked about
+     *                   when it returns
      */
-    UncheckedModelReports(String helper, Set<String> exempt) {
+    UncheckedModelReports(String helper, Set<String> exempt, Set<String> validating) {
         this.helper = helper;
         this.exempt = Set.copyOf(exempt);
+        this.validating = Set.copyOf(validating);
     }
 
     /**
@@ -94,7 +100,7 @@ final class UncheckedModelReports {
         everything.addAll(production);
         ModelWalk.World world = new ModelWalk.World(helper, Set.copyOf(walks.keySet()),
                 Set.copyOf(written), Map.copyOf(captured), exempt,
-                ModelEffects.of(everything));
+                ModelEffects.of(everything), validating);
         ModelWalk.Facts facts = ModelWalk.Facts.NONE;
         Map<ModelWalk, ModelWalk.Result> results = new LinkedHashMap<>();
         for (int round = 0; round < ROUNDS; round++) {

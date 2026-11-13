@@ -33,7 +33,8 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
     private static final Set<String> REFUSED_SHAPES = new TreeSet<>(List.of(
             "ADerivedModelNeverAsked", "AllReportsOfAnAnswered", "AnotherClassMadeIt",
             "AnotherModelAsked", "AnswerWarningsOnly", "AskedAliasOfAFieldChangedByAMethod",
-            "AnswerKeptInAVariable", "AnswerReturnedThroughAMethod", "AskedOnOneWayOnly",
+            "AnswerKeptInAVariable", "AnswerReturnedThroughAMethod",
+            "AskedAfterTheReadInATryThatDropsTheFailure", "AskedOnOneWayOnly",
             "BoundMethodRefChanges",
             "BoundMethodRefReads", "BoxedInAnArray", "ChangedThroughTheParentNotTheDefault",
             "ChoosesBetweenAStoreItMadeAndTheOneGiven",
@@ -50,7 +51,8 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
             "FieldChangedByTheVariableItCameIn", "FieldChangedByTheVariableItWasReadInto",
             "FieldHandedToAConsumer", "FieldMutatedAfterTheLook",
             "FieldNeverAsked", "FromACollection", "HandedOnManyTimes",
-            "HandedToCodeThatChangesIt", "LambdaCreatedBeforeTheAsk", "LambdaMadeNotRun",
+            "HandedBackByACallThatChecksNothing", "HandedToCodeThatChangesIt",
+            "LambdaCreatedBeforeTheAsk", "LambdaMadeNotRun",
             "LambdaMadeAfterTheAskAndRun", "LeftBeforeTheAsk", "LeftOpenFor", "MadeInALambda",
             "MeasuredThenRead",
             "MutatedAfterTheLook", "NotCompiledButReportRead", "NotCompiledOffTheList",
@@ -58,7 +60,8 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
             "ParameterNobodyPasses", "ReadThenChangedThenAsked",
             "ReadThenChangedThenAskedInAMethod", "ReassignedOnOneWay",
             "ReassignedCopyChangedDirectly", "ReassignedCopyHandedToAConsumer",
-            "ReplacedAfterTheLook", "ReportsOfAStoreHandedIn", "ReportsOfAnAnsweredModel",
+            "ReadByAProductionHelper", "ReplacedAfterTheLook", "ReportsOfAStoreHandedIn",
+            "ReportsOfAnAnsweredModel",
             "ReportsReadOfAModelNobodyAsked",
             "StaticMethodRefReads", "StoreAskOfAnAnswered", "StreamForEachChanges",
             "StructuralFailureOfAnUnasked", "StructuralReportsOfAnUnasked", "SwallowedFailure",
@@ -74,7 +77,8 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
             "ErrorsOfAnAnsweredModel", "FieldAskedWhereWritten", "HandedToAnInterfaceThatOnlyLooks",
             "HelperThatChangesAndAsks", "MarkedAndNotRun",
             "NotCompiledOnTheList",
-            "ParameterHandedByACaller", "ReportsOfAStoreHandedInAfterTheLook",
+            "ParameterHandedByACaller", "ReadByAProductionHelperAfterTheLook",
+            "ReportsOfAStoreHandedInAfterTheLook",
             "RequireNonNullKeepsTheAsk", "TheErrorsAreWhatWasMeant", "ValueOfAnAnswerOfACheckedModel",
             "ThroughTheDoor",
             "UpdatedThenAsked"));
@@ -98,9 +102,23 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
                     "(Lsouther/lsp/analysis/SemanticProbe;Ljava/util/Map;Ljava/lang/String;"
                             + "Ljava/lang/String;I)V"));
 
+    /**
+     * The methods of the compiler, and of what measures it, that read what a model found and stop
+     * unless it compiles. What each says is held by a test that hands it a model that does not
+     * compile and sees it stop: {@code CorpusTest#aCorpusIsNotOneForAModelThatDoesNotCompile} and
+     * {@code AProgramIsNoneForAModelTheLanguageRefusedTest}. A method is on this list only with
+     * such a test, and a method that does not stop is not on it.
+     */
+    private static final Set<String> VALIDATING = Set.of(
+            AMethod.of("souther/bench/Corpus", "check",
+                    "(Lsouther/compiler/query/Compilation;)V"),
+            AMethod.of("souther/compiler/program/CheckedProgramAssembler", "of",
+                    "(Lsouther/compiler/query/Compilation;)"
+                            + "Lsouther/compiler/program/CheckedProgram;"));
+
     /** The door the tests of this repository go through. */
     private static final UncheckedModelReports ASKING =
-            new UncheckedModelReports(HELPER, CANNOT_BE_COMPILED);
+            new UncheckedModelReports(HELPER, CANNOT_BE_COMPILED, VALIDATING);
 
     /** What the repository's tests do with the models they read, worked out once for the class. */
     private static UncheckedModelReports.Findings findings;
@@ -148,7 +166,8 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
                 AMethod.of(FIXTURES + "NotCompiledButReportRead", "read",
                         "(Ljava/lang/String;)Lsouther/compiler/report/AdequacyReport;"),
                 AMethod.of(FIXTURES + "NotCompiledReadsAllReports", "read",
-                        "(Ljava/lang/String;)Z")));        List<ClassModel> shapes = new ArrayList<>();
+                        "(Ljava/lang/String;)Z")), Set.of());
+        List<ClassModel> shapes = new ArrayList<>();
         for (String shape : REFUSED_SHAPES) {
             shapes.add(COMPILED.read(FIXTURES + shape));
         }
@@ -192,6 +211,27 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
         assertEquals(Set.of(), ModelVocabulary.unsaid(COMPILED.read(ModelVocabulary.DB)),
                 "a method of Db is not said in ModelVocabulary to read a report, to change what a"
                         + " model is made of, or to do neither");
+    }
+
+    /**
+     * And what is taken to ask that a model compiles is the calls the helper is said to have, and
+     * no call it has by the type it answers.
+     *
+     * <p>A call of the helper that hands a model back is a check only by being said so, with a test
+     * that holds what it does ({@code ACompiledModelHoldsAModelToCompilingTest}). One added that
+     * does not stop for a model that does not compile, a call that hands the model back as it was,
+     * is found here and not taken for a look.
+     */
+    @Test
+    void everyCallOfTheHelperThatHandsAModelBackIsSaidToBeACheckOrNotToCompile() {
+        ClassModel helper = COMPILED.read(HELPER);
+        ClassModel shared = COMPILED.read(HELPER + "$Shared");
+        Set<String> unsaid = new TreeSet<>(ModelVocabulary.unsaidChecks(helper));
+        unsaid.addAll(ModelVocabulary.unsaidChecks(shared));
+        assertEquals(Set.of(), unsaid,
+                "a call of ACompiledModel hands a model back and is not said to be a check");
+        assertEquals(Set.of(), ModelVocabulary.checksMissing(List.of(helper, shared)),
+                "a check that ModelVocabulary says is not a call of ACompiledModel");
     }
 
     /**

@@ -60,6 +60,21 @@ public final class ModelShapes {
             model.answerEverything();
             return List.of();
         }
+
+        public static Compilation passedThrough(Compilation model) {
+            return model;
+        }
+    }
+
+    /** Takes a model back from a call of the helper that checks nothing, and reads its report. */
+    public static final class HandedBackByACallThatChecksNothing {
+
+        private HandedBackByACallThatChecksNothing() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.passedThrough(Compilation.ofSource(source, "Main"));
+            return AdequacyReport.of(model);
+        }
     }
 
     /** Answers the warnings of a module, which is not answering everything, and reads the errors. */
@@ -913,6 +928,55 @@ public final class ModelShapes {
         public static boolean read(String source) {
             Compilation model = TheDoor.answered(source);
             return hasNoReports(model.db());
+        }
+    }
+
+    /** Reads the report of a model and asks that it compiles after, where the failure is dropped. */
+    public static final class AskedAfterTheReadInATryThatDropsTheFailure {
+
+        private AskedAfterTheReadInATryThatDropsTheFailure() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            AdequacyReport report = AdequacyReport.of(model);
+            try {
+                TheDoor.compiles(model);
+            } catch (AssertionError dropped) {
+                return report;
+            }
+            return report;
+        }
+    }
+
+    /** Code of the compiler that reads the reports of the model it is handed. */
+    public static final class ProductionReader {
+
+        private ProductionReader() { }
+
+        public static boolean hasNoReports(Compilation model) {
+            return model.reports().isEmpty();
+        }
+    }
+
+    /** Hands a model nobody asked about to code that reads its reports. */
+    public static final class ReadByAProductionHelper {
+
+        private ReadByAProductionHelper() { }
+
+        public static boolean read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            return ProductionReader.hasNoReports(model);
+        }
+    }
+
+    /** Hands a model that was asked about to code that reads its reports. */
+    public static final class ReadByAProductionHelperAfterTheLook {
+
+        private ReadByAProductionHelperAfterTheLook() { }
+
+        public static boolean read(String source) {
+            Compilation model = TheDoor.answered(source);
+            return ProductionReader.hasNoReports(model);
         }
     }
 

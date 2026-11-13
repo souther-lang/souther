@@ -133,9 +133,12 @@ final class ModelWalk {
      * @param exempt    the methods that may read a model they did not compile, and say so
      * @param effects   what the methods of every class do to a model, worked out from the classes,
      *                  and which methods a call may run
+     * @param validating the methods of the compiler that read what a model found and stop unless it
+     *                  compiles, so that a model they return from is one that was asked about
      */
     record World(String helper, Set<String> analysed, Set<String> written,
-                 Map<String, Integer> captured, Set<String> exempt, ModelEffects effects) { }
+                 Map<String, Integer> captured, Set<String> exempt, ModelEffects effects,
+                 Set<String> validating) { }
 
     /** What holds a model where it is used. */
     sealed interface Operand {
@@ -700,6 +703,25 @@ final class ModelWalk {
             }
         }
         return out == null ? before : out;
+    }
+
+    /**
+     * Whether a method the call may run is code of the repository that is not walked, and can
+     * reach a read of the reports a model found, which {@link ModelEffects} works out. The model it
+     * is handed is read by it, and which of what it is handed is not told, so it is taken to be
+     * read.
+     */
+    private boolean readByCodeNotWalked(String callee) {
+        for (String target : world.effects().targets(callee)) {
+            String owner = target.substring(0, target.indexOf('#'));
+            if (owner.startsWith("souther/") && !owner.equals(COMPILATION)
+                    && !owner.equals(REPORT) && !owner.equals(DB)
+                    && !isHelper(owner, world.helper()) && !world.analysed().contains(target)
+                    && world.effects().readsReports(target)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1337,14 +1359,17 @@ final class ModelWalk {
                                     ? target.equals(COMPILATION) && !configuring.contains(at)
                                             && (storeAccessor
                                             || world.effects().readsReports(callee))
-                                    : target.equals(REPORT)
-                                            && name.equals(ModelVocabulary.ADEQUACY_REPORT_OF);
+                                    : (target.equals(REPORT)
+                                            && name.equals(ModelVocabulary.ADEQUACY_REPORT_OF))
+                                            || (readByCodeNotWalked(callee)
+                                            && !world.validating().contains(callee));
                             boolean report = reads && !storeAccessor;
                             boolean helping = !receiver && isHelper(target, helper);
                             boolean handsTheModelBack = call.typeSymbol().returnType()
                                     .descriptorString().equals(COMPILATION_TYPE);
-                            boolean asks = helping && !name.equals(NOT_COMPILED)
-                                    && handsTheModelBack;
+                            boolean asks = (helping && ModelVocabulary.CHECKS.contains(name)
+                                    && handsTheModelBack) || (!receiver
+                                    && world.validating().contains(callee));
                             boolean exempts = helping && name.equals(NOT_COMPILED)
                                     && world.exempt().contains(key);
                             boolean mutates = receiver && target.equals(COMPILATION)

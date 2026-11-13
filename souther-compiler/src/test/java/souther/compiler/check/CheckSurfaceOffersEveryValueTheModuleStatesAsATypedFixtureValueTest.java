@@ -262,7 +262,10 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
         assertEquals(List.of(new ReachName.Own(new ValueName.Helper("example.member", "vip"))),
                 surface.typedFixtureValues().getOrDefault(customerType(compilation,
                         "example.member"), List.of()));
-        ACompiledModel.refusedWith(List.of("E1011"), compilation);
+        // E1011 is what the compile stops with, at the field declared twice. E1317 is what it has
+        // reported of `stray`: the `1` it gives `x` is no value of the `String` the second
+        // declaration makes `x`.
+        ACompiledModel.refusedWith(List.of("E1011", "E1317"), compilation);
     }
 
     /**

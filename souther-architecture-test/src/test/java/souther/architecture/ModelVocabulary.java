@@ -37,6 +37,45 @@ final class ModelVocabulary {
     static final String NOT_COMPILED = "notCompiled";
 
     /**
+     * The calls of the helper, and of what it keeps, that hand a model back and stop unless it is as
+     * the test said. A model one of them hands back was asked about. What each does is held by
+     * {@code ACompiledModelHoldsAModelToCompilingTest}, and a call of the helper that hands a model
+     * back and is not here, or is {@link #NOT_COMPILED}, is found by {@link #unsaidChecks}.
+     */
+    static final Set<String> CHECKS = Set.of("compiles", "refusedWith", "refusedOnlyWith",
+            "answered", "measured");
+
+    /**
+     * The calls of the helper class, as {@code Class#name}, that hand a model back and are neither
+     * a check nor the way of saying a model is not compiled.
+     */
+    static Set<String> unsaidChecks(ClassModel helper) {
+        Set<String> unsaid = new TreeSet<>();
+        for (MethodModel method : helper.methods()) {
+            String name = method.methodName().stringValue();
+            if (method.methodTypeSymbol().returnType().descriptorString().equals(COMPILATION_TYPE)
+                    && method.flags().has(AccessFlag.PUBLIC) && !CHECKS.contains(name)
+                    && !name.equals(NOT_COMPILED)) {
+                unsaid.add(helper.thisClass().asInternalName() + "#" + name);
+            }
+        }
+        return unsaid;
+    }
+
+    /** The checks that none of the classes has, as names. */
+    static Set<String> checksMissing(List<ClassModel> helper) {
+        Set<String> had = new TreeSet<>();
+        for (ClassModel each : helper) {
+            for (MethodModel method : each.methods()) {
+                had.add(method.methodName().stringValue());
+            }
+        }
+        Set<String> missing = new TreeSet<>(CHECKS);
+        missing.removeAll(had);
+        return missing;
+    }
+
+    /**
      * The report of a model that reads the measures it asks of the store itself, so it is not
      * reached from the store's reads of a report.
      */
