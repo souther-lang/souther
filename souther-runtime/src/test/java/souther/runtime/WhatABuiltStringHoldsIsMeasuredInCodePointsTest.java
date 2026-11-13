@@ -58,6 +58,15 @@ class WhatABuiltStringHoldsIsMeasuredInCodePointsTest {
         assertThrows(ConstraintViolation.class, () -> Strings.append("a", "̂", 1));
     }
 
+    /** Both are NFC, and the join canonicalizes to three code points: the join is measured as it
+     *  is built as well, and not only as it is handed over. */
+    @Test
+    void appendIsMeasuredAfterItIsCanonicalizedToo() {
+        String joined = Strings.append("ǖ", "̣", 3);
+        assertEquals(3, joined.codePointCount(0, joined.length()));
+        assertThrows(ConstraintViolation.class, () -> Strings.append("ǖ", "̣", 2));
+    }
+
     @Test
     void repeatOfNothingIsNothingWhateverTheCount() {
         assertEquals("", Strings.repeat("", Long.MAX_VALUE, LIMIT));
