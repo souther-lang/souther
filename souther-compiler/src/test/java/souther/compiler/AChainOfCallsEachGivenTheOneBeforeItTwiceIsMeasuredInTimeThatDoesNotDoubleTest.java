@@ -199,4 +199,49 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
                 AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDoubleTest
                         ::afterOneLetEachCall, 3, 24, 100);
     }
+
+    private static String reportOfSizesAddedToThemselves(int depth, String ending) {
+        StringBuilder body = new StringBuilder("{\n    let a0 = String.length(s)\n");
+        for (int i = 1; i <= depth; i++) {
+            body.append("    let a%d = a%d + a%d\n".formatted(i, i - 1, i - 1));
+        }
+        body.append("    " + ending.replace("LAST", "a" + depth) + "\n}");
+        Compilation compilation = Compilation.ofSource("""
+                module m
+
+                behavior f : (s: String, j: Int) -> Bool
+                let f (s, j) = %s
+                """.formatted(body), "Main");
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    /**
+     * Held against a number that parts nought from the rest, a size added to itself is the check
+     * of one container however many names it is added through.
+     */
+    @Test
+    void aSizeAddedToItselfThroughAChainOfNamesSaysAtAnyDepthWhatItSaysAtAShallowOne() {
+        for (String ending : new String[] {"LAST == 0", "LAST > 0", "LAST /= 0"}) {
+            assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
+                    depth -> reportOfSizesAddedToThemselves(depth, ending),
+                    AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDoubleTest
+                            ::afterOneLetEachCall, 3, 24);
+        }
+    }
+
+    /**
+     * The report is worked out at any depth. A hundred additions overflow an Int, and the run that
+     * would add them says so: the arithmetic is read from what is written and not from the sizes.
+     */
+    @Test
+    void aSizeAddedToItselfThroughAChainOfNamesHeldAgainstAnInputIsReportedAtAnyDepth() {
+        for (int depth : new int[] {24, 100}) {
+            String report = assertTimeoutPreemptively(Duration.ofSeconds(60),
+                    () -> reportOfSizesAddedToThemselves(depth, "LAST == j"));
+            assertTrue(report.contains("String.length(s)"), report);
+        }
+    }
 }

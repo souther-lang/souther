@@ -16,7 +16,9 @@ import souther.compiler.types.BinOp;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Whether a comparison is a size held against a number that parts nought from every size above it
@@ -41,14 +43,16 @@ final class AnEmptinessCheck {
      * What a comparison says of whether containers hold anything.
      *
      * @param containers        the containers whose sizes are added up and held against nought,
-     *                          one where a size alone is, each where it is read
+     *                          one where a size alone is, each where it is read, each once
+     * @param bareSize          whether it is a size alone and not a sum: a size added to itself
+     *                          is a sum of one container
      * @param emptyWhereItHolds whether the comparison holding is the containers holding nothing
      * @param written           the comparison with the name its sum was given followed, and the
      *                          reading it is read in: what the arithmetic over the input is
      *                          asked of, to tell a sum it reads from one it does not
      * @param named             whether the sum is a name that was followed to what it stands for
      */
-    record Checked(List<Denotation> containers, boolean emptyWhereItHolds,
+    record Checked(List<Denotation> containers, boolean bareSize, boolean emptyWhereItHolds,
                    StatedComparison written, InputReads writtenAt, boolean named) {
 
         Checked {
@@ -57,7 +61,7 @@ final class AnEmptinessCheck {
 
         /** Whether it is a size alone and not a sum. */
         boolean ofOneContainer() {
-            return containers.size() == 1;
+            return bareSize;
         }
     }
 
@@ -95,8 +99,8 @@ final class AnEmptinessCheck {
     static Checked checked(StatedComparison stated, InputReads reads, Standing standing) {
         Denotation[] stood = {null};
         Core[] side = {null};
-        StatedComparison.Numbered<List<Size>> sizes = stated.at(each -> {
-            List<Size> out = new ArrayList<>();
+        StatedComparison.Numbered<SizesAddedUp> sizes = stated.at(each -> {
+            SizesAddedUp out = new SizesAddedUp();
             Denotation followed = standing.of(each, reads);
             if (!addedUp(followed, standing, out)) {
                 return null;
@@ -120,17 +124,18 @@ final class AnEmptinessCheck {
         // whatever else is known of the size: it comes out one way at nought and the other way on
         // either side of it.
         boolean noughtAlone = against.value() == 0 && relation.holds(-1) == above;
-        if (!noughtAlone && !sizes.number().stream().allMatch(size -> partsNoughtFromEverySizeAbove(
-                relation, against.value(), size.applied().operation()))) {
+        if (!noughtAlone && !sizes.number().sizes.stream().allMatch(size ->
+                partsNoughtFromEverySizeAbove(relation, against.value(),
+                        size.applied().operation()))) {
             return null;
         }
         boolean onTheLeft = side[0] == stated.left();
         StatedComparison written = new StatedComparison(stated.claim(),
                 onTheLeft ? stood[0].value() : stated.left(),
                 onTheLeft ? stated.right() : stood[0].value(), stated.reading());
-        return new Checked(sizes.number().stream().map(size -> new Denotation(
-                size.applied().args().getFirst(), size.at())).toList(), atNought, written,
-                stood[0].at(),
+        return new Checked(sizes.number().sizes.stream().map(size -> new Denotation(
+                size.applied().args().getFirst(), size.at())).toList(), !sizes.number().ofASum,
+                atNought, written, stood[0].at(),
                 Core.withoutStanding(stood[0].value()) != Core.withoutStanding(side[0]));
     }
 
@@ -138,13 +143,48 @@ final class AnEmptinessCheck {
      * Whether {@code e} is sizes and nothing else added together, the sizes put in {@code into}
      * in the order they are added.
      */
-    private static boolean addedUp(Denotation e, Standing standing, List<Size> into) {
-        if (Core.withoutStanding(e.value()) instanceof Core.Binary sum && sum.op() == BinOp.ADD) {
+    private static boolean addedUp(Denotation e, Standing standing, SizesAddedUp into) {
+        Core value = Core.withoutStanding(e.value());
+        if (!into.visited.add(new Visited(value, e.at()))) {
+            return true;
+        }
+        if (value instanceof Core.Binary sum && sum.op() == BinOp.ADD) {
+            into.ofASum = true;
             return addedUp(standing.of(sum.left(), e.at()), standing, into)
                     && addedUp(standing.of(sum.right(), e.at()), standing, into);
         }
         AnOperationApplied size = aSize(e.value());
-        return size != null && into.add(new Size(size, e.at()));
+        return size != null && into.sizes.add(new Size(size, e.at()));
+    }
+
+    /**
+     * The sizes an expression adds up, each once however many ways lead to it, in the order they
+     * are first added; and whether it is a sum at all.
+     *
+     * <p>A name used twice in a sum stands for one value, and a chain of such sums reaches a size
+     * by a number of ways that doubles with each link. Each value is taken once in the reading it
+     * is read in, so the work and what it holds follow the values and not the ways to them. A sum
+     * is nought exactly where every size is, and is one or more exactly where some one is, so how
+     * many times a size is added is not asked of it.
+     */
+    private static final class SizesAddedUp {
+        private final Set<Visited> visited = new HashSet<>();
+        private final List<Size> sizes = new ArrayList<>();
+        private boolean ofASum;
+    }
+
+    /** A value, by what object it is, in the reading it is read in. */
+    private record Visited(Core value, InputReads at) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Visited that && that.value == value && that.at.equals(at);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * System.identityHashCode(value) + at.hashCode();
+        }
     }
 
     /**
