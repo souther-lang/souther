@@ -24,7 +24,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AnInputWrittenIntoIsComparedByWhatItHoldsOnlyWhereTheReadingAskedAfterItTest {
 
     private static final class AnOwner {
+        /** Read by the state through its role, and by nothing here but the test that sets it. */
+        @SuppressWarnings("UnusedVariable")
         List<String> answers;
+        /** Read by the state through its role, and by nothing here but the test that sets it. */
+        @SuppressWarnings("UnusedVariable")
         Map<String, List<String>> counts;
         /** Set by a test that changes it, and read by the state through its role. */
         @SuppressWarnings("UnusedVariable")
