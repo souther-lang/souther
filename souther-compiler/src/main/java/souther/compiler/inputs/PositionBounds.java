@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedInterval;
 import souther.compiler.numeric.OrderedRuns;
 
 /**
@@ -57,5 +58,22 @@ public record PositionBounds(NumericTerm.FromOnePosition term,
             throw new IllegalArgumentException(
                     term + " has no answer about what the value it sits in leaves it");
         }
+    }
+
+    /**
+     * Whether the values the number holds are fewer than the values between its ends: some are
+     * taken out from between them, or the one run stops short of an end. Not where no word was
+     * read of them, which says nothing of what the ends leave.
+     *
+     * <p>A reader that takes what a set admits as what the position holds, with the ends as the
+     * only bound the set was met with, is wrong exactly where this holds.
+     */
+    public boolean holdsLessThanItsEnds() {
+        if (runsLeft == null) {
+            return false;
+        }
+        NumericDomain.Bounds ends = rangeLeft == null ? NumericDomain.Bounds.OPEN : rangeLeft;
+        return !runsLeft.sameValuesAs(
+                OrderedRuns.of(new OrderedInterval(ends.min(), ends.max())));
     }
 }

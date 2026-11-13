@@ -354,8 +354,10 @@ class ALengthRuleWithAHoleIsReadAsTheRunsItLeavesTest {
                 stop -> unanswered.add(each.path("question").asString() + " "
                         + each.path("subject").path("path").asString() + " "
                         + stop.path("reason").asString())));
-        assertEquals(true, unanswered.contains("admitted_values code unsupported_syntax"),
-                unanswered.toString());
+        // The values of the code are not read, and the relation over them is not shown to reach
+        // every value of the partner for that.
+        assertEquals(List.of("admitted_values code unsupported_syntax",
+                "notDetermined other relation_not_shown_to_reach_every_value"), unanswered);
     }
 
     /** A choice between runs of lengths with no end above is a rule read all the same. */

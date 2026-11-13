@@ -13,8 +13,10 @@ import souther.compiler.regex.Language;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.Sets;
+import souther.compiler.values.TextExtents;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
+import souther.compiler.values.ValuesAtLengths;
 import souther.compiler.values.ValuesWithin;
 
 import net.unit8.notation199x.pattern.Meter;
@@ -111,15 +113,8 @@ final class StringsHeld {
         LengthRuns lengths = LengthRuns.of(left);
         List<NumericDomain.Bounds> runs = runsOfTheLengths(at);
         if (runs != null) {
-            List<LengthsPastTheWay.Lengths> ofTheRuns = new ArrayList<>();
-            for (NumericDomain.Bounds run : runs) {
-                LengthsPastTheWay.Lengths one = lengthsOf(run);
-                if (one == null) {
-                    return null;
-                }
-                ofTheRuns.add(one);
-            }
-            lengths = lengths.and(LengthRuns.ofAll(ofTheRuns));
+            LengthRuns ofTheRuns = asLengths(runs);
+            lengths = ofTheRuns == null ? LengthRuns.NONE : lengths.and(ofTheRuns);
             if (lengths.isEmpty()) {
                 return null;
             }
@@ -194,6 +189,39 @@ final class StringsHeld {
                     .map(run -> new NumericDomain.Bounds(run.low(), run.high())).toList();
         }
         return out;
+    }
+
+    /**
+     * Whether the strings {@code at} admits are shown to include a value of the lengths its rules
+     * leave it. The set holds the strings of the lengths taken out from between the ends as well,
+     * and one of those is no value of the position, so it is asked of the strings of each run
+     * ({@link ValuesAtLengths#shownToHoldAValue}) where the runs were read, and of the set alone
+     * where they were not.
+     *
+     * <p>Asked of the runs and of the set, and not of {@link #held}: that is the strings the
+     * position holds where no rule binds another number of them, which is not what this asks.
+     */
+    static boolean shownToHoldAValue(Position at) {
+        ValueSet admitted = at.admitted().approximation();
+        List<NumericDomain.Bounds> runs = runsOfTheLengths(at);
+        if (runs == null) {
+            return TextExtents.shownToHoldAValue(admitted);
+        }
+        LengthRuns lengths = asLengths(runs);
+        return lengths != null && lengths.ofValues(admitted).shownToHoldAValue();
+    }
+
+    /** {@code runs} as lengths, or null where an end of one is no whole count. */
+    private static LengthRuns asLengths(List<NumericDomain.Bounds> runs) {
+        List<LengthsPastTheWay.Lengths> ofTheRuns = new ArrayList<>();
+        for (NumericDomain.Bounds run : runs) {
+            LengthsPastTheWay.Lengths one = lengthsOf(run);
+            if (one == null) {
+                return null;
+            }
+            ofTheRuns.add(one);
+        }
+        return LengthRuns.ofAll(ofTheRuns);
     }
 
     /**

@@ -18,9 +18,11 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -77,6 +79,25 @@ class StringsReachedKnowTheLengthsTakenOutTest {
         assertTrue(reached.allowsAnEdgeAt(length[0], ExactRatio.of(6)));
         assertTrue(reached.allowsAnEdgeAt(length[0], ExactRatio.of(8)));
         assertTrue(reached.allowsAnEdgeAt(length[0], ExactRatio.of(0)));
+    }
+
+    /**
+     * A value is shown to exist where some string is in the set and has a length the rules leave.
+     * The set admits the strings of the lengths taken out as well, so what it holds is not enough:
+     * a set whose every string is of a length taken out holds no value of the position.
+     */
+    @Test
+    void aSetWhoseEveryStringIsOfALengthTakenOutLeavesNoValue() {
+        Map<String, Boolean> exists = new LinkedHashMap<>();
+        exists.put("value == \"abc\" && String.length(value) /= 3", false);
+        exists.put("value == \"abc\" && (String.length(value) < 3 || String.length(value) > 3)",
+                false);
+        exists.put("String.matches(\"aaa\", value) && String.length(value) /= 3", false);
+        exists.put("(value == \"abc\" || value == \"abcd\") && String.length(value) /= 3", true);
+        exists.put("String.matches(\"a+\", value) && String.length(value) /= 3", true);
+        exists.put("String.length(value) <= 10 && String.length(value) /= 7", true);
+        exists.forEach((rule, there) -> assertEquals(there,
+                reachedBy(rule, new NumericTerm[1]).mandatoryPositionsHoldAValue(), rule));
     }
 
     @Test

@@ -138,20 +138,27 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue,
             // Only a string has a length, and the other numbers of a position that has one are
             // numbers of its strings.
             boolean isString = each.bounds().stream().anyMatch(b -> isLength(b.term()));
+            // What the set admits is more than the position holds where the lengths the rules
+            // leave are not the lengths between their ends: the lengths taken out are held beside
+            // the set and not in it. So the set alone says nothing of what the position holds of
+            // them.
+            boolean holey = each.bounds().stream()
+                    .anyMatch(b -> isLength(b.term()) && b.holdsLessThanItsEnds());
             // A position none of whose strings is shown to be a value leaves the input none. And
             // the strings of one are a bound on its values, which a rule not read may refuse
             // altogether: a row is a value of every parameter, so what is shown is shown of the
             // strings of all of them, and a position that is not shown holds back every edge.
             if (isMandatory(each.path())) {
-                holds &=TextExtents.shownToHoldAValue(admitted) && !each.nothingExists()
-                        && (!isString || isReadWhole(each));
+                holds &= (isString ? StringsHeld.shownToHoldAValue(each)
+                                : TextExtents.shownToHoldAValue(admitted))
+                        && !each.nothingExists() && (!isString || isReadWhole(each));
             }
             // What the strings reach is read off a set that is a bound, so it is claimed only of a
             // position whose rules were read whole.
             if (!isString || !isReadWhole(each) || each.nothingExists()) {
                 continue;
             }
-            if (TextExtents.reachesEveryCount(admitted) && bindsNothing(each, null)) {
+            if (!holey && TextExtents.reachesEveryCount(admitted) && bindsNothing(each, null)) {
                 counts.add(each.path());
             }
             for (PositionBounds bounds : each.bounds()) {
