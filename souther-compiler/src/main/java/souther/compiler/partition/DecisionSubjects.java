@@ -237,8 +237,8 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
         if (stands != null) {
             return new DecisionArgument.OfASubject(stands);
         }
-        return AffineForms.outcome(e, at, aNumberAndNothingElse())
-                instanceof AffineForms.Outcome.Composed<Void, InputReads>(LinearForm<Void> form)
+        return AffineForms.of(e, at, aNumberAndNothingElse())
+                instanceof LinearForm<Void> form
                 && form.coefs().isEmpty()
                 ? new DecisionArgument.OfANumber(form.constant())
                 : new DecisionArgument.WorkedOut(workedOut(e, at, new HashSet<>()));
