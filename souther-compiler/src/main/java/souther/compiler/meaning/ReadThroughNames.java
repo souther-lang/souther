@@ -478,12 +478,12 @@ public final class ReadThroughNames {
             // for each statement a reader tells.
             case Proposition.All all -> {
                 List<Proposition> parts = changed(all.parts(),
-                        stated.overParts(again.in(leftAlone)));
+                        stated.allOverParts(again.in(leftAlone)));
                 yield parts == null ? stated : Proposition.all(parts);
             }
             case Proposition.Any any -> {
                 List<Proposition> parts = changed(any.parts(),
-                        stated.overParts(again.in(leftAlone)));
+                        stated.allOverParts(again.in(leftAlone)));
                 yield parts == null ? stated : Proposition.any(parts);
             }
             case Proposition.WhereItAnswers where -> {
@@ -494,7 +494,7 @@ public final class ReadThroughNames {
             }
             case Proposition.OnAnApplication applied -> {
                 List<Proposition> each = changed(applied.each(),
-                        stated.overParts(again.in(leftAlone)));
+                        stated.allOverParts(again.in(leftAlone)));
                 yield each == null ? stated : Proposition.onAnApplication(each);
             }
             // Inside a quantifier its container's element is its own, and stays as it stands: a
@@ -532,7 +532,7 @@ public final class ReadThroughNames {
             // How many of some statements hold is of whatever those statements are of.
             case Proposition.SoManyHold many -> {
                 List<Proposition> statements =
-                        changed(many.statements(), stated.overParts(again.in(leftAlone)));
+                        changed(many.statements(), stated.allOverParts(again.in(leftAlone)));
                 yield statements == null ? stated : Proposition.SoManyHold.counting(statements,
                         many.weights(), many.admitted());
             }

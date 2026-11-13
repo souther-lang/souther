@@ -82,7 +82,7 @@ public final class StatementReading<R> implements EachOnce<R> {
 
         /** What the reading comes to for one statement in one context. */
         @FunctionalInterface
-        public interface At<C, R> {
+        public interface AtIn<C, R> {
 
             /**
              * What the reading comes to for {@code stated} in {@code context}. Its parts are read
@@ -92,19 +92,19 @@ public final class StatementReading<R> implements EachOnce<R> {
             R of(Proposition stated, C context, InContext<C, R> again);
         }
 
-        private final At<C, R> at;
+        private final AtIn<C, R> at;
 
         private final BiFunction<Proposition, C, C> relevantTo;
 
         private final Map<Proposition, Map<C, R>> worked = new IdentityHashMap<>();
 
-        private InContext(At<C, R> at, BiFunction<Proposition, C, C> relevantTo) {
+        private InContext(AtIn<C, R> at, BiFunction<Proposition, C, C> relevantTo) {
             this.at = at;
             this.relevantTo = relevantTo;
         }
 
         /** A reading that comes to what {@code at} says for each statement and context. */
-        public static <C, R> InContext<C, R> over(At<C, R> at) {
+        public static <C, R> InContext<C, R> over(AtIn<C, R> at) {
             return new InContext<>(at, (_, context) -> context);
         }
 
@@ -114,7 +114,7 @@ public final class StatementReading<R> implements EachOnce<R> {
          * with are one, so a statement is read once for what it can tell them apart by and not
          * once for each of the many contexts that are not it.
          */
-        public static <C, R> InContext<C, R> over(At<C, R> at,
+        public static <C, R> InContext<C, R> over(AtIn<C, R> at,
                                                   BiFunction<Proposition, C, C> relevantTo) {
             return new InContext<>(at, relevantTo);
         }

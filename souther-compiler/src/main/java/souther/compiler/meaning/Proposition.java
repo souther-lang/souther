@@ -222,9 +222,18 @@ public sealed interface Proposition {
         return sum;
     }
 
-    /** What {@code again} comes to of each part, in the order the parts are kept: for a reading
-     *  that makes a statement of what it comes to of the parts. */
-    default <R> List<R> overParts(EachOnce<R> again) {
+    /**
+     * What {@code again} comes to of each part, in the order the parts are kept, each read when it
+     * is asked for and not before: a reader whose answer is settled by the first part that fails
+     * stops there and does not read the rest.
+     */
+    default <R> Iterable<R> overParts(EachOnce<R> again) {
+        return () -> partsHeld().stream().map(again::read).iterator();
+    }
+
+    /** What {@code again} comes to of every part, in the order the parts are kept: for a reading
+     *  that makes a statement of what it comes to of all of them. */
+    default <R> List<R> allOverParts(EachOnce<R> again) {
         List<Proposition> parts = partsHeld();
         List<R> out = new ArrayList<>(parts.size());
         for (Proposition part : parts) {
@@ -2599,9 +2608,9 @@ public sealed interface Proposition {
         return switch (stated) {
             case WhereItAnswers(Proposition answers, Proposition states, Spelling _) ->
                     all(List.of(again.read(answers), again.read(states)));
-            case All _ -> all(stated.overParts(again));
-            case Any _ -> any(stated.overParts(again));
-            case OnAnApplication _ -> onAnApplication(stated.overParts(again));
+            case All _ -> all(stated.allOverParts(again));
+            case Any _ -> any(stated.allOverParts(again));
+            case OnAnApplication _ -> onAnApplication(stated.allOverParts(again));
             case OfTheWays ways -> again.read(ways.written());
             // What one of these holds of is read on every row, by its constructor.
             case SoManyHold _, Some _, SomeReachable _ -> throw new IllegalStateException(

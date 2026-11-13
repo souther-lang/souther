@@ -2435,11 +2435,11 @@ public sealed interface Derivation {
                                                  StatementReading<Proposition> again) {
             return switch (stated) {
                 case Proposition.All all -> {
-                    List<Proposition> each = stated.overParts(again);
+                    List<Proposition> each = stated.allOverParts(again);
                     yield each.equals(all.parts()) ? stated : Proposition.all(each);
                 }
                 case Proposition.Any any -> {
-                    List<Proposition> each = stated.overParts(again);
+                    List<Proposition> each = stated.allOverParts(again);
                     yield each.equals(any.parts()) ? stated : Proposition.any(each);
                 }
                 case Proposition.Some some

@@ -94,8 +94,8 @@ public final class GivenTotals {
     }
 
     /** The parts as given, or why the first that could not be is not. */
-    private static ExactAnswer<List<Proposition>> given(List<ExactAnswer<Proposition>> parts) {
-        List<Proposition> out = new ArrayList<>(parts.size());
+    private static ExactAnswer<List<Proposition>> given(Iterable<ExactAnswer<Proposition>> parts) {
+        List<Proposition> out = new ArrayList<>();
         for (ExactAnswer<Proposition> part : parts) {
             switch (part) {
                 case ExactAnswer.Held<Proposition>(var one) -> out.add(one);

@@ -3,6 +3,7 @@ package souther.compiler.meaning;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
 
@@ -87,6 +88,20 @@ class AStatementReadThroughAReadingIsReadOnceHoweverManyStatementsHoldItTest {
         StatementReading<String> none = StatementReading.over((stated, again) -> null);
 
         assertThrows(NullPointerException.class, () -> none.read(CompoundSamples.truth("t")));
+    }
+
+    @Test
+    void aPartIsReadWhenItIsAskedForAndNotBefore() {
+        Proposition both = Proposition.all(List.of(CompoundSamples.truth("first"),
+                CompoundSamples.truth("second")));
+        List<Proposition> read = new ArrayList<>();
+        EachOnce<Boolean> reading = stated -> read.add(stated);
+
+        Iterator<Boolean> parts = both.overParts(reading).iterator();
+        parts.next();
+
+        assertEquals(1, read.size(), "the rest are not read where the first settles it");
+        assertEquals(2, both.allOverParts(reading).size());
     }
 
     @Test

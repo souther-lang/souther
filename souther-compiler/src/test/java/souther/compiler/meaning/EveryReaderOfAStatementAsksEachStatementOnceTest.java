@@ -12,7 +12,6 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Every reader of a statement asks each statement once, however many statements hold it.
@@ -24,8 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link StatementReading}'s, and this is what keeps a reader that does not from being written
  * ({@link ReadersOfAGraph}), for a chain of each kind of statement that holds one.
  *
- * <p>That some readers were found is held ({@link #AT_LEAST_ASKED}) so that this cannot come to ask
- * none.
+ * <p>That the readers found going down every way answer, and are not merely asked and refused, is
+ * held ({@link #MUST_ANSWER_ON_EVERY_CHAIN}), so that this cannot come to ask none.
  */
 @ClosedWorldContract
 class EveryReaderOfAStatementAsksEachStatementOnceTest {
@@ -44,8 +43,22 @@ class EveryReaderOfAStatementAsksEachStatementOnceTest {
             "TruthOutcomes.of", "every way the distinct parts can come out",
             "Proposition.toString", "the text of the statement");
 
-    /** How many readers are asked at least, so that finding none is not a pass. */
-    private static final int AT_LEAST_ASKED = 40;
+    /**
+     * Readers that answer on a chain of the kind named, so that being asked and refusing is not
+     * what passes: the ones that were found going down every way, and the ones whose walk is the
+     * model of what the rest do.
+     */
+    private static final Set<String> MUST_ANSWER_ON_EVERY_CHAIN = Set.of(
+            "Proposition.whereItHolds on WhereItAnswers",
+            "Proposition.whereItAnswersAtAll on WhereItAnswers",
+            "Proposition.leavesSomethingUnread on All",
+            "Proposition.saysASearchReachesBelow on SomeReachable",
+            "Proposition.aboutAnAnswer on Some",
+            "Proposition.mayTurnOnAnElementOf on Some",
+            "Proposition.withTheValuesItHoldsCompared on Some",
+            "TruthTable.holdsWhateverItsPartsAre on Any",
+            "ReadThroughNames.atThePositions on Some",
+            "Cutting.statesNoRelation on Any");
 
     /**
      * Each statement holds the one before it twice: beside a statement of {@code kind} that holds
@@ -72,7 +85,12 @@ class EveryReaderOfAStatementAsksEachStatementOnceTest {
     void noReaderOfAStatementGoesDownEveryWayToItsParts() throws Exception {
         List<ReadersOfAGraph.Chain> chains = CompoundSamples.COMPOUNDS.stream()
                 .map(kind -> new ReadersOfAGraph.Chain(kind.getSimpleName(), Proposition.class,
-                        length -> chainOf(kind, length)))
+                        length -> chainOf(kind, length), Map.of(
+                                DecisionSubject.class,
+                                () -> new DecisionSubject.AnInput(TermPath.of("c1")),
+                                TermPath.class, () -> TermPath.of("c1"),
+                                Proposition.class, () -> CompoundSamples.truth("beside"),
+                                String.class, () -> "f")))
                 .toList();
 
         ReadersOfAGraph.Findings found = ReadersOfAGraph.askEach(chains, BY_THEIR_NATURE);
@@ -80,6 +98,10 @@ class EveryReaderOfAStatementAsksEachStatementOnceTest {
         assertEquals(Set.of(), found.slow(), "readers that take a growth of the ways down to "
                 + "the parts on a chain of " + ReadersOfAGraph.LONG + " names as on one of "
                 + ReadersOfAGraph.SHORT);
-        assertTrue(found.asked() >= AT_LEAST_ASKED, found.asked() + " readers asked");
+        Set<String> notAnswered = new java.util.TreeSet<>(MUST_ANSWER_ON_EVERY_CHAIN);
+        notAnswered.removeAll(found.answered());
+        assertEquals(Set.of(), notAnswered, "readers that were to answer and did not ("
+                + found.answered().size() + " answered, " + found.refused().size() + " refused, "
+                + found.notAsked().size() + " not asked)");
     }
 }

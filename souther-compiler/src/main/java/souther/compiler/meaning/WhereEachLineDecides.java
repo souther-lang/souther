@@ -1926,21 +1926,24 @@ public final class WhereEachLineDecides {
      */
     static Proposition assuming(Proposition stated, DecisionSubject value,
                                 List<Refinement> atoms) {
+        return StatementReading.<Proposition>over((each, again) ->
+                assumingAt(each, value, atoms, again)).read(stated);
+    }
+
+    private static Proposition assumingAt(Proposition stated, DecisionSubject value,
+                                          List<Refinement> atoms,
+                                          StatementReading<Proposition> again) {
         return switch (stated) {
-            case Proposition.All all -> Proposition.all(all.parts().stream()
-                    .map(each -> assuming(each, value, atoms)).toList());
-            case Proposition.Any any -> Proposition.any(any.parts().stream()
-                    .map(each -> assuming(each, value, atoms)).toList());
+            case Proposition.All _ -> Proposition.all(stated.allOverParts(again));
+            case Proposition.Any _ -> Proposition.any(stated.allOverParts(again));
             case Proposition.WhereItAnswers where -> Proposition.whereItAnswers(
-                    assuming(where.answers(), value, atoms),
-                    assuming(where.states(), value, atoms));
+                    again.read(where.answers()), again.read(where.states()));
             case Proposition.InCases cases when cases.of().equals(value) -> new Proposition.Always(
                     atoms.stream().anyMatch(cases.cases().atoms()::contains) == cases.holds());
             case Proposition.Some some -> new Proposition.Some(some.container(),
-                    assuming(some.ofTheElement(), value, atoms), some.holds());
-            case Proposition.SoManyHold counted ->
-                    counted.mapped(each -> assuming(each, value, atoms));
-            case Proposition.OfTheWays ways -> assuming(ways.written(), value, atoms);
+                    again.read(some.ofTheElement()), some.holds());
+            case Proposition.SoManyHold counted -> counted.mapped(again::read);
+            case Proposition.OfTheWays ways -> again.read(ways.written());
             case Proposition.InCases _, Proposition.Always _, Proposition.Compared _,
                  Proposition.Truth _, Proposition.Present _, Proposition.InTheStrings _,
                  Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _,

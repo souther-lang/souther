@@ -15,6 +15,7 @@ import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.StatementReading;
 import souther.compiler.observe.AnswerObservation;
 import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.ExactRatio;
@@ -1121,6 +1122,13 @@ public final class CountWitnesses {
      */
     private static void sameValuesIn(Proposition stated, TermPath element,
                                      Map<List<String>, TermPath> into) {
+        StatementReading.<Boolean>over((each, again) -> sameValuesAt(each, element, into, again))
+                .read(stated);
+    }
+
+    private static boolean sameValuesAt(Proposition stated, TermPath element,
+                                        Map<List<String>, TermPath> into,
+                                        StatementReading<Boolean> again) {
         switch (stated) {
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath one, var _),
                                        Operand.At<DecisionSubject>(
@@ -1140,15 +1148,12 @@ public final class CountWitnesses {
                     sameValueAt(one, other, element, into);
                 }
             }
-            case Proposition.All all -> all.parts().forEach(each -> sameValuesIn(each, element,
-                    into));
-            case Proposition.Any any -> any.parts().forEach(each -> sameValuesIn(each, element,
-                    into));
-            case Proposition.Some some -> sameValuesIn(some.ofTheElement(), element, into);
-            case Proposition.WhereItAnswers answers -> sameValuesIn(answers.states(), element,
-                    into);
+            case Proposition.All _, Proposition.Any _, Proposition.Some _ ->
+                    stated.eachPart(again);
+            case Proposition.WhereItAnswers answers -> again.read(answers.states());
             default -> { }
         }
+        return true;
     }
 
     /** Adds to {@code into} the fields down to the one of {@code one} and {@code other} that is

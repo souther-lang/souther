@@ -66,6 +66,6 @@ class EveryReaderOfAWayAsksEachConditionOnceTest {
                 BY_THEIR_NATURE);
 
         assertEquals(Set.of(), found.slow());
-        assertTrue(found.asked() >= AT_LEAST_ASKED, found.asked() + " readers asked");
+        assertTrue(found.answered().size() >= AT_LEAST_ASKED, found.answered().size() + " readers asked");
     }
 }

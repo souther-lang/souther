@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -35,7 +36,7 @@ import java.util.stream.Stream;
  * What it costs is not asked, so that this does not turn on how fast a machine is.
  *
  * <p>Asked of every static method of the compiler whose first parameter is the value, and of the
- * methods the value (or what wraps it) has. A method that refuses — throws — is not asked: what it
+ * methods the value (or what wraps it) has. A method that refuses — throws — is said of apart ({@link Findings}): what it
  * costs to say so, a message naming the value, is not what a reader of the values costs. The
  * methods are found and not listed, so a reader written later is asked as the rest are.
  */
@@ -52,6 +53,10 @@ public final class ReadersOfAGraph {
 
     /** Under this a reader on the longer chain is too quick for the ratio to say anything. */
     private static final long NANOS_TOO_SHORT_TO_TELL = 20_000_000L;
+
+    /** What a piece of a reading takes: the reading it is a piece of. */
+    private static final Set<String> IN_A_READING = Set.of("StatementReading", "EachOnce",
+            "InContext");
 
     private ReadersOfAGraph() {
     }
@@ -74,8 +79,17 @@ public final class ReadersOfAGraph {
         }
     }
 
-    /** What was asked and what was found slow. */
-    public record Findings(int asked, Set<String> slow) {}
+    /**
+     * What was asked, and what came of it, each by the name of the class, the method and the chain.
+     *
+     * @param answered a reader that answered on both chains, which is what it costs is told of
+     * @param refused  a reader that threw on one of them, which a chain of this kind may be one
+     *                 for: nothing is said of what it costs
+     * @param notAsked a reader with a parameter that is not made, so that it was not asked
+     * @param slow     a reader that goes down every way, or that never finished
+     */
+    public record Findings(Set<String> answered, Set<String> refused, Set<String> notAsked,
+                           Set<String> slow) {}
 
     private static Object other(Class<?> type, Chain chain) {
         Supplier<Object> made = chain.made().get(type);
@@ -200,7 +214,9 @@ public final class ReadersOfAGraph {
             thread.setDaemon(true);
             return thread;
         });
-        int asked = 0;
+        Set<String> answered = new TreeSet<>();
+        Set<String> refused = new TreeSet<>();
+        Set<String> notAsked = new TreeSet<>();
         for (Class<?> owner : classesOfTheCompiler()) {
             Method[] methods;
             try {
@@ -223,32 +239,42 @@ public final class ReadersOfAGraph {
                         continue;
                     }
                     Object[] others = new Object[method.getParameterCount()];
-                    boolean made = true;
+                    String missing = null;
                     for (int at = aMethodOfIt ? 0 : 1; at < others.length; at++) {
                         others[at] = other(method.getParameterTypes()[at], chain);
-                        made &= others[at] != null;
+                        if (others[at] == null && missing == null) {
+                            missing = method.getParameterTypes()[at].getSimpleName();
+                        }
                     }
-                    if (!made) {
+                    String told = name + " on " + chain.label();
+                    if (missing != null) {
+                        // The pieces of a reading, which take the reading they are a piece of,
+                        // are asked through the reading that is made of them.
+                        if (!IN_A_READING.contains(missing)) {
+                            notAsked.add(told + ", for want of a " + missing);
+                        }
                         continue;
                     }
                     method.setAccessible(true);
-                    asked++;
-                    String told = name + " on " + chain.label();
-                    try {
-                        pool.submit(() -> {
-                            OptionalLong onShort = fastest(method, aMethodOfIt, others,
-                                    shorter.get(chain));
-                            OptionalLong onLong = fastest(method, aMethodOfIt, others,
-                                    longer.get(chain));
-                            if (onShort.isPresent() && onLong.isPresent()
-                                    && goesDownEveryWay(onShort.getAsLong(), onLong.getAsLong())) {
-                                synchronized (slow) {
-                                    slow.add(told);
-                                }
+                    Future<Boolean> run = pool.submit(() -> {
+                        OptionalLong onShort = fastest(method, aMethodOfIt, others,
+                                shorter.get(chain));
+                        OptionalLong onLong = fastest(method, aMethodOfIt, others,
+                                longer.get(chain));
+                        if (onShort.isEmpty() || onLong.isEmpty()) {
+                            return false;
+                        }
+                        if (goesDownEveryWay(onShort.getAsLong(), onLong.getAsLong())) {
+                            synchronized (slow) {
+                                slow.add(told);
                             }
-                            return null;
-                        }).get(120, TimeUnit.SECONDS);
+                        }
+                        return true;
+                    });
+                    try {
+                        (run.get(120, TimeUnit.SECONDS) ? answered : refused).add(told);
                     } catch (TimeoutException wayTooLong) {
+                        run.cancel(true);
                         slow.add(told);
                     } catch (ExecutionException failed) {
                         throw new IllegalStateException(told, failed.getCause());
@@ -257,6 +283,6 @@ public final class ReadersOfAGraph {
             }
         }
         pool.shutdownNow();
-        return new Findings(asked, slow);
+        return new Findings(answered, refused, notAsked, slow);
     }
 }
