@@ -21,7 +21,6 @@ import souther.compiler.query.ReadAs;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -85,7 +84,8 @@ class StringsReachedKnowTheLengthsTakenOutTest {
         NumericTerm[] length = new NumericTerm[1];
         StringsReached reached = reachedBy("String.length(value) <= 10", length);
         assertTrue(reached.allowsAnEdgeAt(length[0], ExactRatio.of(7)));
-        assertEquals(Map.of(), reached.lengthsTakenOut());
+        assertTrue(reached.lengthsLeft().get(length[0]).isOneRun(),
+                "the lengths left are the one run between the ends");
     }
 
     @Test

@@ -379,7 +379,6 @@ public final class BehaviorSetStatements {
                 shown = AdmittedPlan.meeting(List.of(shown, reaching));
                 whenFalse = AdmittedPlan.meeting(List.of(whenFalse, reaching));
                 switch (strings.reached()) {
-                    case LengthsPastTheWay.Lengths lengths -> notReached = lengths.outside();
                     case LengthRuns runs -> notReached = runs.outside();
                     case CodePointsPastTheWay counts -> notCounted = counts.outside().stream()
                             .map(open -> new CountedOpen(new AdmittedPlan.Pattern(open.strings()),
@@ -393,8 +392,7 @@ public final class BehaviorSetStatements {
             // of the false side, which is then the runs of lengths outside them; made into strings
             // otherwise, to be joined with what the false side holds.
             LengthRuns heldTo = null;
-            LengthRuns lengths = strings.partnerHeldTo() == null ? null
-                    : LengthRuns.asRuns(strings.partnerHeldTo());
+            LengthRuns lengths = strings.partnerHeldTo() instanceof LengthRuns runs ? runs : null;
             if (lengths != null && strings.mayBe().isAny() && strings.reached() == null
                     && !lengths.isEvery()) {
                 heldTo = lengths;

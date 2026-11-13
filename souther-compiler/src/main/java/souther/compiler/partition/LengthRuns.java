@@ -22,11 +22,9 @@ import java.util.List;
  * <p>Lowest first and apart from each other, with a length between each run and the next that
  * neither holds — runs that overlap or touch are one run — and none that holds no length. Made only
  * by the factories here, which put what they are handed into that shape, so every question below
- * can take it for granted and two of these holding the same lengths are equal. No runs at all is
- * no length ({@link #isEmpty}), and the one run of every length is {@link #EVERY}.
- *
- * <p>The same questions {@link LengthsPastTheWay.Lengths} answers, of each run and put together,
- * so that a reader of one run is a reader of these where there is one.
+ * can take it for granted and two of these holding the same lengths are equal, whether they are
+ * one run or several. No runs at all is no length ({@link #isEmpty}), and the one run of every
+ * length is {@link #EVERY}.
  *
  * @param runs the runs, lowest first
  */
@@ -75,27 +73,6 @@ record LengthRuns(List<LengthsPastTheWay.Lengths> runs) implements StringsPastTh
             }
         }
         return new LengthRuns(out);
-    }
-
-    /** These as {@code lengths} is, where it is some lengths, or null where it is a count of
-     *  something else. */
-    static LengthRuns asRuns(StringsPastTheWay lengths) {
-        return switch (lengths) {
-            case LengthRuns it -> it;
-            case LengthsPastTheWay.Lengths it -> of(it);
-            case CodePointsPastTheWay _ -> null;
-        };
-    }
-
-    /**
-     * These as they are held where they are one run or none: the one {@link
-     * LengthsPastTheWay.Lengths} a reader of one run holds, so that the same lengths are one value
-     * however they were made. Several runs are held as these.
-     */
-    StringsPastTheWay canonical() {
-        return runs.size() > 1 ? this
-                : runs.isEmpty() ? new LengthsPastTheWay.Lengths(BigInteger.ONE, BigInteger.ZERO)
-                : runs.getFirst();
     }
 
     /** Whether no string has a length of these. */

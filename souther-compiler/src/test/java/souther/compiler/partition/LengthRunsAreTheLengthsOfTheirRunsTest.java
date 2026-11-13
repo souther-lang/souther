@@ -136,12 +136,15 @@ class LengthRunsAreTheLengthsOfTheirRunsTest {
     }
 
     @Test
-    void oneRunIsHeldAsTheLengthsItAlwaysWasAndSeveralAsThese() {
-        assertEquals(run(2, 5), LengthRuns.ofAll(List.of(run(2, 3), run(4, 5))).canonical());
-        LengthRuns two = LengthRuns.ofAll(List.of(run(2, 3), run(6, 7)));
-        assertEquals(two, two.canonical());
-        assertTrue(LengthRuns.ofAll(List.of()).canonical() instanceof Lengths none
-                && none.isEmpty());
+    void theSameLengthsAreOneValueHoweverTheyWereMade() {
+        assertEquals(LengthRuns.of(run(2, 5)),
+                LengthRuns.ofAll(List.of(run(4, 5), run(2, 3))), "touching runs are one run");
+        assertEquals(LengthRuns.of(run(2, 5)),
+                LengthRuns.ofAll(List.of(run(2, 5), run(3, 4))), "a run inside another is lost");
+        assertEquals(LengthRuns.ofAll(List.of(run(2, 3), run(6, 7))),
+                LengthRuns.ofAll(List.of(run(6, 7), run(2, 3))), "the order they come in is none");
+        assertEquals(LengthRuns.NONE, LengthRuns.ofAll(List.of()));
+        assertEquals(LengthRuns.NONE, LengthRuns.of(new Lengths(BigInteger.ONE, BigInteger.ZERO)));
     }
 
     @Test

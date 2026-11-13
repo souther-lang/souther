@@ -435,18 +435,21 @@ sealed interface StatedByClauses {
 
         /**
          * Whether the choice between this and {@code other} is one the reading of the numbers an
-         * operation answers composes exactly: each alternative says something about those numbers
-         * only, takes every rule of it in whole, and is a rule of the same numbers as the one
+         * operation answers composes exactly: each alternative says something about one number
+         * only, takes every rule of it in whole, and is a rule of the same number as the one
          * beside it.
          *
          * <p>Only then is the join of the runs the choice. An alternative that also holds the
          * strings, the order or the elements of a position to something says that beside the
          * number, and the two read apart are a product of what the alternatives say together: a
          * code of two letters beginning with A or one of five beginning with B is not a code of
-         * either length beginning with either letter.
+         * either length beginning with either letter. And so are two numbers: a name and a code
+         * each shorter than three or each longer than five are not a name and a code each of
+         * either, so what each is left as runs is more than the choice leaves it.
          */
         private boolean leavesOnlyNumbersReadWhole(Part other) {
             return aloneOnTheNumbers(this) && aloneOnTheNumbers(other)
+                    && boundary.byNumber().size() == 1
                     && boundary.byNumber().keySet().equals(other.boundary().byNumber().keySet());
         }
 

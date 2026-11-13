@@ -30,10 +30,13 @@ import souther.compiler.numeric.OrderedRuns;
  *                    in has been taken in, which is not what {@link #ownEnds} says: a clause placing
  *                    an end at a value another clause takes away leaves the number stopping
  *                    somewhere no rule wrote
- * @param runsLeft    the values the number holds where they are not the values between the ends
- *                    of {@code rangeLeft} — some taken out from between them, or one run that stops
- *                    short of an end — or null where they are, or where none was read. A reader of
- *                    ends has {@code rangeLeft} and a reader of values has what stands inside it
+ * @param runsLeft    the values the number holds, as the runs they lie in — which are not always the
+ *                    values between the ends of {@code rangeLeft}, some being taken out from between
+ *                    them or one run stopping short of an end — or null where no word was read of
+ *                    them. Where it is there, the ends and these are the whole of what the rules
+ *                    of the one value that states anything say of the number; where it is null the
+ *                    ends are all there is, and whether they are the whole is the projection's
+ *                    to say
  */
 public record PositionBounds(NumericTerm.FromOnePosition term,
                              NumericDomain.Bounds admissible,

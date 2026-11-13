@@ -1080,21 +1080,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * where each is some lengths.
          */
         StringsAPartnerCanHold partnerHeldTo(StringsPastTheWay lengths) {
-            LengthRuns had = partnerHeldTo == null ? null : LengthRuns.asRuns(partnerHeldTo);
-            LengthRuns more = LengthRuns.asRuns(lengths);
             StringsPastTheWay both;
             if (partnerHeldTo == null) {
                 both = lengths;
-            } else if (had != null && more != null) {
+            } else if (partnerHeldTo instanceof LengthRuns had
+                    && lengths instanceof LengthRuns more) {
                 both = had.and(more);
             } else {
                 throw new IllegalArgumentException("the partner is held to " + partnerHeldTo
                         + ", and " + lengths + " is no lengths beside it");
-            }
-            // One run of lengths is held as it always was, so that two ways of saying the same
-            // lengths are one value.
-            if (both instanceof LengthRuns runs) {
-                both = runs.canonical();
             }
             return new StringsAPartnerCanHold(canBe, mayBe, upTo, shownAt, reached, both, partner,
                     operations);
@@ -3622,7 +3616,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return false;
         }
         return there.text() != null || !partnerHeld
-                || room.counts() instanceof LengthsPastTheWay.Lengths;
+                || room.counts() instanceof LengthRuns;
     }
 
     /**
@@ -3820,7 +3814,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return new RoomOnTheWay(limited, null, null, stated);
         }
         StringsPastTheWay counts = length instanceof NumericTerm.CodePointClassCount count
-                ? new CodePointsPastTheWay(count.counted(), lengths) : lengths;
+                ? new CodePointsPastTheWay(count.counted(), lengths) : LengthRuns.of(lengths);
         return new RoomOnTheWay(limited, limited, counts, stated);
     }
 
@@ -4091,7 +4085,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         StringsAPartnerCanHold held = StringsAPartnerCanHold.unreached(theirStrings, called);
-        return theirLengths.isEvery() ? held : held.partnerHeldTo(theirLengths.canonical());
+        return theirLengths.isEvery() ? held : held.partnerHeldTo(theirLengths);
     }
 
     /**

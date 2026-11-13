@@ -267,27 +267,24 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     }
 
     /**
-     * The values the position's number {@code kind} is left at {@code path} where the rules take
-     * some out from between its ends, or null where they take none that was read. What
-     * {@link #leftAt} says of the ends, for a reader of values.
+     * The values the position's number {@code kind} is left at {@code path}, as the runs they lie
+     * in, or null where no word was read of them. What {@link #leftAt} says of the ends, for a
+     * reader of values.
      */
     OrderedRuns runsLeftAt(TermPath path, NumberAt.OfWhatNumber kind) {
         // What one value's rules say of a number is the owner's to say whole
         // ({@link FieldDomains#runsLeftAt}), and what two values' say together is not: each system
         // is proved apart, and met they are not proved ({@link #proofAt}). The runs are handed on
-        // only where the one system there is is the one they were proved of; with another beside
-        // it they are not, whatever the other leaves of the ends.
+        // only where the one system there is is the one they were proved of, so that the value
+        // that says them is the only one that says anything and there is nothing to meet them
+        // with: a value that states nothing has no runs to give.
         if (proofAt(path).stating() > 1) {
             return null;
         }
         RuleKey where = keyOf(path);
         OrderedRuns here = where == null ? null : bounds().runsLeftAt(where, kind);
         TermPath above = alsoAt(path);
-        if (above == null) {
-            return here;
-        }
-        OrderedRuns outer = alsoReaching.outer().runsLeftAt(above, kind);
-        return here == null ? outer : outer == null ? here : here.meet(outer);
+        return here != null || above == null ? here : alsoReaching.outer().runsLeftAt(above, kind);
     }
 
     /**

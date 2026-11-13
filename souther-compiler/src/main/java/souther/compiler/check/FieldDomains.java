@@ -2680,34 +2680,22 @@ public final class FieldDomains {
     }
 
     /**
-     * Whether every number the reading of the numbers an operation answers holds of this value is
-     * the length of a string, whose values are read back whole where the rules take some out from
-     * between its ends, and no line on any of them was left open.
-     */
-    private boolean everyDerivedNumberIsALengthHeldAsRuns() {
-        return !derived.byNumber().isEmpty() && derived.open().isEmpty()
-                && derived.byNumber().keySet().stream()
-                        .allMatch(DerivedNumber::holdsItsHolesAsRuns);
-    }
-
-    /**
-     * The values {@link #leftAt} leaves the number {@code kind} of {@code path} where they are not
-     * the values between the ends it gives, or null where they are or this has no word for them.
+     * The values {@link #leftAt} leaves the number {@code kind} of {@code path}, as the runs they
+     * lie in, or null where this has no word for them.
      *
      * <p>The same rules as {@link #leftAt} and the same reading, which answers the two together:
      * what it composed of the ends is {@code leftAt}'s, and what it composed of the values is
      * here. Met with the ends {@code leftAt} gives, so that a rule only the interval algebra read
      * narrows the runs as it narrows the ends.
      *
-     * <p>Only where the runs and the ends are the whole of what the rules leave the length
-     * ({@link #setBoundsAndRunsAreTheRulesAt}): a reader given these holds the strings as the set
-     * of the position met with them, and a rule nothing states is a string it holds that the
-     * position does not.
-     *
-     * <p>Told apart from the ends by the values and not by how many runs there are. A choice met
-     * with a bound can leave one run that stops short of the end the bound placed —
-     * {@code length <= 8 && (length < 8 || length > 8)} leaves up to seven and its end is eight —
-     * and a reader of the ends alone holds a length the rules refuse.
+     * <p>Said only where the runs are the whole of what the rules leave the length
+     * ({@link #setBoundsAndRunsAreTheRulesAt}), and then said however many runs there are: a
+     * reader given these holds the strings as the set of the position met with them, and a rule
+     * nothing states is a string it holds that the position does not. So null is the one answer
+     * that says nothing, and a value that is the same as the ends is not told apart by being
+     * absent. Runs are not the ends: a choice met with a bound can leave one run that stops short
+     * of the end the bound placed — {@code length <= 8 && (length < 8 || length > 8)} leaves up
+     * to seven and its end is eight — and a rule can take out a length past the ends.
      */
     public OrderedRuns runsLeftAt(RuleKey path, NumberAt.OfWhatNumber kind) {
         if (!(kind instanceof NumberAt.OfWhatNumber.OfWhatAnOperationAnswers)
@@ -2716,14 +2704,9 @@ public final class FieldDomains {
         }
         DerivedNumber number = DerivedNumber.of(new NumberAt<>(path, kind));
         OrderedRuns runs = number == null ? null : derived.runsAt(number);
-        if (runs == null) {
-            return null;
-        }
-        NumericDomain.Bounds ends = leftAt(path, kind);
-        OrderedRuns between = OrderedRuns.of(
-                ends == null ? runs.hull() : new OrderedInterval(ends.min(), ends.max()));
-        OrderedRuns left = ends == null ? runs : runs.meet(between);
-        return left.sameValuesAs(between) ? null : left;
+        NumericDomain.Bounds ends = runs == null ? null : leftAt(path, kind);
+        return ends == null ? runs
+                : runs.meet(OrderedRuns.of(new OrderedInterval(ends.min(), ends.max())));
     }
 
     /**
@@ -3749,7 +3732,6 @@ public final class FieldDomains {
         Counted counted = countAt.get(place);
         if (counted == null || !notGathered.isEmpty()
                 || !RepresentationBounds.isTheLengthOfAString(counted.by())
-                || !everyDerivedNumberIsALengthHeldAsRuns()
                 || unreadByName.getOrDefault(place, List.of()).stream()
                         .anyMatch(each -> standsBesideARulesOwnAccount(each.why()))) {
             return false;
@@ -3774,13 +3756,11 @@ public final class FieldDomains {
      * the ends of the count {@code counted}, which the runs of the derived number hold
      * ({@link #runsLeftAt}) and the ends do not.
      *
-     * <p>Only the length of a string, and only where no line on any number was left open: a hole
-     * in a count nothing holds as runs is a rule the bounds and the set between them do not state.
+     * <p>Only holes in that count: a hole in another is a rule the bounds and the set between
+     * them do not state, and the runs hold none of it.
      */
-    private boolean onlyTheHolesTheRunsHold(ProjectionEvidence rest, Counted counted) {
+    private static boolean onlyTheHolesTheRunsHold(ProjectionEvidence rest, Counted counted) {
         return rest instanceof ProjectionEvidence.NotCertified(var causes)
-                && RepresentationBounds.isTheLengthOfAString(counted.by())
-                && everyDerivedNumberIsALengthHeldAsRuns()
                 && causes.stream().allMatch(each ->
                         each instanceof ProjectionEvidence.Cause.Lossy lossy
                                 && lossy.unstated().equals(
@@ -3881,13 +3861,10 @@ public final class FieldDomains {
                 if (read.narrowable().stream().anyMatch(ranged::contains)) {
                     return;
                 }
-                // Or a choice between bounds on the length of a string, where every number the
-                // reading of the numbers an operation answers holds of this value is one: the
-                // bounds hold the ends of each alternative, and the lengths the choice takes out
-                // from between them are held beside them as runs ({@link #runsLeftAt}) and taken
-                // out of the strings.
-                if (everyDerivedNumberIsALengthHeldAsRuns()
-                        && isAChoiceTheNumbersTookInWhole(reading, shape)) {
+                // Or a choice between bounds on the length of one string: the bounds hold the ends
+                // of each alternative, and the lengths the choice takes out from between them are
+                // held beside them as runs ({@link #runsLeftAt}) and taken out of the strings.
+                if (isAChoiceTheNumbersTookInWhole(reading, shape)) {
                     return;
                 }
                 // Or the end this part placed, which is the same part in the bounds said by the

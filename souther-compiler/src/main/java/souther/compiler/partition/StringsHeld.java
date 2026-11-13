@@ -105,36 +105,38 @@ final class StringsHeld {
         // What the rules leave the length, which is not always what their ends say: lengths taken
         // out from between the ends are runs of their own, and one run that is not the run between
         // the ends is where the ends are no longer the lengths a string may have. Both are the
-        // lengths the position holds, and the ends are held to them.
+        // lengths the position holds, and the ends are held to them. Met with the ends of every
+        // rule that reaches the position, which the runs are not asked of: a rule of another value
+        // may place an end past where these stop.
+        LengthRuns lengths = LengthRuns.of(left);
         List<NumericDomain.Bounds> runs = runsOfTheLengths(at);
         if (runs != null) {
-            if (runs.isEmpty()) {
-                return null;
-            }
-            // Met with the ends of every rule that reaches the position, which the runs are not
-            // asked of: a rule of another value may place an end past where these stop.
             List<LengthsPastTheWay.Lengths> ofTheRuns = new ArrayList<>();
             for (NumericDomain.Bounds run : runs) {
-                LengthsPastTheWay.Lengths lengths = lengthsOf(run);
-                if (lengths == null) {
+                LengthsPastTheWay.Lengths one = lengthsOf(run);
+                if (one == null) {
                     return null;
                 }
-                ofTheRuns.add(lengths);
+                ofTheRuns.add(one);
             }
-            LengthRuns lengths = LengthRuns.of(left).and(LengthRuns.ofAll(ofTheRuns));
+            lengths = lengths.and(LengthRuns.ofAll(ofTheRuns));
             if (lengths.isEmpty()) {
                 return null;
             }
+        }
+        if (lengths.runs().size() > 1) {
             LengthsPastTheWay.Lengths between = new LengthsPastTheWay.Lengths(
                     lengths.runs().getFirst().least(), lengths.runs().getLast().most());
             return new Held(between.over(admitted), lengths);
         }
+        // One run, which is the lengths when the rules leave no length at all as well.
+        LengthsPastTheWay.Lengths run = lengths.isEmpty() ? left : lengths.runs().getFirst();
         // Where the set admitted already counts the code points and says nothing else, what it
         // says is the lengths, which are held as numbers in its place.
-        if (!left.isEvery() && isEveryStringOf(admitted, left)) {
-            return Held.ofOneRun(left.over(ValueSet.ANY));
+        if (!run.isEvery() && isEveryStringOf(admitted, run)) {
+            return Held.ofOneRun(run.over(ValueSet.ANY));
         }
-        return Held.ofOneRun(whole ? ValuesWithin.all(admitted) : left.over(admitted));
+        return Held.ofOneRun(whole ? ValuesWithin.all(admitted) : run.over(admitted));
     }
 
     /**
@@ -159,43 +161,23 @@ final class StringsHeld {
     }
 
     /**
-     * Whether the bounds of {@code at} are shown to be the whole of what its rules leave, with the
-     * lengths the rules take out from between the ends held as the runs that they are.
-     *
-     * <p>The bounds are two ends, and a hole between them is a rule they do not state. Where the
-     * runs of the length are held beside the ends ({@link PositionBounds#runsLeft}), the ends and
-     * the runs are the whole of what the rules of that value say of the length; they are taken out
-     * of the strings below.
-     *
-     * <p>That is not the position's evidence: what stands in the way of it is asked as well, and
-     * only what the runs hold and what the set of values holds may. A cause that says two values
-     * state rules about the position, or a rule relating it to another place, is one no run is the
-     * answer to, so a position with such a cause is no more shown for having runs.
+     * Whether the bounds of {@code at} are shown to be the whole of what its rules leave: the
+     * projection certifies them, or the runs of the length are held beside them
+     * ({@link PositionBounds#runsLeft}), which are said only where the ends and the runs are the
+     * whole of what the rules of the one value that states anything say of it. The projection's
+     * causes are not asked again: what each one stands for was answered where the runs were.
      */
     static boolean boundsAreTheWholeOfTheRules(Position at) {
         if (at.projection() instanceof ProjectionEvidence.CertifiedExact) {
             return true;
         }
-        if (!(at.projection() instanceof ProjectionEvidence.NotCertified(var causes))
-                || !causes.stream().allMatch(StringsHeld::runsOrTheSetAnswerFor)) {
-            return false;
-        }
         List<NumericDomain.Bounds> runs = runsOfTheLengths(at);
         return runs != null && !runs.isEmpty();
     }
 
-    /** Whether {@code cause} is one the runs of a length, or the set of the values, answer for:
-     *  a hole they hold, or a rule the set holds whole. */
-    private static boolean runsOrTheSetAnswerFor(ProjectionEvidence.Cause cause) {
-        return cause instanceof ProjectionEvidence.Cause.Unrepresented
-                || (cause instanceof ProjectionEvidence.Cause.Lossy lossy
-                        && lossy.unstated().equals(
-                                Set.of(ProjectionEvidence.Cause.Unstated.A_HOLE)));
-    }
-
     /**
-     * The runs of lengths the rules of {@code at} leave a string of it where they are not the run
-     * between the ends, or null where they are. Empty where the rules leave it no length at all.
+     * The runs of lengths the rules of {@code at} leave a string of it, or null where no word was
+     * read of them. Empty where the rules leave it no length at all.
      */
     private static List<NumericDomain.Bounds> runsOfTheLengths(Position at) {
         List<NumericDomain.Bounds> out = null;
@@ -241,7 +223,8 @@ final class StringsHeld {
         }
         Language ofTheRuns = null;
         for (LengthsPastTheWay.Lengths run : lengths.runs()) {
-            Language here = Partitions.ofTheLengths(Language.EVERY_STRING, run, meter);
+            Language here = Partitions.ofTheLengths(Language.EVERY_STRING, LengthRuns.of(run),
+                    meter);
             if (here == null) {
                 return null;
             }
@@ -268,7 +251,7 @@ final class StringsHeld {
         // A function of the two, asked of every relation a reading reads the position in, and
         // what it builds is as long as the length: worked out once for the reading.
         return OneReading.everyStringOf(language, left, () -> language.equals(
-                Partitions.ofTheLengths(Language.EVERY_STRING, left,
+                Partitions.ofTheLengths(Language.EVERY_STRING, LengthRuns.of(left),
                         PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter())));
     }
 
@@ -294,7 +277,7 @@ final class StringsHeld {
         }
         Language language = UndividedByARelation.languageOf(held.values());
         Language within = language == null ? null : Partitions.ofTheLengths(language,
-                LengthsPastTheWay.Lengths.of(held), meter);
+                LengthRuns.of(held), meter);
         return within == null ? null : ValueSet.matching(within);
     }
 
