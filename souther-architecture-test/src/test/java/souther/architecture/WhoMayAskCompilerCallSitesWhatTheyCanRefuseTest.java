@@ -89,26 +89,6 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
                     "Same choke point as Carrier#valueOf; Ordinal's own extent is 0..cases.size()-1,"
                             + " trivially inside int since cases is a List."),
             new Permission(
-                    "souther/compiler/check/ConstantAlgebra#arith(Lsouther/compiler/types/BinOp;"
-                            + "Ljava/lang/Object;Ljava/lang/Object;)Ljava/util/Optional;"
-                            + " add(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
-                    Reason.REFUSAL_TRANSLATED,
-                    "Inside try/catch(ArithmeticException) returning Optional.empty(), the fold's"
-                            + " own documented answer for a sum this compiler could not compute."),
-            new Permission(
-                    "souther/compiler/check/ConstantAlgebra#arith(Lsouther/compiler/types/BinOp;"
-                            + "Ljava/lang/Object;Ljava/lang/Object;)Ljava/util/Optional;"
-                            + " multiply(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
-                    Reason.REFUSAL_TRANSLATED,
-                    "Same try/catch as the add above, plus a pre-check on the product's own scale"
-                            + " before the call; the catch covers what the pre-check leaves."),
-            new Permission(
-                    "souther/compiler/check/ConstantAlgebra#arith(Lsouther/compiler/types/BinOp;"
-                            + "Ljava/lang/Object;Ljava/lang/Object;)Ljava/util/Optional;"
-                            + " subtract(Ljava/math/BigDecimal;)Ljava/math/BigDecimal;",
-                    Reason.REFUSAL_TRANSLATED,
-                    "Same try/catch as the add above."),
-            new Permission(
                     "souther/compiler/check/OccurrenceValues#wholeValuesAt(Lsouther/compiler/"
                             + "check/RuleKey;)Lsouther/compiler/check/Cardinality; longValueExact()J",
                     Reason.REFUSAL_TRANSLATED,
@@ -327,9 +307,9 @@ class WhoMayAskCompilerCallSitesWhatTheyCanRefuseTest {
     @Test
     void theWalkFindsConstantAlgebra() {
         assertTrue(askingWhatCanBeRefused().stream()
-                        .anyMatch(row -> row.startsWith("souther/compiler/check/ConstantAlgebra#")),
-                "constant folding always reaches an add, a subtract or a multiply, so a walk not"
-                        + " finding it is finding nothing");
+                        .anyMatch(row -> row.startsWith("souther/compiler/numeric/Instants#")),
+                "an instant's nanoseconds are always worked out with an add and a multiply, so a"
+                        + " walk not finding it is finding nothing");
     }
 
     private static List<String> askingWhatCanBeRefused() {
