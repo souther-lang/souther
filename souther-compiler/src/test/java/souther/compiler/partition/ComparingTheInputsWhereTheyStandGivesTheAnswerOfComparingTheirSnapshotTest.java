@@ -16,15 +16,16 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@link ReadingState#sameInputsNow} answers what {@link ReadingState#sameInputsBut} answers
- * with the inputs taken, for every state the inputs are in and every way of asking.
+ * {@link ReadingState#sameInputsNow} answers what {@link ReadingState#sameInputsBut} answers with
+ * the inputs taken.
  *
- * <p>A collection that is not a list or a set is compared as the list its copy is, and a set or a
- * map that decides what is in it by another rule than a hash one is compared by its copy, so that
- * leaving out the copy is no change of what is the same.
+ * <p>The two differ only where the comparison in place stands in for the copy an input is taken
+ * as: a collection that is not a list or a set is compared as the list its copy is, a hash or
+ * immutable set or map is compared as it is, and any other is compared by its copy. One case for
+ * each of those, one for each way the other roles are compared, and each is held to the answer of
+ * taking the inputs as well as to the answer it should be.
  */
 class ComparingTheInputsWhereTheyStandGivesTheAnswerOfComparingTheirSnapshotTest {
 
@@ -55,96 +56,117 @@ class ComparingTheInputsWhereTheyStandGivesTheAnswerOfComparingTheirSnapshotTest
 
     private final ReadingState state = new ReadingState(AnOwner.class, ROLES);
 
-    private static List<Object> collections() {
-        List<Object> out = new ArrayList<>();
-        out.add(null);
-        out.add(List.of());
-        out.add(Set.of());
-        out.add(Map.of());
-        out.add(new ArrayList<>(List.of("a", "b")));
-        out.add(new ArrayList<>(List.of("b", "a")));
-        out.add(new ArrayDeque<>(List.of("a", "b")));
-        out.add(new HashSet<>(List.of("a", "b")));
-        out.add(new LinkedHashSet<>(List.of("b", "a")));
-        out.add(new TreeSet<>(List.of("a", "b")));
-        out.add(new HashMap<>(Map.of("a", "b")));
-        out.add(new TreeMap<>(Map.of("a", "b")));
-        out.add(new HashMap<>(Map.of("a", "c")));
-        IdentityHashMap<String, String> byIdentity = new IdentityHashMap<>();
-        byIdentity.put("a", "b");
-        out.add(byIdentity);
-        out.add("a string");
-        out.add(7);
-        return out;
+    private boolean sameNow(AnOwner then, AnOwner now, boolean askedMatters, BitSet unconsulted,
+                            BitSet contentAsked) {
+        ReadingState.Inputs taken = state.inputsOf(then);
+        boolean byTheSnapshot = state.sameInputsBut(taken, state.inputsOf(now), askedMatters,
+                unconsulted, contentAsked);
+        boolean inPlace = state.sameInputsNow(taken, now, askedMatters, unconsulted, contentAsked);
+        assertEquals(byTheSnapshot, inPlace);
+        return inPlace;
     }
 
-    private static List<BitSet> masks() {
-        List<BitSet> out = new ArrayList<>();
-        out.add(null);
-        for (int bits = 0; bits < 16; bits++) {
-            BitSet each = new BitSet();
-            for (int at = 0; at < 4; at++) {
-                each.set(at, (bits & (1 << at)) != 0);
-            }
-            out.add(each);
-        }
-        return out;
+    private boolean sameNow(AnOwner then, AnOwner now) {
+        return sameNow(then, now, false, null, null);
     }
 
-    private AnOwner owner(Object collection, Object identified, boolean present,
-                          List<String> written, Object asked) {
+    private static AnOwner holding(Object collection) {
         AnOwner out = new AnOwner();
         out.collection = collection;
-        out.identified = identified;
-        out.present = present ? "there" : null;
-        out.written = written;
-        out.asked = asked;
         return out;
+    }
+
+    private record Pair(Object then, Object now, boolean same) {}
+
+    @Test
+    void aCollectionIsTheSameWhereItsCopyIs() {
+        IdentityHashMap<String, Integer> twoOfOne = new IdentityHashMap<>();
+        twoOfOne.put("x", 1);
+        twoOfOne.put("xy".substring(0, 1), 1);
+        IdentityHashMap<String, Integer> twoOfOneAgain = new IdentityHashMap<>();
+        twoOfOneAgain.put("x", 1);
+        twoOfOneAgain.put("xy".substring(0, 1), 1);
+        List<Pair> pairs = List.of(
+                new Pair(null, null, true),
+                new Pair(null, List.of(), false),
+                new Pair(new ArrayList<>(List.of("a", "b")), new ArrayDeque<>(List.of("a", "b")),
+                        true),
+                new Pair(new ArrayList<>(List.of("a", "b")), new ArrayList<>(List.of("b", "a")),
+                        false),
+                new Pair(new HashSet<>(List.of("a", "b")),
+                        new LinkedHashSet<>(List.of("b", "a")), true),
+                new Pair(new HashSet<>(List.of("a", "b")), new ArrayList<>(List.of("a", "b")),
+                        false),
+                new Pair(Set.of(), new HashSet<>(), true),
+                new Pair(Set.of(), List.of(), false),
+                new Pair(new HashMap<>(Map.of("a", "b")), new HashMap<>(Map.of("a", "c")), false),
+                new Pair(new HashMap<>(Map.of("a", "b")), new TreeMap<>(Map.of("a", "b")), true),
+                new Pair(new TreeSet<>(List.of("a", "b")), new TreeSet<>(List.of("a", "c")),
+                        false),
+                new Pair(twoOfOne, twoOfOneAgain, true));
+        for (Pair each : pairs) {
+            assertEquals(each.same(), sameNow(holding(each.then()), holding(each.now())),
+                    () -> each.then() + " then, " + each.now() + " now");
+        }
     }
 
     @Test
-    void everyPairOfStatesIsToldApartAsItIsByTheirSnapshots() {
-        List<Object> collections = collections();
-        List<Object> identities = List.of("x", "xy".substring(0, 1));
-        List<List<String>> writtens = new ArrayList<>();
-        writtens.add(null);
-        writtens.add(new ArrayList<>(List.of("a")));
-        writtens.add(new ArrayList<>(List.of("a", "b")));
-        List<BitSet> masks = masks();
-        int compared = 0;
-        for (Object thenCollection : collections) {
-            for (Object nowCollection : collections) {
-                for (Object thenIdentity : identities) {
-                    for (Object nowIdentity : identities) {
-                        for (List<String> thenWritten : writtens) {
-                            for (List<String> nowWritten : writtens) {
-                                AnOwner then = owner(thenCollection, thenIdentity, true,
-                                        thenWritten, collections.get(4));
-                                AnOwner now = owner(nowCollection, nowIdentity,
-                                        nowWritten != null, nowWritten, collections.get(5));
-                                ReadingState.Inputs taken = state.inputsOf(then);
-                                for (BitSet unconsulted : masks) {
-                                    for (BitSet contentAsked : masks.subList(0, 4)) {
-                                        for (boolean askedMatters : new boolean[] {false, true}) {
-                                            assertEquals(
-                                                    state.sameInputsBut(taken, state.inputsOf(now),
-                                                            askedMatters, unconsulted,
-                                                            contentAsked),
-                                                    state.sameInputsNow(taken, now, askedMatters,
-                                                            unconsulted, contentAsked),
-                                                    () -> "then " + thenCollection + ", now "
-                                                            + nowCollection + ", identity "
-                                                            + thenIdentity + "/" + nowIdentity);
-                                            compared++;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        assertTrue(compared > 0);
+    void anIdentityInputIsTheSameOnlyAsTheVeryObject() {
+        String one = "xy".substring(0, 1);
+        AnOwner then = new AnOwner();
+        then.identified = one;
+        AnOwner same = new AnOwner();
+        same.identified = one;
+        AnOwner equal = new AnOwner();
+        equal.identified = "x";
+
+        assertEquals(true, sameNow(then, same));
+        assertEquals(false, sameNow(then, equal));
+    }
+
+    @Test
+    void aFlagInputIsTheSameWhereItIsThereOrNotAndNotWhatItIs() {
+        AnOwner there = new AnOwner();
+        there.present = "a";
+        AnOwner another = new AnOwner();
+        another.present = "b";
+
+        assertEquals(true, sameNow(there, another));
+        assertEquals(false, sameNow(there, new AnOwner()));
+    }
+
+    @Test
+    void whatAWrittenInputHoldsIsComparedOnlyWhereTheReadingAskedAfterIt() {
+        AnOwner then = new AnOwner();
+        then.written = new ArrayList<>(List.of("a"));
+        AnOwner more = new AnOwner();
+        more.written = new ArrayList<>(List.of("a", "b"));
+        BitSet asked = new BitSet();
+        asked.set(state.placeOfTheInput("written"));
+
+        assertEquals(true, sameNow(then, more, false, null, null));
+        assertEquals(false, sameNow(then, more, false, null, asked));
+    }
+
+    @Test
+    void anInputTheReadingNeverAskedAfterIsNotCompared() {
+        AnOwner then = new AnOwner();
+        then.present = "a";
+        BitSet unconsulted = new BitSet();
+        unconsulted.set(state.placeOfTheInput("present"));
+
+        assertEquals(false, sameNow(then, new AnOwner(), false, null, null));
+        assertEquals(true, sameNow(then, new AnOwner(), false, unconsulted, null));
+    }
+
+    @Test
+    void theAggregatesBeingReadAreComparedOnlyWhereTheReadingAskedAfterThem() {
+        AnOwner then = new AnOwner();
+        then.asked = new ArrayList<>(List.of("a"));
+        AnOwner now = new AnOwner();
+        now.asked = new ArrayList<>(List.of("b"));
+
+        assertEquals(true, sameNow(then, now, false, null, null));
+        assertEquals(false, sameNow(then, now, true, null, null));
     }
 }
