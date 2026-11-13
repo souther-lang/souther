@@ -61,15 +61,53 @@ public sealed interface CaseMapping {
      * {@code lowercase(lowercase(x))} is the mapping {@code lowercase(x)} is. A chain of one
      * conversion is therefore one mapping however long it is, and the maps worked out for it are
      * worked out once.
+     *
+     * <p>Every chain therefore alternates, and a chain that alternates for long is a chain that
+     * has stopped changing what it makes: see {@link #MOST_ALTERNATING_ENDING_IN_LOWERCASE}.
      */
     static CaseMapping applying(ValueName operation, CaseMapping inner) {
         if (ValueName.Stdlib.operation("String", "lowercase").equals(operation)) {
-            return inner instanceof Lowercase ? inner : new Lowercase(inner);
+            return inner instanceof Lowercase ? inner : alternating(new Lowercase(inner));
         }
         if (ValueName.Stdlib.operation("String", "uppercase").equals(operation)) {
-            return inner instanceof Uppercase ? inner : new Uppercase(inner);
+            return inner instanceof Uppercase ? inner : alternating(new Uppercase(inner));
         }
         return null;
+    }
+
+    /**
+     * The longest chain of alternating conversions, one ending in lowercase, that is a mapping of
+     * its own; a longer one makes what the chain two conversions shorter makes ({@link
+     * #MOST_ALTERNATING_ENDING_IN_UPPERCASE} for one ending in uppercase). Neither is a property
+     * the Unicode mappings state: it is what the run time's conversions are found to do, over every
+     * code point and every pair of the code points a conversion changes, over every triple of those
+     * with a mark, a widening or a context, and over millions of other triples. Shorter chains are
+     * not equal to the ones two shorter — {@code lowercase(uppercase(lowercase(x)))} is not
+     * {@code lowercase(uppercase(x))}: the capital sharp s is its own uppercase and not its own
+     * lowercase, and the combining ypogegrammeni (U+0345) before some marks ends in different code
+     * points after one more pass — so no shorter chain is shortened.
+     */
+    int MOST_ALTERNATING_ENDING_IN_LOWERCASE = 4;
+
+    /** The longest chain of alternating conversions ending in uppercase that is a mapping of its
+     *  own ({@link #MOST_ALTERNATING_ENDING_IN_LOWERCASE}). */
+    int MOST_ALTERNATING_ENDING_IN_UPPERCASE = 3;
+
+    /** {@code chain}, or the chain of its last conversions that makes what it makes where it is
+     *  longer than a chain of its kind is a mapping of its own. */
+    private static CaseMapping alternating(CaseMapping chain) {
+        int most = chain instanceof Lowercase ? MOST_ALTERNATING_ENDING_IN_LOWERCASE
+                : MOST_ALTERNATING_ENDING_IN_UPPERCASE;
+        List<CaseMapping> done = chain.doneSoFar();
+        if (done.size() <= most) {
+            return chain;
+        }
+        // The first two conversions dropped, each of the others kept on what the one before made.
+        CaseMapping kept = NONE;
+        for (CaseMapping each : done.subList(2, done.size())) {
+            kept = each instanceof Lowercase ? new Lowercase(kept) : new Uppercase(kept);
+        }
+        return kept;
     }
 
     /**

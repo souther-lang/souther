@@ -18,10 +18,11 @@ class AChainOfCaseConversionsIsReadInTimeTest {
 
     private static final int DEPTH = 150;
 
-    private static String chain() {
+    private static String chain(boolean alternating) {
         StringBuilder body = new StringBuilder("{\n");
         for (int i = 1; i <= DEPTH; i++) {
-            body.append("  let a").append(i).append(" = String.lowercase(")
+            body.append("  let a").append(i).append(" = String.")
+                    .append(alternating && i % 2 == 0 ? "uppercase" : "lowercase").append("(")
                     .append(i == 1 ? "i" : "a" + (i - 1)).append(")\n");
         }
         body.append("  a").append(DEPTH).append(" == j\n}");
@@ -31,7 +32,13 @@ class AChainOfCaseConversionsIsReadInTimeTest {
 
     @Test
     void theComparisonAtTheEndIsReadWithinSecondsAndNotMinutes() {
-        assertTimeoutPreemptively(Duration.ofSeconds(30), () -> ACompiledModel.measured(chain(),
-                Adequacy.Asked.warningsAt(Adequacy.Level.ALL)));
+        assertTimeoutPreemptively(Duration.ofSeconds(30), () -> ACompiledModel.measured(
+                chain(false), Adequacy.Asked.warningsAt(Adequacy.Level.ALL)));
+    }
+
+    @Test
+    void aChainThatAlternatesBetweenTheTwoIsReadWithinSecondsToo() {
+        assertTimeoutPreemptively(Duration.ofSeconds(30), () -> ACompiledModel.measured(
+                chain(true), Adequacy.Asked.warningsAt(Adequacy.Level.ALL)));
     }
 }
