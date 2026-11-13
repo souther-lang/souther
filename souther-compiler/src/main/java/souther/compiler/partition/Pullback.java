@@ -2529,6 +2529,10 @@ final class Pullback {
             ExactRatio greatest = before == null ? null : rounding.roundedFrom(before.greatest());
             return least == null || greatest == null ? null : new FormRange(least, greatest);
         }
+        FormRange ofAForm = exactRangeOfAFormItIsHanded(e, reads, known);
+        if (ofAForm != null) {
+            return ofNewtype(ofAForm, ofTheNewtype);
+        }
         // A call of an operation that computes what an operator does is that operator over its
         // arguments, as the arithmetic reads it ({@link AffineForms#asOperator}), so its numbers are
         // those of the operator below.
@@ -2578,6 +2582,30 @@ final class Pullback {
                     exactRangeOf(binary.right(), reads, known));
             default -> null;
         };
+    }
+
+    /**
+     * The numbers {@code e} comes to, where it is a call of an operation the library says answers
+     * a form of its arguments, over the numbers each of those arguments comes to — for the
+     * arguments the arithmetic composes as no form, which the composition above does not reach.
+     * Null where it is no such call or some argument's numbers are not known.
+     */
+    private FormRange exactRangeOfAFormItIsHanded(Core e, InputReads reads,
+                                                  Map<BindingId, RangeOfAName> known) {
+        AnOperationApplied applied = AnOperationApplied.of(Core.withoutStanding(e));
+        LinearForm<DeclaredArgument> form = applied == null ? null
+                : DefaultBoundOperationFacts.get().answersAFormOfItsArguments(applied.operation());
+        if (form == null) {
+            return null;
+        }
+        return FormRange.of(form, argument -> {
+            Core handed = applied.argument(argument);
+            return handed == null ? null : exactRangeOf(handed, reads, known);
+        });
+    }
+
+    private static FormRange ofNewtype(FormRange range, FormRange ofTheNewtype) {
+        return ofTheNewtype == null ? range : range.meet(ofTheNewtype);
     }
 
     /**

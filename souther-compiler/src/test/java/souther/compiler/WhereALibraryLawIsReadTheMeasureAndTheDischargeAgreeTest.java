@@ -109,14 +109,19 @@ class WhereALibraryLawIsReadTheMeasureAndTheDischargeAgreeTest {
             new Row("if c < 0 then c + c + 7 else 5", 0, Set.of("-2", "-1", "0"), true),
             // A sign moved and scaled by numbers is still compared with a number, and the library's
             // bounds on it settle the comparison either way. Where they leave it, it is a relation
-            // of two rationals, which the measure draws no line on read or unread: that row is the
-            // discharge's control, a value the invariant refuses where the sign is above nought.
+            // of the two numbers it is the sign of, and both read it as they read a comparison of
+            // them written down: of two Rationals made of whole numbers too, which stand on no
+            // carrier and are read as the arithmetic they are.
             new Row("if Rational.compare(Rational.fromInt(c), Rational.fromInt(0)) + 10 >= 12"
                     + " then 0 - 1 else c", 0, Set.of("4", "5"), true),
             new Row("if 10 - 2 * Rational.compare(Rational.fromInt(c), Rational.fromInt(0)) >= 7"
                     + " then c else 0 - 1", 0, Set.of("4", "5"), true),
             new Row("if 10 - 2 * Rational.compare(Rational.fromInt(c), Rational.fromInt(0)) >= 9"
-                    + " then c else 0 - 1", 0, Set.of(), false));
+                    + " then c else 0 - 1", 0, Set.of("0", "1"), false),
+            // The same relation where the discharge, reading it, settles the body: the sign of a
+            // number made of c is not below nought, and c is not below nought.
+            new Row("if Rational.compare(Rational.fromInt(c), Rational.fromInt(0)) >= 0"
+                    + " then c else 0 - 1", 0, Set.of("-1", "0", "4", "5"), true));
 
     /** {@code rows}, each a {@code helper} with the two behaviors that read it beside it. */
     private static String program(List<Row> rows) {

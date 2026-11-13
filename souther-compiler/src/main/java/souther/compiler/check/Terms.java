@@ -1965,7 +1965,8 @@ final class Terms {
             return new Opens(scrutinee, subjectOf(scrutinee, at), null);
         }
         NumericMeaning meaning = computedBy(result, argsOf(called.value()), carried);
-        FactSubject subject = subjectOpenedAs(meaning, carried, called.value(), called.at());
+        FactSubject subject = meaning == null ? null
+                : subjectOpenedAs(meaning, carried, called.value(), called.at());
         // A call the term grammar cannot name leaves the number it answers named by nothing this can
         // relate to anything else, and a binding standing for the value it opened is what an arm has
         // always given. Nothing is lost by declining here; what is lost by naming it anyway is the
@@ -3369,8 +3370,10 @@ final class Terms {
         // remove. `asOperator` still writes a call as the operator it stands for, which is what
         // names the value; what it computes is answered here.
         NumericResult<DeclaredArgument> result = DischargeRules.numericResult(operationOf(e));
-        if (result != null && answersIn(result, answered)) {
-            return Computed.in(computedBy(result, argsOf(e), answered), at);
+        NumericMeaning computed = result != null && answersIn(result, answered)
+                ? computedBy(result, argsOf(e), answered) : null;
+        if (computed != null) {
+            return Computed.in(computed, at);
         }
         Computed whole = aWholeNumberOfAQuotient(e, at);
         if (whole != null) {
@@ -3432,9 +3435,18 @@ final class Terms {
      * told about the next pair. Both the call read where it stands and the arm that opens a case
      * come through here, which is what keeps one value from being two meanings depending on which
      * of the two reached it.
+     *
+     * <p>Null where {@code answered} is on no carrier. A row states what is computed of exact
+     * values, which a {@code Rational} has though nothing counts one; a meaning is a number on a
+     * carrier, and giving one to a number with none is what made a measure and a discharge read
+     * one comparison two ways. Asked here, where the row is turned into a meaning, so that no
+     * reader of a row needs telling.
      */
     NumericMeaning computedBy(NumericResult<DeclaredArgument> result, List<Core> args,
                               Type answered) {
+        if (!carriesANumber(answered)) {
+            return null;
+        }
         return NumericMeanings.of(result.computes(), args);
     }
 

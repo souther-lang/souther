@@ -1060,6 +1060,15 @@ public final class OperationFacts {
             about("Decimal", "add", computes(new Arithmetic.TheOperator(BinOp.ADD))),
             about("Decimal", "subtract", computes(new Arithmetic.TheOperator(BinOp.SUB))),
             about("Decimal", "multiply", computes(new Arithmetic.TheOperator(BinOp.MUL))),
+            // A Rational is on no carrier, so what these compute is said of the arithmetic over
+            // their arguments and is read where a call is taken as that arithmetic. A reader that
+            // gives the answer a meaning on a carrier finds none for it.
+            about("Rational", "fromInt", answers(form(at(0), 1))),
+            about("Rational", "fromDecimal", answers(form(at(0), 1))),
+            about("Rational", "add", computes(new Arithmetic.TheOperator(BinOp.ADD))),
+            about("Rational", "subtract", computes(new Arithmetic.TheOperator(BinOp.SUB))),
+            about("Rational", "multiply", computes(new Arithmetic.TheOperator(BinOp.MUL))),
+            about("Rational", "divide", computes(new Arithmetic.TheOperator(BinOp.DIV))),
             about("Int", "truncatingDivide",
                     computesInTheCaseCarrying(Type.INT, new Arithmetic.ATruncatingQuotient())),
             about("Int", "truncatingRemainder",

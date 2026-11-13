@@ -2,16 +2,20 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.DefaultStdlib;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -77,8 +81,14 @@ class EveryDeclaredFormIsMeasuredAtItsOwnCoefficientsTest {
     /** Every operation declared to answer a form of its arguments is measured here. */
     @Test
     void everyDeclaredFormIsMeasuredHere() {
-        assertEquals(DefaultBoundOperationFacts.get().answersAFormOfItsArguments(),
-                MEASURED.keySet(),
+        Set<ValueName> declared = new LinkedHashSet<>(
+                DefaultBoundOperationFacts.get().answersAFormOfItsArguments());
+        // A Rational is on no carrier, so a line drawn on its coefficients has no axis to be
+        // drawn on. What a form answering one says is read where a call is taken as that
+        // arithmetic, which the range tests of a call hold.
+        declared.removeIf(operation -> operation instanceof ValueName.Stdlib.Operation library
+                && DefaultStdlib.get().entry(library).signature().result() == Type.RATIONAL);
+        assertEquals(declared, MEASURED.keySet(),
                 "an operation declared to answer a form of its arguments has its coefficients"
                         + " measured, and one measured here is one that is declared");
     }
