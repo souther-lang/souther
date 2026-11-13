@@ -52,7 +52,12 @@ public final class RepresentationBounds {
 
     /** Whether {@code taken} is how many code points a string holds. */
     public static boolean isALength(NumericTerm.TakenOf taken) {
-        return taken.operation().equals(LENGTH);
+        return isTheLengthOfAString(taken.operation());
+    }
+
+    /** Whether {@code operation} answers how many code points a string holds. */
+    public static boolean isTheLengthOfAString(ValueName operation) {
+        return LENGTH.equals(operation);
     }
 
     /**

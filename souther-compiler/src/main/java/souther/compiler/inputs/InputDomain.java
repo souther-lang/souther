@@ -1948,7 +1948,7 @@ public final class InputDomain {
                 // Where the number actually stops, which the ends as written do not say: a clause
                 // placing one at 0 beside a clause that takes the 0 away leaves a number whose
                 // first value is 1, and a line drawn at the 0 is drawn at no value of it.
-                placed.leftAt(path, kind));
+                placed.leftAt(path, kind), placed.runsLeftAt(path, kind));
     }
 
     /**

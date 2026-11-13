@@ -7,14 +7,20 @@ import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.RepresentationBounds;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.TextExtents;
 import souther.compiler.values.ValueSet;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.IntPredicate;
 
@@ -52,18 +58,24 @@ import java.util.function.IntPredicate;
  * @param lengthsReached   the lengths of a position the rules leave it, where every one is the
  *                         length of some value and no rule on another number of the position
  *                         bounds it
+ * @param lengthsLeft      the lengths the rules leave, as the runs they lie in, for the length of
+ *                         each position whose rules were read whole. A line drawn at a length
+ *                         outside them is at the length of no string
  */
 public record StringsReached(boolean mandatoryPositionsHoldAValue,
-                             Set<TermPath> countsReached, Set<NumericTerm> lengthsReached) {
+                             Set<TermPath> countsReached, Set<NumericTerm> lengthsReached,
+                             Map<NumericTerm, OrderedRuns> lengthsLeft) {
 
     /** An input none of whose positions is a string. */
-    public static final StringsReached NONE = new StringsReached(true, Set.of(), Set.of());
+    public static final StringsReached NONE =
+            new StringsReached(true, Set.of(), Set.of(), Map.of());
 
     private static final String STRING = "String";
 
     public StringsReached {
         countsReached = Set.copyOf(countsReached);
         lengthsReached = Set.copyOf(lengthsReached);
+        lengthsLeft = Map.copyOf(lengthsLeft);
     }
 
     /**
@@ -74,7 +86,20 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue,
      * @param lineAt where the line the edge is of falls, or null where it is at no number
      */
     public boolean allowsAnEdgeAt(NumericTerm term, ExactRatio lineAt) {
-        return mandatoryPositionsHoldAValue && reaches(term) && lineFitsAString(term, lineAt);
+        return mandatoryPositionsHoldAValue && reaches(term) && lineFitsAString(term, lineAt)
+                && !lineIsAtALengthNoStringHas(term, lineAt);
+    }
+
+    /**
+     * Whether the line falls at a length the rules leave none of — one taken out from between the
+     * ends they place, or past them: the strings reach every length that is left, and a length
+     * that is not is none of theirs, so no row is written at a line there.
+     */
+    private boolean lineIsAtALengthNoStringHas(NumericTerm term, ExactRatio lineAt) {
+        OrderedRuns left = lengthsLeft.get(term);
+        return left != null && lineAt != null && lineAt.isWhole()
+                && lineAt.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
+                && !left.admits(Count.of(new BigDecimal(whole)));
     }
 
     /**
@@ -107,35 +132,46 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue,
         boolean holds = true;
         Set<TermPath> counts = new LinkedHashSet<>();
         Set<NumericTerm> lengths = new LinkedHashSet<>();
+        Map<NumericTerm, OrderedRuns> left = new LinkedHashMap<>();
         for (Position each : positions) {
             ValueSet admitted = each.admitted().approximation();
             // Only a string has a length, and the other numbers of a position that has one are
             // numbers of its strings.
             boolean isString = each.bounds().stream().anyMatch(b -> isLength(b.term()));
+            // What the set admits is more than the position holds where the lengths the rules
+            // leave are not the lengths between their ends: the lengths taken out are held beside
+            // the set and not in it. So the set alone says nothing of what the position holds of
+            // them.
+            boolean holey = each.bounds().stream()
+                    .anyMatch(b -> isLength(b.term()) && b.holdsLessThanItsEnds());
             // A position none of whose strings is shown to be a value leaves the input none. And
             // the strings of one are a bound on its values, which a rule not read may refuse
             // altogether: a row is a value of every parameter, so what is shown is shown of the
             // strings of all of them, and a position that is not shown holds back every edge.
             if (isMandatory(each.path())) {
-                holds &=TextExtents.shownToHoldAValue(admitted) && !each.nothingExists()
-                        && (!isString || isReadWhole(each));
+                holds &= (isString ? StringsHeld.shownToHoldAValue(each)
+                                : TextExtents.shownToHoldAValue(admitted))
+                        && !each.nothingExists() && (!isString || isReadWhole(each));
             }
             // What the strings reach is read off a set that is a bound, so it is claimed only of a
             // position whose rules were read whole.
             if (!isString || !isReadWhole(each) || each.nothingExists()) {
                 continue;
             }
-            if (TextExtents.reachesEveryCount(admitted) && bindsNothing(each, null)) {
+            if (!holey && TextExtents.reachesEveryCount(admitted) && bindsNothing(each, null)) {
                 counts.add(each.path());
             }
             for (PositionBounds bounds : each.bounds()) {
                 if (isLength(bounds.term()) && bindsNothing(each, bounds)
                         && reachesEveryLengthLeft(admitted, bounds)) {
                     lengths.add(bounds.term());
+                    if (bounds.runsLeft() != null) {
+                        left.put(bounds.term(), bounds.runsLeft());
+                    }
                 }
             }
         }
-        return new StringsReached(holds, counts, lengths);
+        return new StringsReached(holds, counts, lengths, left);
     }
 
     /**
@@ -146,7 +182,7 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue,
      */
     private static boolean isReadWhole(Position at) {
         return at.admitted().completeness() instanceof AdmissibleSet.Completeness.Complete
-                || at.projection() instanceof ProjectionEvidence.CertifiedExact;
+                || StringsHeld.boundsAreTheWholeOfTheRules(at);
     }
 
     /**
@@ -236,7 +272,11 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue,
     private static boolean reachesEveryLengthLeft(ValueSet at, PositionBounds bounds) {
         NumericDomain.Bounds left =
                 bounds.rangeLeft() == null ? NumericDomain.Bounds.OPEN : bounds.rangeLeft();
-        IntPredicate wanted = each -> each >= 0 && left.admits(ExactRatio.of(each));
+        // The lengths the rules take out from between their ends are lengths they do not leave, so
+        // the strings are not asked for one of them.
+        OrderedRuns runs = bounds.runsLeft();
+        IntPredicate wanted = each -> each >= 0 && left.admits(ExactRatio.of(each))
+                && (runs == null || runs.admits(Count.of(each)));
         return TextExtents.reachesEveryLength(at, wanted, left.max() == null);
     }
 }

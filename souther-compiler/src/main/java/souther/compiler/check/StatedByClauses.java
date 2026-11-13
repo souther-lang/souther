@@ -402,9 +402,13 @@ sealed interface StatedByClauses {
             return new Part(byValues.either(opening.byValues(), other.byValues()),
                     byOrder.either(opening.byOrder(), other.byOrder()),
                     // And no opening for the numbers an operation answers: what that reading makes
-                    // of a choice is the envelope of what its branches leave
-                    // ({@link BoundaryState#either}), which is not the rule the choice states.
-                    byDerivedNumbers.eitherWithoutAJoin(other.byDerivedNumbers()),
+                    // of an end is the envelope of what its branches leave
+                    // ({@link BoundaryState#either}), which is not the rule the choice states. The
+                    // values it leaves are joined whole ({@link BoundaryState#runsAt}), and a
+                    // choice between rules about nothing but such numbers is taken in by them.
+                    leavesOnlyNumbersReadWhole(other)
+                            ? byDerivedNumbers.eitherExactly(other.byDerivedNumbers())
+                            : byDerivedNumbers.eitherWithoutAJoin(other.byDerivedNumbers()),
                     // Nor for how a container's elements stand to each other. Either of two rules
                     // about them is no rule a builder keeps: keeping both refuses containers the
                     // choice admits, and keeping one admits what the other refuses.
@@ -427,6 +431,38 @@ sealed interface StatedByClauses {
                     // open is what the alternatives leave that number, and that is settled once,
                     // where they are ({@link BoundaryState#either}).
                     under(choice, reached(boundsLeftOpen, other.boundsLeftOpen())));
+        }
+
+        /**
+         * Whether the choice between this and {@code other} is one the reading of the numbers an
+         * operation answers composes exactly: each alternative says something about one number
+         * only, takes every rule of it in whole, and is a rule of the same number as the one
+         * beside it.
+         *
+         * <p>Only then is the join of the runs the choice. An alternative that also holds the
+         * strings, the order or the elements of a position to something says that beside the
+         * number, and the two read apart are a product of what the alternatives say together: a
+         * code of two letters beginning with A or one of five beginning with B is not a code of
+         * either length beginning with either letter. And so are two numbers: a name and a code
+         * each shorter than three or each longer than five are not a name and a code each of
+         * either, so what each is left as runs is more than the choice leaves it.
+         */
+        private boolean leavesOnlyNumbersReadWhole(Part other) {
+            return aloneOnTheNumbers(this) && aloneOnTheNumbers(other)
+                    && boundary.byNumber().size() == 1
+                    && boundary.byNumber().keySet().equals(other.boundary().byNumber().keySet());
+        }
+
+        private static boolean aloneOnTheNumbers(Part part) {
+            return part.byDerivedNumbers().tookEveryPartInWhole()
+                    && part.byValues().read().isEmpty() && part.byOrder().read().isEmpty()
+                    && part.byElements().read().isEmpty() && part.aboutStrings().isEmpty()
+                    && part.boundary().open().isEmpty()
+                    && !part.boundary().byNumber().isEmpty()
+                    && part.boundary().byNumber().entrySet().stream()
+                            .allMatch(each -> each.getKey().holdsItsHolesAsRuns()
+                                    && (each.getValue() instanceof BoundaryState.Left.Known
+                                    || each.getValue() instanceof BoundaryState.Left.NothingLeft));
         }
 
         /** The same ends, with {@code choice} standing between them and the walk. */
@@ -927,7 +963,7 @@ sealed interface StatedByClauses {
             return switch (read) {
                 case BoundaryReading.Read.NoLineStated _ -> BoundaryState.nothing();
                 case BoundaryReading.Read.Bounded it ->
-                        BoundaryState.bounded(it.number(), it.range());
+                        BoundaryState.bounded(it.number(), it.range(), it.runs());
                 case BoundaryReading.Read.LeftOpen it -> BoundaryState.leftOpen(it.end());
             };
         }
