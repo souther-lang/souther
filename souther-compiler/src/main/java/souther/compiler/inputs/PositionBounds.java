@@ -3,6 +3,7 @@ package souther.compiler.inputs;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.OrderedRuns;
 
 /**
  * What the rules leave one of a position's numbers.
@@ -29,12 +30,17 @@ import souther.compiler.numeric.NumericDomain;
  *                    in has been taken in, which is not what {@link #ownEnds} says: a clause placing
  *                    an end at a value another clause takes away leaves the number stopping
  *                    somewhere no rule wrote
+ * @param runsLeft    the values the number holds inside {@code rangeLeft} where the rules take
+ *                    some out from between its ends — more than one run — or null where they take
+ *                    none that was read. The ends are the hull of these, so a reader of ends has
+ *                    {@code rangeLeft} and a reader of values has what stands inside it
  */
 public record PositionBounds(NumericTerm.FromOnePosition term,
                              NumericDomain.Bounds admissible,
                              DeclaredBounds.Bounds ownEnds,
                              NarrowedBounds narrowedEnds,
-                             NumericDomain.Bounds rangeLeft) {
+                             NumericDomain.Bounds rangeLeft,
+                             OrderedRuns runsLeft) {
 
     public PositionBounds {
         if (term == null) {

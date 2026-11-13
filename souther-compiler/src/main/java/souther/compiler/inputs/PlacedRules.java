@@ -267,6 +267,21 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     }
 
     /**
+     * The values the position's number {@code kind} is left at {@code path} where the rules take
+     * some out from between its ends, or null where they take none that was read. What
+     * {@link #leftAt} says of the ends, for a reader of values.
+     */
+    OrderedRuns runsLeftAt(TermPath path, NumberAt.OfWhatNumber kind) {
+        RuleKey where = keyOf(path);
+        OrderedRuns here = where == null ? null : bounds().runsLeftAt(where, kind);
+        TermPath above = alsoAt(path);        if (above == null) {
+            return here;
+        }
+        OrderedRuns outer = alsoReaching.outer().runsLeftAt(above, kind);
+        return here == null ? outer : outer == null ? here : here.meet(outer);
+    }
+
+    /**
      * What the order leaves the position at {@code path}, or null where no rule of it stops the
      * position: this value's own, met with what it leaves the value this was narrowed out of, as
      * {@link #admits} meets what each admits. Whatever shape the meet comes to — one run, runs

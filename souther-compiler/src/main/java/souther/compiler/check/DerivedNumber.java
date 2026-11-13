@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.numeric.Congruences;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.OrderedInterval;
+import souther.compiler.numeric.OrderedRuns;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.Arithmetic;
 import souther.compiler.semantics.TakenArguments;
@@ -129,6 +130,40 @@ record DerivedNumber(RuleKey position, ValueName operation, TakenArguments argum
                     new NumericDomain.Bounds(range.low(), range.high()).holdsOneWholeNumber() != null;
             case null, default -> false;
         };
+    }
+
+    /**
+     * Whether the values {@code runs} leaves this number are the values the reading of the
+     * position holds of it, so that a rule leaving it there is carried out whole.
+     *
+     * <p>A run is asked as {@link #carriesOut(OrderedInterval)} asks it. Several are carried out
+     * only by a count, whose values are held as the numbers they are: a part of a date and a
+     * remainder are read back as one range or one class.
+     */
+    boolean carriesOut(OrderedRuns runs) {
+        if (runs.holdsNothing()) {
+            return false;
+        }
+        if (runs.isOneRun()) {
+            return carriesOut(runs.hull());
+        }
+        return holdsItsHolesAsRuns();
+    }
+
+    /**
+     * Whether the values left this number are read back out of it whole where the rules take some
+     * out from between its ends: the length of a string, whose values the strings a position holds
+     * are taken from ({@code StringsHeld}). The size of a container is counted and holds its ends
+     * and nothing between them, so a hole in it is a rule nothing reads.
+     */
+    boolean holdsItsHolesAsRuns() {
+        return how() instanceof TakenAs.HowManyItHolds && isTheLengthOfAString(operation);
+    }
+
+    /** Whether {@code operation} answers how many code points a string has. */
+    static boolean isTheLengthOfAString(ValueName operation) {
+        return operation instanceof ValueName.Stdlib library
+                && library.alias().equals("String") && library.name().equals("length");
     }
 
     /**

@@ -2664,6 +2664,90 @@ public final class FieldDomains {
     }
 
     /**
+     * Whether {@code shape} is a choice every leaf of which bounds the length of a string and
+     * nothing else: each leaf narrows only atoms of {@code lengthAtoms}, so that what the choice
+     * says is what those bounds and the runs between them say, and nothing about another place.
+     */
+    private static boolean isAChoiceOfBoundsOnLengths(ClauseExpr shape) {
+        if (!(shape instanceof ClauseExpr.Joined joined)) {
+            return false;
+        }
+        List<Core> lengthsOf = new ArrayList<>();
+        if (!leavesAreBoundsOnLengths(joined, lengthsOf) || lengthsOf.isEmpty()) {
+            return false;
+        }
+        // Of one string: a choice between the length of one and the length of another holds
+        // neither to what the choice leaves it.
+        return lengthsOf.stream().allMatch(each -> Core.sameValue(lengthsOf.getFirst(), each));
+    }
+
+    /** Whether every leaf of {@code shape} compares the length of a string with a number written
+     *  out, collecting the string each leaf measures. */
+    private static boolean leavesAreBoundsOnLengths(ClauseExpr shape, List<Core> strings) {
+        if (shape instanceof ClauseExpr.Joined joined) {
+            return leavesAreBoundsOnLengths(joined.left(), strings)
+                    && leavesAreBoundsOnLengths(joined.right(), strings);
+        }
+        if (!(shape instanceof ClauseExpr.Part part)
+                || !(Core.withoutStanding(part.of()) instanceof Core.Binary comparison)) {
+            return false;
+        }
+        Core.PreservedCall onTheLeft = aLengthCall(comparison.left());
+        Core.PreservedCall onTheRight = aLengthCall(comparison.right());
+        Core.PreservedCall length =
+                onTheLeft != null && Core.withoutStanding(comparison.right()) instanceof Core.Int
+                        ? onTheLeft
+                        : onTheRight != null
+                                && Core.withoutStanding(comparison.left()) instanceof Core.Int
+                                ? onTheRight : null;
+        if (length == null) {
+            return false;
+        }
+        strings.add(length.args().getFirst());
+        return true;
+    }
+
+    /** {@code e} as a call of the length of a string, or null where it is not one. */
+    private static Core.PreservedCall aLengthCall(Core e) {
+        return Core.withoutStanding(e) instanceof Core.PreservedCall call && call.args().size() == 1
+                && DerivedNumber.isTheLengthOfAString(call.declared().operation()) ? call : null;
+    }
+
+    /**
+     * Whether every number the reading of the numbers an operation answers holds of this value is
+     * the length of a string, whose values are read back whole where the rules take some out from
+     * between its ends, and no line on any of them was left open.
+     */
+    private boolean everyDerivedNumberIsALengthHeldAsRuns() {
+        return !derived.byNumber().isEmpty() && derived.open().isEmpty()
+                && derived.byNumber().keySet().stream()
+                        .allMatch(DerivedNumber::holdsItsHolesAsRuns);
+    }
+
+    /**
+     * The values {@link #leftAt} leaves the number {@code kind} of {@code path}, holes and all, or
+     * null where the rules leave no hole in it that this knows of.
+     *
+     * <p>The same rules as {@link #leftAt} and the same reading, which answers the two together:
+     * what it composed of the ends is {@code leftAt}'s, and what it composed of the values is
+     * here. Met with the ends {@code leftAt} gives, so that a rule only the interval algebra read
+     * narrows the runs as it narrows the ends.
+     */
+    public OrderedRuns runsLeftAt(RuleKey path, NumberAt.OfWhatNumber kind) {
+        if (!(kind instanceof NumberAt.OfWhatNumber.OfWhatAnOperationAnswers)
+                || derived.byNumber().isEmpty()) {
+            return null;
+        }
+        DerivedNumber number = DerivedNumber.of(new NumberAt<>(path, kind));
+        OrderedRuns runs = number == null ? null : derived.runsAt(number);        if (runs == null || runs.isOneRun()) {
+            return null;
+        }
+        NumericDomain.Bounds ends = leftAt(path, kind);
+        return ends == null ? runs
+                : runs.meet(OrderedRuns.of(new OrderedInterval(ends.min(), ends.max())));
+    }
+
+    /**
      * Where the reading that composed this value's connectives stops one of its numbers, or null
      * where no line may be drawn on it.
      *
@@ -3760,6 +3844,14 @@ public final class FieldDomains {
                     return;
                 }
                 if (read.narrowable().stream().anyMatch(ranged::contains)) {
+                    return;
+                }
+                // Or a choice between bounds on the length of a string, where every number the
+                // reading of the numbers an operation answers holds of this value is one: the
+                // bounds hold the ends of each alternative, and the lengths the choice takes out
+                // from between them are held beside them as runs ({@link #runsLeftAt}) and taken
+                // out of the strings.
+                if (everyDerivedNumberIsALengthHeldAsRuns() && isAChoiceOfBoundsOnLengths(shape)) {
                     return;
                 }
                 // Or the end this part placed, which is the same part in the bounds said by the

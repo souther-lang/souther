@@ -19,7 +19,9 @@ import souther.compiler.values.ValuesWithin;
 import net.unit8.notation199x.pattern.Meter;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -55,12 +57,24 @@ final class StringsHeld {
         ValueSet admitted = at.admitted().approximation();
         boolean whole = at.admitted().completeness()
                 instanceof AdmissibleSet.Completeness.Complete;
-        if (!whole && !(at.projection() instanceof ProjectionEvidence.CertifiedExact)) {
+        if (!whole && !boundsAreTheWholeOfTheRules(at)) {
             return null;
         }
         LengthsPastTheWay.Lengths left = lengthsLeft(at);
         if (left == null) {
             return whole ? ValuesWithin.all(admitted) : null;
+        }
+        // Lengths the rules take out from between their ends are not what the ends say. The ends
+        // are held as numbers, and the lengths taken out are taken out of the set: a string of one
+        // of them is no string the position holds. Where that set is no machine this compiler
+        // makes within the allowance, the strings are not shown.
+        List<NumericDomain.Bounds> runs = runsOfTheLengths(at);
+        if (runs != null) {
+            admitted = withoutTheLengthsBetween(admitted, runs);
+            if (admitted == null) {
+                return null;
+            }
+            return left.over(admitted);
         }
         // Where the set admitted already counts the code points and says nothing else, what it
         // says is the lengths, which are held as numbers in its place.
@@ -89,6 +103,107 @@ final class StringsHeld {
             left = left.and(lengths);
         }
         return left;
+    }
+
+    /**
+     * Whether the bounds of {@code at} are shown to be the whole of what its rules leave, with the
+     * lengths the rules take out from between the ends held as the runs that they are.
+     *
+     * <p>The bounds are two ends, and a hole between them is a rule they do not state; that is all
+     * that stands in the way where the one number that has a hole is the length, whose runs are
+     * held beside its ends ({@link PositionBounds#runsLeft}) and taken out of the strings below.
+     * Any other cause, or a hole of another number, is still a rule nothing here states.
+     */
+    static boolean boundsAreTheWholeOfTheRules(Position at) {
+        if (at.projection() instanceof ProjectionEvidence.CertifiedExact) {
+            return true;
+        }
+        if (!(at.projection() instanceof ProjectionEvidence.NotCertified(var causes))) {
+            return false;
+        }        Set<Object> holed = new LinkedHashSet<>();
+        for (ProjectionEvidence.Cause each : causes) {
+            if (!(each instanceof ProjectionEvidence.Cause.Lossy lossy)
+                    || !lossy.unstated().equals(Set.of(ProjectionEvidence.Cause.Unstated.A_HOLE))) {
+                return false;
+            }
+            holed.add(lossy.atom());
+        }
+        List<NumericDomain.Bounds> runs = runsOfTheLengths(at);
+        return holed.size() == 1 && runs != null && !runs.isEmpty();
+    }
+
+    /**
+     * The runs of lengths the rules of {@code at} leave a string of it where they take some out
+     * from between the ends, or null where they take none that was read.
+     */
+    private static List<NumericDomain.Bounds> runsOfTheLengths(Position at) {
+        List<NumericDomain.Bounds> out = null;
+        for (PositionBounds each : at.bounds()) {
+            if (each.runsLeft() == null || !(each.term() instanceof NumericTerm.TakenOf taken)
+                    || !RepresentationBounds.isALength(taken)) {
+                continue;
+            }
+            if (out != null) {
+                // Two numbers of one string that both leave holes: the strings are those of both,
+                // which is not asked here.
+                return List.of();
+            }
+            out = each.runsLeft().runs().stream()
+                    .map(run -> new NumericDomain.Bounds(run.low(), run.high())).toList();
+        }
+        return out;
+    }
+
+    /**
+     * {@code admitted} less the strings whose length is in none of {@code runs}, or null where
+     * that is not worked out: a run whose ends are no whole count, or strings of those lengths
+     * that are a machine past the allowance of a piece of a language.
+     */
+    private static ValueSet withoutTheLengthsBetween(ValueSet admitted,
+                                                     List<NumericDomain.Bounds> runs) {
+        if (runs.isEmpty()) {
+            return null;
+        }
+        List<LengthsPastTheWay.Lengths> lengths = new ArrayList<>();
+        for (NumericDomain.Bounds run : runs) {
+            LengthsPastTheWay.Lengths of = lengthsOf(run);
+            if (of == null) {
+                return null;
+            }
+            lengths.add(of);
+        }
+        if (admitted instanceof ValueSet.Finite finite) {
+            Set<Value> kept = new LinkedHashSet<>();
+            for (Value each : finite.values()) {
+                if (lengths.stream().anyMatch(run -> holds(run, each))) {
+                    kept.add(each);
+                }
+            }
+            return ValueSet.oneOf(kept);
+        }
+        Language language = UndividedByARelation.languageOf(admitted);
+        if (language == null) {
+            return null;
+        }
+        Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
+        Language of = null;
+        for (LengthsPastTheWay.Lengths run : lengths) {
+            Language here = Partitions.ofTheLengths(language, run, meter);
+            if (here == null) {
+                return null;
+            }
+            of = of == null ? here : of.or(here, meter);
+        }
+        return ValueSet.matching(of);
+    }
+
+    /** Whether {@code value} is a string of a length of {@code lengths}. */
+    private static boolean holds(LengthsPastTheWay.Lengths lengths, Value value) {
+        if (!(value instanceof Value.Text(String text))) {
+            return false;
+        }
+        BigInteger count = BigInteger.valueOf(text.codePointCount(0, text.length()));
+        return lengths.holds(count, count);
     }
 
     /**

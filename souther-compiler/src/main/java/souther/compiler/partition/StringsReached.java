@@ -146,7 +146,7 @@ public record StringsReached(boolean mandatoryPositionsHoldAValue,
      */
     private static boolean isReadWhole(Position at) {
         return at.admitted().completeness() instanceof AdmissibleSet.Completeness.Complete
-                || at.projection() instanceof ProjectionEvidence.CertifiedExact;
+                || StringsHeld.boundsAreTheWholeOfTheRules(at);
     }
 
     /**
