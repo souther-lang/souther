@@ -1411,11 +1411,13 @@ public final class NumericDomain<A> {
         FormReach<A> had = reach;
         if (had == null) {
             ClosedState<A> state = closed();
-            had = FormReach.over(rules(), state.sided(), state.box(), state.differences(), order);
+            had = FormReach.over(rules(), state.sided(), state.box(), state.differences(),
+                    parted().orderedBy(order));
             reach = had;
         }
         return had;
     }
+
 
 
     // --- reading the domain back --------------------------------------------------------------------

@@ -10,7 +10,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -50,7 +49,7 @@ import java.util.function.ToIntFunction;
 public final class ClosedStates {
 
     /** Nothing kept: every domain works out what its rules leave for itself. */
-    public static final ClosedStates NONE = new ClosedStates(null, null, null, false, 0);
+    public static final ClosedStates NONE = new ClosedStates(null, null, 0, false, 0);
 
     /**
      * Nothing kept, and every set of rules closed in one run rather than a part at a time
@@ -61,7 +60,7 @@ public final class ClosedStates {
      * the closure, about forms over positions of two parts. Nothing else asks for this: the two are
      * one closure, and this one costs what the rules cost together.
      */
-    static final ClosedStates IN_ONE_RUN = new ClosedStates(null, null, null, true, 0);
+    static final ClosedStates IN_ONE_RUN = new ClosedStates(null, null, 0, true, 0);
 
     /**
      * One closure per question, kept while it is among the {@link #CLOSURES_KEPT} asked last and
@@ -73,8 +72,17 @@ public final class ClosedStates {
 
     /** The same, with each closure keeping no more than {@code placesKept} places of its work. */
     static ClosedStates keptWithWorkOf(long placesKept) {
-        return new ClosedStates(new LatelyAsked<>(CLOSURES_KEPT), new ConcurrentHashMap<>(),
-                new ConcurrentHashMap<>(), false, placesKept);
+        return keptWithTablesOf(POSITION_SETS_KEPT, WALKS_KEPT, placesKept);
+    }
+
+    /**
+     * The same, keeping the places of no more than {@code positionSets} sets of positions and the
+     * walks of no more than {@code walks} forms in each order, for a test holding what is kept to
+     * what it was made to keep.
+     */
+    static ClosedStates keptWithTablesOf(int positionSets, int walks, long placesKept) {
+        return new ClosedStates(new LatelyAsked<>(CLOSURES_KEPT), new LatelyAsked<>(positionSets),
+                walks, false, placesKept);
     }
 
     /**
@@ -89,6 +97,22 @@ public final class ClosedStates {
      */
     static final int CLOSURES_KEPT = 1024;
 
+    /**
+     * How many sets of positions {@link #places} keeps the places of: as many as closures are kept,
+     * since each closure asked is a set of positions and the places of one are wanted for as long
+     * as its closure is.
+     */
+    static final int POSITION_SETS_KEPT = CLOSURES_KEPT;
+
+    /**
+     * How many forms each order in {@link #walks} keeps the walk of. The rules of the closures kept
+     * and the forms a reading is asked about are a few forms to each closure — two to a step of
+     * a chain of prefix sums — so this holds them with room to spare, and no more: a table keeping
+     * the walk of every form it was asked keeps the forms of every step of a long run, each as long
+     * as its own length.
+     */
+    static final int WALKS_KEPT = 4 * CLOSURES_KEPT;
+
     private final LatelyAsked<ClosureQuestion<?>, ClosedState<?>> answers;
 
     /**
@@ -99,22 +123,45 @@ public final class ClosedStates {
      * sorting the positions its rules weigh — with a comparison that can be dear, once per question
      * asked and not once per closure worked out. The positions repeat far more than the rules do.
      *
+     * <p>The sets asked last, {@link #POSITION_SETS_KEPT} of them. Each set asked over a growing
+     * run of rules holds the one before it, so a table keeping every set holds the square of the
+     * length of the run for as long as whatever holds this is held. A set let go and asked again is
+     * sorted again and is the places it was.
+     *
      * <p>Keyed by the order as the object it is, which is not what makes two questions one: two
      * orders written apart that put the positions in the same places are two entries here and one
-     * question at {@link #answers}. An entry missed is a sort done again and nothing else.
+     * question at {@link #answers}. Null for a table that keeps nothing.
      */
-    private final Map<CanonicalOrder<?>, Map<Set<?>, Map<?, Integer>>> places;
+    private final LatelyAsked<PositionsPlaced<?>, Map<?, Integer>> places;
+
+    /** A set of positions and the order it is placed in: what {@link #places} is asked. */
+    private record PositionsPlaced<A>(CanonicalOrder<A> order, Set<A> positions) {}
 
     /**
      * Each order, as the order that keeps how each form has been walked in it
      * ({@link CanonicalForm#entriesIn}).
      *
-     * <p>Kept for the reason {@link #places} is: the walk of a form is settled by the form and the
-     * order alone, and the rules a reading is asked about are the same few forms for every form it is
-     * put. Keyed by the order as the object it is, so an order written apart that walks alike is a
-     * walk done again and nothing else. Null for a table that keeps nothing.
+     * <p>Kept for the reason {@link #places} is, and bounded for it: the walk of a form is settled
+     * by the form and the order alone, and the rules a reading is asked about are the same few forms
+     * for every form it is put, of which {@link #WALKS_KEPT} asked last are kept in each order.
+     * Keyed by the order as the object it is, so an order written apart that walks alike is a walk
+     * done again and nothing else. Null for a table that keeps nothing.
+     *
+     * <p>The orders asked last, {@link #ORDERS_KEPT} of them, for the reason the forms are bounded:
+     * an order written afresh at each call is an entry of its own, and a table of them grows with the
+     * calls. One that is let go is still the order of whatever was handed it, which goes on walking
+     * by it; what is lost is the walks kept in it, which are worked out again by whoever asks next.
      */
-    private final Map<CanonicalOrder<?>, CanonicalOrder<?>> walks;
+    private final LatelyAsked<CanonicalOrder<?>, CanonicalOrder<?>> walks;
+
+    /** How many forms each order of {@link #walks} keeps the walk of. */
+    private final int walksKept;
+
+    /**
+     * How many orders {@link #walks} keeps the walks of. A table of closures serves the atoms of one
+     * domain, whose positions are put in one order, so a few is enough for the ones written apart.
+     */
+    static final int ORDERS_KEPT = 16;
 
     private final AtomicLong workedOut = new AtomicLong();
 
@@ -130,13 +177,13 @@ public final class ClosedStates {
     private final long placesKept;
 
     private ClosedStates(LatelyAsked<ClosureQuestion<?>, ClosedState<?>> answers,
-                         Map<CanonicalOrder<?>, Map<Set<?>, Map<?, Integer>>> places,
-                         Map<CanonicalOrder<?>, CanonicalOrder<?>> walks,
-                         boolean inOneRun, long placesKept) {
+                         LatelyAsked<PositionsPlaced<?>, Map<?, Integer>> places,
+                         int walksKept, boolean inOneRun, long placesKept) {
         this.placesKept = placesKept;
         this.answers = answers;
         this.places = places;
-        this.walks = walks;
+        this.walksKept = walksKept;
+        this.walks = answers == null ? null : new LatelyAsked<>(ORDERS_KEPT);
         this.inOneRun = inOneRun;
     }
 
@@ -157,7 +204,7 @@ public final class ClosedStates {
         // The cast holds because an entry is only ever put under the order it keeps the walks of.
         @SuppressWarnings("unchecked")
         CanonicalOrder<A> keeping =
-                (CanonicalOrder<A>) walks.computeIfAbsent(order, _ -> new Keeping<>(order));
+                (CanonicalOrder<A>) walks.answer(order, _ -> new Keeping<>(order));
         return keeping;
     }
 
@@ -165,8 +212,8 @@ public final class ClosedStates {
     private final class Keeping<A> implements CanonicalOrder<A> {
 
         private final CanonicalOrder<A> order;
-        private final Map<CanonicalForm<A>, List<Map.Entry<A, ExactRatio>>> walked =
-                new ConcurrentHashMap<>();
+        private final LatelyAsked<CanonicalForm<A>, List<Map.Entry<A, ExactRatio>>> walked =
+                new LatelyAsked<>(walksKept);
 
         private Keeping(CanonicalOrder<A> order) {
             this.order = order;
@@ -185,15 +232,40 @@ public final class ClosedStates {
         @Override
         public List<Map.Entry<A, ExactRatio>> walkOf(CanonicalForm<A> form,
                                                      Supplier<List<Map.Entry<A, ExactRatio>>> walk) {
-            List<Map.Entry<A, ExactRatio>> had = walked.get(form);
-            if (had != null) {
-                return had;
-            }
-            List<Map.Entry<A, ExactRatio>> made = walk.get();
-            walkedOut.incrementAndGet();
-            walked.put(form, made);
-            return made;
+            return walked.answer(form, _ -> {
+                List<Map.Entry<A, ExactRatio>> made = walk.get();
+                walkedOut.incrementAndGet();
+                return made;
+            });
         }
+
+        private int held() {
+            return walked.size();
+        }
+    }
+
+    /**
+     * How many forms the walks are held of, over every order, for a test holding what is kept to
+     * what it was made to keep however long the run of rules asked about.
+     */
+    int walksHeld() {
+        int held = 0;
+        if (walks != null) {
+            for (CanonicalOrder<?> each : walks.kept()) {
+                held += ((Keeping<?>) each).held();
+            }
+        }
+        return held;
+    }
+
+    /** How many orders the walks are kept for, for the same test as {@link #walksHeld}. */
+    int ordersHeld() {
+        return walks == null ? 0 : walks.size();
+    }
+
+    /** How many sets of positions the places are held of, for the same test as {@link #walksHeld}. */
+    int positionSetsHeld() {
+        return places == null ? 0 : places.size();
     }
 
     /**
@@ -441,6 +513,15 @@ public final class ClosedStates {
             return only == null ? null : closed.get(only);
         }
 
+        /**
+         * {@code order}, walking a form whose positions are all of one part by the places that part
+         * was asked with ({@link PartedOrder}), and {@code order} itself where the rules were not
+         * parted. Made for the rules as they stand, from what the closure already holds.
+         */
+        public CanonicalOrder<A> orderedBy(CanonicalOrder<A> order) {
+            return owner == null || !complete ? order : new PartedOrder<>(partOf, questions, order);
+        }
+
         /** The rules of the part weighing {@code position}; null where {@link #partWeighing} is. */
         public List<AffineConstraint<A>> rulesOfThePartWeighing(A position) {
             Integer at = partOf.get(position);
@@ -624,20 +705,20 @@ public final class ClosedStates {
         return premisesMoved.get();
     }
 
-    /** {@link ClosureQuestion#placesIn}, kept for the order and the positions it was asked of. */
-    private <A> Map<A, Integer> placed(Set<A> positions, CanonicalOrder<A> order) {
-        Map<Set<?>, Map<?, Integer>> under =
-                places.computeIfAbsent(order, _ -> new ConcurrentHashMap<>());
-        // The cast holds because an entry is only ever put under the positions it places.
+    /**
+     * {@link ClosureQuestion#placesIn}, kept for the order and the positions it was asked of. The
+     * positions are copied into the question, which is held for as long as its answer is.
+     */
+    <A> Map<A, Integer> placed(Set<A> positions, CanonicalOrder<A> order) {
+        PositionsPlaced<A> question = new PositionsPlaced<>(order, Set.copyOf(positions));
+        // The cast holds because the answer to a question is only ever the places of its positions.
+        // Placed from the positions as they were handed over, and not from the copy the question
+        // holds: a copy lists them in an order of its own, and a sort that is given the positions in
+        // the order they came in, which over a run of rules is nearly their order, is linear.
         @SuppressWarnings("unchecked")
-        Map<A, Integer> had = (Map<A, Integer>) under.get(positions);
-        if (had != null) {
-            return had;
-        }
-        Map<A, Integer> made = ClosureQuestion.placesIn(positions, order);
-        @SuppressWarnings("unchecked")
-        Map<A, Integer> raced = (Map<A, Integer>) under.putIfAbsent(Set.copyOf(positions), made);
-        return raced == null ? made : raced;
+        Map<A, Integer> placed = (Map<A, Integer>) places.answer(question,
+                _ -> ClosureQuestion.placesIn(positions, order));
+        return placed;
     }
 
     /**
