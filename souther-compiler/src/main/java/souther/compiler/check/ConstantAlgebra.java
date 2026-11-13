@@ -15,6 +15,7 @@ import net.unit8.notation199x.pattern.PatternParser;
 import net.unit8.notation199x.pattern.PatternRead;
 import souther.compiler.regex.Recognizer;
 import souther.compiler.evaluate.JoinedText;
+import souther.exact.ExactDecimals;
 import net.unit8.notation199x.ScalarValues;
 
 /**
@@ -340,26 +341,14 @@ final class ConstantAlgebra {
         }
         if (a instanceof BigDecimal x && b instanceof BigDecimal y) {
             // A result the run time has no Decimal for is one it aborts on, and the fold answers
-            // nothing, as the Int fold does on overflow. A product's scale is the sum of its
-            // factors' and is refused whatever the product's value is, so it is checked before
-            // BigDecimal is asked; BigDecimal answers some products past the range instead of
-            // refusing them.
-            if (op == BinOp.MUL) {
-                long scale = (long) x.scale() + y.scale();
-                if (scale != (int) scale) {
-                    return Optional.empty();
-                }
-            }
-            try {
-                return Optional.of(switch (op) {
-                    case ADD -> x.add(y);
-                    case SUB -> x.subtract(y);
-                    case MUL -> x.multiply(y);
-                    default -> throw new IllegalStateException();
-                });
-            } catch (ArithmeticException _) {
-                return Optional.empty();
-            }
+            // nothing, as the Int fold does on overflow. Whether there is room is what the run
+            // time asks of ExactDecimals, and this asks the same.
+            return Optional.ofNullable(switch (op) {
+                case ADD -> ExactDecimals.sumWhereThereIsRoom(x, y);
+                case SUB -> ExactDecimals.differenceWhereThereIsRoom(x, y);
+                case MUL -> ExactDecimals.timesWhereThereIsRoom(x, y);
+                default -> throw new IllegalStateException();
+            });
         }
         return Optional.empty();
     }
