@@ -12476,8 +12476,10 @@ final class Pullback {
                 return read.rules().declarations();
             }
 
-            /** What a form read here holds is held in this reading's own elements, and the
-             *  operations it reads through are told by the walk of them ({@link #operatorsIn}). */
+            /** The operations it reads through are told by the walk of them
+             *  ({@link #operatorsIn}). The elements a form meets are registered as it is read, and
+             *  the arguments of a call that composed no form belong to none: what reading them
+             *  would register is registered for nothing. */
             @Override
             public boolean tellsWhatItReads() {
                 return false;
@@ -13894,6 +13896,10 @@ final class Pullback {
      * a stop that reads a name asks it of the value the name stands for, which is the stop another
      * name was read inside of, so a chain of names that each stand for a call of the one before is
      * gone into once and not once for every name above it.
+     *
+     * <p>What comes of going into a part does not depend on which parts were gone into before it in
+     * the search it is asked in: a part reached again has been gone into and found none, and a value
+     * that reaches itself is refused before any reading runs.
      */
     private Inside aWayIntoAPart(Denotation part, Set<BindingId> met,
                                  Map<Core, List<InputReads>> explored) {
