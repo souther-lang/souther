@@ -5,9 +5,9 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -352,11 +352,10 @@ public final class ModelShapes {
 
         public static AdequacyReport read(String source) {
             Compilation model = Compilation.ofSource(source, "Main");
-            List<String> dropped = new ArrayList<>();
             try {
                 TheDoor.compiles(model);
             } catch (AssertionError failed) {
-                dropped.add(failed.getMessage());
+                Objects.requireNonNull(failed);
             }
             return AdequacyReport.of(model);
         }
