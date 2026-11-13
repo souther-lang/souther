@@ -1,9 +1,12 @@
 package souther.compiler.numeric;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -64,16 +67,131 @@ final class PrefixBasis<A> {
     private final Map<A, Integer> places;
 
     /** The rules in the coordinates, their differences closed. */
-    private final DifferenceBounds<Integer> closed;
+    private final Closed closed;
 
     /** What each position is left, which is the whole of what the rules leave it; null where the
      *  rules leave nothing. */
     private final Box<A> box;
 
-    private PrefixBasis(Map<A, Integer> places, DifferenceBounds<Integer> closed) {
+    /**
+     * What the closure of the rules in the coordinates answers. Rules that bound a coordinate or
+     * the difference of two neighbours, which is every rule of a chain of prefix sums, are closed
+     * along the chain ({@link ChainBounds}); any other rule the basis accepts is closed by
+     * {@link DifferenceBounds}, whose answers the first gives for the rules it takes.
+     */
+    interface Closed {
+
+        boolean holdsNothing();
+
+        boolean everyHopWasComposed();
+
+        ExactCut upperBoundOf(int coordinate);
+
+        ExactCut lowerBoundOf(int coordinate);
+
+        ExactCut differenceBound(int a, int b);
+
+        boolean differenceBoundWasComposed(int a, int b);
+    }
+
+    /** The closure by {@link DifferenceBounds}, for rules that are not bounds along a chain. */
+    private record Differences(DifferenceBounds<Integer> of) implements Closed {
+
+        @Override
+        public boolean holdsNothing() {
+            return of.holdsNothing();
+        }
+
+        @Override
+        public boolean everyHopWasComposed() {
+            return of.everyHopWasComposed();
+        }
+
+        @Override
+        public ExactCut upperBoundOf(int coordinate) {
+            return of.upperBoundOf(coordinate);
+        }
+
+        @Override
+        public ExactCut lowerBoundOf(int coordinate) {
+            return of.lowerBoundOf(coordinate);
+        }
+
+        @Override
+        public ExactCut differenceBound(int a, int b) {
+            return of.differenceBound(a, b);
+        }
+
+        @Override
+        public boolean differenceBoundWasComposed(int a, int b) {
+            return of.differenceBoundWasComposed(a, b);
+        }
+    }
+
+    /** The rules this basis was made from, in the order they were handed over. */
+    private final List<AffineConstraint<A>> rules;
+
+    /** The rules in the coordinates, one for each of {@link #rules}. */
+    private final List<AffineConstraint<Integer>> moved;
+
+    /** How many positions the shortest and the longest prefix hold. */
+    private final int smallest;
+    private final int largest;
+
+    /** Every position the rules weigh, in the order the rules name them. */
+    private final Set<A> positions;
+
+    /**
+     * What a form weighs over the coordinates, kept for the forms asked of the bases that follow
+     * one another: a basis made from the one before keeps the places that one had, so what was
+     * worked out with them is what it would work out again.
+     *
+     * <p>Only the last of a line writes on, as {@link souther.compiler.collect.AppendOnly} does: a
+     * basis made from one that has another made from it starts a line of its own, since the
+     * positions the two add are placed apart. An entry is read by a basis that holds as many places
+     * as the one that made it did, and not by one with fewer.
+     */
+    private static final class Line<A> {
+
+        /** What a form's weights come to, by the very map of weights it was asked as. */
+        private final Map<Map<A, ExactRatio>, Prepared> weighed = new IdentityHashMap<>();
+        private int written;
+
+        private Line(int written) {
+            this.written = written;
+        }
+    }
+
+    /** A form's weights over the coordinates, and how many places the basis that worked them out
+     *  held. */
+    private record Prepared(int placed, Map<Integer, ExactRatio> weights) {}
+
+    private static final int FORMS_KEPT = 1 << 16;
+
+    private final Line<A> line;
+
+    private PrefixBasis(Map<A, Integer> places, Closed closed, List<AffineConstraint<A>> rules,
+                        List<AffineConstraint<Integer>> moved, int smallest, int largest,
+                        Set<A> positions, Line<A> line) {
+        this.line = line;
         this.places = places;
         this.closed = closed;
+        this.rules = rules;
+        this.moved = moved;
+        this.smallest = smallest;
+        this.largest = largest;
+        this.positions = positions;
         this.box = closed.holdsNothing() ? null : boxOf(places.keySet());
+    }
+
+    /** How many rules this was made from. */
+    int ruleCount() {
+        return rules.size();
+    }
+
+    /** Every position the rules this was made from weigh, in the order they name them. */
+    Set<A> positions() {
+        return positions;
     }
 
     /** What a basis says of how high a form comes to. */
@@ -106,6 +224,7 @@ final class PrefixBasis<A> {
         Set<Set<A>> distinct = new HashSet<>();
         List<Set<A>> supports = new ArrayList<>();
         List<List<Map.Entry<A, ExactRatio>>> walked = new ArrayList<>(constraints.size());
+        Set<A> positions = new LinkedHashSet<>();
         for (AffineConstraint<A> rule : constraints) {
             if (!(rule instanceof AffineConstraint.HalfSpace<A> half)) {
                 return null;
@@ -117,6 +236,7 @@ final class PrefixBasis<A> {
                     return null;
                 }
                 support.add(each.getKey());
+                positions.add(each.getKey());
             }
             walked.add(entries);
             if (support.size() >= 2 && distinct.add(support)) {
@@ -149,13 +269,130 @@ final class PrefixBasis<A> {
             }
             moved.add(there);
         }
-        DifferenceBounds<Integer> closed = DifferenceBounds.over(moved, BY_PLACE);
+        Closed closed = ChainBounds.over(moved);
+        if (closed == null) {
+            closed = new Differences(DifferenceBounds.over(moved, BY_PLACE));
+        }
         if (!closed.everyHopWasComposed()) {
             return null;
         }
-        PrefixBasis<A> basis = new PrefixBasis<>(places, closed);
+        PrefixBasis<A> basis = new PrefixBasis<>(places, closed, List.copyOf(constraints), moved,
+                supports.getFirst().size(), supports.getLast().size(),
+                Collections.unmodifiableSet(positions), new Line<>(places.size()));
         return basis.holdsNothing() || basis.box != null ? basis : null;
     }
+
+    /**
+     * The basis {@code constraints} are read in, made from {@code before}, the basis of the rules
+     * they are the very ones followed by others, so that the rules before are not read again; or
+     * null where this cannot say, in which case {@link #over} is asked.
+     *
+     * <p>What a rule is read to is its support and its place in the coordinates, and neither
+     * depends on the rules after it while the prefixes keep their places: a rule added is one
+     * whose support is one of the prefixes there are, or the longest of them with one more
+     * position. A rule that is not asks {@link #over}, which says whether there is a basis at all.
+     * The answer is the one {@link #over} gives for the same rules — what is read of the rules before
+     * is what it was read to — at a cost of the rules added and not of all of them.
+     */
+    static <A> PrefixBasis<A> following(PrefixBasis<A> before, List<AffineConstraint<A>> constraints,
+                                        Function<A, Granularity> spacing, CanonicalOrder<A> order) {
+        int had = before.rules.size();
+        if (constraints.size() <= had) {
+            return null;
+        }
+        for (int at = 0; at < had; at++) {
+            if (constraints.get(at) != before.rules.get(at)) {
+                return null;
+            }
+        }
+        Map<A, Integer> places = new HashMap<>(before.places);
+        Set<A> positions = new LinkedHashSet<>(before.positions);
+        int largest = before.largest;
+        List<AffineConstraint.HalfSpace<A>> added = new ArrayList<>(constraints.size() - had);
+        List<List<Map.Entry<A, ExactRatio>>> walked = new ArrayList<>(constraints.size() - had);
+        for (int at = had; at < constraints.size(); at++) {
+            if (!(constraints.get(at) instanceof AffineConstraint.HalfSpace<A> half)) {
+                return null;
+            }
+            List<Map.Entry<A, ExactRatio>> entries = half.form().entriesIn(order);
+            for (Map.Entry<A, ExactRatio> each : entries) {
+                if (spacing.apply(each.getKey()) != Granularity.DISCRETE) {
+                    return null;
+                }
+                positions.add(each.getKey());
+            }
+            int size = entries.size();
+            if (size >= 2) {
+                if (size < before.smallest || size > largest + 1) {
+                    return null;
+                }
+                int unplaced = 0;
+                A fresh = null;
+                for (Map.Entry<A, ExactRatio> each : entries) {
+                    Integer place = places.get(each.getKey());
+                    if (place == null) {
+                        unplaced++;
+                        fresh = each.getKey();
+                    } else if (place >= size) {
+                        return null;
+                    }
+                }
+                if (size == largest + 1) {
+                    if (unplaced != 1) {
+                        return null;
+                    }
+                    places.put(fresh, largest);
+                    largest = size;
+                } else if (unplaced != 0) {
+                    return null;
+                }
+            }
+            walked.add(entries);
+            added.add(half);
+        }
+        List<AffineConstraint<Integer>> moved = new ArrayList<>(before.moved);
+        for (int at = 0; at < added.size(); at++) {
+            AffineConstraint.HalfSpace<Integer> there =
+                    half(weighed(walked.get(at), places), added.get(at).bound());
+            if (there == null || !DifferenceBounds.canHold(there, BY_PLACE)
+                    || !onTheWholeNumbers(there.bound())) {
+                return null;
+            }
+            moved.add(there);
+        }
+        Closed closed = ChainBounds.over(moved);
+        if (closed == null) {
+            closed = new Differences(DifferenceBounds.over(moved, BY_PLACE));
+        }
+        if (!closed.everyHopWasComposed()) {
+            return null;
+        }
+        Map<A, Integer> placed = Map.copyOf(places);
+        Line<A> line;
+        synchronized (before.line) {
+            if (before.line.written == before.places.size()) {
+                line = before.line;
+                line.written = placed.size();
+            } else {
+                line = new Line<>(placed.size());
+            }
+        }
+        PrefixBasis<A> basis = new PrefixBasis<>(placed, closed, List.copyOf(constraints),
+                moved, before.smallest, largest, Collections.unmodifiableSet(positions), line);
+        if (!basis.holdsNothing() && basis.box == null) {
+            return null;
+        }
+        long[] counting = COUNTING_FOLLOWED;
+        if (counting != null) {
+            counting[0]++;
+        }
+        return basis;
+    }
+
+    /** Where a test in this package counts the bases made from the basis before, and null everywhere
+     *  else. What a basis answers is the same however it was made, so how it was made has nowhere
+     *  else to be read. */
+    static long[] COUNTING_FOLLOWED;
 
     /**
      * Whether a bound is one a closure of whole-number differences is exact for: a whole number the
@@ -247,6 +484,35 @@ final class PrefixBasis<A> {
         return box;
     }
 
+    /**
+     * What {@code coefs} weigh over the coordinates, or null where a position is in no prefix or a
+     * number is not one the exact arithmetic holds. Kept for the very map asked: a form read again,
+     * by this basis or by one made from it, is not weighed again. What is null is not kept, since a
+     * position that is in no prefix here may be in one of the next.
+     */
+    private Map<Integer, ExactRatio> weighedOver(Map<A, ExactRatio> coefs) {
+        if (coefs.size() > 2) {
+            synchronized (line) {
+                Prepared kept = line.weighed.get(coefs);
+                if (kept != null && kept.placed() <= places.size()) {
+                    return kept.weights();
+                }
+            }
+        }
+        Map<Integer, ExactRatio> weights = weighed(coefs.entrySet(), places);
+        // A form of one position or two is weighed as fast as it is looked up, and is most often a
+        // map made for the one question.
+        if (weights != null && coefs.size() > 2) {
+            synchronized (line) {
+                if (line.weighed.size() >= FORMS_KEPT) {
+                    line.weighed.clear();
+                }
+                line.weighed.put(coefs, new Prepared(places.size(), weights));
+            }
+        }
+        return weights;
+    }
+
     /** What each position is left, or null where one of its bounds is not one this can write. */
     private Box<A> boxOf(Set<A> positions) {
         Map<A, ExactCut> least = new LinkedHashMap<>();
@@ -281,7 +547,7 @@ final class PrefixBasis<A> {
      * different answers, and are told apart. Asked only where the rules leave something.
      */
     Highest highest(Map<A, ExactRatio> coefs, ExactRatio constant) {
-        Map<Integer, ExactRatio> weights = weighed(coefs.entrySet(), places);
+        Map<Integer, ExactRatio> weights = weighedOver(coefs);
         if (weights == null) {
             return Highest.NOT_ANSWERED;
         }

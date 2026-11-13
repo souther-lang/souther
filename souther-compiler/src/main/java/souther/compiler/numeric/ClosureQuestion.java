@@ -90,6 +90,37 @@ final class ClosureQuestion<A> {
                                      Function<Set<A>, Map<A, Integer>> placing) {
         Set<A> weighed = new LinkedHashSet<>();
         rules.forEach(each -> weighed.addAll(each.form().coefs().keySet()));
+        return stated(rules, weighed, spacing, order, placing);
+    }
+
+    /**
+     * The question {@code rules} put, which are the very rules of {@code before} followed by others,
+     * with the positions of {@code before} taken as they are and only the rules after them read for
+     * what they weigh; the question {@link #of} puts for the same rules where they are not.
+     */
+    static <A> ClosureQuestion<A> following(ClosureQuestion<A> before,
+                                            List<AffineConstraint<A>> rules,
+                                            Function<A, Granularity> spacing,
+                                            CanonicalOrder<A> order,
+                                            Function<Set<A>, Map<A, Integer>> placing) {
+        int had = before == null ? 0 : before.rules.size();
+        if (before == null || rules.size() <= had) {
+            return of(rules, spacing, order, placing);
+        }
+        for (int at = 0; at < had; at++) {
+            if (rules.get(at) != before.rules.get(at)) {
+                return of(rules, spacing, order, placing);
+            }
+        }
+        Set<A> weighed = new LinkedHashSet<>(before.place.keySet());
+        rules.subList(had, rules.size()).forEach(each -> weighed.addAll(each.form().coefs().keySet()));
+        return stated(rules, weighed, spacing, order, placing);
+    }
+
+    private static <A> ClosureQuestion<A> stated(List<AffineConstraint<A>> rules, Set<A> weighed,
+                                                 Function<A, Granularity> spacing,
+                                                 CanonicalOrder<A> order,
+                                                 Function<Set<A>, Map<A, Integer>> placing) {
         Map<A, Granularity> spaced = new HashMap<>();
         for (A position : weighed) {
             Granularity it = spacing.apply(position);

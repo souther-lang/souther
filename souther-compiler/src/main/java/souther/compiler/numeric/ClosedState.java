@@ -187,6 +187,11 @@ public final class ClosedState<A> {
         this.bases = bases;
     }
 
+    /** Whether the rules were closed in a basis, for the closure of one part. */
+    boolean isClosedInABasis() {
+        return !bases.isEmpty();
+    }
+
     /**
      * How high a form comes to over these rules where a basis they were closed in answers it, and
      * not answered where none does: no basis was chosen, or the form is not one of its positions,
@@ -297,17 +302,48 @@ public final class ClosedState<A> {
                                              Function<A, Granularity> spacing,
                                              CanonicalOrder<A> order, ClosureWork<A> parent,
                                              ClosureWork<A> into) {
-        DifferenceBounds<A> differences = DifferenceBounds.over(constraints, order);
+        return closedTogether(constraints, spacing, order, parent, into, null);
+    }
+
+    /**
+     * The same closure, with what is read of the rules before these taken from {@code before},
+     * the closure of the rules these are the very ones followed by others, where it was closed in a
+     * basis and the rules added are of a kind it is extended by. Only how the closure is reached:
+     * with none, or with one it cannot use, this is the closure of the rules read from the start.
+     */
+    static <A> ClosedState<A> closedTogether(List<AffineConstraint<A>> constraints,
+                                             Function<A, Granularity> spacing,
+                                             CanonicalOrder<A> order, ClosureWork<A> parent,
+                                             ClosureWork<A> into, ClosedState<A> before) {
+        PrefixBasis<A> prefix = null;
+        DifferenceBounds<A> differences = null;
+        if (before != null && before.bases.size() == 1 && !before.holdsNothing) {
+            PrefixBasis<A> was = before.bases.getFirst();
+            prefix = PrefixBasis.following(was, constraints, spacing, order);
+            if (prefix != null) {
+                differences = before.differences.followedBy(
+                        constraints.subList(was.ruleCount(), constraints.size()), order);
+                if (differences == null) {
+                    prefix = null;
+                }
+            }
+        }
+        boolean read = prefix == null;
+        if (read) {
+            differences = DifferenceBounds.over(constraints, order);
+        }
         if (differences.holdsNothing()) {
             return empty(differences);
         }
-        Set<A> positions = positionsOf(constraints, order);
+        Set<A> positions = read ? positionsOf(constraints, order) : prefix.positions();
         Box<A> box = boxOf(differences, positions);
         if (!box.holdsAValue()) {
             return empty(differences);
         }
         boolean everyBoundWasComposed = differences.everyHopWasComposed();
-        PrefixBasis<A> prefix = PrefixBasis.over(constraints, spacing, order);
+        if (read) {
+            prefix = PrefixBasis.over(constraints, spacing, order);
+        }
         if (prefix != null) {
             return closedInPrefixBasis(prefix, box, differences, positions, everyBoundWasComposed);
         }
@@ -439,9 +475,9 @@ public final class ClosedState<A> {
     /** The same, worked from {@code parent} and leaving its own work in {@code into}; see
      *  {@link #closedTogether(List, Function, CanonicalOrder, ClosureWork, ClosureWork)}. */
     static <A> ClosedState<A> of(ClosureQuestion<A> question, ClosureWork<A> parent,
-                                 ClosureWork<A> into) {
+                                 ClosureWork<A> into, ClosedState<A> before) {
         return closedTogether(question.rules(), question::spacingOf, question.order(), parent,
-                into);
+                into, before);
     }
 
     /**

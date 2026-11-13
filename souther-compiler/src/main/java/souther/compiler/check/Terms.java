@@ -214,6 +214,10 @@ final class Terms {
      */
     private final Map<FactSubject, AtomKnowledge> knowledge = new HashMap<>();
 
+    /** The runs of answers the forms read against this take into a reading, which are let go where
+     *  something is recorded about an atom they were made from. */
+    final DerivedNumericFacts.Plans derivationPlans = new DerivedNumericFacts.Plans();
+
     /** The subject each evaluation this could not name is, made once per occurrence. Identity-keyed:
      * an occurrence is a node, and two nodes are two evaluations however alike they are written. */
     private final IdentityHashMap<Core, EvaluationId> evaluations = new IdentityHashMap<>();
@@ -257,6 +261,7 @@ final class Terms {
                     + had.computation() + " and as " + how);
         }
         knowledge.put(atom, had.computedBy(how));
+        derivationPlans.knowledgeChanged(atom);
     }
 
     /**
@@ -286,6 +291,7 @@ final class Terms {
                     + had.intrinsic() + " and carries " + facts);
         }
         knowledge.put(atom, had.carrying(facts));
+        derivationPlans.knowledgeChanged(atom);
     }
 
     /**
