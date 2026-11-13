@@ -117,7 +117,22 @@ class ARangeIsCarriedThroughACallTheLibrarySaysTheArithmeticOfTest {
                 + " * 92233720368547758)");
         ofAnInt("Rational.toInt(mode, Rational.multiply(v / 2, v / 2))");
         ofAnInt("Rational.toInt(mode, Rational.fromInt(v) / Rational.fromInt(2)"
+                + " * 92233720368547758)");
+        ofAnInt("Rational.toInt(mode, Rational.divide(Rational.fromInt(v), Rational.fromInt(2))"
                 + " * 92233720368547758)");        ofADecimal("Rational.toInt(mode, Rational.fromDecimal(v) * 92233720368547758)");
+    }
+
+    /** A divisor that may be nought is a stop the range does not answer for, call or operator. */
+    @Test
+    void aDivisorThatMayBeNoughtIsNotShownToGetPast() {
+        for (String number : List.of(
+                "Rational.toInt(mode, Rational.divide(Rational.fromInt(1), Rational.fromInt(v)))",
+                "Rational.toInt(mode, Rational.fromInt(1) / Rational.fromInt(v))",
+                "Rational.toInt(mode, Rational.divide(Rational.fromInt(1), Rational.fromInt(0)))")) {
+            List<String> held = whyVIsNotRead(
+                    model("Int", "value >= 0 && value <= 100", number));
+            assertTrue(held.contains(NOT_SHOWN_REACHED), () -> number + " " + held);
+        }
     }
 
     @Test
