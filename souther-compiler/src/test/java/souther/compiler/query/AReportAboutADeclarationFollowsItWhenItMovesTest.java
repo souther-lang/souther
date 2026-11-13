@@ -167,7 +167,7 @@ class AReportAboutADeclarationFollowsItWhenItMovesTest {
         edited.put("prices.sou", prices);
         edited.put("cart.sou", BUILDING);
         c.update(edited, Set.of(), TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
     }
 
     private static Compilation workspace(String prices) {

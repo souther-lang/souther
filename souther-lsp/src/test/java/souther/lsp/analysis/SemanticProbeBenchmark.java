@@ -83,6 +83,7 @@ class SemanticProbeBenchmark {
         Compilation workspace = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
                 .writtenOn(WrittenOn.DAY);
         resolve(workspace, module);
+        ACompiledModel.compiles(workspace);
 
         // Warmed for as many rounds as it is measured. The workspace is held to compile once its
         // round has been timed, so that answering every report is no part of a timing.
@@ -150,6 +151,7 @@ class SemanticProbeBenchmark {
             long between = System.nanoTime();
             through(alongside, byId, edited, module, round);
             long closed = System.nanoTime();
+            ACompiledModel.compiles(workspace);
             if (round >= ROUNDS) {
                 workspaceTurns.add(between - opened);
                 probeTurns.add(closed - between);

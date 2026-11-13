@@ -13,6 +13,12 @@ enum ModelStanding {
     /** The helper was handed it, so the test stops if it does not compile. */
     ASKED,
 
+    /**
+     * The test said it is a model that cannot be compiled, so what it reads of it is what the
+     * declarations say, and never a report: a report of a model nothing was asked of is empty.
+     */
+    EXEMPT,
+
     /** It came in as an argument of the method, which is asked about where the method is called. */
     HANDED_IN,
 

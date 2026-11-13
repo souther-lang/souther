@@ -50,6 +50,7 @@ class AnArrangementNamedAfterRowsHaveRunIsRefusedTest {
                 () -> compilation.withJvmExampleDeadlines(
                         DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("run"))));
 
+        ACompiledModel.compiles(compilation);
         assertEquals(Disposition.HELD, onlyRowOf(compilation).disposition(),
                 "and what it answered is what it ran, which is why the second one is refused: "
                         + refused.getMessage());

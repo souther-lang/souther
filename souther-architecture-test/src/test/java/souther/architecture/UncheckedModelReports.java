@@ -51,14 +51,19 @@ final class UncheckedModelReports {
 
     private final Set<String> exempt;
 
+    private final Set<String> readOnly;
+
     /**
-     * @param helper the class a test goes through to ask that a model compiles
-     * @param exempt the methods, as {@link AMethod} says them, that read a model they did not
-     *               compile and say so
+     * @param helper   the class a test goes through to ask that a model compiles
+     * @param exempt   the methods, as {@link AMethod} says them, that read a model they did not
+     *                 compile and say so
+     * @param readOnly the methods of the compiler, as {@link AMethod} says them, that a model is
+     *                 handed to and that leave what it is compiled from as it was
      */
-    UncheckedModelReports(String helper, Set<String> exempt) {
+    UncheckedModelReports(String helper, Set<String> exempt, Set<String> readOnly) {
         this.helper = helper;
         this.exempt = Set.copyOf(exempt);
+        this.readOnly = Set.copyOf(readOnly);
     }
 
     /** What {@code classes} do with the models they read. */
@@ -80,7 +85,7 @@ final class UncheckedModelReports {
             }
         }
         ModelWalk.World world = new ModelWalk.World(helper, Set.copyOf(walks.keySet()),
-                Set.copyOf(written), Map.copyOf(captured), exempt);
+                Set.copyOf(written), Map.copyOf(captured), exempt, readOnly);
         ModelWalk.Facts facts = ModelWalk.Facts.NONE;
         Map<ModelWalk, ModelWalk.Result> results = new LinkedHashMap<>();
         for (int round = 0; round < ROUNDS; round++) {
@@ -98,7 +103,7 @@ final class UncheckedModelReports {
                 + ROUNDS + " rounds, so nothing can be said of the reads");
     }
 
-    private static Findings findings(Map<ModelWalk, ModelWalk.Result> results) {
+    private Findings findings(Map<ModelWalk, ModelWalk.Result> results) {
         Set<String> handed = new HashSet<>();
         for (ModelWalk walk : results.keySet()) {
             handed.addAll(walk.handedOn());
@@ -110,7 +115,8 @@ final class UncheckedModelReports {
             ModelWalk.Result result = each.getValue();
             boolean nobodyHandsItIn = result.readsParameter.stream()
                     .anyMatch(index -> !handed.contains(walk.key() + "#" + index));
-            if (result.unasked > 0 || result.lost > 0 || nobodyHandsItIn) {
+            boolean theEngineHandsItIn = walk.engineRuns() && !result.readsParameter.isEmpty();
+            if (result.unasked > 0 || result.lost > 0 || nobodyHandsItIn || theEngineHandsItIn) {
                 refused.add(AMethod.of(walk.owner(), walk.method()));
             }
             if (result.asked > 0) {
@@ -124,7 +130,10 @@ final class UncheckedModelReports {
         Map<String, ModelStanding> returns = new HashMap<>();
         Set<String> returnsParameter = new HashSet<>();
         Set<String> readsParameter = new HashSet<>();
+        Set<String> readsReportParameter = new HashSet<>();
         Set<String> asksParameter = new HashSet<>();
+        Set<String> mutatesParameter = new HashSet<>();
+        Set<String> leavesAsked = new HashSet<>();
         Map<String, ModelStanding> fields = new HashMap<>();
         Map<String, Set<String>> fieldFlows = new HashMap<>();
         for (Map.Entry<ModelWalk, ModelWalk.Result> each : results.entrySet()) {
@@ -135,13 +144,22 @@ final class UncheckedModelReports {
             }
             result.returnsParameter.forEach(index -> returnsParameter.add(key + "#" + index));
             result.readsParameter.forEach(index -> readsParameter.add(key + "#" + index));
+            result.readsReportParameter.forEach(index -> readsReportParameter
+                    .add(key + "#" + index));
             result.asksParameter.forEach(index -> asksParameter.add(key + "#" + index));
+            result.mutatesParameter.forEach(index -> mutatesParameter.add(key + "#" + index));
+            result.exits.forEach((index, standing) -> {
+                if (standing == ModelStanding.ASKED) {
+                    leavesAsked.add(key + "#" + index);
+                }
+            });
             result.fieldWrites.forEach((field, standing) -> fields.merge(field, standing,
                     ModelStanding::join));
             result.fieldFlows.forEach((parameter, flowing) -> fieldFlows
                     .computeIfAbsent(parameter, k -> new HashSet<>()).addAll(flowing));
         }
-        return new ModelWalk.Facts(returns, returnsParameter, readsParameter, asksParameter,
-                fields, fieldFlows);
+        return new ModelWalk.Facts(returns, returnsParameter, readsParameter,
+                readsReportParameter, asksParameter, mutatesParameter, leavesAsked, fields,
+                fieldFlows);
     }
 }

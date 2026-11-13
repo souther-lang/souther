@@ -115,6 +115,7 @@ class ABehaviorsInputDomainIsReadFromWhatThatBehaviorDeclaresTest {
 
     private static void edited(Compilation c, String text) {
         c.update(Map.of(ID, text), Set.of(), TestDay.DATE);
+        ACompiledModel.compiles(c);
     }
 
     @Test

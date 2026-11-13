@@ -72,7 +72,7 @@ class WhatHasNoValueIsCountedFromWhatAModuleDeclaresTest {
 
     private static void edited(Compilation c, String text) {
         c.update(Map.of(ID, text), Set.of(), TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
     }
 
     /** A body written another way leaves the count where it was: it says nothing about which types

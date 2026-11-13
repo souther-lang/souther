@@ -1,8 +1,11 @@
 package souther.architecture.fixture;
 
+import org.junit.jupiter.api.Test;
+
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.source.SourceId;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -563,14 +566,97 @@ public final class ModelShapes {
         }
     }
 
-    /** Says a model is read without compiling it, in a method that is on the list. */
+    /** Says a model is read without compiling it, and reads what its declarations say. */
     public static final class NotCompiledOnTheList {
 
         private NotCompiledOnTheList() { }
 
+        public static boolean read(String source) {
+            Compilation model = TheDoor.notCompiled(Compilation.ofSource(source, "Main"),
+                    "too long");
+            return model.db() != null;
+        }
+    }
+
+    /** Says a model is read without compiling it, and then reads a report of it. */
+    public static final class NotCompiledButReportRead {
+
+        private NotCompiledButReportRead() { }
+
         public static AdequacyReport read(String source) {
-            Compilation model = TheDoor.notCompiled(Compilation.ofSource(source, "Main"), "too long");
+            Compilation model = TheDoor.notCompiled(Compilation.ofSource(source, "Main"),
+                    "too long");
             return AdequacyReport.of(model);
+        }
+    }
+
+    /** Reads the report first, changes the model, and asks about it as it then is. */
+    public static final class ReadThenChangedThenAsked {
+
+        private ReadThenChangedThenAsked() { }
+
+        public static AdequacyReport read(String source, Map<String, String> other) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            AdequacyReport report = AdequacyReport.of(model);
+            model.update(other, Set.of(), LocalDate.MIN);
+            TheDoor.compiles(model);
+            return report;
+        }
+    }
+
+    /** Asks about the model, and has a method of its own change it before the read. */
+    public static final class ChangedThroughAMethod {
+
+        private ChangedThroughAMethod() { }
+
+        private static void changeSource(Compilation model, Map<String, String> sources) {
+            model.update(sources, Set.of(), LocalDate.MIN);
+        }
+
+        public static AdequacyReport read(String source, Map<String, String> other) {
+            Compilation model = TheDoor.answered(source);
+            changeSource(model, other);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Asks about the model, and changes what it is compiled from through the store it hands out. */
+    public static final class ChangedThroughTheDb {
+
+        private ChangedThroughTheDb() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            model.db().forget(new SourceId("main.sou"), "main");
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Sets what a model is compiled from through its store before it is asked about. */
+    public static final class ConfiguredThroughTheDbBeforeTheLook {
+
+        private ConfiguredThroughTheDbBeforeTheLook() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            model.db().forget(new SourceId("main.sou"), "main");
+            TheDoor.compiles(model);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** A method the test engine runs, which a caller also calls with a model that was asked about. */
+    public static final class EngineHandsItIn {
+
+        private EngineHandsItIn() { }
+
+        @Test
+        void checks(Compilation model) {
+            AdequacyReport.of(model);
+        }
+
+        public static void viaACaller(String source) {
+            new EngineHandsItIn().checks(TheDoor.answered(source));
         }
     }
 }

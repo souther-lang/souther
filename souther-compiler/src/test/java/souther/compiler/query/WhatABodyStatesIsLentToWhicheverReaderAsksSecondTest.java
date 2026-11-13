@@ -80,6 +80,7 @@ class WhatABodyStatesIsLentToWhicheverReaderAsksSecondTest {
         db.ask(new Adequacy.Meets(MODULE));
         db.ask(new Adequacy.PathReached(MODULE));
         Object before = db.ask(new Adequacy.Meets(MODULE)).value().get("keep");
+        ACompiledModel.compiles(compilation);
         long done = RevisionKnowledge.timesDone(WhatABodyStates.class);
 
         compilation.update(Map.of(SOURCE, MODEL.replace("r.rank >= 3", "r.rank >= 5")),

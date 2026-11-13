@@ -71,6 +71,7 @@ class WhatAReportNumbersIsAnAnswerOfItsOwnTest {
     private static void edited(Compilation compilation, String source) {
         compilation.update(Map.of("a.sou", source), Set.of(), TestDay.DATE);
         compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
     }
 
     /** The value has numbers in it, so the two checks below are about something. */

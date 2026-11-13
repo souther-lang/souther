@@ -398,7 +398,7 @@ class WhichFieldsAClauseReadsIsTheDeclarationsAnswerTest {
         Map<String, String> edited = new LinkedHashMap<>();
         edited.put("prices.sou", prices);
         c.update(edited, Set.of(), TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
     }
 
     private static Compilation started(String prices) {

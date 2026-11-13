@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Measurement;
@@ -227,7 +228,7 @@ class ALengthRuleOnARecordAboutOneFieldIsReadAsARuleOfThatFieldTest {
     private static PartitionEvidence evidence(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         assertFalse(compilation.modules().isEmpty(), "the model compiles");
         for (String module : compilation.modules()) {
             Map<String, PartitionEvidence> coverage =
