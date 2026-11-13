@@ -62,9 +62,7 @@ class CoverageSitesTest {
     /** The same, of a source whose abort stands at a case the model admits, which it is told of. */
     private static Checked bodiesOfWhatAbortsWhereItIsAdmitted(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of("E1326"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(List.of("E1326"), compilation);
         return bodiesOf(compilation);
     }
 

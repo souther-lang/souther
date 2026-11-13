@@ -306,11 +306,8 @@ class AFoldThatAddsWhatEachKeyFilesAnswersTheTotalOfItsValuesTest {
     private static Compilation ranAndStopped(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1905"),
-                compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
-                "the row stops before it answers");
-        return compilation;
+        // The row stops before it answers.
+        return ACompiledModel.refusedWith(List.of("E1905"), compilation);
     }
 
     /** The source measured, whose examples may stop where they run. */

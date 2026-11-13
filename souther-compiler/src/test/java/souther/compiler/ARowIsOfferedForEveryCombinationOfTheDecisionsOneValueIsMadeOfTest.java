@@ -115,10 +115,7 @@ class ARowIsOfferedForEveryCombinationOfTheDecisionsOneValueIsMadeOfTest {
     private static Compilation measuredAndToldOf(String source, List<String> codes) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(codes, compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
-        return compilation;
+        return ACompiledModel.refusedWith(codes, compilation);
     }
 
     /** The offering's own table of what each row would settle, built the way an offering is. */

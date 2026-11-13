@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AssumedContract;
 import souther.compiler.check.StatedContract;
 import souther.compiler.conformance.ConformanceCorpus;
@@ -74,11 +75,8 @@ class WhatACallerAssumesIsWhatWasStatedNotWhereItWasWrittenTest {
             byId.put(corpus.files().get(i), before + corpus.sources().get(i));
         }
         Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertEquals(CORPUS_REFUSALS.getOrDefault(corpus.name(), List.of()),
-                compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
-                "what " + corpus.name() + " is refused for");
-        return compilation;
+        return ACompiledModel.refusedWith(
+                CORPUS_REFUSALS.getOrDefault(corpus.name(), List.of()), compilation);
     }
 
     @Test

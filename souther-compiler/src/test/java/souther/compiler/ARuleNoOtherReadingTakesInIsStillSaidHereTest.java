@@ -9,7 +9,6 @@ import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -39,9 +38,7 @@ class ARuleNoOtherReadingTakesInIsStillSaidHereTest {
     private static String reportOfRefused(String source, List<String> codes) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(codes, compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
-                "the model is refused");
+        ACompiledModel.refusedWith(codes, compilation);
         return humanReportOf(compilation);
     }
 

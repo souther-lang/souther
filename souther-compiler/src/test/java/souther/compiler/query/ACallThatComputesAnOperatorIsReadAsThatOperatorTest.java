@@ -2,6 +2,8 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+
 import java.util.List;
 import java.util.Map;
 
@@ -47,10 +49,8 @@ class ACallThatComputesAnOperatorIsReadAsThatOperatorTest {
         compilation.measure(Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), compilation.errors().toString());
 
         assertEquals(reasonsOf(evidence, "operator"), reasonsOf(evidence, "call"));
+        ACompiledModel.compiles(compilation);
     }
 }

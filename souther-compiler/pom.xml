@@ -130,6 +130,26 @@
                     </execution>
                 </executions>
             </plugin>
+            <!-- The one test class every module's tests go through to ask that a model compiles
+                 before they read what is said of it. Only that class ships, so a module reaches
+                 the helper without taking the compiler's tests with it. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>test-jar</id>
+                        <goals>
+                            <goal>test-jar</goal>
+                        </goals>
+                        <configuration>
+                            <includes>
+                                <include>souther/compiler/ACompiledModel.class</include>
+                            </includes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <!-- What the library's written operations state is proved against their bodies once,
                  here, with the classes and the library this build ships, and what each proof came
                  to rides inside the jar. A compilation reads it rather than proving them again at

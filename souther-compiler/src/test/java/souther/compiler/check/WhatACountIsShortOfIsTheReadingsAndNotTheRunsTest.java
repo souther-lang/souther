@@ -2,9 +2,9 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
-import souther.compiler.diag.msg.MessageKeys;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
 import souther.compiler.query.Shapes;
@@ -119,13 +119,7 @@ class WhatACountIsShortOfIsTheReadingsAndNotTheRunsTest {
     /** The model, answered in full, and refused for the one call the reading stops at. */
     private static Compilation stoppingShort() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of("name.write-a-standard-library-name-qualified"),
-                compilation.errors().stream()
-                        .map(found -> MessageKeys.of(found.diagnostic().said())).distinct().toList(),
-                "the rule of Email calls a standard library function unqualified, which is the rule"
-                        + " the reading stops at");
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1025"), compilation);
     }
 
     /** {@code source}, with {@code declaration} one nobody could work out. */

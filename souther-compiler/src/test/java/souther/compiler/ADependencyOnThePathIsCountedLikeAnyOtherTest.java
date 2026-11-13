@@ -67,13 +67,8 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
     private static RowOutcome onlyRowThatSpendsItsBudgetOf(String source, EvaluationPolicy policy) {
         Compilation compilation = Compilation.ofSources(List.of(source), published());
         compilation.withEvaluationPolicy(policy);
-        assertEquals(List.of("E1910"), errorCodesOf(compilation));
+        ACompiledModel.refusedWith(List.of("E1910"), compilation);
         return onlyRowOf(compilation);
-    }
-
-    private static List<String> errorCodesOf(Compilation compilation) {
-        compilation.answerEverything();
-        return compilation.errors().stream().map(e -> e.diagnostic().code()).toList();
     }
 
     private static RowOutcome onlyRowOf(Compilation compilation) {
@@ -172,7 +167,7 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
                   | "reaches the dependency body": (Amount(1)) -> Receipt { total = Amount(0) }
                 """), ModulePath.of(jar));
         compilation.withEvaluationPolicy(EvaluationPolicy.of(50_000L));
-        assertEquals(List.of("E1910"), errorCodesOf(compilation));
+        ACompiledModel.refusedWith(List.of("E1910"), compilation);
 
         assertFalse(compilation.db()
                         .ask(new Output.EvaluationLinked("app.calls", ArmObservation.OMIT))

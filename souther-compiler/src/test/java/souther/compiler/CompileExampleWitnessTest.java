@@ -60,9 +60,7 @@ class CompileExampleWitnessTest {
     private static Map<String, Adequacy.SignatureEvidence> evidenceOfADisagreeingRow(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1905"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "the row that disagrees");
+        ACompiledModel.refusedWith(List.of("E1905"), compilation);
         Map<String, Adequacy.SignatureEvidence> out = compilation.db()
                 .ask(new Adequacy.Witnesses(compilation.modules().get(0))).value();
         assertNotNull(out, "the witnesses of a module whose row disagrees");

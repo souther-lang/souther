@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.ExpandedClauseResult;
 import souther.compiler.check.PublishedDeclarationResult;
 import souther.compiler.meta.ModulePath;
@@ -66,8 +67,12 @@ class TheTwoBoundariesTellUnavailableFromNotDeclaredAlikeTest {
             data Held = { b: Basket }
             """;
 
-    /** A source, the declaration asked after, and the one arm both boundaries say it is in. */
-    private record Asked(String why, String prices, TypeKey named, String arm) {
+    /**
+     * A source, the codes the compiler refuses it with, the declaration asked after, and the one
+     * arm both boundaries say it is in.
+     */
+    private record Asked(String why, String prices, List<String> refusedWith, TypeKey named,
+                         String arm) {
     }
 
     /**
@@ -87,21 +92,24 @@ class TheTwoBoundariesTellUnavailableFromNotDeclaredAlikeTest {
     @Test
     void bothBoundariesSayWhichOfUnavailableAndNotDeclaredADeclarationIs() {
         List<Asked> cases = List.of(
-                new Asked("a module that could not be read", PRICES_THAT_CANNOT_BE_READ, AMOUNT,
-                        "Unavailable"),
-                new Asked("a module whose imports form a ring", PRICES_IN_A_RING, AMOUNT,
-                        "Unavailable"),
+                new Asked("a module that could not be read", PRICES_THAT_CANNOT_BE_READ,
+                        List.of("E1022"), AMOUNT, "Unavailable"),
+                new Asked("a module whose imports form a ring", PRICES_IN_A_RING,
+                        List.of("E1501"), AMOUNT, "Unavailable"),
                 new Asked("a module refused by its name", """
                         module souther.mine exposing ( Amount )
 
                         data Amount = Int
                             invariant value >= 0
-                        """, new TypeKey("souther.mine", "Amount"), "Unavailable"),
+                        """, List.of("E1502", "E1504"), new TypeKey("souther.mine", "Amount"),
+                        "Unavailable"),
                 new Asked("a name no module writes", PRICES_THAT_CANNOT_BE_READ,
-                        new TypeKey("shop.prices", "Nobody"), "NotDeclared"));
+                        List.of("E1022"), new TypeKey("shop.prices", "Nobody"), "NotDeclared"));
         for (Asked each : cases) {
-            assertEquals(each.arm(), published(each.prices(), each.named()), each.why());
-            assertEquals(each.arm(), expanded(each.prices(), each.named()), each.why());
+            assertEquals(each.arm(),
+                    published(each.prices(), each.refusedWith(), each.named()), each.why());
+            assertEquals(each.arm(),
+                    expanded(each.prices(), each.refusedWith(), each.named()), each.why());
         }
     }
 
@@ -124,15 +132,15 @@ class TheTwoBoundariesTellUnavailableFromNotDeclaredAlikeTest {
                 """;
         TypeKey flag = new TypeKey("shop.prices", "Flag");
 
-        assertEquals("Unavailable", published(prices, flag),
+        assertEquals("Unavailable", published(prices, List.of("E1022", "E1506"), flag),
                 "what it says is worked out where its module is, and this compiler stops there");
-        assertEquals("Found", expanded(prices, flag),
+        assertEquals("Found", expanded(prices, List.of("E1022", "E1506"), flag),
                 "and a form with no rule to write has no clauses whatever became of its module");
     }
 
     /** Which arm {@code named} is published in. */
-    private static String published(String prices, TypeKey named) {
-        Compilation c = compiled(prices);
+    private static String published(String prices, List<String> refusedWith, TypeKey named) {
+        Compilation c = compiled(prices, refusedWith);
         Object said = c.db().ask(new Shapes.MeaningOf(named)).value();
         return switch (assertInstanceOf(PublishedDeclarationResult.class, said,
                 "the model says: " + c.errors())) {
@@ -143,8 +151,8 @@ class TheTwoBoundariesTellUnavailableFromNotDeclaredAlikeTest {
     }
 
     /** And which arm its expanded clauses are in, named the same way so a failure compares. */
-    private static String expanded(String prices, TypeKey named) {
-        Compilation c = compiled(prices);
+    private static String expanded(String prices, List<String> refusedWith, TypeKey named) {
+        Compilation c = compiled(prices, refusedWith);
         Object said = c.db().ask(new Shapes.ClausesExpandedFor(named)).value();
         return switch (assertInstanceOf(ExpandedClauseResult.class, said,
                 "the model says: " + c.errors())) {
@@ -154,10 +162,11 @@ class TheTwoBoundariesTellUnavailableFromNotDeclaredAlikeTest {
         };
     }
 
-    private static Compilation compiled(String prices) {
+    private static Compilation compiled(String prices, List<String> refusedWith) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("prices.sou", prices);
         byId.put("cart.sou", CART);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        return ACompiledModel.refusedWith(refusedWith,
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
     }
 }

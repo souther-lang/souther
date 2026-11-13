@@ -56,15 +56,20 @@ class TwoBehaviorsOfOneNameAreTwoBehaviorsTest {
 
     /** Every diagnostic a compile of {@code sources} reports, as its code. */
     private static List<String> reported(String... sources) {
-        Compilation compilation = Compilation.ofSources(List.of(sources), ModulePath.EMPTY);
-        compilation.answerEverything();
+        return reported(List.of(), sources);
+    }
+
+    /**
+     * Every diagnostic a compile of {@code sources} reports, as its code, the compile being
+     * refused with {@code refusal}.
+     */
+    private static List<String> reported(List<String> refusal, String... sources) {
+        Compilation compilation = ACompiledModel.refusedWith(refusal,
+                Compilation.ofSources(List.of(sources), ModulePath.EMPTY));
         List<String> codes = new ArrayList<>();
         for (Db.Found found : compilation.db().allReports()) {
             codes.add(found.report().diagnostic().code());
         }
-        List<String> errors = compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList();
-        assertTrue(codes.containsAll(errors), "every error is among what was reported: " + errors);
         return codes;
     }
 
@@ -237,7 +242,7 @@ class TwoBehaviorsOfOneNameAreTwoBehaviorsTest {
                     depends on app.a.f, app.b.f
                 let use (i, one, two) = Res { n = 1 }
                 """;
-        assertEquals(List.of("E1011"), reported(a, b, own));
+        assertEquals(List.of("E1011"), reported(List.of("E1011"), a, b, own));
     }
 
     /** One behavior reached twice — once bare through an import line, once through its module — is

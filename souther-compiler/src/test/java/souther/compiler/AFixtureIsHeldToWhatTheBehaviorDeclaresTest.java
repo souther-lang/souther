@@ -106,7 +106,7 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
 
     @Test
     void whereTheRowStopsIsSaidOfTheRow() {
-        List<RowOutcome> rows = rows(DECLARED + BREAKS_IT);
+        List<RowOutcome> rows = rows("E1928", DECLARED + BREAKS_IT);
 
         assertEquals(1, rows.size());
         RowOutcome row = rows.get(0);
@@ -212,7 +212,7 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
     /** Where such a row stops is where any row held to the declaration stops. */
     @Test
     void whereACaseOnlyRowStopsIsSaidOfTheRow() {
-        List<RowOutcome> rows = rows(CARRIES_FIELDS + """
+        List<RowOutcome> rows = rows("E1928", CARRIES_FIELDS + """
                 example findTodo
                     | "nothing is found for zero" : (Id(0)) -> NotFound
                 """);
@@ -352,7 +352,7 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
      */
     @Test
     void aRowReachingSuchATableDoesNotRunAgainstIt() {
-        List<RowOutcome> rows = rows(DEPENDS + """
+        List<RowOutcome> rows = rows("E1929", DEPENDS + """
 
                 fake lookup
                     | (Id(1)) -> Found { id = Id(2) }
@@ -635,11 +635,10 @@ class AFixtureIsHeldToWhatTheBehaviorDeclaresTest {
         return codes;
     }
 
-    private static List<RowOutcome> rows(String model) {
+    /** The rows of a model the compiler refuses with {@code refusal}, as they were recorded. */
+    private static List<RowOutcome> rows(String refusal, String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.answerEverything();
-        assertFalse(compilation.errors().isEmpty(),
-                "a row held to what the behavior declares is refused, which is why it stops");
+        ACompiledModel.refusedWith(List.of(refusal), compilation);
         return compilation.db()
                 .ask(Output.Examples.asked(compilation.db(), compilation.modules().get(0),
                         compilation.sourceIds().get(0)))

@@ -3,6 +3,7 @@ package souther.compiler.query;
 import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
@@ -37,11 +38,7 @@ class ADefinitionReachingOneThatWasNotBuiltIsNotBuiltTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", source);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
-        assertEquals(List.of("E1023"),
-                c.errors().stream().map(each -> each.diagnostic().code()).toList(),
-                "the name that denotes nothing is the one mistake");
-        return c;
+        return ACompiledModel.refusedWith(List.of("E1023"), c);
     }
 
     private static boolean has(Compilation c, String declared) {

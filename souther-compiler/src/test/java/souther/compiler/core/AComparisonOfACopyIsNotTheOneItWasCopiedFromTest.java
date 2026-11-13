@@ -234,14 +234,7 @@ class AComparisonOfACopyIsNotTheOneItWasCopiedFromTest {
         List<Map.Entry<String, Core>> out = new ArrayList<>();
         for (Model each : models) {
             Compilation compilation = Compilation.ofSources(each.sources(), ModulePath.EMPTY);
-            if (each.refusedFor().isEmpty()) {
-                ACompiledModel.compiles(compilation);
-            } else {
-                compilation.answerEverything();
-                assertEquals(each.refusedFor(), compilation.errors().stream()
-                        .map(found -> found.diagnostic().code()).toList(),
-                        "the model is refused as checked in");
-            }
+            ACompiledModel.refusedWith(each.refusedFor(), compilation);
             int before = out.size();
             for (String module : compilation.modules()) {
                 Bodies.Elaborated checked =

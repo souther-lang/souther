@@ -62,9 +62,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
     private static Read ofWhatIsRefused(String source, String behavior, List<String> codes) {
         Compilation compilation = Compilation.ofSources(List.of(source),
                 souther.compiler.meta.ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertEquals(codes, compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(codes, compilation);
         return of(compilation, behavior, 0);
     }
 

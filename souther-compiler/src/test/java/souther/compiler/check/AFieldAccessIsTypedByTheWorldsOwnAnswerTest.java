@@ -15,10 +15,10 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -141,8 +141,7 @@ class AFieldAccessIsTypedByTheWorldsOwnAnswerTest {
                     { n: Int }
                     invariant broken = n
                 """, "Main");
-        c.answerEverything();
-        assertFalse(c.errors().isEmpty(), "the clause is not a condition, and is refused");
+        ACompiledModel.refusedWith(List.of("E1101"), c);
         Symbols scope = Scopes.derived(c.db(), "demo").value();
         TypeSymbol bad = TypeSymbols.declared(new TypeKey("demo", "Bad"));
         assertEquals(Map.of(), c.db().ask(new Shapes.ValueShapes("demo")).value(),

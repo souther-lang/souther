@@ -228,9 +228,7 @@ class AWeightIsOwedToTheComputationThatMakesItTest {
     private static String reportOfARowThatDoesNotHold(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1905"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "the row that does not hold");
+        ACompiledModel.refusedWith(List.of("E1905"), compilation);
         return humanReportOf(compilation);
     }
 

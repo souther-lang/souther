@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.WhereItSits;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -121,7 +122,7 @@ class ADataThatSpreadsItsWayBackToItselfIsRefusedTest {
      */
     @Test
     void theReadersThatWalkTheSpreadsAreNotStarted() {
-        Compilation c = compiled(TWO);
+        Compilation c = compiled(TWO, List.of("E1027"));
         assertAll(
                 () -> assertEquals(1, c.db().allReports().size(),
                         () -> "the ring is said once and nothing under it is read: "
@@ -136,7 +137,7 @@ class ADataThatSpreadsItsWayBackToItselfIsRefusedTest {
     @Test
     void whatIsHandedOnIsTheGraphTheWalkWentOver() {
         Answer<ProductSpreads.WellFounded> validated =
-                compiled(THE_PATHS_MEET).db().ask(new Shapes.WellFoundedSpreads("demo"));
+                compiled(THE_PATHS_MEET, List.of("E1004")).db().ask(new Shapes.WellFoundedSpreads("demo"));
 
         assertTrue(validated.present(), "two spreads meeting one declaration close no ring");
         assertEquals(declarations("Held", "Left", "Right", "Both"),
@@ -284,18 +285,10 @@ class ADataThatSpreadsItsWayBackToItselfIsRefusedTest {
     }
 
     /** The compilation itself, for a case that asks it what it holds rather than what it said. */
-    private static Compilation compiled(String source) {
+    private static Compilation compiled(String source, List<String> codes) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        List<Diagnostic> refused = new ArrayList<>();
-        try {
-            c.answerEverything();
-        } catch (CompileException e) {
-            refused.addAll(e.diagnostics());
-        }
-        c.errors().forEach(each -> refused.add(each.diagnostic()));
-        assertFalse(refused.isEmpty(), "the model is one the compiler refuses");
-        return c;
+        return ACompiledModel.refusedWith(codes, c);
     }
 }

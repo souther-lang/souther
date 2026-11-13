@@ -642,13 +642,7 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                     compilation.withReadingPolicy(reading);
         };
         compilation.measure(Adequacy.Asked.fullReport());
-        if (witness.refusedFor().isEmpty()) {
-            ACompiledModel.compiles(compilation);
-        } else {
-            compilation.answerEverything();
-            assertEquals(witness.refusedFor(), compilation.errors().stream()
-                    .map(found -> found.diagnostic().code()).toList(), "the model is refused");
-        }
+        compilation = ACompiledModel.refusedWith(witness.refusedFor(), compilation);
         Set<String> out = new LinkedHashSet<>();
         collect(JSON.readTree(AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts()))),
                 out);

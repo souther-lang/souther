@@ -49,9 +49,7 @@ class AnAbsentDerivationIsNotAProofAboutTheModelTest {
     private static Compilation stopped() {
         Compilation compilation = Compilation.ofSource(STOPPED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertFalse(compilation.errors().isEmpty(), "this model is one the compile stops in");
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1621"), compilation);
     }
 
     private static Adequacy.BranchEvidence branchOf(Compilation compilation, String module,

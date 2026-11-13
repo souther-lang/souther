@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.test.RepositoryJavaSources;
 import souther.test.RepositoryLayout;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.msg.MessageValues;
@@ -400,21 +401,21 @@ class WhatATypeIsMadeOfIsAnsweredInOnePlaceTest {
     }
 
     private static Hir.Module resolved(String source) {
-        return resolved(source, false);
+        Compilation compilation = modelOf(source);
+        ACompiledModel.compiles(compilation);
+        return compilation.db().ask(new Names.Resolved("m")).value();
     }
 
     /** The same, for a model the compiler refuses. */
     private static Hir.Module resolvedButRefused(String source) {
-        return resolved(source, true);
+        Compilation compilation = modelOf(source);
+        ACompiledModel.refusedWith(List.of("E1021"), compilation);
+        return compilation.db().ask(new Names.Resolved("m")).value();
     }
 
-    private static Hir.Module resolved(String source, boolean refused) {
+    private static Compilation modelOf(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
-        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertEquals(refused, !compilation.errors().isEmpty(),
-                refused ? "the compiler refuses this model" : "the model under test compiles");
-        return compilation.db().ask(new Names.Resolved("m")).value();
+        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
     }
 }

@@ -77,11 +77,8 @@ class AComparisonOverANumberOnlyARunWorksOutIsMeasuredOnTheRunsTest {
         String source = model + "\nexample out\n" + rows.stream().map(row -> "    | " + row)
                 .collect(Collectors.joining("\n")) + "\n";
         Compilation compilation = Compilation.ofSource(source, "Main");
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     private static String report(String model, List<String> rows) {

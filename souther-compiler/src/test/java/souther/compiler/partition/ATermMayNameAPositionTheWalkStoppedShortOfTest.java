@@ -10,7 +10,6 @@ import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -111,10 +110,7 @@ class ATermMayNameAPositionTheWalkStoppedShortOfTest {
     void soIsALineTheArithmeticHadToRewriteToFind() {
         Compilation compilation = Compilation.ofSource(REWRITTEN_BY_THE_ARITHMETIC, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1905"), compilation.errors().stream()
-                .map(found -> found.diagnostic().code()).toList(),
-                "the example row is one the rewritten comparison refuses");
+        ACompiledModel.refusedWith(List.of("E1905"), compilation);
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 

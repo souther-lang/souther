@@ -80,12 +80,7 @@ class TheStepBudgetHasRoomOverWhatModelsActuallySpendTest {
     /** What every row of {@code source} cost, in the unit it is held to. */
     private static List<RowOutcome> rowsOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        souther.compiler.diag.CompileException wrong =
-                compilation.failure();
-        if (wrong != null) {
-            throw new IllegalStateException("the census model has to compile: " + wrong.getMessage());
-        }
+        ACompiledModel.compiles(compilation);
         List<RowOutcome> rows = new ArrayList<>();
         for (SourceId sourceId : compilation.exampleSourcesOf("example.census")) {
             Output.Examples.Of observed = compilation.db()

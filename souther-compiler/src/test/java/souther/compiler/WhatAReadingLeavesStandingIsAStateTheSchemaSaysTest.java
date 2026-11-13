@@ -130,9 +130,7 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
             String source, String behavior, List<String> codes) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(codes, compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(codes, compilation);
         return partitionIn(compilation, behavior);
     }
 

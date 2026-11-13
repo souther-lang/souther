@@ -91,9 +91,7 @@ class AnExpansionThatDidNotHappenIsARuleNotReachedTest {
         Compilation compilation =
                 Compilation.ofSources(List.of(owner, IMPORTER), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1022", "E1023", "E1023"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "the cycle is the owner's error");
+        ACompiledModel.refusedWith(List.of("E1022", "E1023", "E1023"), compilation);
         return measured(compilation);
     }
 

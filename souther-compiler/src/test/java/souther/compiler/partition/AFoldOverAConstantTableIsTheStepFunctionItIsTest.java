@@ -386,10 +386,7 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
         Compilation compilation = Compilation.ofSource(tableModel(table, selects, condition),
                 "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1321"), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(),
-                "a field is read off an element of a table of no row");
+        ACompiledModel.refusedWith(List.of("E1321"), compilation);
         return compilation.db().ask(new Adequacy.Coverage("demo")).value().get("f");
     }
 

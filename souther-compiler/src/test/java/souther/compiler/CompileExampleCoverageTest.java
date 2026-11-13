@@ -259,9 +259,7 @@ class CompileExampleCoverageTest {
                 .withJvmExampleDeadlines(
                         DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("go")));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1923"), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(List.of("E1923"), compilation);
         String module = compilation.modules().get(0);
         SourceId sourceId = compilation.exampleSourcesOf(module).getFirst();
         List<souther.compiler.observe.RowOutcome> rows = compilation.db()

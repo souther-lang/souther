@@ -189,13 +189,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
             compilation.withJvmExampleDeadlines(overrun);
         }
         compilation.measure(Adequacy.Asked.fullReport());
-        if (refusedFor.isEmpty()) {
-            return ACompiledModel.compiles(compilation);
-        }
-        compilation.answerEverything();
-        assertEquals(refusedFor, compilation.errors().stream()
-                .map(found -> found.diagnostic().code()).toList(), "the model is refused");
-        return compilation;
+        return ACompiledModel.refusedWith(refusedFor, compilation);
     }
 
     /**

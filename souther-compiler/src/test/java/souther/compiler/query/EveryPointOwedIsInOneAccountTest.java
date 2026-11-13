@@ -163,10 +163,7 @@ class EveryPointOwedIsInOneAccountTest {
     void aReadingThatDidNotRunOutLeavesTheDeclarationsAccountShort() {
         Compilation compilation = Compilation.ofSources(List.of(NOT_REACHED), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1013"),
-                compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
-                "a type that comes back to itself holds no value, so it cannot be constructed");
+        ACompiledModel.refusedWith(List.of("E1013"), compilation);
 
         Adequacy.DeclaredBoundaries account =
                 compilation.db().ask(new Adequacy.DeclaredBorders("example.notreached")).value();
@@ -273,10 +270,7 @@ class EveryPointOwedIsInOneAccountTest {
         compilation.withJvmExampleDeadlines(souther.compiler.DoesNotComeBack.overrunningOn(
                 souther.compiler.DoesNotComeBack.everythingAboutRowsOf("stalls")));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1923"),
-                compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
-                "the row of `stalls` does not come back in time");
+        ACompiledModel.refusedWith(List.of("E1923"), compilation);
 
         Adequacy.DeclaredBoundaries account =
                 compilation.db().ask(new Adequacy.DeclaredBorders("example.stopped")).value();

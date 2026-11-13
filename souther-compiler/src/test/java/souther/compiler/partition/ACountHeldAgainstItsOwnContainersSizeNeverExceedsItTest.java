@@ -38,10 +38,6 @@ class ACountHeldAgainstItsOwnContainersSizeNeverExceedsItTest {
      *  are as many as the deals: all priced, none, and one missing. */
     private static final List<String> WHEN_PRICED_MATCH_DEALS = List.of("Ok", "Ok", "Short");
 
-    private static String model(String guard, String moreRows) {
-        return model(guard, moreRows, WHEN_PRICED_MATCH_DEALS);
-    }
-
     /** The model with the answers its three base rows give under {@code guard}. */
     private static String model(String guard, String moreRows, List<String> answers) {
         return """

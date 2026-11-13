@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
@@ -31,7 +32,7 @@ class AValueNothingSatisfiesHasNoRangeToBeExactAboutTest {
 
     @Test
     void aDeclarationTwoOfWhoseRulesCannotBothHoldSaysSoRatherThanCertifying() {
-        assertEquals(List.of("NothingIsLeft"), causesOf("""
+        assertEquals(List.of("NothingIsLeft"), causesOf(List.of("E1013"), """
                 module example.rooms
 
                 data Length = Int
@@ -43,13 +44,13 @@ class AValueNothingSatisfiesHasNoRangeToBeExactAboutTest {
     /** And the same rules apart hold something, so the row above is about the pair. */
     @Test
     void eitherRuleOnItsOwnLeavesARangeAndIsCertified() {
-        assertEquals(List.of(), causesOf("""
+        assertEquals(List.of(), causesOf(List.of(), """
                 module example.rooms
 
                 data Length = Int
                     invariant low = value >= 5
                 """));
-        assertEquals(List.of(), causesOf("""
+        assertEquals(List.of(), causesOf(List.of(), """
                 module example.rooms
 
                 data Length = Int
@@ -57,16 +58,15 @@ class AValueNothingSatisfiesHasNoRangeToBeExactAboutTest {
                 """));
     }
 
-    /** The causes a declaration's projection names, by kind, in the order it files them. */
-    private static List<String> causesOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        // A declaration nobody can build a value of is refused, and is what the first case is about;
-        // any other refusal is a model whose declarations were never read.
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code().toString())
-                        .filter(each -> !each.equals("E1013")).toList(),
-                "the model this reads has to be one somebody could write");
+    /**
+     * The causes a declaration's projection names, by kind, in the order it files them, the model
+     * being refused with {@code refusal}. A declaration nobody can build a value of is refused, and
+     * is what the first case is about; any other refusal is a model whose declarations were never
+     * read.
+     */
+    private static List<String> causesOf(List<String> refusal, String source) {
+        Compilation compilation = ACompiledModel.refusedWith(refusal,
+                Compilation.ofSource(source, "Main"));
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols);

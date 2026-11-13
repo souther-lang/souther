@@ -105,10 +105,7 @@ class ARuleThatPartsValuesInsideTheRangeIsNotOutsideItTest {
                 """;
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1013"), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(),
-                "no bag can be constructed, and the rule is still read");
+        ACompiledModel.refusedWith(List.of("E1013"), compilation);
         Partitions.Partitioning divided =
                 compilation.db().ask(new Adequacy.Divided(MODULE, "read")).value();
         assertNotNull(divided, "the model under test is measured");

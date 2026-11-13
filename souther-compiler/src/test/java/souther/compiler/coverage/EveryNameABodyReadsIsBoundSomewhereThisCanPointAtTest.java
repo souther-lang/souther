@@ -2,6 +2,7 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
@@ -215,10 +216,7 @@ class EveryNameABodyReadsIsBoundSomewhereThisCanPointAtTest {
         List<Body> out = new ArrayList<>();
         for (SourceSet set : sources) {
             Compilation compilation = Compilation.ofSources(set.sources(), ModulePath.EMPTY);
-            compilation.answerEverything();
-            assertEquals(set.refusedWith(), compilation.errors().stream()
-                    .map(e -> e.diagnostic().code()).toList(),
-                    "the errors this set of sources is checked in with");
+            ACompiledModel.refusedWith(set.refusedWith(), compilation);
             int before = out.size();
             for (String module : compilation.modules()) {
                 Bodies.Elaborated checked =

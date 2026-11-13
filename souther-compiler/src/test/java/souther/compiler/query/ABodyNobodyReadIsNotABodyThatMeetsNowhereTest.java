@@ -86,12 +86,7 @@ class ABodyNobodyReadIsNotABodyThatMeetsNowhereTest {
 
     /** The model whose implementation is refused: {@code mint} makes a seat of nought. */
     private static Compilation measured() {
-        Compilation compilation = measuredWith("0");
-        compilation.answerEverything();
-        assertEquals(List.of("E2010"), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(),
-                "the seat of nought is refused");
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E2010"), measuredWith("0"));
     }
 
     /** The same model with an implementation that is accepted. */

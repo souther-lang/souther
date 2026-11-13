@@ -321,14 +321,9 @@ class ARowMeetsALineOnlyThroughAnElementTheRunComparedTest {
 
     /** The report of a model refused with exactly {@code errors}; one that compiles says none. */
     private static JsonNode reportOfSource(String source, List<String> errors) {
-        if (errors.isEmpty()) {
-            return reportOfSource(source);
-        }
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(errors, compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
-                "the model is refused");
+        ACompiledModel.refusedWith(errors, compilation);
         return JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
     }

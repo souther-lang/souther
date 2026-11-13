@@ -115,9 +115,7 @@ class ACaseTheModelRulesOutIsNotOwedARowTest {
     private static InputCaseEvidence inputOfRefused(String source, int at, List<String> codes) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(codes, compilation.errors().stream()
-                .map(found -> found.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(codes, compilation);
         return inputAt(compilation, at);
     }
 

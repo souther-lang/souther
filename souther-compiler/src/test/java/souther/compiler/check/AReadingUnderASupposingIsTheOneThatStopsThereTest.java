@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
@@ -305,11 +306,8 @@ class AReadingUnderASupposingIsTheOneThatStopsThereTest {
     /** The module is made of declarations nothing can build, and is refused for exactly those. */
     private static Compilation compiled() {
         Compilation compilation = Compilation.ofSources(List.of(MODULE), ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertEquals(List.of("E1013", "E1013", "E1013", "E1013"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(),
-                "Empty, R1, P1 and Q1 cannot be constructed");
-        return compilation;
+        return ACompiledModel.refusedWith(
+                List.of("E1013", "E1013", "E1013", "E1013"), compilation);
     }
 
     private static TypeSymbol.AtModule declared(String declaration) {

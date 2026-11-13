@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
@@ -220,9 +221,7 @@ class ACountTheCarrierDoesNotHoldIsNotAnEndTest {
     /** The same, of a model the compile refuses with {@code refusals} and nothing else. */
     private static List<String> obligations(String source, List<String> refusals) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(refusals, compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(refusals, compilation);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =

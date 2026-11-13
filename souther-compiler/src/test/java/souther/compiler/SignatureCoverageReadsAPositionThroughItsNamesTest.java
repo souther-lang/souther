@@ -185,9 +185,7 @@ class SignatureCoverageReadsAPositionThroughItsNamesTest {
     private static InputCaseEvidence inputOfRefused(String rows, String behavior, List<String> codes) {
         Compilation compilation = Compilation.ofSource(DECLARATIONS + "\n" + rows, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(codes, compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
-                "the model is refused");
+        ACompiledModel.refusedWith(codes, compilation);
         Adequacy.SignatureEvidence evidence = compilation.db()
                 .ask(new Adequacy.Witnesses(compilation.modules().get(0))).value().get(behavior);
         assertEquals(1, evidence.positions().size());

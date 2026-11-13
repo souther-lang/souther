@@ -467,20 +467,14 @@ class APlaceDefinedAsANumberMadeOfOthersLeavesThemFreeTest {
 
     /** What stands unanswered at each place below the input of {@code probe}, by place. */
     private static Map<String, List<String>> unansweredBelowTheInput(String source) {
-        return unansweredBelowTheInput(ACompiledModel.answered(source));
+        return unansweredBelowTheInput(source, List.of());
     }
 
     /** The same, for a model refused for {@code errors}, which is what leaves a rule unread. */
     private static Map<String, List<String>> unansweredBelowTheInput(String source,
                                                                      List<String> errors) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(errors, compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "what the model is refused for");
-        return unansweredBelowTheInput(compilation);
-    }
-
-    private static Map<String, List<String>> unansweredBelowTheInput(Compilation compilation) {
+        ACompiledModel.refusedWith(errors, compilation);
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

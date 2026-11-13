@@ -1,6 +1,7 @@
 package souther.cli;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -51,10 +52,7 @@ class ASearchStandsInARuleWithoutCoveringItTest {
     private static Compilation measuredModel() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "the model compiles");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     @Test

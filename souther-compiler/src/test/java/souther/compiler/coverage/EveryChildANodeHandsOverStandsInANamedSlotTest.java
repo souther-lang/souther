@@ -3,6 +3,7 @@ package souther.compiler.coverage;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
@@ -207,9 +208,7 @@ class EveryChildANodeHandsOverStandsInANamedSlotTest {
         refused.add(List.of());
         for (int at = 0; at < sources.size(); at++) {
             Compilation compilation = Compilation.ofSources(sources.get(at), ModulePath.EMPTY);
-            compilation.answerEverything();
-            assertEquals(refused.get(at), compilation.errors().stream()
-                    .map(e -> e.diagnostic().code()).toList(), "what the source set is refused for");
+            ACompiledModel.refusedWith(refused.get(at), compilation);
             int before = out.size();
             for (String module : compilation.modules()) {
                 Bodies.Elaborated checked =

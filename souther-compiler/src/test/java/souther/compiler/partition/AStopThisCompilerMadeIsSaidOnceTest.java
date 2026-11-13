@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.BlockedDescent;
 import souther.compiler.inputs.RulesLeftUnread;
@@ -151,10 +152,7 @@ class AStopThisCompilerMadeIsSaidOnceTest {
     private static List<Weakening> weakeningOf(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1013"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(),
-                "the type with no base is a value nothing can build");
+        ACompiledModel.refusedWith(List.of("E1013"), compilation);
         Map<String, PartitionEvidence> partitions = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         return List.copyOf(partitions.get(behavior).weakening().causes());

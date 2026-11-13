@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -532,9 +533,6 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
     private static Proposition statedIn(String model, String condition) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
-        // The errors of what was asked, which is the body checked: a model that does not check
-        // has no fork to read, whatever its condition says.
-        assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + condition);
         assertNotNull(checked, "the model under test compiles");
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
@@ -544,7 +542,11 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
                 inputs.dependencies());
         Core.If fork = assertInstanceOf(Core.If.class, Core.withoutStanding(analysis.core()),
                 "the body is the fork");
-        return Pullback.ofATruth(fork.cond(), reads, inputs.reading(rules), Optional.empty())
-                .proposition();
+        Proposition stated =
+                Pullback.ofATruth(fork.cond(), reads, inputs.reading(rules), Optional.empty())
+                        .proposition();
+        // A model that does not check has no fork to read, whatever its condition says.
+        ACompiledModel.compiles(compilation);
+        return stated;
     }
 }

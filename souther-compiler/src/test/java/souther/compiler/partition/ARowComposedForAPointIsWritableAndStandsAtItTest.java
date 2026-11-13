@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -168,11 +169,21 @@ class ARowComposedForAPointIsWritableAndStandsAtItTest {
                 .toList();
     }
 
+    /**
+     * The codes the model is held to be refused with: those of a stated answer that disagrees, and
+     * nothing else, however many rows disagree.
+     */
+    private static List<String> onlyTheAnswerDisagreeing(Compilation compilation) {
+        return compilation.errors().stream()
+                .map(each -> each.diagnostic().code())
+                .filter(THE_ANSWER_DISAGREES::equals)
+                .toList();
+    }
+
     /** The lines the behavior's positions met, whosever the row at each point is. */
     private static List<BorderAssessment> lines(String source) {
         Compilation compilation = measuredAndAnswered(source);
-        assertEquals(List.of(), errorsOtherThanTheAnswer(compilation),
-                () -> "the model compiles, whatever its stated answer is: " + source);
+        ACompiledModel.refusedWith(onlyTheAnswerDisagreeing(compilation), compilation);
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "demo");
         assertNotNull(read, () -> "the model under test compiles: " + source);
         List<BorderAssessment> lines = read.get("f");

@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.source.SourceId;
 
@@ -9,7 +10,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -69,8 +69,8 @@ class WhatASourceGotWrongIsSaidEvenWhereNothingCouldBeEmittedTest {
     private static Db refusedForTheClash() {
         Compilation model = Compilation.ofSources(List.of(tooWideForTheJvm(), DECLARES_IT_AGAIN),
                 ModulePath.EMPTY);
-        model.answerEverything();
-        assertFalse(model.errors().isEmpty(), "the name declared twice is refused");
+        // The record the JVM will not hold is refused, and so is the name declared twice.
+        ACompiledModel.refusedWith(List.of("E2101", "E1906"), model);
         return model.db();
     }
 

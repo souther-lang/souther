@@ -791,9 +791,7 @@ class WhatIsFixedIsAskedTogetherHoweverItArrivedTest {
     /** The reading of a model that is refused for {@code refusedFor}, which is read all the same. */
     private static Read readRefused(String source, String behavior, List<String> refusedFor) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(refusedFor, compilation.errors().stream()
-                .map(found -> found.diagnostic().code()).toList(), "the model is refused");
+        ACompiledModel.refusedWith(refusedFor, compilation);
         return read(compilation, behavior);
     }
 

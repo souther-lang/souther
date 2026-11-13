@@ -76,11 +76,7 @@ class AClauseOnePartOfWhichCannotBeReadIsStoppedWholeTest {
     }
 
     private static FieldDomains ofRefused(String source, List<String> codes) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(codes, compilation.errors().stream()
-                .map(found -> found.diagnostic().code()).toList(), "the model is refused");
-        return of(compilation);
+        return of(ACompiledModel.refusedWith(codes, Compilation.ofSource(source, "Main")));
     }
 
     private static FieldDomains of(Compilation compilation) {

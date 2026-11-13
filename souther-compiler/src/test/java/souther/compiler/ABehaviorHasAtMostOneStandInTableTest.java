@@ -107,18 +107,14 @@ class ABehaviorHasAtMostOneStandInTableTest {
     private static Compilation compiled(List<String> sources) {
         Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        ACompiledModel.compiles(compilation);
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     /** {@code sources} compiled, measured and answered in full, refused with exactly {@code errors}. */
     private static Compilation refused(List<String> sources, List<String> errors) {
         Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(errors, compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
-                "the model is refused");
-        return compilation;
+        return ACompiledModel.refusedWith(errors, compilation);
     }
 
     private static List<Diagnostic> diagnosticsIn(Compilation compilation) {

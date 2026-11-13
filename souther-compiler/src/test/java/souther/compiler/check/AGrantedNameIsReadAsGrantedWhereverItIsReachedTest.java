@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeKey;
@@ -40,23 +41,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
 
     /**
-     * {@code source} compiled and answered in full. Everything but the refusal these answers decide
-     * is held not to be said: a model refused for anything else is one whose declarations were never
-     * read, and a name that is not declared is answered by the absence of it rather than by
-     * anything here.
+     * {@code source} compiled and answered in full, and refused with {@code refusal}: the refusal
+     * these answers decide and nothing else. A model refused for anything else is one whose
+     * declarations were never read, and a name that is not declared is answered by the absence of
+     * it rather than by anything here.
      */
-    private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code().toString())
-                        .filter(each -> !each.equals("E1013")).toList(),
-                "the model this reads has to be one somebody could write");
-        return compilation;
+    private static Compilation compiled(String source, List<String> refusal) {
+        return ACompiledModel.refusedWith(refusal, Compilation.ofSource(source, "Main"));
     }
 
-    private static void grantingLeaves(String source, String granted, String reader) {
-        Compilation compilation = compiled(source);
+    private static void grantingLeaves(String source, List<String> refusal, String granted,
+                                       String reader) {
+        Compilation compilation = compiled(source, refusal);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeCardinality.Cardinalities solved =
                 CountsByComponent.of(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),
@@ -79,7 +75,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
 
                 data A = B
                 data B = { a: A }
-                """, "A", "B");
+                """, List.of("E1013"), "A", "B");
     }
 
     /** A field of a record. */
@@ -92,7 +88,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
                     invariant no = value >= 2 && value <= 1
 
                 data Holder = { x: Bad }
-                """, "Bad", "Holder");
+                """, List.of("E1013"), "Bad", "Holder");
     }
 
     /** A case of a sum. */
@@ -104,7 +100,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
                 data Leaf = { s: Shape }
                 data Branch = { s: Shape }
                 data Shape = Leaf | Branch
-                """, "Leaf", "Shape");
+                """, List.of("E1013"), "Leaf", "Shape");
     }
 
     /** A value a collection holds, which the rules will not let be empty. */
@@ -118,7 +114,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
 
                 data Holding = List<Bad>
                     invariant nonEmpty = List.length(value) >= 1
-                """, "Bad", "Holding");
+                """, List.of("E1013"), "Bad", "Holding");
     }
 
     /**
@@ -141,9 +137,10 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
 
                 data Holder = { g: Granted }
                 """;
-        grantingLeaves(source, "Granted", "Holder");
+        List<String> refusal = List.of("E1013");
+        grantingLeaves(source, refusal, "Granted", "Holder");
 
-        Compilation compilation = compiled(source);
+        Compilation compilation = compiled(source, refusal);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         assertTrue(CountsByComponent.of(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),
                 souther.compiler.query.ReadAs.THE_COMPILATION_DOES)
@@ -170,7 +167,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
 
                 data NeedTwo = Set<MaybeBad>
                     invariant two = Set.size(value) >= 2
-                """, "Bad", "NeedTwo");
+                """, List.of("E1013"), "Bad", "NeedTwo");
     }
 
     /** Nothing is granted while the counts themselves are read, so the reading is what it was. */
@@ -181,7 +178,7 @@ class AGrantedNameIsReadAsGrantedWhereverItIsReachedTest {
 
                 data A = B
                 data B = { a: A }
-                """);
+                """, List.of("E1013"));
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeCardinality.Cardinalities solved =
                 CountsByComponent.of(compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList(), RuleReadings.of(compilation, "demo"),

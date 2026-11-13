@@ -2,6 +2,7 @@ package souther.compiler.reading;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
@@ -39,9 +40,7 @@ class TwoDecisionsMeetingAtOneOperatorAreOneInteractionTest {
      */
     private static List<Interaction> readRefused(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of("E1326"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(List.of("E1326"), compilation);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test has bodies");

@@ -17,7 +17,6 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -53,11 +52,9 @@ class InvariantCapabilitiesTest {
     }
 
     /** The same, for a declaration a build refuses and an editor is asked about all the same. */
-    private static List<ClauseDischarge> ofARefusedOne(String source, String type) {
-        Compilation c = modelOf(source);
-        c.answerEverything();
-        assertFalse(c.errors().isEmpty(), "a build refuses the declaration under test");
-        return capabilitiesOf(c, type);
+    private static List<ClauseDischarge> ofARefusedOne(String source, String type,
+            List<String> refusal) {
+        return capabilitiesOf(ACompiledModel.refusedWith(refusal, modelOf(source)), type);
     }
 
     private static Compilation modelOf(String source) {
@@ -134,7 +131,7 @@ class InvariantCapabilitiesTest {
                 module m.a
                 data Money = Int
                     invariant 1 < 0
-                """, "Money");
+                """, "Money", List.of("E1013"));
         assertEquals(new CapabilityResult.Decided(false), read(clauses, 0));
     }
 
@@ -172,7 +169,7 @@ class InvariantCapabilitiesTest {
                 module m.a
                 data Money = Int
                     invariant Int.compare(1, 2) >= 0
-                """, "Money");
+                """, "Money", List.of("E1013"));
         assertEquals(new CapabilityResult.Decided(false), read(clauses, 0));
     }
 
@@ -219,7 +216,7 @@ class InvariantCapabilitiesTest {
                 data Kind = String
                     invariant match value with
                         | Anything -> true
-                """, "Kind");
+                """, "Kind", List.of("E1023"));
         assertInstanceOf(CapabilityResult.AnalysisStopped.class, read(clauses, 0));
     }
 

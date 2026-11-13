@@ -8,7 +8,6 @@ import souther.compiler.query.Compilation;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
@@ -29,24 +28,20 @@ class AJvmClassCollisionIsRefusedByTheCheckTest {
             let quote (n) = Quote { subtotal = n }
             """;
 
-    /** What the check of {@code source} says, by code. */
-    private static List<String> codesOfTheCheck(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.db().ask(new Bodies.ModuleCheck("probe"));
-        return compilation.errors().stream().map(each -> String.valueOf(each.diagnostic().code()))
-                .toList();
+    /** {@code source} held to be refused with {@code codes} by the check of the module. */
+    private static void checkedAndRefusedWith(List<String> codes, String source) {
+        ACompiledModel.refusedWith(codes, Compilation.ofSource(source, "Main"));
     }
 
     @Test
     void aBehaviorCapitalizedOntoADataIsSaidOnce() {
-        assertEquals(List.of("E2105"),
-                codesOfTheCheck(A_BEHAVIOR_ON_A_DATA));
+        checkedAndRefusedWith(List.of("E2105"), A_BEHAVIOR_ON_A_DATA);
     }
 
     @Test
     void twoBehaviorsCapitalizedOntoOneClassAreSaidOnce() {
         // `Run` is a name a behavior does not take on its own account, which is said as well.
-        assertEquals(1, codesOfTheCheck("""
+        checkedAndRefusedWith(List.of("E2105", "E1006", "E1006"), """
                 module probe
 
                 data N = Int
@@ -57,12 +52,12 @@ class AJvmClassCollisionIsRefusedByTheCheckTest {
                 behavior Run : (n: N) -> N
                     constructs N
                 let Run (n) = n
-                """).stream().filter("E2105"::equals).count());
+                """);
     }
 
     @Test
     void aResultUnionCapitalizedOntoADataIsSaidOnce() {
-        assertEquals(List.of("E2105"), codesOfTheCheck("""
+        checkedAndRefusedWith(List.of("E2105"), """
                 module probe
 
                 data Req = { n: Int }
@@ -73,12 +68,12 @@ class AJvmClassCollisionIsRefusedByTheCheckTest {
                 behavior bill : (r: Req) -> Ok | NotFound
                     constructs Ok
                 let bill (r) = if r.n > 0 then Ok { v = r.n } else NotFound
-                """));
+                """);
     }
 
     @Test
     void namesThatDoNotCollideAreToldNothingOfTheKind() {
-        assertEquals(List.of(), codesOfTheCheck("""
+        checkedAndRefusedWith(List.of(), """
                 module probe
 
                 data Quote = { subtotal: Int }
@@ -86,7 +81,7 @@ class AJvmClassCollisionIsRefusedByTheCheckTest {
                 behavior makeQuote : (n: Int) -> Quote
                     constructs Quote
                 let makeQuote (n) = Quote { subtotal = n }
-                """));
+                """);
     }
 
     @Test
@@ -95,8 +90,7 @@ class AJvmClassCollisionIsRefusedByTheCheckTest {
         assertFalse(compilation.db().ask(new Bodies.Observable("probe")).present(),
                 "no program to run rows against");
         assertFalse(compilation.db().ask(new Bodies.Checked("probe")).present(), "and none to ship");
-        assertEquals(List.of("E2105"), compilation.errors().stream()
-                .map(each -> String.valueOf(each.diagnostic().code())).toList());
+        ACompiledModel.refusedWith(List.of("E2105"), compilation);
     }
 
     /** A measure asks the check as it asks everything it rests on, and is told the same. */
@@ -105,7 +99,6 @@ class AJvmClassCollisionIsRefusedByTheCheckTest {
         Compilation compilation = Compilation.ofSource(A_BEHAVIOR_ON_A_DATA, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.db().ask(new Adequacy.Coverage("probe"));
-        assertEquals(List.of("E2105"), compilation.errors().stream()
-                .map(each -> String.valueOf(each.diagnostic().code())).toList());
+        ACompiledModel.refusedWith(List.of("E2105"), compilation);
     }
 }

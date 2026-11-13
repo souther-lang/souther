@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.Located;
@@ -131,10 +132,7 @@ class AClosureOverAContainerHoldingNoneReachesNothingInsideItTest {
      */
     private static List<Reachability> arms(String model, String module, boolean inTheLibrary) {
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         CoverageSites.Plan plan =
                 compilation.db().ask(new Bodies.Observable(module)).value().plan();
         PathReachability.Answers answers =

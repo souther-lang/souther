@@ -61,9 +61,7 @@ class AMeasuredPositionSaysHowFarItsRulesWereReadTest {
     private static AdequacyReport reportOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1319"), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(List.of("E1319"), compilation);
         return AdequacyReport.of(compilation);
     }
 

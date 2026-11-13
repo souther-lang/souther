@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -48,10 +49,8 @@ class EveryDeclarationACorpusImportsStatesOneThingWhoeverAsksTest {
         List<String> stopped = new ArrayList<>();
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
             Compilation compilation = Compilation.ofSources(corpus.sources(), ModulePath.EMPTY);
-            compilation.answerEverything();
-            assertEquals(REFUSED.getOrDefault(corpus.name(), List.of()),
-                    compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
-                    "what `" + corpus + "` is refused for is what is checked in beside it");
+            ACompiledModel.refusedWith(REFUSED.getOrDefault(corpus.name(), List.of()),
+                    compilation);
             Db db = compilation.db();
             for (ClauseReadings.Edge edge
                     : ClauseReadings.importsOf(db, compilation.modules())) {

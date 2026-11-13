@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.meta.ModulePath;
@@ -58,11 +59,9 @@ class AClauseThatCannotBeReadCostsItsOwnDeclarationAndNoReaderOfTheNameTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("lib.sou", LIB);
         byId.put("app.sou", APP);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-    }
-
-    private static List<String> errorCodes(Compilation c) {
-        return c.errors().stream().map(each -> each.diagnostic().code()).toList();
+        // The clause is what does not compile.
+        return ACompiledModel.refusedWith(List.of("E1802"),
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
     }
 
     /** One mistake, in the file that wrote it. */
@@ -83,8 +82,6 @@ class AClauseThatCannotBeReadCostsItsOwnDeclarationAndNoReaderOfTheNameTest {
     @Test
     void theDeclarationIsStillReadWhereItWasWritten() {
         Compilation c = compiled();
-        c.answerEverything();
-        assertEquals(List.of("E1802"), errorCodes(c), "the clause is what does not compile");
         DerivedSymbols symbols = Scopes.derived(c.db(), "lib").value();
 
         Hir.Def wide = symbols.declaredNode(new TypeKey("lib", "Wide"));
@@ -146,8 +143,6 @@ class AClauseThatCannotBeReadCostsItsOwnDeclarationAndNoReaderOfTheNameTest {
     @Test
     void theImporterReadsTheDeclarationItNamed() {
         Compilation c = compiled();
-        c.answerEverything();
-        assertEquals(List.of("E1802"), errorCodes(c), "the clause is what does not compile");
         DerivedSymbols symbols = Scopes.derived(c.db(), "app").value();
 
         assertNotNull(symbols, "`app` has names of its own to mean something");

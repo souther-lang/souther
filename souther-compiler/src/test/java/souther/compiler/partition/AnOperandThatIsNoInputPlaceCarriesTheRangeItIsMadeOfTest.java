@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -216,8 +217,7 @@ class AnOperandThatIsNoInputPlaceCarriesTheRangeItIsMadeOfTest {
         CASES.forEach((name, each) -> source.append(each.template().formatted(name, each.number())));
         Compilation compilation = Compilation.ofSource(source.toString(), "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         Map<String, PartitionEvidence> out =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
         assertNotNull(out, "the model under test compiles");

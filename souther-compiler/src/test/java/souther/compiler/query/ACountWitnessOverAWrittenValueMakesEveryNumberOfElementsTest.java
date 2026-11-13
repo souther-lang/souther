@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.Sig;
 import souther.compiler.execute.BoundaryValues;
@@ -148,8 +149,7 @@ class ACountWitnessOverAWrittenValueMakesEveryNumberOfElementsTest {
     void aRowOfTwoElementsIsCountedAtNoneOneAndTwoWhereTheyAreKeptOrDropped() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         compilation.db().ask(new Adequacy.Coverage("demo"));
         Map<String, List<Adequacy.WitnessOfACount>> asked = askedOf(compilation);
         for (String behavior : BEHAVIORS) {

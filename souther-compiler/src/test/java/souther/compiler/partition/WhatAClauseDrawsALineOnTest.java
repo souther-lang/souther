@@ -48,9 +48,7 @@ class WhatAClauseDrawsALineOnTest {
     private static EnsuresThresholds.Clauses drawnDespite(
             List<String> codes, String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(codes, compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(codes, compilation);
         return drawn(compilation, behavior);
     }
 

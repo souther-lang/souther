@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -170,9 +171,7 @@ class TakingRulesOverIsSaidAndNotInferredTest {
 
     private static InputDomain read(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of("E1319"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "the clause nothing could type");
+        ACompiledModel.refusedWith(List.of("E1319"), compilation);
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

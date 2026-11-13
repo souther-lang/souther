@@ -829,9 +829,7 @@ class AClauseReachingOneCoordinatePlacesAnEdgeTest {
             List<String> refusals) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(refusals, compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(refusals, compilation);
         Map<String, BorderAssessment> lines = new LinkedHashMap<>();
         Adequacy.readingsOf(compilation.db(), module)
                 .forEach((behavior, read) -> read

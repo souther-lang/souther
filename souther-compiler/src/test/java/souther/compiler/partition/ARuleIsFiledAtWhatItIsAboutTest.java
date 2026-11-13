@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -40,7 +41,6 @@ class ARuleIsFiledAtWhatItIsAboutTest {
                     | "one" : (1, 2, 3) -> Ok { n = 1 }
                 """.formatted(clause), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
         onlyTheClauseNamesNoAnswer(compilation);
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).partition();
     }
@@ -50,8 +50,7 @@ class ARuleIsFiledAtWhatItIsAboutTest {
      * the answer, which is what a rule is filed at the quantity of and nothing else is asked of.
      */
     private static void onlyTheClauseNamesNoAnswer(Compilation compilation) {
-        assertEquals(List.of("E1616"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(List.of("E1616"), compilation);
     }
 
     private static List<String> filedAt(String clause) {
@@ -75,7 +74,6 @@ class ARuleIsFiledAtWhatItIsAboutTest {
                     | "one" : ([1], 2) -> Ok { n = 2 }
                 """.formatted(clause), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
         onlyTheClauseNamesNoAnswer(compilation);
         return AdequacyReport.of(compilation).modules().get(0).behaviors().get(0).partition();
     }

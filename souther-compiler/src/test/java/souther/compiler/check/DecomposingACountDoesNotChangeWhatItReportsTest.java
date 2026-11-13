@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -48,18 +49,16 @@ class DecomposingACountDoesNotChangeWhatItReportsTest {
      * <p>Both, because the first alone would hold of a model neither way says anything about. What
      * each model is about is written beside it, so a model that stopped saying it is a failure
      * rather than a pair of empty reports agreeing.
+     *
+     * <p>{@code refused} is what the model is refused with. A declaration no value satisfies is
+     * refused, and is what these models are about; any other refusal is a model whose declarations
+     * were never read.
      */
-    private static void reportsAlike(String what, List<List<String>> named,
+    private static void reportsAlike(String what, List<String> refused, List<List<String>> named,
                                      Map<String, String> documents) {
         Compilation c = Compilation.ofDocuments(
                 new LinkedHashMap<>(documents), Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
-        // A declaration no value satisfies is refused, and is what these models are about; any
-        // other refusal is a model whose declarations were never read.
-        assertEquals(List.of(), c.errors().stream()
-                        .map(each -> each.diagnostic().code().toString())
-                        .filter(each -> !each.equals("E1013")).toList(),
-                () -> "the model is refused for nothing but what it is about: " + what);
+        ACompiledModel.refusedWith(refused, c);
 
         List<TypeSymbol.AtModule> declared = c.db().ask(new Front.DeclaredTypes(MODULE)).value();
         RuleReadingSource source = Shapes.ruleReading(c.db(), MODULE).value();
@@ -82,13 +81,14 @@ class DecomposingACountDoesNotChangeWhatItReportsTest {
                         + " have, for " + what);
     }
 
-    private static void reportsAlike(String what, List<List<String>> named, String source) {
-        reportsAlike(what, named, Map.of("demo.sou", source));
+    private static void reportsAlike(String what, List<String> refused, List<List<String>> named,
+                                     String source) {
+        reportsAlike(what, refused, named, Map.of("demo.sou", source));
     }
 
     @Test
     void aChainAnsweredOneDeclarationAtATime() {
-        reportsAlike("a chain", List.of(), """
+        reportsAlike("a chain", List.of(), List.of(), """
                 module demo exposing ( Tail, Held, Holding )
 
                 data Tail = Int
@@ -100,7 +100,8 @@ class DecomposingACountDoesNotChangeWhatItReportsTest {
 
     @Test
     void aDeclarationWrittenInTermsOfItself() {
-        reportsAlike("a declaration written in terms of itself", List.of(List.of("Node")), """
+        reportsAlike("a declaration written in terms of itself", List.of("E1013"),
+                List.of(List.of("Node")), """
                 module demo exposing ( Node, Fine )
 
                 data Node = { next: Node, fine: Fine }
@@ -111,7 +112,8 @@ class DecomposingACountDoesNotChangeWhatItReportsTest {
 
     @Test
     void aRisingUnderACountAnotherDeclarationsRuleAskedAbout() {
-        reportsAlike("a rising under a count asked about elsewhere", List.of(List.of("Pair")), """
+        reportsAlike("a rising under a count asked about elsewhere", List.of("E1013"),
+                List.of(List.of("Pair")), """
                 module demo exposing ( One, Pair, Both, Wide )
 
                 data One = Int
@@ -126,8 +128,8 @@ class DecomposingACountDoesNotChangeWhatItReportsTest {
 
     @Test
     void aRisingWhoseCountOnlyAReaderAsksAbout() {
-        reportsAlike("a rising whose count only a reader asks about", List.of(List.of("NeedTwo")),
-                """
+        reportsAlike("a rising whose count only a reader asks about", List.of("E1013"),
+                List.of(List.of("NeedTwo")), """
                 module demo exposing ( Loop, NeedTwo )
 
                 data Loop = Set<Loop>
@@ -141,7 +143,7 @@ class DecomposingACountDoesNotChangeWhatItReportsTest {
     @Test
     void aLackReachingAnotherThroughADeclarationThatHasValues() {
         reportsAlike("a lack reaching another through a declaration that has values",
-                List.of(List.of("Bad")), """
+                List.of("E1013"), List.of(List.of("Bad")), """
                 module demo exposing ( Bad, MaybeBad, NeedTwo, Beside )
 
                 data Bad = Int
@@ -178,7 +180,7 @@ class DecomposingACountDoesNotChangeWhatItReportsTest {
 
                 data Beside = { one: One }
                 """);
-        reportsAlike("a component reaching out of its module",
+        reportsAlike("a component reaching out of its module", List.of("E1013"),
                 List.of(List.of("NeedTwo")), documents);
     }
 }

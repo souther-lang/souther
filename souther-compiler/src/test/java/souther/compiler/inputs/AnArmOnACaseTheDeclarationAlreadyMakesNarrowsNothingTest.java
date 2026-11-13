@@ -170,9 +170,7 @@ class AnArmOnACaseTheDeclarationAlreadyMakesNarrowsNothingTest {
         Compilation c = Compilation.ofDocuments(Map.of("model.sou", WIDENED), Set.of(),
                 ModulePath.EMPTY);
         c.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        c.answerEverything();
-        assertEquals(List.of(), c.errors().stream()
-                .map(e -> e.diagnostic().code().toString()).toList(), "the model is measured");
+        ACompiledModel.compiles(c);
 
         DecisionEvidence decided = c.db().ask(new Adequacy.Decides(c.modules().get(0))).value()
                 .get("render");

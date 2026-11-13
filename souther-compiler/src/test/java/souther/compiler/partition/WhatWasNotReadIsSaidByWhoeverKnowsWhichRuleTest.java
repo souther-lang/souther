@@ -152,9 +152,7 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
     private static AdequacyReport reportOfWhatIsRefused(String model, List<String> codes) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(codes, compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(codes, compilation);
         return AdequacyReport.of(compilation);
     }
     /**

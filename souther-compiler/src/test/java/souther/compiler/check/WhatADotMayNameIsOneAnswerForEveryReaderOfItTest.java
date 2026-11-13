@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.CompileException;
@@ -247,24 +248,25 @@ class WhatADotMayNameIsOneAnswerForEveryReaderOfItTest {
                 {"A", """
                         module demo
                         data A = { x: Int, x: String }
-                        """},
+                        """, "E1011"},
                 {"Bad", """
                         module demo
                         data Open   = { id: String }
                         data Closed = { id: String }
                         data Deal   = Open | Closed
                         data Bad    = { ...Deal }
-                        """},
+                        """, "E1015"},
                 {"Bad", """
                         module demo
                         data One = { id: String }
                         data Two = { id: String }
                         data Bad = { ...One, ...Two }
-                        """}}) {
+                        """, "E1004"}}) {
             // Resolved and not checked, which is the state these readings are made in: the check
             // refuses the module, and an editor is looking at it while it does.
             Compilation c = Compilation.ofSource(each[1], "Main");
-            List<String> refusedWith = codesOfRefusing(c);
+            List<String> refusedWith = List.of(each[2]);
+            ACompiledModel.refusedWith(refusedWith, c);
             Symbols scope = Scopes.derived(c.db(), "demo").value();
             Type position = Type.ref(TypeSymbols.declared(new TypeKey("demo", each[0])));
             FieldTypes text = new ResolvedFieldTypes(scope, ScopedDeclarations.wrapsOf(scope));
@@ -301,25 +303,13 @@ class WhatADotMayNameIsOneAnswerForEveryReaderOfItTest {
                 module demo
                 data A = { x: Int, x: String }
                 """, "Main");
-        assertEquals(List.of("E1011"), codesOfRefusing(c),
-                "the declaration does not read, and is refused");
+        ACompiledModel.refusedWith(List.of("E1011"), c);
         Type a = Type.ref(TypeSymbols.declared(new TypeKey("demo", "A")));
         assertEquals(Map.of(),
                 SemanticSnapshot.of(c.db(), "demo").orElseThrow()
                         .fieldsOf(new TypeFact(a, new Evidence.Declared())),
                 "an author writing `.` after a declaration that does not read is told nothing,"
                         + " rather than the buffer refusing to answer");
-    }
-
-    /** The codes a model that does not read is refused with, whether answering it reports them or
-     *  throws the first. */
-    private static List<String> codesOfRefusing(Compilation compilation) {
-        try {
-            compilation.answerEverything();
-        } catch (CompileException refused) {
-            return List.of(refused.code());
-        }
-        return compilation.errors().stream().map(e -> e.diagnostic().code()).toList();
     }
 
     /** A behavior reading the shared name off the sum and answering with {@code answers}. */

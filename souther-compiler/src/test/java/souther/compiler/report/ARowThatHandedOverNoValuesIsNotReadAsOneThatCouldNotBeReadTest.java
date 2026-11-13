@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.query.Adequacy;
@@ -157,9 +158,7 @@ class ARowThatHandedOverNoValuesIsNotReadAsOneThatCouldNotBeReadTest {
                     | "red then stops" : (Red, spin(1)) -> 0
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1910"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "the row that stops");
+        ACompiledModel.refusedWith(List.of("E1910"), compilation);
 
         Adequacy.Filling generated = Adequacy.generatedOf(compilation.db(), "m").get("f");
         List<Adequacy.GenerationDisposition> uncovered = generated.generation().stream()

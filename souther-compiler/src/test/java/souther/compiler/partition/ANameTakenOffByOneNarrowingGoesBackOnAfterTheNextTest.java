@@ -163,13 +163,7 @@ class ANameTakenOffByOneNarrowingGoesBackOnAfterTheNextTest {
 
     private static Read read(String source, List<String> refusedWith) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        if (refusedWith.isEmpty()) {
-            ACompiledModel.compiles(compilation);
-        } else {
-            compilation.answerEverything();
-            assertEquals(refusedWith, compilation.errors().stream()
-                    .map(e -> e.diagnostic().code()).toList(), "what the model is refused for");
-        }
+        ACompiledModel.refusedWith(refusedWith, compilation);
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

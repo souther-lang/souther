@@ -2,15 +2,16 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.function.IntBinaryOperator;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -112,10 +113,32 @@ class AFixedWeightIsOneAWrongWeightFailsARowOnTest {
             new int[] {100, 0}, new int[] {99, 1}, new int[] {-1, 100}, new int[] {-2, 101},
             new int[] {1000, 0}, new int[] {999, 1}, new int[] {-1, 1000}, new int[] {-2, 1001});
 
+    /** The source measured, which is a source whose rows hold of it. */
     private static Compilation compile(String source) {
+        return ACompiledModel.compiles(measured(source));
+    }
+
+    /** A way of totalling the positions: how the source writes it and what it comes to. */
+    private record Weighing(String written, IntBinaryOperator total) {
+    }
+
+    /**
+     * The source totalling by {@code wrong}, which is a source some row fails on: the rows are the
+     * ones {@code modelled} answers, so each row whose grade the wrong total changes is refused.
+     */
+    private static Compilation refused(Written written, Weighing wrong, IntBinaryOperator modelled,
+                                       boolean signed, int top, List<int[]> rows) {
+        long failing = rows.stream()
+                .filter(row -> written.gradeOf(modelled.applyAsInt(row[0], row[1]), top)
+                        != written.gradeOf(wrong.total().applyAsInt(row[0], row[1]), top))
+                .count();
+        return ACompiledModel.refusedWith(Collections.nCopies((int) failing, "E1905"),
+                measured(source(written, wrong.written(), modelled, signed, top, rows)));
+    }
+
+    private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
         return compilation;
     }
 
@@ -127,7 +150,6 @@ class AFixedWeightIsOneAWrongWeightFailsARowOnTest {
     void rowsBesideTheThresholdFixBothWeightsHoweverTheThresholdIsWritten() {
         for (Written written : Written.values()) {
             Compilation model = compile(source(written, "a.v + b.v", false, 200, ROWS));
-            assertEquals(List.of(), model.errors(), () -> written + ": the rows hold of the model");
             String report = reportOf(model);
             assertFalse(report.contains(SAID), () -> written + ": " + report);
         }
@@ -137,10 +159,13 @@ class AFixedWeightIsOneAWrongWeightFailsARowOnTest {
     @Test
     void aPositionWeighedOtherwiseFailsARowTheReportCalledEnough() {
         for (Written written : Written.values()) {
-            for (String wrong : List.of("b.v", "a.v", "2 * a.v + b.v", "a.v + 2 * b.v")) {
-                Compilation mutant = compile(source(written, wrong, false, 200, ROWS));
-                assertFalse(mutant.errors().isEmpty(), () -> written + ": `" + wrong
-                        + "` passes every row the report called enough");
+            for (Weighing wrong : List.of(
+                    new Weighing("b.v", (a, b) -> b),
+                    new Weighing("a.v", (a, b) -> a),
+                    new Weighing("2 * a.v + b.v", (a, b) -> 2 * a + b),
+                    new Weighing("a.v + 2 * b.v", (a, b) -> a + 2 * b))) {
+                refused(written, wrong, AFixedWeightIsOneAWrongWeightFailsARowOnTest::sum, false,
+                        200, ROWS);
             }
         }
     }
@@ -150,9 +175,7 @@ class AFixedWeightIsOneAWrongWeightFailsARowOnTest {
     @Test
     void rowsOnBothSidesThatAWrongWeightPassesDoNotFixThatWeight() {
         Written written = Written.AT_OR_ABOVE;
-        Compilation mutant = compile(source(written, "2 * a.v + b.v", true, 1000, SIGNED_ROWS));
-        assertEquals(List.of(), mutant.errors(),
-                "the rows the model is held to are passed by the wrong weight");
+        compile(source(written, "2 * a.v + b.v", true, 1000, SIGNED_ROWS));
         String report = reportOf(compile(source(written, "a.v + b.v", true, 1000, SIGNED_ROWS)));
         assertTrue(report.contains(SAID + " `a.v` weighs"), report);
         assertFalse(report.contains(SAID + " `b.v` weighs"), report);
@@ -173,13 +196,13 @@ class AFixedWeightIsOneAWrongWeightFailsARowOnTest {
         for (Written written : Written.values()) {
             Compilation model = compile(source(written, "2 * a.v - b.v", difference, true, 200,
                     DIFFERENCE_ROWS));
-            assertEquals(List.of(), model.errors(), () -> written + ": the rows hold of the model");
             assertFalse(reportOf(model).contains(SAID), () -> written + ": " + reportOf(model));
-            for (String wrong : List.of("3 * a.v - b.v", "a.v - b.v", "2 * a.v", "2 * a.v - 2 * b.v")) {
-                Compilation mutant = compile(source(written, wrong, difference, true, 200,
-                        DIFFERENCE_ROWS));
-                assertFalse(mutant.errors().isEmpty(), () -> written + ": `" + wrong
-                        + "` passes every row the report called enough");
+            for (Weighing wrong : List.of(
+                    new Weighing("3 * a.v - b.v", (a, b) -> 3 * a - b),
+                    new Weighing("a.v - b.v", (a, b) -> a - b),
+                    new Weighing("2 * a.v", (a, b) -> 2 * a),
+                    new Weighing("2 * a.v - 2 * b.v", (a, b) -> 2 * a - 2 * b))) {
+                refused(written, wrong, difference, true, 200, DIFFERENCE_ROWS);
             }
         }
     }
@@ -190,7 +213,6 @@ class AFixedWeightIsOneAWrongWeightFailsARowOnTest {
         for (Written written : Written.values()) {
             Compilation model = compile(source(written, "a.v + b.v", false, 200,
                     List.of(new int[] {1, 1}, new int[] {99, 0}, new int[] {0, 99})));
-            assertEquals(List.of(), model.errors(), () -> written + ": the rows hold of the model");
             String report = reportOf(model);
             assertTrue(report.contains(SAID + " `a.v` weighs"), () -> written + ": " + report);
         }

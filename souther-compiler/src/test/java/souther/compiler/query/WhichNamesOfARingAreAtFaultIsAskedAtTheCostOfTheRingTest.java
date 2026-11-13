@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.TypeCardinality;
 import souther.compiler.meta.ModulePath;
@@ -12,7 +13,6 @@ import java.util.Set;
 import java.util.function.IntFunction;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -70,8 +70,7 @@ class WhichNamesOfARingAreAtFaultIsAskedAtTheCostOfTheRingTest {
         Compilation c = Compilation.ofDocuments(
                 new LinkedHashMap<>(Map.of("chain.sou", ring.apply(names))), Set.of(),
                 ModulePath.EMPTY);
-        c.answerEverything();
-        assertFalse(c.errors().isEmpty(), "the ring is a mistake the model says");
+        ACompiledModel.refusedWith(List.of("E1013"), c);
         List<String> said = c.db().allReports().stream()
                 .map(each -> each.report().diagnostic().code().toString()).toList();
         assertEquals(1, said.size(), () -> "the ring is reported once and only once: " + said);

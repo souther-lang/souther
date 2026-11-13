@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.DerivedSymbols;
@@ -71,17 +72,12 @@ class WhetherARepresentationCameOutDoesNotChooseHowADeclarationIsReadTest {
     private static Db db(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
-        List<String> codes = c.errors().stream().map(e -> e.diagnostic().code()).toList();
-        if (source.equals(SOURCE)) {
-            assertTrue(codes.stream().anyMatch(code -> !code.equals("E1105")),
-                    () -> "a mistake beside the constructions is said where `Bad` names no type: "
-                            + codes);
-        } else {
-            assertEquals(List.of("E1105", "E1105"), codes,
-                    "where `Bad` names a type, only the constructions in the two clauses are refused");
-        }
+        // Where `Bad` names no type a mistake beside the constructions is said; where it names
+        // one, only the constructions in the two clauses are refused.
+        List<String> refusedFor = source.equals(SOURCE)
+                ? List.of("E1023", "E1105") :List.of("E1105", "E1105");
+        Compilation c = ACompiledModel.refusedWith(refusedFor,
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
         return c.db();
     }
 

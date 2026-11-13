@@ -89,10 +89,9 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
 
     /** The same, for a model the compiler refuses: what this hands over afterwards is still read by
      * whatever ran before the refusal reached the caller. */
-    private static FieldDomains ofRefused(String source, String named) {
+    private static FieldDomains ofRefused(List<String> codes, String source, String named) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertFalse(compilation.errors().isEmpty(), "this model is meant to be refused");
+        ACompiledModel.refusedWith(codes, compilation);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), named));
         return FieldDomains.of(name,
@@ -599,7 +598,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
      */
     @Test
     void aClauseNothingCouldTypeLeavesNoPositionSpokenFor() {
-        FieldDomains read = ofRefused("""
+        FieldDomains read = ofRefused(List.of("E1319"), """
                 module demo
 
                 data Pair = { left: String, right: Int }
@@ -619,7 +618,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
      */
     @Test
     void aClauseNothingCouldTypeInsideAFieldsTypeLeavesThatFieldSpokenForByNothing() {
-        FieldDomains read = ofRefused("""
+        FieldDomains read = ofRefused(List.of("E1319"), """
                 module demo
 
                 data Inner = String
@@ -704,7 +703,7 @@ class WhatAPositionMayHoldIsHandedOverWithHowMuchOfItWasReadTest {
      */
     @Test
     void aStopUnderOneFieldDoesNotSpoilTheFieldBesideIt() {
-        FieldDomains read = ofRefused("""
+        FieldDomains read = ofRefused(List.of("E1319"), """
                 module demo
 
                 data Inner = String

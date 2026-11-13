@@ -362,10 +362,7 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
 
     /** The model measured and answered in full, refused with exactly {@code codes}. */
     private static Compilation refusedAs(String source, List<String> codes) {
-        Compilation compilation = attempted(source);
-        assertEquals(codes, compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
-                "the model is refused");
-        return compilation;
+        return ACompiledModel.refusedWith(codes, attempted(source));
     }
 
     /** Compiled and run and not measured, for a question about what a row answers: a row the

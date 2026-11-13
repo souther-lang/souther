@@ -69,9 +69,7 @@ class ARuntimeCallIsHeldToTheStepsOfTheRowThatMadeItTest {
     private static RowOutcome onlyRowStoppedOf(String source, EvaluationPolicy policy) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.withEvaluationPolicy(policy);
-        compilation.answerEverything();
-        assertEquals(List.of("E1910"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(List.of("E1910"), compilation);
         return onlyRowOf(compilation);
     }
 

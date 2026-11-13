@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
@@ -116,11 +117,8 @@ class AWayNoInputTakesLeavesTheReadingWholeTest {
                 let f (e) = if e.value > 4 then 1 else 2
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1013"), compilation);
 
-        assertEquals(List.of("E1013"), compilation.errors().stream()
-                        .map(said -> said.diagnostic().code().toString()).toList(),
-                "a declaration nothing can construct is refused where it is written");
         assertNull(compilation.db()
                         .ask(new Adequacy.Decides(compilation.modules().getFirst())).value(),
                 "so no body of the module is read, and none has every way dropped by a proof");

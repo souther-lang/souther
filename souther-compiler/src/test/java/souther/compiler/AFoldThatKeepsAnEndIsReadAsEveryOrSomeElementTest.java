@@ -966,10 +966,7 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     private static String readingReport(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(new Adequacy.Asked(Adequacy.Level.OFF, false));
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code().toString()).toList(),
-                () -> "the source compiles: " + model);
+        ACompiledModel.compiles(compilation);
         return reportOf(compilation);
     }
 

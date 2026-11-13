@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -462,8 +463,7 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
                 behavior many : (x: Input) -> Bool
                 let many (x) = List.any(g -> %s, x.groups)
                 """.formatted(body), "Main");
-        assertEquals(List.of(), made.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
+        ACompiledModel.compiles(made);
         List<OnTheWay> stated = statedIn(made, "many");
         List<Integer> handed = new ArrayList<>();
         List<WhyNotTaken> declined = new ArrayList<>();
@@ -527,8 +527,7 @@ class AWayElementsOfTheirOwnMeetIsNeverShownClosedTest {
                     if x.gate > 0 then A else B
                 }
                 """.formatted(guard), "Main");
-        assertEquals(List.of(), made.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
+        ACompiledModel.compiles(made);
         List<BorderAssessment> lines = Adequacy.readingsOf(made.db(), "probe.pastaguard").get("f");
         assertNotNull(lines, "f was measured");
         return lines.stream().map(line -> line.border().cut() + " " + new TreeSet<>(

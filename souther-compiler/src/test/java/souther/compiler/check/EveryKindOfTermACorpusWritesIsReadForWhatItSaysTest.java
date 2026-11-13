@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
@@ -127,9 +128,7 @@ class EveryKindOfTermACorpusWritesIsReadForWhatItSaysTest {
             Map<String, String> byId = workspaces.get(at);
             wide = byId.containsKey("wide.sou");
             Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-            c.answerEverything();
-            assertEquals(refused.get(at), c.errors().stream()
-                    .map(e -> e.diagnostic().code()).toList(), "what the workspace is refused for");
+            ACompiledModel.refusedWith(refused.get(at), c);
             // The module written here is held to say nothing at all, warnings included.
             if (wide) {
                 assertEquals(List.of(), c.db().allReports().stream().map(Object::toString).toList(),

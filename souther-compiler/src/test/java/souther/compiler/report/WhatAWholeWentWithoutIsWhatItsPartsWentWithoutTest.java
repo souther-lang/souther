@@ -93,9 +93,7 @@ class WhatAWholeWentWithoutIsWhatItsPartsWentWithoutTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.withEvaluationPolicy(BOUNDED);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1910"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(List.of("E1910"), compilation);
         return AdequacyReport.of(compilation);
     }
 

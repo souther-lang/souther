@@ -1,14 +1,15 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -49,10 +50,7 @@ class ANameLeftUnansweredCountsWhetherOrNotItWasReportedTest {
         byId.put("evil.sou", RESERVED);
         byId.put("main.sou", IMPORTER);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
-        assertEquals(1, c.errors().size(),
-                "only the module that takes a shipped name is refused: " + c.errors());
-        return c;
+        return ACompiledModel.refusedWith(List.of("E1502"), c);
     }
 
     private static boolean has(Compilation c, String declared) {

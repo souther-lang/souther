@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -101,9 +100,7 @@ class OneCheckedModuleIssuesOneNumberingTest {
 
     private static Compilation uncheckable() {
         Compilation compilation = Compilation.ofSources(List.of(UNCHECKABLE), ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertFalse(compilation.errors().isEmpty(), "the name nothing declares is refused");
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1023"), compilation);
     }
 
     private static Bodies.Elaborated checkedOf(Compilation compilation) {

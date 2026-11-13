@@ -36,9 +36,7 @@ class AnExampleShortOfRoomIsUndecidedAndNotFailedTest {
     @Test
     void theRowIsUndecidedAtTheShortage() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of("E1941"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(List.of("E1941"), compilation);
         SourceId sourceId = compilation.exampleSourcesOf("example.room").getFirst();
         List<RowOutcome> rows = compilation.db()
                 .ask(new Output.Examples("example.room", sourceId, ArmObservation.OMIT))

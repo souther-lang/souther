@@ -1,14 +1,15 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -42,9 +43,8 @@ class ADeclarationWrittenTwiceIsAnsweredForByTheOneTheModuleHasTest {
                 data A = { value: Int }
                 data A = { value: Nowhere }
                 """);
-        c.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1011"), c);
 
-        assertEquals(1, c.errors().size(), "the second `A` is the one mistake: " + c.errors());
         assertTrue(has(c, "A"), "what `m.a` declares as `A` is made of `Int`");
     }
 }

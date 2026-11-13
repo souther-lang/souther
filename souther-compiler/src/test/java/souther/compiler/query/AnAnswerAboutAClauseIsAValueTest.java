@@ -6,11 +6,11 @@ import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -62,8 +62,7 @@ class AnAnswerAboutAClauseIsAValueTest {
 
     private static Map<String, StatedContract> contractsOfARuleThatStops() {
         Compilation c = Compilation.ofDocuments(Map.of("a.sou", STOPS), Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
-        assertFalse(c.errors().isEmpty(), "the rule does not type, which is what this is about");
+        ACompiledModel.refusedWith(List.of("E1506"), c);
         return c.db().ask(new Bodies.StatedContracts("m.a")).value();
     }
 

@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.partition.AdequacyPolicy;
 import souther.compiler.partition.Budgets;
@@ -69,10 +70,7 @@ class AParameterTheBodyDoesNotReadSpendsNoneOfWhatARewriteIsLookedForWithTest {
                                 PatternPlan.Budget.OF_BEHAVIOR_DISTINCTIONS, RUNS),
                         Budgets.generation()));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         ReplacementEvidence its = compilation.db()
                 .ask(new Replacements.Measured("example.runs")).value().get("f");
         Map<Replacement, ReplacementEvidence.Outcome> rewrites = new LinkedHashMap<>();

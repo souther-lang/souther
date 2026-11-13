@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.source.SourceId;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.diag.msg.ModuleMessage;
 import souther.compiler.diag.Located;
@@ -132,8 +133,7 @@ class CascadeStopsAtTheCauseTest {
                 }
                 """), Set.of("m.broken"), ModulePath.EMPTY);
         Located.diagnosticsOf(c.diagnostics());
-        assertEquals(List.of(), c.errors().stream().map(each -> each.diagnostic().code()).toList(),
-                "nothing is reported here: the module that cannot be followed is the caller's to say");
+        ACompiledModel.compiles(c);
 
         assertFalse(Boolean.TRUE.equals(c.db().ask(new Names.Sound("m.a")).value()),
                 "m.a is built on a name nothing brought in");

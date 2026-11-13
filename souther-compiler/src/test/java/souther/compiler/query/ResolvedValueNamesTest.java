@@ -291,7 +291,7 @@ class ResolvedValueNamesTest {
                 let f (n) = nosuch
                 """;
 
-        Compilation c = documentOf(source);
+        Compilation c = ACompiledModel.refusedWith(List.of("E1023"), documentOf(source));
         Hir.Var name = nameOf(c, "nosuch");
         assertInstanceOf(Hir.Var.Unanswered.class, name);
         // and it holds no stand-in for a reader below to take for a declaration: what a name names

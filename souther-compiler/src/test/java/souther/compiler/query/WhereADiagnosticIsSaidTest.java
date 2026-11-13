@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
@@ -10,7 +11,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -59,8 +59,7 @@ class WhereADiagnosticIsSaidTest {
     @Test
     void aCompileOfOneSourceNamesItLikeAnyOther() {
         Compilation c = Compilation.ofSource(BROKEN, "Main");
-        c.answerEverything();
-        assertFalse(c.errors().isEmpty(), "the source has a mistake to say");
+        ACompiledModel.refusedWith(List.of("E1023"), c);
 
         Db.Found only = c.db().allReports().get(0);
 
@@ -78,8 +77,7 @@ class WhereADiagnosticIsSaidTest {
                 import a ( N )
                 let f (n: N) = bogus
                 """), souther.compiler.meta.ModulePath.EMPTY);
-        c.answerEverything();
-        assertFalse(c.errors().isEmpty(), "the second source has a mistake to say");
+        ACompiledModel.refusedWith(List.of("E1023"), c);
 
         List<SourceId> said = c.db().allReports().stream().map(c::filedUnderOf).toList();
 
@@ -91,8 +89,7 @@ class WhereADiagnosticIsSaidTest {
     @Test
     void aReportIsSaidWhereItPointsAndNowhereElse() {
         Compilation c = Compilation.ofSource(BROKEN, "Main");
-        c.answerEverything();
-        assertFalse(c.errors().isEmpty(), "the source has a mistake to say");
+        ACompiledModel.refusedWith(List.of("E1023"), c);
 
         for (Db.Found found : c.db().allReports()) {
             List<SourceId> saidAt = c.publishSourceIdsOf(found);

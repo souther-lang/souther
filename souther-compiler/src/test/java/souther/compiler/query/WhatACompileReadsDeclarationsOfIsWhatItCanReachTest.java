@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.Compiler;
 import souther.compiler.meta.Agreement;
@@ -15,7 +16,6 @@ import souther.compiler.meta.Readback;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
@@ -81,10 +81,8 @@ class WhatACompileReadsDeclarationsOfIsWhatItCanReachTest {
     private static PublishedClasses declarationsOf(String source, Map<String, ClassFileImage> path) {
         Compilation compiled = Compilation.ofSources(List.of(source), ModulePath.of(path));
         compiled.db().ask(new Output.All());
-        assertEquals(List.of(),
-                compiled.errors().stream()
-                        .map(d -> String.valueOf(d.diagnostic().code())).toList(),
-                "the model this is measured against compiles");
-        return Output.declarationsRead(compiled.db());
+        PublishedClasses read = Output.declarationsRead(compiled.db());
+        ACompiledModel.compiles(compiled);
+        return read;
     }
 }

@@ -403,9 +403,7 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsComposedHoldingItTest {
     /** The same, of a record no value can be built of, which the model is refused for. */
     private static Partitions.FieldsChosen composedOfWhatNothingBuilds(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of("E1013"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(List.of("E1013"), compilation);
         return composedGiven(compilation, Map.of());
     }
 

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.cst.SourceLayout;
 import souther.compiler.source.SourceId;
 
@@ -12,6 +13,7 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -66,16 +68,15 @@ class AnEditorIsNotToldAnIdentityNothingResolvedTest {
             let f (n) = nowhere
             """;
 
-    /** The sources that write a name nothing denotes, so the compile refuses them. */
-    private static final Set<String> NAMING_NOTHING = Set.of(TYPES, VALUES);
+    /** What the compile refuses the sources that write a name nothing denotes for. */
+    private static final Map<String, List<String>> REFUSED_WITH =
+            Map.of(TYPES, List.of("E1023"), VALUES, List.of("E1023"));
 
     private static Object under(String source, Key<?> key) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(ID, source);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
-        assertEquals(NAMING_NOTHING.contains(source), !c.errors().isEmpty(),
-                () -> "only a source naming nothing is refused: " + c.errors());
+        ACompiledModel.refusedWith(REFUSED_WITH.getOrDefault(source, List.of()), c);
         return c.db().ask(key).value();
     }
 

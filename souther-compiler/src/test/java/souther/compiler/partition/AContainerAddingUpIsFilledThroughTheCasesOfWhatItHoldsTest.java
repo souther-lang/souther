@@ -232,7 +232,8 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
     void everyWayTriedAndNoneComposedSaysSo() {
         TermRealizations.Realization.None came = assertInstanceOf(
                 TermRealizations.Realization.None.class,
-                realizing(NO_CASE_COMPOSES, AMOUNT, namedIn(NO_CASE_COMPOSES, "Entries")),
+                realizing(RuleReadings.ofSource(NO_CASE_COMPOSES, List.of("E1013")), AMOUNT,
+                        namedIn(NO_CASE_COMPOSES, "Entries")),
                 "the ways down are there and neither of them builds a value");
 
         assertEquals(Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE, came.why());
@@ -271,8 +272,9 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
     private static final List<String> UNDER_A_TRUTH = List.of("settled", "amount");
 
     /**
-     * The same sum with both cases holding a string longer than one is worth writing out, so the
-     * way down to the amount is there and neither case composes a value.
+     * The same sum with each case holding the sum again, so the way down to the amount is there and
+     * neither case composes a value. No value of the model exists, which the compiler refuses
+     * with E1013.
      */
     private static final String NO_CASE_COMPOSES = """
             module g
@@ -322,7 +324,12 @@ class AContainerAddingUpIsFilledThroughTheCasesOfWhatItHoldsTest {
     /** The same, over a container of {@code held}. */
     private static TermRealizations.Realization realizing(String source, List<String> steps,
                                                           Type held) {
-        RuleReadingSource rules = RuleReadings.ofSource(source);
+        return realizing(RuleReadings.ofSource(source), steps, held);
+    }
+
+    /** The same, over the reading of a model already compiled. */
+    private static TermRealizations.Realization realizing(RuleReadingSource rules,
+                                                          List<String> steps, Type held) {
         Symbols symbols = rules.symbols();
         Type entries = held;
         TermPath read = TermPath.of("ns").element();

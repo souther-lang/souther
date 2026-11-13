@@ -95,13 +95,7 @@ class WhatAComparisonIsARuleAboutTest {
                     ensures Ok -> %s
                 """.formatted(params, clause);
         Compilation compilation = Compilation.ofSource(source, "Main");
-        if (refusedWith.isEmpty()) {
-            ACompiledModel.compiles(compilation);
-        } else {
-            compilation.answerEverything();
-            assertEquals(refusedWith, compilation.errors().stream()
-                    .map(e -> e.diagnostic().code()).toList());
-        }
+        ACompiledModel.refusedWith(refusedWith, compilation);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         StatedContract stated =

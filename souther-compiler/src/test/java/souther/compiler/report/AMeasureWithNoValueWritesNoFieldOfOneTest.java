@@ -124,10 +124,7 @@ class AMeasureWithNoValueWritesNoFieldOfOneTest {
         compilation.withJvmExampleDeadlines(souther.compiler.DoesNotComeBack.overrunningOn(
                 souther.compiler.DoesNotComeBack.everythingAboutRowsOf("go")));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1923"), compilation.errors().stream()
-                .map(found -> found.diagnostic().code()).toList(),
-                "the row that does not come back is said as an error of the model");
+        ACompiledModel.refusedWith(List.of("E1923"), compilation);
         return JsonMapper.builder().build().readTree(
                 AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
     }

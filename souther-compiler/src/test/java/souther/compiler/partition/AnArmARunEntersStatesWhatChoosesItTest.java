@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.ElementBindings;
@@ -18,7 +19,6 @@ import souther.compiler.query.Compilation;
 import souther.compiler.types.WrittenOwner;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -203,8 +203,7 @@ class AnArmARunEntersStatesWhatChoosesItTest {
                 """.formatted(constructs == null ? "" : "    constructs " + constructs,
                 body.indent(4));
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), () -> "the model compiles:\n" + source);
+        ACompiledModel.compiles(compilation);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         assertNotNull(checked, "the model under test compiles");
         AnalysisBody analysis = checked.analysisBodies().get("f");

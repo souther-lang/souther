@@ -107,13 +107,12 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
                 """, "Main");
         compilation.db().ask(new Bodies.Checked("broken"));
 
-        assertEquals(List.of("E2010"), compilation.errors().stream()
-                .map(said -> said.diagnostic().code().toString()).toList());
+        ACompiledModel.refusedWith(List.of("E2010"), compilation);
     }
 
     @Test
     void aWayEveryInputOfWhichAConstructionRefusesStopsThere() {
-        Compilation bodies = ACompiledModel.answered(BODIES);
+        Compilation bodies = Compilation.ofSource(BODIES, "Main");
         DecisionReading read = readUnderTheOtherRules(bodies, "one");
 
         assertEquals(List.of(), read.impossible(), "some input brings `n > 5` out true");
@@ -123,24 +122,26 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
                 lines(bodies, read.everyRunStops().getFirst()));
         assertEquals(1, read.found().size(), () -> "and the way past `else` is a rule: "
                 + read.found());
+        ACompiledModel.compiles(bodies);
     }
 
     /** Of two constructions on the way, the one its inputs get past is not said. */
     @Test
     void ofTwoConstructionsOnAWayOnlyTheOneEveryRunStopsAtIsNamed() {
-        Compilation bodies = ACompiledModel.answered(BODIES);
+        Compilation bodies = Compilation.ofSource(BODIES, "Main");
         DecisionReading read = readUnderTheOtherRules(bodies, "two");
 
         assertEquals(1, read.everyRunStops().size(), () -> "one way: " + read.everyRunStops());
         assertEquals(List.of(lineOf("Positive { n = n }", 1)),
                 lines(bodies, read.everyRunStops().getFirst()));
+        ACompiledModel.compiles(bodies);
     }
 
     /** Of two clauses of one construction, only the one the way's inputs break is named: the
      *  other holds of every one of them. */
     @Test
     void ofTwoClausesOfAConstructionOnlyTheOneTheWayBreaksIsNamed() {
-        Compilation bodies = ACompiledModel.answered(BODIES);
+        Compilation bodies = Compilation.ofSource(BODIES, "Main");
         DecisionReading read = readUnderTheOtherRules(bodies, "three");
 
         assertEquals(1, read.everyRunStops().size(), () -> "one way: " + read.everyRunStops());
@@ -149,13 +150,14 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
                 .map(each -> assertInstanceOf(ClauseOfAConstruction.Held.class, each.clause())
                         .clause().name().map(ClauseName::value)).toList());
         assertEquals(List.of(lineOf("Bounded { n = n }", 0)), lines(bodies, way));
+        ACompiledModel.compiles(bodies);
     }
 
     /** A way whose conditions clash goes through a construction, and it is a way no input takes:
      *  the least proof is had without the construction. */
     @Test
     void aWayWhoseConditionsClashIsOneNoInputTakesWhateverItGoesThrough() {
-        Compilation compilation = ACompiledModel.answered("""
+        Compilation compilation = Compilation.ofSource("""
                 module demo
 
                 data Positive = { n: Int }
@@ -166,13 +168,14 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
                 behavior c : (n: Int) -> Positive | No
                     constructs Positive
                 let c (n) = if n < 0 && n > 0 then Positive { n = n } else No
-                """);
+                """, "Main");
         DecisionReading read = readingOf(compilation, RuleReadings.of(compilation, "demo"), "c");
 
         assertEquals(List.of(), read.everyRunStops());
         assertEquals(1, read.impossible().size(), () -> "the one way: " + read.impossible());
         assertEquals(List.of(), read.impossible().getFirst().way().passed(),
                 "proved of the conditions alone");
+        ACompiledModel.compiles(compilation);
     }
 
     /**
@@ -183,7 +186,7 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
      */
     @Test
     void aWayWhoseSmallerProofTheFigureLeftUnansweredIsUndecided() {
-        Compilation bodies = ACompiledModel.answered(BODIES);
+        Compilation bodies = Compilation.ofSource(BODIES, "Main");
         Allowances allowing = Allowances.DECLARED
                 .with(CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE, SPENT_AT);
         DecisionReading read = allowing.over(() -> readUnderTheOtherRules(bodies, "two"));
@@ -200,6 +203,7 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
                         .map(each -> bodies.texts().resolve(each.at()).line()).toList());
         assertEquals(1, read.found().size(), () -> "and the way past `else` is a rule: "
                 + read.found());
+        ACompiledModel.compiles(bodies);
     }
 
     /**
@@ -222,8 +226,10 @@ class AWayEveryRunOfWhichStopsIsNotAWayNoInputTakesTest {
 
     /** The body of {@code behavior} of {@link #BODIES}, read under the rules of {@link #RULES}. */
     private static DecisionReading readUnderTheOtherRules(Compilation bodies, String behavior) {
-        Compilation rules = ACompiledModel.answered(RULES);
-        return readingOf(bodies, RuleReadings.of(rules, "demo"), behavior);
+        Compilation rules = Compilation.ofSource(RULES, "Main");
+        DecisionReading read = readingOf(bodies, RuleReadings.of(rules, "demo"), behavior);
+        ACompiledModel.compiles(rules);
+        return read;
     }
 
     /** The line of {@link #BODIES} the {@code nth} {@code text} in it is on, from one. */

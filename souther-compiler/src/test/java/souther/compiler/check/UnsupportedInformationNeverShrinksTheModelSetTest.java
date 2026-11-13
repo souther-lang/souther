@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Compilation;
@@ -10,7 +11,6 @@ import souther.compiler.types.TypeSymbols;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -32,22 +32,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class UnsupportedInformationNeverShrinksTheModelSetTest {
 
     /**
-     * {@code source} compiled and answered in full. A declaration no value satisfies is refused,
-     * and is what some of these are about; any other refusal is a model whose declarations were
-     * never read.
+     * {@code source} compiled and answered in full, and refused with {@code refusal}. A declaration
+     * no value satisfies is refused, and is what some of these are about; any other refusal is a
+     * model whose declarations were never read.
      */
-    private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code().toString())
-                        .filter(each -> !each.equals("E1013")).toList(),
-                "the model this reads has to be one somebody could write");
-        return compilation;
+    private static Compilation compiled(String source, List<String> refusal) {
+        return ACompiledModel.refusedWith(refusal, Compilation.ofSource(source, "Main"));
     }
 
-    private static FieldDomains domainsOf(String source, String name) {
-        Compilation compilation = compiled(source);
+    private static FieldDomains domainsOf(String source, String name, List<String> refusal) {
+        Compilation compilation = compiled(source, refusal);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         return FieldDomains.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)),
                 RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
@@ -55,7 +49,7 @@ class UnsupportedInformationNeverShrinksTheModelSetTest {
     }
 
     private static OccurrenceCounts countsOf(String source, String name) {
-        Compilation compilation = compiled(source);
+        Compilation compilation = compiled(source, List.of());
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         return OccurrenceCounts.of(TypeSymbols.declared(new TypeKey(symbols.module(), name)),
                 RuleReadingContext.unshared(RuleReadings.of(compilation, "demo"),
@@ -71,7 +65,8 @@ class UnsupportedInformationNeverShrinksTheModelSetTest {
                 data X = Int
                     invariant low = value >= 2
                     invariant high = value <= 1
-                """, "X").infeasible(), "nothing is both at least two and at most one");
+                """, "X", List.of("E1013")).infeasible(),
+                "nothing is both at least two and at most one");
     }
 
     /**
@@ -85,7 +80,7 @@ class UnsupportedInformationNeverShrinksTheModelSetTest {
 
                 data Seven = Int
                     invariant either = (value >= 2 && value <= 1) || value == 7
-                """, "Seven").infeasible(), "seven is a value of it");
+                """, "Seven", List.of()).infeasible(), "seven is a value of it");
     }
 
     /** A floor the seeding reads, so the count at the name a set wears is one it can answer about. */

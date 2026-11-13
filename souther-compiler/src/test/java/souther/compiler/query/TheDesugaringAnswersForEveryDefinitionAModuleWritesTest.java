@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 
 import java.util.LinkedHashMap;
@@ -8,7 +9,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -42,7 +42,9 @@ class TheDesugaringAnswersForEveryDefinitionAModuleWritesTest {
     private static Compilation compiled() {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", SOURCE);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        // The model is the one that has the mistake: a newtype applied to a count other than one.
+        return ACompiledModel.refusedWith(List.of("E1802"),
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
     }
 
     /** Both definitions are answered for, the one holding the application among them. */
@@ -55,12 +57,6 @@ class TheDesugaringAnswersForEveryDefinitionAModuleWritesTest {
         assertTrue(fns.containsKey("f"),
                 "the rewrite leaves what is not a construction as it was, and answers");
         assertTrue(fns.containsKey("g"), "and the definition beside it likewise");
-        assertEquals(List.of("E1802"), errorsOf(c), "the model is the one that has the mistake");
-    }
-
-    private static List<String> errorsOf(Compilation c) {
-        c.answerEverything();
-        return c.errors().stream().map(each -> each.diagnostic().code()).toList();
     }
 
     /** So the module is assembled, and the definitions beside the mistake are checked. */
@@ -70,8 +66,5 @@ class TheDesugaringAnswersForEveryDefinitionAModuleWritesTest {
 
         assertTrue(c.db().ask(new Shapes.Desugared("m.a")).present(),
                 "every definition was answered for, so there is a module");
-
-        assertEquals(List.of("E1802"), errorsOf(c),
-                "and the application is said as a newtype wrapping a count other than one, once");
     }
 }

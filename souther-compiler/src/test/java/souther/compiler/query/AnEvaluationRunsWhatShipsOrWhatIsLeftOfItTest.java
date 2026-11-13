@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.jvm.GeneratedClass;
 import souther.compiler.jvm.SoutherJvmAbi;
 import souther.compiler.meta.ModulePath;
@@ -73,7 +74,7 @@ class AnEvaluationRunsWhatShipsOrWhatIsLeftOfItTest {
      */
     @Test
     void whereTheModuleCameOutWholeAnEvaluationObservesTheProgramThatShips() {
-        Compilation clean = compile("1");
+        Compilation clean = whole();
 
         Answer<Bodies.Elaborated> ships = clean.db().ask(new Bodies.Checked("demo"));
         Answer<Bodies.Elaborated> observed = clean.db().ask(new Bodies.Observable("demo"));
@@ -93,7 +94,7 @@ class AnEvaluationRunsWhatShipsOrWhatIsLeftOfItTest {
      */
     @Test
     void aRefusedBodyLeavesNoModuleToShipAndTheBodiesThatMayBeRun() {
-        Compilation refused = compile("0");
+        Compilation refused = refused();
 
         assertFalse(refused.db().ask(new Bodies.Checked("demo")).present(),
                 "a module one of whose bodies did not come out has no whole to ship");
@@ -113,7 +114,7 @@ class AnEvaluationRunsWhatShipsOrWhatIsLeftOfItTest {
      */
     @Test
     void thePartialImageDeclaresEveryBehaviorAndImplementsOnlyWhatMayBeRun() {
-        Compilation refused = compile("0");
+        Compilation refused = refused();
 
         Answer<EvaluationArtifact> run =
                 refused.db().ask(new Output.Evaluated("demo", ArmObservation.RECORD));
@@ -148,7 +149,7 @@ class AnEvaluationRunsWhatShipsOrWhatIsLeftOfItTest {
      */
     @Test
     void aRowOfAnImplementationThatWasNotMadeIsUndecidedAndSaysWhy() {
-        Compilation refused = compile("0");
+        Compilation refused = refused();
 
         Output.RowsRead.Of read = refused.db().ask(new Output.RowsRead("demo")).value();
         List<RowOutcome> ran = new java.util.ArrayList<>(read.byBehavior().get("twice").ran());
@@ -172,13 +173,15 @@ class AnEvaluationRunsWhatShipsOrWhatIsLeftOfItTest {
                 new GeneratedClass.BehaviorImpl("demo", behavior)).binaryName();
     }
 
-    private static Compilation compile(String constructs) {
-        Compilation compilation =
-                Compilation.ofSources(List.of(MODEL.formatted(constructs)), ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertEquals(!"1".equals(constructs), !compilation.errors().isEmpty(),
-                () -> "only the model constructing a value the invariant refuses is refused: "
-                        + compilation.errors());
-        return compilation;
+    /** The module whose {@code mint} constructs a seat the invariant admits. */
+    private static Compilation whole() {
+        return ACompiledModel.compiles(
+                Compilation.ofSources(List.of(MODEL.formatted("1")), ModulePath.EMPTY));
+    }
+
+    /** The module whose {@code mint} constructs a value the invariant refuses. */
+    private static Compilation refused() {
+        return ACompiledModel.refusedWith(List.of("E2010"),
+                Compilation.ofSources(List.of(MODEL.formatted("0")), ModulePath.EMPTY));
     }
 }

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ARuleNoReadingTakesIn;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
@@ -259,9 +260,7 @@ class ARuleThatStatesNothingIsNotOneThatRestrictsThePositionTest {
 
     private static Partitions.Partitioning partitioningOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(REFUSED.getOrDefault(source, List.of()), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "what the model is refused for");
+        ACompiledModel.refusedWith(REFUSED.getOrDefault(source, List.of()), compilation);
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

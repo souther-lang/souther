@@ -7,7 +7,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -22,11 +21,9 @@ class AComparisonOfTwoValuesTakenOfAPlaceKeepsTheEndsOfWhatTheOperationGivesTest
     private static String report(String body) {
         Compilation compilation = Compilation.ofSource("module p\n\n" + body, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        String report = AdequacyReport.of(compilation)
+        ACompiledModel.compiles(compilation);
+        return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
-        assertEquals(0, compilation.errors().size(), report);
-        return report;
     }
 
     private static String completeReport(String body) {

@@ -12,8 +12,6 @@ import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -64,13 +62,10 @@ class AnAnswerThatIsTheOnlyConditionIsRecordedTest {
                 """.formatted(condition, !condition.startsWith("List.all"),
                 condition.startsWith("List.all")), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
-                report);
         assertTrue(report.contains("decision    rules 2   taken 2"), report);
     }
 }

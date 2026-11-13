@@ -319,9 +319,7 @@ class TheBlockAnsweredIsTheFixedPointOfTheAccountTest {
     /** The report of a model whose rows state answers the body refuses, which it says it does. */
     private static String reportOfWhatTheBodyRefuses(String model) {
         Compilation measured = measured(model);
-        assertTrue(measured.errors().stream()
-                        .anyMatch(each -> "E1905".equals(String.valueOf(each.diagnostic().code()))),
-                "the body refuses the rows' answers");
+        ACompiledModel.refusedWith(List.of("E1905", "E1905"), measured);
         return humanReport(measured);
     }
 

@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.source.SourceId;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.Compiler;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.CompileException;
@@ -73,11 +74,7 @@ class CyclicModulesTest {
     private static Compilation cyclic(String first, String second) {
         Compilation compilation = Compilation.ofDocuments(documents(first, second), Set.of(),
                 souther.compiler.meta.ModulePath.EMPTY);
-        compilation.diagnostics();
-        assertTrue(compilation.errors().stream()
-                        .anyMatch(each -> "E1501".equals(each.diagnostic().code())),
-                "the modules name each other");
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1501"), compilation);
     }
 
     @Test

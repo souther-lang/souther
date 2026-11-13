@@ -36,20 +36,14 @@ class WhatStoppedADerivationIsWhatIsReportedTest {
     }
 
     private static PartitionEvidence measured(String model, String behavior) {
-        return measuredOf(ACompiledModel.measured(model, Adequacy.Asked.fullReport()), behavior);
+        return measured(model, behavior, List.of());
     }
 
     /** The same, for a model the check refuses for {@code errors}. */
     private static PartitionEvidence measured(String model, String behavior, List<String> errors) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(errors, compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "what the model is refused for");
-        return measuredOf(compilation, behavior);
-    }
-
-    private static PartitionEvidence measuredOf(Compilation compilation, String behavior) {
+        ACompiledModel.refusedWith(errors, compilation);
         Map<String, PartitionEvidence> coverage =
                 compilation.db().ask(new Adequacy.Coverage("demo")).value();
         assertNotNull(coverage, "the model under test compiles");

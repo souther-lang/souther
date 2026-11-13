@@ -16,7 +16,6 @@ import souther.compiler.types.TypeSymbols;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -197,9 +196,7 @@ class AListOfRecordsThatDefineANumberFromTheirOthersWithholdsNothingBesideItTest
                 """);
 
         Compilation refused = Compilation.ofSource(source, "Main");
-        refused.answerEverything();
-        assertEquals(List.of("E1013"), refused.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "no line can be built");
+        ACompiledModel.refusedWith(List.of("E1013"), refused);
 
         assertFalse(lineHoldsAValue(source));
         assertFalse(certified(refused, "q.lines[*].discount"));

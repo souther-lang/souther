@@ -312,10 +312,7 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
     private static AdequacyReport measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors()
-                .stream().map(e -> e.diagnostic().code() + " " + e.diagnostic().titleKey())
-                .toList());
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation);
     }
 

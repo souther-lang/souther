@@ -3,6 +3,7 @@ package souther.compiler.reading;
 import souther.compiler.coverage.ArmProbe;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.core.Core;
@@ -256,9 +257,7 @@ class AnArmThePlanNumberedIsToldHowItIsReachedTest {
 
     private static Read read(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(REFUSED.getOrDefault(source, List.of()), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "what the model is refused for");
+        ACompiledModel.refusedWith(REFUSED.getOrDefault(source, List.of()), compilation);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         assertNotNull(checked, "the model under test compiles");

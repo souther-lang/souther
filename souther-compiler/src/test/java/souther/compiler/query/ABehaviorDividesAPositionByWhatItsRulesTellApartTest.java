@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.partition.Axis;
@@ -363,11 +364,7 @@ class ABehaviorDividesAPositionByWhatItsRulesTellApartTest {
 
                 """ + behavior;
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code() + " " + each.diagnostic().primary())
-                        .toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         Partitions.Partitioning divided = compilation.db()
                 .ask(new Adequacy.Divided(compilation.modules().get(0), "route")).value();
         assertNotNull(divided, "the behavior was divided");

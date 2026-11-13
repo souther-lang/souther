@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.check.TypeOps;
 import souther.compiler.meta.ModulePath;
@@ -242,10 +243,6 @@ class WhatANameEndsInIsTheWalksAnswerTest {
         byId.put("beneath.sou", BENEATH);
         byId.put("above.sou", ABOVE);
         Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertEquals(List.of("E1013", "E1013"), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(),
-                "the names that wrap themselves, or each other, hold no value");
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1013", "E1013"), compilation);
     }
 }

@@ -7,6 +7,7 @@ import souther.compiler.query.Compilation;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -110,6 +111,11 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
      * refused a value.
      */
     private static Compiler.Compiled checked(String source) {
+        return checked(List.of(), source);
+    }
+
+    /** As {@link #checked(String)}, the source held to be refused with {@code codes}. */
+    private static Compiler.Compiled checked(List<String> codes, String source) {
         Compilation compilation = Compilation.ofSource(source, ImplicitModuleName.OF_A_TEXT);
         CompileException structural = compilation.structuralFailure();
         if (structural != null) {
@@ -119,10 +125,13 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
             compilation.db().ask(new Bodies.InvariantWarnings(module));
         }
         CompileException failure = compilation.failure();
+        Compiler.Compiled said = failure == null
+                ? new Compiler.Compiled(Map.of(), compilation.warnings()) : null;
+        ACompiledModel.refusedWith(codes, compilation);
         if (failure != null) {
             throw failure;
         }
-        return new Compiler.Compiled(Map.of(), compilation.warnings());
+        return said;
     }
 
     private static boolean owed(Compiler.Compiled c) {
@@ -417,7 +426,7 @@ class AWalkFromASeedIsBoundedByCheckingOneStepTest {
     @Test
     void aProductInsideTheStepSeededBelowTheClauseIsRefused() {
         CompileException refused = assertThrows(CompileException.class, () ->
-                checked("""
+                checked(List.of("E2010"), """
                         module demo
 
                         data Positive = Int

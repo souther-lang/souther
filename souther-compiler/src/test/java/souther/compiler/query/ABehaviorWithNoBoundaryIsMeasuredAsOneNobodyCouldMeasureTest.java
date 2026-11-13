@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import org.junit.jupiter.api.Test;
 import souther.compiler.report.AdequacyReport;
@@ -64,10 +65,7 @@ class ABehaviorWithNoBoundaryIsMeasuredAsOneNobodyCouldMeasureTest {
     private static Compilation measured() {
         Compilation compilation = Compilation.ofSource(UNRESOLVED, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertFalse(compilation.errors().isEmpty(),
-                "the model names a type from a module that does not resolve");
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1504", "E2105"), compilation);
     }
 
     private static JsonNode behaviorOf(AdequacyReport report, String name) {

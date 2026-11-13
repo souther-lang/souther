@@ -107,9 +107,7 @@ class ARowSaysWhatAppliedTheBehaviorTest {
     private static List<RowOutcome> rowsOf(String source, String refusal) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(refusal), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(List.of(refusal), compilation);
         List<RowOutcome> rows = new ArrayList<>();
         for (String module : compilation.modules()) {
             for (SourceId id : compilation.exampleSourcesOf(module)) {

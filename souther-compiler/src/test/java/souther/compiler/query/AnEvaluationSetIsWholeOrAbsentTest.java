@@ -41,11 +41,8 @@ class AnEvaluationSetIsWholeOrAbsentTest {
             """);
 
     private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSources(ONE_REACHES_A_BROKEN_ONE,
-                souther.compiler.meta.ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertFalse(compilation.errors().isEmpty(), "the imported module does not check");
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1319"), Compilation.ofSources(
+                ONE_REACHES_A_BROKEN_ONE, souther.compiler.meta.ModulePath.EMPTY));
     }
 
     /** The module that cannot be generated has no evaluation classes. */

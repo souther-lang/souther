@@ -248,8 +248,7 @@ class AValueHeldAgainstWhatAnOperationAnswersRelatesTheTwoTest {
                 let f (b) = if %s then 1 else 0
                 """.formatted(condition);
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + condition);
+        ACompiledModel.compiles(compilation);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");

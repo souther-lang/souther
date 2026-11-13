@@ -270,11 +270,7 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
                     | (Date("+999999999-12-31")) -> true
                 """, "Main");
         past.measure(Adequacy.Asked.fullReport());
-        past.answerEverything();
-
-        assertEquals(List.of("E1905"),
-                past.errors().stream().map(e -> e.diagnostic().code()).toList(),
-                "the program aborts there: " + report(past));
+        ACompiledModel.refusedWith(List.of("E1905"), past);
 
         Compilation near = compiled("""
                 module m

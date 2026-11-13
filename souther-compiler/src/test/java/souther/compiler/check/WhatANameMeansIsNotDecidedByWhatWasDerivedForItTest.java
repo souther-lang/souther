@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.WrittenName;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -57,11 +58,7 @@ class WhatANameMeansIsNotDecidedByWhatWasDerivedForItTest {
         byId.put("lib.sou", LIB);
         byId.put("app.sou", APP);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
-        assertEquals(List.of("E1023"), c.errors().stream().map(each -> each.diagnostic().code())
-                        .toList(),
-                "the model has the one mistake, a field whose type names nothing");
-        return c;
+        return ACompiledModel.refusedWith(List.of("E1023"), c);
     }
 
     /** Written out in full, and under an alias of this module's own making. */

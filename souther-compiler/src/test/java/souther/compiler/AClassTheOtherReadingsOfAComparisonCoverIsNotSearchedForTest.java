@@ -56,10 +56,8 @@ class AClassTheOtherReadingsOfAComparisonCoverIsNotSearchedForTest {
 
     private static Compilation measured() {
         Compilation compilation = Compilation.ofSource(CLAMPED_EQUALITY, "Main");
-        assertTrue(compilation.errors().isEmpty(), () -> "the model compiles: " + compilation.errors());
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     @Test

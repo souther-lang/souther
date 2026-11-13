@@ -13,6 +13,7 @@ import souther.compiler.query.Output;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -182,15 +183,16 @@ class AStoredStringEqualToTheLowercaseOfAStringIsReadTest {
                 // for not holding, and that is the only thing the model is refused for.
                 Compilation running = Compilation.ofSource(
                         model + "\nexample f\n" + examples + "\n", "Main");
-                running.answerEverything();
-                assertEquals(Set.of("E1905"), running.errors().stream()
-                        .map(e -> e.diagnostic().code()).collect(Collectors.toSet()));
                 Output.Examples key = Output.Examples.asked(running.db(), "demo",
                         running.sourceIds().get(0));
-                Set<String> answered = running.db().ask(key).value().rows().stream()
-                        .map(row -> row.resultArm().name()).collect(Collectors.toSet());
-                assertEquals(Set.of("Same", "Differ"), answered,
+                List<String> arms = running.db().ask(key).value().rows().stream()
+                        .map(row -> row.resultArm().name()).toList();
+                assertEquals(Set.of("Same", "Differ"), Set.copyOf(arms),
                         () -> pattern + " " + body + "\n" + examples);
+                ACompiledModel.refusedWith(
+                        Collections.nCopies((int) arms.stream().filter("Differ"::equals).count(),
+                                "E1905"),
+                        running);
             }
         }
     }

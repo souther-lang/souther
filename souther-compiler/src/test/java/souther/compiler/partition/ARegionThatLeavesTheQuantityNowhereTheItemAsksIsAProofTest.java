@@ -726,10 +726,7 @@ class ARegionThatLeavesTheQuantityNowhereTheItemAsksIsAProofTest {
     /** As above, of a model the compile refuses with {@code refusedWith}. */
     private static Read read(String source, String behavior, List<String> refusedWith) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertEquals(refusedWith, compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "what the model is refused for");
-        return read(compilation, behavior);
+        return read(ACompiledModel.refusedWith(refusedWith, compilation), behavior);
     }
 
     private static Read read(Compilation compilation, String behavior) {

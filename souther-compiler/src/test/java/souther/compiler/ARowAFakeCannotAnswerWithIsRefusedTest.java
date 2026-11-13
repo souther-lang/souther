@@ -98,10 +98,7 @@ class ARowAFakeCannotAnswerWithIsRefusedTest {
     private static Compilation refused(String source, List<String> codes) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(codes, compilation.errors().stream()
-                .map(found -> found.diagnostic().code()).toList(), "the model is refused");
-        return compilation;
+        return ACompiledModel.refusedWith(codes, compilation);
     }
 
     private static List<Diagnostic> diagnosticsOf(Compilation compilation) {

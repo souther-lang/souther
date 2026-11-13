@@ -10,11 +10,11 @@ import souther.compiler.types.TypeKey;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -135,9 +135,7 @@ class WhetherSomethingIsDeclaredIsNotAFactAboutARepresentationTest {
                 "and it is a type its module declares all the same");
         assertNull(derived.identify(new TypeKey("shop.prices", "Nothing")),
                 "while an address nothing declares is still nothing");
-
-        c.answerEverything();
-        assertFalse(c.errors().isEmpty(), "the field names no type, and that is said");
+        ACompiledModel.refusedWith(List.of("E1023"), c);
     }
 
     private static Compilation started() {

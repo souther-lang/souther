@@ -246,19 +246,13 @@ class ATotalOfOneCaseHeldEqualToTheTotalOfAnotherIsReadTest {
 
     /** What stands unanswered at the list of the input of {@code probe}. */
     private static List<String> unansweredAtTheList(String source) {
-        return unansweredAtTheList(ACompiledModel.answered(source));
+        return unansweredAtTheList(source, List.of());
     }
 
     /** The same for a model that is refused for {@code refusedFor}, which is read all the same. */
     private static List<String> unansweredAtTheList(String source, List<String> refusedFor) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(refusedFor, compilation.errors().stream()
-                .map(found -> found.diagnostic().code()).toList(), "the model is refused");
-        return unansweredAtTheList(compilation);
-    }
-
-    private static List<String> unansweredAtTheList(Compilation compilation) {
+        ACompiledModel.refusedWith(refusedFor, compilation);
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

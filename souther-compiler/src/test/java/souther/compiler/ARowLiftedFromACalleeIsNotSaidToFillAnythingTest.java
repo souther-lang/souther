@@ -141,9 +141,7 @@ class ARowLiftedFromACalleeIsNotSaidToFillAnythingTest {
     private static Offered offeredFor(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(e -> e.diagnostic().code().toString()).toList());
+        ACompiledModel.compiles(compilation);
         Offering offering = Adequacy.offeredFor(compilation.db(), OfferingRequest.overTheModule("m"));
         return new Offered(offering, GeneratedRows.of(offering, Map.of(),
                 SourceRendering.namedByIdentity(compilation.texts()), compilation.db()).textInEnglish());

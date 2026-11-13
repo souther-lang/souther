@@ -33,7 +33,7 @@ class CompileNamingAnExpressionTest {
             "c.value * 2",                          // a scalar product
             "c.value * n",                          // a variable product, outside the fragment
             "c.value * n + 1",                      // one inside arithmetic the fragment does read
-            "c.value / 2",                          // an integer divide, outside it too
+            "Rational.toInt(DOWN, c.value / 2)",    // an integer divide, outside it too
             "Int.add(c.value, 1)",                  // the function form of an operator
             "Int.subtract(c.value, 1)",
             "Int.floorMod(c.value, p.value)",          // a call the check has no rule about
@@ -75,8 +75,14 @@ class CompileNamingAnExpressionTest {
      * its warnings are what is counted.
      */
     private static String said(String source) {
+        return said(source, List.of());
+    }
+
+    /** The same, of a model that is refused with exactly {@code codes}: a model the invariant check refuses. */
+    private static String said(String source, List<String> codes) {
+        Compilation compilation = Compilation.ofSource(source, ImplicitModuleName.OF_A_TEXT);
+        String said;
         try {
-            Compilation compilation = Compilation.ofSource(source, ImplicitModuleName.OF_A_TEXT);
             CompileException structural = compilation.structuralFailure();
             if (structural != null) {
                 throw structural;
@@ -88,15 +94,17 @@ class CompileNamingAnExpressionTest {
             if (failure != null) {
                 throw failure;
             }
-            return "warnings=" + compilation.warnings().stream()
+            said = "warnings=" + compilation.warnings().stream()
                     .filter(d -> d.diagnostic().severity() == Severity.WARNING)
                     .filter(d -> "E2011".equals(d.diagnostic().code())).count();
         } catch (CompileException e) {
             String code = e.diagnostic().code();
-            return code == null ? "error: " + e.getMessage() : code;
+            said = code == null ? "error: " + e.getMessage() : code;
         } catch (RuntimeException e) {
-            return "raised: " + e.getMessage();
+            said = "raised: " + e.getMessage();
         }
+        ACompiledModel.refusedWith(codes, compilation);
+        return said;
     }
 
     /** {@code source} with the guard's departure added to what the behavior answers and builds. */
@@ -157,15 +165,19 @@ class CompileNamingAnExpressionTest {
         assertEquals(written, bound, "one value, one guard, one answer");
     }
 
-    /** Values written into the source rather than computed: what a name for one has to carry is not
-     * a key but the text, since what a clause reading it says is decided by folding that text. */
+    /**
+     * Values written into the source rather than computed: what a name for one has to carry is not
+     * a key but the text, since what a clause reading it says is decided by folding that text. A row
+     * is the construction, the value, what the behavior constructs, and the codes the model is
+     * refused with (none when it compiles).
+     */
     private static final List<String> WRITTEN = List.of(
-            "Code(%s)|\"12\"",
-            "Code(%s)|\"ab\"",
-            "Table(%s)|[ Row { grade = 1 }, Row { grade = 2 } ]",
-            "Table(%s)|[ ]",
-            "Wrapped(%s)|Row { grade = 1 }",
-            "Wrapped(%s)|row(1)");
+            "Code(%s)|\"12\"|Code|",
+            "Code(%s)|\"ab\"|Code|E2010",
+            "Table(%s)|[ Row { grade = 1 }, Row { grade = 2 } ]|Table, Row|",
+            "Table(%s)|[ ]|Table|E2010",
+            "Wrapped { of = %s }|Row { grade = 1 }|Wrapped, Row|",
+            "Wrapped { of = %s }|row(1)|Wrapped, Row|");
 
     private static final String WRITTEN_MODULE = """
             module demo
@@ -178,7 +190,7 @@ class CompileNamingAnExpressionTest {
                 invariant of.grade >= 1
             let row (n: Int) = Row { grade = n }
             behavior mk : (x: Int) -> %s
-                constructs Code, Table, Wrapped, Row
+                constructs %s
             let mk (x) = %s
             """;
 
@@ -189,20 +201,24 @@ class CompileNamingAnExpressionTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("written")
     void namingAWrittenValueDoesNotChangeWhatIsKnownOfIt(String row) {
-        String construct = row.split("\\|")[0];
-        String value = row.split("\\|")[1];
-        String target = construct.substring(0, construct.indexOf('('));
-        String inline = WRITTEN_MODULE.formatted(target, construct.formatted(value));
-        String bound = WRITTEN_MODULE.formatted(target,
+        String[] parts = row.split("\\|", -1);
+        String construct = parts[0];
+        String value = parts[1];
+        String constructs = parts[2];
+        List<String> codes = parts[3].isEmpty() ? List.of() : List.of(parts[3]);
+        String target = construct.substring(0, construct.indexOf(construct.contains("{") ? ' ' : '('));
+        String inline = WRITTEN_MODULE.formatted(target, constructs, construct.formatted(value));
+        String bound = WRITTEN_MODULE.formatted(target, constructs,
                 "{\n        let v = " + value + "\n        " + construct.formatted("v") + "\n    }");
-        assertEquals(kindOf(said(inline)), kindOf(said(bound)),
-                "a name for a written value carries what was written");
-    }
-
-    /** Whether it was an error or not. Which check named the error is not what is being fixed here:
-     * a construction from a value written where it is built is the constant check's to report, and
-     * one from a name for that value is this check's, and they word it differently. */
-    private static String kindOf(String said) {
-        return said.startsWith("warnings=") ? said : "error";
+        String saidInline = said(inline, codes);
+        String saidBound = said(bound, codes);
+        // A refused model is held to its codes in `said`, for both shapes. Which check reports the
+        // refusal is not the same: a construction from a value written where it is built is the
+        // constant check's to report, and one from a name for that value is the invariant check's,
+        // so only a model that compiles has a count of this check's warnings to compare.
+        if (codes.isEmpty()) {
+            assertEquals(saidInline, saidBound,
+                    "a name for a written value carries what was written");
+        }
     }
 }

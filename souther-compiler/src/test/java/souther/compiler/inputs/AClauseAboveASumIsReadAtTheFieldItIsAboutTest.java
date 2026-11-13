@@ -623,9 +623,7 @@ class AClauseAboveASumIsReadAtTheFieldItIsAboutTest {
     private static InputDomain readingRefused(String source, List<String> refusedFor) {
         Compilation compilation = Compilation.ofSources(List.of(source),
                 souther.compiler.meta.ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertEquals(refusedFor, compilation.errors().stream()
-                .map(found -> found.diagnostic().code()).toList(), "the model is refused");
+        ACompiledModel.refusedWith(refusedFor, compilation);
         return readingOf(compilation, "read");
     }
 

@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ElementProvenance;
@@ -33,11 +34,7 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
 
     static ReadComparisons of(String source, String behavior) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code() + " "
-                                + each.diagnostic().primary()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);
@@ -67,11 +64,7 @@ record ReadComparisons(List<ComparisonReadings.Reading> comparisons,
     static ReadComparisons ofTheAnalysis(String source, String behavior,
                                          ComparisonWitnesses.AtComparisons witnesses) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code() + " "
-                                + each.diagnostic().primary()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         RuleReadingSource rules = RuleReadings.of(compilation, module);

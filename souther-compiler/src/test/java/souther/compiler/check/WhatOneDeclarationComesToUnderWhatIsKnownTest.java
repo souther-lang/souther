@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.Scopes;
 import souther.compiler.ast.Hir;
@@ -11,7 +12,9 @@ import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.TypeSymbol;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -38,25 +41,22 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
      */
     private static final Cardinality NO_VALUE = Cardinality.none(new Emptiness.ConflictingRules());
 
-    private static Cardinality upperOf(String source, String name, Object... assumed) {
-        return upperOf(source, name, def -> def, assumed);
+    /** {@code name} of {@code source}, a model refused with {@code refusal}, read once. */
+    private static Cardinality upperOf(List<String> refusal, String source, String name,
+                                       Object... assumed) {
+        return upperOf(refusal, source, name, def -> def, assumed);
     }
 
     /** The same, with the declaration handed to {@code as} before it is read. */
-    private static Cardinality upperOf(String source, String name,
-                                       java.util.function.UnaryOperator<Hir.Def> as,
-                                       Object... assumed) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(java.util.List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code().toString())
-                        .filter(each -> !each.equals("E1013")).toList(),
-                "the model this reads has to be one somebody could write");
+    private static Cardinality upperOf(List<String> refusal, String source, String name,
+                                       UnaryOperator<Hir.Def> as, Object... assumed) {
+        Compilation compilation = ACompiledModel.refusedWith(refusal,
+                Compilation.ofSource(source, "Main"));
         // A clause nothing could type is a clause nothing reads, and a model with one in it would
         // give every row it appears in the answer of a model with no rules at all. Everything but the
         // refusal these answers are what decides: a model here is meant to hold types with no value.
-        assertEquals(java.util.List.of(), compilation.diagnostics().values().stream()
-                        .flatMap(java.util.List::stream)
+        assertEquals(List.of(), compilation.diagnostics().values().stream()
+                        .flatMap(List::stream)
                         .map(each -> each.diagnostic().code().toString())
                         .filter(each -> !each.equals("E1013")).toList(),
                 "the model this reads has to be one somebody could write");
@@ -80,7 +80,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
 
     @Test
     void aDeclarationWithNoFieldsIsOneValue() {
-        assertEquals(Cardinality.atMost(1), upperOf("""
+        assertEquals(Cardinality.atMost(1), upperOf(List.of(), """
                 module demo
 
                 data U
@@ -89,7 +89,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
 
     @Test
     void aBooleanIsTwo() {
-        assertEquals(Cardinality.atMost(2), upperOf("""
+        assertEquals(Cardinality.atMost(2), upperOf(List.of(), """
                 module demo
 
                 data Flag = Bool
@@ -109,14 +109,15 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                 data Money = Decimal
                     invariant range = value >= 1.0m && value <= 10.0m
                 """;
-        assertEquals(Cardinality.atMost(1), upperOf(source, "One"));
-        assertEquals(Cardinality.UNKNOWN, upperOf(source, "Any"), "open at both ends");
-        assertEquals(Cardinality.UNKNOWN, upperOf(source, "Money"), "and spaced too finely to count");
+        assertEquals(Cardinality.atMost(1), upperOf(List.of(), source, "One"));
+        assertEquals(Cardinality.UNKNOWN, upperOf(List.of(), source, "Any"), "open at both ends");
+        assertEquals(Cardinality.UNKNOWN, upperOf(List.of(), source, "Money"),
+                "and spaced too finely to count");
     }
 
     @Test
     void rulesThatCannotAllHoldLeaveNoValue() {
-        assertTrue(upperOf("""
+        assertTrue(upperOf(List.of("E1013"), """
                 module demo
 
                 data Bad = Int
@@ -138,15 +139,16 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
 
                 data Beside = { a: Any, b: One }
                 """;
-        assertEquals(Cardinality.atMost(1), upperOf(source, "Both", "One", Cardinality.atMost(1)));
-        assertEquals(Cardinality.UNKNOWN, upperOf(source, "Beside",
+        assertEquals(Cardinality.atMost(1),
+                upperOf(List.of(), source, "Both", "One", Cardinality.atMost(1)));
+        assertEquals(Cardinality.UNKNOWN, upperOf(List.of(), source, "Beside",
                 "One", Cardinality.atMost(1), "Any", Cardinality.UNKNOWN));
     }
 
     /** The row the product exists for: what has no value takes the record with it. */
     @Test
     void aRecordWithAFieldOfNoValueHasNoValueHoweverLittleIsKnownBeside() {
-        assertTrue(upperOf("""
+        assertTrue(upperOf(List.of(), """
                 module demo
 
                 data Any = Int
@@ -166,9 +168,9 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                 data Right
                 data Either = Left | Right
                 """;
-        assertEquals(Cardinality.atMost(2), upperOf(source, "Either",
+        assertEquals(Cardinality.atMost(2), upperOf(List.of(), source, "Either",
                 "Left", Cardinality.atMost(1), "Right", Cardinality.atMost(1)));
-        assertTrue(upperOf(source, "Either",
+        assertTrue(upperOf(List.of(), source, "Either",
                 "Left", NO_VALUE, "Right", NO_VALUE).none());
     }
 
@@ -193,7 +195,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                 data Right
                 data Either = Left | Right
                 """;
-        assertEquals(Cardinality.UNKNOWN, upperOf(source, "Either",
+        assertEquals(Cardinality.UNKNOWN, upperOf(List.of(), source, "Either",
                         def -> {
                             Hir.SumData sum = (Hir.SumData) def;
                             return new Hir.SumData(sum.written(), sum.declares(),
@@ -207,7 +209,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
     /** And the same two answers the other way round: a case of no value adds none. */
     @Test
     void aSumWithACaseOfNoValueIsAsWideAsItsOtherCase() {
-        assertEquals(Cardinality.UNKNOWN, upperOf("""
+        assertEquals(Cardinality.UNKNOWN, upperOf(List.of(), """
                 module demo
 
                 data Left
@@ -219,7 +221,7 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
     /** A `None` is a value of an optional whatever it wraps, including a type nothing can build. */
     @Test
     void anOptionalOfSomethingWithNoValueIsStillOneValue() {
-        assertEquals(Cardinality.atMost(1), upperOf("""
+        assertEquals(Cardinality.atMost(1), upperOf(List.of(), """
                 module demo
 
                 data Empty = Int
@@ -244,10 +246,13 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
 
                 data Any = Set<One>
                 """;
-        assertTrue(upperOf(source, "Two", "One", Cardinality.atMost(1)).none(),
+        List<String> refusal = List.of("E1013");
+        assertTrue(upperOf(refusal, source, "Two", "One", Cardinality.atMost(1)).none(),
                 "two of a value there is one of");
-        assertEquals(Cardinality.atMost(1), upperOf(source, "Just", "One", Cardinality.atMost(1)));
-        assertEquals(Cardinality.atMost(2), upperOf(source, "Any", "One", Cardinality.atMost(1)),
+        assertEquals(Cardinality.atMost(1),
+                upperOf(refusal, source, "Just", "One", Cardinality.atMost(1)));
+        assertEquals(Cardinality.atMost(2),
+                upperOf(refusal, source, "Any", "One", Cardinality.atMost(1)),
                 "the empty set and the one holding it");
     }
 
@@ -266,9 +271,11 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                 data Just = List<One>
                     invariant one = List.length(value) == 2
                 """;
-        assertEquals(Cardinality.UNKNOWN, upperOf(source, "Many", "One", Cardinality.atMost(1)),
+        assertEquals(Cardinality.UNKNOWN,
+                upperOf(List.of(), source, "Many", "One", Cardinality.atMost(1)),
                 "left long enough to be past counting");
-        assertEquals(Cardinality.atMost(1), upperOf(source, "Just", "One", Cardinality.atMost(1)));
+        assertEquals(Cardinality.atMost(1),
+                upperOf(List.of(), source, "Just", "One", Cardinality.atMost(1)));
     }
 
     @Test
@@ -290,9 +297,10 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                 data Keyed = { m: Map<String, One> }
                     invariant some = Map.size(m) >= 1
                 """;
-        assertEquals(Cardinality.atMost(1), upperOf(source, "Bare", "Empty", NO_VALUE));
-        assertTrue(upperOf(source, "Holding", "Empty", NO_VALUE).none());
-        assertEquals(Cardinality.UNKNOWN, upperOf(source, "Keyed", "One", Cardinality.atMost(1)),
+        assertEquals(Cardinality.atMost(1), upperOf(List.of(), source, "Bare", "Empty", NO_VALUE));
+        assertTrue(upperOf(List.of(), source, "Holding", "Empty", NO_VALUE).none());
+        assertEquals(Cardinality.UNKNOWN,
+                upperOf(List.of(), source, "Keyed", "One", Cardinality.atMost(1)),
                 "there is no end of keys to hold it under");
     }
 
@@ -313,14 +321,15 @@ class WhatOneDeclarationComesToUnderWhatIsKnownTest {
                 data NoList = { l: List<Empty> }
                     invariant empty = List.length(l) == 0
                 """;
-        assertEquals(Cardinality.atMost(1), upperOf(source, "NoSet", "Empty", NO_VALUE));
-        assertEquals(Cardinality.atMost(1), upperOf(source, "NoList", "Empty", NO_VALUE));
+        assertEquals(Cardinality.atMost(1), upperOf(List.of(), source, "NoSet", "Empty", NO_VALUE));
+        assertEquals(Cardinality.atMost(1),
+                upperOf(List.of(), source, "NoList", "Empty", NO_VALUE));
     }
 
     /** A floor a record wrote about a field reaches the collection the field's name wraps. */
     @Test
     void aFloorWrittenAtTheFieldIsReadThereAndNotAtTheNamesOwnDeclaration() {
-        assertTrue(upperOf("""
+        assertTrue(upperOf(List.of("E1013"), """
                 module demo
 
                 data One = Int

@@ -216,14 +216,8 @@ class WhatIsUnverifiedComesFromWhatTheRowsObservedTest {
 
     /** The model measured; held to compile unless {@code refusedWith} says what it is refused for. */
     private static Compilation compiled(String source, List<String> refusedWith) {
-        if (refusedWith.isEmpty()) {
-            return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
-        }
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(refusedWith, compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "what the model is refused for");
-        return compilation;
+        return ACompiledModel.refusedWith(refusedWith, compilation);
     }
 }

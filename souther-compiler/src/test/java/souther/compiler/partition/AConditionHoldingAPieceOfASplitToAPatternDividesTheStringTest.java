@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -126,9 +127,7 @@ class AConditionHoldingAPieceOfASplitToAPatternDividesTheStringTest {
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model compiles");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     private static List<String> offeredFor(Compilation compilation, Pattern value) {
@@ -257,8 +256,7 @@ class AConditionHoldingAPieceOfASplitToAPatternDividesTheStringTest {
                 "List.any(s -> List.any(t -> String.matches(\"[A-Z]{2}[0-9]\", t),"
                         + " String.split(\";\", s)), list.codes)"), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors());
+        ACompiledModel.compiles(compilation);
         List<String> rows = offeredFor(compilation, THE_CODES_OF_A_ROW);
         assertEquals(2, rows.size(), rows::toString);
         Predicate<String> someCodeHasAMatchingPiece = codes -> Stream.of(codes.split(","))
@@ -358,8 +356,7 @@ class AConditionHoldingAPieceOfASplitToAPatternDividesTheStringTest {
                 """.formatted(SPLIT);
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model compiles");
+        ACompiledModel.compiles(compilation);
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertFalse(report.contains("is divided by"), report);

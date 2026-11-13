@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.report.AdequacyReport;
@@ -123,7 +124,7 @@ class ASourceNobodyObservedWeakensOnlyWhatItWroteRowsForTest {
         Compilation compilation = Compilation.ofSources(List.of(MODULE, TWO_MORE_ROWS),
                 ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        refusedAsAnExamplesFile(compilation);
+        ACompiledModel.refusedWith(List.of("E1906"), compilation);
 
         List<Incompleteness.Fact> absent = absent(AdequacyReport.of(compilation).modules().get(0));
 
@@ -150,14 +151,8 @@ class ASourceNobodyObservedWeakensOnlyWhatItWroteRowsForTest {
         Compilation compilation = Compilation.ofSources(List.of(MODULE, ATTACHED),
                 ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        refusedAsAnExamplesFile(compilation);
+        // The attached file holds a value and not only examples, which is why nothing is read of it.
+        ACompiledModel.refusedWith(List.of("E1906"), compilation);
         return AdequacyReport.of(compilation).modules().get(0);
-    }
-
-    /** The attached file holds a value and not only examples, which is why nothing is read of it. */
-    private static void refusedAsAnExamplesFile(Compilation compilation) {
-        compilation.answerEverything();
-        assertEquals(List.of("E1906"), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList());
     }
 }

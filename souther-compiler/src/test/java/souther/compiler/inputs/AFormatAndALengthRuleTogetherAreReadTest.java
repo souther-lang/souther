@@ -331,9 +331,7 @@ class AFormatAndALengthRuleTogetherAreReadTest {
     @Test
     void norBesideASiblingNoValueSatisfies() {
         Compilation refused = Compilation.ofSource(A_SIBLING_NOTHING_SATISFIES, "Main");
-        refused.answerEverything();
-        assertEquals(List.of("E1013"), refused.errors().stream()
-                .map(each -> each.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(List.of("E1013"), refused);
         assertInstanceOf(AdmissibleSet.Completeness.Wider.class,
                 positionIn(refused, "pair.email", ReadAs.THE_COMPILATION_DOES).completeness(),
                 "no value of the pair exists, and the rules leave this position nothing at all");

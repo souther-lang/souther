@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
@@ -8,7 +9,6 @@ import souther.compiler.types.TypeSymbol;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -34,25 +34,20 @@ public final class RuleReadings {
         return of(compilation, compilation.modules().get(0));
     }
 
-    /**
-     * {@code source} compiled and answered in full. A declaration no value satisfies is refused,
-     * and a test about the rules of one is let be; any other refusal is a model whose declarations
-     * were never read.
-     */
-    private static Compilation compiled(String source) {
-        return compiled(source, List.of());
+    /** The same, of a model that is refused for {@code refusedWith}, which is read all the same. */
+    public static RuleReadingSource ofSource(String source, List<String> refusedWith) {
+        Compilation compilation = compiled(source, refusedWith);
+        return of(compilation, compilation.modules().get(0));
     }
 
-    /** The same, with {@code alsoRefusedWith} the codes of refusals the test lets be as well. */
-    private static Compilation compiled(String source, List<String> alsoRefusedWith) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code().toString())
-                        .filter(each -> !each.equals("E1013") && !alsoRefusedWith.contains(each))
-                        .toList(),
-                "the model this reads has to be one somebody could write");
-        return compilation;
+    /** {@code source} compiled and answered in full, held to compile. */
+    private static Compilation compiled(String source) {
+        return ACompiledModel.compiles(Compilation.ofSource(source, "Main"));
+    }
+
+    /** The same, of a model that is refused for {@code refusedWith}, which is read all the same. */
+    private static Compilation compiled(String source, List<String> refusedWith) {
+        return ACompiledModel.refusedWith(refusedWith, Compilation.ofSource(source, "Main"));
     }
 
     /** The same, for a test that holds the database rather than the compilation. */
@@ -92,9 +87,9 @@ public final class RuleReadings {
         return admittedByTheValueOf(source, List.of());
     }
 
-    /** The same, for a model whose refusals by {@code alsoRefusedWith} are let be. */
-    public static String admittedByTheValueOf(String source, List<String> alsoRefusedWith) {
-        Compilation compilation = compiled(source, alsoRefusedWith);
+    /** The same, for a model that is refused for {@code refusedWith}. */
+    public static String admittedByTheValueOf(String source, List<String> refusedWith) {
+        Compilation compilation = compiled(source, refusedWith);
         Symbols symbols = souther.compiler.query.Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = souther.compiler.types.TypeSymbols.declared(
                 new souther.compiler.types.TypeKey(symbols.module(), "N"));

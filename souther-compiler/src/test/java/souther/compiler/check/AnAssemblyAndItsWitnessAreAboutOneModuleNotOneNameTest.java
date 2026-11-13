@@ -223,17 +223,6 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
             let wrap (n: Int) : Wrapped = Wrapped(n)
             """;
 
-    private static Compilation answered(String source, List<String> refusedFor) {
-        if (refusedFor.isEmpty()) {
-            return ACompiledModel.answered(source);
-        }
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(refusedFor, compilation.errors().stream()
-                .map(found -> found.diagnostic().code()).toList(), "the model is refused");
-        return compilation;
-    }
-
     private static List<Normalized.Def> normalizedIn(Desugared.Module module) {
         List<Normalized.Def> out = new ArrayList<>();
         for (Derived.Def def : module.defs()) {
@@ -248,7 +237,8 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
 
     /** The declarations of a module refused for {@code refusedFor}, which are read all the same. */
     private static Desugared.Module declarationsOf(String source, List<String> refusedFor) {
-        Compilation compilation = answered(source, refusedFor);
+        Compilation compilation = ACompiledModel.refusedWith(refusedFor,
+                Compilation.ofSource(source, "Main"));
         Desugared.Module module = compilation.db().ask(new Shapes.Desugared("m")).value();
         assertNotNull(module, "the source under test does not get as far as being desugared");
         return module;
@@ -259,7 +249,8 @@ class AnAssemblyAndItsWitnessAreAboutOneModuleNotOneNameTest {
     }
 
     private static CheckSurface assemblyOf(String source, List<String> refusedFor) {
-        Compilation compilation = answered(source, refusedFor);
+        Compilation compilation = ACompiledModel.refusedWith(refusedFor,
+                Compilation.ofSource(source, "Main"));
         CheckSurface surface = compilation.db().ask(new Shapes.CheckSurface("m")).value();
         assertNotNull(surface, "the source under test does not get as far as being assembled");
         return surface;

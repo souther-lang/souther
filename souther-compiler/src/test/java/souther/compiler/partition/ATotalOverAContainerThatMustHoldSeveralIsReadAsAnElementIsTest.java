@@ -2,12 +2,12 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -85,8 +85,7 @@ class ATotalOverAContainerThatMustHoldSeveralIsReadAsAnElementIsTest {
                 BEHAVIOR.formatted(name, each.type(), each.statement(), each.cap())));
         Compilation compilation = Compilation.ofSource(source.toString(), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         Map<String, PartitionEvidence> out =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
         assertNotNull(out, "the model under test compiles");

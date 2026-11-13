@@ -58,18 +58,22 @@ class ExampleOutcomeTest {
             }
             """;
 
-    /** What the rows of a model observed, the reports that came of asking, and the codes of every
-     *  error the compile holds, for a row that is meant to be refused. */
-    private record Evaluated(Output.Examples.Of value, List<Report> reports, List<String> errors) {}
+    /** What the rows of a model observed, and the reports that came of asking. */
+    private record Evaluated(Output.Examples.Of value, List<Report> reports) {}
 
+    /** The rows of a model that compiles. */
     private static Evaluated evaluate(String source) {
+        return evaluate(List.of(), source);
+    }
+
+    /** The rows of a model the compile refuses with {@code refusals} and nothing else. */
+    private static Evaluated evaluate(List<String> refusals, String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(refusals, compilation);
         String module = compilation.modules().get(0);
         Output.Examples key = Output.Examples.asked(compilation.db(), module,
                 compilation.sourceIds().get(0));
-        return new Evaluated(compilation.db().ask(key).value(), compilation.db().ask(key).reports(),
-                compilation.errors().stream().map(each -> each.diagnostic().code()).toList());
+        return new Evaluated(compilation.db().ask(key).value(), compilation.db().ask(key).reports());
     }
 
     private static RowOutcome onlyRow(Evaluated evaluated) {
@@ -100,7 +104,7 @@ class ExampleOutcomeTest {
      * that {@code Rejected} can happen. */
     @Test
     void aRowThatDisagreesStillSawWhatItSaw() {
-        Evaluated evaluated = evaluate(MODEL + """
+        Evaluated evaluated = evaluate(List.of("E1905"), MODEL + """
 
                 example submit
                     | "over the ceiling" : (Draft { cost = Amount(500) }) -> Submitted
@@ -119,7 +123,7 @@ class ExampleOutcomeTest {
 
     @Test
     void anInputThatBreaksAnInvariantStopsBeforeAnythingIsEstablished() {
-        Evaluated evaluated = evaluate(MODEL + """
+        Evaluated evaluated = evaluate(List.of("E1903"), MODEL + """
 
                 example submit
                     | "negative" : (Draft { cost = Amount(-1) }) -> Submitted
@@ -137,7 +141,7 @@ class ExampleOutcomeTest {
 
     @Test
     void anExpectationNamingACaseTheBehaviorCannotProduceStopsAtTheExpectation() {
-        RowOutcome row = onlyRow(evaluate(MODEL + """
+        RowOutcome row = onlyRow(evaluate(List.of("E1904"), MODEL + """
 
                 example submit
                     | "wrong arm" : (Draft { cost = Amount(50) }) -> Draft
@@ -199,7 +203,7 @@ class ExampleOutcomeTest {
 
     @Test
     void aDependencyWithNoFakeStopsAfterTheFixturesAreBuilt() {
-        RowOutcome row = onlyRow(evaluate("""
+        RowOutcome row = onlyRow(evaluate(List.of("E1908"), """
                 module example.clock
 
                 data Draft = { cost: Int }
@@ -225,7 +229,7 @@ class ExampleOutcomeTest {
 
     @Test
     void anArmDeclaredUnreachableThatIsReachedStopsInsideTheBehavior() {
-        RowOutcome row = onlyRow(evaluate("""
+        RowOutcome row = onlyRow(evaluate(List.of("E1911"), """
                 module example.leave
 
                 data UnderThirty

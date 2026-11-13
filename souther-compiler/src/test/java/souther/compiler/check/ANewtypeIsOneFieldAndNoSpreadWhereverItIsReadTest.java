@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -86,10 +87,7 @@ class ANewtypeIsOneFieldAndNoSpreadWhereverItIsReadTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", EVERY_FORM);
         Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertEquals(List.of("E1009"), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(),
-                "a newtype over an optional is refused, and is still read as one");
+        ACompiledModel.refusedWith(List.of("E1009"), compilation);
         return compilation.db().ask(new Names.Resolved("m")).value();
     }
 }

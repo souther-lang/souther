@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
@@ -15,7 +16,6 @@ import souther.compiler.partition.Allowances;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.WhereARunStopped;
-import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BehaviorEvidence;
 import souther.compiler.query.Bodies;
@@ -104,10 +104,9 @@ class AWayAProofLeftUndecidedIsSaidWithItsFigureTest {
     private static Undecided undecidedWay() {
         Compilation bodies = Compilation.ofSource(BODIES, "Main");
         bodies.measure(Adequacy.Asked.fullReport());
-        bodies.answerEverything();
-        assertEquals(List.of(), bodies.errors(), "the model the body is read off compiles");
+        ACompiledModel.compiles(bodies);
         AdequacyReport own = AdequacyReport.of(bodies);
-        DecisionReading read = Allowances.DECLARED
+        DecisionReading read =Allowances.DECLARED
                 .with(CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE, SPENT_AT)
                 .over(() -> readUnderTheOtherRules(bodies));
         assertEquals(1, read.undecided().size(), () -> "the way into the constructions: "
@@ -159,8 +158,7 @@ class AWayAProofLeftUndecidedIsSaidWithItsFigureTest {
     void aProofCutOffAtItsAllowanceIsUndecidedAndNeverAProvenExclusion() {
         Compilation bodies = Compilation.ofSource(BODIES, "Main");
         bodies.measure(Adequacy.Asked.fullReport());
-        bodies.answerEverything();
-        assertEquals(List.of(), bodies.errors(), "the model the body is read off compiles");
+        ACompiledModel.compiles(bodies);
         AdequacyReport own = AdequacyReport.of(bodies);
         DecisionReading unbounded = readUnderTheOtherRules(bodies);
         assertEquals(1, unbounded.everyRunStops().size(), () -> "the proof in full: "

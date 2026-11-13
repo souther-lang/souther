@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -23,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A position is read as reached at every value only over values some run gets to it at. The
@@ -241,8 +241,7 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
             }
             Compilation compilation = Compilation.ofSource(model.toString(), "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors());
+            ACompiledModel.compiles(compilation);
             JsonNode report = reportOf(compilation);
             assertEquals(List.of(READ), reasonsOfBehavior(report, "plain", "hs[*]"), order::toString);
             assertEquals(List.of(NOT_SHOWN), reasonsOfBehavior(report, "cancelled", "hs[*]"),
@@ -437,8 +436,6 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
                 condition);
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors());
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

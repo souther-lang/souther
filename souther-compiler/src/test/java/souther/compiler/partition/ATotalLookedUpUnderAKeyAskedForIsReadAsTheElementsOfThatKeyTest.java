@@ -335,10 +335,7 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
                 """;
         String passing = List.of(posting(String.valueOf(Long.MAX_VALUE)), posting("1"),
                 posting("-1")).toString();
-        Compilation stops = ran(model.formatted("ps", passing));
-        assertEquals(List.of("E1905"), stops.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(),
-                "the example's answer is not the one a run that stops gives");
+        Compilation stops = ran(model.formatted("ps", passing), List.of("E1905"));
         assertTrue(unmetOf(stops).contains("ON"),
                 () -> "a row whose run stops is at no point: " + report(stops));
         Compilation reversed = ranCompiling(model.formatted("List.reverse(ps)", passing));
@@ -359,9 +356,7 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
                 example large
                     | "wrong" : (%s, "A") -> false
                 """.formatted(postings(new Posting("A", 60), new Posting("A", 40)));
-        Compilation compilation = ran(overOneList(ADDING, examples));
-        assertFalse(compilation.errors().isEmpty(),
-                () -> "an example that does not hold is refused: " + report(compilation));
+        ran(overOneList(ADDING, examples), List.of("E1905"));
     }
 
     private static String totalBesideACount(String more) {
@@ -669,12 +664,11 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
         return "Posting { account = \"A\", amount = " + amount + " }";
     }
 
-    /** The source measured, whose examples may stop where they run. */
-    private static Compilation ran(String source) {
+    /** The source measured, whose examples may stop where they run, refused with {@code codes}. */
+    private static Compilation ran(String source, List<String> codes) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.refusedWith(codes, compilation);
     }
 
     /** {@link #ran} of a source that compiles. */
@@ -983,10 +977,6 @@ class ATotalLookedUpUnderAKeyAskedForIsReadAsTheElementsOfThatKeyTest {
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code().toString()).toList(),
-                () -> "the source compiles: " + source);
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

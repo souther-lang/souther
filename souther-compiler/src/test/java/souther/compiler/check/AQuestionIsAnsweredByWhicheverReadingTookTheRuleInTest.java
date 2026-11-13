@@ -54,9 +54,7 @@ class AQuestionIsAnsweredByWhicheverReadingTookTheRuleInTest {
     private static Map<RuleRef.Invariant, RuleAccounting> accountingOfRefused(
             String source, String type, List<String> refusals) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(refusals, compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(refusals, compilation);
         return accountingOf(compilation, type);
     }
 

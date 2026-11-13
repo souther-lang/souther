@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Measurement;
 import souther.compiler.report.AdequacyReport;
 import org.junit.jupiter.api.Test;
@@ -140,10 +141,7 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
     private static Compilation measuredRefusing(String source, List<String> refusals) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(refusals, compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
-        return compilation;
+        return ACompiledModel.refusedWith(refusals, compilation);
     }
 
     private static souther.compiler.query.Measure<

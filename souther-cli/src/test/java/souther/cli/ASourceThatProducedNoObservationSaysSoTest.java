@@ -6,6 +6,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import souther.cli.CliProcess.Ran;
+import souther.compiler.ACompiledModel;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.publish.PublishedIncompleteness;
 import souther.compiler.query.Adequacy;
@@ -106,10 +107,8 @@ class ASourceThatProducedNoObservationSaysSoTest {
         Compilation compilation = Compilation.ofSources(List.of(MODULE, ATTACHED),
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1906"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(),
-                "the attached file declares a value the module already declares");
+        // The attached file declares a value the module already declares.
+        ACompiledModel.refusedWith(List.of("E1906"), compilation);
 
         List<PublishedIncompleteness> gaps =
                 AdequacyReport.of(compilation).modules().get(0).incompleteness().written();

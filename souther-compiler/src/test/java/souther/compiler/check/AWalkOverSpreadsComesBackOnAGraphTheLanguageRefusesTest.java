@@ -2,8 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.CompileException;
-import souther.compiler.diag.Diagnostic;
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
@@ -12,7 +11,6 @@ import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -146,16 +144,9 @@ class AWalkOverSpreadsComesBackOnAGraphTheLanguageRefusesTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        List<Diagnostic> refused = new ArrayList<>();
-        try {
-            c.answerEverything();
-        } catch (CompileException e) {
-            refused.addAll(e.diagnostics());
-        }
-        c.errors().forEach(each -> refused.add(each.diagnostic()));
         // What a ring is refused with is another test's. This one asks the walks directly.
-        assertEquals(source.equals(A_RING), !refused.isEmpty(),
-                "the ring is the one model here the compiler refuses");
+        List<String> refusedWith = source.equals(A_RING) ? List.of("E1027") : List.of();
+        ACompiledModel.refusedWith(refusedWith, c);
         return c.db();
     }
 }

@@ -1,5 +1,6 @@
 package souther.compiler.core;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
@@ -168,10 +169,7 @@ class EverySlotHoldsWhatItsNodeTakesItAsTest {
                 byId.put(corpus.files().get(i), corpus.sources().get(i));
             }
             Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-            c.answerEverything();
-            assertEquals(checkedInErrors(corpus.name()), c.errors().stream()
-                    .map(each -> each.diagnostic().code()).toList(),
-                    () -> "the errors the " + corpus.name() + " corpus is checked in with");
+            ACompiledModel.refusedWith(checkedInErrors(corpus.name()), c);
             for (String module : c.modules()) {
                 Set<String> names = c.declaredBehaviors(module);
                 if (names == null) {

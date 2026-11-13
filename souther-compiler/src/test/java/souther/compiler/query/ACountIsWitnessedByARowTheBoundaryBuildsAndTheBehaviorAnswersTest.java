@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.Prepared;
@@ -69,12 +70,25 @@ class ACountIsWitnessedByARowTheBoundaryBuildsAndTheBehaviorAnswersTest {
             let yenRates = RateTable { base = CurrencyCode("JPY"), rates = Map.fromList(
                 [ (CurrencyCode("JPY"), ConversionRate(1.0m))
                 , (CurrencyCode("USD"), ConversionRate(150.0m)) ]) }
+            """;
+
+    /** A table whose own rule fails: the module is refused building it, and the boundary refuses
+     *  it too. */
+    private static final String BROKEN = """
 
             let broken = RateTable { base = CurrencyCode("AAA"), rates = Map.empty }
             """;
 
     /** A forecast keeping the deals whose currency the table has, held to keeping every one. */
-    private static String forecast(String deal, String depends) {
+    private static String forecast(String deal) {
+        return forecast(deal, "", "");
+    }
+
+    /** The same forecast, depending on {@code injected} (a behavior's name, or none) and
+     *  calling it. */
+    private static String forecast(String deal, String depends, String injected) {
+        String params = injected.isEmpty() ? "deals, rates" : "deals, rates, " + injected;
+        String call = injected.isEmpty() ? "" : "let day = " + injected + "()";
         return """
                 module demo
 
@@ -88,12 +102,13 @@ class ACountIsWitnessedByARowTheBoundaryBuildsAndTheBehaviorAnswersTest {
                 behavior forecast : (deals: List<Deal>, rates: RateTable) -> Ok | Lost
                 %s
 
-                let forecast (deals, rates) = {
+                let forecast (%s) = {
                     let kept = List.filterMap(d -> Map.get(d.currency, rates.rates), deals)
                     guard List.length(kept) == List.length(deals) else Lost
+                    %s
                     Ok
                 }
-                """.formatted(RATES, deal, depends);
+                """.formatted(RATES, deal, depends, params, call);
     }
 
     private static final String DEAL = "data Deal = { currency: CurrencyCode, amount: Decimal }";
@@ -124,9 +139,13 @@ class ACountIsWitnessedByARowTheBoundaryBuildsAndTheBehaviorAnswersTest {
                     true));
 
     private static Compilation compiled(String source) {
+        return refusedWith(List.of(), source);
+    }
+
+    private static Compilation refusedWith(List<String> codes, String source) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
+        ACompiledModel.refusedWith(codes, compilation);
         assertEquals(List.of("demo"), compilation.modules(), "and is read");
         return compilation;
     }
@@ -152,7 +171,7 @@ class ACountIsWitnessedByARowTheBoundaryBuildsAndTheBehaviorAnswersTest {
      *  keys: the row keeps one deal and drops the other, and the behavior answers on it. */
     @Test
     void aRowKeepingOneElementAndDroppingAnotherBesideOneTableIsFound() {
-        Optional<CountWitnesses.Witness> found = witnessIn(compiled(forecast(DEAL, "")));
+        Optional<CountWitnesses.Witness> found = witnessIn(compiled(forecast(DEAL)));
         assertTrue(found.isPresent(), "a witness is found");
         assertEquals(List.of("[Deal { currency = CurrencyCode(\"USD\"), amount = 0m },"
                         + " Deal { currency = CurrencyCode(\"AAA\"), amount = 0m }]", "yenRates"),
@@ -163,7 +182,7 @@ class ACountIsWitnessedByARowTheBoundaryBuildsAndTheBehaviorAnswersTest {
      *  where it does not: which is valid is the boundary's to say. */
     @Test
     void aNamedValueIsBuiltWhereItsRulesHoldAndRefusedWhereTheyDoNot() {
-        Compilation compilation = compiled(forecast(DEAL, ""));
+        Compilation compilation = refusedWith(List.of("E2010"), forecast(DEAL) + BROKEN);
         CheckSurface surface = compilation.db().ask(new Shapes.CheckSurface("demo")).value();
         FixturesAtTheBoundary building = Adequacy.constructing(compilation.db(), "demo");
         assertNotNull(building);
@@ -180,7 +199,7 @@ class ACountIsWitnessedByARowTheBoundaryBuildsAndTheBehaviorAnswersTest {
     /** Each row written is counted at the elements the statement holds of, every element told. */
     @Test
     void eachRowIsCountedAtTheElementsTheStatementHoldsOf() {
-        Compilation compilation = compiled(forecast(DEAL, "") + ROWS);
+        Compilation compilation = compiled(forecast(DEAL) + ROWS);
         Db db = compilation.db();
         Sig sig = db.ask(new Bodies.Signatures("demo")).value().get("forecast");
         FixturesAtTheBoundary building = Adequacy.constructing(db, "demo");
@@ -209,7 +228,7 @@ class ACountIsWitnessedByARowTheBoundaryBuildsAndTheBehaviorAnswersTest {
     @Test
     void anElementItsOwnRuleRefusesIsPassedOverAndNotTakenForEveryOne() {
         String notDollars = DEAL + "\n    invariant currency.value /= \"USD\"";
-        Optional<CountWitnesses.Witness> found = witnessIn(compiled(forecast(notDollars, "")));
+        Optional<CountWitnesses.Witness> found = witnessIn(compiled(forecast(notDollars)));
         assertTrue(found.isPresent(), "the other key is tried");
         assertEquals("Deal { currency = CurrencyCode(\"JPY\"), amount = 0m }",
                 found.get().one().text());
@@ -224,13 +243,13 @@ class ACountIsWitnessedByARowTheBoundaryBuildsAndTheBehaviorAnswersTest {
 
                 behavior today : () -> Int
                 """;
-        assertEquals(Optional.empty(), witnessIn(compiled(forecast(DEAL, depending))));
+        assertEquals(Optional.empty(), witnessIn(compiled(forecast(DEAL, depending, "today"))));
     }
 
     /** Asked twice it is answered once, and another count is asked apart. */
     @Test
     void oneCountIsWitnessedOnceAndAnotherApart() {
-        Compilation compilation = compiled(forecast(DEAL, ""));
+        Compilation compilation = compiled(forecast(DEAL));
         Optional<CountWitnesses.Witness> first = witnessIn(compilation);
         assertSame(first, witnessIn(compilation));
         Quantity.HowManyMeet other = new Quantity.HowManyMeet(new DecisionSubject.AnInput(DEALS),
@@ -248,7 +267,7 @@ class ACountIsWitnessedByARowTheBoundaryBuildsAndTheBehaviorAnswersTest {
      *  the behavior or walks the way to a comparison. */
     @Test
     void aWitnessIsFoundBelowAnyDivision() {
-        Compilation compilation = compiled(forecast(DEAL, ""));
+        Compilation compilation = compiled(forecast(DEAL));
         Adequacy.WitnessOfACount asked = askedIn(compilation, COUNT);
         compilation.db().ask(asked);
         Set<Key<?>> reached = new HashSet<>();

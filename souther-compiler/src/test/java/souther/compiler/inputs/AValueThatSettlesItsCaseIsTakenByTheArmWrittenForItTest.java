@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
@@ -101,13 +102,10 @@ class AValueThatSettlesItsCaseIsTakenByTheArmWrittenForItTest {
 
     private static Core.Match matchOf(String behavior) {
         Compilation compilation = Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().literalMessage())
-                .toList(), "the model compiles");
+        ACompiledModel.compiles(compilation);
         Core body = compilation.db().ask(new Bodies.Checked(compilation.modules().get(0))).value()
                 .behaviorBodies().get(behavior);
-        assertNotNull(body, () -> "the model compiles: " + compilation.errors());
+        assertNotNull(body, "the body of the behavior is checked");
         Core.Match match = firstMatch(body);
         assertNotNull(match, "the body matches");
         return match;

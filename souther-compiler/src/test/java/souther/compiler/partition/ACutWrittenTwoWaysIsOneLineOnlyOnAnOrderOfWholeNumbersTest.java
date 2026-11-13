@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -38,7 +39,7 @@ class ACutWrittenTwoWaysIsOneLineOnlyOnAnOrderOfWholeNumbersTest {
                 """.replace("TYPE", type).replace("AT_LEAST", atLeast).replace("ABOVE", above);
         Compilation compilation = Compilation.ofSource(source, "Main");
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
-        assertNotNull(checked, "the model compiles: " + compilation.errors());
+        assertNotNull(checked, "the model compiles");
         AnalysisBody analysis = checked.analysisBodies().get("g");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("demo")).value().get("g");
@@ -47,8 +48,10 @@ class ACutWrittenTwoWaysIsOneLineOnlyOnAnOrderOfWholeNumbersTest {
                 inputs.dependencies());
         Proposition stated = Pullback.ofATruth(Core.withoutStanding(analysis.core()), reads,
                 inputs.reading(rules), Optional.empty()).proposition();
-        return WhereEachLineDecides.in(stated, inputs.reading(rules).quantities()::countsWhole)
+        int lines = WhereEachLineDecides.in(stated, inputs.reading(rules).quantities()::countsWhole)
                 .size();
+        ACompiledModel.compiles(compilation);
+        return lines;
     }
 
     @Test

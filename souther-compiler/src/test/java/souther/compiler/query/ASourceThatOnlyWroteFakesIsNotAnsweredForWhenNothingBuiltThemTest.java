@@ -9,7 +9,6 @@ import souther.compiler.source.SourceId;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -72,13 +71,9 @@ class ASourceThatOnlyWroteFakesIsNotAnsweredForWhenNothingBuiltThemTest {
 
     /** The wide module, refused for the one thing the JVM will not hold of it. */
     private static Db tooWide() {
-        Compilation c = Compilation.ofSources(List.of(tooWideForTheJvm(), ONLY_A_FAKE),
-                ModulePath.EMPTY);
-        c.answerEverything();
-        assertEquals(List.of("E2101"),
-                c.errors().stream().map(each -> each.diagnostic().code()).distinct().toList(),
-                "the width is the one thing the JVM refuses");
-        return c.db();
+        return ACompiledModel.refusedWith(List.of("E2101"),
+                Compilation.ofSources(List.of(tooWideForTheJvm(), ONLY_A_FAKE),
+                        ModulePath.EMPTY)).db();
     }
 
     @Test

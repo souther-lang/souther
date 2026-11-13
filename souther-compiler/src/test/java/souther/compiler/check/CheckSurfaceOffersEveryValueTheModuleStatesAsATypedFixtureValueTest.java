@@ -3,7 +3,6 @@ package souther.compiler.check;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
-import souther.compiler.diag.CompileException;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -253,9 +252,8 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
                 let vip = Customer { grade = Gold }
                 let stray = A { x = 1 }.x
                 """);
-        // Asked directly before the full pipeline: that reaches A's declaration too, at a rung that
-        // does refuse a field declared twice, and what is held first is CheckSurface's own
-        // tolerance and not whether the module as a whole checks.
+        // Asked before anything is answered: what is held is CheckSurface's own tolerance of the
+        // declaration that does not read, and the module is refused for A's field declared twice.
         Compilation compilation = Compilation.ofSource(source, "Main");
         CheckSurface surface = compilation.db()
                 .ask(new Shapes.CheckSurface("example.member")).value();
@@ -264,19 +262,7 @@ class CheckSurfaceOffersEveryValueTheModuleStatesAsATypedFixtureValueTest {
         assertEquals(List.of(new ReachName.Own(new ValueName.Helper("example.member", "vip"))),
                 surface.typedFixtureValues().getOrDefault(customerType(compilation,
                         "example.member"), List.of()));
-        assertEquals("E1011", refusalOf(compilation),
-                "A declares a field twice, and the module is refused for it");
-    }
-
-    /** The code {@code model} is refused with, whether answering it throws or it reports it. */
-    private static String refusalOf(Compilation model) {
-        try {
-            model.answerEverything();
-        } catch (CompileException refused) {
-            return refused.code();
-        }
-        return model.errors().stream().map(e -> e.diagnostic().code()).findFirst()
-                .orElse("none");
+        ACompiledModel.refusedWith(List.of("E1011"), compilation);
     }
 
     /**

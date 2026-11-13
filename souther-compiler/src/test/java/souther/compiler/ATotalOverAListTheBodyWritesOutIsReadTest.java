@@ -9,7 +9,6 @@ import souther.compiler.partition.UndividedPosition;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.WhyAPlaceIsUndividedIsSaid;
 
-import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -72,9 +71,7 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
     private static String measured(String model, String total) {
         Compilation compilation = Compilation.ofSource(model.formatted(total), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
                 .replaceAll("\\d+:\\d+", "");

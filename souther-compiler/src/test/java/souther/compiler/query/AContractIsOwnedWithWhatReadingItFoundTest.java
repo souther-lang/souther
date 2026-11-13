@@ -97,10 +97,7 @@ class AContractIsOwnedWithWhatReadingItFoundTest {
     void aClauseThatCannotBeReadIsReportedByTheKeyThatReadsIt() {
         Compilation c = compiled(HOLDS
                 .replace("Found   -> value.id == id", "Found   -> value.id == value.id"));
-        c.answerEverything();
-        assertEquals(List.of("E1617"),
-                c.errors().stream().map(each -> each.diagnostic().code()).toList(),
-                "the clause is what does not compile");
+        ACompiledModel.refusedWith(List.of("E1617"), c);
         Answer<Map<String, CheckedEnsures>> answered = c.db().ask(new Bodies.Contracts("m.a"));
 
         assertTrue(answered.hasError(),

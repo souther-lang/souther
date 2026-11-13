@@ -798,14 +798,12 @@ class CompileExampleGenerateTest {
         String wrong = answered(TRIP, "Accepted { at = \"later\" }");
 
         Compilation compilation = Compilation.ofSource(wrong, "Main");
-        compilation.answerEverything();
-        List<String> errors = compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList();
+        ACompiledModel.refusedWith(List.of("E1905", "E1905"), compilation);
 
         assertTrue(outcomes(compilation).stream()
                         .anyMatch(row -> row.disposition() == souther.compiler.observe.Disposition
                                 .FAILED),
-                "a wrong answer is a failing row, the model's errors being " + errors);
+                "a wrong answer is a failing row");
     }
 
     /**

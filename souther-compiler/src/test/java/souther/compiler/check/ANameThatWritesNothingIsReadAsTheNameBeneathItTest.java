@@ -158,10 +158,7 @@ class ANameThatWritesNothingIsReadAsTheNameBeneathItTest {
                 data B = A
                 """)) {
             Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-            compilation.answerEverything();
-            assertEquals(List.of("E1013"), compilation.errors().stream()
-                    .map(found -> found.diagnostic().code()).toList(),
-                    "a ring of names holds no value, so nothing can construct one");
+            ACompiledModel.refusedWith(List.of("E1013"), compilation);
 
             for (String each : List.of("A", "B", "C")) {
                 assertEquals(each, ownerOf(compilation, "ring", each),

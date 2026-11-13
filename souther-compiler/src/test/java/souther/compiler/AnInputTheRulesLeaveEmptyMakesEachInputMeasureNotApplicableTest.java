@@ -67,10 +67,7 @@ class AnInputTheRulesLeaveEmptyMakesEachInputMeasureNotApplicableTest {
     private static Measured measured() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1013"),
-                compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
-                "the rules leave the record no value, so it cannot be constructed");
+        ACompiledModel.refusedWith(List.of("E1013"), compilation);
         AdequacyReport report = AdequacyReport.of(compilation);
         JsonNode document = JSON.readTree(report.json(SourceRendering.namedByIdentity(compilation.texts())));
         return new Measured(document.get("modules").get(0).get("behaviors").get(0),

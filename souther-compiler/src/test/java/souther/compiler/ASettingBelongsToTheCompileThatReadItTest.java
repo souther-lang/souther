@@ -39,9 +39,7 @@ class ASettingBelongsToTheCompileThatReadItTest {
     /** The row of the model, which the compile refuses with {@code refusals} and nothing else. */
     private static RowOutcome onlyRow(List<String> refusals) {
         Compilation compilation = Compilation.ofSource(COUNTS_DOWN, "Main");
-        compilation.answerEverything();
-        assertEquals(refusals, compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(refusals, compilation);
         SourceId sourceId = compilation.exampleSourcesOf("example.setting").getFirst();
         List<RowOutcome> rows = compilation.db()
                 .ask(new Output.Examples("example.setting", sourceId, ArmObservation.OMIT))

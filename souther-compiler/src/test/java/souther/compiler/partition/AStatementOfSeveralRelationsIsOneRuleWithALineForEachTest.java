@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.numeric.ExactAnswer;
@@ -334,8 +335,7 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
                     ensures big = High -> Int.max(a, b) > 5
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors());
+        ACompiledModel.compiles(compilation);
         JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         assertTrue(obligationsOfParts(report).isEmpty(), "no line of the clause is drawn");
@@ -577,8 +577,7 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
     private static JsonNode reportOfSource(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors());
+        ACompiledModel.compiles(compilation);
         return JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
     }

@@ -31,11 +31,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AnEquivalencePartitionIsWhatTheModelDistinguishesTest {
 
-    private static souther.compiler.query.PartitionEvidence measured(String type, String guards) {
-        return measured(type, guards,
-                "    | \"one\" : (" + (type.equals("Decimal") ? "0.1m" : "1") + ") -> Yes { v = 1 }");
-    }
-
     /** The lines the behavior's positions met, whosever the row at each point is. */
     private static List<BorderAssessment> lines(String type, String guards, String rows) {
         Compilation compilation = compiled(type, guards, rows);

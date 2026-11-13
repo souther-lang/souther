@@ -117,13 +117,7 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
     private static Measured of(String clause, String name, List<String> codes) {
         Compilation compilation = Compilation.ofSource(model(clause, name), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        if (codes.isEmpty()) {
-            ACompiledModel.compiles(compilation);
-        } else {
-            compilation.answerEverything();
-            assertEquals(codes, compilation.errors().stream()
-                    .map(found -> found.diagnostic().code()).toList(), "the model is refused");
-        }
+        ACompiledModel.refusedWith(codes, compilation);
         AdequacyReport report = AdequacyReport.of(compilation);
         JsonNode document = JSON.readTree(report.json(SourceRendering.namedByIdentity(compilation.texts())));
         JsonNode behavior = document.get("modules").get(0).get("behaviors").get(0);

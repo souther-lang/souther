@@ -10,7 +10,6 @@ import souther.compiler.query.Output;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -59,9 +58,7 @@ class ADecoderIsNotBuiltFromTheRulesThatHappenedToBeReadableTest {
     private static Map<String, ClassFileImage> classesOf(String owner, List<String> errors) {
         Compilation compilation =
                 Compilation.ofSources(List.of(owner, SPREADS), ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertEquals(errors, compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "what the pair is refused for");
+        ACompiledModel.refusedWith(errors, compilation);
         return compilation.db().ask(new Output.Classes("app.rows")).present()
                 ? compilation.db().ask(new Output.Classes("app.rows")).value() : Map.of();
     }

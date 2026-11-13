@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.coverage.ConditionOutcomeSite;
 import souther.compiler.coverage.CoverageSites;
@@ -195,8 +196,7 @@ class AWitnessWhoseRowsStopSaysWhereTheyStoppedTest {
     private static Compilation compiled(String source) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     /** What the search for a witness of {@link #COUNT} came to, at a run going through the

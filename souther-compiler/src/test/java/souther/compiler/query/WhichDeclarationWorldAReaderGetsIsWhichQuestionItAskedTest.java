@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Symbols;
 import souther.compiler.meta.ModulePath;
@@ -43,11 +44,7 @@ class WhichDeclarationWorldAReaderGetsIsWhichQuestionItAskedTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", SOURCE);
         Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertEquals(List.of("E1105"), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(),
-                "an invariant that builds is refused, and the two worlds still differ in it");
-        return compilation.db();
+        return ACompiledModel.refusedWith(List.of("E1105"), compilation).db();
     }
 
     private static Hir.Expr clauseOf(Symbols symbols) {

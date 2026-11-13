@@ -77,8 +77,7 @@ class NothingExpandsAModuleThatWasNotHandedOverTest {
     /** The module with a value reaching itself, which is refused. */
     private static Db dbOfTheCycle() {
         Compilation c = modelOf(CYCLE_UNDER_AN_INVARIANT);
-        c.answerEverything();
-        assertFalse(c.errors().isEmpty(), "a value that reaches itself is refused");
+        ACompiledModel.refusedWith(List.of("E1022"), c);
         return c.db();
     }
 

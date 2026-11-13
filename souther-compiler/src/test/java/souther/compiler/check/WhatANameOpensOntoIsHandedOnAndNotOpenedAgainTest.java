@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -34,16 +35,16 @@ class WhatANameOpensOntoIsHandedOnAndNotOpenedAgainTest {
 
     private static final String MODULE = "demo";
 
-    private static Map<TypeSymbol, Cardinality> countsAlike(Map<String, String> documents) {
+    /**
+     * What counting {@code documents} comes to. {@code refused} is what the model is refused with:
+     * a declaration no value satisfies is refused, and is what some of these models are about; any
+     * other refusal is a model whose declarations were never read.
+     */
+    private static Map<TypeSymbol, Cardinality> countsAlike(List<String> refused,
+                                                            Map<String, String> documents) {
         Compilation c = Compilation.ofDocuments(
                 new LinkedHashMap<>(documents), Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
-        // A declaration no value satisfies is refused, and is what some of these models are about;
-        // any other refusal is a model whose declarations were never read.
-        assertEquals(List.of(), c.errors().stream()
-                        .map(each -> each.diagnostic().code())
-                        .filter(each -> !each.equals("E1013")).toList(),
-                "the model this reads has to be one somebody could write");
+        ACompiledModel.refusedWith(refused, c);
         List<Hir.Def> declared = c.module(MODULE).defs().stream()
                 .map(each -> each.declaration().node()).toList();
         RuleReadingSource source = Shapes.ruleReading(c.db(), MODULE).value();
@@ -61,8 +62,8 @@ class WhatANameOpensOntoIsHandedOnAndNotOpenedAgainTest {
         return opened;
     }
 
-    private static Map<TypeSymbol, Cardinality> countsAlike(String source) {
-        return countsAlike(Map.of("demo.sou", source));
+    private static Map<TypeSymbol, Cardinality> countsAlike(List<String> refused, String source) {
+        return countsAlike(refused, Map.of("demo.sou", source));
     }
 
     private static Cardinality named(Map<TypeSymbol, Cardinality> counts, String name) {
@@ -79,7 +80,7 @@ class WhatANameOpensOntoIsHandedOnAndNotOpenedAgainTest {
      */
     @Test
     void lacksAtEveryDepthCarryTheDeepestOne() {
-        Map<TypeSymbol, Cardinality> counts = countsAlike("""
+        Map<TypeSymbol, Cardinality> counts = countsAlike(List.of("E1013"), """
                 module demo exposing ( Several, C, B, A, Bad )
 
                 data Bad = Int
@@ -99,7 +100,7 @@ class WhatANameOpensOntoIsHandedOnAndNotOpenedAgainTest {
     /** A chain ending in a record stops there: the record is read by its name and not opened. */
     @Test
     void aChainEndingInANameThatWearsNoValue() {
-        Map<TypeSymbol, Cardinality> counts = countsAlike("""
+        Map<TypeSymbol, Cardinality> counts = countsAlike(List.of("E1013"), """
                 module demo exposing ( Several, Top, Outer, Holder, Bad )
 
                 data Bad = Int
@@ -120,7 +121,7 @@ class WhatANameOpensOntoIsHandedOnAndNotOpenedAgainTest {
      *  two of is short of values the chain's names never said anything about. */
     @Test
     void theReadersRulesReachWhatTheChainEndsIn() {
-        Map<TypeSymbol, Cardinality> counts = countsAlike("""
+        Map<TypeSymbol, Cardinality> counts = countsAlike(List.of("E1013"), """
                 module demo exposing ( Pair, Wide, B, A, One )
 
                 data One = Int
@@ -146,7 +147,7 @@ class WhatANameOpensOntoIsHandedOnAndNotOpenedAgainTest {
      *  read under a rule, and a lack at the bottom is still the one carried. */
     @Test
     void aChainOfNamesEachWrappingACollectionOfTheOneBefore() {
-        Map<TypeSymbol, Cardinality> counts = countsAlike("""
+        Map<TypeSymbol, Cardinality> counts = countsAlike(List.of("E1013"), """
                 module demo exposing ( Several, D, C, B, A, Bad )
 
                 data Bad = Int
@@ -187,7 +188,7 @@ class WhatANameOpensOntoIsHandedOnAndNotOpenedAgainTest {
                 data Several =Set<E>
                     invariant several = Set.size(value) >= 1
                 """);
-        Map<TypeSymbol, Cardinality> counts = countsAlike(documents);
+        Map<TypeSymbol, Cardinality> counts = countsAlike(List.of("E1013"), documents);
 
         assertEquals(List.of(new Emptiness.TheNameHasNone(declaredIn(counts, "Bad"))),
                 namesIn(named(counts, "Several").why()),

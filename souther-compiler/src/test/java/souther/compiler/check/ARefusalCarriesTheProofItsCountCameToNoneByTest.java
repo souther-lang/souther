@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Scopes;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeSymbol;
@@ -25,22 +26,27 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class ARefusalCarriesTheProofItsCountCameToNoneByTest {
 
+    /** What a model with one group of types with no value is refused with: one refusal. */
+    private static final List<String> ONE_GROUP = List.of("E1013");
+
+    /** What a model with two such groups is refused with. */
+    private static final List<String> TWO_GROUPS = List.of("E1013", "E1013");
+
     /**
-     * {@code source} compiled and answered in full. Everything but the refusal of a type with no
-     * value is held not to be said, since that refusal is what the answers here are about.
+     * {@code source} compiled and answered in full, and held to be refused for nothing but the
+     * types with no value, since that refusal is what the answers here are about.
      */
-    private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code().toString())
-                        .filter(each -> !each.equals("E1013")).toList(),
-                "the model this reads has to be one somebody could write");
-        return compilation;
+    private static Compilation compiled(List<String> refusedWith, String source) {
+        return ACompiledModel.refusedWith(refusedWith, Compilation.ofSource(source, "Main"));
     }
 
     private static List<UninhabitableTypes.UninhabitableGroup> reported(String source) {
-        Compilation compilation = compiled(source);
+        return reported(ONE_GROUP, source);
+    }
+
+    private static List<UninhabitableTypes.UninhabitableGroup> reported(List<String> refusedWith,
+                                                                         String source) {
+        Compilation compilation = compiled(refusedWith, source);
         List<souther.compiler.ast.Hir.Def> defs =
                 compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList();
         return UninhabitableTypes.withNoValueOfTheirOwn(
@@ -57,7 +63,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
 
     /** What every declaration of the model was shown by, before any group is separated out. */
     private static String shownBy(String source, String name) {
-        Compilation compilation = compiled(source);
+        Compilation compilation = compiled(ONE_GROUP, source);
         List<souther.compiler.ast.Hir.Def> defs =
                 compilation.module("demo").defs().stream().map(each -> each.declaration().node()).toList();
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
@@ -305,7 +311,7 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
      */
     @Test
     void aLackOfItsOwnBesideACycleKeepsBothProofs() {
-        List<UninhabitableTypes.UninhabitableGroup> reported = reported("""
+        List<UninhabitableTypes.UninhabitableGroup> reported = reported(TWO_GROUPS, """
                 module demo
 
                 data Bad = Int
@@ -409,8 +415,8 @@ class ARefusalCarriesTheProofItsCountCameToNoneByTest {
                     invariant no = n >= 2 && n <= 1
                 """;
         assertEquals(new Emptiness.AtAField(new Emptiness.AtAField.Where.In("n"), new Emptiness.EmptyOrderedInterval()),
-                reported(before).get(1).why());
+                reported(TWO_GROUPS, before).get(1).why());
         assertEquals(new Emptiness.AtAField(new Emptiness.AtAField.Where.In("n"), new Emptiness.EmptyOrderedInterval()),
-                reported(after).get(1).why(), "and the fields the other way round");
+                reported(TWO_GROUPS, after).get(1).why(), "and the fields the other way round");
     }
 }

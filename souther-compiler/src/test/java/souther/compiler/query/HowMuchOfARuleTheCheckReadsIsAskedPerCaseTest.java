@@ -234,9 +234,8 @@ class HowMuchOfARuleTheCheckReadsIsAskedPerCaseTest {
 
                 let findIt (id) = if id.value > 0 then Found { id = id } else Missing { asked = id }
                 """);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
-        assertFalse(c.errors().isEmpty(), "the arm naming a type that is not a case is refused");
+        Compilation c = ACompiledModel.refusedWith(List.of("E1619"),
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
 
         Map<String, ContractDischarge> byName =
                 c.db().ask(new Bodies.ContractCapabilities("m.a")).value();

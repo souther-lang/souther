@@ -510,9 +510,7 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
                 """;
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1905"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(List.of("E1905"), compilation);
         String human = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).toString();
         assertTrue(human.contains("1 row does not hold"), human);

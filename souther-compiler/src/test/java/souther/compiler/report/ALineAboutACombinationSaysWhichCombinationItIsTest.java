@@ -624,10 +624,7 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
         }
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1905"), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(),
-                "the row that does not hold is the one error");
-        return compilation;
+        // The row that does not hold is the one error.
+        return ACompiledModel.refusedWith(List.of("E1905"), compilation);
     }
 }

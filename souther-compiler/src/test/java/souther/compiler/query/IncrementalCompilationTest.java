@@ -512,11 +512,10 @@ class IncrementalCompilationTest {
         Compilation c = Compilation.ofDocuments(
                 workspace(PRICES, CART, "module shop.customers\ndata Name = Nope\n"), Set.of(),
                 ModulePath.EMPTY).writtenOn(TestDay.DATE);
-        c.answerEverything();
-        assertFalse(c.errors().isEmpty(), "an unknown type is an error to begin with");
+        ACompiledModel.refusedWith(List.of("E1023"), c);
 
         c.update(workspace(PRICES, CART, CUSTOMERS), Set.of(), TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
 
         assertTrue(c.db().allReports().isEmpty(), "the fixed error is not still listed");
     }
@@ -870,8 +869,7 @@ class IncrementalCompilationTest {
                     constructs Amount
                 let writing (n) = Amount(Discount(n.value).value)
                 """), Set.of(), ModulePath.EMPTY).writtenOn(TestDay.DATE);
-        c.answerEverything();
-        assertFalse(c.errors().isEmpty(), "`Discount` denotes nothing to begin with");
+        ACompiledModel.refusedWith(List.of("E1023"), c);
         Answer<?> writing = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "writing"));
         Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "caller"));
 
@@ -957,8 +955,7 @@ class IncrementalCompilationTest {
     void declaringADataRechecksTheBodyWhoseReportIsReadOffEveryNameInSight() {
         Compilation c = Compilation.ofDocuments(Map.of("offering.sou", OFFERING), Set.of(),
                 ModulePath.EMPTY).writtenOn(TestDay.DATE);
-        c.answerEverything();
-        assertFalse(c.errors().isEmpty(), "`Q` is not a case of `Inner`, which is reported");
+        ACompiledModel.refusedWith(List.of("E1611", "E1203"), c);
         Answer<?> run = c.db().ask(new Bodies.CheckedBehavior("shop.offering", "run"));
 
         c.update(Map.of("offering.sou", OFFERING + "\ndata Discount = Int\n"), Set.of(),

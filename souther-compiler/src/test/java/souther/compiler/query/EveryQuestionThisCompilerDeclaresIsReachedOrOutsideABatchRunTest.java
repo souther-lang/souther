@@ -247,12 +247,7 @@ class EveryQuestionThisCompilerDeclaresIsReachedOrOutsideABatchRunTest {
                 let use (count: Int): Int = count(2)
                 let run (n) = use(n)
                 """, "Main");
-        compilation.answerEverything();
-        if (compilation.errors().isEmpty()) {
-            throw new IllegalStateException("the mistake was not reported, so nothing that reports"
-                    + " one was reached");
-        }
-        return compilation;
+        return ACompiledModel.refusedWith(List.of("E1803"), compilation);
     }
 
     /**

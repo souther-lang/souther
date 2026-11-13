@@ -96,13 +96,7 @@ class WhatATypeIsMadeOfIsComposedOfEachSumsAnswerTest {
         Module(String source, List<String> refusedWith) {
             Compilation compilation = Compilation.ofDocuments(
                     Map.of("m.sou", source), Set.of(), ModulePath.EMPTY);
-            if (refusedWith.isEmpty()) {
-                ACompiledModel.compiles(compilation);
-            } else {
-                compilation.answerEverything();
-                assertEquals(refusedWith, compilation.errors().stream()
-                        .map(e -> e.diagnostic().code()).toList());
-            }
+            ACompiledModel.refusedWith(refusedWith, compilation);
             resolved = compilation.db().ask(new Names.Resolved("m")).value();
             Symbols symbols = TypeChecker.symbols(resolved, DefaultStdlib.get());
             kinds = ScopedDeclarations.kindsOf(symbols);

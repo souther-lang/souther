@@ -47,9 +47,7 @@ class AQuestionExistsBecauseTheModelStatesItAndNotBecauseAReadingSucceededTest {
     /** The same, of a clause the model is refused for with {@code codes} and still read. */
     private static FieldDomains readWhatIsRefused(String clause, List<String> codes) {
         Compilation compilation = Compilation.ofSource(lengthWith(clause), "Main");
-        compilation.answerEverything();
-        assertEquals(codes, compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(codes, compilation);
         return readOf(compilation);
     }
 

@@ -61,9 +61,7 @@ class AnArrangementNamedAfterRowsHaveRunIsRefusedTest {
         Compilation compilation = Compilation.ofSource(ONE_ROW, "Main");
         compilation.withJvmExampleDeadlines(
                 DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("run")));
-        compilation.answerEverything();
-        assertEquals(List.of("E1923"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(List.of("E1923"), compilation);
 
         assertEquals(Disposition.INCOMPLETE, onlyRowOf(compilation).disposition());
     }

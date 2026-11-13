@@ -1,6 +1,7 @@
 package souther.cli;
 
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
@@ -321,9 +322,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     void aBuildThatMeasuredNothingIsNotSatisfied() {
         Compilation compilation = Compilation.ofSource(ONE_CLASS_OF_TWO, "Main");
         compilation.measure(new Adequacy.Asked(Adequacy.Level.OFF, false));
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "the model compiles");
+        ACompiledModel.compiles(compilation);
         AdequacyReport report = AdequacyReport.of(compilation);
 
         assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED, report.adequacy(),
@@ -690,9 +689,7 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     private static AdequacyReport reportOf(String source, Adequacy.Level level) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(level));
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "the model compiles");
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation);
     }
 

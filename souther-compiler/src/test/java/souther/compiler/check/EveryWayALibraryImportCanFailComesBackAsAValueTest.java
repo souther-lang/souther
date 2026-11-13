@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -36,10 +37,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class EveryWayALibraryImportCanFailComesBackAsAValueTest {
 
-    /** What the check refused in {@code source}, which declares {@code app.own}. */
-    private static List<Exposing.Refusal> refusedIn(String source) {
+    /**
+     * What the check refused in {@code source}, which declares {@code app.own}, a model refused
+     * with {@code codes}.
+     */
+    private static List<Exposing.Refusal> refusedIn(String source, List<String> codes) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(codes, compilation);
         List<Located> errors = compilation.errors();
         Exposing.Checked checked = compilation.db().ask(new Front.Checked("app.own")).value();
         assertTrue(errors.size() >= checked.refused().size(),
@@ -52,7 +56,7 @@ class EveryWayALibraryImportCanFailComesBackAsAValueTest {
         List<Exposing.Refusal> refused = refusedIn("""
                 module app.own
                 import List ( noSuchOperation )
-                """);
+                """, List.of("E1506"));
 
         assertEquals(1, refused.size(), refused::toString);
         Exposing.Refusal.NoSuchLibraryFunction said = assertInstanceOf(
@@ -68,7 +72,7 @@ class EveryWayALibraryImportCanFailComesBackAsAValueTest {
                 module app.own
                 import Map ( insert )
                 import Set ( insert )
-                """));
+                """, List.of("E1508")));
     }
 
     /** The same, for a claim against a declaration written here. */
@@ -79,7 +83,7 @@ class EveryWayALibraryImportCanFailComesBackAsAValueTest {
                 import List ( map )
 
                 let map (x) = x
-                """));
+                """, List.of("E1508", "E1811")));
     }
 
     /**
@@ -95,7 +99,7 @@ class EveryWayALibraryImportCanFailComesBackAsAValueTest {
                 module app.own
                 import List ( noSuchOperation )
                 import Map ( alsoNotThere )
-                """);
+                """, List.of("E1506", "E1506"));
 
         assertEquals(2, refused.size(), refused::toString);
         assertEquals(List.of("noSuchOperation", "alsoNotThere"),

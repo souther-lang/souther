@@ -250,9 +250,7 @@ class TheInputsEmptinessHasOneOwnerTest {
     /** What proves the input holds nothing, read off the one thing that answers. */
     private static Emptiness why(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of("E1013"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "a data with no value is refused");
+        ACompiledModel.refusedWith(List.of("E1013"), compilation);
         Read read = read(compilation, "take");
         EmptyInput held = read.inputs().quantities(read.rules()).emptiness().orElseThrow();
         return ((EmptyInput.ProvedByTheDeclarations) held).why();

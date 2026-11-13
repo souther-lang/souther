@@ -46,9 +46,7 @@ class ASumOfSeveralNumbersHeldAgainstAConstantIsReadAtEachOfThemTest {
                 }
                 """.formatted(condition), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .filter(line -> line.contains("not read:"))

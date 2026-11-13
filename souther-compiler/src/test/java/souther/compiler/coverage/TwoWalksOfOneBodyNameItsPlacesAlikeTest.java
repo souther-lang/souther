@@ -2,6 +2,7 @@ package souther.compiler.coverage;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.core.Core;
 import souther.compiler.meta.ModulePath;
@@ -162,10 +163,9 @@ class TwoWalksOfOneBodyNameItsPlacesAlikeTest {
         List<Map.Entry<String, Core>> out = new ArrayList<>();
         for (List<String> each : sources) {
             Compilation compilation = Compilation.ofSources(each, ModulePath.EMPTY);
-            compilation.answerEverything();
-            assertEquals(each.equals(REFUSED_ON_PURPOSE) ? REFUSED_ON_PURPOSE_CODES : List.of(),
-                    compilation.errors().stream().map(e -> e.diagnostic().code()).toList(),
-                    "the sources compile, but for the corpus checked in as refused");
+            ACompiledModel.refusedWith(
+                    each.equals(REFUSED_ON_PURPOSE) ? REFUSED_ON_PURPOSE_CODES : List.of(),
+                    compilation);
             int before = out.size();
             for (String module : compilation.modules()) {
                 Bodies.Elaborated checked =

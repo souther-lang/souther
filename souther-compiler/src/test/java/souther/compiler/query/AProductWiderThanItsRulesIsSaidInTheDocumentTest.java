@@ -96,9 +96,7 @@ class AProductWiderThanItsRulesIsSaidInTheDocumentTest {
     /** The same, of a model the rules leave no value of, which it is refused for. */
     private static JsonNode behaviorOfWhatNothingBuilds(String source) {
         Compilation compilation = measuredMerging(source);
-        compilation.answerEverything();
-        assertEquals(List.of("E1013"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(List.of("E1013"), compilation);
         return behaviorIn(compilation);
     }
 

@@ -72,10 +72,7 @@ class ARowIsHeldToStepsAndNotToTheClockTest {
     private static Compilation compiled(String source, EvaluationPolicy policy, List<String> errors) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.withEvaluationPolicy(policy);
-        compilation.answerEverything();
-        assertEquals(errors, compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "what the row is refused for");
-        return compilation;
+        return ACompiledModel.refusedWith(errors, compilation);
     }
 
     private static RowOutcome onlyRowOf(Compilation compilation, String module) {

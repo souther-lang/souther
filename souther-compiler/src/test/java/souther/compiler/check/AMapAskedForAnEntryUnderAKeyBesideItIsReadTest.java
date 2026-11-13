@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
-import souther.compiler.diag.CompileException;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.Position;
 import souther.compiler.query.Bodies;
@@ -475,19 +474,7 @@ class AMapAskedForAnEntryUnderAKeyBesideItIsReadTest {
      */
     private static Map<String, List<String>> unansweredAtTheFieldsOfARefusedModel(String source) {
         Compilation model = Compilation.ofSource(source, "Main");
-        assertEquals("E1314", refusalOf(model), "a map keyed by Int cannot cross the boundary");
-        return unansweredAtTheFields(Compilation.ofSource(source, "Main"));
-    }
-
-    /** The code {@code model} is refused with, whether answering it throws or it reports it. */
-    private static String refusalOf(Compilation model) {
-        try {
-            model.answerEverything();
-        } catch (CompileException refused) {
-            return refused.code();
-        }
-        return model.errors().stream().map(e -> e.diagnostic().code()).findFirst()
-                .orElse("none");
+        return unansweredAtTheFields(ACompiledModel.refusedWith(List.of("E1314"), model));
     }
 
     private static Map<String, List<String>> unansweredAtTheFields(Compilation compilation) {

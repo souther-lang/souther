@@ -11,7 +11,6 @@ import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -96,10 +95,7 @@ class ARunOfARowShortOfTheWayIsNotEvidenceAboutTheRuleTest {
     private static List<RuleSettlement> settlementsOf(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         List<RuleSettlement> out = AdequacyReport.of(compilation).modules().stream()
                 .flatMap(module -> module.behaviors().stream())
                 .filter(each -> "decides".equals(each.name()))

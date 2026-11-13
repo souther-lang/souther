@@ -256,13 +256,7 @@ class APositionThatDidNotBuildItsStringsSaysSoRatherThanNothingTest {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.db().set(new Front.Reading(), policy);
         compilation.measure(Adequacy.Asked.fullReport());
-        if (refusedFor.isEmpty()) {
-            ACompiledModel.compiles(compilation);
-        } else {
-            compilation.answerEverything();
-            assertEquals(refusedFor, compilation.errors().stream()
-                    .map(found -> found.diagnostic().code()).toList(), "the model is refused");
-        }
+        ACompiledModel.refusedWith(refusedFor, compilation);
 
         List<PartitionEvidence> out = new ArrayList<>();
         for (String module : compilation.modules()) {

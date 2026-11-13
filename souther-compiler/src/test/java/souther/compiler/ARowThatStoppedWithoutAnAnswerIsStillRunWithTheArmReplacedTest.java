@@ -69,9 +69,7 @@ class ARowThatStoppedWithoutAnAnswerIsStillRunWithTheArmReplacedTest {
     private static RowOutcome rowNamed(String name) {
         Compilation compilation = Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1905"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "the row that stops is the one error");
+        ACompiledModel.refusedWith(List.of("E1905"), compilation);
         List<RowOutcome> rows = new ArrayList<>();
         for (String module : compilation.modules()) {
             for (SourceId id : compilation.exampleSourcesOf(module)) {

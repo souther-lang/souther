@@ -143,9 +143,7 @@ class AStopAtAPlaceWithNoTextSaysNoPlaceTest {
     private static Compilation compiled() {
         Compilation bodies = Compilation.ofSource(BODIES, "Main");
         bodies.measure(Adequacy.Asked.fullReport());
-        bodies.answerEverything();
-        assertEquals(List.of(), bodies.errors(), "the model the body is read off compiles");
-        return bodies;
+        return ACompiledModel.compiles(bodies);
     }
 
     private static DecisionReading.EveryRunStops theWay(Compilation bodies) {

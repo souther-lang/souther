@@ -209,15 +209,13 @@ class WhatIsWrittenInAnEnsuresIsQuotedOverTheRowsTest {
                 """;
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        List<String> errors = compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList();
+        ACompiledModel.refusedWith(List.of("E1619"), compilation);
 
         // The arm names a data that is no case of the answer, so the reading of the contract is
         // refused and the behavior is not among them.
         assertFalse(compilation.db().ask(new Bodies.Contracts("example.todo")).value()
                         .containsKey("wrong"),
-                "the checker could not read this behavior's clause, the errors being " + errors);
+                "the checker could not read this behavior's clause");
 
         String block = GeneratedRows.of(compilation, null, null,
                 SourceRendering.namedByIdentity(compilation.texts())).textInEnglish();

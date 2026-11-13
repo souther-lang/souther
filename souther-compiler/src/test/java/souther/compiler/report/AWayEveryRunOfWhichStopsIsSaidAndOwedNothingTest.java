@@ -75,8 +75,7 @@ class AWayEveryRunOfWhichStopsIsSaidAndOwedNothingTest {
     void theWayIsSaidInTheReportAndTheDocumentAndLeavesTheVerdictAsItWas() {
         Compilation bodies = Compilation.ofSource(BODIES, "Main");
         bodies.measure(Adequacy.Asked.fullReport());
-        bodies.answerEverything();
-        assertEquals(List.of(), bodies.errors(), "the model the body is read off compiles");
+        ACompiledModel.compiles(bodies);
         AdequacyReport own = AdequacyReport.of(bodies);
         AdequacyReport stopping = withTheWay(bodies, own);
         SourceRendering rendering = SourceRendering.namedByIdentity(bodies.texts());

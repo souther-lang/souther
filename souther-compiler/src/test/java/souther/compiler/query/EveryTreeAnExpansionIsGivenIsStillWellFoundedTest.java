@@ -13,6 +13,7 @@ import souther.compiler.meta.ModulePath;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -171,8 +172,7 @@ class EveryTreeAnExpansionIsGivenIsStillWellFoundedTest {
                     constructs Out
                 let go (i) = Out { n = i.n + step }
                 """), Set.of(), ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertTrue(!compilation.errors().isEmpty(), "the value that reaches itself is refused");
+        ACompiledModel.refusedWith(List.of("E1022"), compilation);
         Db db = compilation.db();
         Answer<Hir.Module> resolved = db.ask(new Names.Resolved("m.a"));
         assertTrue(resolved.present(), "resolution answers; the refusal comes later");

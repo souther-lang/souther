@@ -1,15 +1,14 @@
 package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -44,8 +43,7 @@ class EveryRuleAModelsEvidenceReadHasAPlaceTest {
     private static AdequacyReport.BehaviorReport seat() {
         Compilation compilation = Compilation.ofSource(WAITLIST, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model compiles");
+        ACompiledModel.compiles(compilation);
         AdequacyReport.ModuleReport module = AdequacyReport.of(compilation).modules().getFirst();
         return module.behaviors().stream().filter(each -> each.name().equals("seat")).findFirst()
                 .orElseThrow();

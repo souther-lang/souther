@@ -72,10 +72,7 @@ class ACollectionOfSeveralIsFilledFromWhatItsElementTypeAdmitsTest {
     /** As {@link #filled(String)}, of a model the compile refuses with {@code refusedWith}. */
     private static FillResult filled(String source, List<String> refusedWith) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(refusedWith, compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "what the model is refused for");
-        return filled(compilation);
+        return filled(ACompiledModel.refusedWith(refusedWith, compilation));
     }
 
     private static FillResult filled(Compilation compilation) {

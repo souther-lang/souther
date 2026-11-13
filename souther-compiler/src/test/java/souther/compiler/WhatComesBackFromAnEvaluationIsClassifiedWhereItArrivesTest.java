@@ -71,9 +71,7 @@ class WhatComesBackFromAnEvaluationIsClassifiedWhereItArrivesTest {
     private static RowOutcome onlyRowOf(JvmExampleDeadlines arrangement) {
         Compilation compilation = Compilation.ofSource(COMES_BACK, "Main");
         compilation.withJvmExampleDeadlines(arrangement);
-        compilation.answerEverything();
-        assertEquals(List.of("E1924"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList());
+        ACompiledModel.refusedWith(List.of("E1924"), compilation);
         SourceId sourceId = compilation.exampleSourcesOf("example.arrives").getFirst();
         List<RowOutcome> rows = compilation.db()
                 .ask(new Output.Examples("example.arrives", sourceId, ArmObservation.OMIT))

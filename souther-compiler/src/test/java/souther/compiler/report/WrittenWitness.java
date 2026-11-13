@@ -1,12 +1,11 @@
 package souther.compiler.report;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * A model written to reach one arm of {@link ReaderDisposition}, measured and handed over.
@@ -45,21 +44,12 @@ final class WrittenWitness {
      * witness asked for.
      *
      * @param codes the diagnostic codes this witness is written to provoke, one entry per refusal
-     *              expected, as a document spells them
+     *              expected, as a document spells them, in the order the compiler reports them
      */
     static AdequacyReport refusedOnly(List<String> codes, String... sources) {
         Compilation compilation = Compilation.ofSources(List.of(sources), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-
-        List<String> refused = compilation.errors().stream()
-                .map(each -> each.diagnostic().code().toString())
-                .sorted()
-                .toList();
-
-        assertEquals(codes.stream().sorted().toList(), refused,
-                "a witness says what its model is refused about, and this one is refused about"
-                        + " something else");
+        ACompiledModel.refusedWith(codes, compilation);
         return AdequacyReport.of(compilation);
     }
 }

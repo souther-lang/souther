@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.partition.Replacement;
 
@@ -168,10 +169,7 @@ class AListNoWrittenRowFillsIsGrownFromWhatOtherRowsRanWithTest {
                                                                             String behavior) {
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         String module = compilation.modules().get(0);
         ReplacementEvidence its =
                 compilation.db().ask(new Replacements.Measured(module)).value().get(behavior);

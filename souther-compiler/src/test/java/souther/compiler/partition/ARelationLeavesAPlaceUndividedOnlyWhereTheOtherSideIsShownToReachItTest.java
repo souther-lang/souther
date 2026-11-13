@@ -161,17 +161,12 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * no composed row moves.
      */
     private static Compilation measured(String source) {
-        List<String> refusedWith = REFUSED_WITH.get();
-        return MEASURED.computeIfAbsent(source, written -> {
-            Compilation compilation = Compilation.ofSource(written, "Main");
-            compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-            if (refusedWith.isEmpty()) {
-                return ACompiledModel.compiles(compilation);
-            }
-            compilation.answerEverything();
-            assertEquals(refusedWith, codesOf(compilation), "the model is refused");
-            return compilation;
+        Compilation compilation = MEASURED.computeIfAbsent(source, written -> {
+            Compilation made = Compilation.ofSource(written, "Main");
+            made.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+            return made;
         });
+        return ACompiledModel.refusedWith(REFUSED_WITH.get(), compilation);
     }
 
     /** The codes the models measured by {@code asked} are refused with: none, for a model that
@@ -188,10 +183,6 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         } finally {
             REFUSED_WITH.remove();
         }
-    }
-
-    private static List<String> codesOf(Compilation compilation) {
-        return compilation.errors().stream().map(e -> e.diagnostic().code()).toList();
     }
 
     private static Map<String, String> leftIn(Compilation compilation, String at) {
@@ -4015,15 +4006,12 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                     let m (x) = true
                     """.formatted(apart), "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            if (apart.endsWith("7")) {
-                compilation.answerEverything();
-                assertEquals(List.of("E1013"), codesOf(compilation), "no two lists hold the rule");
-            } else {
-                ACompiledModel.compiles(compilation);
-            }
+            boolean heldByNoTwoLists = apart.endsWith("7");
+            ACompiledModel.refusedWith(heldByNoTwoLists ? List.of("E1013") : List.of(),
+                    compilation);
             String report = AdequacyReport.of(compilation)
                     .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
-            String said = apart.endsWith("7") ? "not shown to reach every value here"
+            String said = heldByNoTwoLists ? "not shown to reach every value here"
                     : "it relates the value here to another value rather than dividing";
             for (String place : List.of("x.g", "x.d")) {
                 assertTrue(report.lines().anyMatch(line -> line.contains("invariant D #1")

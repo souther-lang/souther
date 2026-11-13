@@ -527,11 +527,8 @@ class AMeasureWithNoNumberSaysWhyTest {
         Compilation compilation = Compilation.ofSources(UNSEEN,
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1906"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(),
-                "the attached source holds a declaration the model's own source has");
-        return compilation;
+        // The attached source holds a declaration the model's own source has.
+        return ACompiledModel.refusedWith(List.of("E1906"), compilation);
     }
 
     /**

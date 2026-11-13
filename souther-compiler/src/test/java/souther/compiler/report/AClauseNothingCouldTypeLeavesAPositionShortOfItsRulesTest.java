@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.report.AdequacyReport;
 import org.junit.jupiter.api.Test;
@@ -9,7 +10,6 @@ import souther.compiler.query.Compilation;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -43,9 +43,7 @@ class AClauseNothingCouldTypeLeavesAPositionShortOfItsRulesTest {
     private static String reportOf(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of("E1319"), compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "the clause nothing could type");
+        ACompiledModel.refusedWith(List.of("E1319"), compilation);
         return AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts()));
     }
 

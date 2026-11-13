@@ -12,7 +12,6 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -109,8 +108,7 @@ class TwoSpreadsThatMeetOneDeclarationAreRefusedTest {
     private static String whatItSays(Map<String, String> byId) {
         try {
             Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-            c.answerEverything();
-            assertFalse(c.errors().isEmpty(), "the model is one the compiler refuses");
+            ACompiledModel.refusedWith(List.of("E1004"), c);
             return c.db().allReports().toString();
         } catch (RuntimeException e) {
             return String.valueOf(e.getMessage());

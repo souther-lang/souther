@@ -308,7 +308,7 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
 
     @Test
     void aShiftUndoneAtTheEndOfTheRangeAbortsAndIsNoRowThatReachedALine() {
-        Compilation past = answered("""
+        Compilation past = ACompiledModel.refusedWith(List.of("E1905"), answered("""
                 module p
 
                 behavior f : (birthday: Date) -> Bool
@@ -316,9 +316,7 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
 
                 example f
                     | (Date("+999999999-12-31")) -> true
-                """);
-
-        assertEquals(1, past.errors().size(), "the program aborts there: " + report(past));
+                """));
 
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(past.db(), OfferingRequest.overTheModule("p")), Map.of(),

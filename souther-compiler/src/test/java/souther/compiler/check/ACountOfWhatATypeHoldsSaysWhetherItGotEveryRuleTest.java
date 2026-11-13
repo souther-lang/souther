@@ -11,7 +11,6 @@ import souther.compiler.types.TypeKey;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -113,9 +112,7 @@ class ACountOfWhatATypeHoldsSaysWhetherItGotEveryRuleTest {
 
                 data Row = { ...Held, m: Int }
                 """), souther.compiler.meta.ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertEquals(errors, compilation.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "what the pair is refused for");
+        ACompiledModel.refusedWith(errors, compilation);
         return compilation.db().ask(new Shapes.TypesWithNoValue("app.rows")).value();
     }
 }

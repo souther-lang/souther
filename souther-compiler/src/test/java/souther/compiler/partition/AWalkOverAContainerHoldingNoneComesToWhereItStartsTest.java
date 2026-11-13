@@ -53,11 +53,8 @@ class AWalkOverAContainerHoldingNoneComesToWhereItStartsTest {
     /** The same of a model that is refused for {@code refusedFor}, which is read all the same. */
     private static Read readRefused(String source, String path, String field,
                                     List<String> refusedFor) {
-        Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        compilation.answerEverything();
-        assertEquals(refusedFor, compilation.errors().stream()
-                .map(found -> found.diagnostic().code()).toList(), "the model is refused");
-        return read(compilation, path, field);
+        return read(ACompiledModel.refusedWith(refusedFor,
+                Compilation.ofSources(List.of(source), ModulePath.EMPTY)), path, field);
     }
 
     private static Read read(Compilation compilation, String path, String field) {

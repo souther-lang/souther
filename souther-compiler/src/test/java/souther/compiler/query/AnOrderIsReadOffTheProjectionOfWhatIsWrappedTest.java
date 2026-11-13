@@ -159,10 +159,7 @@ class AnOrderIsReadOffTheProjectionOfWhatIsWrappedTest {
                 behavior twice : (n: Int) -> Int
                 let twice (n) = inc(inc(n))
                 """), ModulePath.of(path));
-        compilation.answerEverything();
-        assertEquals(List.of("E1510", "E1510"),
-                compilation.errors().stream().map(each -> each.diagnostic().code()).toList(),
-                "the module is refused for the two declarations whose order moved");
+        ACompiledModel.refusedWith(List.of("E1510", "E1510"), compilation);
         Set<ModuleMessage.ItWasBuiltAgainstAnotherLinkage> moved = new HashSet<>();
         for (Db.Found found : compilation.db().allReports()) {
             if (found.report().diagnostic().said()
