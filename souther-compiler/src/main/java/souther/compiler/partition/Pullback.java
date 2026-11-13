@@ -2387,20 +2387,25 @@ final class Pullback {
      * needs, and one of several alternatives needs one of what the alternatives each need.
      */
     private static Optional<Set<TermPath>> containersHeldBy(Proposition stated) {
+        return StatementReading.<Optional<Set<TermPath>>>over(Pullback::containersHeldByAt)
+                .read(stated);
+    }
+
+    private static Optional<Set<TermPath>> containersHeldByAt(
+            Proposition stated, StatementReading<Optional<Set<TermPath>>> again) {
         return switch (stated) {
             case Proposition.Some(DecisionSubject.AnInput(TermPath at, var _), var _,
                                   boolean holds, var _) when holds -> Optional.of(Set.of(at));
-            case Proposition.All all -> {
+            case Proposition.All _ -> {
                 Set<TermPath> out = new LinkedHashSet<>();
-                for (Proposition part : all.parts()) {
-                    containersHeldBy(part).ifPresent(out::addAll);
+                for (Optional<Set<TermPath>> needed : stated.overParts(again)) {
+                    needed.ifPresent(out::addAll);
                 }
                 yield out.isEmpty() ? Optional.empty() : Optional.of(out);
             }
-            case Proposition.Any any -> {
+            case Proposition.Any _ -> {
                 Set<TermPath> out = new LinkedHashSet<>();
-                for (Proposition part : any.parts()) {
-                    Optional<Set<TermPath>> needed = containersHeldBy(part);
+                for (Optional<Set<TermPath>> needed : stated.overParts(again)) {
                     if (needed.isEmpty()) {
                         yield Optional.empty();
                     }
