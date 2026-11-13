@@ -11672,11 +11672,17 @@ final class Pullback {
      * ({@code OnlyTheAccessorsAskAfterWhatAReadingMayLeaveUnconsultedTest}).
      */
     private enum InputAskedAfter {
-        SIDE, ANSWERING, COUNTS, TELLING;
+        SIDE(1), ANSWERING(2), COUNTS(4), TELLING(8);
 
-        /** The place of this among the bits a set of them is told by. */
+        private final int bit;
+
+        InputAskedAfter(int bit) {
+            this.bit = bit;
+        }
+
+        /** The bit a set of these is told by that has this in it. */
         int bit() {
-            return 1 << ordinal();
+            return bit;
         }
     }
 
