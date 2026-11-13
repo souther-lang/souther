@@ -12,7 +12,9 @@ import souther.compiler.values.Operand;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -257,15 +259,24 @@ public final class ReadThroughNames {
         return told != null && told.equals(other);
     }
 
-    /** The value each number and subject of {@code stated} was told, in the order they stand. */
+    /**
+     * The value each number and subject of {@code stated} was told, in the order they first stand.
+     *
+     * <p>A value at a place is one however many statements hold it, so one is counted once: what a
+     * statement says is what it is made of, and not how many objects it is made with. A part held
+     * by one object and the same part held by two equal ones give the same.
+     */
     private static List<ValueIdentity> identitiesIn(Proposition stated) {
-        List<ValueIdentity> out = new ArrayList<>();
+        Set<Told> out = new LinkedHashSet<>();
         told(stated, (position, had) -> {
-            out.add(had);
+            out.add(new Told(position, had));
             return had;
         }, () -> stated);
-        return out;
+        return out.stream().map(Told::identity).toList();
     }
+
+    /** The value {@code identity} a number or a subject at {@code position} was told. */
+    private record Told(TermPath position, ValueIdentity identity) {}
 
     /**
      * The value at {@code at} that something read through {@code names} is about, as a subject:
@@ -380,19 +391,42 @@ public final class ReadThroughNames {
 
     /**
      * {@code stated} told by {@code telling}, each statement of it told once however many
-     * statements hold it. What is told is the same wherever a statement stands, since one
-     * {@code telling} is for the whole of the reading; inside a quantifier it is another, and a
-     * statement there is told by a reading of its own.
+     * statements hold it, in the context it stands in: inside a quantifier what stands at its
+     * container's element is left as it is, so a statement inside one is told once for the
+     * quantifiers it is inside of.
      */
     private static Proposition told(Proposition stated, Telling telling,
                                     Supplier<Proposition> twoAsOne) {
-        return StatementReading.<Proposition>over((each, again) ->
-                toldAt(each, telling, twoAsOne, again)).read(stated);
+        Map<Proposition, Optional<List<TermPath>>> places = new IdentityHashMap<>();
+        return StatementReading.InContext.<List<DecisionSubject>, Proposition>over(
+                (each, leftAlone, again) -> toldAt(each, leftAlone, telling, twoAsOne, again),
+                (each, leftAlone) -> leftAlone.isEmpty() ? leftAlone : aboutThe(leftAlone,
+                        places.computeIfAbsent(each, PositionsAStatementReads::everyPlaceOf)))
+                .read(stated, List.of());
     }
 
-    private static Proposition toldAt(Proposition stated, Telling telling,
-                                      Supplier<Proposition> twoAsOne,
-                                      StatementReading<Proposition> again) {
+    /**
+     * The containers of {@code leftAlone} that something standing at {@code places} can stand at
+     * an element of: what is told of a statement turns on those and not on the others. All of them
+     * where the places are not known.
+     */
+    private static List<DecisionSubject> aboutThe(List<DecisionSubject> leftAlone,
+                                                  Optional<List<TermPath>> places) {
+        if (places.isEmpty()) {
+            return leftAlone;
+        }
+        return leftAlone.stream().filter(container -> {
+            TermPath at = ((DecisionSubject.AnInput) container).inputPosition();
+            return places.get().stream().anyMatch(place ->
+                    place.isAtOrUnder(at.element()) || place.isAtOrUnder(at.key()));
+        }).toList();
+    }
+
+    private static Proposition toldAt(Proposition stated, List<DecisionSubject> leftAlone,
+                                      Telling outside, Supplier<Proposition> twoAsOne,
+                                      StatementReading.InContext<List<DecisionSubject>,
+                                              Proposition> again) {
+        Telling telling = leavingAlone(leftAlone, outside);
         return switch (stated) {
             case Proposition.Always _ -> stated;
             // What a part would be said as is of whatever that statement is of, and says nothing
@@ -443,21 +477,24 @@ public final class ReadThroughNames {
             // not put together again: joining parts orders them, which is no small thing to do
             // for each statement a reader tells.
             case Proposition.All all -> {
-                List<Proposition> parts = changed(all.parts(), stated.overParts(again));
+                List<Proposition> parts = changed(all.parts(),
+                        stated.overParts(again.in(leftAlone)));
                 yield parts == null ? stated : Proposition.all(parts);
             }
             case Proposition.Any any -> {
-                List<Proposition> parts = changed(any.parts(), stated.overParts(again));
+                List<Proposition> parts = changed(any.parts(),
+                        stated.overParts(again.in(leftAlone)));
                 yield parts == null ? stated : Proposition.any(parts);
             }
             case Proposition.WhereItAnswers where -> {
-                Proposition answers = again.read(where.answers());
-                Proposition states = again.read(where.states());
+                Proposition answers = again.read(where.answers(), leftAlone);
+                Proposition states = again.read(where.states(), leftAlone);
                 yield answers == where.answers() && states == where.states() ? stated
                         : Proposition.whereItAnswers(answers, states);
             }
             case Proposition.OnAnApplication applied -> {
-                List<Proposition> each = changed(applied.each(), stated.overParts(again));
+                List<Proposition> each = changed(applied.each(),
+                        stated.overParts(again.in(leftAlone)));
                 yield each == null ? stated : Proposition.onAnApplication(each);
             }
             // Inside a quantifier its container's element is its own, and stays as it stands: a
@@ -468,8 +505,8 @@ public final class ReadThroughNames {
                 if (container == null) {
                     yield twoAsOne.get();
                 }
-                Proposition element = told(some.ofTheElement(), ownElementLeftAlone(
-                        some.container(), telling), twoAsOne);
+                Proposition element = again.read(some.ofTheElement(),
+                        leftAloneInside(leftAlone, some.container()));
                 yield container == some.container() && element == some.ofTheElement() ? stated
                         : new Proposition.Some(container, element, some.holds());
             }
@@ -495,7 +532,7 @@ public final class ReadThroughNames {
             // How many of some statements hold is of whatever those statements are of.
             case Proposition.SoManyHold many -> {
                 List<Proposition> statements =
-                        changed(many.statements(), stated.overParts(again));
+                        changed(many.statements(), stated.overParts(again.in(leftAlone)));
                 yield statements == null ? stated : Proposition.SoManyHold.counting(statements,
                         many.weights(), many.admitted());
             }
@@ -535,15 +572,36 @@ public final class ReadThroughNames {
         return null;
     }
 
+    /** The containers whose elements are left as they are inside {@code container}'s quantifier,
+     *  beside {@code leftAlone}: only a container at a position has an element. */
+    private static List<DecisionSubject> leftAloneInside(List<DecisionSubject> leftAlone,
+                                                         DecisionSubject container) {
+        if (!(container instanceof DecisionSubject.AnInput) || leftAlone.contains(container)) {
+            return leftAlone;
+        }
+        List<DecisionSubject> out = new ArrayList<>(leftAlone);
+        out.add(container);
+        return List.copyOf(out);
+    }
+
     /** {@code telling}, with what stands at {@code container}'s element left as it is. */
     private static Telling ownElementLeftAlone(DecisionSubject container, Telling telling) {
-        if (!(container instanceof DecisionSubject.AnInput(TermPath at, var _))) {
-            return telling;
+        return leavingAlone(leftAloneInside(List.of(), container), telling);
+    }
+
+    /** {@code telling}, with what stands at the element of each of {@code leftAlone} left as it
+     *  is. */
+    private static Telling leavingAlone(List<DecisionSubject> leftAlone, Telling telling) {
+        Telling out = telling;
+        for (DecisionSubject container : leftAlone) {
+            TermPath at = ((DecisionSubject.AnInput) container).inputPosition();
+            TermPath own = at.element();
+            TermPath key = at.key();
+            Telling inner = out;
+            out = (position, had) -> position.isAtOrUnder(own) || position.isAtOrUnder(key) ? had
+                    : inner.of(position, had);
         }
-        TermPath own = at.element();
-        TermPath key = at.key();
-        return (position, had) -> position.isAtOrUnder(own) || position.isAtOrUnder(key) ? had
-                : telling.of(position, had);
+        return out;
     }
 
     /** {@code subject} told which value it is, or null where it is no one. */

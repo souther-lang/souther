@@ -531,7 +531,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      */
     static Set<TermPath> positionsInside(OnTheWay entry) {
         Set<TermPath> out = new LinkedHashSet<>();
-        everyOneInside(entry).forEach(one -> out.addAll(positionsOf(one)));
+        OnTheWay.eachOnce(List.of(entry), one -> out.addAll(positionsOf(one)));
         return out;
     }
 
@@ -545,25 +545,6 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     static boolean asksNothingOf(TermPath at, OnTheWay entry) {
         Set<ReadSubject> on = turnsOn(entry);
         return on != null && !ReadSubject.bearOnEachOther(on, Set.of(new ReadSubject.At(at)));
-    }
-
-    /** {@code entry}, and every condition inside the alternatives it leaves a row and the
-     *  statements it counts, however deep. */
-    private static List<OnTheWay> everyOneInside(OnTheWay entry) {
-        List<OnTheWay> out = new ArrayList<>();
-        gatherInside(entry, out);
-        return out;
-    }
-
-    private static void gatherInside(OnTheWay entry, List<OnTheWay> into) {
-        into.add(entry);
-        if (entry.ofSeveralWays()) {
-            entry.alternatives().forEach(alternative ->
-                    alternative.forEach(one -> gatherInside(one, into)));
-        }
-        if (entry instanceof OnTheWay.Counted counted) {
-            counted.parts().forEach(one -> gatherInside(one, into));
-        }
     }
 
     /** The conditions on this way a row is past one of several ways of

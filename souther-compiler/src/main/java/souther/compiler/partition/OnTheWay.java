@@ -21,6 +21,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -65,27 +66,36 @@ public sealed interface OnTheWay {
      * differs by where it stands is not one that wants each of them, and goes down the way as the
      * walk of its owner does ({@link WayToTheBorder#along}).
      *
-     * @param met the conditions already met, which are not visited again; kept by identity
+     * @param met    the conditions already met, which are not visited again; kept by identity
+     * @param inside which of the conditions met are gone down into
      */
-    static void eachOnce(List<OnTheWay> entries, Set<OnTheWay> met,
-                         Consumer<OnTheWay> visit) {
+    static void eachOnce(List<OnTheWay> entries, Set<OnTheWay> met, Consumer<OnTheWay> visit,
+                         Predicate<OnTheWay> inside) {
         for (OnTheWay each : entries) {
             if (!met.add(each)) {
                 continue;
             }
             visit.accept(each);
+            if (!inside.test(each)) {
+                continue;
+            }
             switch (each) {
-                case OneOf several ->
-                        several.alternatives().forEach(one -> eachOnce(one, met, visit));
+                case OneOf several -> several.alternatives()
+                        .forEach(one -> eachOnce(one, met, visit, inside));
                 case Counted counted -> counted.statements().forEach(one -> {
-                    eachOnce(one.holding(), met, visit);
-                    eachOnce(one.failing(), met, visit);
+                    eachOnce(one.holding(), met, visit, inside);
+                    eachOnce(one.failing(), met, visit, inside);
                 });
                 // A narrowing's alternatives are the cases it leaves, each made afresh as a
                 // narrowing to that case; they state nothing the narrowing did not.
                 case Narrowed _, Declined _, TakenIn _, Settled _ -> { }
             }
         }
+    }
+
+    /** {@link #eachOnce(List, Set, Consumer, Predicate)} going down into every condition. */
+    static void eachOnce(List<OnTheWay> entries, Set<OnTheWay> met, Consumer<OnTheWay> visit) {
+        eachOnce(entries, met, visit, _ -> true);
     }
 
     /** {@link #eachOnce(List, Set, Consumer)} with no condition met yet. */

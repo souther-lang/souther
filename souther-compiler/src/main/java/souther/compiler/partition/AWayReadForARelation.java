@@ -157,10 +157,11 @@ final class AWayReadForARelation {
         choices.addAll(whole.unsplit());
         // What each condition asks of: one on the way, and one in an alternative of a choice.
         List<Set<TermPath>> asked = new ArrayList<>();
+        Set<OnTheWay> met = Collections.newSetFromMap(new IdentityHashMap<>());
         for (OnTheWay each : entries) {
             if (choices.contains(each) && each.ofSeveralWays()) {
                 each.alternatives().forEach(alternative ->
-                        alternative.forEach(one -> askedOneByOne(one, asked)));
+                        askedOneByOne(alternative, met, asked));
             } else {
                 asked.add(WayToTheBorder.positionsInside(each));
             }
@@ -1000,13 +1001,13 @@ final class AWayReadForARelation {
 
     /** Adds to {@code into} what each condition {@code entry} asks of, one by one inside the
      *  alternatives of a choice, which are parted where they stand ({@link ChoiceRead}). */
-    private static void askedOneByOne(OnTheWay entry, List<Set<TermPath>> into) {
-        if (entry instanceof OnTheWay.OneOf several) {
-            several.alternatives().forEach(alternative ->
-                    alternative.forEach(one -> askedOneByOne(one, into)));
-        } else {
-            into.add(WayToTheBorder.positionsInside(entry));
-        }
+    private static void askedOneByOne(List<OnTheWay> alternative, Set<OnTheWay> met,
+                                      List<Set<TermPath>> into) {
+        OnTheWay.eachOnce(alternative, met, each -> {
+            if (!(each instanceof OnTheWay.OneOf)) {
+                into.add(WayToTheBorder.positionsInside(each));
+            }
+        }, each -> each instanceof OnTheWay.OneOf);
     }
 
     /**

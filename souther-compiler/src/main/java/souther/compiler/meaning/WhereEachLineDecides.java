@@ -1525,17 +1525,15 @@ public final class WhereEachLineDecides {
     /**
      * Every part a statement joins, held, filed by whether it stands in where it answers.
      *
-     * <p>What a part comes to depends on which side of an answering it stands, so there is a
-     * reading for each side, and a statement met on both sides is filed on both.
+     * <p>What a part comes to depends on which side of an answering it stands, so a statement met
+     * on both sides is filed on both.
      */
     private static final class FiledByWhereItStands {
 
         private final Map<Spelling, Proposition> where;
         private final Map<Spelling, Proposition> what;
-        private final StatementReading<Boolean> inWhereItAnswers =
-                StatementReading.over((stated, again) -> filed(stated, true, again));
-        private final StatementReading<Boolean> elsewhere =
-                StatementReading.over((stated, again) -> filed(stated, false, again));
+        private final StatementReading.InContext<Boolean, Boolean> reading =
+                StatementReading.InContext.over(this::filed);
 
         FiledByWhereItStands(Map<Spelling, Proposition> where, Map<Spelling, Proposition> what) {
             this.where = where;
@@ -1543,17 +1541,17 @@ public final class WhereEachLineDecides {
         }
 
         void from(Proposition stated) {
-            elsewhere.read(stated);
+            reading.read(stated, false);
         }
 
         private boolean filed(Proposition stated, boolean answering,
-                              StatementReading<Boolean> again) {
+                              StatementReading.InContext<Boolean, Boolean> again) {
             switch (stated) {
                 case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
-                     Proposition.OfTheWays _ -> stated.eachPart(again);
+                     Proposition.OfTheWays _ -> stated.eachPart(again.in(answering));
                 case Proposition.WhereItAnswers inside -> {
-                    inWhereItAnswers.read(inside.answers());
-                    again.read(inside.states());
+                    again.read(inside.answers(), true);
+                    again.read(inside.states(), answering);
                 }
                 case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                      Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,

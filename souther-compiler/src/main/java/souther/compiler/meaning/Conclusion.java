@@ -82,7 +82,8 @@ public final class Conclusion {
         /** How many parts each statement concluded here comes to written out, past the figure
          *  held at one past it. By identity, since a part held twice is one statement counted
          *  twice wherever it is held. */
-        private final Map<Proposition, Long> parts = new IdentityHashMap<>();
+        private final StatementReading<Long> parts =
+                StatementReading.over((stated, again) -> partsAt(this, stated, again));
         /** Where the numbers a statement over the ways is owed start, by what it is written out
          *  from, so that the statement met again here is owed the same ones. */
         private final Map<Spelling, Long> reserved = new HashMap<>();
@@ -404,34 +405,35 @@ public final class Conclusion {
      * it.
      */
     private long partsIn(Proposition stated) {
-        Long known = shared.parts.get(stated);
-        if (known != null) {
-            return known;
-        }
+        return shared.parts.read(stated);
+    }
+
+    /**
+     * {@link #partsIn} of one statement, its parts read through {@code again}, which keeps what
+     * each came to across every statement counted here.
+     */
+    private static long partsAt(Shared shared, Proposition stated,
+                                StatementReading<Long> again) {
         // A statement held as how it is written out is one part until it is written out, and is
         // counted against the figure then, as the step that writes it out concludes it.
         if (stated instanceof Proposition.OfTheWays) {
-            shared.parts.put(stated, 1L);
             return 1;
         }
         // Its parts, and the statements a count or a sum in it is taken over, which a reader of the
         // number walks as much as a part.
-        // What each part comes to is kept in {@code shared.parts}, across every statement counted
-        // here, so the reading only hands each part to it.
-        long out = 1 + stated.sumOverParts(StatementReading.<Long>over((each, _) -> partsIn(each)))
-                + switch (stated) {
+        long out = 1 + stated.sumOverParts(again) + switch (stated) {
             case Proposition.Compared compared -> switch (compared.relation()) {
                 case Relation.Affine affine -> {
                     long held = 0;
                     for (Quantity each : affine.form().coefs().keySet()) {
-                        held += partsIn(each);
+                        held += partsIn(shared, each);
                     }
                     yield held;
                 }
                 case Relation.Ordered _ -> 0;
             };
             case Proposition.StringInside inside ->
-                    partsIn(inside.inner()) + partsIn(inside.outer());
+                    partsIn(shared, inside.inner()) + partsIn(shared, inside.outer());
             case Proposition.All _, Proposition.Any _, Proposition.OnAnApplication _,
                  Proposition.Some _, Proposition.SomeReachable _, Proposition.Always _,
                  Proposition.Truth _, Proposition.InCases _, Proposition.Present _,
@@ -439,36 +441,28 @@ public final class Conclusion {
                  Proposition.Carried _, Proposition.SoManyHold _,
                  Proposition.WhereItAnswers _, Proposition.OfTheWays _ -> 0;
         };
-        long kept = Math.min(out, shared.mostParts + 1L);
-        shared.parts.put(stated, kept);
-        return kept;
-    }
-
-    private long partsIn(List<Proposition> each) {
-        long out = 0;
-        for (Proposition one : each) {
-            out += partsIn(one);
-        }
-        return out;
+        return Math.min(out, shared.mostParts + 1L);
     }
 
     /** The parts the statements {@code quantity} is a count or a sum over come to. */
-    private long partsIn(Quantity quantity) {
+    private static long partsIn(Shared shared, Quantity quantity) {
         return switch (quantity) {
-            case Quantity.HowManyMeet(DecisionSubject _, Proposition each) -> partsIn(each);
+            case Quantity.HowManyMeet(DecisionSubject _, Proposition each) ->
+                    shared.parts.read(each);
             case Quantity.HowManyMeetAcross(DecisionSubject _, DecisionSubject _,
-                                            Proposition each) -> partsIn(each);
+                                            Proposition each) -> shared.parts.read(each);
             case Quantity.HowManyDifferentMeet different ->
-                    partsIn(different.meeting().statement());
-            case Quantity.HowManyHold(List<Proposition> each) -> partsIn(each);
-            case Quantity.SumOver(DecisionSubject _, Quantity each) -> partsIn(each);
+                    shared.parts.read(different.meeting().statement());
+            case Quantity.HowManyHold(List<Proposition> each) ->
+                    each.stream().mapToLong(shared.parts::read).sum();
+            case Quantity.SumOver(DecisionSubject _, Quantity each) -> partsIn(shared, each);
             // Its arguments are numbers of the input and other such answers, which hold no
             // statement, so there is nothing to count however many paths lead to them.
             case Quantity.WhatAnOperationAnswers _ -> 0;
-            case Quantity.APieceOf piece -> partsIn(piece.string());
-            case Quantity.ThePieceAt piece -> partsIn(piece.string());
+            case Quantity.APieceOf piece -> partsIn(shared, piece.string());
+            case Quantity.ThePieceAt piece -> partsIn(shared, piece.string());
             case Quantity.IsAmongThePieces among ->
-                    partsIn(among.value()) + partsIn(among.string());
+                    partsIn(shared, among.value()) + partsIn(shared, among.string());
             case DecisionAtom.OfTheInput _, DecisionAtom.OfAnAnswer _,
                  DecisionAtom.TakenOfAnAnswer _, DecisionAtom.ComputedOverAnAnswer _,
                  Quantity.OfABinding _, Quantity.TheKeptTotal _,

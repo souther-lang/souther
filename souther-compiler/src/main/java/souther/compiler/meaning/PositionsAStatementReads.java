@@ -214,17 +214,17 @@ public final class PositionsAStatementReads {
     /**
      * Each statement is read once, however many statements hold it, outside the applications of a
      * closure and again inside them: what a statement comes to there is not what it comes to here
-     * ({@link #insideAnApplication}), so there is a reading for each.
+     * ({@link #insideAnApplication}).
      */
-    private final StatementReading<Boolean> outsideAnApplication =
-            StatementReading.over(this::readsAt);
-    private final StatementReading<Boolean> inAnApplication = StatementReading.over(this::readsAt);
+    private final StatementReading.InContext<Boolean, Boolean> statements =
+            StatementReading.InContext.over(this::readsAt);
 
     private boolean reads(Proposition stated) {
-        return (insideAnApplication == 0 ? outsideAnApplication : inAnApplication).read(stated);
+        return statements.read(stated, insideAnApplication > 0);
     }
 
-    private boolean readsAt(Proposition stated, StatementReading<Boolean> again) {
+    private boolean readsAt(Proposition stated, boolean inAnApplication,
+                            StatementReading.InContext<Boolean, Boolean> again) {
         return switch (stated) {
             case Proposition.Always _ -> true;
             case Proposition.Carried _, Proposition.Unread _, Proposition.SomeReachable _ -> false;
@@ -250,12 +250,13 @@ public final class PositionsAStatementReads {
             case Proposition.LastToHold last -> reads(last.container()) && reads(last.position());
             case Proposition.OnAnApplication _ -> {
                 insideAnApplication++;
-                boolean read = stated.everyPart(inAnApplication);
+                boolean read = stated.everyPart(again.in(true));
                 insideAnApplication--;
                 yield read;
             }
             case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
-                 Proposition.SoManyHold _, Proposition.OfTheWays _ -> stated.everyPart(again);
+                 Proposition.SoManyHold _, Proposition.OfTheWays _ ->
+                    stated.everyPart(again.in(inAnApplication));
             case Proposition.Some some -> reads(some.container()) && reads(some.ofTheElement());
         };
     }

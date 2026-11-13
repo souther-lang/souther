@@ -187,7 +187,7 @@ public sealed interface Proposition {
      * {@link StatementReading} is one that asks each statement once, however many statements hold
      * it. {@link #partsHeld} is the owner's own.
      */
-    default boolean anyPart(StatementReading<Boolean> again) {
+    default boolean anyPart(EachOnce<Boolean> again) {
         for (Proposition part : partsHeld()) {
             if (again.read(part)) {
                 return true;
@@ -197,7 +197,7 @@ public sealed interface Proposition {
     }
 
     /** Whether {@code again} says yes of every part, going down each part once. */
-    default boolean everyPart(StatementReading<Boolean> again) {
+    default boolean everyPart(EachOnce<Boolean> again) {
         for (Proposition part : partsHeld()) {
             if (!again.read(part)) {
                 return false;
@@ -207,14 +207,14 @@ public sealed interface Proposition {
     }
 
     /** {@code again} asked of each part, each once, in the order the parts are kept. */
-    default void eachPart(StatementReading<?> again) {
+    default void eachPart(EachOnce<?> again) {
         for (Proposition part : partsHeld()) {
             again.read(part);
         }
     }
 
     /** What {@code again} comes to of the parts, each part counted as often as it is held. */
-    default long sumOverParts(StatementReading<Long> again) {
+    default long sumOverParts(EachOnce<Long> again) {
         long sum = 0;
         for (Proposition part : partsHeld()) {
             sum += again.read(part);
@@ -224,7 +224,7 @@ public sealed interface Proposition {
 
     /** What {@code again} comes to of each part, in the order the parts are kept: for a reading
      *  that makes a statement of what it comes to of the parts. */
-    default <R> List<R> overParts(StatementReading<R> again) {
+    default <R> List<R> overParts(EachOnce<R> again) {
         List<Proposition> parts = partsHeld();
         List<R> out = new ArrayList<>(parts.size());
         for (Proposition part : parts) {
@@ -237,7 +237,7 @@ public sealed interface Proposition {
      * What {@code again} comes to of the parts, put together one after another in the order they
      * are kept from {@code none}: for a reading whose answer for a statement is made of its parts'.
      */
-    default <R> R foldParts(R none, BinaryOperator<R> together, StatementReading<R> again) {
+    default <R> R foldParts(R none, BinaryOperator<R> together, EachOnce<R> again) {
         R out = none;
         for (Proposition part : partsHeld()) {
             out = together.apply(out, again.read(part));
@@ -1352,39 +1352,36 @@ public sealed interface Proposition {
          * said of that node as it stands, and its containers are the ones spelled.
          */
         public static boolean quantifiesOver(DecisionSubject container, Proposition stated) {
-            return quantifiesOverInside(container, stated, List.of());
+            return StatementReading.InContext.<List<TermPath>, Boolean>over((each, rebound,
+                    again) -> quantifiesOverAt(container, each, rebound, again))
+                    .read(stated, List.of());
         }
 
-        /** {@link #quantifiesOver}, inside searches written of each of {@code rebound}. */
-        private static boolean quantifiesOverInside(DecisionSubject container, Proposition stated,
-                                                    List<TermPath> rebound) {
+        /** {@link #quantifiesOver}, of {@code stated} inside searches written of each of
+         *  {@code rebound}. */
+        private static boolean quantifiesOverAt(
+                DecisionSubject container, Proposition stated, List<TermPath> rebound,
+                StatementReading.InContext<List<TermPath>, Boolean> again) {
             return switch (stated) {
                 case Some some -> (some.container.equals(container)
                         && !reboundBy(some.container, rebound))
-                        || quantifiesOverInside(container, some.ofTheElement, rebound);
-                case All all -> all.parts().stream()
-                        .anyMatch(part -> quantifiesOverInside(container, part, rebound));
-                case Any any -> any.parts().stream()
-                        .anyMatch(part -> quantifiesOverInside(container, part, rebound));
+                        || again.read(some.ofTheElement, rebound);
+                case All _, Any _, OnAnApplication _, SoManyHold _ ->
+                        stated.anyPart(again.in(rebound));
                 case SomeReachable reached -> {
                     List<TermPath> inside = rebound;
                     if (reached.startsBelowWhereItWasWritten()) {
                         inside = new ArrayList<>(rebound);
                         inside.add(reached.writtenAt());
                     }
-                    yield quantifiesOverInside(container, reached.atANode(), inside)
+                    yield again.read(reached.atANode(), inside)
                             || reached.noneBelow()
-                                    .filter(each -> quantifiesOverInside(container, each, rebound))
+                                    .filter(each -> again.read(each, rebound))
                                     .isPresent();
                 }
-                case OnAnApplication applied -> applied.each().stream()
-                        .anyMatch(each -> quantifiesOverInside(container, each, rebound));
-                case SoManyHold counted -> counted.statements().stream()
-                        .anyMatch(each -> quantifiesOverInside(container, each, rebound));
-                case OfTheWays ways -> quantifiesOverInside(container, ways.written(), rebound);
-                case WhereItAnswers where ->
-                        quantifiesOverInside(container, where.answers(), rebound)
-                                || quantifiesOverInside(container, where.states(), rebound);
+                case OfTheWays ways -> again.read(ways.written(), rebound);
+                case WhereItAnswers where -> again.read(where.answers(), rebound)
+                        || again.read(where.states(), rebound);
                 case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
                      SameValue _, StringInside _, LastToHold _, Carried _, Unread _ -> false;
             };
@@ -2563,17 +2560,23 @@ public sealed interface Proposition {
      * by side where the part that may answer nothing stands inside it.
      */
     public static Proposition whereItAnswersAtAll(Proposition stated) {
+        return StatementReading.<Optional<Proposition>>over(Proposition::answeredAtAllAt)
+                .read(stated).orElse(null);
+    }
+
+    private static Optional<Proposition> answeredAtAllAt(
+            Proposition stated, StatementReading<Optional<Proposition>> again) {
         if (!holdsAnAnswering(stated)) {
-            return null;
+            return Optional.empty();
         }
         // Where it answers may be written as a part and its denial side by side, which holds
         // where the part answers either way.
         if (stated instanceof WhereItAnswers(Proposition answers, Proposition states, Spelling _)) {
-            Proposition inside = whereItAnswersAtAll(states);
-            return inside == null ? whereItHolds(answers)
-                    : all(List.of(whereItHolds(answers), inside));
+            Optional<Proposition> inside = again.read(states);
+            return Optional.of(inside.isEmpty() ? whereItHolds(answers)
+                    : all(List.of(whereItHolds(answers), inside.get())));
         }
-        return any(List.of(whereItHolds(stated), whereItHolds(stated.denied())));
+        return Optional.of(any(List.of(whereItHolds(stated), whereItHolds(stated.denied()))));
     }
 
     /**
@@ -2585,17 +2588,21 @@ public sealed interface Proposition {
      * the rows it answers on — never every row, where something in it answers nothing.
      */
     public static Proposition whereItHolds(Proposition stated) {
+        return StatementReading.<Proposition>over(Proposition::whereItHoldsAt).read(stated);
+    }
+
+    private static Proposition whereItHoldsAt(Proposition stated,
+                                              StatementReading<Proposition> again) {
         if (!holdsAnAnswering(stated)) {
             return stated;
         }
         return switch (stated) {
             case WhereItAnswers(Proposition answers, Proposition states, Spelling _) ->
-                    all(List.of(whereItHolds(answers), whereItHolds(states)));
-            case All all -> all(all.parts().stream().map(Proposition::whereItHolds).toList());
-            case Any any -> any(any.parts().stream().map(Proposition::whereItHolds).toList());
-            case OnAnApplication applied -> onAnApplication(applied.each().stream()
-                    .map(Proposition::whereItHolds).toList());
-            case OfTheWays ways -> whereItHolds(ways.written());
+                    all(List.of(again.read(answers), again.read(states)));
+            case All _ -> all(stated.overParts(again));
+            case Any _ -> any(stated.overParts(again));
+            case OnAnApplication _ -> onAnApplication(stated.overParts(again));
+            case OfTheWays ways -> again.read(ways.written());
             // What one of these holds of is read on every row, by its constructor.
             case SoManyHold _, Some _, SomeReachable _ -> throw new IllegalStateException(
                     "a count or a quantifier is of statements answering on every row: " + stated);
