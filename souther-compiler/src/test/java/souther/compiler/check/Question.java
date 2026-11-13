@@ -731,8 +731,7 @@ enum Question {
     NUMERIC_RESULT("what number it computes, and where it answers it") {
         @Override
         boolean asksOf(Stdlib stdlib, Stdlib.Signature signature) {
-            Type number = BinaryElaborator.exactlyReadable(signature.result())
-                    ? signature.result() : NumericAnswers.in(signature.result());
+            Type number = ArithmeticAnswers.in(signature.result());
             return number != null && signature.params().size() >= 2
                     && number.equals(signature.params().get(0))
                     && number.equals(signature.params().get(1));
@@ -777,6 +776,10 @@ enum Question {
      * anything. {@code String.toInt} answers a number and is asked which representation reads it,
      * and the answer is that none does.
      *
+     * <p>A number is one a statement of arithmetic can be about ({@link ArithmeticAnswers}), which
+     * is wider than one a term can stand for: {@code Rational.fromInt} answers a number on no
+     * carrier, is read as a form of its argument, and is in range for that reason.
+     *
      * <p>Wider than what may be declared. A term is held to a result that is a bare number
      * (held by {@link OperationFactBinder}), because what stands at the path a term names is the
      * union and which case it is in is not something such an account has room for. The two ranges
@@ -793,7 +796,7 @@ enum Question {
             // declared to answer a string is asked which representation reads the number it
             // answers, and the range picks up operations the subject is not about.
             return signature.params().size() == 1
-                    && (NumericAnswers.in(signature.result()) != null
+                    && (ArithmeticAnswers.in(signature.result()) != null
                             || (DischargeRules.resultIsElementOf(signature, 0)
                                     && NumericAnswers.answerIsLeftToTheCall(signature.result())));
         }

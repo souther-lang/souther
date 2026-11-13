@@ -201,20 +201,27 @@ final class DischargeRules {
     static Set<String> formNames(Stdlib stdlib) {
         Set<String> names = new LinkedHashSet<>();
         for (ValueName operation : facts().answersAFormOfItsArguments()) {
-            if (answersOnACarrier(stdlib, operation)) {
+            if (isCarried(stdlib, operation, facts().answersAFormOfItsArguments(operation))) {
                 names.add(operation.toString());
             }
         }
         return names;
     }
 
-    /** Whether what {@code operation} answers counts to a number on a carrier. */
-    private static boolean answersOnACarrier(Stdlib stdlib, ValueName operation) {
+    /**
+     * Whether {@code form}, which {@code operation} answers, is over counts: what it answers and
+     * every argument it is written over count on a carrier. A form with a part that counts on none
+     * has no coordinate for this check to name, whichever part that is.
+     */
+    private static boolean isCarried(Stdlib stdlib, ValueName operation,
+                                     LinearForm<DeclaredArgument> form) {
         if (!(operation instanceof ValueName.Stdlib.Operation library)) {
             return false;
         }
         Stdlib.Entry entry = stdlib.entry(library);
-        return entry != null && Carrier.countsToANumber(entry.signature().result());
+        return entry != null && Carrier.countsToANumber(entry.signature().result())
+                && form.coefs().keySet().stream()
+                        .allMatch(each -> Carrier.countsToANumber(each.stands()));
     }
 
     /** Those of them the building table has, by name, for the test that holds each to a construction

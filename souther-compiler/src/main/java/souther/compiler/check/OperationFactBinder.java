@@ -1398,11 +1398,7 @@ final class OperationFactBinder {
     private static NumericResult<DeclaredArgument> holdNumericResult(
             Stdlib stdlib, CompleteSignature declaration, NumericResult<ArgumentRef> rule) {
         DeclaredOperation operation = declaration.declaring();
-        // What the operation computes is a statement about its arguments, which a number on no
-        // carrier has as much as one on a carrier does. Where its answer is one of those it is that
-        // number, and no reader that needs the answer on a carrier is handed it here.
-        Type answers = BinaryElaborator.exactlyReadable(declaration.result())
-                ? declaration.result() : NumericAnswers.in(declaration.result());
+        Type answers = ArithmeticAnswers.in(declaration.result());
         List<Arithmetic.Reads> reads = rule.computes().reads();
         if (declaration.params().size() != reads.size()) {
             throw new IllegalStateException(operation + " takes " + declaration.params().size()
@@ -1449,6 +1445,11 @@ final class OperationFactBinder {
                 }
             }
         }
+        // The other case is read as a comparison of this argument with a number, in a tree whose
+        // places are on carriers, so the argument is held to a number a carrier counts. An
+        // operation answering a Rational as one case of a union is refused here, loudly, until the
+        // reader of that comparison reads one over Rationals; it is not given a statement some
+        // reader would take for a comparison it cannot make.
         NumericResult.TheOtherCaseWhen<DeclaredArgument> unless = rule.unless() == null ? null
                 : new NumericResult.TheOtherCaseWhen<>(
                         holdToTheDeclaration(declaration, rule.unless().argument(), null,
