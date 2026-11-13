@@ -56,9 +56,16 @@ final class SharedReads<C, E, M, R> {
         C inputs();
 
         /**
-         * Whether the inputs as they stand are the inputs {@code then} were, those of the
-         * aggregates being read only where {@code askedAggregates}, and what an input holds only
-         * where the reading {@code consulted} what it holds.
+         * Whether {@code now} are the inputs {@code then} were, those of the aggregates being read
+         * only where {@code askedAggregates}, and what an input holds only where the reading
+         * {@code consulted} what it holds.
+         */
+        boolean sameInputs(C then, C now, boolean askedAggregates, int consulted);
+
+        /**
+         * The same of the inputs as they stand, without taking them: for a reading that is
+         * compared with one reading kept, which is read from the reader and ends where the first
+         * input differs.
          */
         boolean sameInputsNow(C then, boolean askedAggregates, int consulted);
 
@@ -154,15 +161,31 @@ final class SharedReads<C, E, M, R> {
             return null;
         }
         int hash = reads.hashButForWhatIsHanded();
+        // The first reading to compare is compared with the reader as it stands. Once there is a
+        // second, the inputs are taken once and each is compared with them: reading every input
+        // of the reader again for each of many readings costs more than taking them once.
+        C now = null;
+        boolean first = true;
         for (Held<C, M, R> one : before) {
             if (one.hash() != hash) {
                 continue;
             }
+            boolean sameInputs;
+            if (first) {
+                first = false;
+                sameInputs = scene.sameInputsNow(one.inputs(), one.askedAggregates(),
+                        one.consulted());
+            } else {
+                if (now == null) {
+                    now = scene.inputs();
+                }
+                sameInputs = scene.sameInputs(one.inputs(), now, one.askedAggregates(),
+                        one.consulted());
+            }
             // The key last: it is the dear comparison, a structural one of the program's own
             // nodes, and the state of the reader tells most of the readings kept at a node apart
             // before it is asked.
-            if (scene.sameInputsNow(one.inputs(), one.askedAggregates(), one.consulted())
-                    && elements.agrees(one.footprint()) && reads.handsAsAsked(one.asked())
+            if (sameInputs && elements.agrees(one.footprint()) && reads.handsAsAsked(one.asked())
                     && reads.sameButForWhatIsHanded(one.at())
                     && Objects.equals(one.key(), key)) {
                 return new Found<>(one.result(), one.footprint(), one.met(), one.asked(), reads,

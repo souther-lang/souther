@@ -11810,6 +11810,13 @@ final class Pullback {
         }
 
         @Override
+        public boolean sameInputs(ReadingState.Inputs then, ReadingState.Inputs now,
+                                  boolean askedAggregates, int consulted) {
+            return READING_STATE.sameInputsBut(then, now, askedAggregates, null,
+                    CONTENT_ASKED[consulted]);
+        }
+
+        @Override
         public boolean sameInputsNow(ReadingState.Inputs then, boolean askedAggregates,
                                      int consulted) {
             return READING_STATE.sameInputsNow(then, Pullback.this, askedAggregates, null,
@@ -15065,10 +15072,27 @@ final class Pullback {
         Trial told = underTrial.peek();
         Object said = told == null ? null : told.markBesidesTheRemainders();
         List<ReadingTaken<R>> before = table.get(node);
+        // The first reading at this place is compared with the state as it stands; once there is
+        // a second, the inputs are taken, as a reading that is not found keeps them anyway.
+        ReadingState.Inputs inputs = null;
+        boolean first = true;
         for (ReadingTaken<R> each : before == null ? List.<ReadingTaken<R>>of() : before) {
-            if (each.at() == at && READING_STATE.sameInputsNow(each.inputs(), this, false,
-                            UNCONSULTED[each.consulted()], CONTENT_ASKED[each.consulted()])
-                    && elementsMet.agrees(each.footprint())
+            if (each.at() != at) {
+                continue;
+            }
+            boolean sameInputs;
+            if (first) {
+                first = false;
+                sameInputs = READING_STATE.sameInputsNow(each.inputs(), this, false,
+                        UNCONSULTED[each.consulted()], CONTENT_ASKED[each.consulted()]);
+            } else {
+                if (inputs == null) {
+                    inputs = READING_STATE.inputsOf(this);
+                }
+                sameInputs = READING_STATE.sameInputsBut(each.inputs(), inputs, false,
+                        UNCONSULTED[each.consulted()], CONTENT_ASKED[each.consulted()]);
+            }
+            if (sameInputs && elementsMet.agrees(each.footprint())
                     && Objects.equals(each.said(), said)) {
                 elementsMet.takes(each.footprint());
                 consulted |= each.consulted();
@@ -15077,7 +15101,9 @@ final class Pullback {
                 return each.result();
             }
         }
-        ReadingState.Inputs inputs = READING_STATE.inputsOf(this);
+        if (inputs == null) {
+            inputs = READING_STATE.inputsOf(this);
+        }
         List<ReadingTaken<R>> entries = table.computeIfAbsent(node, _ -> new ArrayList<>());
         List<Object[]> guards = READING_STATE.guardsOf(this);
         List<Map<Core, Core>> remainders = told == null ? null : told.remaindersRead();

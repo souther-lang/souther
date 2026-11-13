@@ -53,6 +53,14 @@ class AReadingIsKeptToBeTakenAgainOnlyWhereItWouldBeTheSameReadingTest {
         }
 
         @Override
+        public boolean sameInputs(Integer then, Integer now, boolean askedAggregates,
+                                  int consulted) {
+            askedAggregatesWhenCompared = askedAggregates;
+            consultedWhenCompared = consulted;
+            return then.equals(now);
+        }
+
+        @Override
         public boolean sameInputsNow(Integer then, boolean askedAggregates, int consulted) {
             askedAggregatesWhenCompared = askedAggregates;
             consultedWhenCompared = consulted;
@@ -167,6 +175,19 @@ class AReadingIsKeptToBeTakenAgainOnlyWhereItWouldBeTheSameReadingTest {
     void whatItDependsOnStandingOtherwiseIsReadAgain() {
         read("key");
         scene.input++;
+        read("key");
+
+        assertEquals(2, made);
+    }
+
+    @Test
+    void aReadingKeptAfterAnotherAtTheSamePlaceIsTakenWhereItsInputsStandAgain() {
+        read("key");
+        scene.input++;
+        read("key");
+        scene.input = 0;
+        read("key");
+        scene.input = 1;
         read("key");
 
         assertEquals(2, made);
