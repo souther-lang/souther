@@ -81,7 +81,7 @@ class WhatANameWrapsIsReadOffTheDeclarationOnceItsNamesResolveTest {
         Compilation c = compiling(NEWTYPE);
         assertEquals(Type.INT, wraps(c), "an Int under a name to begin with");
 
-        edit(c, MOVED);
+        c = edit(c, MOVED);
 
         assertEquals(Type.INT, wraps(c), "and the same Int where it now stands");
     }
@@ -91,7 +91,7 @@ class WhatANameWrapsIsReadOffTheDeclarationOnceItsNamesResolveTest {
     void writingTheOneValueAsAnotherTypeChangesWhatItWraps() {
         Compilation c = compiling(NEWTYPE);
 
-        edit(c, WRAPPING_SOMETHING_ELSE);
+        c = edit(c, WRAPPING_SOMETHING_ELSE);
 
         assertEquals(Type.DECIMAL, wraps(c), "what it wraps is what its one value was written as");
     }
@@ -194,12 +194,13 @@ class WhatANameWrapsIsReadOffTheDeclarationOnceItsNamesResolveTest {
         return c;
     }
 
-    private static void edit(Compilation c, String source) {
-        Map<String, String> edited = new LinkedHashMap<>();
-        edited.put("prices.sou", source);
-        c.update(edited, Set.of(), TestDay.DATE);
-        c.answerEverything();
-        assertTrue(c.db().allReports().isEmpty(), "the edited workspace compiles: "
-                + c.db().allReports());
+    private static Compilation edit(Compilation c, String source) {
+        Map<String, String> sources = new LinkedHashMap<>();
+        sources.put("prices.sou", source);
+        c.update(sources, Set.of(), TestDay.DATE);
+        Compilation edited = ACompiledModel.compiles(c);
+        assertTrue(edited.db().allReports().isEmpty(), "the edited workspace compiles: "
+                + edited.db().allReports());
+        return edited;
     }
 }

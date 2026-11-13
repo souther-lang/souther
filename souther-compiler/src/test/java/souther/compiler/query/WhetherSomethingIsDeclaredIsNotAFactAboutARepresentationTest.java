@@ -82,7 +82,7 @@ class WhetherSomethingIsDeclaredIsNotAFactAboutARepresentationTest {
         edited.put("prices.sou", MOVED);
         edited.put("cart.sou", IMPORTING);
         c.update(edited, Set.of(), TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(), "the edited workspace compiles: "
                 + c.db().allReports());
 

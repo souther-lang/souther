@@ -86,7 +86,7 @@ class ANameAFailedImportStandsInForIsReportedOnceTest {
 
     private static List<Diagnostic> diagnostics(String... sources) {
         Compilation compilation = Compilation.ofSources(List.of(sources), ModulePath.EMPTY);
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1507"), compilation);
         List<Diagnostic> found = new ArrayList<>();
         for (Located report : compilation.errors()) {
             found.add(report.diagnostic());

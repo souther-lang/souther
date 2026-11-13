@@ -103,7 +103,7 @@ class WhichBindingEachFieldIsClosesOverWhatADeclarationSpreadsTest {
         Compilation c = compiling(SPREADING);
         Map<String, BindingId> before = bindings(c, LINE);
 
-        edit(c, ANOTHER_TYPE);
+        c = edit(c, ANOTHER_TYPE);
 
         assertEquals(before, bindings(c, LINE),
                 "a field's type is not what a binding is");
@@ -124,7 +124,7 @@ class WhichBindingEachFieldIsClosesOverWhatADeclarationSpreadsTest {
         assertEquals(List.of("qty", "cents"), List.copyOf(before.keySet()),
                 "what the declaration writes, then what it spreads in");
 
-        edit(c, REORDERED);
+        c = edit(c, REORDERED);
 
         assertEquals(before, bindings(c, LINE),
                 "the spread written after the field it takes is the same closure");
@@ -140,7 +140,7 @@ class WhichBindingEachFieldIsClosesOverWhatADeclarationSpreadsTest {
         assertEquals(0, before.get("qty").ordinal(), "written first");
         assertEquals(1, before.get("note").ordinal(), "and written second");
 
-        edit(c, TWO_OF_ITS_OWN_SWAPPED);
+        c = edit(c, TWO_OF_ITS_OWN_SWAPPED);
 
         assertEquals(1, bindings(c, LINE).get("qty").ordinal(),
                 "which field of its owner a field is, is what the order decides");
@@ -153,7 +153,7 @@ class WhichBindingEachFieldIsClosesOverWhatADeclarationSpreadsTest {
         Compilation c = compiling(SPREADING);
         Map<String, BindingId> before = bindings(c, LINE);
 
-        edit(c, MOVED);
+        c = edit(c, MOVED);
 
         assertEquals(before, bindings(c, LINE),
                 "a binding is not where a declaration stands");
@@ -208,12 +208,13 @@ class WhichBindingEachFieldIsClosesOverWhatADeclarationSpreadsTest {
         return c;
     }
 
-    private static void edit(Compilation c, String source) {
-        Map<String, String> edited = new LinkedHashMap<>();
-        edited.put("prices.sou", source);
-        c.update(edited, Set.of(), TestDay.DATE);
-        c.answerEverything();
-        assertTrue(c.db().allReports().isEmpty(), "the edited workspace compiles: "
-                + c.db().allReports());
+    private static Compilation edit(Compilation c, String source) {
+        Map<String, String> sources = new LinkedHashMap<>();
+        sources.put("prices.sou", source);
+        c.update(sources, Set.of(), TestDay.DATE);
+        Compilation edited = ACompiledModel.compiles(c);
+        assertTrue(edited.db().allReports().isEmpty(), "the edited workspace compiles: "
+                + edited.db().allReports());
+        return edited;
     }
 }

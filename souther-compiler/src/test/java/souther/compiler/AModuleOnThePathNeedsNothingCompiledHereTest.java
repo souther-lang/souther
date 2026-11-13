@@ -194,7 +194,7 @@ class AModuleOnThePathNeedsNothingCompiledHereTest {
      *  is what that report says is not decided: it is said once, as that. */
     @Test
     void aModuleCompiledHereAndOnThePathIsSaidOnlyAsThat() {
-        List<Object> said = everythingSaid(List.of(COMMON, """
+        List<Object> said = everythingSaid(List.of("E1503"), List.of(COMMON, """
                         module app.user
                         import lib.x ( make )
                         behavior go : (s: String) -> app.common.Tag
@@ -218,7 +218,7 @@ class AModuleOnThePathNeedsNothingCompiledHereTest {
                 behavior shout : (s: String) -> String
                 let shout (s) = s
                 """;
-        List<Object> said = everythingSaid(List.of("""
+        List<Object> said = everythingSaid(List.of("E1511"), List.of("""
                         module app.common exposing ( Other )
                         data Other = String
                         """, """
@@ -234,9 +234,10 @@ class AModuleOnThePathNeedsNothingCompiledHereTest {
 
     /** Every report any question of the compilation makes, every question asked: not only what a
      *  build reads before it stops. */
-    private static List<Object> everythingSaid(List<String> sources, ModulePath path) {
-        Compilation compilation = Compilation.ofSources(sources, path);
-        compilation.answerEverything();
+    private static List<Object> everythingSaid(List<String> codes, List<String> sources,
+            ModulePath path) {
+        Compilation compilation =
+                ACompiledModel.refusedWith(codes, Compilation.ofSources(sources, path));
         List<Object> out = new ArrayList<>();
         for (Located found : compilation.errors()) {
             out.add(found.diagnostic().said());

@@ -121,7 +121,7 @@ class WhatShipsCarriesTheDeclarationsAndWhatRunsDoesNotTest {
                 .ask(new Output.Evaluated("shop.prices", ArmObservation.OMIT));
 
         compilation.update(workspace(REWORDED), Set.of(), TestDay.DATE);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         assertFalse(Arrays.equals(ships, published(compilation)),
                 "the classes that ship carry the declaration as it is now written");

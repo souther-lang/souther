@@ -329,7 +329,7 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
                 behavior step = charged >-> double
                 """);
 
-        List<Object> said = saidCompiling(USES_ONLY_INC, path);
+        List<Object> said = saidCompiling(List.of("E1510", "E1510"), USES_ONLY_INC, path);
 
         assertTrue(said.stream().anyMatch(each ->
                         each instanceof ModuleMessage.ItWasBuiltAgainstAnotherLinkage b
@@ -445,9 +445,10 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
     }
 
     /** Every report a compile of {@code app} against {@code path} says, as what each says. */
-    private static List<Object> saidCompiling(String app, Map<String, ClassFileImage> path) {
-        Compilation compilation = Compilation.ofSources(List.of(app), ModulePath.of(path));
-        compilation.answerEverything();
+    private static List<Object> saidCompiling(List<String> codes, String app,
+            Map<String, ClassFileImage> path) {
+        Compilation compilation = ACompiledModel.refusedWith(codes,
+                Compilation.ofSources(List.of(app), ModulePath.of(path)));
         List<Object> said = new ArrayList<>();
         for (Located found : compilation.errors()) {
             said.add(found.diagnostic().said());
@@ -505,7 +506,7 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
         path.putAll(Compiler.compileModules(List.of(D_TAKING_ONE, C_ON_ONE)));
         path.putAll(Compiler.compile(D_TAKING_TWO));
 
-        List<Object> said = saidCompiling(USES_ONLY_INC, path);
+        List<Object> said = saidCompiling(List.of("E1510", "E1510"), USES_ONLY_INC, path);
 
         assertTrue(said.stream().anyMatch(each ->
                         each instanceof ModuleMessage.ItWasBuiltAgainstAnotherLinkage c
@@ -540,7 +541,7 @@ class AStageAnotherModuleDeclaresBringsWhatItRequiresTest {
                 behavior bonus : (n: Int) -> Int
                 """));
 
-        List<Object> said = saidCompiling(USES_ONLY_INC, path);
+        List<Object> said = saidCompiling(List.of("E1506", "E1506"), USES_ONLY_INC, path);
 
         assertTrue(said.stream().anyMatch(each ->
                         each instanceof ModuleMessage.ItWasBuiltRequiringWhatTheModuleDoesNotDeclare c

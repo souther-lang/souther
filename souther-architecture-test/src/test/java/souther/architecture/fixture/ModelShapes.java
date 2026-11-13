@@ -8,6 +8,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -36,6 +37,11 @@ public final class ModelShapes {
         public static Compilation refusedWith(List<String> codes, Compilation model) {
             model.answerEverything();
             assertEquals(codes, model.errors());
+            return model;
+        }
+
+        public static Compilation notCompiled(Compilation model, String reason) {
+            Objects.requireNonNull(reason);
             return model;
         }
     }
@@ -448,12 +454,122 @@ public final class ModelShapes {
         }
     }
 
-    /** Reads the report of a model that was handed in, which was asked about where it was made. */
-    public static final class HandedIn {
+    /** Reads the report of a model a caller hands in, having asked about it. */
+    public static final class ParameterHandedByACaller {
 
-        private HandedIn() { }
+        private ParameterHandedByACaller() { }
+
+        private static AdequacyReport reportOf(Compilation model) {
+            return AdequacyReport.of(model);
+        }
+
+        public static AdequacyReport read(String source) {
+            return reportOf(TheDoor.answered(source));
+        }
+    }
+
+    /** Reads the report of a model nobody hands it, as a method the test engine runs does. */
+    public static final class ParameterNobodyPasses {
+
+        private ParameterNobodyPasses() { }
 
         public static AdequacyReport read(Compilation model) {
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Makes a lambda that would ask about the model, and never runs it. */
+    public static final class LambdaMadeNotRun {
+
+        private LambdaMadeNotRun() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            Runnable later = () -> TheDoor.compiles(model);
+            Objects.requireNonNull(later);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Hands an asked-about model new sources and reads it. */
+    public static final class UpdatedAfterTheLook {
+
+        private UpdatedAfterTheLook() { }
+
+        public static AdequacyReport read(String source, Map<String, String> other) {
+            Compilation model = TheDoor.answered(source);
+            model.update(other, Set.of(), LocalDate.MIN);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Hands an asked-about model a day and reads it. */
+    public static final class MutatedAfterTheLook {
+
+        private MutatedAfterTheLook() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            model.writtenOn(LocalDate.MIN);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Hands a model new sources, and asks about it as it then is. */
+    public static final class UpdatedThenAsked {
+
+        private UpdatedThenAsked() { }
+
+        public static AdequacyReport read(String source, Map<String, String> other) {
+            Compilation model = TheDoor.answered(source);
+            model.update(other, Set.of(), LocalDate.MIN);
+            TheDoor.compiles(model);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Reads the model through a second variable it was copied to, having asked through the first. */
+    public static final class AliasOfAnAskedModel {
+
+        private AliasOfAnAskedModel() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            Compilation alias = model;
+            TheDoor.compiles(model);
+            return AdequacyReport.of(alias);
+        }
+    }
+
+    /** Reads what the model says of its warnings without having asked about it. */
+    public static final class WarningsOfAnUnaskedModel {
+
+        private WarningsOfAnUnaskedModel() { }
+
+        public static boolean read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            return model.warnings().isEmpty();
+        }
+    }
+
+    /** Says a model is read without compiling it, in a method that is not on the list. */
+    public static final class NotCompiledOffTheList {
+
+        private NotCompiledOffTheList() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.notCompiled(Compilation.ofSource(source, "Main"), "no");
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Says a model is read without compiling it, in a method that is on the list. */
+    public static final class NotCompiledOnTheList {
+
+        private NotCompiledOnTheList() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.notCompiled(Compilation.ofSource(source, "Main"), "too long");
             return AdequacyReport.of(model);
         }
     }

@@ -84,12 +84,22 @@ class SemanticProbeBenchmark {
                 .writtenOn(WrittenOn.DAY);
         resolve(workspace, module);
 
-        double settled = medianMillis(round -> {
+        // Warmed for as many rounds as it is measured. The workspace is held to compile once its
+        // round has been timed, so that answering every report is no part of a timing.
+        List<Long> settledNanos = new ArrayList<>();
+        for (int round = 0; round < ROUNDS * 2; round++) {
             Map<String, String> now = new LinkedHashMap<>(byId);
             now.put(edited, byId.get(edited) + finished(round));
+            long began = System.nanoTime();
             workspace.update(now, Set.of(), WrittenOn.DAY);
             resolve(workspace, module);
-        }, ROUNDS);
+            long took = System.nanoTime() - began;
+            ACompiledModel.compiles(workspace);
+            if (round >= ROUNDS) {
+                settledNanos.add(took);
+            }
+        }
+        double settled = median(settledNanos);
 
         SemanticProbe kept = new SemanticProbe();
         double probed = medianMillis(round -> through(kept, byId, edited, module, round), ROUNDS);

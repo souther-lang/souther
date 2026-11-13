@@ -298,7 +298,7 @@ class WhetherADeclarationWearsOneValueWasSettledWhenItWasIndexedTest {
         Map<String, String> edited = new LinkedHashMap<>();
         edited.put("prices.sou", source);
         c.update(edited, Set.of(), TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(), "the edited workspace compiles: "
                 + c.db().allReports());
     }

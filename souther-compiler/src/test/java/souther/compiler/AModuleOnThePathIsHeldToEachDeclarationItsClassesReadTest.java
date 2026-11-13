@@ -61,10 +61,13 @@ class AModuleOnThePathIsHeldToEachDeclarationItsClassesReadTest {
         return path;
     }
 
-    /** Every report a compile of {@code app} against {@code path} says, as what each says. */
+    /**
+     * Every report a compile of {@code app} against {@code path} says, as what each says; the
+     * compile is refused once, for the one thing that moved.
+     */
     private static List<Object> said(String app, Map<String, ClassFileImage> path) {
-        Compilation compilation = Compilation.ofSources(List.of(app), ModulePath.of(path));
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.refusedWith(List.of("E1510"),
+                Compilation.ofSources(List.of(app), ModulePath.of(path)));
         List<Object> out = new ArrayList<>();
         for (Located found : compilation.errors()) {
             out.add(found.diagnostic().said());
@@ -292,14 +295,14 @@ class AModuleOnThePathIsHeldToEachDeclarationItsClassesReadTest {
     void aModuleCompiledHereIsNotOneAModuleOnThePathIsHeldTo() {
         Map<String, ClassFileImage> path = Compiler.compileModules(List.of(B_CALLS_TWICE),
                 ModulePath.of(Compiler.compile(C)));
-        Compilation compilation = Compilation.ofSources(List.of("""
-                module lib.c exposing ( twice, thrice )
-                behavior twice : (n: Int) -> String
-                let twice (n) = "two"
-                behavior thrice : (n: Int) -> Int
-                let thrice (n) = n * 3
-                """, USES_ONLY_INC), ModulePath.of(path));
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.refusedWith(List.of("E1511"),
+                Compilation.ofSources(List.of("""
+                        module lib.c exposing ( twice, thrice )
+                        behavior twice : (n: Int) -> String
+                        let twice (n) = "two"
+                        behavior thrice : (n: Int) -> Int
+                        let thrice (n) = n * 3
+                        """, USES_ONLY_INC), ModulePath.of(path)));
         List<Object> said = new ArrayList<>();
         for (Located found : compilation.errors()) {
             said.add(found.diagnostic().said());

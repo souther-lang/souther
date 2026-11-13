@@ -950,7 +950,6 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
     private static Compilation warned(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

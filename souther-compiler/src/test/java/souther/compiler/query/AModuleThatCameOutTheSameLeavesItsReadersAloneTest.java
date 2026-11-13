@@ -83,10 +83,12 @@ class AModuleThatCameOutTheSameLeavesItsReadersAloneTest {
         Answer<Map<String, ClassFileImage>> before = compilation.db().ask(new Output.All());
 
         compilation.update(Map.of("a.sou", OTHERWISE), Set.of(), TestDay.DATE);
+        ACompiledModel.compiles(compilation);
         Answer<Map<String, ClassFileImage>> edited = compilation.db().ask(new Output.All());
         assertNotEquals(before.value(), edited.value(), "the edit reached the classes");
 
         compilation.update(Map.of("a.sou", SOURCE), Set.of(), TestDay.DATE);
+        ACompiledModel.compiles(compilation);
         Answer<Map<String, ClassFileImage>> undone = compilation.db().ask(new Output.All());
 
         assertNotSame(before, undone, "the generation ran again");

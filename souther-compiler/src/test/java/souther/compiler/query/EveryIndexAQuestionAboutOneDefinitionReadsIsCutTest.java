@@ -230,7 +230,7 @@ class EveryIndexAQuestionAboutOneDefinitionReadsIsCutTest {
 
             c.update(Map.of(ID, edit.source()), Set.of(), TestDay.DATE);
             c.measure(Adequacy.Asked.fullReport());
-            c.answerEverything();
+            ACompiledModel.refusedWith(edit.says(), c);
             assertEquals(edit.says(), codesFrom(c),
                     () -> "after " + edit + " the compiler said " + said(c));
 

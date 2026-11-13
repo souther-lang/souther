@@ -370,6 +370,7 @@ class ADateARuleLeavesFreeIsWrittenNearTheDayTest {
         AdequacyReport owedFirst = AdequacyReport.of(compilation);
         String saidFirst = owedFirst.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         compilation.writtenOn(DAYS.get(1));
+        ACompiledModel.compiles(compilation);
         List<List<LocalDate>> second = rows(compilation);
         AdequacyReport owedSecond = AdequacyReport.of(compilation);
         String saidSecond = owedSecond.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));

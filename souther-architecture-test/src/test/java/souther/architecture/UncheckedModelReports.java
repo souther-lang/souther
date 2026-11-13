@@ -19,20 +19,26 @@ import java.util.TreeSet;
  * without the model it read having been handed to the helper, which stops the test on an error or
  * says which errors the model is meant to be refused with. That is a fact about one value, and
  * about every way a method can run, so each model is followed through the method that makes it
- * ({@link ModelWalk}): through the local variable that holds it, through a field it is written into
- * and read out of, through the methods that make it, answer it, take it, read it or ask about it,
- * and through the ways a method can go, including the one into a handler.
+ * ({@link ModelWalk}): through the local variable that holds it and the variables it is copied
+ * to, through a field it is written into and read out of, through the methods that make it, answer
+ * it, take it, read it or ask about it, and through the ways a method can go, including the one
+ * into a handler.
  *
  * <p>A read counts where the model stands as asked about on every way to it, or is asked about on
  * every way out of the method after it, so that a test can read what a model has computed before
- * anything was answered and still be held to its compiling. A look at {@code errors()} written in
- * the test is not a look, because nothing says what was done with what it showed; the tests that
- * mean a model not to compile say so to the helper.
+ * anything was answered and still be held to its compiling. What was asked is not kept past what
+ * changes the model: handing it new sources, or a policy, or a measure, makes it a model that was
+ * not asked about. A lambda made with a model asks nothing until it is run, so making one asks
+ * nothing. A look at {@code errors()} written in the test is not a look, because nothing says what
+ * was done with what it showed; the tests that mean a model not to compile say so to the helper.
  *
  * <p>What is not followed is refused and not let through: a model whose origin cannot be placed is
- * one the test is not shown to have been asked about. What is asked of the other methods is found
- * by going round until nothing changes, and that is held to a number of rounds; a check that did
- * not settle says so and does not pass.
+ * one the test is not shown to have been asked about, and so is a model a method reads that nobody
+ * hands it, which is what a method run by the test engine is given. A method that reads a model
+ * without compiling it says so to the helper and is named in the list the check is given; no other
+ * method is let say so. What is asked of the other methods is found by going round until nothing
+ * changes, and that is held to a number of rounds; a check that did not settle says so and does
+ * not pass.
  */
 final class UncheckedModelReports {
 
@@ -43,9 +49,16 @@ final class UncheckedModelReports {
 
     private final String helper;
 
-    /** @param helper the class a test goes through to ask that a model compiles */
-    UncheckedModelReports(String helper) {
+    private final Set<String> exempt;
+
+    /**
+     * @param helper the class a test goes through to ask that a model compiles
+     * @param exempt the methods, as {@link AMethod} says them, that read a model they did not
+     *               compile and say so
+     */
+    UncheckedModelReports(String helper, Set<String> exempt) {
         this.helper = helper;
+        this.exempt = Set.copyOf(exempt);
     }
 
     /** What {@code classes} do with the models they read. */
@@ -67,7 +80,7 @@ final class UncheckedModelReports {
             }
         }
         ModelWalk.World world = new ModelWalk.World(helper, Set.copyOf(walks.keySet()),
-                Set.copyOf(written), Map.copyOf(captured));
+                Set.copyOf(written), Map.copyOf(captured), exempt);
         ModelWalk.Facts facts = ModelWalk.Facts.NONE;
         Map<ModelWalk, ModelWalk.Result> results = new LinkedHashMap<>();
         for (int round = 0; round < ROUNDS; round++) {
@@ -86,12 +99,19 @@ final class UncheckedModelReports {
     }
 
     private static Findings findings(Map<ModelWalk, ModelWalk.Result> results) {
+        Set<String> handed = new HashSet<>();
+        for (ModelWalk walk : results.keySet()) {
+            handed.addAll(walk.handedOn());
+        }
         Set<String> refused = new TreeSet<>();
         int asked = 0;
         for (Map.Entry<ModelWalk, ModelWalk.Result> each : results.entrySet()) {
+            ModelWalk walk = each.getKey();
             ModelWalk.Result result = each.getValue();
-            if (result.unasked > 0 || result.lost > 0) {
-                refused.add(AMethod.of(each.getKey().owner(), each.getKey().method()));
+            boolean nobodyHandsItIn = result.readsParameter.stream()
+                    .anyMatch(index -> !handed.contains(walk.key() + "#" + index));
+            if (result.unasked > 0 || result.lost > 0 || nobodyHandsItIn) {
+                refused.add(AMethod.of(walk.owner(), walk.method()));
             }
             if (result.asked > 0) {
                 asked++;

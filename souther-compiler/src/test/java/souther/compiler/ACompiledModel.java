@@ -8,6 +8,7 @@ import souther.compiler.query.Compilation;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
@@ -61,6 +62,24 @@ public final class ACompiledModel {
         }
         assertEquals(codes, refused,
                 codes.isEmpty() ? "the model compiles" : "the model is refused as meant");
+        return model;
+    }
+
+    /**
+     * {@code model}, answered in full, held to be refused with no error but those of
+     * {@code allowed}, as many times as it is. For a model whose rows are generated, so that how
+     * many of them are refused is not fixed, and what is fixed is what they can be refused with.
+     */
+    public static Compilation refusedOnlyWith(Set<String> allowed, Compilation model) {
+        List<String> refused;
+        try {
+            model.answerEverything();
+            refused = model.errors().stream().map(e -> e.diagnostic().code()).toList();
+        } catch (CompileException stopped) {
+            refused = stopped.diagnostics().stream().map(Diagnostic::code).toList();
+        }
+        assertEquals(List.of(), refused.stream().filter(code -> !allowed.contains(code)).toList(),
+                "the model is refused with nothing but " + allowed);
         return model;
     }
 

@@ -2,7 +2,6 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.Located;
 import souther.compiler.diag.Severity;
 import souther.compiler.query.Compilation;
 
@@ -10,7 +9,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * An invariant written as a call of the library says of the value what the law of the call says
@@ -24,16 +22,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatAnInvariantSaysOfItsValueIsHeldOfEveryValueOfItsTypeTest {
 
-    private record Row(String body, boolean owed) {}
+    /** What a body is owed, and the errors it is refused with when what it is owed is an error. */
+    private record Row(String body, boolean owed, List<String> refused) {
+        Row(String body, boolean owed) {
+            this(body, owed, List.of());
+        }
+    }
 
     private static final List<Row> ROWS = List.of(
             // A pattern of one length is that length, and of several is between the least and
             // the most of them.
             new Row("Digit(String.length(three.value) - 3)", false),
             new Row("Digit(3 - String.length(three.value))", false),
-            new Row("Digit(String.length(three.value) - 4)", true),
+            new Row("Digit(String.length(three.value) - 4)", true, List.of("E2010")),
             new Row("Digit(4 - String.length(three.value))", false),
-            new Row("Digit(2 - String.length(three.value))", true),
+            new Row("Digit(2 - String.length(three.value))", true, List.of("E2010")),
             new Row("Digit(String.length(letters.value) - 2)", false),
             new Row("Digit(String.length(letters.value) - 3)", true),
             new Row("Digit(4 - String.length(letters.value))", false),
@@ -65,7 +68,7 @@ class WhatAnInvariantSaysOfItsValueIsHeldOfEveryValueOfItsTypeTest {
             new Row("Digit(4 - String.length(wrapped.value))", true),
             // A pattern written as a constant that is worked out is the pattern it comes to.
             new Row("Digit(String.length(computed.value) - 3)", false),
-            new Row("Digit(String.length(computed.value) - 4)", true),
+            new Row("Digit(String.length(computed.value) - 4)", true, List.of("E2010")),
             // What one of them says of itself is not said of the other.
             new Row("Digit(String.length(three.value) + 1 - String.length(letters.value))", false),
             new Row("Digit(String.length(three.value) - String.length(letters.value))", true));
@@ -121,7 +124,7 @@ class WhatAnInvariantSaysOfItsValueIsHeldOfEveryValueOfItsTypeTest {
     void eachRowIsOwedWhatTheInvariantsLeaveOpen() {
         List<String> wrong = new ArrayList<>();
         for (Row row : ROWS) {
-            boolean owed = owedBy(row.body());
+            boolean owed = owedBy(row);
             if (owed != row.owed()) {
                 wrong.add(row.body() + " is owed: " + owed);
             }
@@ -129,16 +132,11 @@ class WhatAnInvariantSaysOfItsValueIsHeldOfEveryValueOfItsTypeTest {
         assertEquals(List.of(), wrong, "each row is owed exactly what the invariants leave open");
     }
 
-    /** Whether the discharge leaves anything owed of a behavior with {@code body}. */
-    private static boolean owedBy(String body) {
-        Compilation compilation = Compilation.ofSource(MODEL.formatted(body), "Main");
-        compilation.answerEverything();
-        List<Located> refused = compilation.errors().stream()
-                .filter(each -> !"E2010".equals(each.diagnostic().code())).toList();
-        assertTrue(refused.isEmpty(), () -> body + " compiles: "
-                + refused.stream().map(each -> each.diagnostic().code() + " "
-                        + each.diagnostic().values()).toList());
-        return compilation.errors().size() > refused.size()
+    /** Whether the discharge leaves anything owed of a behavior with the body of {@code row}. */
+    private static boolean owedBy(Row row) {
+        Compilation compilation = ACompiledModel.refusedWith(row.refused(),
+                Compilation.ofSource(MODEL.formatted(row.body()), "Main"));
+        return !row.refused().isEmpty()
                 || compilation.warnings().stream().anyMatch(each ->
                 each.diagnostic().severity() == Severity.WARNING
                         && "E2011".equals(each.diagnostic().code()));

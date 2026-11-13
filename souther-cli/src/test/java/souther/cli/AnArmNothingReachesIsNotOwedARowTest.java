@@ -261,7 +261,7 @@ class AnArmNothingReachesIsNotOwedARowTest {
     private static List<Message> deadBranchProofs(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return compilation.warnings().stream()
                 .map(Located::diagnostic)
                 .filter(d -> "E1327".equals(d.code()))

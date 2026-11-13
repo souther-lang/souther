@@ -68,6 +68,20 @@ final class ModelWalk {
 
     static final String REPORT = "souther/compiler/report/AdequacyReport";
 
+    /** What a test calls on a model to read what is said of it. */
+    private static final Set<String> READERS = Set.of("db", "adequacy", "warnings");
+
+    /**
+     * What changes a model once it has been asked about, so that what was asked is no longer what
+     * it is: the sources it is made of and the way it is compiled.
+     */
+    private static final Set<String> MUTATORS = Set.of("update", "measure", "observe",
+            "abandonWhen", "allowing", "withExampleBudget", "withJvmExampleDeadlines",
+            "withEvaluationPolicy", "writtenOn", "withReadingPolicy", "withAdequacyPolicy");
+
+    /** The helper's way of saying a model is read without being compiled. */
+    private static final String NOT_COMPILED = "notCompiled";
+
     /**
      * What the walks of every method have found about the others so far.
      *
@@ -94,9 +108,10 @@ final class ModelWalk {
      * @param written   the fields a model is written into somewhere that is walked
      * @param captured  how many arguments each method that stands for a lambda is handed by the
      *                  one that made it
+     * @param exempt    the methods that may read a model they did not compile, and say so
      */
     record World(String helper, Set<String> analysed, Set<String> written,
-                 Map<String, Integer> captured) { }
+                 Map<String, Integer> captured, Set<String> exempt) { }
 
     /** What holds a model where it is used. */
     sealed interface Operand {
@@ -117,9 +132,16 @@ final class ModelWalk {
         record Lost() implements Operand { }
     }
 
-    /** A call at {@code at} that is given a model as one of its arguments. */
+    /**
+     * A call at {@code at} that is given a model as one of its arguments.
+     *
+     * @param creation  the call makes a lambda that is handed the model, which does nothing with
+     *                  it until the lambda is run, so what the lambda asks has not been asked
+     * @param mutates   the call changes what the model is compiled from or how, so that what was
+     *                  asked of it before is no longer what it is
+     */
     record Site(int at, String callee, int parameter, boolean readsDirectly,
-                boolean asksDirectly, Operand operand) { }
+                boolean asksDirectly, boolean creation, boolean mutates, Operand operand) { }
 
     /** What one walk found. */
     static final class Result {
@@ -146,6 +168,8 @@ final class ModelWalk {
     private final Map<Integer, Integer> parameterAt = new HashMap<>();
     private final Set<Integer> modelParameters = new HashSet<>();
     private final Set<Integer> stored = new HashSet<>();
+    private final Map<Integer, Integer> storeCounts = new HashMap<>();
+    private Map<Integer, Set<Integer>> groups;
     private final Set<String> fieldsWritten = new HashSet<>();
     private final Map<String, Integer> capturedByLambdas = new HashMap<>();
     private final Map<Long, Operand> producers = new HashMap<>();
@@ -229,8 +253,10 @@ final class ModelWalk {
         boolean mentions = method.methodTypeSymbol().descriptorString().contains(COMPILATION_TYPE);
         for (CodeElement element : flow) {
             switch (element) {
-                case StoreInstruction store when store.typeKind() == TypeKind.REFERENCE ->
-                        stored.add(store.slot());
+                case StoreInstruction store when store.typeKind() == TypeKind.REFERENCE -> {
+                    stored.add(store.slot());
+                    storeCounts.merge(store.slot(), 1, Integer::sum);
+                }
                 case FieldInstruction field -> {
                     if (field.typeSymbol().descriptorString().equals(COMPILATION_TYPE)) {
                         mentions = true;
@@ -279,6 +305,17 @@ final class ModelWalk {
         return fieldsWritten;
     }
 
+    /** The parameters of other methods that the calls of this one hand a model to. */
+    Set<String> handedOn() {
+        Set<String> handed = new HashSet<>();
+        for (List<Site> here : sites(world.helper()).values()) {
+            for (Site site : here) {
+                handed.add(site.callee() + "#" + site.parameter());
+            }
+        }
+        return handed;
+    }
+
     Map<String, Integer> capturedByLambdas() {
         return capturedByLambdas;
     }
@@ -323,7 +360,9 @@ final class ModelWalk {
         for (List<Site> here : all.values()) {
             for (Site site : here) {
                 if (asking(site) && site.operand() instanceof Operand.Local local) {
-                    asks.computeIfAbsent(local.slot(), s -> new HashSet<>()).add(site.at());
+                    for (int member : membersOf(local.slot())) {
+                        asks.computeIfAbsent(member, s -> new HashSet<>()).add(site.at());
+                    }
                 }
             }
         }
@@ -401,19 +440,50 @@ final class ModelWalk {
         }
         Map<Integer, ModelStanding> out = null;
         for (Site site : here) {
-            if (asking(site) && site.operand() instanceof Operand.Local local) {
-                if (out == null) {
-                    out = new HashMap<>(state);
+            if (site.operand() instanceof Operand.Local local) {
+                ModelStanding becomes = site.mutates() ? ModelStanding.UNASKED
+                        : asking(site) ? ModelStanding.ASKED : null;
+                if (becomes != null) {
+                    if (out == null) {
+                        out = new HashMap<>(state);
+                    }
+                    for (int member : membersOf(local.slot())) {
+                        out.put(member, becomes);
+                    }
                 }
-                out.put(local.slot(), ModelStanding.ASKED);
             }
         }
         return out == null ? state : out;
     }
 
+    /**
+     * The variables that hold the model {@code slot} holds: those it was copied to, or copied
+     * from, where each is given a model once and so holds the same one on every way through.
+     */
+    private Set<Integer> membersOf(int slot) {
+        if (groups == null) {
+            groups = new HashMap<>();
+            for (int at = 0; at < flow.size(); at++) {
+                if (flow.get(at) instanceof StoreInstruction store
+                        && store.typeKind() == TypeKind.REFERENCE
+                        && producer(at, 0) instanceof Operand.Local from
+                        && storeCounts.getOrDefault(from.slot(), 0) <= 1
+                        && storeCounts.getOrDefault(store.slot(), 0) == 1) {
+                    Set<Integer> joined = new HashSet<>(groups.getOrDefault(from.slot(),
+                            Set.of(from.slot())));
+                    joined.addAll(groups.getOrDefault(store.slot(), Set.of(store.slot())));
+                    for (int member : joined) {
+                        groups.put(member, joined);
+                    }
+                }
+            }
+        }
+        return groups.getOrDefault(slot, Set.of(slot));
+    }
+
     private boolean asking(Site site) {
-        return site.asksDirectly()
-                || facts.asksParameter().contains(site.callee() + "#" + site.parameter());
+        return !site.creation() && (site.asksDirectly()
+                || facts.asksParameter().contains(site.callee() + "#" + site.parameter()));
     }
 
     private boolean reading(Site site) {
@@ -542,15 +612,11 @@ final class ModelWalk {
             if (call.opcode() == Opcode.INVOKESTATIC) {
                 return name.startsWith("of") ? ModelStanding.UNASKED : ModelStanding.LOST;
             }
-            int arguments = 0;
-            for (ClassDesc parameter : call.typeSymbol().parameterList()) {
-                arguments += sizeOf(parameter);
-            }
-            Map<Integer, ModelStanding> then = in.get(answer.at());
-            return standing(producer(answer.at(), arguments), then == null ? state : then);
+            return ModelStanding.UNASKED;
         }
         if (isHelper(callee, world.helper())) {
-            return ModelStanding.ASKED;
+            return name.equals(NOT_COMPILED) && !world.exempt().contains(key)
+                    ? ModelStanding.LOST : ModelStanding.ASKED;
         }
         String method = AMethod.of(callee, name, call.type().stringValue());
         if (!world.analysed().contains(method)) {
@@ -642,12 +708,14 @@ final class ModelWalk {
                         if (type.descriptorString().equals(COMPILATION_TYPE)) {
                             boolean receiver = instance && i == 0;
                             boolean reads = receiver
-                                    ? target.equals(COMPILATION)
-                                            && (name.equals("db") || name.equals("adequacy"))
+                                    ? target.equals(COMPILATION) && READERS.contains(name)
                                     : target.equals(REPORT) && name.equals("of");
-                            boolean asks = !receiver && isHelper(target, helper);
+                            boolean asks = !receiver && isHelper(target, helper)
+                                    && (!name.equals(NOT_COMPILED) || world.exempt().contains(key));
+                            boolean mutates = receiver && target.equals(COMPILATION)
+                                    && MUTATORS.contains(name);
                             found.computeIfAbsent(at, k -> new ArrayList<>()).add(new Site(at,
-                                    callee, instance ? i - 1 : i, reads, asks,
+                                    callee, instance ? i - 1 : i, reads, asks, false, mutates,
                                     producer(at, above)));
                         }
                         above += sizeOf(type);
@@ -663,7 +731,8 @@ final class ModelWalk {
                             ClassDesc type = stack.get(i);
                             if (type.descriptorString().equals(COMPILATION_TYPE) && i >= shift) {
                                 found.computeIfAbsent(at, k -> new ArrayList<>()).add(new Site(at,
-                                        impl, i - shift, false, false, producer(at, above)));
+                                        impl, i - shift, false, false, true, false,
+                                        producer(at, above)));
                             }
                             above += sizeOf(type);
                         }

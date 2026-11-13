@@ -246,6 +246,7 @@ class WhatListsAValueIsAnsweredOnceForItsModuleTest {
         Answer<Set<TypeSymbol>> before = c.db().ask(new Shapes.EnumerationsListing(key("Qualified")));
 
         c.update(Map.of("shop.sou", WITH_ANOTHER_ENUMERATION), Set.of(), TestDay.DATE);
+        ACompiledModel.compiles(c);
         Answer<Map<TypeKey, Set<TypeSymbol>>> moduleAfter =
                 c.db().ask(new Shapes.EnumerationsListingIn(MODULE));
         Answer<Set<TypeSymbol>> after = c.db().ask(new Shapes.EnumerationsListing(key("Qualified")));

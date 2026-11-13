@@ -192,7 +192,7 @@ class WhatCrossesAModuleBoundaryWhenADeclarationOnlyMovesTest {
         edited.put("prices.sou", prices);
         edited.put("cart.sou", IMPORTING);
         c.update(edited, Set.of(), TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(), "the edited workspace still compiles: "
                 + c.db().allReports());
     }

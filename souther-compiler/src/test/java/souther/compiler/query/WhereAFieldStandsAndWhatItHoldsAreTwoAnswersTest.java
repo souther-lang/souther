@@ -212,7 +212,7 @@ class WhereAFieldStandsAndWhatItHoldsAreTwoAnswersTest {
 
     private static void edit(Compilation c, String... sources) {
         c.update(workspace(sources), Set.of(), TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(),
                 "the edited workspace compiles: " + c.db().allReports());
     }
