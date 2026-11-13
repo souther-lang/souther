@@ -1534,8 +1534,8 @@ final class Pullback {
     private void aDivision(Core operation, InputReads reads) {
         Core divisor = theDivisorItAloneStopsOn(operation);
         if (theRelationReadsItsOwnDivisions || divisor == null
-                || !(AffineForms.of(divisor, reads, quantities())
-                instanceof LinearForm<Quantity> form)) {
+                || !(AffineForms.outcome(divisor, reads, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form))) {
             return;
         }
         operated.tell(operation, new Answers.AsAnOperator(form,
@@ -1546,8 +1546,8 @@ final class Pullback {
      *  library's own bound arithmetic is handed it — or null where it is none, or has no such
      *  writing. */
     private BigDecimal writtenConstant(Core e, InputReads reads) {
-        return AffineForms.of(e, reads, quantities())
-                instanceof LinearForm<Quantity> form
+        return AffineForms.outcome(e, reads, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)
                 && form.coefs().isEmpty()
                 && form.constant().writtenDecimal()
                         instanceof ExactAnswer.Held<Optional<BigDecimal>> held
@@ -1559,7 +1559,7 @@ final class Pullback {
      *  where it answers. */
     private LinearForm<Quantity> composedAs(Core e, InputReads reads) {
         SequencedSet<LinearForm<Quantity>> composed = new LinkedHashSet<>();
-        AffineForms.of(e, reads, quantities(e, composed::add));
+        AffineForms.outcome(e, reads, quantities(e, composed::add));
         return composed.size() == 1 ? composed.getFirst() : null;
     }
 
@@ -1769,8 +1769,8 @@ final class Pullback {
                     ? new Answers.Stands.AllOf(one.get(), other.get())
                     : new Answers.Stands.OneOf(one.get(), other.get()));
         }
-        if (!(AffineForms.of(number.value(), number.at(), quantities())
-                instanceof LinearForm<Quantity> form)
+        if (!(AffineForms.outcome(number.value(), number.at(), quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form))
                 || !(end.at() instanceof Count count)) {
             return Optional.empty();
         }
@@ -1789,8 +1789,8 @@ final class Pullback {
      */
     private Rounding roundingOf(Core e, InputReads reads) {
         RoundedToAWholeNumber.Written written = writtenRounding(e, reads);
-        return written != null && AffineForms.of(written.value(), reads, quantities())
-                instanceof LinearForm<Quantity> before
+        return written != null && AffineForms.outcome(written.value(), reads, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var before)
                 ? new Rounding(before, written.way()) : null;
     }
 
@@ -2088,8 +2088,8 @@ final class Pullback {
                         read.rules().newtypes()).isPresent()) {
             return true;
         }
-        return divisor != null && AffineForms.of(divisor, reads, quantities())
-                instanceof LinearForm<Quantity> form
+        return divisor != null && AffineForms.outcome(divisor, reads, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)
                 && form.coefs().isEmpty() && !form.constant().isZero();
     }
 
@@ -2159,10 +2159,10 @@ final class Pullback {
         FormRange apart = FormRange.combined(BinOp.SUB, exactRangeOf(last, reads),
                 exactRangeOf(first, reads));
         FormRange together = null;
-        if (AffineForms.of(last, reads, quantities())
-                instanceof LinearForm<Quantity> ofTheLast
-                && AffineForms.of(first, reads, quantities())
-                        instanceof LinearForm<Quantity> ofTheFirst
+        if (AffineForms.outcome(last, reads, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var ofTheLast)
+                && AffineForms.outcome(first, reads, quantities())
+                        instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var ofTheFirst)
                 && ofTheLast.minus(ofTheFirst)
                         instanceof ExactAnswer.Held<LinearForm<Quantity>>(var difference)) {
             together = rangeOfAComposedForm(difference, reads, new HashMap<>());
@@ -2516,8 +2516,8 @@ final class Pullback {
                 read.rules().newtypes(), read.ruleReading());
         FormRange ofTheNewtype = leftByTheRules == null ? null
                 : FormRange.ofWhatTheRulesLeave(leftByTheRules);
-        if (AffineForms.of(e, reads, quantities())
-                instanceof LinearForm<Quantity> form) {
+        if (AffineForms.outcome(e, reads, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)) {
             FormRange composed = rangeOfAComposedForm(form, reads, known);
             if (composed != null) {
                 return ofTheNewtype == null ? composed : composed.meet(ofTheNewtype);
@@ -2932,8 +2932,8 @@ final class Pullback {
             leaveUnsaidOverWhatItReads(given.value(), given.at(), bound);
             return;
         }
-        LinearForm<Quantity> form = AffineForms.of(operand, reads, quantities());
-        if (form != null) {
+        if (AffineForms.outcome(operand, reads, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)) {
             operated.leaveUnsaid(form.coefs().keySet(), bound, reads);
         } else {
             leaveUnsaidOverWhereItStands(operand, reads, bound);
@@ -3374,8 +3374,9 @@ final class Pullback {
      * to that; null otherwise.
      */
     private Quantity.OfABinding boundValueOf(Core held, InputReads at) {
-        return AffineForms.of(held, at, quantities())
-                instanceof LinearForm<Quantity> form
+        return AffineForms.outcome(held, at, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                        LinearForm<Quantity> form)
                 && form.constant().isZero() && form.coefs().size() == 1
                 && form.coefs().entrySet().iterator().next() instanceof Map.Entry<Quantity,
                         ExactRatio> only
@@ -5381,8 +5382,8 @@ final class Pullback {
     private Sized readAs(Accumulating how, Core e, InputReads at) {
         return switch (how) {
             case SIZE -> sizeOf(e, at);
-            case NUMBER -> AffineForms.of(e, at, quantities())
-                    instanceof LinearForm<Quantity> form
+            case NUMBER -> AffineForms.outcome(e, at, quantities())
+                    instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)
                     ? new Sized.AsAForm(form) : new Sized.NotSized(new WhyUnread.NotArithmetic());
         };
     }
@@ -6114,8 +6115,9 @@ final class Pullback {
         /** {@code value}, read in {@code in}, as a form over what its arithmetic is read as — or
          *  null where that is not read. */
         private LinearForm<Quantity> formOf(Core value, InputReads in) {
-            return value != null && AffineForms.of(value, in, quantities())
-                    instanceof LinearForm<Quantity> form ? form : null;
+            return value != null && AffineForms.outcome(value, in, quantities())
+                    instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                            LinearForm<Quantity> form) ? form : null;
         }
 
         @Override
@@ -10214,8 +10216,9 @@ final class Pullback {
     }
 
     private Quantity valueOfTheInput(Core argument, InputReads at, OperationsAnswered answered) {
-        return AffineForms.of(argument, at, quantities())
-                instanceof LinearForm<Quantity> form
+        return AffineForms.outcome(argument, at, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                        LinearForm<Quantity> form)
                 && soleQuantity(form) instanceof DecisionAtom.OfTheInput input ? input
                 : callOf(new Denotation(argument, at)) instanceof Denotation inner
                         ? whatAnOperationAnswers(inner, answered) : null;
@@ -11205,8 +11208,9 @@ final class Pullback {
             return null;
         }
         boolean kept = occurrences.stream().anyMatch(one -> !one.keptWhere().isEmpty());
-        if (!kept && occurrences.stream().allMatch(one -> AffineForms.of(one.value().value(),
-                one.value().at(), quantities()) != null)) {
+        if (!kept && occurrences.stream().allMatch(one -> AffineForms.outcome(one.value().value(),
+                one.value().at(), quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>)) {
             return null;
         }
         return new Inside.ATotalByKeeping(Core.withoutStanding(node), at, occurrences, false);
@@ -11414,8 +11418,9 @@ final class Pullback {
             List<LinearForm<Quantity>> forms = new ArrayList<>();
             for (ReadMeaning.Occurrence occurrence : total.occurrences()) {
                 Denotation element = occurrence.value();
-                if (!(AffineForms.of(element.value(), element.at(), quantities())
-                        instanceof LinearForm<Quantity> form)) {
+                if (!(AffineForms.outcome(element.value(), element.at(), quantities())
+                        instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                                LinearForm<Quantity> form))) {
                     return null;
                 }
                 forms.add(form);
@@ -12051,8 +12056,9 @@ final class Pullback {
         List<LinearForm<Quantity>> forms = new ArrayList<>();
         for (ReadMeaning.Occurrence occurrence : occurrences) {
             Denotation element = occurrence.value();
-            if (!(AffineForms.of(element.value(), element.at(), quantities())
-                    instanceof LinearForm<Quantity> form)) {
+            if (!(AffineForms.outcome(element.value(), element.at(), quantities())
+                    instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                            LinearForm<Quantity> form))) {
                 return null;
             }
             forms.add(form);
@@ -12090,8 +12096,9 @@ final class Pullback {
         List<ReadMeaning.Occurrence> occurrences = each.occurrencesWhere(KeptTruths.readIn(read));
         if (occurrences.stream().anyMatch(one -> !one.keptWhere().isEmpty())
                 || splitInto(call.at(), occurrences.size(), container) != null
-                || !(AffineForms.of(walk.seed(), call.at(), quantities())
-                        instanceof LinearForm<Quantity> seed)) {
+                || !(AffineForms.outcome(walk.seed(), call.at(), quantities())
+                        instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                                LinearForm<Quantity> seed))) {
             return null;
         }
         BindingId accumulator = walk.accumulator().binding();
@@ -12104,8 +12111,9 @@ final class Pullback {
                     return null;
                 }
                 carriedSoFar.put(accumulator, carried);
-                if (!(AffineForms.of(walk.step().body(), handing, quantities())
-                        instanceof LinearForm<Quantity> next)) {
+                if (!(AffineForms.outcome(walk.step().body(), handing, quantities())
+                        instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                                LinearForm<Quantity> next))) {
                     return null;
                 }
                 carried = next;
@@ -12308,8 +12316,9 @@ final class Pullback {
         }
         SeededWalk.AnEndKept<InputReads> kept = walk.endKept(at, sides());
         Quantity.KeptSoFar.Seed seed = kept == null ? null : seedOf(walk.seed(), at);
-        if (seed == null || !(AffineForms.of(kept.value().value(), kept.value().at(),
-                quantities()) instanceof LinearForm<Quantity> value)
+        if (seed == null || !(AffineForms.outcome(kept.value().value(), kept.value().at(),
+                quantities()) instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                        LinearForm<Quantity> value))
                 || !(soleQuantity(value) instanceof DecisionAtom.OfTheInput(
                         NumericTerm.FromOnePosition each, var _))
                 || !(subjectOf(walk.container(), at) instanceof DecisionSubject.AnInput(
@@ -12398,8 +12407,9 @@ final class Pullback {
         if (written != null) {
             return new Quantity.KeptSoFar.Seed.Written(written);
         }
-        return AffineForms.of(seed, at, quantities())
-                instanceof LinearForm<Quantity> form
+        return AffineForms.outcome(seed, at, quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                        LinearForm<Quantity> form)
                 && soleQuantity(form) instanceof DecisionAtom.OfTheInput(
                         NumericTerm.FromOnePosition number, var _)
                 ? new Quantity.KeptSoFar.Seed.OfTheInput(number) : null;
@@ -12474,15 +12484,6 @@ final class Pullback {
             @Override
             public DeclarationAccess declarations() {
                 return read.rules().declarations();
-            }
-
-            /** The operations it reads through are told by the walk of them
-             *  ({@link #operatorsIn}). The elements a form meets are registered as it is read, and
-             *  the arguments of a call that composed no form belong to none: what reading them
-             *  would register is registered for nothing. */
-            @Override
-            public boolean tellsWhatItReads() {
-                return false;
             }
 
             @Override
@@ -12902,8 +12903,8 @@ final class Pullback {
         Denotation walked = walk.at().standing(step.walked(), read.rules().symbols(),
                 read.rules().newtypes());
         DecisionSubject.AnAnswer list = answerWhoseEveryElementIsHeldBy(walked);
-        if (list == null || !(AffineForms.of(step.step().body(), walk.at(), quantities())
-                instanceof LinearForm<Quantity> each)) {
+        if (list == null || !(AffineForms.outcome(step.step().body(), walk.at(), quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var each))) {
             return null;
         }
         return addedUpOverTheElementsOfAnAnswer(list, walked.value(), each, measured.operation());
@@ -13094,8 +13095,8 @@ final class Pullback {
         carriedSoFar.put(accumulator, LinearForm.atom(soFar));
         LinearForm<Quantity> stepped;
         try {
-            if (!(AffineForms.of(walk.step().body(), at, quantities())
-                    instanceof LinearForm<Quantity> form)) {
+            if (!(AffineForms.outcome(walk.step().body(), at, quantities())
+                    instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form))) {
                 return null;
             }
             stepped = form;
@@ -15341,8 +15342,9 @@ final class Pullback {
      */
     private Quantity.RemainderOfADividend remainderOverABoundValue(
             RemainderOfAShiftedValue.OfADivision<InputReads> division) {
-        if (!(AffineForms.of(division.dividend(), division.at(), quantities())
-                instanceof LinearForm<Quantity> form)
+        if (!(AffineForms.outcome(division.dividend(), division.at(), quantities())
+                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                        LinearForm<Quantity> form))
                 || form.coefs().isEmpty() || !isWhole(form)) {
             return null;
         }
@@ -16391,8 +16393,9 @@ final class Pullback {
 
             @Override
             public ExactRatio constant(Core e, InputReads at) {
-                return AffineForms.of(e, at, quantities())
-                        instanceof LinearForm<Quantity> number
+                return AffineForms.outcome(e, at, quantities())
+                        instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
+                                LinearForm<Quantity> number)
                         && number.coefs().isEmpty() ? number.constant() : null;
             }
 

@@ -133,17 +133,6 @@ public final class AffineForms {
         }
 
         /**
-         * Whether what this reading is told of the parts of an expression it stopped at matters
-         * beyond the stop. A reading that keeps what it reads — the operations it was told of, the
-         * names it read — needs every argument of a call it did not compose read all the same,
-         * since the arithmetic in them runs. One that keeps nothing of it lets a walk whose caller
-         * asks only for the form leave them unread.
-         */
-        default boolean tellsWhatItReads() {
-            return true;
-        }
-
-        /**
          * The form of the values it was given the environment takes the call {@code node} as —
          * what the case of an operation's definition a reading is on answers — or null where it
          * takes it as none. The call is then that arithmetic over what it was given, as an
@@ -384,8 +373,7 @@ public final class AffineForms {
      * which is a name changing what can be said of an expression.
      */
     public static <A, E> LinearForm<A> of(Core raw, E at, Reading<A, E> reading) {
-        return of(raw, at, reading, new Walk<>(reading.tellsWhatItReads()))
-                instanceof Outcome.Composed<A, E> composed
+        return outcome(raw, at, reading) instanceof Outcome.Composed<A, E> composed
                 ? composed.form() : null;
     }
 
@@ -402,7 +390,7 @@ public final class AffineForms {
      * compose the moment its part did.
      */
     public static <A, E> Outcome<A, E> outcome(Core raw, E at, Reading<A, E> reading) {
-        return of(raw, at, reading, new Walk<>(true));
+        return of(raw, at, reading, new Walk<>());
     }
 
     /**
@@ -596,7 +584,7 @@ public final class AffineForms {
     static <A, E> LinearForm<A> of(Core raw, E at, Reading<A, E> reading,
                                    BindingWalk.Answers<Outcome<A, E>> answered,
                                    FoldedValue.Kept folds) {
-        return of(raw, at, reading, new Walk<>(answered, folds, reading.tellsWhatItReads()))
+        return of(raw, at, reading, new Walk<>(answered, folds))
                 instanceof Outcome.Composed<A, E> composed ? composed.form() : null;
     }
 
@@ -615,30 +603,20 @@ public final class AffineForms {
          *  body it binds for read it on the way the walk took. */
         private final Map<BindingId, Integer> namesRead = new HashMap<>();
 
-        /** Whether a stop is given the reason of the arguments that stopped under it, which is a
-         *  reading of each of them down to the values the names stand for. Not where the caller
-         *  keeps a form and nothing else, and the reading is told nothing of what it reads
-         *  ({@link Reading#tellsWhatItReads}). */
-        private final boolean givesReasons;
-
-        Walk(boolean givesReasons) {
+        Walk() {
             this.folds = new FoldedValue.Kept();
             this.told = null;
-            this.givesReasons = givesReasons;
         }
 
         Walk(Consumed<E> told) {
             this.folds = new FoldedValue.Kept();
             this.told = told;
-            this.givesReasons = true;
         }
 
-        Walk(BindingWalk.Answers<Outcome<A, E>> answered, FoldedValue.Kept folds,
-             boolean givesReasons) {
+        Walk(BindingWalk.Answers<Outcome<A, E>> answered, FoldedValue.Kept folds) {
             super(answered);
             this.folds = folds;
             this.told = null;
-            this.givesReasons = givesReasons;
         }
 
         void written(Core expression, E at) {
@@ -939,9 +917,6 @@ public final class AffineForms {
      */
     private static <A, E> Outcome.StoppedAt<A, E> stoppedOnArithmetic(
             Core e, E at, Reading<A, E> reading, Walk<A, E> following) {
-        if (!following.givesReasons) {
-            return null;
-        }
         for (Core argument : Terms.argsOf(e)) {
             if (of(argument, at, reading, following) instanceof Outcome.StoppedAt<A, E> inside
                     && inside.why().nonAffineOperation().isPresent()) {
@@ -1133,11 +1108,6 @@ public final class AffineForms {
         @Override
         public Reading<A, E> oneAtATime() {
             return this;
-        }
-
-        @Override
-        public boolean tellsWhatItReads() {
-            return of.tellsWhatItReads();
         }
 
         @Override
