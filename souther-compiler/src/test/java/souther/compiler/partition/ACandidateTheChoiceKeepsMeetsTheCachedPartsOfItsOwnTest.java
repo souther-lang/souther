@@ -51,7 +51,8 @@ class ACandidateTheChoiceKeepsMeetsTheCachedPartsOfItsOwnTest {
         }
 
         @Override
-        public boolean sameInputs(Integer then, Integer now, boolean askedAggregates) {
+        public boolean sameInputs(Integer then, Integer now, boolean askedAggregates,
+                                  int consulted) {
             return then.equals(now);
         }
 
@@ -83,6 +84,27 @@ class ACandidateTheChoiceKeepsMeetsTheCachedPartsOfItsOwnTest {
         @Override
         public void meetAgain(List<String> parts) {
             met.addAll(parts);
+        }
+
+        int consulted;
+
+        @Override
+        public int startConsulting() {
+            int before = consulted;
+            consulted = 0;
+            return before;
+        }
+
+        @Override
+        public int endConsulting(int before) {
+            int mine = consulted;
+            consulted = before | mine;
+            return mine;
+        }
+
+        @Override
+        public void consultAgain(int more) {
+            consulted |= more;
         }
 
         @Override

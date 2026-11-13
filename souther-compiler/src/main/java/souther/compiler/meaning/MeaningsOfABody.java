@@ -8,6 +8,7 @@ import souther.compiler.types.ModelOccurrence;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -16,6 +17,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiConsumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
@@ -171,11 +173,9 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
          */
         public Proposition whereARunStops() {
             List<Proposition> stops = new ArrayList<>();
-            downTheArms(how, Down.NO_ARM, (step, down) -> {
-                if (step instanceof Derivation.TheRunStopsHere) {
-                    stops.add(down.all());
-                }
-            });
+            new Walk(step -> step instanceof Derivation.TheRunStopsHere, (step, down) -> {
+                stops.add(down.all());
+            }).down(how, Down.NO_ARM);
             return stops.isEmpty() ? null : Proposition.any(stops);
         }
 
@@ -195,11 +195,10 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
         /** The same, of {@code how}, a derivation a site's may be made of. */
         public static List<ReadOnAnArm> relationsDownTheArmsOf(Derivation how) {
             List<ReadOnAnArm> out = new ArrayList<>();
-            downTheArms(how, Down.NO_ARM, (step, down) -> {
-                if (step instanceof Derivation.AComparisonRead read) {
-                    out.add(new ReadOnAnArm(read.relation(), down.all()));
-                }
-            });
+            new Walk(MeaningsOfABody.Meaning::isAComparisonRead, (step, down) -> {
+                out.add(new ReadOnAnArm(((Derivation.AComparisonRead) step).relation(),
+                        down.all()));
+            }).down(how, Down.NO_ARM);
             return List.copyOf(out);
         }
 
@@ -210,12 +209,14 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
          */
         public static List<Relation> relationsReadIn(Derivation how) {
             List<Relation> out = new ArrayList<>();
-            downTheArms(how, Down.NO_ARM, (step, _) -> {
-                if (step instanceof Derivation.AComparisonRead read) {
-                    out.add(read.relation());
-                }
-            });
+            new Walk(MeaningsOfABody.Meaning::isAComparisonRead, (step, _) -> {
+                out.add(((Derivation.AComparisonRead) step).relation());
+            }).down(how, Down.NO_ARM);
             return List.copyOf(out);
+        }
+
+        private static boolean isAComparisonRead(Derivation step) {
+            return step instanceof Derivation.AComparisonRead;
         }
 
         /**
@@ -232,48 +233,90 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
             }
         }
 
-        /** Every step of {@code step}, each handed to {@code at} with the conditions of the arms it
-         *  is down. */
-        private static void downTheArms(Derivation step, Down down,
-                                        BiConsumer<Derivation, Down> at) {
-            at.accept(step, down);
-            if (step instanceof Derivation.TheRunStopsHere) {
-                return;
-            }
-            if (step instanceof Derivation.IfThenElse(Derivation condition, Derivation then,
-                                                      Derivation otherwise)) {
-                Later decides = new Later(() -> condition.concludes(Optional.empty()));
-                downTheArms(condition, down, at);
-                downTheArms(then, down.and(decides), at);
-                downTheArms(otherwise, down.and(() -> decides.get().denied()), at);
-                return;
-            }
-            // An arm is down where it selects the value and, for arms taken in order, no arm
-            // before it does; what selects is worked out before any arm.
-            switch (step) {
-                case Derivation.MatchArms(var arms) -> downTheArms(arms, true, down, at);
-                case Derivation.AnOperationsCases(var _, var cases) ->
-                        downTheArms(cases, true, down, at);
-                case Derivation.ASizeInCases(var _, var cases) ->
-                        downTheArms(cases, true, down, at);
-                case Derivation.OneOfItsArms(var arms) -> downTheArms(arms, false, down, at);
-                default -> WrittenLines.premisesOf(step)
-                        .forEach(each -> downTheArms(each, down, at));
-            }
-        }
+        /**
+         * Every step the walk wants below a step, each handed to {@code at} with the conditions of
+         * the arms it is down.
+         *
+         * <p>A derivation is a graph where a name was used twice, so what is asked of a step is
+         * asked once: whether a step wants anything below it, and whether a step has been handed
+         * over at the arms it is down already. A step is down the arms of each way to it, which
+         * differ by the conditions of the {@code if}s on the way, and each of those is said: the
+         * same relation read on two arms is said once for each.
+         */
+        private static final class Walk {
 
-        private static void downTheArms(List<Derivation.MatchArms.Arm> arms, boolean inOrder,
-                                        Down down, BiConsumer<Derivation, Down> at) {
-            List<Later> before = new ArrayList<>();
-            for (Derivation.MatchArms.Arm arm : arms) {
-                Later selects = new Later(() -> arm.selects().concludes(Optional.empty()));
-                downTheArms(arm.selects(), down, at);
-                List<Later> earlier = List.copyOf(before);
-                Supplier<Proposition> reached = !inOrder ? selects
-                        : () -> Derivation.taken(earlier.stream().map(Later::get).toList(),
-                                selects.get());
-                downTheArms(arm.states(), down.and(reached), at);
-                before.add(selects);
+            private final Predicate<Derivation> wanted;
+            private final BiConsumer<Derivation, Down> at;
+            private final Map<Derivation, Boolean> holdsOneWanted = new IdentityHashMap<>();
+            private final Map<Derivation, Set<Down>> handedOver = new IdentityHashMap<>();
+
+            Walk(Predicate<Derivation> wanted, BiConsumer<Derivation, Down> at) {
+                this.wanted = wanted;
+                this.at = at;
+            }
+
+            /** Whether {@code step} is wanted or has a wanted step below it. */
+            private boolean holdsOneWanted(Derivation step) {
+                Boolean known = holdsOneWanted.get(step);
+                if (known != null) {
+                    return known;
+                }
+                boolean holds = wanted.test(step);
+                if (!holds && !(step instanceof Derivation.TheRunStopsHere)) {
+                    for (Derivation each : WrittenLines.premisesOf(step)) {
+                        if (holdsOneWanted(each)) {
+                            holds = true;
+                            break;
+                        }
+                    }
+                }
+                holdsOneWanted.put(step, holds);
+                return holds;
+            }
+
+            void down(Derivation step, Down down) {
+                if (!holdsOneWanted(step)
+                        || !handedOver.computeIfAbsent(step, _ -> new HashSet<>()).add(down)) {
+                    return;
+                }
+                if (wanted.test(step)) {
+                    at.accept(step, down);
+                }
+                if (step instanceof Derivation.TheRunStopsHere) {
+                    return;
+                }
+                if (step instanceof Derivation.IfThenElse(Derivation condition, Derivation then,
+                                                          Derivation otherwise)) {
+                    Later decides = new Later(() -> condition.concludes(Optional.empty()));
+                    down(condition, down);
+                    down(then, down.and(decides));
+                    down(otherwise, down.and(() -> decides.get().denied()));
+                    return;
+                }
+                // An arm is down where it selects the value and, for arms taken in order, no arm
+                // before it does; what selects is worked out before any arm.
+                switch (step) {
+                    case Derivation.MatchArms(var arms) -> down(arms, true, down);
+                    case Derivation.AnOperationsCases(var _, var cases) ->
+                            down(cases, true, down);
+                    case Derivation.ASizeInCases(var _, var cases) -> down(cases, true, down);
+                    case Derivation.OneOfItsArms(var arms) -> down(arms, false, down);
+                    default -> WrittenLines.premisesOf(step).forEach(each -> down(each, down));
+                }
+            }
+
+            private void down(List<Derivation.MatchArms.Arm> arms, boolean inOrder, Down down) {
+                List<Later> before = new ArrayList<>();
+                for (Derivation.MatchArms.Arm arm : arms) {
+                    Later selects = new Later(() -> arm.selects().concludes(Optional.empty()));
+                    down(arm.selects(), down);
+                    List<Later> earlier = List.copyOf(before);
+                    Supplier<Proposition> reached = !inOrder ? selects
+                            : () -> Derivation.taken(earlier.stream().map(Later::get).toList(),
+                                    selects.get());
+                    down(arm.states(), down.and(reached));
+                    before.add(selects);
+                }
             }
         }
 
