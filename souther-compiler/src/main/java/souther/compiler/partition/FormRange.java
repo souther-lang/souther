@@ -15,10 +15,12 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -110,7 +112,55 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
         if (aTotal(term)) {
             return null;
         }
-        return read.quantities().answersFor(term) ? endsOf(term, read) : null;
+        if (!read.quantities().answersFor(term)) {
+            return null;
+        }
+        FormRange ends = endsOf(term, read);
+        FormRange quotient = aQuotientOfThePlace(term, read);
+        return ends == null || quotient == null ? ends : ends.meet(quotient);
+    }
+
+    /**
+     * The numbers a quotient truncated toward nought of the value at a place by a divisor the
+     * reading has comes to, where {@code term} is one ({@link TakenAs.TheTruncatingQuotient}): what
+     * the value there comes to, as the rules of the input leave it, divided and truncated. Dividing
+     * by a number above nought keeps the order of what it divides and below nought turns it, and
+     * truncating keeps it either way, so the ends come to the ends. Null where {@code term} is no
+     * such quotient, or the value's numbers are not known.
+     */
+    private static FormRange aQuotientOfThePlace(NumericTerm term, InputReading read) {
+        if (!(term instanceof NumericTerm.TakenOf taken)
+                || !(taken.takenAs() instanceof TakenAs.TheTruncatingQuotient quotient)
+                || !(taken.transformation() instanceof ValueTransformation.Identity)) {
+            return null;
+        }
+        BigDecimal by = quotient.read(taken.arguments());
+        if (by == null || by.signum() == 0) {
+            return null;
+        }
+        NumericTerm dividend = new NumericTerm.ValueOf(taken.position());
+        FormRange of = read.quantities().answersFor(dividend) ? endsOf(dividend, read) : null;
+        if (of == null) {
+            return null;
+        }
+        of = of.within(LinearForm.weighing(dividend, ExactRatio.ONE), read, Map.of());
+        ExactRatio divisor = ExactRatio.of(by);
+        ExactRatio one = truncated(of.least.dividedBy(divisor).orNull());
+        ExactRatio other = truncated(of.greatest.dividedBy(divisor).orNull());
+        if (one == null || other == null) {
+            return null;
+        }
+        return one.compareTo(other) <= 0 ? new FormRange(one, other) : new FormRange(other, one);
+    }
+
+    /** {@code number} with what is past its whole number dropped, toward nought; null where it is
+     *  null. */
+    private static ExactRatio truncated(ExactRatio number) {
+        if (number == null) {
+            return null;
+        }
+        BigInteger whole = (number.signum() < 0 ? number.ceiling() : number.floor()).orNull();
+        return whole == null ? null : ExactRatio.of(whole);
     }
 
     /**

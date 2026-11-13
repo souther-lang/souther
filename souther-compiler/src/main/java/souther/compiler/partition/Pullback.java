@@ -2512,7 +2512,10 @@ final class Pullback {
             ExactRatio greatest = before == null ? null : rounding.roundedFrom(before.greatest());
             return least == null || greatest == null ? null : new FormRange(least, greatest);
         }
-        Core here = Core.withoutStanding(e);
+        // A call of an operation that computes what an operator does is that operator over its
+        // arguments, as the arithmetic reads it ({@link AffineForms#asOperator}), so its numbers are
+        // those of the operator below.
+        Core here = Core.withoutStanding(AffineForms.asOperator(e));
         if (here instanceof Core.PreservedCall call) {
             GetsPast completion = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call);
             if (completion instanceof GetsPast.WhereTheProductFits(int operand)) {
