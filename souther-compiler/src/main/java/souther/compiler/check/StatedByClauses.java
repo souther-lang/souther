@@ -2046,7 +2046,8 @@ sealed interface StatedByClauses {
             // Built for the block the position is on, which is what the machine is being made for:
             // positions the rules hold as one value have one answer between them, and one purse.
             asked.forEach((position, plans) -> {
-                if (!answered.speaksFor(position)) {
+                if (answered.stoppedAt(position).stream().anyMatch(
+                        each -> StoppedReading.carriesAFigure(each.why()))) {
                     // Nothing was asked for, so no limit of the sets' allowance is why: what
                     // stopped them is what stopped the position's own answer, figure and all —
                     // every figure it reached, and whether anything else stopped it too.

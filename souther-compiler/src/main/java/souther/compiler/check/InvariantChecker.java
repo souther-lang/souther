@@ -1941,7 +1941,7 @@ public final class InvariantChecker {
      * or a binding above the statements is where none of them decides anything, and a fact said to
      * be decided there is refused ({@link #wroteIt}) rather than spread over every statement.
      */
-    private static Map<ClauseOccurrence, InvariantStatementId> statementsOf(Written reading) {
+    static Map<ClauseOccurrence, InvariantStatementId> statementsOf(Written reading) {
         Map<ClauseOccurrence, InvariantStatementId> out = new HashMap<>();
         reading.parts().forEach(part -> ConjunctStatements.of(part.of(), part.id())
                 .forEach(each -> under(each.said(), each.statement(), out)));
@@ -2685,6 +2685,11 @@ public final class InvariantChecker {
             Set<FactSubject> names = byName.namesAt(each);
             boolean left = false;
             for (FactSubject name : names) {
+                // Which reading adopted the statement is what the set of values being exact for it
+                // turns on, and `here` is what any of the four readings adopted.
+                if (adopted.byValues().took(name)) {
+                    took.valuesAdopted(statement);
+                }
                 if (here.contains(name)) {
                     took.record(rule, name);
                 } else if (!constrained.contains(name)
