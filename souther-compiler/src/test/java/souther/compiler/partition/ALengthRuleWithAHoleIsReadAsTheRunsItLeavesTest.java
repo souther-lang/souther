@@ -193,32 +193,6 @@ class ALengthRuleWithAHoleIsReadAsTheRunsItLeavesTest {
     }
 
     /**
-     * Finitely many strings beside a hole in a length no machine is made for are each asked
-     * their length, so the strings made into one set cost no machine and stop at no figure.
-     */
-    @Test
-    void aFiniteSetBesideAHoleInLongLengthsIsMadeWithoutAMachine() {
-        JsonNode partition = partitionOf("""
-                module converted
-
-                data Code = String
-                    invariant value == "abc" && String.length(value) <= 2000000
-                        && String.length(value) /= 1000000
-
-                behavior f : (code: Code, other: String) -> Bool
-                let f (Code(code), other) = String.lowercase(other) == code
-
-                example f
-                    | "same"  : (Code("abc"), "ABC") -> true
-                    | "other" : (Code("abc"), "cd") -> false
-                """);
-        List<String> figures = new ArrayList<>();
-        partition.path("unanswered").forEach(each -> each.path("stopped").forEach(
-                stop -> stop.path("figures").forEach(figure -> figures.add(figure.asString()))));
-        assertEquals(List.of(), figures);
-    }
-
-    /**
      * Strings of a length taken out are not written for a class that is the position's, and the
      * ones written for the class of strings never the position's are of the lengths taken out or
      * of those past its ends.

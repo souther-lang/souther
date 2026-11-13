@@ -104,6 +104,7 @@ final class StringsHeld {
         if (left == null) {
             return whole ? Held.ofOneRun(ValuesWithin.all(admitted)) : null;
         }
+        List<NumericDomain.Bounds> runs = runsOfTheLengths(at);
         // What the rules leave the length, which is not always what their ends say: lengths taken
         // out from between the ends are runs of their own, and one run that is not the run between
         // the ends is where the ends are no longer the lengths a string may have. Both are the
@@ -111,7 +112,6 @@ final class StringsHeld {
         // rule that reaches the position, which the runs are not asked of: a rule of another value
         // may place an end past where these stop.
         LengthRuns lengths = LengthRuns.of(left);
-        List<NumericDomain.Bounds> runs = runsOfTheLengths(at);
         if (runs != null) {
             LengthRuns ofTheRuns = asLengths(runs);
             lengths = ofTheRuns == null ? LengthRuns.NONE : lengths.and(ofTheRuns);
@@ -137,7 +137,7 @@ final class StringsHeld {
     /**
      * The lengths the rules of {@code at} leave a string of it, or null where a rule about its
      * length is not read as one: an end that is no whole count, or a rule that bounds another
-     * number beside it.
+     * number beside it, which the set of strings and the lengths do not hold.
      */
     private static LengthsPastTheWay.Lengths lengthsLeft(Position at) {
         LengthsPastTheWay.Lengths left = LengthsPastTheWay.Lengths.EVERY;
@@ -237,18 +237,6 @@ final class StringsHeld {
      */
     private static ValueSet withoutTheLengthsBetween(ValueSet admitted, LengthRuns lengths,
                                                      Meter meter) {
-        // Finitely many strings are each asked their length, which builds nothing: a machine as
-        // long as the longest length is what a set with no end would cost, and not what this does.
-        if (admitted instanceof ValueSet.Finite finite) {
-            Set<Value> kept = new LinkedHashSet<>();
-            for (Value each : finite.values()) {
-                if (each instanceof Value.Text(String text) && lengths.holds(
-                        BigInteger.valueOf(text.codePointCount(0, text.length())))) {
-                    kept.add(each);
-                }
-            }
-            return ValueSet.oneOf(kept);
-        }
         Language ofTheRuns = null;
         for (LengthsPastTheWay.Lengths run : lengths.runs()) {
             Language here = Partitions.ofTheLengths(Language.EVERY_STRING, LengthRuns.of(run),

@@ -461,7 +461,8 @@ sealed interface StatedByClauses {
                     && !part.boundary().byNumber().isEmpty()
                     && part.boundary().byNumber().entrySet().stream()
                             .allMatch(each -> each.getKey().holdsItsHolesAsRuns()
-                                    && each.getValue() instanceof BoundaryState.Left.Known);
+                                    && (each.getValue() instanceof BoundaryState.Left.Known
+                                    || each.getValue() instanceof BoundaryState.Left.NothingLeft));
         }
 
         /** The same ends, with {@code choice} standing between them and the walk. */

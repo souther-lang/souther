@@ -16,6 +16,7 @@ import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
+import souther.compiler.values.AdmissibleSet;
 
 import java.math.BigInteger;
 import java.util.List;
@@ -23,8 +24,10 @@ import java.util.Map;
 import java.util.function.IntPredicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The lengths a record's rule leaves its field {@code a} are read from what the rule says of
@@ -51,6 +54,11 @@ class ALengthRuleIsReadWhateverIsWrittenBesideItTest {
 
     /** What is held of the strings of {@code a}, where the record's rule is {@code rule}. */
     private static StringsHeld.Held heldBy(String rule) {
+        Position at = positionOf(rule);
+        return StringsHeld.held(at);
+    }
+
+    private static Position positionOf(String rule) {
         Compilation compilation =
                 Compilation.ofSources(List.of(MODEL.formatted(rule)), ModulePath.EMPTY);
         String module = compilation.modules().get(0);
@@ -64,7 +72,7 @@ class ALengthRuleIsReadWhateverIsWrittenBesideItTest {
                 Membership.none());
         Position at = input.at(TermPath.of("p").then("a"));
         assertNotNull(at, "the field is a position");
-        return StringsHeld.held(at);
+        return at;
     }
 
     /** Every length up to past the ends is held exactly where the rule allows it. */
@@ -91,6 +99,40 @@ class ALengthRuleIsReadWhateverIsWrittenBesideItTest {
         assertHeldAre("String.length(a) <= 5 && String.length(a) /= 9", length -> length <= 5);
         assertHeldAre("String.length(a) <= 10 && (String.length(a) < 4 || String.length(a) > 6)",
                 length -> length <= 10 && (length < 4 || length > 6));
+    }
+
+    /**
+     * A set read whole and the ends of the lengths are not the rules where a choice takes a length
+     * out from between them: the set holds the strings, the ends hold the hull of the choice, and
+     * the length the choice refuses is a string of the set that no value is.
+     */
+    @Test
+    void aSetIsNotTheWholeOfARuleWhoseChoiceTakesALengthOutOfIt() {
+        String strings = "(a == \"abc\" || a == \"abcd\")";
+        assertTrue(positionOf(strings).admitted().completeness()
+                        instanceof AdmissibleSet.Completeness.Complete,
+                "the strings alone are the whole of what is said");
+        assertFalse(positionOf(strings
+                + " && (String.length(a) == 4 || String.length(a) <= 2)").admitted().completeness()
+                        instanceof AdmissibleSet.Completeness.Complete,
+                "a length the choice takes out is a string the set still holds");
+    }
+
+    /**
+     * A rule on the order of the strings is a bound the strings and the lengths do not hold, so
+     * the lengths beside it are not read as the strings the position holds, whatever runs they
+     * are.
+     */
+    @Test
+    void aBoundOnTheOrderOfTheStringsLeavesTheLengthsUnread() {
+        assertNull(heldBy("a < \"B\" && String.length(a) >= 1"));
+        assertNull(heldBy("a < \"B\" && String.length(a) >= 1 && String.length(a) /= 3"));
+    }
+
+    @Test
+    void aChoiceOneOfWhoseAlternativesLeavesNoLengthLeavesWhatTheOtherLeaves() {
+        assertHeldAre("(String.length(a) > 5 && String.length(a) <= 0) || String.length(a) < 6",
+                length -> length < 6);
     }
 
     @Test

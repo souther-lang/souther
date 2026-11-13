@@ -3633,12 +3633,17 @@ public final class FieldDomains {
      * @param paths          the names the occurrence is about
      * @param valuesHoldWhole false for a connective or a binding above the statements, which no
      *                        reading decides anything at
+     * @param runsHoldWhole  whether the part is a choice between bounds on the length of one
+     *                        string, which the runs of the length hold whole beside the ends
+     *                        ({@link #runsLeftAt}). A cause all the same for what reads the ends
+     *                        and the set without the runs: they hold nothing of it
      */
     private record PartUnstated(RuleRef.Invariant rule, Set<RuleKey> paths,
-                                boolean valuesHoldWhole) {}
+                                boolean valuesHoldWhole, boolean runsHoldWhole) {}
 
-    /** An occurrence of a part the bounds hold nothing of, and the names it is about. */
-    private record Occurrence(ClauseOccurrence at, Set<RuleKey> paths) {}
+    /** An occurrence of a part the bounds hold nothing of, the names it is about, and whether
+     *  the runs of a length hold it whole. */
+    private record Occurrence(ClauseOccurrence at, Set<RuleKey> paths, boolean runsHoldWhole) {}
 
     /**
      * What {@link #projection} says with {@code setAside} not counted among what stands in the way.
@@ -3745,7 +3750,8 @@ public final class FieldDomains {
             return false;
         }
         List<PartUnstated> heldHere = read.unstated().stream()
-                .filter(each -> each.valuesHoldWhole() && each.paths().equals(Set.of(place)))
+                .filter(each -> (each.valuesHoldWhole() || each.runsHoldWhole())
+                        && each.paths().equals(Set.of(place)))
                 .toList();
         ProjectionEvidence rest = evidenceLeaving(heldHere);
         return rest.isCertified() || onlyTheHolesTheRunsHold(rest, counted);
@@ -3861,12 +3867,6 @@ public final class FieldDomains {
                 if (read.narrowable().stream().anyMatch(ranged::contains)) {
                     return;
                 }
-                // Or a choice between bounds on the length of one string: the bounds hold the ends
-                // of each alternative, and the lengths the choice takes out from between them are
-                // held beside them as runs ({@link #runsLeftAt}) and taken out of the strings.
-                if (isAChoiceTheNumbersTookInWhole(reading, shape)) {
-                    return;
-                }
                 // Or the end this part placed, which is the same part in the bounds said by the
                 // other reading of it: an ordered value that is not a number takes its range from
                 // the comparison rather than from the interval algebra, and counting only the
@@ -3900,7 +3900,11 @@ public final class FieldDomains {
                 if (required == null || required.obligations().isEmpty()) {
                     told.add(RuleKey.THE_VALUE);
                 }
-                pending.add(new Occurrence(shape.at(), told));
+                // A choice between bounds on the length of one string is still a part the bounds
+                // hold nothing of: they hold the ends of each alternative, and the lengths the
+                // choice takes out from between them are held beside them as runs.
+                pending.add(new Occurrence(shape.at(), told,
+                        isAChoiceTheNumbersTookInWhole(reading, shape)));
             }));
             if (pending.isEmpty()) {
                 return;
@@ -3913,7 +3917,8 @@ public final class FieldDomains {
             for (Occurrence each : pending) {
                 InvariantStatementId statement = statements.get(each.at());
                 unstated.add(new PartUnstated(rule, each.paths(),
-                        statement != null && took.valuesHoldWhole(statement)));
+                        statement != null && took.valuesHoldWhole(statement),
+                        each.runsHoldWhole()));
             }
         });
         // And what the algebra was given and what it projects does not hold.
