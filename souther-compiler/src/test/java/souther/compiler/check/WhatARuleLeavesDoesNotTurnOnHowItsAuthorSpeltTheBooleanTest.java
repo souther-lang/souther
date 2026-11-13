@@ -198,10 +198,11 @@ class WhatARuleLeavesDoesNotTurnOnHowItsAuthorSpeltTheBooleanTest {
                     }
                     invariant capped = %s
                 """.formatted(helpers, clause);
-        return READ.computeIfAbsent(source, each -> read(each, clause));
+        return READ.computeIfAbsent(source,
+                WhatARuleLeavesDoesNotTurnOnHowItsAuthorSpeltTheBooleanTest::read);
     }
 
-    private static FieldDomains read(String source, String clause) {
+    private static FieldDomains read(String source) {
         // Everything there is to answer, which is what holding a fixture to being writable costs
         // and not what these rows read.
         //
