@@ -46,7 +46,7 @@ class AnEnsuresStatementNoRunEvaluatesOwesNothingTest {
     private static final String STOP = "weekday(c, Date.addMonths(1, d)) >= 1";
 
     /** A form nothing reads, so the statement is one the clause reader turns away. */
-    private static final String OPAQUE = "List.contains(List.length(xs), xs)";
+    private static final String OPAQUE = "List.allDistinctBy(k -> k, xs)";
 
     @Test
     void aStatementTheOnesBeforeItKeepARunFromOwesNothing() {

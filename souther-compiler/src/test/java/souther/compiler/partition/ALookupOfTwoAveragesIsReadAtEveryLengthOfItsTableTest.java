@@ -80,7 +80,7 @@ class ALookupOfTwoAveragesIsReadAtEveryLengthOfItsTableTest {
                 "mb <= r.upperBound then", "mb.value + n <= r.upperBound.value then"),
                 "gradeRowFor(averageOf(pa), averageOf(pb)).grade",
                 "gradeRowFor(averageOf(pa), averageOf(pb),"
-                        + " List.length(List.filter(ys -> List.contains(List.length(ys), ys), w.xs))).grade");
+                        + " List.length(List.filter(ys -> List.allDistinctBy(k -> k, ys), w.xs))).grade");
     }
 
     private static String replaced(String in, String what, String with) {
@@ -91,7 +91,7 @@ class ALookupOfTwoAveragesIsReadAtEveryLengthOfItsTableTest {
     /** Everything the report leaves unread, with why and at which figure. */
     private static List<String> unread(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         compilation.answerEverything();
         assertEquals(List.of(), compilation.errors().stream()
                 .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
