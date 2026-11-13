@@ -12,6 +12,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.function.ToIntFunction;
 
 /**
  * Where a closure is worked out, and for how long one is kept to stand for the next question equal
@@ -103,14 +105,15 @@ public final class ClosedStates {
     private final Map<CanonicalOrder<?>, Map<Set<?>, Map<?, Integer>>> places;
 
     /**
-     * How each form has been walked in each order it has been asked of ({@link CanonicalForm#entriesIn}).
+     * Each order, as the order that keeps how each form has been walked in it
+     * ({@link CanonicalForm#entriesIn}).
      *
      * <p>Kept for the reason {@link #places} is: the walk of a form is settled by the form and the
      * order alone, and the rules a reading is asked about are the same few forms for every form it is
      * put. Keyed by the order as the object it is, so an order written apart that walks alike is a
      * walk done again and nothing else. Null for a table that keeps nothing.
      */
-    private final Map<CanonicalOrder<?>, Map<CanonicalForm<?>, List<?>>> walks;
+    private final Map<CanonicalOrder<?>, CanonicalOrder<?>> walks;
 
     private final AtomicLong workedOut = new AtomicLong();
 
@@ -127,7 +130,7 @@ public final class ClosedStates {
 
     private ClosedStates(LatelyAsked<ClosureQuestion<?>, ClosedState<?>> answers,
                          Map<CanonicalOrder<?>, Map<Set<?>, Map<?, Integer>>> places,
-                         Map<CanonicalOrder<?>, Map<CanonicalForm<?>, List<?>>> walks,
+                         Map<CanonicalOrder<?>, CanonicalOrder<?>> walks,
                          boolean inOneRun, long placesKept) {
         this.placesKept = placesKept;
         this.answers = answers;
@@ -137,31 +140,59 @@ public final class ClosedStates {
     }
 
     /**
-     * How a form is walked under {@code order}: {@link CanonicalForm#entriesIn}, worked out once for
-     * each form where this keeps what it is asked, and worked out each time where it does not.
+     * {@code order}, walking each form from what it kept: the walk of a form is worked out once
+     * where this keeps what it is asked, and each time where it does not, in which case this is
+     * {@code order} itself.
      *
-     * <p>A walk that is refused is refused each time it is asked, and nothing of it is kept.
+     * <p>An order and not a function beside it, so that every reader that is given the order to walk
+     * a form in — the closure of rules, the differences among them, a reading of a form — shares
+     * what is kept without being handed anything more. A walk that is refused is refused each time
+     * it is asked, and nothing of it is kept.
      */
-    <A> Function<CanonicalForm<A>, List<Map.Entry<A, ExactRatio>>> walksIn(
-            CanonicalOrder<A> order) {
-        if (walks == null) {
-            return form -> form.entriesIn(order);
+    <A> CanonicalOrder<A> kept(CanonicalOrder<A> order) {
+        if (walks == null || order instanceof Keeping<A>) {
+            return order;
         }
-        Map<CanonicalForm<?>, List<?>> kept = walks.computeIfAbsent(order,
-                _ -> new ConcurrentHashMap<>());
-        return form -> {
-            // The cast holds because an entry is only ever put under the form it is the walk of, in
-            // the order the table above is keyed by.
-            @SuppressWarnings("unchecked")
-            List<Map.Entry<A, ExactRatio>> had = (List<Map.Entry<A, ExactRatio>>) kept.get(form);
+        // The cast holds because an entry is only ever put under the order it keeps the walks of.
+        @SuppressWarnings("unchecked")
+        CanonicalOrder<A> keeping =
+                (CanonicalOrder<A>) walks.computeIfAbsent(order, _ -> new Keeping<>(order));
+        return keeping;
+    }
+
+    /** An order, and the walk of each form it was asked for. */
+    private final class Keeping<A> implements CanonicalOrder<A> {
+
+        private final CanonicalOrder<A> order;
+        private final Map<CanonicalForm<A>, List<Map.Entry<A, ExactRatio>>> walked =
+                new ConcurrentHashMap<>();
+
+        private Keeping(CanonicalOrder<A> order) {
+            this.order = order;
+        }
+
+        @Override
+        public int compare(A one, A other) {
+            return order.compare(one, other);
+        }
+
+        @Override
+        public ToIntFunction<A> placeOf() {
+            return order.placeOf();
+        }
+
+        @Override
+        public List<Map.Entry<A, ExactRatio>> walkOf(CanonicalForm<A> form,
+                                                     Supplier<List<Map.Entry<A, ExactRatio>>> walk) {
+            List<Map.Entry<A, ExactRatio>> had = walked.get(form);
             if (had != null) {
                 return had;
             }
-            List<Map.Entry<A, ExactRatio>> made = form.entriesIn(order);
+            List<Map.Entry<A, ExactRatio>> made = walk.get();
             walkedOut.incrementAndGet();
-            kept.put(form, made);
+            walked.put(form, made);
             return made;
-        };
+        }
     }
 
     /**
