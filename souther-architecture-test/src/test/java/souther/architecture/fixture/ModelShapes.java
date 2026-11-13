@@ -951,7 +951,7 @@ public final class ModelShapes {
         public static AdequacyReport read(String source) {
             Compilation model = TheDoor.answered(source);
             Function<LocalDate, Compilation> derive = model::writtenOn;
-            derive.apply(LocalDate.MIN);
+            Objects.requireNonNull(derive.apply(LocalDate.MIN));
             return AdequacyReport.of(model);
         }
     }
@@ -1026,7 +1026,8 @@ public final class ModelShapes {
 
         public static AdequacyReport read(String source) {
             Compilation model = TheDoor.answered(source);
-            Optional.of(model).ifPresent(each -> each.update(Map.of(), Set.of(), LocalDate.MIN));
+            Optional.ofNullable(model)
+                    .ifPresent(each -> each.update(Map.of(), Set.of(), LocalDate.MIN));
             return AdequacyReport.of(model);
         }
     }
