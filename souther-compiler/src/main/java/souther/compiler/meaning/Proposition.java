@@ -2016,41 +2016,44 @@ public sealed interface Proposition {
     /** Why the first part of {@code stated} nothing read stopped, in the order its parts are
      *  kept, or null where every part was read. */
     static WhyUnread firstStopIn(Proposition stated) {
-        List<WhyUnread> stops = new ArrayList<>(1);
-        stopsIn(stated, stops, true);
-        return stops.isEmpty() ? null : stops.getFirst();
+        return SharedPropositions.<Optional<WhyUnread>>fact(stated,
+                SharedPropositions.Fact.FIRST_STOP, Proposition::firstStopAfresh).orElse(null);
+    }
+
+    private static Optional<WhyUnread> firstStopAfresh(Proposition stated) {
+        return switch (stated) {
+            case Unread unread -> Optional.of(unread.why());
+            // Written out to be told: whether a number of some way cannot be held is not known of
+            // the parts it is made of, and is found where the cases are.
+            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
+                 WhereItAnswers _, OfTheWays _ -> stated.partsHeld().stream()
+                    .map(part -> Optional.ofNullable(firstStopIn(part)))
+                    .flatMap(Optional::stream).findFirst();
+            case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
+                 SameValue _, StringInside _, LastToHold _, Carried _ -> Optional.empty();
+        };
     }
 
     /** Why each part of {@code stated} nothing read stopped, in the order its parts are kept. */
     static List<WhyUnread> stopsIn(Proposition stated) {
         List<WhyUnread> out = new ArrayList<>();
-        stopsIn(stated, out, false);
+        stopsIn(stated, out);
         return List.copyOf(out);
     }
 
-    /** Each stop in {@code stated} added to {@code into} in the order its parts are kept, or the
-     *  first alone where {@code first}; whether one was added. */
-    private static boolean stopsIn(Proposition stated, List<WhyUnread> into, boolean first) {
-        return switch (stated) {
-            case Unread unread -> into.add(unread.why());
-            // Written out to be told: whether a number of some way cannot be held is not known of
-            // the parts it is made of, and is found where the cases are.
-            case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
-                 WhereItAnswers _, OfTheWays _ -> stopsIn(stated.partsHeld(), into, first);
-            case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
-                 SameValue _, StringInside _, LastToHold _, Carried _ -> false;
-        };
-    }
-
-    private static boolean stopsIn(List<Proposition> parts, List<WhyUnread> into, boolean first) {
-        boolean added = false;
-        for (Proposition part : parts) {
-            added |= stopsIn(part, into, first);
-            if (added && first) {
-                return true;
-            }
+    /** Each stop in {@code stated} added to {@code into} in the order its parts are kept. A part
+     *  that holds none is not gone down: the stops written out are the ones the answer lists. */
+    private static void stopsIn(Proposition stated, List<WhyUnread> into) {
+        if (firstStopIn(stated) == null) {
+            return;
         }
-        return added;
+        if (stated instanceof Unread unread) {
+            into.add(unread.why());
+            return;
+        }
+        for (Proposition part : stated.partsHeld()) {
+            stopsIn(part, into);
+        }
     }
 
     /**
@@ -2162,6 +2165,11 @@ public sealed interface Proposition {
      * something.
      */
     static boolean saysASearchReachesBelow(Proposition stated) {
+        return SharedPropositions.fact(stated, SharedPropositions.Fact.SEARCH_BELOW,
+                Proposition::saysASearchReachesBelowAfresh);
+    }
+
+    private static boolean saysASearchReachesBelowAfresh(Proposition stated) {
         return switch (stated) {
             case SomeReachable _ -> true;
             case All _, Any _, OnAnApplication _, SoManyHold _, Some _, WhereItAnswers _,
@@ -2181,6 +2189,11 @@ public sealed interface Proposition {
      * statement about it names.
      */
     static boolean aboutAnAnswer(Proposition stated) {
+        return SharedPropositions.fact(stated, SharedPropositions.Fact.ABOUT_AN_ANSWER,
+                Proposition::aboutAnAnswerAfresh);
+    }
+
+    private static boolean aboutAnAnswerAfresh(Proposition stated) {
         return switch (stated) {
             case Always _, Unread _, Carried _ -> false;
             case LastToHold last -> last.container() instanceof DecisionSubject.AnAnswer;
@@ -2496,6 +2509,11 @@ public sealed interface Proposition {
 
     /** Whether some part of {@code stated} answers only where an operation does. */
     private static boolean holdsAnAnswering(Proposition stated) {
+        return SharedPropositions.fact(stated, SharedPropositions.Fact.ANSWERING,
+                Proposition::holdsAnAnsweringAfresh);
+    }
+
+    private static boolean holdsAnAnsweringAfresh(Proposition stated) {
         return switch (stated) {
             case WhereItAnswers _ -> true;
             // What one of these holds answers on every row, which its constructor saw to, so

@@ -82,6 +82,52 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
+    private static String reportOfNamesEachMadeOfTheOneBefore(int depth, String seed, String step,
+                                                              String ending) {
+        StringBuilder body = new StringBuilder("{\n    let a0 = " + seed + "\n");
+        for (int i = 1; i <= depth; i++) {
+            body.append("    let a%d = %s\n".formatted(i, step.replace("PREV", "a" + (i - 1))));
+        }
+        body.append("    " + ending.replace("LAST", "a" + depth) + "\n}");
+        Compilation compilation = Compilation.ofSource("""
+                module m
+
+                behavior f : (x: Int, j: Int) -> Bool
+                let f (x, j) = %s
+                """.formatted(body), "Main");
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    @Test
+    void aProductOfANameWithItselfSaysAtAnyDepthWhatItSaysAtAShallowOne() {
+        assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
+                depth -> reportOfNamesEachMadeOfTheOneBefore(depth, "x", "PREV * PREV",
+                        "LAST >= j"),
+                AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDoubleTest
+                        ::afterOneLetEachCall, 3, 50);
+    }
+
+    /** What a remainder of a sum of a name with itself says depends on the depth, as the numbers it
+     *  is of do; what is asked here is that it is worked out in time that does not double. */
+    @Test
+    void aRemainderOfASumOfANameWithItselfIsReadInTimeThatDoesNotDoubleWithTheDepth() {
+        String report = assertTimeoutPreemptively(Duration.ofSeconds(60),
+                () -> reportOfNamesEachMadeOfTheOneBefore(50, "x",
+                        "Int.floorMod(PREV + PREV, 7)", "LAST >= j"));
+        assertTrue(!report.isEmpty(), "a report is made");
+    }
+
+    @Test
+    void aTruthMadeOfANameOnBothSidesOfADisjunctionIsReadInTimeThatDoesNotDoubleWithTheDepth() {
+        String report = assertTimeoutPreemptively(Duration.ofSeconds(60),
+                () -> reportOfNamesEachMadeOfTheOneBefore(22, "x >= 0",
+                        "PREV && (j > 3 || PREV)", "LAST"));
+        assertTrue(!report.isEmpty(), "a report is made");
+    }
+
     /** What is said of a truth does not depend on how many names it is made through. */
     @Test
     void aTruthMadeOfTheOneBeforeItTwiceIsReadOnceForEachNameAndSaysWhatItSaysAtAnyDepth() {

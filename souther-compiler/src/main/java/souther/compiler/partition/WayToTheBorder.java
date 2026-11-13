@@ -473,26 +473,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      */
     public List<OnTheWay> stated() {
         List<OnTheWay> out = new ArrayList<>();
-        stated(onTheWay, out);
+        OnTheWay.eachOnce(onTheWay, out::add);
         return List.copyOf(out);
-    }
-
-    private static void stated(List<OnTheWay> entries, List<OnTheWay> into) {
-        for (OnTheWay each : entries) {
-            into.add(each);
-            switch (each) {
-                case OnTheWay.OneOf several ->
-                        several.alternatives().forEach(one -> stated(one, into));
-                case OnTheWay.Counted counted -> counted.statements().forEach(one -> {
-                    stated(one.holding(), into);
-                    stated(one.failing(), into);
-                });
-                // A narrowing's alternatives are the cases it leaves, each made afresh as a
-                // narrowing to that case; they state nothing the narrowing did not.
-                case OnTheWay.Narrowed _, OnTheWay.Declined _, OnTheWay.TakenIn _,
-                     OnTheWay.Settled _ -> { }
-            }
-        }
     }
 
     /**

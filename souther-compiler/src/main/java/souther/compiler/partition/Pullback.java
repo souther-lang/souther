@@ -11286,6 +11286,14 @@ final class Pullback {
     private final SharedReads<ReadingState.Inputs, Guards, Met, LinearForm<Quantity>> sharedSums =
             new SharedReads<>(new TheScene());
 
+    /** The way into the value an arithmetic stopped at, kept ({@link #aWayInAt}). */
+    private final SharedReads<ReadingState.Inputs, Guards, Met, Optional<Inside>> sharedWaysIn =
+            new SharedReads<>(new TheScene(true));
+
+    /** The forms the factors of a product come to, kept ({@link #formOfAFactor}). */
+    private final SharedReads<ReadingState.Inputs, Guards, Met,
+            Optional<LinearForm<NumericTerm>>> sharedForms = new SharedReads<>(new TheScene(true));
+
 
     /** How the value a name stands for answered each side, kept ({@link #observe}), by the side. */
     private final SharedReads<ReadingState.Inputs, Guards, Met, Derivation> sharedObservations =
@@ -13178,6 +13186,13 @@ final class Pullback {
      * no form for was handed — or null where what it stopped at is no such value.
      */
     private Inside aWayInAt(AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped) {
+        // Asked at every name a stop was read inside of, and each asking searches the value down
+        // to the way in: a stop is one node read at one reading, and is searched once.
+        return sharedWaysIn.shared(stopped.node(), stopped.at(), stopped.why().getClass(),
+                () -> Optional.ofNullable(aWayInAtAfresh(stopped)), _ -> true).orElse(null);
+    }
+
+    private Inside aWayInAtAfresh(AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped) {
         return switch (stopped.why()) {
             case AffineForms.Halt.AnArgumentStopped<Quantity, InputReads>(var argument) ->
                     aWayInAt(argument);
@@ -14711,6 +14726,25 @@ final class Pullback {
     }
 
     /**
+     * What a factor of a product comes to as a form of the input's numbers, held to the elements
+     * {@code met} has met. A factor that is a name's value made of products is read through the
+     * products inside it, each factor of each, so read afresh for every way down to it the reads
+     * are two to the depth of the chain of names; taken again, it is read once.
+     */
+    private LinearForm<NumericTerm> formOfAFactor(Core factor, InputReads at, ElementsMet met) {
+        // A name stands for the same reading wherever it is used, and each use of it is a node of
+        // its own: kept by the value it stands for, a name used twice is read once. A factor the
+        // arithmetic stops on is an answer as well, and kept as one.
+        Denotation denoted = Core.withoutStanding(factor) instanceof Core.Read name
+                && at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())
+                        instanceof ReadMeaning.Through through ? through.denotes() : null;
+        return sharedForms.shared(denoted != null ? denoted.value() : factor,
+                denoted != null ? denoted.at() : at, null, met,
+                () -> Optional.ofNullable(AffineReading.formOf(factor, at, read, met)),
+                _ -> true).orElse(null);
+    }
+
+    /**
      * What two forms of the input's whole numbers come to multiplied, as a number of the input —
      * or null where either form is none, or a number of one is read off a place a number of the
      * other is. The comparison's arithmetic reads the same product ({@code AffineReading}), and
@@ -14723,8 +14757,8 @@ final class Pullback {
         // The two factors held to the same elements, and to those of the form the product stands
         // in where one is being read: a product of two elements' numbers is no number of one.
         ElementsMet met = elementsMet == ElementsMet.NONE ? new ElementsMet() : elementsMet;
-        LinearForm<NumericTerm> left = AffineReading.formOf(written.left(), at, read, met);
-        LinearForm<NumericTerm> right = AffineReading.formOf(written.right(), at, read, met);
+        LinearForm<NumericTerm> left = formOfAFactor(written.left(), at, met);
+        LinearForm<NumericTerm> right = formOfAFactor(written.right(), at, met);
         NumericTerm.ProductOf.Signed made = NumericTerm.ProductOf.signed(left, right);
         if (made == null) {
             return null;

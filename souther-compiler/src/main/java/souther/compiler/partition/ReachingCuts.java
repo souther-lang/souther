@@ -4,6 +4,7 @@ import souther.compiler.carrier.Lookup;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.collect.EachNodeOnce;
 import souther.compiler.core.Core;
 import souther.compiler.core.EnteredArm;
 import souther.compiler.diag.SourcePos;
@@ -1071,6 +1072,31 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
                                      DemandReading.ReadOff readOff,
                                      SaidOnTheWay.Filing by,
                                      Optional<EnteredArm> entered, NamedElements named) {
+        return onTheWay(condition, at, read, input, readOff, by, entered, named,
+                new EachNodeOnce<>());
+    }
+
+    /**
+     * The same, where a read held in several places inside {@code read} is put on the way once and
+     * that one is what each place holds. Everything but the read is the same down the whole walk,
+     * and what a read is put on the way by is told once, with the entry.
+     */
+    private static OnTheWay onTheWay(ConditionOccurrence condition, ConditionReportAnchor at,
+                                     DemandReading.Read read, InputReading input,
+                                     DemandReading.ReadOff readOff,
+                                     SaidOnTheWay.Filing by,
+                                     Optional<EnteredArm> entered, NamedElements named,
+                                     EachNodeOnce<DemandReading.Read, OnTheWay> once) {
+        return once.of(read, node -> madeOnTheWay(condition, at, node, input, readOff, by,
+                entered, named, once));
+    }
+
+    private static OnTheWay madeOnTheWay(ConditionOccurrence condition, ConditionReportAnchor at,
+                                         DemandReading.Read read, InputReading input,
+                                         DemandReading.ReadOff readOff,
+                                         SaidOnTheWay.Filing by,
+                                         Optional<EnteredArm> entered, NamedElements named,
+                                         EachNodeOnce<DemandReading.Read, OnTheWay> once) {
         OnTheWay made = switch (read) {
             case DemandReading.Read.Demands(var demand) -> new OnTheWay.TakenIn(at, demand, named);
             case DemandReading.Read.Settled(var thisWay) ->
@@ -1080,16 +1106,16 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             case DemandReading.Read.OneOf oneOf -> OnTheWay.OneOf.of(
                     condition, at, oneOf.alternatives().stream().map(each -> each.stream()
                             .map(one -> onTheWay(condition, at, one, input, readOff, by, entered,
-                                    named))
+                                    named, once))
                             .toList()).toList(),
                     oneOf.stated());
             case DemandReading.Read.Counted counted -> new OnTheWay.Counted(condition, at,
                     counted.statements().stream().map(each -> new OnTheWay.Counted.Statement(
                             each.weight(),
                             each.holding().stream().map(one -> onTheWay(condition, at, one, input,
-                                    readOff, by, entered, named)).toList(),
+                                    readOff, by, entered, named, once)).toList(),
                             each.failing().stream().map(one -> onTheWay(condition, at, one, input,
-                                    readOff, by, entered, named)).toList())).toList(),
+                                    readOff, by, entered, named, once)).toList())).toList(),
                     counted.admitted(), counted.stated());
             case DemandReading.Read.Unread(var whys, var besideAnAnswer) ->
                     new OnTheWay.Declined(condition, at, whys, entered, besideAnAnswer);

@@ -3,6 +3,7 @@ package souther.compiler.meaning;
 import java.lang.ref.WeakReference;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -43,7 +44,55 @@ final class SharedPropositions {
      */
     private static final Map<Proposition.WaysToWrite, Proposition> WRITTEN = new WeakHashMap<>();
 
+    /**
+     * What a statement says of itself that is the same wherever it stands.
+     *
+     * <p>Held as long as the statement is, once for each kind of fact: a statement stands inside
+     * every statement made of it, and one condition read through a name used twice is two parts of
+     * what is made of it, so a reader that goes down the parts to ask pays for every way down.
+     * Asked here, each statement says it once to every reader and every statement above it.
+     * Held strongly: what is held names parts of the statement and never the statement.
+     */
+    private static final Map<Proposition, Object[]> FACTS = new WeakHashMap<>();
+
+    /** The kinds of fact {@link #fact} keeps. */
+    enum Fact {
+        /** Whether some part answers only where an operation does. */
+        ANSWERING,
+        /** Whether it is, or holds, a search from a node for some node below it. */
+        SEARCH_BELOW,
+        /** Whether some part is about what a dependency answered. */
+        ABOUT_AN_ANSWER,
+        /** Why the first part nothing read stopped, or nothing where all were read. */
+        FIRST_STOP
+    }
+
     private SharedPropositions() {
+    }
+
+    /**
+     * The fact {@code kind} of {@code stated}: worked out by {@code work} the first time it is
+     * asked while {@code stated} is held, and the same after.
+     *
+     * <p>Worked out outside the lock, since working it out asks the same of every part. Two
+     * readers asking at once work out the same, and the first is kept.
+     */
+    @SuppressWarnings("unchecked")
+    static <T> T fact(Proposition stated, Fact kind, Function<Proposition, T> work) {
+        synchronized (FACTS) {
+            Object[] held = FACTS.get(stated);
+            if (held != null && held[kind.ordinal()] != null) {
+                return (T) held[kind.ordinal()];
+            }
+        }
+        T made = work.apply(stated);
+        synchronized (FACTS) {
+            Object[] held = FACTS.computeIfAbsent(stated, _ -> new Object[Fact.values().length]);
+            if (held[kind.ordinal()] == null) {
+                held[kind.ordinal()] = made;
+            }
+            return (T) held[kind.ordinal()];
+        }
     }
 
     /**

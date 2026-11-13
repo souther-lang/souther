@@ -1,5 +1,8 @@
 package souther.compiler.types;
 
+import souther.compiler.hash.KeepsTheNumberItIsAskedFor;
+import souther.compiler.hash.ValueHash;
+
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -18,16 +21,55 @@ import java.util.stream.Stream;
  *
  * <p>In the order met because that is the order a reader is told them in.
  *
- * @param inOrder the copies, each once, in the order they were met
+ * <p>A class and not a record, for its hash. It is a value of every entry of what puts things on
+ * a way, and each of those is hashed whole wherever it is gathered into a map; worked out from the
+ * copies each time it is asked, the hash goes down every copy at every gathering. So it is worked
+ * out when the copies are made and kept.
  */
-public record ModelOccurrences(List<ModelOccurrence> inOrder)
-        implements Iterable<ModelOccurrence> {
+public final class ModelOccurrences implements Iterable<ModelOccurrence>,
+        KeepsTheNumberItIsAskedFor {
+
+    /** The whole of what a set of copies is: the copies, each once, in the order they were met. */
+    record Parts(List<ModelOccurrence> inOrder) {
+    }
 
     /** None at all. */
     public static final ModelOccurrences NONE = new ModelOccurrences(List.of());
 
-    public ModelOccurrences {
-        inOrder = List.copyOf(new LinkedHashSet<>(inOrder));
+    private final Parts parts;
+
+    private final int hash;
+
+    public ModelOccurrences(List<ModelOccurrence> inOrder) {
+        this.parts = new Parts(List.copyOf(new LinkedHashSet<>(inOrder)));
+        this.hash = ValueHash.ofOnePart(ModelOccurrences.class, parts.hashCode());
+    }
+
+    /** The copies, each once, in the order they were met. */
+    public List<ModelOccurrence> inOrder() {
+        return parts.inOrder();
+    }
+
+    @Override
+    public Parts standsFor() {
+        return parts;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return this == other
+                || (other instanceof ModelOccurrences that && hash == that.hash
+                        && parts.equals(that.parts));
+    }
+
+    @Override
+    public int hashCode() {
+        return hash;
+    }
+
+    @Override
+    public String toString() {
+        return "ModelOccurrences[inOrder=" + parts.inOrder() + "]";
     }
 
     /** {@code copies}, each once, in the order given. */
@@ -48,8 +90,8 @@ public record ModelOccurrences(List<ModelOccurrence> inOrder)
         if (isEmpty()) {
             return other;
         }
-        Set<ModelOccurrence> both = new LinkedHashSet<>(inOrder);
-        both.addAll(other.inOrder);
+        Set<ModelOccurrence> both = new LinkedHashSet<>(inOrder());
+        both.addAll(other.inOrder());
         return new ModelOccurrences(List.copyOf(both));
     }
 
@@ -61,16 +103,16 @@ public record ModelOccurrences(List<ModelOccurrence> inOrder)
     }
 
     public boolean isEmpty() {
-        return inOrder.isEmpty();
+        return inOrder().isEmpty();
     }
 
     public Stream<ModelOccurrence> stream() {
-        return inOrder.stream();
+        return inOrder().stream();
     }
 
     @Override
     public Iterator<ModelOccurrence> iterator() {
-        return inOrder.iterator();
+        return inOrder().iterator();
     }
 
     /**
@@ -108,7 +150,7 @@ public record ModelOccurrences(List<ModelOccurrence> inOrder)
                 return this;
             }
             spill();
-            held.addAll(copies.inOrder);
+            held.addAll(copies.inOrder());
             return this;
         }
 
@@ -120,7 +162,7 @@ public record ModelOccurrences(List<ModelOccurrence> inOrder)
 
         private void spill() {
             if (only != null) {
-                held.addAll(only.inOrder);
+                held.addAll(only.inOrder());
                 only = null;
             }
         }
