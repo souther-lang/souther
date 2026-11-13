@@ -91,6 +91,11 @@ class EveryAnswerAboutAPositionSaysWhatItDoesAboutTheValueAboveTest {
                 "neither certificate is one for the pair, so the pair is not certified",
                 "AClauseAboveASumIsReadAtTheFieldItIsAboutTest"
                         + ".theProofThatBoundsSayEverythingIsNotOneValuesAlone"));
+        table.put("guaranteedOfEveryElementAt", new Decided(Above.ASKED,
+                "both: what a clause above the sum states of every element of a container the cases "
+                        + "share is a fact about each element under each case",
+                "ARuleAListStatesOfEveryElementIsPlacedOnTheElementsTest"
+                        + ".aRuleAboveASumReachesTheElementsOfAListTheCasesShare"));
         table.put("handsTheRulesOnAt", new Decided(Above.NOT_ASKED,
                 "the value above raises its own handing over at the sum, and the descent into the "
                         + "case is what takes it up — asked here as well, one handing over would be "

@@ -6,6 +6,7 @@ import souther.compiler.check.DeclarationKinds;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.DeclarationReadings;
+import souther.compiler.check.ElementGuarantee;
 import souther.compiler.check.FieldDomains;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.check.PartId;
@@ -100,6 +101,20 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     /** The same, of a value narrowed out of another whose rules name some of the same positions. */
     static PlacedRules of(TermPath root, Type type, RuleReadingContext reading,
                           Reaching alsoReaching) {
+        return of(root, type, reading, alsoReaching, List.of());
+    }
+
+    /**
+     * The same, of a value that is one element of a container whose rules state something of every
+     * element it holds.
+     *
+     * <p>What the container states is read as a rule of the value where the value stands under no
+     * declaration of its own, which is what a string or a number held in a list is. A value that
+     * wears a declaration is read as that declaration, as before: its clauses are its own, and a
+     * clause of the container is not written across.
+     */
+    static PlacedRules of(TermPath root, Type type, RuleReadingContext reading,
+                          Reaching alsoReaching, List<ElementGuarantee> inherited) {
         RuleReadingSource source = reading.source();
         TypeSymbol read = readAs(type, source.symbols(), source.kinds(), source.sums());
         // What this keeps of the world is the lender alone: the questions asked of these rules after
@@ -110,7 +125,9 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         // of the value this was narrowed from — one answer, however many paths are asked about it.
         // Made per call instead, every ask would get its own allowance and the whole of what a
         // reading costs would be bounded by nothing.
-        return new PlacedRules(root, read, Rules.of(read, reading), alsoReaching,
+        Rules rules = read == null && !inherited.isEmpty()
+                ? Rules.ofElement(type, inherited, reading) : Rules.of(read, reading);
+        return new PlacedRules(root, read, rules, alsoReaching,
                 reading.policy().allowanceForAdmittedValues(answersFor(read, machines).lending()),
                 machines);
     }
@@ -183,6 +200,26 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
     /** What the rules leave the numbers, ends and narrowings of this value. */
     FieldDomains bounds() {
         return rules.bounds();
+    }
+
+    /**
+     * What the rules of this value state of every element of the container at {@code container},
+     * with the part that states each.
+     *
+     * <p>What the value this was narrowed out of states of it as well, as every answer about a
+     * position asks it. Nothing for a position these rules call by no name, which is one under
+     * another value.
+     */
+    List<ElementGuarantee> guaranteedOfEveryElementAt(TermPath container) {
+        RuleKey where = keyOf(container);
+        List<ElementGuarantee> here = where == null ? List.of() : bounds().guaranteesAt(where);
+        TermPath above = alsoAt(container);
+        if (above == null) {
+            return here;
+        }
+        List<ElementGuarantee> both = new ArrayList<>(here);
+        both.addAll(alsoReaching.outer().guaranteedOfEveryElementAt(above));
+        return both;
     }
 
     /**
@@ -760,6 +797,13 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * which places no end and is nothing anyone has to lift, could not be passed along at all.
      */
     List<ClauseWithoutAnEnd> clausesWithoutAnEnd() {
+        // A value no declaration stands under reads what a container states of its elements, and a
+        // line is drawn by the declaration that wrote the rule — the container's, which is read at
+        // the container. Nothing is handed on from here, and what this reading could not place an
+        // end from is still said by what the position admits and by how much of it was read.
+        if (bounds().named() == null) {
+            return List.of();
+        }
         return bounds().withoutAnEnd().stream()
                 .map(each -> new ClauseWithoutAnEnd(each.statement(), each.states(), each.wrote(),
                         each.root(),

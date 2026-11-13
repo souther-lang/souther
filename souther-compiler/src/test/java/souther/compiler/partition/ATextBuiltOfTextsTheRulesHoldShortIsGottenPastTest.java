@@ -133,6 +133,33 @@ class ATextBuiltOfTextsTheRulesHoldShortIsGottenPastTest {
         notShownReachedAtEveryValue(joined.formatted(10));
     }
 
+    /**
+     * The same list with each text held to ten code points: the join is three texts of ten, two
+     * separators, and the four times a text grows once put in canonical form, so
+     * {@code 3 * 10 + 2 + 4 * 3 + n + 3} fits where {@code v} holds {@code n} — and one past it does
+     * not. Written on the elements by the rule that states it of each of them, and on the element's
+     * own type, the same.
+     */
+    @Test
+    void aJoinOfAListWhoseTextsAreHeldToTenFitsWhereThatSumDoes() {
+        String joined = """
+                module held
+
+                data V = String invariant String.length(value) <= %s
+                data Ws = List<String> invariant
+                    List.length(value) <= 3 && List.all(s -> String.length(s) <= 10, value)
+
+                behavior f : (v: V, ns: List<String>, ws: Ws) -> Bool
+                let f (V(v), ns, Ws(ws)) = {
+                    let m = String.join(",", ws) ++ v
+                    List.any(own -> own == v, ns) || String.length(m) > 0
+                }
+                """;
+        long longest = L - (3 * 10 + 2 + 4 * 3 + 3);
+        reachedAtEveryValue(joined.formatted(longest));
+        notShownReachedAtEveryValue(joined.formatted(longest + 1));
+    }
+
     /** What a text built of texts is handed may itself be built, chosen or converted: each is as
      *  long as its own account says at most. */
     @Test

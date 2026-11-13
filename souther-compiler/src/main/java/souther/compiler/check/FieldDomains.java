@@ -109,7 +109,7 @@ public final class FieldDomains {
                     Map.of(), Map.of(), List.of(), Map.of(), List.of(), StringFacts.NONE,
                     RevisionKnowledge.NONE,
                     Map.of(), Map.of(), BoundaryState.nothing(),
-                    SettledOrderEnvelope.nothing(), Map.of());
+                    SettledOrderEnvelope.nothing(), Map.of(), null, Map.of());
 
     private final Map<RuleKey, NumericDomain.Bounds> byName;
     /** The ends the record's own clauses place, which is a different question from the range they
@@ -228,6 +228,11 @@ public final class FieldDomains {
      *  the declaration the reading is of, which a lent reading may have of a name beneath the one
      *  asked about. */
     private final TypeSymbol.AtModule named;
+    /** What a container states of every element, where this is the reading of one of its elements;
+     *  null where it is not. Held to read the value again without a rule of it. */
+    private final InvariantChecker.Inherited inherited;
+    /** What a rule of this value states of every element of the container at each name. */
+    private final Map<RuleKey, List<ElementGuarantee>> guarantees;
     /** The scope and the representation together, so that a second reading of this declaration reads
      *  the same tree. Held apart, a counterfactual could be taken against the other form and what
      *  moved would be read as what a rule did. */
@@ -404,7 +409,11 @@ public final class FieldDomains {
                          Map<RuleRef.Invariant, Map<FactSubject, Set<ChoiceToLift>>> endsLeftOpen,
                          Map<RuleRef.Invariant, Map<OpenEnd, Set<ChoiceToLift>>> boundsLeftOpen,
                          BoundaryState derived, SettledOrderEnvelope settledOrder,
-                         Map<RuleKey, OrderedRuns> orderedRegions) {
+                         Map<RuleKey, OrderedRuns> orderedRegions,
+                         InvariantChecker.Inherited inherited,
+                         Map<RuleKey, List<ElementGuarantee>> guarantees) {
+        this.inherited = inherited;
+        this.guarantees = guarantees;
         this.orderedRegions = orderedRegions;
         this.endsLeftOpen = endsLeftOpen;
         this.boundsLeftOpen = boundsLeftOpen;
@@ -593,13 +602,35 @@ public final class FieldDomains {
      */
     static FieldDomains of(DeclarationReading read, RuleReadingContext reading,
                            InvariantChecker.Reach reach) {
-        return read.fields(seeded -> leftBy(seeded, read.owner(), reading, Map.of(), reach));
+        return read.fields(seeded -> leftBy(seeded, read.owner(), reading, Map.of(), reach, null));
+    }
+
+    /**
+     * What the value one element of a container is leaves its places able to hold, given what the
+     * container states of every element.
+     *
+     * <p>{@code named} is the declaration the element wears, or null where it wears none — a string
+     * or a number a container holds. A value with no declaration has no rules of its own to read,
+     * so what it holds is what the container's rules leave it.
+     */
+    public static FieldDomains ofElement(TypeSymbol.AtModule named, Type type,
+                                         List<ElementGuarantee> guarantees,
+                                         RuleReadingContext reading) {
+        return of(named, reading, Map.of(), InvariantChecker.Reach.EVERYTHING,
+                new InvariantChecker.Inherited(type, guarantees));
     }
 
     /** The same, reading only as far as {@code reach} says — see {@link #narrowedBy}. */
     private static FieldDomains of(TypeSymbol.AtModule named, RuleReadingContext reading,
                                    Map<NumberAt<RuleKey>, Count> settled,
                                    InvariantChecker.Reach reach) {
+        return of(named, reading, settled, reach, null);
+    }
+
+    private static FieldDomains of(TypeSymbol.AtModule named, RuleReadingContext reading,
+                                   Map<NumberAt<RuleKey>, Count> settled,
+                                   InvariantChecker.Reach reach,
+                                   InvariantChecker.Inherited inherited) {
         // A newtype is read the same way, and only its bounds are not worth handing back: its value
         // is the value it is, so there are no siblings to relate. Everything else is the same
         // question — its own rules can hold a hole no range keeps, and they can contradict, and both
@@ -614,8 +645,10 @@ public final class FieldDomains {
         // Under the declaration the reading is of, which a lent reading may have of a name beneath
         // the one asked about: the terms are bound under that one, and what is derived is kept with
         // the reading for every asker after the first.
-        DeclarationReading read = InvariantChecker.readFields(named, reading, settled, reach);
-        return read.fields(seeded -> leftBy(seeded, read.owner(), reading, settled, reach));
+        DeclarationReading read =
+                InvariantChecker.readFields(named, reading, settled, reach, inherited);
+        return read.fields(seeded ->
+                leftBy(seeded, read.owner(), reading, settled, reach, inherited));
     }
 
     /** What the reading {@code seeded} leaves the fields able to hold, under the terms it was made
@@ -623,7 +656,8 @@ public final class FieldDomains {
     private static FieldDomains leftBy(InvariantChecker.Seeded seeded, TypeSymbol.AtModule named,
                                        RuleReadingContext reading,
                                        Map<NumberAt<RuleKey>, Count> settled,
-                                       InvariantChecker.Reach reach) {
+                                       InvariantChecker.Reach reach,
+                                       InvariantChecker.Inherited inherited) {
         Map<RuleKey, NumericDomain.Bounds> out = new LinkedHashMap<>();
         seeded.atoms().forEach((field, atom) -> {
             // The value itself is at no name of its own, and its range is the one thing not worth
@@ -683,7 +717,7 @@ public final class FieldDomains {
                 // borrows its work from.
                 reading.readings().revision(),
                 seeded.endsLeftOpen(), seeded.boundsLeftOpen(), seeded.derived(),
-                seeded.settledOrder(), seeded.orderedRegions());
+                seeded.settledOrder(), seeded.orderedRegions(), inherited, seeded.guarantees());
     }
 
     /**
@@ -1086,9 +1120,10 @@ public final class FieldDomains {
     private FieldDomains counterfactual(LeftOut omitted) {
         return counterfactuals.computeIfAbsent(omitted, left -> of(named,
                 RuleReadingContext.of(source, policy,
-                        DeclarationReadings.borrowing(named.key(), stringMachines, revision),
+                        DeclarationReadings.borrowing(named == null ? null : named.key(),
+                                stringMachines, revision),
                         today),
-                settled, left.reach()));
+                settled, left.reach(), inherited));
     }
 
     /**
@@ -1100,10 +1135,18 @@ public final class FieldDomains {
      * ({@code machines}) — and the reading made here keeps what it builds to itself, as every
      * counterfactual does ({@link DeclarationReadings#borrowing}).
      */
-    static FieldDomains withoutParts(TypeSymbol.AtModule named, RuleReadingContext reading,
+    static FieldDomains withoutParts(TypeSymbol.AtModule named,
+                                     InvariantChecker.Inherited inherited,
+                                     RuleReadingContext reading,
                                      Set<PartId<RuleRef.Invariant>> parts, StringFacts machines) {
-        return of(named, reading.forACounterfactual(named.key(), machines), Map.of(),
-                new LeftOut.Conjuncts(parts).reach());
+        return of(named,
+                reading.forACounterfactual(named == null ? null : named.key(), machines),
+                Map.of(), new LeftOut.Conjuncts(parts).reach(), inherited);
+    }
+
+    /** What a rule of this value states of every element of the container at {@code place}. */
+    public List<ElementGuarantee> guaranteesAt(RuleKey place) {
+        return guarantees.getOrDefault(place, List.of());
     }
 
     /**
@@ -2928,7 +2971,7 @@ public final class FieldDomains {
                         instanceof ProjectionCertification.Certified(var by))) {
             return whole;
         }
-        List<ProjectionEvidence.StandsApart> apart = standingApart(whole, place, Set.of(named));
+        List<ProjectionEvidence.StandsApart> apart = standingApart(whole, place, asked());
         return apart == null ? whole : new ProjectionEvidence.CertifiedExact(by, apart);
     }
 
@@ -3095,6 +3138,10 @@ public final class FieldDomains {
 
     /** {@link #writtenOver} of {@code joint}, worked out once for each. */
     private Optional<Map<RuleKey, Object>> writtenAt(Joint joint) {
+        // No declaration stands under the value, so there are no fields to write a value at.
+        if (named == null) {
+            return Optional.empty();
+        }
         return heldTogether.computeIfAbsent(joint, this::writtenOver);
     }
 
@@ -3484,6 +3531,9 @@ public final class FieldDomains {
     /** The declaration the elements of the list or set at {@code at} are of, or null where they are
      *  not of one, or {@code at} is not reached through fields. */
     private TypeSymbol.AtModule elementOf(RuleKey at) {
+        if (named == null) {
+            return null;
+        }
         Type here = new Type.Ref(named);
         for (String step : at.steps()) {
             if (!(source.inners().terminal(here) instanceof Type.Ref(TypeSymbol.AtModule record))) {
@@ -3512,7 +3562,7 @@ public final class FieldDomains {
      * those.
      */
     public boolean shownToHoldAValue() {
-        return shownToHoldAValue(Set.of(named));
+        return shownToHoldAValue(asked());
     }
 
     /** The same, where {@code asked} are the declarations already being asked, so that one holding
@@ -3551,6 +3601,11 @@ public final class FieldDomains {
      * declaration holds them, each over the bindings of its fields.
      */
     private boolean holdsInAWitness() {
+        // A witness is a value of a declaration with its fields written down. A value no declaration
+        // stands under has no fields to write, so none is exhibited.
+        if (named == null) {
+            return false;
+        }
         Map<Core, Boolean> seen = new IdentityHashMap<>();
         List<Core> rules = new ArrayList<>();
         for (InvariantChecker.Written each : readings) {
@@ -3717,7 +3772,16 @@ public final class FieldDomains {
             return false;
         }
         ProjectionEvidence rest = evidenceLeaving(heldHere);
-        return rest.isCertified() || standingApart(rest, place, Set.of(named)) != null;
+        return rest.isCertified() || standingApart(rest, place, asked()) != null;
+    }
+
+    /**
+     * The declarations being asked about when this is asked whether it holds a value: the one this
+     * is a reading of, and none where there is none — a value no declaration stands under has no
+     * declaration to be asked again.
+     */
+    private Set<TypeSymbol.AtModule> asked() {
+        return named == null ? Set.of() : Set.of(named);
     }
 
     /**

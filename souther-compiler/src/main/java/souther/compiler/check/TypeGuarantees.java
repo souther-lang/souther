@@ -213,7 +213,9 @@ final class TypeGuarantees {
                     (shape, of, came) ->
                             parts.add(new TypeGuarantee.Part(part.id(), shape, of, came)));
             owed = owed == null ? said : owed.and(said);
-            predicates.quantifiedBy(part.expr(), denotations, true, quantified);
+            List<Quantified> stated = new ArrayList<>();
+            predicates.quantifiedBy(part.expr(), denotations, true, stated);
+            stated.forEach(each -> quantified.add(each.statedBy(part.id())));
         }
         // Nothing owed where every part was left out, which is a clause with all of it taken away
         // and not a clause that holds.

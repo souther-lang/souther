@@ -230,6 +230,19 @@ public sealed interface Rules {
         };
     }
 
+    /**
+     * The rules a value has that stands under no declaration and is one element of a container
+     * whose rules state something of every element.
+     *
+     * <p>Read, and not {@link NoneWritten}: what is written about the value is what the container
+     * wrote about each element it holds, and a reader that took the value for one with nothing
+     * written would answer of every element that nothing was said.
+     */
+    public static Rules ofElement(Type type, List<ElementGuarantee> guarantees,
+                                  RuleReadingContext reading) {
+        return new Read(FieldDomains.ofElement(null, type, guarantees, reading));
+    }
+
     /** The same, for a value whose type may name no declaration at all. */
     static Rules of(Type type, RuleReadingContext reading) {
         return of(type instanceof Type.Ref ref ? ref.name() : null, reading);
