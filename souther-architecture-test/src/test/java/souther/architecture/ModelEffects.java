@@ -6,6 +6,7 @@ import java.lang.classfile.CodeElement;
 import java.lang.classfile.MethodModel;
 import java.lang.classfile.instruction.InvokeDynamicInstruction;
 import java.lang.classfile.instruction.InvokeInstruction;
+import java.lang.classfile.instruction.NewObjectInstruction;
 import java.lang.reflect.AccessFlag;
 import java.util.ArrayDeque;
 import java.util.Collection;
@@ -41,19 +42,26 @@ final class ModelEffects {
 
     private final Map<String, Set<String>> supers;
 
+    private final Map<String, String> parents;
+
     private final Set<String> declared;
 
     private final Set<String> withCode;
+
+    private final Set<String> ownStores;
 
     private final Set<String> changers;
 
     private final Set<String> reportReaders;
 
     private ModelEffects(Map<String, Set<String>> implementers, Map<String, Set<String>> supers,
-                         Set<String> declared, Set<String> withCode, Set<String> changers,
+                         Map<String, String> parents, Set<String> declared, Set<String> withCode,
+                         Set<String> ownStores, Set<String> changers,
                          Set<String> reportReaders) {
         this.implementers = implementers;
         this.supers = supers;
+        this.parents = parents;
+        this.ownStores = ownStores;
         this.declared = declared;
         this.withCode = withCode;
         this.changers = changers;
@@ -67,7 +75,7 @@ final class ModelEffects {
      * repository declare is not what a call of its method runs.
      */
     private static Set<String> resolved(String callee, Map<String, Set<String>> supers,
-                                        Set<String> declared,
+                                        Map<String, String> parents, Set<String> declared,
                                         Map<String, Set<String>> implementers) {
         Set<String> found = new HashSet<>();
         found.add(callee);
@@ -76,18 +84,30 @@ final class ModelEffects {
         if (owner.startsWith("java/")) {
             return found;
         }
-        String declaring = callee;
         if (!declared.contains(callee)) {
-            for (String above : supers.getOrDefault(owner, Set.of())) {
-                if (declared.contains(above + member)) {
-                    declaring = above + member;
-                    found.add(declaring);
-                    break;
+            // The class a method is inherited from is the nearest one up the superclasses that
+            // declares it, and that one is run before any default of an interface. Where no class
+            // declares it, any default of the interfaces may be the one, and each is taken.
+            String declaring = null;
+            for (String up = parents.get(owner); up != null && declaring == null;
+                 up = parents.get(up)) {
+                if (declared.contains(up + member)) {
+                    declaring = up + member;
+                }
+            }
+            if (declaring != null) {
+                found.add(declaring);
+            } else {
+                for (String above : supers.getOrDefault(owner, Set.of())) {
+                    if (declared.contains(above + member)) {
+                        found.add(above + member);
+                    }
                 }
             }
         }
-        found.addAll(implementers.getOrDefault(declaring, Set.of()));
-        found.addAll(implementers.getOrDefault(callee, Set.of()));
+        for (String each : Set.copyOf(found)) {
+            found.addAll(implementers.getOrDefault(each, Set.of()));
+        }
         return found;
     }
 
@@ -98,8 +118,11 @@ final class ModelEffects {
             byName.put(each.thisClass().asInternalName(), each);
         }
         Map<String, Set<String>> supers = new HashMap<>();
+        Map<String, String> parents = new HashMap<>();
         for (ClassModel each : classes) {
             supers.put(each.thisClass().asInternalName(), supertypesOf(each, byName));
+            each.superclass().ifPresent(parent -> parents.put(each.thisClass().asInternalName(),
+                    parent.asInternalName()));
         }
         Map<String, Set<String>> implementers = new HashMap<>();
         Set<String> withCode = new HashSet<>();
@@ -152,7 +175,7 @@ final class ModelEffects {
                                 reading.add(self);
                             }
                             String callee = AMethod.of(owner, name, call.type().stringValue());
-                            for (String target : resolved(callee, supers, declared,
+                            for (String target : resolved(callee, supers, parents, declared,
                                     implementers)) {
                                 calledBy.computeIfAbsent(target, k -> new HashSet<>()).add(self);
                             }
@@ -188,8 +211,34 @@ final class ModelEffects {
         }
         Set<String> readers = close(reading, calledBy);
         readers.addAll(handingBack);
-        return new ModelEffects(implementers, supers, declared, withCode,
+        Set<String> ownStores = new HashSet<>();
+        for (ClassModel each : classes) {
+            for (MethodModel method : each.methods()) {
+                if (method.code().isPresent() && method.methodTypeSymbol().returnType()
+                        .descriptorString().equals(ModelVocabulary.DB_TYPE)
+                        && makesAStoreOfItsOwn(method)) {
+                    ownStores.add(AMethod.of(each, method));
+                }
+            }
+        }
+        return new ModelEffects(implementers, supers, parents, declared, withCode, ownStores,
                 close(changing, calledBy), readers);
+    }
+
+    private static boolean makesAStoreOfItsOwn(MethodModel method) {
+        boolean makes = false;
+        for (CodeElement element : method.code().orElseThrow().elementList()) {
+            if (element instanceof NewObjectInstruction made
+                    && made.className().asInternalName().equals(ModelVocabulary.DB)) {
+                makes = true;
+            }
+            if (element instanceof InvokeInstruction call
+                    && call.owner().asInternalName().equals(ModelVocabulary.COMPILATION)
+                    && call.name().stringValue().equals(ModelVocabulary.STORE_ACCESSOR)) {
+                return false;
+            }
+        }
+        return makes;
     }
 
     /**
@@ -221,7 +270,16 @@ final class ModelEffects {
 
     /** The methods the call of {@code callee} may run: see {@link #resolved}. */
     Set<String> targets(String callee) {
-        return resolved(callee, supers, declared, implementers);
+        return resolved(callee, supers, parents, declared, implementers);
+    }
+
+    /**
+     * Whether the method hands back a store it made, and not one it got from a model: it makes one
+     * with {@code new}, and nothing in it takes the store of a model. Reading what such a store
+     * says is reading nothing a model found.
+     */
+    boolean makesItsOwnStore(String method) {
+        return ownStores.contains(method);
     }
 
     /** Whether {@code method} has a body among the classes. */

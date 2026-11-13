@@ -143,6 +143,7 @@ final class UncheckedModelReports {
 
     private static ModelWalk.Facts factsOf(Map<ModelWalk, ModelWalk.Result> results) {
         Map<String, ModelStanding> returns = new HashMap<>();
+        Map<String, ModelStanding> storeReturns = new HashMap<>();
         Set<String> returnsParameter = new HashSet<>();
         Set<String> readsParameter = new HashSet<>();
         Set<String> readsReportParameter = new HashSet<>();
@@ -157,6 +158,9 @@ final class UncheckedModelReports {
             ModelWalk.Result result = each.getValue();
             if (result.returns != ModelStanding.ASKED) {
                 returns.put(key, result.returns);
+            }
+            if (each.getKey().handsBackAStore()) {
+                storeReturns.put(key, result.returnsStore);
             }
             result.returnsParameter.forEach(index -> returnsParameter.add(key + "#" + index));
             result.readsParameter.forEach(index -> readsParameter.add(key + "#" + index));
@@ -181,6 +185,6 @@ final class UncheckedModelReports {
                 each.lastIndexOf('#'))));
         return new ModelWalk.Facts(returns, returnsParameter, readsParameter,
                 readsReportParameter, readsStrictParameter, asksParameter, mutatesParameter,
-                leavesAsked, fields, fieldFlows, changingMethods);
+                leavesAsked, fields, fieldFlows, changingMethods, storeReturns);
     }
 }

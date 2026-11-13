@@ -825,6 +825,127 @@ public final class ModelShapes {
         }
     }
 
+    /** Reads a model that is the asked-about one on one way and nobody's on the other. */
+    public static final class ConditionalModelJoin {
+
+        private ConditionalModelJoin() { }
+
+        public static boolean read(String source, boolean sound) {
+            Compilation selected = sound ? TheDoor.answered(source)
+                    : Compilation.ofSource(source, "Main");
+            return selected.reports().isEmpty();
+        }
+    }
+
+    /** Something that holds a model, of which there are as many as it is made. */
+    public static final class Box {
+
+        public Compilation model;
+    }
+
+    /** Writes an asked-about model to the field of one box and reads the field of another. */
+    public static final class TwoBoxesOneFieldName {
+
+        private TwoBoxesOneFieldName() { }
+
+        public static boolean read(String source) {
+            Box unsafe = new Box();
+            Box safe = new Box();
+            unsafe.model = Compilation.ofSource(source, "Main");
+            safe.model = TheDoor.answered(source);
+            return unsafe.model.reports().isEmpty();
+        }
+    }
+
+    /** Hands the store of an asked-about model, kept in a variable, to a function that changes it. */
+    public static final class DbHeldHandedToAConsumer {
+
+        private DbHeldHandedToAConsumer() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            Db store = model.db();
+            Consumer<Db> changer = db -> db.forget(new SourceId("main.sou"), "main");
+            changer.accept(store);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Keeps what a question put to the store of a model that was answered is told in a variable. */
+    public static final class AnswerKeptInAVariable {
+
+        private AnswerKeptInAVariable() { }
+
+        public static boolean read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            model.answerEverything();
+            var answer = model.db().ask(new Adequacy.Witnesses("Main"));
+            return answer.reports().isEmpty();
+        }
+    }
+
+    /** Reads what a store says in a method that is handed the store of a model that was answered. */
+    public static final class ReportsOfAStoreHandedIn {
+
+        private ReportsOfAStoreHandedIn() { }
+
+        private static boolean hasNoReports(Db store) {
+            return store.ask(new Adequacy.Witnesses("Main")).reports().isEmpty();
+        }
+
+        public static boolean read(String source) {
+            Compilation model = Compilation.ofSource(source, "Main");
+            model.answerEverything();
+            return hasNoReports(model.db());
+        }
+    }
+
+    /** The same, of the store of a model that was asked about. */
+    public static final class ReportsOfAStoreHandedInAfterTheLook {
+
+        private ReportsOfAStoreHandedInAfterTheLook() { }
+
+        private static boolean hasNoReports(Db store) {
+            return store.ask(new Adequacy.Witnesses("Main")).reports().isEmpty();
+        }
+
+        public static boolean read(String source) {
+            Compilation model = TheDoor.answered(source);
+            return hasNoReports(model.db());
+        }
+    }
+
+    /** An interface whose method does nothing, which a class that has its own does not take. */
+    public interface Silent {
+
+        default void change(Compilation model) {
+            Objects.requireNonNull(model);
+        }
+    }
+
+    /** A class that changes the model it is handed. */
+    public static class Parent {
+
+        public void change(Compilation model) {
+            model.update(Map.of(), Set.of(), LocalDate.MIN);
+        }
+    }
+
+    /** Inherits the method of its class and has another of the same from its interface. */
+    public static final class Child extends Parent implements Silent { }
+
+    /** Changes an asked-about model by the method the class is run with, not the one of the interface. */
+    public static final class ChangedThroughTheParentNotTheDefault {
+
+        private ChangedThroughTheParentNotTheDefault() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            new Child().change(model);
+            return AdequacyReport.of(model);
+        }
+    }
+
     /** Hands a copy of the variable that holds an asked-about model to a function that changes it. */
     public static final class CopyHandedToAConsumer {
 

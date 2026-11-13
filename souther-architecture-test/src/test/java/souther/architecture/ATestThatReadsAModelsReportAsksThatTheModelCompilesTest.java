@@ -33,7 +33,9 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
     private static final Set<String> REFUSED_SHAPES = new TreeSet<>(List.of(
             "ADerivedModelNeverAsked", "AllReportsOfAnAnswered", "AnotherClassMadeIt",
             "AnotherModelAsked", "AnswerWarningsOnly", "AskedAliasOfAFieldChangedByAMethod",
-            "AskedOnOneWayOnly", "BoundMethodRefChanges", "BoundMethodRefReads", "BoxedInAnArray",
+            "AnswerKeptInAVariable", "AskedOnOneWayOnly", "BoundMethodRefChanges",
+            "BoundMethodRefReads", "BoxedInAnArray", "ChangedThroughTheParentNotTheDefault",
+            "ConditionalModelJoin", "DbHeldHandedToAConsumer",
             "ChangedOnTheWayThatFails",
             "ChangedThenFailedAndCaught", "ChangedThroughADefaultMethod",
             "ChangedThroughAGenericFunction", "ChangedThroughAGetter", "ChangedThroughAHolder",
@@ -54,10 +56,12 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
             "ParameterNobodyPasses", "ReadThenChangedThenAsked",
             "ReadThenChangedThenAskedInAMethod", "ReassignedOnOneWay",
             "ReassignedCopyChangedDirectly", "ReassignedCopyHandedToAConsumer",
-            "ReplacedAfterTheLook", "ReportsOfAnAnsweredModel", "ReportsReadOfAModelNobodyAsked",
+            "ReplacedAfterTheLook", "ReportsOfAStoreHandedIn", "ReportsOfAnAnsweredModel",
+            "ReportsReadOfAModelNobodyAsked",
             "StaticMethodRefReads", "StoreAskOfAnAnswered", "StreamForEachChanges",
             "StructuralFailureOfAnUnasked", "StructuralReportsOfAnUnasked", "SwallowedFailure",
-            "ThrownOnTheReadAndCaughtByTheCaller", "UnboundMethodRefReads", "UpdatedAfterTheLook",
+            "ThrownOnTheReadAndCaughtByTheCaller", "TwoBoxesOneFieldName", "UnboundMethodRefReads",
+            "UpdatedAfterTheLook",
             "WarningsOfAnUnaskedModel"));
 
     private static final Set<String> ACCEPTED_SHAPES = new TreeSet<>(List.of(
@@ -67,7 +71,8 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
             "ErrorsOfAnAnsweredModel", "FieldAskedWhereWritten", "HandedToAnInterfaceThatOnlyLooks",
             "HelperThatChangesAndAsks", "MarkedAndNotRun",
             "NotCompiledOnTheList",
-            "ParameterHandedByACaller", "RequireNonNullKeepsTheAsk", "TheErrorsAreWhatWasMeant",
+            "ParameterHandedByACaller", "ReportsOfAStoreHandedInAfterTheLook",
+            "RequireNonNullKeepsTheAsk", "TheErrorsAreWhatWasMeant",
             "ThroughTheDoor",
             "UpdatedThenAsked"));
 

@@ -105,15 +105,18 @@ final class ModelWalk {
      * @param fields             what is written into each field of a model
      * @param fieldFlows         the fields an argument of a method is written into
      * @param changingMethods    the methods that change some argument they are handed
+     * @param storeReturns       what the model each method that answers a store hands back the
+     *                           store of stands as
      */
     record Facts(Map<String, ModelStanding> returns, Set<String> returnsParameter,
                  Set<String> readsParameter, Set<String> readsReportParameter,
                  Set<String> readsStrictParameter, Set<String> asksParameter, Set<String> mutatesParameter,
                  Set<String> leavesAsked, Map<String, ModelStanding> fields,
-                 Map<String, Set<String>> fieldFlows, Set<String> changingMethods) {
+                 Map<String, Set<String>> fieldFlows, Set<String> changingMethods,
+                 Map<String, ModelStanding> storeReturns) {
 
         static final Facts NONE = new Facts(Map.of(), Set.of(), Set.of(), Set.of(), Set.of(),
-                Set.of(), Set.of(), Set.of(), Map.of(), Map.of(), Set.of());
+                Set.of(), Set.of(), Set.of(), Map.of(), Map.of(), Set.of(), Map.of());
     }
 
     /**
@@ -140,8 +143,14 @@ final class ModelWalk {
         /** The answer of the call at {@code at}. */
         record Answer(InvokeInstruction call, int at) implements Operand { }
 
-        /** A field. */
-        record Field(String key) implements Operand { }
+        /**
+         * A field.
+         *
+         * @param sole it is the one a static field is, or the field of the object this method is
+         *             run on, so that what is written to it is written to the only one there is;
+         *             a field of another object is one of as many as there are objects
+         */
+        record Field(String key, boolean sole) implements Operand { }
 
         /** A store made here with {@code new}, which belongs to no model. */
         record FreshStore() implements Operand { }
@@ -183,6 +192,8 @@ final class ModelWalk {
         /** Reads of a model that was asked about, by this method. */
         int asked;
         ModelStanding returns = ModelStanding.ASKED;
+        /** What the model a store that is answered belongs to stands as, joined over the answers. */
+        ModelStanding returnsStore = ModelStanding.ASKED;
         final Set<Integer> returnsParameter = new HashSet<>();
         final Set<Integer> readsParameter = new HashSet<>();
         final Set<Integer> readsReportParameter = new HashSet<>();
@@ -343,6 +354,11 @@ final class ModelWalk {
                 .orElse(false);
     }
 
+    /** Whether the method answers a store. */
+    boolean handsBackAStore() {
+        return method.methodTypeSymbol().returnType().descriptorString().equals(DB_TYPE);
+    }
+
     /** Whether the test engine runs the method, handing it what its parameters ask for. */
     boolean engineRuns() {
         return engineRuns;
@@ -457,6 +473,9 @@ final class ModelWalk {
         for (int slot : modelParameters) {
             entry.put(slot, ModelStanding.HANDED_IN);
         }
+        for (int slot : storeParameters) {
+            entry.put(slot, ModelStanding.HANDED_IN);
+        }
         for (String each : modelFieldOrder) {
             entry.put(fieldSlot(each), field(each));
         }
@@ -525,7 +544,13 @@ final class ModelWalk {
                 && (put.opcode() == Opcode.PUTFIELD || put.opcode() == Opcode.PUTSTATIC)
                 && modelFields.contains(fieldKey(put))) {
             Map<Integer, ModelStanding> out = new HashMap<>(state);
-            out.put(fieldSlot(fieldKey(put)), standing(producer(at, 0), state));
+            ModelStanding written = standing(producer(at, 0), state);
+            int place = fieldSlot(fieldKey(put));
+            // A write to a field of another object may be to any of as many fields as there are
+            // objects, so it does not say of the one read afterwards what it says of the one
+            // written: the field stands as the worse of what it stood as and what is written.
+            out.put(place, soleReceiver(put, at) ? written
+                    : state.getOrDefault(place, field(fieldKey(put))).join(written));
             return out;
         }
         List<Site> here = all.get(at);
@@ -555,8 +580,8 @@ final class ModelWalk {
             } else if (site.operand() instanceof Operand.Field field
                     && modelFields.contains(field.key())) {
                 ModelStanding becomes = mutating(site) ? ModelStanding.UNASKED
-                        : asking(site) ? ModelStanding.ASKED
-                        : site.answers() && state.get(fieldSlot(field.key()))
+                        : field.sole() && asking(site) ? ModelStanding.ASKED
+                        : field.sole() && site.answers() && state.get(fieldSlot(field.key()))
                                 != ModelStanding.ASKED ? ModelStanding.ANSWERED : null;
                 if (becomes != null) {
                     if (out == null) {
@@ -572,6 +597,19 @@ final class ModelWalk {
             }
         }
         return out == null ? state : out;
+    }
+
+    /** Whether the field the node at {@code at} writes is the only one: a static, or this one's. */
+    private boolean soleReceiver(FieldInstruction put, int at) {
+        return put.opcode() == Opcode.PUTSTATIC || (producer(at, 1) instanceof Operand.Local held
+                && held.slot() == 0 && !method.flags().has(AccessFlag.STATIC));
+    }
+
+    /** Whether the object the field read at {@code at} is of is the one this method is run on. */
+    private boolean onThis(int at) {
+        return at > 0 && flow.get(at - 1) instanceof LoadInstruction held
+                && held.typeKind() == TypeKind.REFERENCE && held.slot() == 0
+                && !method.flags().has(AccessFlag.STATIC);
     }
 
     /**
@@ -936,6 +974,16 @@ final class ModelWalk {
         }
         boolean returnsModel = method.methodTypeSymbol().returnType().descriptorString()
                 .equals(COMPILATION_TYPE);
+        if (element instanceof ReturnInstruction handedBack
+                && handedBack.typeKind() == TypeKind.REFERENCE
+                && method.methodTypeSymbol().returnType().descriptorString().equals(DB_TYPE)) {
+            // What a store stands as is what the model it belongs to stands as, and a store a
+            // method made is of no model.
+            Operand of = modelOfTheDb(producer(at, 0));
+            ModelStanding standing = of instanceof Operand.Nothing ? ModelStanding.ASKED
+                    : unhanded(standing(of, state));
+            result.returnsStore = result.returnsStore.join(standing);
+        }
         if (element instanceof ReturnInstruction back && back.typeKind() == TypeKind.REFERENCE
                 && returnsModel) {
             Operand operand = producer(at, 0);
@@ -968,7 +1016,9 @@ final class ModelWalk {
     }
 
     private Integer pristineParameter(Operand operand) {
-        if (operand instanceof Operand.Local local && modelParameters.contains(local.slot())
+        if (operand instanceof Operand.Local local
+                && (modelParameters.contains(local.slot())
+                || storeParameters.contains(local.slot()))
                 && !stored.contains(local.slot())) {
             return parameterAt.get(local.slot());
         }
@@ -1053,8 +1103,34 @@ final class ModelWalk {
         return facts.fields().getOrDefault(field, ModelStanding.ASKED);
     }
 
+    /**
+     * What the model stands as that the store the call answers belongs to, from every method the
+     * call may run, and not placed where one of them is not walked.
+     */
+    private ModelStanding standingOfTheStore(InvokeInstruction call) {
+        ModelStanding standing = ModelStanding.ASKED;
+        boolean any = false;
+        String callee = AMethod.of(call.owner().asInternalName(), call.name().stringValue(),
+                call.type().stringValue());
+        for (String target : world.effects().targets(callee)) {
+            if (!world.effects().hasCode(target)) {
+                continue;
+            }
+            ModelStanding of = facts.storeReturns().get(target);
+            if (of == null) {
+                return ModelStanding.LOST;
+            }
+            any = true;
+            standing = standing.join(of);
+        }
+        return any ? standing : ModelStanding.LOST;
+    }
+
     private ModelStanding answered(Operand.Answer answer, Map<Integer, ModelStanding> state) {
         InvokeInstruction call = answer.call();
+        if (call.typeSymbol().returnType().descriptorString().equals(DB_TYPE)) {
+            return standingOfTheStore(call);
+        }
         if (!call.typeSymbol().returnType().descriptorString().equals(COMPILATION_TYPE)) {
             return ModelStanding.LOST;
         }
@@ -1189,7 +1265,7 @@ final class ModelWalk {
                     String name = call.name().stringValue();
                     String callee = AMethod.of(target, name, call.type().stringValue());
                     if (target.equals(ANSWER) && name.equals("reports")
-                            && producer(at, 0) instanceof Operand.Answer asked
+                            && throughLocals(producer(at, 0), 0) instanceof Operand.Answer asked
                             && asked.call().owner().asInternalName().equals(DB)
                             && asked.call().name().stringValue().equals("ask")) {
                         int arguments = 0;
@@ -1262,7 +1338,15 @@ final class ModelWalk {
                         } else if (type.descriptorString().startsWith("L")
                                 || type.descriptorString().startsWith("[")) {
                             Operand handed = producer(at, above);
-                            if (leaves(handed, at, null, -1) && !inertWithAModel(target)
+                            boolean model = leaves(handed, at, null, -1);
+                            if (!model && handed instanceof Operand.Local
+                                    && modelOfTheDb(handed) instanceof Operand.Local owner) {
+                                // The store of a model is the model's to the one that is given it.
+                                escapes.add(new Escape(owner, at, null, -1));
+                                handed = owner;
+                                model = true;
+                            }
+                            if (model && !inertWithAModel(target)
                                     && !(handed instanceof Operand.Answer)) {
                                 // The model is handed on as something else, which is where a
                                 // model goes through a generic method and comes back as itself.
@@ -1306,6 +1390,12 @@ final class ModelWalk {
                         int above = 0;
                         for (int i = stack.size() - 1; i >= 0; i--) {
                             ClassDesc type = stack.get(i);
+                            if (type.descriptorString().equals(DB_TYPE) && i >= shift) {
+                                Operand store = producer(at, above);
+                                found.computeIfAbsent(at, k -> new ArrayList<>()).add(new Site(at,
+                                        impl, i - shift, false, false, false, false, true, false,
+                                        modelOfTheDb(store), store, false, false));
+                            }
                             if (type.descriptorString().equals(COMPILATION_TYPE)) {
                                 Operand captured = producer(at, above);
                                 leaves(captured, at, impl, i - shift);
@@ -1344,6 +1434,25 @@ final class ModelWalk {
     }
 
     /**
+     * What gave the value a variable holds, where the variable is given one value in one place and
+     * is not an argument, and the variable itself otherwise.
+     */
+    private Operand throughLocals(Operand held, int depth) {
+        if (depth < 8 && held instanceof Operand.Local local
+                && storeCounts.getOrDefault(local.slot(), 0) == 1
+                && !modelParameters.contains(local.slot())
+                && !storeParameters.contains(local.slot())) {
+            for (int at = 0; at < flow.size(); at++) {
+                if (flow.get(at) instanceof StoreInstruction store
+                        && store.typeKind() == TypeKind.REFERENCE && store.slot() == local.slot()) {
+                    return throughLocals(producer(at, 0), depth + 1);
+                }
+            }
+        }
+        return held;
+    }
+
+    /**
      * Followed through the store's own methods that return it, and through a variable that is
      * given one store once. A store made here with {@code new} belongs to no model, and says
      * {@link Operand.Nothing}.
@@ -1366,10 +1475,25 @@ final class ModelWalk {
                 }
                 return modelOfTheDb(producer(answer.at(), arguments), depth + 1);
             }
+            if (answer.call().typeSymbol().returnType().descriptorString().equals(DB_TYPE)
+                    && world.effects().makesItsOwnStore(AMethod.of(owner,
+                    answer.call().name().stringValue(), answer.call().type().stringValue()))) {
+                return new Operand.Nothing();
+            }
+            if (answer.call().typeSymbol().returnType().descriptorString().equals(DB_TYPE)
+                    && world.analysed().contains(AMethod.of(owner,
+                    answer.call().name().stringValue(), answer.call().type().stringValue()))) {
+                // A method that is walked says what the model its store belongs to stands as.
+                return answer;
+            }
             return new Operand.Lost();
         }
         if (db instanceof Operand.FreshStore) {
             return new Operand.Nothing();
+        }
+        if (db instanceof Operand.Local local && storeParameters.contains(local.slot())
+                && !stored.contains(local.slot())) {
+            return db;
         }
         if (db instanceof Operand.Local local && storeCounts.getOrDefault(local.slot(), 0) == 1
                 && !storeParameters.contains(local.slot())) {
@@ -1480,7 +1604,8 @@ final class ModelWalk {
                             new Operand.FreshStore();
                     case FieldInstruction field when field.opcode() == Opcode.GETFIELD
                             || field.opcode() == Opcode.GETSTATIC ->
-                            new Operand.Field(fieldKey(field));
+                            new Operand.Field(fieldKey(field),
+                                    field.opcode() == Opcode.GETSTATIC || onThis(i));
                     default -> new Operand.Lost();
                 };
             }
@@ -1578,7 +1703,7 @@ final class ModelWalk {
             if (strikes) {
                 for (String field : modelFieldOrder) {
                     out.computeIfAbsent(at, k -> new ArrayList<>()).add(new Site(at, ESCAPE, -1,
-                            false, false, false, false, false, true, new Operand.Field(field),
+                            false, false, false, false, false, true, new Operand.Field(field, true),
                             new Operand.Nothing(), false, false));
                 }
             }
