@@ -51,6 +51,8 @@ final class ReadingState {
     private final Field[] flags;
     private final Field[] identities;
     private final Field[] absent;
+    /** How each of {@link #inputs} is taken, in the same order. */
+    private final Taken[] howEachInputIsTaken;
 
     ReadingState(Class<?> owner, Map<String, ReadingRole> roles) {
         List<Field> inputFields = new ArrayList<>();
@@ -109,7 +111,15 @@ final class ReadingState {
         this.identities = identityFields.toArray(Field[]::new);
         this.absent = absentFields.toArray(Field[]::new);
         this.asked = askedField;
+        this.howEachInputIsTaken = new Taken[inputs.length];
+        for (int at = 0; at < inputs.length; at++) {
+            howEachInputIsTaken[at] = isAmong(flags, inputs[at]) ? Taken.AS_PRESENT
+                    : isAmong(identities, inputs[at]) ? Taken.AS_THE_VERY_ONE : Taken.AS_A_COPY;
+        }
     }
+
+    /** What an input is taken as, which its role settles once. */
+    private enum Taken { AS_PRESENT, AS_THE_VERY_ONE, AS_A_COPY }
 
     /**
      * Whether everything the roles call {@link ReadingRole#ABSENT} holds nothing in {@code owner}.
@@ -133,10 +143,13 @@ final class ReadingState {
     /** The inputs of {@code owner} as they stand. */
     Inputs inputsOf(Object owner) {
         List<Object> values = new ArrayList<>(inputs.length);
-        for (Field each : inputs) {
-            Object value = read(each, owner);
-            values.add(isAmong(flags, each) ? Boolean.valueOf(value != null)
-                    : isAmong(identities, each) ? new Same(value) : copyOf(value));
+        for (int at = 0; at < inputs.length; at++) {
+            Object value = read(inputs[at], owner);
+            values.add(switch (howEachInputIsTaken[at]) {
+                case AS_PRESENT -> Boolean.valueOf(value != null);
+                case AS_THE_VERY_ONE -> new Same(value);
+                case AS_A_COPY -> copyOf(value);
+            });
         }
         return new Inputs(Collections.unmodifiableList(values),
                 asked == null ? null : snapshotOf(read(asked, owner)));

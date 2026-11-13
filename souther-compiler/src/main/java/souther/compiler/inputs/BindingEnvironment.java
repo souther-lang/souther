@@ -86,6 +86,10 @@ final class BindingEnvironment {
      *  it is worked out from is every value bound, which a reader asking it of one environment
      *  many times would otherwise walk each time. Nought where it has not been. */
     private int hash;
+    /** {@link #hashButForWhatIsHanded}, worked out the first time it is asked, for the same
+     *  reason as {@link #hash}: a reading kept is found by it, once for each time it is asked
+     *  for. Nought where it has not been. */
+    private int hashWithoutWhatWasHanded;
     /**
      * The hash of {@link #elements} and {@link #values}, shared by every environment made from
      * this one, which holds the same two.
@@ -353,8 +357,13 @@ final class BindingEnvironment {
 
     /** {@link #hashCode} but for what was handed. */
     int hashButForWhatIsHanded() {
-        return Objects.hash(roots, bound().keySet(), heldHash.get(), callsStand,
-                selected.keySet(), opened.keySet(), answered.keySet());
+        int h = hashWithoutWhatWasHanded;
+        if (h == 0) {
+            h = Objects.hash(roots, bound().keySet(), heldHash.get(), callsStand,
+                    selected.keySet(), opened.keySet(), answered.keySet());
+            hashWithoutWhatWasHanded = h;
+        }
+        return h;
     }
 
     BindingEnvironment(Map<BindingId, TermPath> roots, Map<BindingId, Core> bound,
