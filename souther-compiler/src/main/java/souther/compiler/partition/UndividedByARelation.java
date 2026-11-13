@@ -553,13 +553,29 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * row holds at the place were searched is not said by the search.
      */
     UndividedByARelation searchedBy(Proposition.Some some) {
-        if (!(some.container() instanceof DecisionSubject.AnInput(TermPath container, var _))
-                || !(some.ofTheElement() instanceof Proposition.SameValue(
-                        DecisionSubject.AnInput(TermPath one, var _),
-                        Operand.At<DecisionSubject>(
-                                DecisionSubject.AnInput(TermPath other, var _)),
-                        boolean equal, var _))
-                || !equal || one.isAtOrUnder(container) == other.isAtOrUnder(container)) {
+        if (!(some.container() instanceof DecisionSubject.AnInput(TermPath container, var _))) {
+            return this;
+        }
+        TermPath one;
+        TermPath other;
+        switch (some.ofTheElement()) {
+            case Proposition.SameValue(
+                    DecisionSubject.AnInput(TermPath first, var _),
+                    Operand.At<DecisionSubject>(DecisionSubject.AnInput(TermPath second, var _)),
+                    boolean equal, var _) when equal -> {
+                one = first;
+                other = second;
+            }
+            case Proposition.Compared compared when some.holds()
+                    && twoPlacesHeldEqual(compared) instanceof List<TermPath> places -> {
+                one = places.get(0);
+                other = places.get(1);
+            }
+            default -> {
+                return this;
+            }
+        }
+        if (one.isAtOrUnder(container) == other.isAtOrUnder(container)) {
             return this;
         }
         TermPath searched = one.isAtOrUnder(container) ? one : other;
@@ -570,6 +586,34 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return new UndividedByARelation(sides, constant, relation, amongThemselves, kind,
                 remainder, working,
                 new Search(FilingCoordinate.at(searched), FilingCoordinate.at(probe)));
+    }
+
+    /**
+     * The two places of the input {@code compared} says hold one value — the value at the one
+     * less the value at the other being nought, stated and not denied — or null where it says
+     * anything else: another form, another relation, a number worked out of a place, a place
+     * weighed by more than the one.
+     */
+    private static List<TermPath> twoPlacesHeldEqual(Proposition.Compared compared) {
+        if (!compared.holds()
+                || !(compared.relation() instanceof Relation.Affine(var form, var rel))
+                || rel != Rel.EQ || !form.constant().isZero() || form.coefs().size() != 2) {
+            return null;
+        }
+        List<TermPath> places = new ArrayList<>();
+        List<ExactRatio> weights = new ArrayList<>();
+        for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
+            if (!(each.getKey() instanceof DecisionAtom.OfTheInput(
+                    NumericTerm.ValueOf(TermPath place), var _))
+                    || !(each.getValue().equals(ExactRatio.ONE)
+                            || each.getValue().equals(ExactRatio.ONE.negated()))) {
+                return null;
+            }
+            places.add(place);
+            weights.add(each.getValue());
+        }
+        // One less the other: the two weights are one and its negation.
+        return weights.get(0).equals(weights.get(1)) ? null : places;
     }
 
     UndividedByARelation {

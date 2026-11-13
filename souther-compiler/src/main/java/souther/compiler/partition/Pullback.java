@@ -92,6 +92,7 @@ import souther.compiler.inputs.WrittenOutElements;
 import souther.compiler.meaning.Conclusion;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
+import souther.compiler.meaning.ReadThroughNames;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.GivenTotals;
 import souther.compiler.meaning.Derivation.ALawJoinsWithoutWhatImpliesAnother.Disjunct;
@@ -1044,7 +1045,8 @@ final class Pullback {
                 ? pulled.withTheLines(pulledAs(Conclusion.drawingLines(where), whole)) : pulled;
         Trial theRule = triedAndConcluded.get(stated);
         return theRule == null ? drawn
-                : drawn.withWorkingOfRelation(theRule::workingOfTheRelationItStates);
+                : drawn.withWorkingOfRelation(relation -> theRule.workingOf(
+                        ReadThroughNames.atThePositions(relation)));
     }
 
     /** {@code whole} concluded by {@code conclusion}, with every part met as it came to there. */
@@ -3292,21 +3294,6 @@ final class Pullback {
         /** What the candidate says of the rows of {@code relation}, or null where it says none. */
         UndividedByARelation.Working workingOf(Relation relation) {
             return relations == null ? null : relations.get(relation);
-        }
-
-        /**
-         * What the candidate says of the rows of {@code relation}, which a statement of one
-         * relation says under the names its elements are read through ({@link ElementsNamed}) as
-         * well as without them: what it told of its one relation, where it told one and no other
-         * — null where it told none, or several that say different things.
-         */
-        UndividedByARelation.Working workingOfTheRelationItStates(Relation relation) {
-            UndividedByARelation.Working told = workingOf(relation);
-            if (told != null || relations == null || relations.isEmpty()) {
-                return told;
-            }
-            UndividedByARelation.Working first = relations.values().iterator().next();
-            return relations.values().stream().allMatch(first::equals) ? first : null;
         }
 
         /** The relations the candidate kept under this one read, held as this one's. What it
@@ -6112,20 +6099,22 @@ final class Pullback {
                 return null;
             }
             Core handed = applied.argument(at);
-            Type element = TypeView.shapeOf(applied.argument(container).type(),
+            Type elementType = TypeView.shapeOf(applied.argument(container).type(),
                     read.rules().inners(), read.rules().symbols(), read.rules().kinds(),
                     read.rules().sums()) instanceof Shape.Container holding
                     ? holding.element() : null;
-            if (handed == null || element == null || !element.equals(handed.type())) {
+            if (handed == null || elementType == null || !elementType.equals(handed.type())) {
                 return null;
             }
-            BindingId name = new BindingId(new BindingOwner.Synthesized(
-                    new BindingOwner.OfValue("souther", "law"), BindingOwner.Pass.LAW_READER,
-                    applied.argument(container).hashCode()), 0);
-            Core own = new Core.Read("own", name, element, e.pos());
-            InputReads beside = reads.holdingAnElement(name, new HeldIn(
+            BindingOwner within = ownerOfTheRootOf(applied.argument(container));
+            if (within == null) {
+                return null;
+            }
+            InputReads.ElementNamed element = reads.holdingAnElement(within, new HeldIn(
                     applied.argument(container), HeldIn.Part.ELEMENT,
                     HowAClosureIsApplied.UNTIL_ONE_HOLDS, false));
+            Core own = new Core.Read("own", element.name(), elementType, e.pos());
+            InputReads beside = element.reads();
             StatedComparison stated = new StatedComparison(
                     ComparisonClaim.stating(same.holds() ? Rel.EQ : Rel.NE),
                     own, handed, new Core.BinaryReading.AsTheyStand());
@@ -6134,10 +6123,32 @@ final class Pullback {
             // comparison written tells it, so a reader of the rows of the relation is asked.
             if (comparison instanceof Derivation.Restated(Derivation read)
                     && tried(read) instanceof Proposition.Compared compared) {
-                trial().tell(compared.relation(),
+                trial().tell(ReadThroughNames.atThePositions(compared.relation()),
                         workingOf(triedAndConcluded.get(read), arithmeticOf(stated, beside)));
             }
             return comparison;
+        }
+
+        /**
+         * What the binding at the root of {@code container}, a place of the input read through
+         * its fields, is owned by — or null where it stands on no binding, which is no place
+         * a name for its element can be given.
+         */
+        private BindingOwner ownerOfTheRootOf(Core container) {
+            Core at = Core.withoutStanding(container);
+            while (true) {
+                switch (at) {
+                    case Core.Read name when name.binding() != null -> {
+                        return name.binding().owner();
+                    }
+                    case Core.FieldAccess field -> at = Core.withoutStanding(field.target());
+                    case Core.FieldProjection projection ->
+                            at = Core.withoutStanding(projection.base());
+                    default -> {
+                        return null;
+                    }
+                }
+            }
         }
 
         /**

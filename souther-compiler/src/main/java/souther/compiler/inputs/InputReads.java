@@ -567,14 +567,20 @@ public final class InputReads {
     }
 
     /**
-     * This reading, with {@code name} an element of the container {@code held} names, as the
-     * parameter of a closure an operation applies to the elements of a container is. A statement
-     * a law makes of some element of a container is read of the name, as one a closure makes is.
+     * A name for an element of the container {@code held} names, in this reading: the parameter
+     * of a closure an operation applies to the elements of a container is one, and a statement a
+     * law makes of some element of a container is read of the name as one a closure makes is.
+     *
+     * @param within what the name is a name of a reading inside
      */
-    public InputReads holdingAnElement(BindingId name, HeldIn held) {
-        return new InputReads(names.holdingAnElement(name, held), alternatives, declared,
-                dependencies, applied);
+    public ElementNamed holdingAnElement(BindingOwner within, HeldIn held) {
+        BindingId name = names.anotherElementOf(within);
+        return new ElementNamed(new InputReads(names.holdingAnElement(name, held), alternatives,
+                declared, dependencies, applied), name);
     }
+
+    /** This reading with a name for an element in it, and the name. */
+    public record ElementNamed(InputReads reads, BindingId name) {}
 
     private InputReads handedAs(BindingId binding, Denotation value, DeclarationNewtypes newtypes) {
         Map<BindingId, List<ReadMeaning.Occurrence>> narrower = new LinkedHashMap<>(alternatives);

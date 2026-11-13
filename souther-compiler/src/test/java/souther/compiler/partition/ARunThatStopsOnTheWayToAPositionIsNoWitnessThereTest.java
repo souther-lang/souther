@@ -78,6 +78,42 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
     }
 
     /**
+     * What the sum stops at is where the elements are divided: no run past the sum holds {@code a}
+     * from the first value it stops on up, so the elements from there on are a class the
+     * membership never settles with a value of {@code a}. The line is drawn on {@code hs[*]} at
+     * that value, and the rows are of both answers of the membership, each at an {@code a} the
+     * sum is past.
+     */
+    @Test
+    void theElementsAreDividedAtTheFirstValueTheSumStopsOn() {
+        long firstStop = Long.MAX_VALUE - FIRST_SUM + 1;
+        for (String condition : List.of(THE_SUM_STOPPING, THE_REMAINDER_OF_A_SUM_STOPPING)) {
+            JsonNode partition = reportOf(compiled(PARAMETERS, condition)).path("modules")
+                    .get(0).path("behaviors").get(0).path("partition");
+            List<String> classes = new ArrayList<>();
+            for (JsonNode axis : partition.path("axes")) {
+                if (axis.path("path").asString().equals("hs[*]")) {
+                    axis.path("classes").forEach(each -> classes.add(each.asString()));
+                }
+            }
+            assertEquals(List.of("hs[*]: x < " + firstStop, "hs[*]: " + firstStop + " <= x"),
+                    classes, condition);
+            boolean lineAtTheStop = false;
+            for (JsonNode border : partition.path("boundaries")) {
+                lineAtTheStop |= border.path("axis").asString().equals("f/hs[*]")
+                        && border.path("value").asString().equals(Long.toString(firstStop));
+            }
+            assertTrue(lineAtTheStop, condition);
+
+            List<List<String>> rows = certifiedRowsOf(condition);
+            assertTrue(rows.stream().anyMatch(row -> row.get(2).equals("[" + row.get(0) + "]")),
+                    "a row whose set holds a: " + rows);
+            assertTrue(rows.stream().anyMatch(row -> row.get(2).equals("[]")),
+                    "a row whose set holds none: " + rows);
+        }
+    }
+
+    /**
      * The values the sum stops on: {@code a} at 11 is past the greatest {@code Int} and at 10 is
      * the greatest, so a row the compiler offers for the rule is one the program gets past.
      *

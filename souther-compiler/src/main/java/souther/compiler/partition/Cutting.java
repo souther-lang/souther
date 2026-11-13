@@ -2282,16 +2282,30 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         if (CountsWrittenOut.outsideElementsOf(stated)
                 instanceof CountsWrittenOut.Written(Proposition written)
                 && several(behavior, application, written.withTheValuesItHoldsCompared(), read,
-                        reads, Optional.of(authors), relation -> {
-                            UndividedByARelation.Working told = working.apply(relation);
-                            return told == null ? UndividedByARelation.Working.UNREAD : told;
-                        }, false)
+                        reads, Optional.of(authors), whatWasToldOrNot(working), false)
                         instanceof TheParts.Drawn(Read.Several lines)) {
             return lines;
         }
         List<FilingCoordinate> related = valuesItRelates(stated);
-        return related == null ? againstAnotherValueOnly(stated, read, working)
+        return related == null
+                ? againstAnotherValueOnly(stated, read, whatWasToldOrNot(working))
                 : against(related, stated);
+    }
+
+    /**
+     * What the rows of a relation an application states get past, as {@code told} says of it —
+     * and, of a relation it says nothing of, that a run may stop on what nothing told.
+     *
+     * <p>The one place that is decided, for the lines an application draws and for the relations
+     * it has of another value alike: that nothing was told of what a run works out is not that
+     * a run works out nothing that stops it.
+     */
+    static Function<Relation, UndividedByARelation.Working> whatWasToldOrNot(
+            Function<Relation, UndividedByARelation.Working> told) {
+        return relation -> {
+            UndividedByARelation.Working said = told.apply(relation);
+            return said == null ? UndividedByARelation.Working.UNREAD : said;
+        };
     }
 
     /**
@@ -2307,7 +2321,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     private static Read.AgainstAnotherValue againstAnotherValueOnly(
             Proposition stated, InputReading read,
             Function<Relation, UndividedByARelation.Working> working) {
-        if (!(stated instanceof Proposition.Some(var _, Proposition.Compared _, var _, var _))) {
+        if (!(stated instanceof Proposition.Some some
+                && some.ofTheElement() instanceof Proposition.Compared)) {
             return null;
         }
         List<WhereEachLineDecides.Decides> lines =
@@ -2324,8 +2339,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 return null;
             }
             related.stream().filter(at -> !over.contains(at)).forEach(over::add);
-            UndividedByARelation.Working told = workingOf(working, each.line());            relations.addAll(against(related, each.line(),
-                    told == null ? UndividedByARelation.Working.NOTHING : told).relations());
+            for (UndividedByARelation relation : against(related, each.line(),
+                    workingOf(working, each.line())).relations()) {
+                relations.add(relation.searchedBy(some));
+            }
         }
         return new Read.AgainstAnotherValue(over, relations);
     }
