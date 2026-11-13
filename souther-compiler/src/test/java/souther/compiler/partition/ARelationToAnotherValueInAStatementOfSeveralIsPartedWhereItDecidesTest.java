@@ -111,10 +111,19 @@ class ARelationToAnotherValueInAStatementOfSeveralIsPartedWhereItDecidesTest {
                 .findFirst().orElseThrow();
         ComparisonAssessment read = assertInstanceOf(BoundaryPolicy.Standing.Admitted.class,
                 contains.standing()).read();
-        ComparisonAssessment.AgainstAnotherValue relation =
-                assertInstanceOf(ComparisonAssessment.AgainstAnotherValue.class, read,
-                        read::toString);
-        assertFalse(relation.settling().isEmpty(), read::toString);
+        // The relation of the element to the value, as a comparison of the two is: a line over the
+        // two places, or the relation to another value where the value is none of a position's.
+        assertFalse(settlingOf(read).isEmpty(), read::toString);
+    }
+
+    private static List<ComparisonAssessment.AtAPosition> settlingOf(ComparisonAssessment read) {
+        return switch (read) {
+            case ComparisonAssessment.AgainstAnotherValue relation -> relation.settling();
+            case ComparisonAssessment.AcrossPositions across -> across.settling();
+            case ComparisonAssessment.Several several -> several.parts().stream()
+                    .flatMap(part -> settlingOf(part.line()).stream()).toList();
+            default -> throw new AssertionError(read.toString());
+        };
     }
 
     /**

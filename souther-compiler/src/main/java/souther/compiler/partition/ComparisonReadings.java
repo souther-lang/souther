@@ -534,7 +534,6 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         ConditionNumbering numbering =
                 new ConditionNumbering(read.symbols().module(), behavior,
                         ConditionOccurrence.Reading.DIVIDING);
-        StatedHere stated = new StatedHere(behavior);
         WhatConditionsState conditions = WhatConditionsState.of(read);
         // Whether a node answers a value is asked of the tree it stands in: the body, or the
         // template of a value the body builds. A reading that follows a name given a build is in
@@ -544,6 +543,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         trees.add(body);
         trees.addAll(analysis.templatesAfterTheirBuilders());
         Arrivals answering = Arrivals.inTheTrees(trees, analysis.templates()::bodyOf);
+        StatedHere stated = new StatedHere(behavior, answering);
         ArmsNamed.Gathered armsNamed = new ArmsNamed.Gathered();
         ForkDependencies.Gathered dependencies = new ForkDependencies.Gathered();
         WithinOneApplication.Gathered oneApplication = new WithinOneApplication.Gathered();
@@ -1639,10 +1639,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
 
         private final String behavior;
+        /** Whether an expression answers a value, of the trees the body is made of. */
+        private final Arrivals answering;
         private final Map<Asked, Optional<Cutting.AppliedOn>> applications = new HashMap<>();
 
-        StatedHere(String behavior) {
+        StatedHere(String behavior, Arrivals answering) {
             this.behavior = behavior;
+            this.answering = answering;
         }
 
         /**
@@ -1687,6 +1690,27 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             return applied == null ? null : applied.read();
         }
 
+        /**
+         * What {@code application}, whose statement {@code stated} has a part nothing read, says
+         * at the places its law's comparison is of — or nothing where its law holds no comparison
+         * of an element or a key with a value, and what stopped is something else.
+         */
+        private Optional<Cutting.AppliedOn> unreadAsItsLawComparison(
+                Core.PreservedCall application, Pullback.Pulled stated,
+                WhatNamesStandFor standing) {
+            Pullback.LawComparison law = Pullback.lawComparisonOf(application, standing.reads(),
+                    standing.read());
+            if (law == null) {
+                return Optional.empty();
+            }
+            Cutting.Read read = Cutting.ofAComparisonThatStopped(law.comparison(),
+                    stated.proposition(), Pullback.arithmeticOf(law.comparison(), law.reads(),
+                            standing.read()), standing.read(), law.reads(), answering);
+            return read == null ? Optional.empty()
+                    : Optional.of(new Cutting.AppliedOn(read, stated.meaning().how(),
+                            stated.proposition()));
+        }
+
         /** What {@code application} reads as under the names {@code standing} holds, or null where
          *  it states nothing of its own. */
         private Cutting.AppliedOn appliedOn(Core.PreservedCall application,
@@ -1702,7 +1726,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 boolean itsOwn = stated.turnsOn().stream().anyMatch(leaf ->
                         Core.withoutStanding(leaf.from().value()) == application);
                 if (Proposition.leavesSomethingUnread(stated.proposition())) {
-                    return Optional.empty();
+                    // Where what stopped is the comparison of the element or key the call's law
+                    // holds against the value it was handed, that comparison is the application's
+                    // own and says why at the places it compares. What stopped elsewhere in what
+                    // the application states is a fork's to say.
+                    return itsOwn ? unreadAsItsLawComparison(application, stated, standing)
+                            : Optional.empty();
                 }
                 if (!itsOwn) {
                     return Optional.of(new Cutting.AppliedOn(null, stated.meaning().how(),
@@ -1712,7 +1741,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         stated.proposition(), standing.read(), standing.reads(),
                         WrittenLines.of(stated.meaning().how(),
                                 application.occurrence().lineage().expansionProjection(),
-                                Optional.empty(), Optional.empty()));
+                                Optional.empty(), Optional.empty()),
+                        stated.workingOfRelation());
                 return read == null ? Optional.empty()
                         : Optional.of(new Cutting.AppliedOn(read, stated.meaning().how(),
                                 stated.proposition()));

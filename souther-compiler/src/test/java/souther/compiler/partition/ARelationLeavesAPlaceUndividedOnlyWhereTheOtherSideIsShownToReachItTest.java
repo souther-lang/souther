@@ -3573,7 +3573,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     /** How many a set holds, read down a chain of fields from a newtype wrapping a record. */
     @Test
     void aRuleOverHowManyASetFurtherDownHoldsBackNoElement() {
-        assertEquals(Map.of("champ", TELLS_NOTHING_APART, "w.members[*]", TELLS_NOTHING_APART), left("champ: EmpId, w: Wrapped",
+        assertEquals(Map.of("champ", RELATES, "w.members[*]", RELATES), left("champ: EmpId, w: Wrapped",
                 EMPLOYEE + "\ndata Inner = { members: Set<EmpId> }"
                         + "\ndata Wrapped = Inner invariant Set.size(value.members) >= 1",
                 "Set.contains(champ, w.value.members)", "6:20"));
@@ -3584,7 +3584,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      *  states, says nothing of the count. */
     @Test
     void aSetsCountIsShownOfItselfBesideAFieldWhoseRuleNoRangeStates() {
-        assertEquals(Map.of("champ", TELLS_NOTHING_APART, "o.makers[*]", TELLS_NOTHING_APART), left("champ: EmpId, o: Opp",
+        assertEquals(Map.of("champ", RELATES, "o.makers[*]", RELATES), left("champ: EmpId, o: Opp",
                 EMPLOYEE + "\ndata Ds = Set<EmpId> invariant Set.size(value) >= 1"
                         + "\ndata Code = String invariant String.matches(\"[A-Z]{2}\", value)"
                         + "\ndata Opp = { code: Code, makers: Ds }",
@@ -3605,15 +3605,18 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      *  hold one; held to none, its elements are values it never holds. */
     @Test
     void aRuleOverHowManyASetHoldsHoldsBackNoElementUnlessItHoldsNone() {
-        assertEquals(Map.of("champ", TELLS_NOTHING_APART, "ds[*]", TELLS_NOTHING_APART), left("champ: EmpId, ds: Ds",
+        assertEquals(Map.of("champ", RELATES, "ds[*]", RELATES), left("champ: EmpId, ds: Ds",
                 EMPLOYEE + "\ndata Ds = Set<EmpId> invariant Set.size(value) >= 1",
                 "Set.contains(champ, ds.value)", "5:21"));
-        assertEquals(Map.of("champ", TELLS_NOTHING_APART, "ds.members[*]", TELLS_NOTHING_APART), left("champ: EmpId, ds: Ds",
+        assertEquals(Map.of("champ", RELATES, "ds.members[*]", RELATES), left("champ: EmpId, ds: Ds",
                 EMPLOYEE + "\ndata Ds = { members: Set<EmpId> } invariant Set.size(members) >= 1",
                 "Set.contains(champ, ds.members)", "5:21"));
-        assertEquals(NOT_SHOWN, left("champ: EmpId, ds: Ds",
+        // Held to none, no element is any value, so the membership draws its line at a value
+        // the other side never holds.
+        assertTrue(left("champ: EmpId, ds: Ds",
                 EMPLOYEE + "\ndata Ds = Set<EmpId> invariant Set.size(value) <= 0",
-                "Set.contains(champ, ds.value)", "5:21").get("champ"));
+                "Set.contains(champ, ds.value)", "5:21").get("champ")
+                .contains("draws its line outside what the quantity it cuts ever holds"));
     }
 
     /** Held to more than one, a set's elements are that many values apart, which is a question
@@ -4280,8 +4283,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aRuleLookingUpOneKeyLeavesTheOtherKeysOfTheMapEveryValue() {
         for (String rule : List.of("Map.containsKey(base, rates)", "baseIsOne(base, rates)")) {
             String model = KEYED.formatted(rule);
-            assertEquals(Map.of("t.rates[key]", TELLS_NOTHING_APART, "codes[*]", TELLS_NOTHING_APART),
-                    leftIn(model, whereWritten(model, "Map.containsKey(c")), rule);
+            Map<String, String> left = leftIn(model, whereWritten(model, "Map.containsKey(c"));
+            assertEquals(Map.of("t.rates[key]", RELATES, "codes[*]", RELATES), left, rule);
+            assertEquals(theLookupWrittenAsAComparison(model), left, rule);
         }
     }
 
@@ -4340,6 +4344,17 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * What the keys of the map are left with by the rule of its record, asked of the same lookup
+     * written as the comparison of each key with the code: {@code Map.containsKey(c, t.rates)} and
+     * {@code List.any(own -> own == c, Map.keys(t.rates))} state one relation, and are read as one.
+     */
+    private static Map<String, String> theLookupWrittenAsAComparison(String model) {
+        String any = model.replace("Map.containsKey(c, t.rates)",
+                "List.any(own -> own == c, Map.keys(t.rates))");
+        return leftIn(any, whereWritten(any, "== c"));
+    }
+
+    /**
      * What a rule leaves the keys is the entry it reads only while the map may hold a second one.
      * With room for one entry the only key is the one the rule names, and a rule reading every
      * key holds each to what it says. Neither leaves a key every code.
@@ -4349,8 +4364,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         for (String rule : List.of("Map.containsKey(base, rates) && Map.size(rates) <= 1",
                 "Map.containsKey(base, rates) && List.all(k -> k == base, Map.keys(rates))")) {
             String model = KEYED.formatted(rule);
-            assertEquals(Map.of("t.rates[key]", NOT_SHOWN, "codes[*]", NOT_SHOWN),
-                    leftIn(model, whereWritten(model, "Map.containsKey(c")), rule);
+            Map<String, String> left = leftIn(model, whereWritten(model, "Map.containsKey(c"));
+            assertEquals(theLookupWrittenAsAComparison(model), left, rule);
+            assertEquals(NOT_SHOWN, left.get("codes[*]"), rule);
         }
     }
 

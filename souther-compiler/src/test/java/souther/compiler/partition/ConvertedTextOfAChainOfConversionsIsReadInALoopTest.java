@@ -46,8 +46,25 @@ class ConvertedTextOfAChainOfConversionsIsReadInALoopTest {
     void aTextMadeOfTheInputByConversionsIsThePlaceAndWhatTheyMakeOfIt() {
         ConvertedText text = ConvertedText.of(converted(2, LOWERCASE));
         assertEquals(PLACE, text.place());
-        assertEquals(new CaseMapping.Lowercase(CaseMapping.LOWERCASE), text.through());
+        assertEquals(CaseMapping.LOWERCASE, text.through());
         assertEquals(CaseMapping.NONE, ConvertedText.of(new DecisionAtom.OfTheInput(PLACE)).through());
+    }
+
+    @Test
+    void aChainOfOneConversionIsThatConversionHoweverLongItIs() {
+        assertEquals(CaseMapping.LOWERCASE, ConvertedText.of(converted(320, LOWERCASE)).through());
+        assertEquals(CaseMapping.UPPERCASE, ConvertedText.of(converted(320, UPPERCASE)).through());
+    }
+
+    @Test
+    void differentConversionsInTurnKeepTheirOrder() {
+        Quantity lowered = new Quantity.WhatAnOperationAnswers(LOWERCASE,
+                List.of(converted(3, UPPERCASE)));
+        assertEquals(new CaseMapping.Lowercase(CaseMapping.UPPERCASE),
+                ConvertedText.of(lowered).through());
+        Quantity uppered = new Quantity.WhatAnOperationAnswers(UPPERCASE, List.of(lowered));
+        assertEquals(new CaseMapping.Uppercase(new CaseMapping.Lowercase(CaseMapping.UPPERCASE)),
+                ConvertedText.of(uppered).through());
     }
 
     @Test

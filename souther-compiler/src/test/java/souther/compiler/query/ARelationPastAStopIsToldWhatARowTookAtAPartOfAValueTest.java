@@ -221,9 +221,21 @@ class ARelationPastAStopIsToldWhatARowTookAtAPartOfAValueTest {
         Map<String, PartitionEvidence.NotRead> covered = notRead(evidence, "covered");
         assertEquals(List.of("\"Y\"", "\"W\""), covered.get("deals[*].currency").shownReachedAt(),
                 covered.toString());
-        assertEquals(List.of("\"Y\""), covered.get("rates.rates[key]").shownReachedAt(),
-                covered.toString());
         ACompiledModel.compiles(compilation);
+
+        // A lookup by a key is the comparison of each key with the value, as it is written with
+        // an `any` over the keys: what is told of the keys is what that is told.
+        Compilation written = onTheDay(TWO_KEYS.replace(
+                "Map.containsKey(d.currency, rates.rates)",
+                "List.any(own -> own == d.currency, Map.keys(rates.rates))"));
+        written.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(written);
+        Map<String, PartitionEvidence.NotRead> asAnyOverTheKeys = notRead(
+                written.db().ask(new Adequacy.Coverage("probe")).value(), "covered");
+        assertEquals(asAnyOverTheKeys.get("rates.rates[key]").shownReachedAt(),
+                covered.get("rates.rates[key]").shownReachedAt(), covered.toString());
+        assertTrue(covered.get("deals[*].currency").shownReachedAt().containsAll(
+                asAnyOverTheKeys.get("deals[*].currency").shownReachedAt()), covered.toString());
     }
 
     /**
