@@ -57,11 +57,13 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.SequencedMap;
+import java.util.SequencedSet;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -983,6 +985,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> relating = new LinkedHashMap<>();
         List<FilingCoordinate> against = new ArrayList<>();
         List<UndividedByARelation> relations = new ArrayList<>();
+        SequencedSet<PlacesStopped.Stop> stoppedAt = new LinkedHashSet<>();
         boolean relatedOnlySomewhere = false;
         for (ClosureApplications.Application one : each) {
             if (!one.isMadeOnSomeRow()) {
@@ -1023,10 +1026,17 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                     relatedOnlySomewhere |= !(one.reached() instanceof Proposition.Always(
                             boolean holds) && holds);
                 }
+                // Said stopped on one application, it is stopped: what was read of the others is
+                // no reading of the whole.
+                case Read.Stopped stopped -> stoppedAt.addAll(stopped.places().stops());
                 default -> {
                     return null;
                 }
             }
+        }
+        if (!stoppedAt.isEmpty()) {
+            return new Read.Stopped(new PlacesStopped(stoppedAt),
+                    WhereAReadingStopped.ELSEWHERE);
         }
         if (!against.isEmpty()) {
             List<Read.Several.Part> parts = new ArrayList<>();
@@ -2290,6 +2300,23 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return related == null
                 ? againstAnotherValueOnly(stated, read, whatWasToldOrNot(working))
                 : against(related, stated);
+    }
+
+    /**
+     * What a comparison no reading took to the end says at each place it compares — the
+     * comparison of an element or a key with a value that an application is, by the law of its
+     * operation ({@link Pullback#lawComparisonOf}) — or null where it says nothing there.
+     *
+     * <p>Said as any comparison that stopped is, where it stopped and why, so that an
+     * application whose comparison was not read is not an application that divides no place.
+     */
+    static Read ofAComparisonThatStopped(StatedComparison comparison, Proposition stated,
+                                         Supplier<AffineReading.OfAComparison> arithmetic,
+                                         InputReading read, InputReads reads,
+                                         Arrivals answering) {
+        Read stopped = noLine(comparison, stated, Proposition.stopsIn(stated), Set.of(),
+                arithmetic, read, reads, answering);
+        return stopped instanceof Read.Stopped ? stopped : null;
     }
 
     /**

@@ -4244,8 +4244,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void aRuleLookingUpOneKeyLeavesTheOtherKeysOfTheMapEveryValue() {
         for (String rule : List.of("Map.containsKey(base, rates)", "baseIsOne(base, rates)")) {
             String model = KEYED.formatted(rule);
-            assertEquals(Map.of("t.rates[key]", TELLS_NOTHING_APART, "codes[*]", TELLS_NOTHING_APART),
-                    leftIn(model, whereWritten(model, "Map.containsKey(c")), rule);
+            Map<String, String> left = leftIn(model, whereWritten(model, "Map.containsKey(c"));
+            assertEquals(Map.of("t.rates[key]", RELATES, "codes[*]", RELATES), left, rule);
+            assertEquals(theLookupWrittenAsAComparison(model), left, rule);
         }
     }
 
@@ -4304,6 +4305,17 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
+     * What the keys of the map are left with by the rule of its record, asked of the same lookup
+     * written as the comparison of each key with the code: {@code Map.containsKey(c, t.rates)} and
+     * {@code List.any(own -> own == c, Map.keys(t.rates))} state one relation, and are read as one.
+     */
+    private static Map<String, String> theLookupWrittenAsAComparison(String model) {
+        String any = model.replace("Map.containsKey(c, t.rates)",
+                "List.any(own -> own == c, Map.keys(t.rates))");
+        return leftIn(any, whereWritten(any, "== c"));
+    }
+
+    /**
      * What a rule leaves the keys is the entry it reads only while the map may hold a second one.
      * With room for one entry the only key is the one the rule names, and a rule reading every
      * key holds each to what it says. Neither leaves a key every code.
@@ -4313,8 +4325,9 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         for (String rule : List.of("Map.containsKey(base, rates) && Map.size(rates) <= 1",
                 "Map.containsKey(base, rates) && List.all(k -> k == base, Map.keys(rates))")) {
             String model = KEYED.formatted(rule);
-            assertEquals(Map.of("t.rates[key]", NOT_SHOWN, "codes[*]", NOT_SHOWN),
-                    leftIn(model, whereWritten(model, "Map.containsKey(c")), rule);
+            Map<String, String> left = leftIn(model, whereWritten(model, "Map.containsKey(c"));
+            assertEquals(theLookupWrittenAsAComparison(model), left, rule);
+            assertEquals(NOT_SHOWN, left.get("codes[*]"), rule);
         }
     }
 

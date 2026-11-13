@@ -896,6 +896,126 @@ final class Pullback {
         }
     }
 
+    /**
+     * The comparison a law's sameness is read as, and the reading it is read in.
+     *
+     * @param comparison the element, or the key, of a container, held against the value the call
+     *                   was handed, as {@code own == value}
+     * @param reads      the reading that has a name for that element or key, which the comparison's
+     *                   left side is
+     */
+    record LawComparison(StatedComparison comparison, InputReads reads) {}
+
+    /**
+     * What a law's {@code same}, of an element or a key of a container and a value the call was
+     * handed, comes to as the comparison of the two the source writes — or null where it is a
+     * sameness of other things, or of two of a different type, or where the container stands on no
+     * binding a name for its element can be owned by.
+     *
+     * <p>A name stands for the element at its place, which is what the parameter of a closure over
+     * the container stands for, so that the law and the closure are one comparison to read. A key
+     * is what a map's name stands for in the same way, by the part of the container it is of.
+     */
+    static LawComparison lawComparison(Core call, LawProposition.Same<DeclaredArgument> same,
+                                       AnOperationApplied applied, InputReads reads,
+                                       InputReading read) {
+        DeclaredArgument container;
+        HeldIn.Part part;
+        switch (same.one()) {
+            case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument of) -> {
+                container = of;
+                part = HeldIn.Part.ELEMENT;
+            }
+            case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument of) -> {
+                container = of;
+                part = HeldIn.Part.KEY;
+            }
+            default -> {
+                return null;
+            }
+        }
+        if (!(same.other() instanceof LawSubject.Argument<DeclaredArgument>(DeclaredArgument at))) {
+            return null;
+        }
+        Core held = applied.argument(container);
+        Core handed = applied.argument(at);
+        if (held == null || handed == null) {
+            return null;
+        }
+        Shape shape = TypeView.shapeOf(held.type(), read.rules().inners(),
+                read.rules().symbols(), read.rules().kinds(), read.rules().sums());
+        Type placeType = part == HeldIn.Part.KEY
+                ? shape instanceof Shape.Mapping map ? map.key() : null
+                : shape instanceof Shape.Container holding ? holding.element() : null;
+        if (placeType == null || !placeType.equals(handed.type())) {
+            return null;
+        }
+        BindingOwner within = ownerOfTheRootOf(held);
+        if (within == null) {
+            return null;
+        }
+        InputReads.ElementNamed named = reads.holdingAnElement(within,
+                new HeldIn(held, part, HowAClosureIsApplied.UNTIL_ONE_HOLDS, false));
+        Core own = new Core.Read("own", named.name(), placeType, call.pos());
+        return new LawComparison(new StatedComparison(
+                ComparisonClaim.stating(same.holds() ? Rel.EQ : Rel.NE), own, handed,
+                new Core.BinaryReading.AsTheyStand()), named.reads());
+    }
+
+    /**
+     * The comparison the law of the operation {@code call} applies is, where the law says only
+     * that some element of a container, or some key of it, is the value the call was handed — or
+     * null where it says anything else ({@link #lawComparison}).
+     *
+     * <p>Asked of the call and not of what was read of it, so that where the reading stopped before
+     * the comparison was made, the comparison it stopped at is still the one the places are
+     * said at.
+     */
+    static LawComparison lawComparisonOf(Core.PreservedCall call, InputReads reads,
+                                         InputReading read) {
+        AnOperationApplied applied = AnOperationApplied.of(call);
+        if (applied == null || !(applied.operation() instanceof ValueName.Stdlib operation)
+                || !(DefaultBoundOperationFacts.get().settled(operation,
+                        OperationLaw.Observed.of(AnswerAspect.TRUTH))
+                        instanceof BoundOperationFacts.Settled.ByALaw(
+                                OperationLaw.Observation<DeclaredArgument> law, var _))
+                || !(law.equivalentTo() instanceof LawProposition.SomeElement<DeclaredArgument>(
+                        var _, LawProposition.Same<DeclaredArgument> same, boolean holds))
+                || !holds) {
+            return null;
+        }
+        return lawComparison(call, same, applied, reads, read);
+    }
+
+    /** The arithmetic {@code comparison} is read through, read when it is first asked. */
+    static Supplier<AffineReading.OfAComparison> arithmeticOf(StatedComparison comparison,
+                                                              InputReads reads,
+                                                              InputReading read) {
+        return new Once<>(() -> AffineReading.read(comparison, reads, read));
+    }
+
+    /**
+     * What the binding at the root of {@code container}, a place of the input read through its
+     * fields, is owned by — or null where it stands on no binding, which is no place a name for
+     * its element can be given.
+     */
+    private static BindingOwner ownerOfTheRootOf(Core container) {
+        Core at = Core.withoutStanding(container);
+        while (true) {
+            switch (at) {
+                case Core.Read name when name.binding() != null -> {
+                    return name.binding().owner();
+                }
+                case Core.FieldAccess field -> at = Core.withoutStanding(field.target());
+                case Core.FieldProjection projection ->
+                        at = Core.withoutStanding(projection.base());
+                default -> {
+                    return null;
+                }
+            }
+        }
+    }
+
     /** The same, with the arithmetic it was read through. */
     static OnTheInput ofAComparisonOnTheInput(StatedComparison comparison, InputReads reads,
                                               InputReading read) {
@@ -6033,31 +6153,35 @@ final class Pullback {
 
         @Override
         public Derivation same(LawProposition.Same<DeclaredArgument> same) {
-            Derivation asked = sameAsAskedOfRows(same);
-            // Two numbers one of which stands at no position are already read as the comparison
-            // of their difference with nought ({@link #sameNumber}), and a value chosen by cases
-            // is read on each case, which reads this again. What is left is the two being one
-            // where each is a subject or written, and the two the reading stopped at.
-            Derivation basis = Derivation.readOff(asked);
-            if (!(basis instanceof Derivation.TheSameValue
-                    || basis instanceof Derivation.Stopped)) {
-                return asked;
+            AsRowsAreAsked asked = sameAsAskedOfRows(same);
+            // A value chosen by cases is read on each of them, which reads this again; every other
+            // sameness is read for the lines it draws as the comparison the source writes of the
+            // two, whether the rows are asked of it as the two being one, as their difference
+            // being nought, or not at all.
+            if (asked.onEachCase()) {
+                return asked.derivation();
             }
             Derivation comparison = asTheSourceWritesIt(same);
-            return comparison == null ? asked : leaf(
-                    new Derivation.TheSameAsAWrittenComparison(same, comparison, asked), e, reads);
+            return comparison == null ? asked.derivation() : leaf(
+                    new Derivation.TheSameAsAWrittenComparison(same, comparison,
+                            asked.derivation()), e, reads);
         }
+
+        /** What a row is asked of a sameness, and whether that is read on each case of a value
+         *  chosen by cases instead of on the sameness itself. */
+        private record AsRowsAreAsked(Derivation derivation, boolean onEachCase) {}
 
         /**
          * {@code same} read as what a row is asked: the two values being one, where each is a
          * subject or a value the source wrote.
          */
-        private Derivation sameAsAskedOfRows(LawProposition.Same<DeclaredArgument> same) {
+        private AsRowsAreAsked sameAsAskedOfRows(LawProposition.Same<DeclaredArgument> same) {
             Operand<DecisionSubject> one = operand(same.one());
             Operand<DecisionSubject> other = operand(same.other());
             if (one != null && other != null
                     && (one.place().isPresent() || other.place().isPresent())) {
-                return leaf(new Derivation.TheSameValue(same, one, other), e, reads);
+                return new AsRowsAreAsked(
+                        leaf(new Derivation.TheSameValue(same, one, other), e, reads), false);
             }
             // A value chosen by cases is the same as the other on each of them, as a comparison
             // the source wrote of it is read ({@link #comparedWhereItsCountsAre}).
@@ -6069,13 +6193,15 @@ final class Pullback {
             }
             Inside inside = aWayIn(values);
             if (inside != null) {
-                return goingIn(inside, reads, new Denotation(e, reads), fixed(e, reads),
-                        taking -> new ALawRead(this, taking.apply(reads)).same(same));
+                return new AsRowsAreAsked(goingIn(inside, reads, new Denotation(e, reads),
+                        fixed(e, reads),
+                        taking -> new ALawRead(this, taking.apply(reads)).same(same)), true);
             }
             Derivation.TheSameNumber numbers = sameNumber(same);
-            return numbers != null ? leaf(numbers, e, reads)
+            return new AsRowsAreAsked(numbers != null ? leaf(numbers, e, reads)
                     : unread(e, reads,
-                            new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.VALUE));
+                            new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.VALUE)),
+                    false);
         }
 
         /**
@@ -6090,65 +6216,36 @@ final class Pullback {
          */
         private Derivation asTheSourceWritesIt(LawProposition.Same<DeclaredArgument> same) {
             // Inside the count of a comparison, what is counted is read by the count.
-            if (counting != null || !(same.one() instanceof LawSubject.ElementOf<DeclaredArgument>(
-                            DeclaredArgument container))
-                    || !(same.other() instanceof LawSubject.Argument<DeclaredArgument>(
-                            DeclaredArgument at))
-                    || !(elements.get(container) instanceof ElementAt.AtASubject(
-                            DecisionSubject.AnInput(TermPath held, var _)))) {
+            if (counting != null) {
                 return null;
             }
-            Core handed = applied.argument(at);
-            Type elementType = TypeView.shapeOf(applied.argument(container).type(),
-                    read.rules().inners(), read.rules().symbols(), read.rules().kinds(),
-                    read.rules().sums()) instanceof Shape.Container holding
-                    ? holding.element() : null;
-            if (handed == null || elementType == null || !elementType.equals(handed.type())) {
+            LawComparison law = lawComparison(e, same, applied, reads, read);
+            if (law == null || !(elements.get(containerOf(same)) instanceof ElementAt.AtASubject(
+                    DecisionSubject.AnInput _))) {
                 return null;
             }
-            BindingOwner within = ownerOfTheRootOf(applied.argument(container));
-            if (within == null) {
-                return null;
-            }
-            InputReads.ElementNamed element = reads.holdingAnElement(within, new HeldIn(
-                    applied.argument(container), HeldIn.Part.ELEMENT,
-                    HowAClosureIsApplied.UNTIL_ONE_HOLDS, false));
-            Core own = new Core.Read("own", element.name(), elementType, e.pos());
-            InputReads beside = element.reads();
-            StatedComparison stated = new StatedComparison(
-                    ComparisonClaim.stating(same.holds() ? Rel.EQ : Rel.NE),
-                    own, handed, new Core.BinaryReading.AsTheyStand());
-            Derivation comparison = restated(stated, null, fixed(e, reads), beside);
+            Derivation comparison = restated(law.comparison(), null, fixed(e, reads),
+                    law.reads());
             // What a run works out in getting to the relation is told of the relation, as a
             // comparison written tells it, so a reader of the rows of the relation is asked.
             if (comparison instanceof Derivation.Restated(Derivation read)
                     && tried(read) instanceof Proposition.Compared compared) {
                 trial().tell(ReadThroughNames.atThePositions(compared.relation()),
-                        workingOf(triedAndConcluded.get(read), arithmeticOf(stated, beside)));
+                        workingOf(triedAndConcluded.get(read),
+                                arithmeticOf(law.comparison(), law.reads())));
             }
             return comparison;
         }
 
-        /**
-         * What the binding at the root of {@code container}, a place of the input read through
-         * its fields, is owned by — or null where it stands on no binding, which is no place
-         * a name for its element can be given.
-         */
-        private BindingOwner ownerOfTheRootOf(Core container) {
-            Core at = Core.withoutStanding(container);
-            while (true) {
-                switch (at) {
-                    case Core.Read name when name.binding() != null -> {
-                        return name.binding().owner();
-                    }
-                    case Core.FieldAccess field -> at = Core.withoutStanding(field.target());
-                    case Core.FieldProjection projection ->
-                            at = Core.withoutStanding(projection.base());
-                    default -> {
-                        return null;
-                    }
-                }
-            }
+        /** The container {@code same} names an element or a key of, or null where it names
+         *  neither ({@link #lawComparison}). */
+        private static DeclaredArgument containerOf(LawProposition.Same<DeclaredArgument> same) {
+            return switch (same.one()) {
+                case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument container) ->
+                        container;
+                case LawSubject.KeyOf<DeclaredArgument>(DeclaredArgument container) -> container;
+                default -> null;
+            };
         }
 
         /**

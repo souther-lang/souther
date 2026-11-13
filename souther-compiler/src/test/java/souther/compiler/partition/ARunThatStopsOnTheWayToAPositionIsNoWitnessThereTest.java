@@ -227,10 +227,15 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
     void aSumAnArgumentStopsAtIsNotTheArgumentItIsAsAForm() {
         String written = "Bool.not(Set.contains(a + " + FIRST_SUM + " - " + FIRST_SUM + ", hs))";
         assertEquals(List.of(READ), reasonsAt(PARAMETERS, MEMBERSHIP, "hs[*]"));
-        assertEquals(Map.of("a", List.of(NOT_SHOWN), "hs[*]", List.of(NOT_SHOWN)),
+        // The runs past the sum hold {@code a} at 10 or below, and the relation reaches each of
+        // them, as it does under the guard; the elements of {@code hs} above 10 are never {@code a}.
+        assertEquals(Map.of("a", List.of(READ), "hs[*]", List.of(NOT_SHOWN)),
                 readingsOf(PARAMETERS, written));
         assertEquals(readingsOf(PARAMETERS, "a <= 10 && " + written),
                 readingsOf(PARAMETERS, written));
+        // And it is the comparison of the element with the sum, read the same written as one.
+        assertEquals(readingsOf(PARAMETERS, "Bool.not(List.any(x -> x == a + " + FIRST_SUM + " - "
+                + FIRST_SUM + ", Set.toList(hs)))"), readingsOf(PARAMETERS, written));
         String withTheDifference = "Bool.not(Set.contains(a + " + FIRST_SUM + " - " + FIRST_SUM
                 + " - d, hs))";
         assertEquals(readingsOf(PARAMETERS, "a <= 10 && Bool.not(Set.contains(a - d, hs))"),
@@ -397,8 +402,7 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
                 "Int.floorMod(a - b, 7) >= 1", "Int.floorMod(a - b, 7) == 3",
                 "Int.floorMod(a, 7) == 3", "Int.floorMod(b, 7) == 3", "Int.floorMod(a, b) == 0",
                 "Int.floorMod(b, a) == 0", "Bool.not(Set.contains(a, hs))",
-                "Bool.not(Set.contains(b, hs))", "Bool.not(Set.contains(a + b, hs))",
-                "Set.size(hs) == a", "Set.size(hs) == b", "List.any(x -> x == a, xs)",
+                "Bool.not(Set.contains(b, hs))", "Set.size(hs) == a", "Set.size(hs) == b", "List.any(x -> x == a, xs)",
                 "List.any(x -> x == b, xs)", "a - b > 0 || c > 0", "c > 0 && a - b > 0",
                 "a == b && b == c", "a + b - 100 >= 0 && Bool.not(Set.contains(b, hs))")) {
             assertAsAGuardReads(10, target);
@@ -409,6 +413,26 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
                 "Int.floorMod(a + b, 7) >= 1 && Bool.not(Set.contains(b, hs))",
                 "Int.floorMod(b - a, 7) >= 1 && Bool.not(Set.contains(b, hs))")) {
             assertAsAGuardReads(3, target);
+        }
+    }
+
+    /**
+     * A membership of a sum of two numbers is not among the forms above: the guard keeping
+     * {@code a} to 10 makes it a number no longer free, and is the more cautious of the two. The
+     * stop leaves {@code b} free to make up any element of the set with an {@code a} the sum is
+     * past, so every element is reached, which is read as the comparison of the element with the
+     * sum is, written either way.
+     */
+    @Test
+    void aMembershipOfASumIsReachedAtEveryElementWhereTheGuardIsMoreCautious() {
+        String sum = "a + b";
+        String membership = "Bool.not(Set.contains(" + sum + ", hs))";
+        String comparison = "Bool.not(List.any(x -> x == " + sum + ", Set.toList(hs)))";
+        for (String target : List.of(membership, comparison)) {
+            String stop = "a + " + (Long.MAX_VALUE - 10) + " - a >= 0 && " + target;
+            assertEquals(List.of(READ), readingsOf(NUMBERS, stop).get("hs[*]"), target);
+            assertEquals(List.of(NOT_SHOWN),
+                    readingsOf(NUMBERS, "a <= 10 && " + target).get("hs[*]"), target);
         }
     }
 
