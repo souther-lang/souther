@@ -473,26 +473,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      */
     public List<OnTheWay> stated() {
         List<OnTheWay> out = new ArrayList<>();
-        stated(onTheWay, out);
+        OnTheWay.eachOnce(onTheWay, out::add);
         return List.copyOf(out);
-    }
-
-    private static void stated(List<OnTheWay> entries, List<OnTheWay> into) {
-        for (OnTheWay each : entries) {
-            into.add(each);
-            switch (each) {
-                case OnTheWay.OneOf several ->
-                        several.alternatives().forEach(one -> stated(one, into));
-                case OnTheWay.Counted counted -> counted.statements().forEach(one -> {
-                    stated(one.holding(), into);
-                    stated(one.failing(), into);
-                });
-                // A narrowing's alternatives are the cases it leaves, each made afresh as a
-                // narrowing to that case; they state nothing the narrowing did not.
-                case OnTheWay.Narrowed _, OnTheWay.Declined _, OnTheWay.TakenIn _,
-                     OnTheWay.Settled _ -> { }
-            }
-        }
     }
 
     /**
@@ -549,7 +531,7 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      */
     static Set<TermPath> positionsInside(OnTheWay entry) {
         Set<TermPath> out = new LinkedHashSet<>();
-        everyOneInside(entry).forEach(one -> out.addAll(positionsOf(one)));
+        OnTheWay.eachOnce(List.of(entry), one -> out.addAll(positionsOf(one)));
         return out;
     }
 
@@ -563,25 +545,6 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
     static boolean asksNothingOf(TermPath at, OnTheWay entry) {
         Set<ReadSubject> on = turnsOn(entry);
         return on != null && !ReadSubject.bearOnEachOther(on, Set.of(new ReadSubject.At(at)));
-    }
-
-    /** {@code entry}, and every condition inside the alternatives it leaves a row and the
-     *  statements it counts, however deep. */
-    private static List<OnTheWay> everyOneInside(OnTheWay entry) {
-        List<OnTheWay> out = new ArrayList<>();
-        gatherInside(entry, out);
-        return out;
-    }
-
-    private static void gatherInside(OnTheWay entry, List<OnTheWay> into) {
-        into.add(entry);
-        if (entry.ofSeveralWays()) {
-            entry.alternatives().forEach(alternative ->
-                    alternative.forEach(one -> gatherInside(one, into)));
-        }
-        if (entry instanceof OnTheWay.Counted counted) {
-            counted.parts().forEach(one -> gatherInside(one, into));
-        }
     }
 
     /** The conditions on this way a row is past one of several ways of

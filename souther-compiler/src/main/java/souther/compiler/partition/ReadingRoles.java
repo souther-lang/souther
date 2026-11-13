@@ -88,6 +88,8 @@ final class ReadingRoles {
             Map.entry("aggregatesKept", COUNTER),
             Map.entry("aggregatesAsked", COUNTER),
             Map.entry("sharedSums", MEMO),
+            Map.entry("sharedForms", MEMO),
+            Map.entry("sharedWaysIn", MEMO),
             Map.entry("sharedApplications", MEMO),
             Map.entry("sharedObservations", MEMO),
             Map.entry("keptRemainders", MEMO),

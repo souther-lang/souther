@@ -254,33 +254,14 @@ final class ConditionNumbering {
         return stated.entries();
     }
 
+    /** What is filed of an entry is the same however many alternatives hold it. */
     private void file(List<OnTheWay> entries, SaidOnTheWay by) {
-        file(entries, by, Collections.newSetFromMap(new IdentityHashMap<>()));
-    }
-
-    /**
-     * Each entry is filed once however many alternatives hold it: a condition used on two sides
-     * of a connective puts the one entry in both, and what is filed of it is the same each time.
-     */
-    private void file(List<OnTheWay> entries, SaidOnTheWay by, Set<OnTheWay> filed) {
-        for (OnTheWay each : entries) {
-            if (!filed.add(each)) {
-                continue;
-            }
+        OnTheWay.eachOnce(entries, each -> {
             ModelOccurrences copies = by.entries().get(each);
             if (copies != null && !copies.isEmpty()) {
                 madeBy.putIfAbsent(each, copies);
             }
-            if (each instanceof OnTheWay.OneOf several) {
-                several.alternatives().forEach(one -> file(one, by, filed));
-            }
-            if (each instanceof OnTheWay.Counted counted) {
-                counted.statements().forEach(one -> {
-                    file(one.holding(), by, filed);
-                    file(one.failing(), by, filed);
-                });
-            }
-        }
+        });
     }
 
     /**
@@ -291,27 +272,15 @@ final class ConditionNumbering {
      */
     SaidOnTheWay saidOnTheWay(List<List<OnTheWay>> ways) {
         SaidOnTheWay.Filing entries = new SaidOnTheWay.Filing();
+        Set<OnTheWay> told = Collections.newSetFromMap(new IdentityHashMap<>());
         for (List<OnTheWay> way : ways) {
-            told(way, entries);
+            OnTheWay.eachOnce(way, told, each -> {
+                ModelOccurrences made = madeBy.get(each);
+                if (made != null) {
+                    entries.alone(each, made);
+                }
+            });
         }
         return entries.said();
-    }
-
-    private void told(List<OnTheWay> way, SaidOnTheWay.Filing into) {
-        for (OnTheWay each : way) {
-            ModelOccurrences made = madeBy.get(each);
-            if (made != null) {
-                into.alone(each, made);
-            }
-            if (each instanceof OnTheWay.OneOf several) {
-                several.alternatives().forEach(one -> told(one, into));
-            }
-            if (each instanceof OnTheWay.Counted counted) {
-                counted.statements().forEach(one -> {
-                    told(one.holding(), into);
-                    told(one.failing(), into);
-                });
-            }
-        }
     }
 }

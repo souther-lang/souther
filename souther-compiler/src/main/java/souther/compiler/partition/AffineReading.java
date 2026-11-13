@@ -286,10 +286,19 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      *  beside another, whose numbers are to be of the same elements. */
     static LinearForm<NumericTerm> formOf(Core expression, InputReads reads, InputReading read,
                                           ElementsMet met) {
-        AffineForms.Outcome<NumericTerm, InputReads> outcome = AffineForms.outcome(expression,
-                reads, reading(read, new LinkedHashSet<>(), met, new WhatWasTold()));
-        return outcome instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> composed
+        return outcomeOf(expression, reads, read, met)
+                instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> composed
                 ? composed.form() : null;
+    }
+
+    /** What reading {@code expression} as a form of the input's numbers comes to ({@link
+     *  #formOf}), and where it stopped where it did not compose. */
+    static AffineForms.Outcome<NumericTerm, InputReads> outcomeOf(Core expression,
+                                                                  InputReads reads,
+                                                                  InputReading read,
+                                                                  ElementsMet met) {
+        return AffineForms.outcome(expression, reads,
+                reading(read, new LinkedHashSet<>(), met, new WhatWasTold()));
     }
 
     /**

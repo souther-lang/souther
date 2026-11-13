@@ -14,11 +14,14 @@ import souther.compiler.meaning.WhyNotTaken;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -50,6 +53,55 @@ import java.util.stream.Collectors;
  * sits, which is the rule {@link souther.compiler.reach.PathDecision} is written to as well.
  */
 public sealed interface OnTheWay {
+
+    /**
+     * Each of {@code entries}, and each condition inside an alternative of one or a statement of a
+     * count, given to {@code visit} once, in the order it is first met: the condition, then what is
+     * inside it.
+     *
+     * <p>The one walk down the conditions of a way, for every reader that wants each of them and
+     * not each way to it. A condition used on two sides of a connective is one object held in two
+     * places, and conditions made through a name used twice are two to the depth of the chain, so a
+     * reader that goes down them itself pays for every way. A reader whose answer for a condition
+     * differs by where it stands is not one that wants each of them, and goes down the way as the
+     * walk of its owner does ({@link WayToTheBorder#along}).
+     *
+     * @param met    the conditions already met, which are not visited again; kept by identity
+     * @param inside which of the conditions met are gone down into
+     */
+    static void eachOnce(List<OnTheWay> entries, Set<OnTheWay> met, Consumer<OnTheWay> visit,
+                         Predicate<OnTheWay> inside) {
+        for (OnTheWay each : entries) {
+            if (!met.add(each)) {
+                continue;
+            }
+            visit.accept(each);
+            if (!inside.test(each)) {
+                continue;
+            }
+            switch (each) {
+                case OneOf several -> several.alternatives()
+                        .forEach(one -> eachOnce(one, met, visit, inside));
+                case Counted counted -> counted.statements().forEach(one -> {
+                    eachOnce(one.holding(), met, visit, inside);
+                    eachOnce(one.failing(), met, visit, inside);
+                });
+                // A narrowing's alternatives are the cases it leaves, each made afresh as a
+                // narrowing to that case; they state nothing the narrowing did not.
+                case Narrowed _, Declined _, TakenIn _, Settled _ -> { }
+            }
+        }
+    }
+
+    /** {@link #eachOnce(List, Set, Consumer, Predicate)} going down into every condition. */
+    static void eachOnce(List<OnTheWay> entries, Set<OnTheWay> met, Consumer<OnTheWay> visit) {
+        eachOnce(entries, met, visit, _ -> true);
+    }
+
+    /** {@link #eachOnce(List, Set, Consumer)} with no condition met yet. */
+    static void eachOnce(List<OnTheWay> entries, Consumer<OnTheWay> visit) {
+        eachOnce(entries, Collections.newSetFromMap(new IdentityHashMap<>()), visit);
+    }
 
     /**
      * Which question a report about it asks for its place.

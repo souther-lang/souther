@@ -68,6 +68,36 @@ class WhatAStatementSaysUpToTheNamesDoesNotDependOnWhatIsSharedTest {
         assertTrue(ReadThroughNames.sameUpToTheNames(made(0), shared(1)));
     }
 
+    /** Some element of the container {@code c}, the value named {@code name}, is true. A
+     *  quantifier is not made one for equal ones, as a conjunction is. */
+    private static Proposition someElement(int name) {
+        return new Proposition.Some(new DecisionSubject.AnInput(TermPath.of("c"),
+                new ValueIdentity.OfAnElement(new BindingId(OWNER, name))),
+                new Proposition.Truth(new DecisionSubject.AnInput(
+                        TermPath.of("c").element().then("x"), ValueIdentity.AT_THE_POSITION),
+                        true), true);
+    }
+
+    /** A statement that holds a part twice: beside itself, and inside a disjunction. */
+    private static Proposition holdingAPartTwice(Proposition one, Proposition other,
+                                                 Proposition beside) {
+        return Proposition.all(List.of(one, Proposition.any(List.of(other, beside))));
+    }
+
+    @Test
+    void aStatementIsTheSameUpToTheNamesWhetherItsPartsAreSharedOrMadeTwice() {
+        Proposition beside = new Proposition.Truth(new DecisionSubject.AnInput(
+                TermPath.of("i").then("y"), ValueIdentity.AT_THE_POSITION), true);
+        Proposition part = someElement(0);
+        Proposition shared = holdingAPartTwice(part, part, beside);
+        // The same value as the part, held by another object.
+        Proposition twice = holdingAPartTwice(someElement(1), someElement(1), beside);
+
+        assertTrue(ReadThroughNames.sameUpToTheNames(shared, twice),
+                "a part held by one object is the part held by two equal ones");
+        assertTrue(ReadThroughNames.sameUpToTheNames(twice, shared));
+    }
+
     @Test
     void twoValuesAtOnePlaceAreStillTwoValues() {
         Proposition one = about(answer(FLOOR_MOD, answer(NEGATE, input("x", 0)),

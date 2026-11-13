@@ -1046,7 +1046,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             // which.
             Map.entry("souther.compiler.meaning.CountsWrittenOut#<clinit>()V",
                     "how many parts every count one reader is handed comes to together"),
-            Map.entry("souther.compiler.meaning.CountsWrittenOut#<init>(Z)V",
+            Map.entry("souther.compiler.meaning.CountsWrittenOut#<init>(ZLjava/util/Map;)V",
                     "starts a reader's writing out at the figure, which every count it is handed"
                             + " is charged to, and past which it is handed none and told the figure"),
             // The assignments of a count's statements that hold together with the rest of a way:

@@ -7,6 +7,7 @@ import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.StatementReading;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -90,19 +91,17 @@ final class ValuesAStatementNames {
     }
 
     private static void collect(Proposition stated, Map<TermPath, List<Named>> out) {
+        StatementReading.<Boolean>over((each, again) -> collectAt(each, out, again))
+                .read(stated);
+    }
+
+    private static boolean collectAt(Proposition stated, Map<TermPath, List<Named>> out,
+                                     StatementReading<Boolean> again) {
         switch (stated) {
             case Proposition.Compared compared -> relation(compared.relation(), out);
-            case Proposition.All all -> all.parts().forEach(each -> collect(each, out));
-            case Proposition.Any any -> any.parts().forEach(each -> collect(each, out));
-            case Proposition.Some some -> collect(some.ofTheElement(), out);
-            case Proposition.WhereItAnswers answers -> {
-                collect(answers.answers(), out);
-                collect(answers.states(), out);
-            }
-            case Proposition.SoManyHold counted ->
-                    counted.statements().forEach(each -> collect(each, out));
-            case Proposition.OnAnApplication applied ->
-                    applied.each().forEach(each -> collect(each, out));
+            case Proposition.All _, Proposition.Any _, Proposition.Some _,
+                 Proposition.WhereItAnswers _, Proposition.SoManyHold _,
+                 Proposition.OnAnApplication _ -> stated.eachPart(again);
             // A place the statement says holds a value it wrote is told apart at that value.
             case Proposition.SameValue(DecisionSubject.AnInput(TermPath place, var _),
                                        Operand.Written<DecisionSubject>(Value written),
@@ -113,6 +112,7 @@ final class ValuesAStatementNames {
                  Proposition.StringInside _, Proposition.LastToHold _, Proposition.OfTheWays _,
                  Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _ -> { }
         }
+        return true;
     }
 
     private static void relation(Relation relation, Map<TermPath, List<Named>> out) {

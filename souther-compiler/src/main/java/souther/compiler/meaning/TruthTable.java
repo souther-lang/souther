@@ -36,11 +36,14 @@ public final class TruthTable {
 
     private static boolean everyAssignmentAnswers(Proposition stated, boolean answer) {
         Map<Spelling, Integer> parts = new LinkedHashMap<>();
-        if (!partsOf(stated, parts) || parts.size() > PARTS_TRIED) {
+        if (!StatementReading.<Boolean>over((each, again) -> partsAt(each, parts, again))
+                .read(stated) || parts.size() > PARTS_TRIED) {
             return false;
         }
         for (long assignment = 0; assignment < 1L << parts.size(); assignment++) {
-            if (valueOf(stated, parts, assignment) != answer) {
+            long chosen = assignment;
+            if (StatementReading.<Boolean>over((each, again) -> valueAt(each, parts, chosen, again))
+                    .read(stated) != answer) {
                 return false;
             }
         }
@@ -52,13 +55,13 @@ public final class TruthTable {
      * of it and its denial that spells first — or answers false where a part is one nothing read,
      * which comes out no way this can name.
      */
-    private static boolean partsOf(Proposition stated, Map<Spelling, Integer> into) {
+    private static boolean partsAt(Proposition stated, Map<Spelling, Integer> into,
+                                   StatementReading<Boolean> again) {
         return switch (stated) {
             case Proposition.Always _ -> true;
             case Proposition.Unread _ -> false;
             case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
-                 Proposition.OfTheWays _ ->
-                    stated.partsHeld().stream().allMatch(part -> partsOf(part, into));
+                 Proposition.OfTheWays _ -> stated.everyPart(again);
             // A count of statements is one part: what holds whichever way it comes out holds
             // whichever way its statements do.
             case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
@@ -71,19 +74,19 @@ public final class TruthTable {
         };
     }
 
-    private static boolean valueOf(Proposition stated, Map<Spelling, Integer> parts,
-                                   long assignment) {
+    /** What {@code stated} comes out as under {@code assignment}, its parts read through
+     *  {@code again}: one reading is for one assignment. */
+    private static boolean valueAt(Proposition stated, Map<Spelling, Integer> parts,
+                                   long assignment, StatementReading<Boolean> again) {
         return switch (stated) {
             case Proposition.Always(boolean holds) -> holds;
-            case Proposition.All all -> all.parts().stream()
-                    .allMatch(part -> valueOf(part, parts, assignment));
-            case Proposition.Any any -> any.parts().stream()
-                    .anyMatch(part -> valueOf(part, parts, assignment));
+            case Proposition.All _ -> stated.everyPart(again);
+            case Proposition.Any _ -> stated.anyPart(again);
             // Holds where it answers and states what it does; its denial is the same answering
             // with the statement denied, and comes out that way here as any other part does.
-            case Proposition.WhereItAnswers where -> valueOf(where.answers(), parts, assignment)
-                    && valueOf(where.states(), parts, assignment);
-            case Proposition.OfTheWays ways -> valueOf(ways.written(), parts, assignment);
+            case Proposition.WhereItAnswers where -> again.read(where.answers())
+                    && again.read(where.states());
+            case Proposition.OfTheWays ways -> again.read(ways.written());
             case Proposition.Compared _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,                 Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _,
                  Proposition.Carried _, Proposition.SomeReachable _, Proposition.Unread _,

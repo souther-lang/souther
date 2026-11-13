@@ -133,6 +133,10 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
         /** Whether {@code stated} compares a number that reads this, or holds a statement that
          *  does. */
         public boolean isIn(Proposition stated) {
+            return StatementReading.<Boolean>over(this::isInAt).read(stated);
+        }
+
+        private boolean isInAt(Proposition stated, StatementReading<Boolean> again) {
             return switch (stated) {
                 case Proposition.Compared compared -> switch (compared.relation()) {
                     case Relation.Affine affine -> isIn(affine.form());
@@ -147,7 +151,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                 case Proposition.All _, Proposition.Any _, Proposition.OnAnApplication _,
                      Proposition.SoManyHold _, Proposition.Some _, Proposition.SomeReachable _,
                      Proposition.WhereItAnswers _, Proposition.OfTheWays _ ->
-                        stated.partsHeld().stream().anyMatch(this::isIn);
+                        stated.anyPart(again);
             };
         }
 
@@ -1687,6 +1691,12 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                  * no place but the value's and turns on which element it is.
                  */
                 private static boolean alike(Proposition stated, Apart apart) {
+                    return StatementReading.<Boolean>over((each, again) ->
+                            alikeAt(each, apart, again)).read(stated);
+                }
+
+                private static boolean alikeAt(Proposition stated, Apart apart,
+                                               StatementReading<Boolean> again) {
                     return switch (stated) {
                         case Proposition.Always _ -> true;
                         case Proposition.Compared compared -> switch (compared.relation()) {
@@ -1696,8 +1706,7 @@ public sealed interface Quantity permits DecisionAtom, Quantity.OfABinding,
                         };
                         case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
                              Proposition.SoManyHold _, Proposition.OfTheWays _ ->
-                                stated.partsHeld().stream()
-                                .allMatch(part -> alike(part, apart));
+                                stated.everyPart(again);
                         case Proposition.Truth truth -> alike(truth.of(), apart);
                         case Proposition.Present present -> alike(present.of(), apart);
                         case Proposition.InCases cases -> alike(cases.of(), apart);

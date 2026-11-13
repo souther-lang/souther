@@ -53,7 +53,14 @@ public final class WrittenOfANode {
         return new WrittenOfANode(node, List.copyOf(staying)).reads(stated);
     }
 
+    /** Each statement is read once, however many statements hold it. */
+    private final StatementReading<Boolean> statements = StatementReading.over(this::readsAt);
+
     private boolean reads(Proposition stated) {
+        return statements.read(stated);
+    }
+
+    private boolean readsAt(Proposition stated, StatementReading<Boolean> again) {
         return switch (stated) {
             case Proposition.Always _ -> true;
             case Proposition.Unread _, Proposition.SomeReachable _, Proposition.Carried _ -> false;
@@ -73,7 +80,7 @@ public final class WrittenOfANode {
             case Proposition.LastToHold last -> reads(last.container()) && reads(last.position());
             case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
                  Proposition.OnAnApplication _, Proposition.SoManyHold _,
-                 Proposition.OfTheWays _ -> stated.partsHeld().stream().allMatch(this::reads);
+                 Proposition.OfTheWays _ -> stated.everyPart(again);
             case Proposition.Some some -> reads(some.container()) && reads(some.ofTheElement());
         };
     }

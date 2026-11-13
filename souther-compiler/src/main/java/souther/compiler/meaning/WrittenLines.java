@@ -352,6 +352,13 @@ public final class WrittenLines {
      */
     static void gather(Proposition stated, Set<Spelling> into,
                        Map<Spelling, Proposition.Compared> found) {
+        StatementReading.<Boolean>over((each, again) -> gatherAt(each, into, found, again))
+                .read(stated);
+    }
+
+    private static boolean gatherAt(Proposition stated, Set<Spelling> into,
+                                    Map<Spelling, Proposition.Compared> found,
+                                    StatementReading<Boolean> again) {
         switch (stated) {
             case Proposition.Compared compared -> {
                 into.add(compared.heldSpelling());
@@ -361,13 +368,13 @@ public final class WrittenLines {
             // whichever way a choice of them holds it.
             case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
                  Proposition.Some _, Proposition.OnAnApplication _, Proposition.SoManyHold _,
-                 Proposition.OfTheWays _, Proposition.SomeReachable _ ->
-                    stated.partsHeld().forEach(each -> gather(each, into, found));
+                 Proposition.OfTheWays _, Proposition.SomeReachable _ -> stated.eachPart(again);
             case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _,
                  Proposition.StringInside _, Proposition.LastToHold _, Proposition.Carried _,
                  Proposition.Unread _ -> { }
         }
+        return true;
     }
 
     /** The steps {@code step} is concluded from. */
