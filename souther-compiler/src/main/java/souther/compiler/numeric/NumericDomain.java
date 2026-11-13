@@ -249,18 +249,26 @@ public final class NumericDomain<A> {
      * since are found without comparing anything.
      */
     private record RulesRead<A>(StatedRules<A> of, List<AffineConstraint<A>> rules,
-                                AppendOnly<CanonicalForm<A>, Integer> places) {
+                                AppendOnly<Object, Integer> places) {
 
         /**
-         * The sum held below a bound over {@code form} among the rules, or null where there is none.
+         * What a rule is found by among the rules read: the form of a sum held below a bound, which
+         * has one place however much tighter its bound comes to, and the rule itself otherwise.
+         */
+        static <A> Object keyOf(AffineConstraint<A> rule) {
+            return rule instanceof AffineConstraint.HalfSpace<A> half ? half.form() : rule;
+        }
+
+        /**
+         * The rule among these that {@code rule} is said again of, or null where there is none: the
+         * sum over the same form, or the very rule.
          *
-         * <p>Found by {@link #places}: a form has one place among the rules and keeps it however
-         * much tighter its bound comes to, so what a rule said after the others finds is a lookup
+         * <p>Found by {@link #places}, so that what a rule said after the others finds is a lookup
          * and not a walk of every rule said before it.
          */
-        AffineConstraint.HalfSpace<A> over(CanonicalForm<A> form) {
-            Integer at = places.get(form);
-            return at == null ? null : (AffineConstraint.HalfSpace<A>) rules.get(at);
+        AffineConstraint<A> among(AffineConstraint<A> rule) {
+            Integer at = places.get(keyOf(rule));
+            return at == null ? null : rules.get(at);
         }
     }
 
@@ -287,11 +295,9 @@ public final class NumericDomain<A> {
             }
         }
         List<AffineConstraint<A>> rules = tightest(stated.distinct());
-        AppendOnly<CanonicalForm<A>, Integer> places = AppendOnly.empty();
+        AppendOnly<Object, Integer> places = AppendOnly.empty();
         for (int at = 0; at < rules.size(); at++) {
-            if (rules.get(at) instanceof AffineConstraint.HalfSpace<A> half) {
-                places = places.with(half.form(), at);
-            }
+            places = places.with(RulesRead.keyOf(rules.get(at)), at);
         }
         return new RulesRead<>(stated, rules, places);
     }
@@ -307,26 +313,26 @@ public final class NumericDomain<A> {
      */
     private static <A> RulesRead<A> readOnto(RulesRead<A> read, AffineConstraint<A> rule) {
         List<AffineConstraint<A>> rules = read.rules();
-        AppendOnly<CanonicalForm<A>, Integer> places = read.places();
-        if (rule instanceof AffineConstraint.HalfSpace<A> half) {
-            AffineConstraint.HalfSpace<A> held = read.over(half.form());
-            if (held != null) {
-                ExactCut kept = ExactCut.tighterUpper(held.bound(), half.bound());
-                if (kept.equals(held.bound())) {
-                    return read;
-                }
-                List<AffineConstraint<A>> out = new ArrayList<>(rules);
-                out.set(places.get(half.form()), new AffineConstraint.HalfSpace<>(half.form(), kept));
-                return new RulesRead<>(read.of(), List.copyOf(out), places);
+        AffineConstraint<A> held = read.among(rule);
+        if (held != null) {
+            if (!(rule instanceof AffineConstraint.HalfSpace<A> half)
+                    || !(held instanceof AffineConstraint.HalfSpace<A> was)) {
+                return read;
             }
-            places = places.with(half.form(), rules.size());
-        } else if (rules.contains(rule)) {
-            return read;
+            ExactCut kept = ExactCut.tighterUpper(was.bound(), half.bound());
+            if (kept.equals(was.bound())) {
+                return read;
+            }
+            List<AffineConstraint<A>> out = new ArrayList<>(rules);
+            out.set(read.places().get(half.form()),
+                    new AffineConstraint.HalfSpace<>(half.form(), kept));
+            return new RulesRead<>(read.of(), List.copyOf(out), read.places());
         }
         List<AffineConstraint<A>> out = new ArrayList<>(rules.size() + 1);
         out.addAll(rules);
         out.add(rule);
-        return new RulesRead<>(read.of(), List.copyOf(out), places);
+        return new RulesRead<>(read.of(), List.copyOf(out),
+                read.places().with(RulesRead.keyOf(rule), rules.size()));
     }
 
     /**
@@ -465,12 +471,13 @@ public final class NumericDomain<A> {
      * is one every reading of the whole holds as well, and a rule not found settles nothing.
      */
     private static <A> boolean alreadyAmong(RulesRead<A> read, AffineConstraint<A> rule) {
-        if (!(rule instanceof AffineConstraint.HalfSpace<A> half)) {
-            return read.rules().contains(rule);
+        AffineConstraint<A> held = read.among(rule);
+        if (held == null) {
+            return false;
         }
-        AffineConstraint.HalfSpace<A> held = read.over(half.form());
-        return held != null
-                && ExactCut.tighterUpper(held.bound(), half.bound()).equals(held.bound());
+        return !(rule instanceof AffineConstraint.HalfSpace<A> half
+                && held instanceof AffineConstraint.HalfSpace<A> was)
+                || ExactCut.tighterUpper(was.bound(), half.bound()).equals(was.bound());
     }
 
     /**
