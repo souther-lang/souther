@@ -406,7 +406,7 @@ public final class WhereEachLineDecides {
                 if (element == null || line.mayTurnOnAnElementOf(element)) {
                     factors.add(reading.turnsOn(line));
                 } else if (lifted) {
-                    throw new IllegalStateException(line.briefly() + " is about no element of " + element
+                    throw new IllegalStateException(line + " is about no element of " + element
                             + ", and was not lifted out of the quantifier over it");
                 } else {
                     factors = List.of(Reading.unread(whole).turnsOn(line));
@@ -1107,8 +1107,8 @@ public final class WhereEachLineDecides {
                         // one end and not at the other some part tells the two apart.
                         case TakenApart.ByNoOnePart _, TakenApart.Taken _,
                              TakenApart.Shared _ ->
-                                throw new IllegalStateException("where " + part.briefly() + " decides in "
-                                        + stated.briefly() + " was told apart by no one part, and the"
+                                throw new IllegalStateException("where " + part + " decides in "
+                                        + stated + " was told apart by no one part, and the"
                                         + " statement asks no value's case twice");
                     })));
         }
@@ -1590,7 +1590,7 @@ public final class WhereEachLineDecides {
             case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
                  Proposition.OfTheWays _ ->
                     throw new IllegalArgumentException(
-                            "a part is what a conjunction or a disjunction joins: " + part.briefly());
+                            "a part is what a conjunction or a disjunction joins: " + part);
         };
         return holds ? part : part.denied();
     }
@@ -2073,6 +2073,6 @@ public final class WhereEachLineDecides {
      */
     private static IllegalArgumentException notWrittenOut(Proposition.SoManyHold counted) {
         return new IllegalArgumentException(
-                "a count reaches this reader written out as its choices: " + counted.briefly());
+                "a count reaches this reader written out as its choices: " + counted);
     }
 }

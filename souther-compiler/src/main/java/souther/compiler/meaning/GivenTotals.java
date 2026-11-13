@@ -89,7 +89,7 @@ public final class GivenTotals {
                  Proposition.Carried _, Proposition.SoManyHold _, Proposition.Unread _,
                  Proposition.OfTheWays _ ->
                     throw new IllegalArgumentException("a total is given to a statement of"
-                            + " relations and their joins: " + stated.briefly());
+                            + " relations and their joins: " + stated);
         };
     }
 

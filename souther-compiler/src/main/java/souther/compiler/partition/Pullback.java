@@ -15032,7 +15032,13 @@ final class Pullback {
      * that did not look at one comes to the same whatever it stands as, and one that wrote into
      * the lists is not kept at all, since it changed what it must leave alone. What a reading
      * taken again asked after is asked after by the reading it is taken in, so that is told to it,
-     * as it is for a reading {@link SharedReads} takes.
+     * as it is for a reading {@link SharedReads} takes. Every other input is compared as it is, so
+     * that which of them are asked after only decides how often a reading is found.
+     *
+     * <p>Only a reading that spent none of the readings the figures allow is kept here, so taking
+     * one never changes where they are reached. A reading {@link SharedReads} keeps may have spent
+     * some, and under another rule for taking it that place moves, which a report says: so the
+     * rule for what is asked after is this one's and not that one's.
      */
     private <R> R kept(Map<Core, List<ReadingTaken<R>>> table, Core node, InputReads at,
                        Supplier<R> fresh) {

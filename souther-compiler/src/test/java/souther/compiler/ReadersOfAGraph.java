@@ -191,7 +191,7 @@ public final class ReadersOfAGraph {
                                         long quickEnough)
             throws ReflectiveOperationException {
         long best = Long.MAX_VALUE;
-        for (int times = 0; times < 3 && best > quickEnough; times++) {
+        for (int times = 0; times == 0 || (times < 3 && best > quickEnough); times++) {
             // A chain of its own too: what the compiler keeps of a statement it has met (it keeps
             // some, held weakly, by what the statement is equal to) is not there for the next.
             Object chain = chains.get();
@@ -285,6 +285,13 @@ public final class ReadersOfAGraph {
                     }
                     method.setAccessible(true);
                     Future<Boolean> run = pool.submit(() -> {
+                        // A reader that refuses a chain of one step refuses a longer one, and what
+                        // it refuses with names the chain, which is as long as the ways down: so a
+                        // chain of one is asked first, and a refusal ends the asking.
+                        if (fastest(method, aMethodOfIt, others,
+                                () -> chain.ofLength().apply(1), Long.MAX_VALUE).isEmpty()) {
+                            return false;
+                        }
                         // What is told apart is a longer chain that takes more than
                         // NANOS_TOO_SHORT_TO_TELL and many times what the shorter takes, so a
                         // reader that is quick on the longer is not asked again, and is asked once
@@ -294,8 +301,7 @@ public final class ReadersOfAGraph {
                         boolean quick = onLong.isPresent()
                                 && onLong.getAsLong() <= NANOS_TOO_SHORT_TO_TELL;
                         OptionalLong onShort = fastest(method, aMethodOfIt, others,
-                                () -> chain.ofLength().apply(SHORT),
-                                quick ? Long.MAX_VALUE : 0L);
+                                () -> chain.ofLength().apply(SHORT), quick ? Long.MAX_VALUE : 0L);
                         if (onShort.isEmpty() || onLong.isEmpty()) {
                             return false;
                         }
