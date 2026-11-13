@@ -62,6 +62,37 @@ final class ModelVocabulary {
         return unsaid;
     }
 
+    /**
+     * The public methods of the class that hand a model back, as {@link AMethod} says them: the
+     * class, the name and what it takes. A name alone is every overload at once, so what a check
+     * is is said by what it takes, and a call that is added under the name of one is found.
+     */
+    static Set<String> signaturesHandingAModelBack(ClassModel helper) {
+        Set<String> found = new TreeSet<>();
+        for (MethodModel method : helper.methods()) {
+            if (method.methodTypeSymbol().returnType().descriptorString().equals(COMPILATION_TYPE)
+                    && method.flags().has(AccessFlag.PUBLIC)) {
+                found.add(AMethod.of(helper, method));
+            }
+        }
+        return found;
+    }
+
+    /** The names that more than one instance method of the class has. */
+    static Set<String> overloadedNames(ClassModel model) {
+        Set<String> once = new TreeSet<>();
+        Set<String> overloaded = new TreeSet<>();
+        for (MethodModel method : model.methods()) {
+            String name = method.methodName().stringValue();
+            if (!method.flags().has(AccessFlag.STATIC) && !method.flags().has(AccessFlag.PRIVATE)
+                    && !method.flags().has(AccessFlag.SYNTHETIC) && !name.startsWith("<")
+                    && !once.add(name)) {
+                overloaded.add(name);
+            }
+        }
+        return overloaded;
+    }
+
     /** The checks that none of the classes has, as names. */
     static Set<String> checksMissing(List<ClassModel> helper) {
         Set<String> had = new TreeSet<>();

@@ -231,6 +231,98 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
                 "a check that ModelVocabulary says is not a call of ACompiledModel");
     }
 
+    /** What the helper hands a model back by, each by what it takes, and the one way not to compile. */
+    private static final Set<String> HELPER_CALLS = new TreeSet<>(Set.of(
+            AMethod.of(HELPER, "measured", "(Ljava/lang/String;"
+                    + "Lsouther/compiler/query/Adequacy$Asked;)Lsouther/compiler/query/Compilation;"),
+            AMethod.of(HELPER, "answered", "(Ljava/lang/String;)"
+                    + "Lsouther/compiler/query/Compilation;"),
+            AMethod.of(HELPER, "compiles", "(Lsouther/compiler/query/Compilation;)"
+                    + "Lsouther/compiler/query/Compilation;"),
+            AMethod.of(HELPER, "refusedWith", "(Ljava/util/List;"
+                    + "Lsouther/compiler/query/Compilation;)Lsouther/compiler/query/Compilation;"),
+            AMethod.of(HELPER, "refusedOnlyWith", "(Ljava/util/Set;"
+                    + "Lsouther/compiler/query/Compilation;)Lsouther/compiler/query/Compilation;"),
+            AMethod.of(HELPER, "notCompiled", "(Lsouther/compiler/query/Compilation;"
+                    + "Ljava/lang/String;)Lsouther/compiler/query/Compilation;"),
+            AMethod.of(HELPER + "$Shared", "compiles", "(Ljava/lang/String;"
+                    + "Ljava/util/function/Supplier;)Lsouther/compiler/query/Compilation;"),
+            AMethod.of(HELPER + "$Shared", "refusedWith", "(Ljava/util/List;Ljava/lang/String;"
+                    + "Ljava/util/function/Supplier;)Lsouther/compiler/query/Compilation;")));
+
+    /**
+     * And what is taken to check a model is each call of the helper by what it takes, and none is
+     * a change to a model.
+     *
+     * <p>The calls are said by name where a model is read, and a name is every call that has it, so
+     * the calls that exist are held to be these: one added under the name of a check is one that
+     * is not said to stop for a model that does not hold, until it is said here with a test. And
+     * what the helper does with a model it is handed is not taken to change it, because a call of
+     * it is not followed for one, which holds of every method it has that is handed one. A call
+     * that makes the model it hands back, as {@code measured} does, changes none that exists.
+     */
+    @Test
+    void theCallsOfTheHelperAreTheOnesSaidAndNoneOfThemChangesAModel() {
+        ClassModel helper = COMPILED.read(HELPER);
+        ClassModel shared = COMPILED.read(HELPER + "$Shared");
+        Set<String> had = new TreeSet<>(ModelVocabulary.signaturesHandingAModelBack(helper));
+        had.addAll(ModelVocabulary.signaturesHandingAModelBack(shared));
+        assertEquals(HELPER_CALLS, had,
+                "a call of ACompiledModel that hands a model back is not one said in this test,"
+                        + " with ACompiledModelHoldsAModelToCompilingTest saying what it does");
+        List<ClassModel> everything = new ArrayList<>();
+        for (Path module : COMPILED.modules()) {
+            everything.addAll(COMPILED.classesOf(module));
+            everything.addAll(COMPILED.testClassesOf(module));
+        }
+        ModelEffects effects = ModelEffects.of(everything);
+        Set<String> changing = new TreeSet<>();
+        for (ClassModel each : List.of(helper, shared)) {
+            each.methods().forEach(method -> {
+                String key = AMethod.of(each, method);
+                String taken = method.methodType().stringValue();
+                boolean handedAModel = taken.substring(0, taken.lastIndexOf(')'))
+                        .contains(ModelVocabulary.COMPILATION_TYPE);
+                if (handedAModel && effects.changes(key)) {
+                    changing.add(key);
+                }
+            });
+        }
+        assertEquals(Set.of(), changing,
+                "a method of the helper that is handed a model reaches a change to a model, which a"
+                        + " call of it is not followed for");
+    }
+
+    /**
+     * And a name that says what a method does is the name of one method.
+     *
+     * <p>The store's methods, and the model's that say what is shown or answered, are said by
+     * name. An overload of one is a method that is taken to do what the name says, so the names are
+     * held to be of one method each, but {@code failure}, whose other method takes the reports it
+     * is to say and reads nothing of a model.
+     */
+    @Test
+    void aNameThatSaysWhatAMethodDoesIsTheNameOfOneMethod() {
+        Set<String> said = new TreeSet<>(ModelVocabulary.SHOWS_ERRORS);
+        said.addAll(ModelVocabulary.ANSWERS);
+        said.addAll(ModelVocabulary.SAYS_WITHOUT_REPORTS);
+        said.add(ModelVocabulary.STORE_ACCESSOR);
+        Set<String> overloadedOfTheModel = new TreeSet<>(ModelVocabulary.overloadedNames(
+                COMPILED.read(ModelVocabulary.COMPILATION)));
+        overloadedOfTheModel.retainAll(said);
+        assertEquals(Set.of("failure"), overloadedOfTheModel,
+                "a name that says what a method of Compilation does is the name of another");
+        Set<String> store = new TreeSet<>(ModelVocabulary.DB_READS_A_REPORT);
+        store.addAll(ModelVocabulary.DB_CHANGES);
+        store.addAll(ModelVocabulary.DB_NEITHER);
+        store.addAll(ModelVocabulary.DB_HOLDS_ANSWERS);
+        Set<String> overloadedOfTheStore = new TreeSet<>(ModelVocabulary.overloadedNames(
+                COMPILED.read(ModelVocabulary.DB)));
+        overloadedOfTheStore.retainAll(store);
+        assertEquals(Set.of(), overloadedOfTheStore,
+                "a name that says what a method of Db does is the name of another");
+    }
+
     /**
      * And what the working out takes of the shape of a method is held where it is taken.
      *
