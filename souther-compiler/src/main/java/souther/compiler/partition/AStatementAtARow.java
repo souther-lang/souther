@@ -19,6 +19,7 @@ import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.ReadThroughNames;
 import souther.compiler.meaning.Spelling;
+import souther.compiler.meaning.StatementReading;
 import souther.compiler.meaning.StringsLanguage;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
@@ -44,7 +45,6 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -147,28 +147,24 @@ final class AStatementAtARow {
     static boolean askableAtSomeElement(Proposition stated) {
         Optional<Quantity.OfABinding> element = OnOneElement.theElementOf(stated);
         return element.isEmpty() ? askable(stated)
-                : askableAt(stated, element.get(), new IdentityHashMap<>());
+                : StatementReading.<Boolean>over((each, again) ->
+                        askableAt(each, element.get(), again)).read(stated);
     }
 
     /**
      * Whether {@code stated}, with {@code element} put at a value, is a statement a row can be
      * asked: asked part by part, each relation with the element put in it alone, since a
      * relation's form is all the element is weighed in; and a part the statement shares, once
-     * ({@code asked}). The statement with the element put in it is never built. A part the
+     * ({@code again}). The statement with the element put in it is never built. A part the
      * element would settle to a constant is asked as it is put, whatever it settles to, so a
      * statement whose other parts no row can be asked is not one either.
      */
     private static boolean askableAt(Proposition stated, Quantity.OfABinding element,
-                                     Map<Proposition, Boolean> asked) {
-        Boolean had = asked.get(stated);
-        if (had != null) {
-            return had;
-        }
-        boolean out = switch (stated) {
+                                     StatementReading<Boolean> again) {
+        return switch (stated) {
             case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
                  Proposition.SoManyHold _, Proposition.OfTheWays _, Proposition.Some _ ->
-                    stated.partsHeld().stream()
-                            .allMatch(each -> askableAt(each, element, asked));
+                    stated.everyPart(again);
             case Proposition.Compared compared -> OnOneElement.at(compared, element,
                     LinearForm.constant(ExactRatio.ZERO)) instanceof Proposition there
                     && askable(there);
@@ -179,8 +175,6 @@ final class AStatementAtARow {
                  Proposition.Carried _, Proposition.OnAnApplication _,
                  Proposition.SomeReachable _ -> askable(stated);
         };
-        asked.put(stated, out);
-        return out;
     }
 
     /**
@@ -210,6 +204,12 @@ final class AStatementAtARow {
 
     private static boolean askable(Proposition stated, boolean besideItsRelations,
                                    boolean besideItsStops) {
+        return StatementReading.<Boolean>over((each, again) ->
+                askableHere(each, besideItsRelations, besideItsStops, again)).read(stated);
+    }
+
+    private static boolean askableHere(Proposition stated, boolean besideItsRelations,
+                                       boolean besideItsStops, StatementReading<Boolean> again) {
         return switch (stated) {
             case Proposition.Unread _ when besideItsStops -> true;
             case Proposition.Always _ -> true;
@@ -232,8 +232,7 @@ final class AStatementAtARow {
             case Proposition.LastToHold _ -> true;
             case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
                  Proposition.SoManyHold _, Proposition.OfTheWays _, Proposition.Some _ ->
-                    stated.partsHeld().stream()
-                            .allMatch(each -> askable(each, besideItsRelations, besideItsStops));
+                    stated.everyPart(again);
             case Proposition.Compared compared -> besideItsRelations
                     || switch (compared.relation()) {
                 case Relation.Affine affine ->
@@ -503,18 +502,24 @@ final class AStatementAtARow {
                                Map<RelationRead, OneRelation> reading,
                                Map<Relation, OneRelation> into,
                                Map<Spelling,OverTheElements> elements, Set<TermPath> positions) {
+        StatementReading.<Boolean>over((each, again) -> gatherAt(each, behavior, quantities,
+                reading, into, elements, positions, again)).read(stated);
+    }
+
+    private static boolean gatherAt(Proposition stated, String behavior, Quantities quantities,
+                                    Map<RelationRead, OneRelation> reading,
+                                    Map<Relation, OneRelation> into,
+                                    Map<Spelling,OverTheElements> elements,
+                                    Set<TermPath> positions, StatementReading<Boolean> again) {
         List<TermPath> asked = positionsAskedBy(stated);
         if (asked != null) {
             positions.addAll(asked);
-            return;
+            return true;
         }
         switch (stated) {
             case Proposition.Always _, Proposition.LastToHold _ -> { }
             case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
-                 Proposition.SoManyHold _, Proposition.OfTheWays _ ->
-                    stated.partsHeld().forEach(part ->
-                            gather(part, behavior, quantities, reading, into, elements,
-                                    positions));
+                 Proposition.SoManyHold _, Proposition.OfTheWays _ -> stated.eachPart(again);
             case Proposition.Some some -> elements.computeIfAbsent(keyOf(some),
                     _ -> new OverTheElements(some.container().inputPosition(),
                             readBy(some.ofTheElement(), behavior, quantities, reading),
@@ -540,6 +545,7 @@ final class AStatementAtARow {
                  Proposition.SomeReachable _ -> { }
             case Proposition.Carried carried -> throw carried.handedToAReader();
         }
+        return true;
     }
 
     /**
@@ -553,14 +559,20 @@ final class AStatementAtARow {
     }
 
     private static void gatherNumbers(Proposition stated, Set<NumericTerm> into) {
+        StatementReading.<Boolean>over((each, again) -> gatherNumbersAt(each, into, again))
+                .read(stated);
+    }
+
+    private static boolean gatherNumbersAt(Proposition stated, Set<NumericTerm> into,
+                                           StatementReading<Boolean> again) {
         switch (stated) {
             case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
                  Proposition.SoManyHold _, Proposition.OfTheWays _, Proposition.Some _ ->
-                    stated.partsHeld().forEach(part -> gatherNumbers(part, into));
+                    stated.eachPart(again);
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
                     && countIn(affine) instanceof Quantity count ->
-                    gatherNumbers(meetingOf(count), into);
+                    again.read(meetingOf(count));
             case Proposition.Compared compared -> {
                 switch (compared.relation()) {
                     case Relation.Affine affine -> {
@@ -595,6 +607,7 @@ final class AStatementAtARow {
                  Proposition.SomeReachable _, Proposition.Unread _,
                  Proposition.OnAnApplication _ -> { }
         }
+        return true;
     }
 
     /** What some element of a container meeting a statement is read as, whichever way it holds. */
@@ -1499,6 +1512,12 @@ final class AStatementAtARow {
      * to {@code read}. False where it reads something no position of the input is.
      */
     private static boolean readsOf(Proposition stated, Set<TermPath> about, Set<TermPath> read) {
+        return StatementReading.<Boolean>over((each, again) -> readsOfAt(each, about, read, again))
+                .read(stated);
+    }
+
+    private static boolean readsOfAt(Proposition stated, Set<TermPath> about, Set<TermPath> read,
+                                     StatementReading<Boolean> again) {
         List<TermPath> asked = positionsAskedBy(stated);
         if (asked != null) {
             read.addAll(asked);
@@ -1506,16 +1525,15 @@ final class AStatementAtARow {
         }
         return switch (stated) {
             case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
-                 Proposition.SoManyHold _, Proposition.OfTheWays _ ->
-                    stated.partsHeld().stream().allMatch(part -> readsOf(part, about, read));
+                 Proposition.SoManyHold _, Proposition.OfTheWays _ -> stated.everyPart(again);
             case Proposition.Some some -> overElementsOf(some.container().inputPosition(), about,
-                    read) && readsOf(some.ofTheElement(), about, read);
+                    read) && again.read(some.ofTheElement());
             case Proposition.Compared compared
                     when compared.relation() instanceof Relation.Affine affine
                     && countIn(affine) instanceof Quantity count -> {
                 differentAt(count).ifPresent(value -> read.addAll(value.places()));
                 yield overElementsOf(elementsOf(count).container().inputPosition(), about, read)
-                        && readsOf(meetingOf(count), about, read);
+                        && again.read(meetingOf(count));
             }
             case Proposition.Compared _, Proposition.Always _, Proposition.LastToHold _ -> true;
             case Proposition.Truth _, Proposition.Present _, Proposition.InCases _,

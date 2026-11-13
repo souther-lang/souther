@@ -11,6 +11,7 @@ import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Relation;
+import souther.compiler.meaning.StatementReading;
 import souther.compiler.numeric.Place;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
@@ -440,6 +441,13 @@ public final class KeyOrderCandidates {
 
     private static void collectNamed(Proposition stated, TermPath container,
                                      Map<List<String>, List<Place>> out) {
+        StatementReading.<Boolean>over((each, again) -> collectNamedAt(each, container, out, again))
+                .read(stated);
+    }
+
+    private static boolean collectNamedAt(Proposition stated, TermPath container,
+                                          Map<List<String>, List<Place>> out,
+                                          StatementReading<Boolean> again) {
         if (stated instanceof Proposition.Compared(
                 Relation.Ordered(DecisionAtom.OfTheInput(NumericTerm.ValueOf field, var _),
                         Place at, var _),
@@ -452,7 +460,8 @@ public final class KeyOrderCandidates {
                 }
             }
         }
-        stated.partsHeld().forEach(part -> collectNamed(part, container, out));
+        stated.eachPart(again);
+        return true;
     }
 
     /**

@@ -4,6 +4,7 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.Spelling;
+import souther.compiler.meaning.StatementReading;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.ModelOccurrence;
@@ -141,12 +142,14 @@ final class StatementsOnClasses {
     }
 
     private static void collect(Proposition stated, Map<Spelling,Proposition.Compared> out) {
-        switch (stated) {
-            case Proposition.Compared leaf -> out.putIfAbsent(leaf.heldSpelling(), leaf);
-            case Proposition.All all -> all.parts().forEach(part -> collect(part, out));
-            case Proposition.Any any -> any.parts().forEach(part -> collect(part, out));
-            default -> { }
-        }
+        StatementReading.<Boolean>over((each, again) -> {
+            switch (each) {
+                case Proposition.Compared leaf -> out.putIfAbsent(leaf.heldSpelling(), leaf);
+                case Proposition.All _, Proposition.Any _ -> each.eachPart(again);
+                default -> { }
+            }
+            return true;
+        }).read(stated);
     }
 
     /** The relation as a place on a quantity, or null where it is not one. */

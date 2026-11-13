@@ -369,26 +369,19 @@ final class DemandReading {
         private final ModelOccurrences own;
         /** What each read of several was read off, put together from what its parts were: the
          *  same each time it is asked, and asked of every read on the way to the parts, so a read
-         *  inside many others would be put together again for each of them. Null for one asked
-         *  while what it was made of is still being told, whose answers are not yet the same
-         *  each time. */
-        private final Map<Read, ModelOccurrences> gathered;
+         *  inside many others would be put together again for each of them. Let go where
+         *  {@code each} is told more ({@link #told}), since an answer then is not the one before. */
+        private final Map<Read, ModelOccurrences> gathered = new IdentityHashMap<>();
 
-        private ReadOff(Map<Read, ModelOccurrences> each, ModelOccurrences own) {
-            this(each, own, true);
-        }
-
-        private ReadOff(Map<Read, ModelOccurrences> each, ModelOccurrences own,
-                        boolean told) {
+        ReadOff(Map<Read, ModelOccurrences> each, ModelOccurrences own) {
             this.each = each;
             this.own = own;
-            this.gathered = told ? new IdentityHashMap<>() : null;
         }
 
-        /** What {@code each} says while it is still being told: asked again, it may answer
-         *  otherwise. */
-        static ReadOff whileTold(Map<Read, ModelOccurrences> each, ModelOccurrences own) {
-            return new ReadOff(each, own, false);
+        /** What {@code each} came to is changed: what was put together from it is put together
+         *  again where it is asked. */
+        private void told() {
+            gathered.clear();
         }
 
         /** The copies {@code read} was read off. */
@@ -400,7 +393,7 @@ final class DemandReading {
             if (!(read instanceof Read.OneOf) && !(read instanceof Read.Counted)) {
                 return own;
             }
-            ModelOccurrences known = gathered == null ? null : gathered.get(read);
+            ModelOccurrences known = gathered.get(read);
             if (known != null) {
                 return known;
             }
@@ -412,9 +405,7 @@ final class DemandReading {
                 counted.parts().forEach(one -> out.add(of(one)));
             }
             ModelOccurrences made = out.isEmpty() ? own : out.gathered();
-            if (gathered != null) {
-                gathered.put(read, made);
-            }
+            gathered.put(read, made);
             return made;
         }
 
@@ -436,7 +427,7 @@ final class DemandReading {
             }
             ModelOccurrences own = gathering.gathered();
             if (made instanceof Read.OneOf oneOf) {
-                ReadOff told = whileTold(each, own);
+                ReadOff told = new ReadOff(each, own);
                 for (List<Read> kept : oneOf.alternatives()) {
                     for (List<Stated> part : parts) {
                         List<Read> asked = part.stream().map(Stated::read).toList();
@@ -481,6 +472,8 @@ final class DemandReading {
                 return;
             }
             into.put(kept, mine.of(kept).and(theirs.of(dropped)));
+            mine.told();
+            theirs.told();
             if (kept instanceof Read.OneOf one && dropped instanceof Read.OneOf other) {
                 for (int alternative = 0; alternative < one.alternatives().size(); alternative++) {
                     List<Read> those = one.alternatives().get(alternative);
@@ -639,7 +632,7 @@ final class DemandReading {
         /** {@code kept}, which asks what {@code dropped} asks, told what both were read off. */
         private void alike(Read kept, Read dropped) {
             if (kept != dropped) {
-                ReadOff told = ReadOff.whileTold(readIn, own);
+                ReadOff told = new ReadOff(readIn, own);
                 ReadOff.joinedInto(kept, told, dropped, told, readIn);
             }
         }

@@ -30,6 +30,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.AuthorsLines;
 import souther.compiler.meaning.CaseExpansion;
+import souther.compiler.meaning.StatementReading;
 import souther.compiler.meaning.CasesOfALineAsked;
 import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.DecidingCase;
@@ -1625,6 +1626,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     /** Whether some part of {@code stated} compares a remainder whose dividend is not a form of
      *  the input's numbers alone ({@link Quantity.RemainderOfADividend#overTheInput}). */
     private static boolean statesARemainderNoRowPuts(Proposition stated) {
+        return StatementReading.<Boolean>over(Cutting::statesARemainderNoRowPutsAt).read(stated);
+    }
+
+    private static boolean statesARemainderNoRowPutsAt(Proposition stated,
+                                                       StatementReading<Boolean> again) {
         if (stated instanceof Proposition.Compared(Relation.Affine affine, boolean _, Spelling _,
                 var _)
                 && affine.form().coefs().keySet().stream().anyMatch(each ->
@@ -1632,7 +1638,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                 && remainder.overTheInput() == null)) {
             return true;
         }
-        return stated.partsHeld().stream().anyMatch(Cutting::statesARemainderNoRowPuts);
+        return stated.anyPart(again);
     }
 
     /**
@@ -2375,9 +2381,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * two strings of its one statement that one string stands inside another.
      */
     private static UndividedByARelation oneValue(Proposition stated) {
-        List<Proposition.SameValue> same = new ArrayList<>();
-        sameValuesIn(stated, same);
-        if (same.size() == 1 && same.getFirst() instanceof Proposition.SameValue(
+        Seen<Proposition.SameValue> same = seen(Proposition.SameValue.class, stated);
+        if (same.times() == 1 && same.first() instanceof Proposition.SameValue(
                 DecisionSubject.AnInput(TermPath one, var _), Operand<DecisionSubject> other,
                 boolean _, Spelling _)) {
             // Against a value written, the value at one position is held for whether it is the
@@ -2393,46 +2398,41 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         : relation;
             }
         }
-        List<Proposition.StringInside> inside = new ArrayList<>();
-        stringsInsideIn(stated, inside);
-        return same.isEmpty() && inside.size() == 1
-                ? UndividedByARelation.ofAStringInside(inside.getFirst().inner(),
-                        inside.getFirst().outer(), inside.getFirst().where())
+        Seen<Proposition.StringInside> inside = seen(Proposition.StringInside.class, stated);
+        return same.times() == 0 && inside.times() == 1
+                ? UndividedByARelation.ofAStringInside(inside.first().inner(),
+                        inside.first().outer(), inside.first().where())
                 : UndividedByARelation.SHOWING_NOTHING;
     }
 
-    /** Every statement of one string standing inside another {@code stated} is made of. */
-    private static void stringsInsideIn(Proposition stated, List<Proposition.StringInside> out) {
-        switch (stated) {
-            case Proposition.StringInside inside -> out.add(inside);
-            case Proposition.Some some -> stringsInsideIn(some.ofTheElement(), out);
-            case Proposition.All all -> all.parts().forEach(each -> stringsInsideIn(each, out));
-            case Proposition.Any any -> any.parts().forEach(each -> stringsInsideIn(each, out));
-            case Proposition.SoManyHold counted ->
-                    counted.statements().forEach(each -> stringsInsideIn(each, out));
-            case Proposition.WhereItAnswers where -> {
-                stringsInsideIn(where.answers(), out);
-                stringsInsideIn(where.states(), out);
-            }
-            default -> { }
+    /**
+     * How many statements of a kind stand in a statement, as often as the ways down to each, and
+     * the first of them in the order the parts are kept.
+     *
+     * @param times how many, counted no further than two: what is asked is whether there is none,
+     *              one, or more
+     */
+    private record Seen<T>(int times, T first) {
+
+        static <T> Seen<T> none() {
+            return new Seen<>(0, null);
+        }
+
+        Seen<T> and(Seen<T> other) {
+            return new Seen<>(Math.min(2, times + other.times), first != null ? first : other.first);
         }
     }
 
-    /** Every statement of two values being one {@code stated} is made of. */
-    private static void sameValuesIn(Proposition stated, List<Proposition.SameValue> out) {
-        switch (stated) {
-            case Proposition.SameValue same -> out.add(same);
-            case Proposition.Some some -> sameValuesIn(some.ofTheElement(), out);
-            case Proposition.All all -> all.parts().forEach(each -> sameValuesIn(each, out));
-            case Proposition.Any any -> any.parts().forEach(each -> sameValuesIn(each, out));
-            case Proposition.SoManyHold counted ->
-                    counted.statements().forEach(each -> sameValuesIn(each, out));
-            case Proposition.WhereItAnswers where -> {
-                sameValuesIn(where.answers(), out);
-                sameValuesIn(where.states(), out);
-            }
-            default -> { }
-        }
+    /** Every statement of {@code kind} {@code stated} is made of, counted and the first of them. */
+    private static <T extends Proposition> Seen<T> seen(Class<T> kind, Proposition stated) {
+        return StatementReading.<Seen<T>>over((each, again) -> kind.isInstance(each)
+                ? new Seen<>(1, kind.cast(each))
+                : switch (each) {
+                    case Proposition.Some _, Proposition.All _, Proposition.Any _,
+                         Proposition.SoManyHold _, Proposition.WhereItAnswers _ ->
+                            each.foldParts(Seen.<T>none(), Seen::and, again);
+                    default -> Seen.<T>none();
+                }).read(stated);
     }
 
     /**
@@ -2442,6 +2442,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * anywhere in it.
      */
     static boolean statesNoRelation(Proposition stated) {
+        return StatementReading.<Boolean>over(Cutting::statesNoRelationAt).read(stated);
+    }
+
+    private static boolean statesNoRelationAt(Proposition stated,
+                                              StatementReading<Boolean> again) {
         return switch (stated) {
             case Proposition.InCases cases -> cases.of() instanceof DecisionSubject.AnInput;
             case Proposition.Truth truth -> truth.of() instanceof DecisionSubject.AnInput;
@@ -2453,13 +2458,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // container it is whether one is a value the source wrote, which no relation of two
             // positions says.
             case Proposition.Some some -> some.container() instanceof DecisionSubject.AnInput
-                    && (statesNoRelation(some.ofTheElement())
+                    && (again.read(some.ofTheElement())
                             || some.ofTheElement() instanceof Proposition.InTheStrings
                             || some.ofTheElement() instanceof Proposition.SameValue(
                                     var _, Operand.Written<DecisionSubject> _, var _, var _));
             case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
                  Proposition.WhereItAnswers _, Proposition.OfTheWays _ ->
-                    stated.partsHeld().stream().allMatch(Cutting::statesNoRelation);
+                    stated.everyPart(again);
             // Settled, a relation, two values being one, or something nobody read: each is read
             // as what it is ({@link #readOnce}). And which strings a string is one of, which is
             // read where the rules about a position's strings are, and is no line of numbers.
@@ -2573,6 +2578,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     private static boolean relates(Proposition stated, List<FilingCoordinate> out) {
+        return StatementReading.<Boolean>over((each, again) -> relatesAt(each, out, again))
+                .read(stated);
+    }
+
+    private static boolean relatesAt(Proposition stated, List<FilingCoordinate> out,
+                                     StatementReading<Boolean> again) {
         return switch (stated) {
             // What a sameness relates is the places of its subjects: against a value written, the
             // place of the one alone.
@@ -2603,23 +2614,28 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 }
                 yield true;
             }
-            case Proposition.Some some -> relates(some.ofTheElement(), out);
+            case Proposition.Some some -> again.read(some.ofTheElement());
             // Which of the elements holding a value is the one meant names no place beside the
             // value's own, which the sameness has already filed.
             case Proposition.LastToHold _ -> true;
-            case Proposition.All all -> all.parts().stream().allMatch(each -> relates(each, out));
+            case Proposition.All _ -> stated.everyPart(again);
             // The cases an arm is chosen by say which arm's relation holds and relate nothing of
             // their own: the match chooses them, and dividing its subject by case is its rule. So
             // of the arms of one choice it is the relation of each that is asked.
             case Proposition.Any any -> {
                 List<Proposition> arms = armsOfAChoice(any);
-                yield (arms == null ? any.parts() : arms).stream()
-                        .allMatch(each -> relates(each, out));
+                if (arms == null) {
+                    yield any.everyPart(again);
+                }
+                boolean every = true;
+                for (Proposition arm : arms) {
+                    every = every && again.read(arm);
+                }
+                yield every;
             }
-            case Proposition.SoManyHold counted ->
-                    counted.statements().stream().allMatch(each -> relates(each, out));
+            case Proposition.SoManyHold _ -> stated.everyPart(again);
             case Proposition.WhereItAnswers where ->
-                    relates(where.answers(), out) && relates(where.states(), out);
+                    again.read(where.answers()) && again.read(where.states());
             default -> false;
         };
     }
@@ -2867,34 +2883,36 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * none, however a row is asked it.
      */
     private static boolean holdsARelation(Proposition stated, boolean aLine) {
+        return StatementReading.<Boolean>over((each, again) ->
+                holdsARelationAt(each, aLine, again)).read(stated);
+    }
+
+    private static boolean holdsARelationAt(Proposition stated, boolean aLine,
+                                            StatementReading<Boolean> again) {
         return switch (stated) {
             case Proposition.Compared compared -> !aLine
                     || !(compared.relation() instanceof Relation.Affine affine
                             && AStatementAtARow.pieceMembershipIn(affine) != null);
-            case Proposition.All all ->
-                    all.parts().stream().anyMatch(each -> holdsARelation(each, aLine));
-            case Proposition.Any any ->
-                    any.parts().stream().anyMatch(each -> holdsARelation(each, aLine));
-            case Proposition.SoManyHold counted ->
-                    counted.statements().stream().anyMatch(each -> holdsARelation(each, aLine));
+            case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _ ->
+                    stated.anyPart(again);
             // Some element meeting it or none: the relation turns what is said of an element
             // either way round.
-            case Proposition.Some some -> holdsARelation(some.ofTheElement(), aLine);
+            case Proposition.Some some -> again.read(some.ofTheElement());
             // Where it answers is no line of it.
-            case Proposition.WhereItAnswers where -> holdsARelation(where.states(), aLine);
+            case Proposition.WhereItAnswers where -> again.read(where.states());
             default -> false;
         };
     }
 
     /** Whether every part {@code stated} joins is a relation. */
     static boolean onlyRelations(Proposition stated) {
+        return StatementReading.<Boolean>over(Cutting::onlyRelationsAt).read(stated);
+    }
+
+    private static boolean onlyRelationsAt(Proposition stated, StatementReading<Boolean> again) {
         return switch (stated) {
-            case Proposition.All all -> all.parts().stream().allMatch(Cutting::onlyRelations);
-            case Proposition.Any any -> any.parts().stream().allMatch(Cutting::onlyRelations);
-            case Proposition.SoManyHold counted ->
-                    counted.statements().stream().allMatch(Cutting::onlyRelations);
-            case Proposition.WhereItAnswers where ->
-                    onlyRelations(where.answers()) && onlyRelations(where.states());
+            case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
+                 Proposition.WhereItAnswers _ -> stated.everyPart(again);
             case Proposition.Compared _ -> true;
             default -> false;
         };

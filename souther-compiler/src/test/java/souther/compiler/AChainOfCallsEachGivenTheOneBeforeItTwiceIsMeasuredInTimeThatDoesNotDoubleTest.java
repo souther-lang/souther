@@ -82,6 +82,34 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
+    private static String reportOfNamesEachMadeOfTheOneBefore(int depth, String seed, String step,
+                                                              String ending) {
+        StringBuilder body = new StringBuilder("{\n    let a0 = " + seed + "\n");
+        for (int i = 1; i <= depth; i++) {
+            body.append("    let a%d = %s\n".formatted(i, step.replace("PREV", "a" + (i - 1))));
+        }
+        body.append("    " + ending.replace("LAST", "a" + depth) + "\n}");
+        Compilation compilation = Compilation.ofSource("""
+                module m
+
+                behavior f : (x: Int, j: Int) -> Bool
+                let f (x, j) = %s
+                """.formatted(body), "Main");
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
+        compilation.answerEverything();
+        return AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    @Test
+    void aProductOfANameWithItselfSaysAtAnyDepthWhatItSaysAtAShallowOne() {
+        assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
+                depth -> reportOfNamesEachMadeOfTheOneBefore(depth, "x", "PREV * PREV",
+                        "LAST >= j"),
+                AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDoubleTest
+                        ::afterOneLetEachCall, 3, 30);
+    }
+
     /** What is said of a truth does not depend on how many names it is made through. */
     @Test
     void aTruthMadeOfTheOneBeforeItTwiceIsReadOnceForEachNameAndSaysWhatItSaysAtAnyDepth() {

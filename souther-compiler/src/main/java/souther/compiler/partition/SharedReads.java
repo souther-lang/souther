@@ -105,13 +105,27 @@ final class SharedReads<C, E, M, R> {
      * @param complete whether what a reading came to was read to the end
      */
     R shared(Core node, InputReads reads, Object key, Supplier<R> fresh, Predicate<R> complete) {
-        Found<M, R> found = find(node, reads, key);
-        return found != null ? take(found) : read(node, reads, key, fresh, complete);
+        return shared(node, reads, key, scene.elementsMet(), fresh, complete);
+    }
+
+    /**
+     * The same, for a reading held to {@code elements} and not to the elements of the scene: one
+     * that reads the parts of a form together, with elements of its own.
+     */
+    R shared(Core node, InputReads reads, Object key, ElementsMet elements, Supplier<R> fresh,
+             Predicate<R> complete) {
+        Found<M, R> found = find(node, reads, key, elements);
+        return found != null ? take(found, elements)
+                : read(node, reads, key, elements, fresh, complete);
     }
 
     /** The reading of {@code node} made before that taking it again at {@code reads} would not
      *  tell apart from reading it, or null. */
     Found<M, R> find(Core node, InputReads reads, Object key) {
+        return find(node, reads, key, scene.elementsMet());
+    }
+
+    private Found<M, R> find(Core node, InputReads reads, Object key, ElementsMet elements) {
         if (!scene.mayShare()) {
             return null;
         }
@@ -121,7 +135,6 @@ final class SharedReads<C, E, M, R> {
         }
         int hash = reads.hashButForWhatIsHanded();
         C now = null;
-        ElementsMet elements = scene.elementsMet();
         for (Held<C, M, R> one : before) {
             if (one.hash() != hash) {
                 continue;
@@ -145,8 +158,12 @@ final class SharedReads<C, E, M, R> {
     /** What a reading found comes to, with the elements it asked of told and the parts it met
      *  met, as reading it would have left them. */
     R take(Found<M, R> found) {
+        return take(found, scene.elementsMet());
+    }
+
+    private R take(Found<M, R> found, ElementsMet elements) {
         found.at().takingAgain(found.asked());
-        scene.elementsMet().takes(found.footprint());
+        elements.takes(found.footprint());
         scene.meetAgain(found.met());
         return found.result();
     }
@@ -172,6 +189,11 @@ final class SharedReads<C, E, M, R> {
 
     /** What {@code fresh} comes to, kept where taking it again would be the same reading. */
     R read(Core node, InputReads reads, Object key, Supplier<R> fresh, Predicate<R> complete) {
+        return read(node, reads, key, scene.elementsMet(), fresh, complete);
+    }
+
+    private R read(Core node, InputReads reads, Object key, ElementsMet elements,
+                   Supplier<R> fresh, Predicate<R> complete) {
         if (!scene.mayShare()) {
             return fresh.get();
         }
@@ -179,9 +201,9 @@ final class SharedReads<C, E, M, R> {
         E guards = scene.guards();
         int metFrom = scene.metCount();
         int askedBefore = scene.aggregatesAsked();
-        ElementsMet.Noting noting = scene.elementsMet().noting();
+        ElementsMet.Noting noting = elements.noting();
         Watched<R> read = reads.watchingWhatIsHanded(fresh);
-        ElementsMet.Footprint footprint = noting.ended(scene.elementsMet());
+        ElementsMet.Footprint footprint = noting.ended(elements);
         R result = read.result();
         if (result != null && read.asked().toldApart() && footprint != null
                 && scene.metCount() >= metFrom && scene.sameGuards(guards, scene.guards())

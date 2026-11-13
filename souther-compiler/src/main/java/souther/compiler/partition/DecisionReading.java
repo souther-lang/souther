@@ -167,11 +167,7 @@ public record DecisionReading(String behavior, List<Ruled> found, List<Excluded>
          * the constructs what it states was read off may be several, in other calls.
          */
         public SaidOnTheWay saidOnTheWay() {
-            SaidOnTheWay out = SaidOnTheWay.NONE;
-            for (RuleStep each : steps) {
-                out = out.and(each.said());
-            }
-            return out;
+            return SaidOnTheWay.allOf(steps.stream().map(RuleStep::said).toList());
         }
     }
 
