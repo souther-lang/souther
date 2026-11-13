@@ -332,8 +332,8 @@ public final class FieldDomains {
     /** What {@link #projection} answers, worked out the first time it is asked. */
     private volatile ProjectionEvidence projected;
 
-    /** What {@link #besideTheValues} answers, worked out the first time it is asked. */
-    private volatile Besides beside;
+    /** What {@link #projection} is made of, worked out the first time it is asked. */
+    private volatile Gathered gathered;
 
     /** What {@link #countsRelatedToAnotherNumber} answers, worked out the first time it is asked. */
     private volatile Set<FactSubject> relatedCounts;
@@ -3558,50 +3558,90 @@ public final class FieldDomains {
     public ProjectionEvidence projection() {
         ProjectionEvidence known = projected;
         if (known == null) {
-            known = projectionReadOff(false).evidence();
+            known = evidenceLeaving(List.of());
             projected = known;
         }
         return known;
     }
 
     /**
-     * What {@link #projection} says with each part the bounds hold nothing of set aside where the
-     * reading of values held it whole, and where those parts were.
+     * What {@link #projection} says of what the readings were given, which it is made of and which
+     * the question below is made of as well.
      *
-     * <p>Not a certificate for the bounds: they state nothing of a part set aside, and
-     * {@link #projection} says so. What it answers is whether anything else stood in the way, which
-     * is what a reader that takes those parts from the set of values needs to know.
+     * @param others        every cause but a part left unrepresented, unordered
+     * @param certification what the algebra says of the ranges it derived
+     * @param unstated      the parts of rules the bounds hold nothing of
      */
-    private Besides besideTheValues() {
-        Besides known = beside;
-        if (known == null) {
-            known = projectionReadOff(true);
-            beside = known;
-        }
-        return known;
-    }
+    private record Gathered(List<ProjectionEvidence.Cause> others,
+                            souther.compiler.numeric.ProjectionCertification certification,
+                            List<PartUnstated> unstated) {}
 
     /**
-     * A projection, and the names of the parts it set aside.
+     * One occurrence of a part the bounds hold nothing of.
      *
-     * @param evidence the projection
-     * @param heldAt   the names the parts set aside are about; empty for {@link #projection}
+     * <p>Whether the set of values holds the statement it is a statement of whole: what is needed to
+     * take it out of what stands in the way of the bounds where the set holds it. A cause names a
+     * rule and a place, which is as far as an author is sent; whether the set holds a rule is a
+     * question about one statement of it, asked where the statement is known.
+     *
+     * @param paths          the names the occurrence is about
+     * @param valuesHoldWhole false for a connective or a binding above the statements, which no
+     *                        reading decides anything at
      */
-    private record Besides(ProjectionEvidence evidence, Set<RuleKey> heldAt) {}
+    private record PartUnstated(RuleRef.Invariant rule, Set<RuleKey> paths,
+                                boolean valuesHoldWhole) {}
+
+    /** An occurrence of a part the bounds hold nothing of, and the names it is about. */
+    private record Occurrence(ClauseOccurrence at, Set<RuleKey> paths) {}
+
+    /**
+     * What {@link #projection} says with {@code setAside} not counted among what stands in the way.
+     *
+     * <p>One reading of the rules, and the one {@link #projection} is: a part set aside is a part
+     * the bounds still state nothing of, and what that leaves is a question for whoever takes it
+     * from somewhere else.
+     */
+    private ProjectionEvidence evidenceLeaving(List<PartUnstated> setAside) {
+        Gathered read = gathered();
+        List<ProjectionEvidence.Cause> causes = new ArrayList<>(read.others());
+        // Said once per rule and place, after every reading of the rule has been met. A clause is
+        // read once per place the walk opens a value at, and what a rule left a place without is
+        // one fact about the rule however many readings there were.
+        Set<ProjectionEvidence.Cause> unrepresented = new LinkedHashSet<>();
+        for (PartUnstated each : read.unstated()) {
+            if (!setAside.contains(each)) {
+                each.paths().forEach(path -> unrepresented.add(
+                        new ProjectionEvidence.Cause.Unrepresented(each.rule(), path.toString())));
+            }
+        }
+        causes.addAll(unrepresented);
+        // In an order that does not move between runs. Parts are keyed by the node the tree holds,
+        // which is an identity, and a map keyed on one iterates by where the addresses landed — so
+        // a value with two conjuncts short of the bounds printed its two causes in whichever order
+        // this run happened to give them. Sorted rather than kept in insertion order, because the
+        // causes come from several producers and there is no one order they arrive in.
+        causes.sort(java.util.Comparator.comparing(FieldDomains::orderOf));
+        if (read.certification() instanceof souther.compiler.numeric.ProjectionCertification
+                .Certified(var by) && causes.isEmpty()) {
+            return new ProjectionEvidence.CertifiedExact(by, List.of());
+        }
+        return new ProjectionEvidence.NotCertified(causes);
+    }
 
     /**
      * Whether the set of values at {@code place}, met with what the bounds say of its count, is
      * what the rules leave it.
      *
-     * <p>Where some part the bounds hold nothing of was held whole by the reading of values, and
-     * every other part is stated by the bounds exactly. The set holds the first and the count the
-     * second, and each holds the whole of its parts: a string that is in the set and has a count the
-     * bounds leave is a string no part refuses.
+     * <p>Where some statement the bounds hold nothing of is one the set of values holds whole, and
+     * the rest of what the rules say about the place is stated by the bounds exactly. The set holds
+     * the first and the count the second, so a string that is in the set and has a count the bounds
+     * leave is a string no statement refuses.
      *
-     * <p>Only of a place the parts set aside are about and nothing else, and where no number
-     * of the place is related to a number of any other. A part about another place, or a relation
-     * from the place's count to one, lets what that place holds change which counts are left here,
-     * and the count the bounds leave was worked out without it.
+     * <p>A statement the set holds is taken out of what stands in the way only where it is about the
+     * place alone. What stands in the way after that is left to be shown apart from the place, as
+     * it is for the bounds ({@link #projectionAt}): rules about other places that leave them some
+     * value and are related to nothing here. And no number of the place may be related to a number
+     * of any other, which would let what another place holds change which counts are left here.
      */
     public boolean valuesAndCountAreTheRulesAt(RuleKey place) {
         Counted counted = countAt.get(place);
@@ -3614,17 +3654,19 @@ public final class FieldDomains {
                 .anyMatch(each -> standsBesideARulesOwnAccount(each.why()))) {
             return false;
         }
-        // Setting parts aside only takes causes away, so what is not already short by parts alone
-        // is not made whole by it, and the second reading of the rules is not made.
-        if (!(projection() instanceof ProjectionEvidence.NotCertified(var causes))
-                || !causes.stream().allMatch(
-                        ProjectionEvidence.Cause.Unrepresented.class::isInstance)) {
+        Gathered read = gathered();
+        if (!(read.certification() instanceof ProjectionCertification.Certified)
+                || countsRelatedToAnotherNumber().contains(counted.atom())) {
             return false;
         }
-        Besides read = besideTheValues();
-        return !read.heldAt().isEmpty() && read.evidence().isCertified()
-                && read.heldAt().equals(Set.of(place))
-                && !countsRelatedToAnotherNumber().contains(counted.atom());
+        List<PartUnstated> heldHere = read.unstated().stream()
+                .filter(each -> each.valuesHoldWhole() && each.paths().equals(Set.of(place)))
+                .toList();
+        if (heldHere.isEmpty()) {
+            return false;
+        }
+        ProjectionEvidence rest = evidenceLeaving(heldHere);
+        return rest.isCertified() || standingApart(rest, place, Set.of(named)) != null;
     }
 
     /** The counts some stated constraint relates to another number, worked out the first time it
@@ -3654,16 +3696,20 @@ public final class FieldDomains {
         return known;
     }
 
-    /**
-     * {@link #projection}, read off the readings.
-     *
-     * @param valuesHoldTheRest whether a part the bounds hold nothing of is set aside where the
-     *                          reading of values was stopped by no statement of it, rather than
-     *                          counted among what stands in the way
-     */
-    private Besides projectionReadOff(boolean valuesHoldTheRest) {
+    /** What {@link #projection} is made of, read off the readings the first time it is asked. */
+    private Gathered gathered() {
+        Gathered known = gathered;
+        if (known == null) {
+            known = gatheredFromTheReadings();
+            gathered = known;
+        }
+        return known;
+    }
+
+    /** {@link #gathered}, read off the readings. */
+    private Gathered gatheredFromTheReadings() {
         List<ProjectionEvidence.Cause> causes = new ArrayList<>();
-        Set<RuleKey> heldAt = new LinkedHashSet<>();
+        List<PartUnstated> unstated = new ArrayList<>();
         // A rule that never arrived first. Which rule it was is not known here and there is nothing
         // to say: what a stop leaves is a name and every name under it.
         // Spelled, since what a cause carries is read by an author rather than looked up.
@@ -3679,14 +3725,11 @@ public final class FieldDomains {
         // pattern raises none — which values may stand somewhere and where a line falls are not what
         // it is about — and it is still a way the value can be refused at an edge of the number
         // beside it.
-        // What each rule leaves unrepresented, met from every reading of it and held by the rule.
-        // A clause is read once per place the walk opens a value at, so a set held by the reading
-        // would say a rule left a position without a representation once per reading that met it —
-        // and what a rule left a position without is one fact about the rule however many readings
-        // there were.
-        Map<RuleRef.Invariant, Set<RuleKey>> unrepresented = new LinkedHashMap<>();
         readings.forEach(reading -> {
             RuleRef.Invariant rule = reading.from();
+            // What this reading left unrepresented, told to the statement each is a statement of
+            // once the part has been walked.
+            List<Occurrence> pending = new ArrayList<>();
             // Where in the clause this reading recorded a shape, which is what a conjunction below
             // asks about its two halves.
             Set<ClauseOccurrence> recorded = new LinkedHashSet<>();
@@ -3696,13 +3739,9 @@ public final class FieldDomains {
             // leaves the range wider than the rule however well the conjunct written beside it went,
             // and a set unioned over the whole clause answers for the failing half with the other
             // one — which is the same shape as reading a clause's evidence for one of its parts.
-            Set<RuleKey> said = unrepresented.computeIfAbsent(rule, _ -> new LinkedHashSet<>());
-            reading.constrained().forEach((part, byOccurrence) ->
+            reading.constrained().values().forEach(byOccurrence ->
                     byOccurrence.values().forEach(one -> {
-                // Where a part the bounds hold nothing of is told: to what stands in the way, or,
-                // where the set of values holds it whole, to what is set aside.
-                Set<RuleKey> told = valuesHoldTheRest && !took.valuesWereStoppedIn(part)
-                        ? heldAt : said;
+                Set<RuleKey> told = new LinkedHashSet<>();
                 ClauseExpr shape = one.of();
                 InvariantChecker.PartRead read = one.said();
                 // A conjunction says what its conjuncts say, and they are here beside it. Asked of
@@ -3756,11 +3795,22 @@ public final class FieldDomains {
                 if (required == null || required.obligations().isEmpty()) {
                     told.add(RuleKey.THE_VALUE);
                 }
+                pending.add(new Occurrence(shape.at(), told));
             }));
+            if (pending.isEmpty()) {
+                return;
+            }
+            // Which statement each is a statement of, and so whether the set of values holds it:
+            // asked of the statement and not of the authored part holding it, which a helper's body
+            // makes more than one.
+            Map<ClauseOccurrence, InvariantStatementId> statements =
+                    InvariantChecker.statementsOf(reading);
+            for (Occurrence each : pending) {
+                InvariantStatementId statement = statements.get(each.at());
+                unstated.add(new PartUnstated(rule, each.paths(),
+                        statement != null && took.valuesHoldWhole(statement)));
+            }
         });
-        // And said once per rule, after every reading of it has been met.
-        unrepresented.forEach((rule, said) -> said.forEach(path ->
-                causes.add(new ProjectionEvidence.Cause.Unrepresented(rule, path.toString()))));
         // And what the algebra was given and what it projects does not hold.
         //
         // Asked of what was derived and of nothing else. Asking the whole state whether it holds a
@@ -3859,17 +3909,7 @@ public final class FieldDomains {
                 }
             }
         }
-        // In an order that does not move between runs. Parts are keyed by the node the tree holds,
-        // which is an identity, and a map keyed on one iterates by where the addresses landed — so
-        // a value with two conjuncts short of the bounds printed its two causes in whichever order
-        // this run happened to give them. Sorted rather than kept in insertion order, because the
-        // causes come from several producers and there is no one order they arrive in.
-        causes.sort(java.util.Comparator.comparing(FieldDomains::orderOf));
-        if (certification instanceof souther.compiler.numeric.ProjectionCertification.Certified(
-                var by) && causes.isEmpty()) {
-            return new Besides(new ProjectionEvidence.CertifiedExact(by, List.of()), heldAt);
-        }
-        return new Besides(new ProjectionEvidence.NotCertified(causes), heldAt);
+        return new Gathered(causes, certification, unstated);
     }
 
 }
