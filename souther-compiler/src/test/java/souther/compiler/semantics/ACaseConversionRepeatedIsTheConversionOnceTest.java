@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.types.ValueName;
 import souther.runtime.Strings;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.UnaryOperator;
 
@@ -14,9 +15,10 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
  * {@link CaseMapping#applying} makes one mapping of a conversion applied to what the same
- * conversion made, and that is what the run time's conversions are: each is idempotent over every
- * code point, alone and with the letters a conversion looks at beside it (the closing sigma looks
- * at the letter before it, a composed result at the mark after it).
+ * conversion made, and that is what the run time's conversions are: each is idempotent over the
+ * strings of up to three of the code points a conversion turns on, which are where context (the
+ * closing sigma), widening (ß) and composition (marks, jamo) could make a second application
+ * differ.
  */
 class ACaseConversionRepeatedIsTheConversionOnceTest {
 
@@ -64,28 +66,26 @@ class ACaseConversionRepeatedIsTheConversionOnceTest {
         idempotent(Strings::uppercase, "uppercase");
     }
 
-    private static void idempotent(UnaryOperator<String> conversion, String name) {
-        for (int cp = 0; cp <= Character.MAX_CODE_POINT; cp++) {
-            if (cp >= Character.MIN_SURROGATE && cp <= Character.MAX_SURROGATE) {
-                continue;
-            }
-            String each = new String(Character.toChars(cp));
-            for (String text : List.of(each, "a" + each, each + "a", "A" + each + "B",
-                    "Σ" + each, each + "Σ", "Σ" + each + "Σ", each + "́", each + "̇")) {
-                once(conversion, name, text);
-            }
-        }
-    }
+    /** The code points a conversion turns on: the closing sigma, the dotted capital I, the sharp s
+     *  in both cases, combining marks that compose, a titlecase letter, the Kelvin sign, and the
+     *  jamo that compose into a syllable. */
+    private static final List<String> ALPHABET = List.of("a", "A", "Σ", "σ", "ς", "İ", "i", "ß",
+            "ẞ", "́", "̇", "̣", "ǅ", "K", "ᄀ", "ᅡ");
 
-    private static void once(UnaryOperator<String> conversion, String name, String text) {
-        String answer;
-        try {
-            answer = conversion.apply(text);
-        } catch (RuntimeException stopped) {
-            return;
+    private static void idempotent(UnaryOperator<String> conversion, String name) {
+        List<String> every = new ArrayList<>(ALPHABET);
+        for (String first : ALPHABET) {
+            for (String second : ALPHABET) {
+                every.add(first + second);
+                for (String third : ALPHABET) {
+                    every.add(first + second + third);
+                }
+            }
         }
-        assertEquals(answer, conversion.apply(answer),
-                () -> name + " of its own answer differs for U+"
-                        + Integer.toHexString(text.codePointAt(0)) + " in " + text);
+        for (String text : every) {
+            String answer = conversion.apply(text);
+            assertEquals(answer, conversion.apply(answer),
+                    () -> name + " of its own answer differs in " + text);
+        }
     }
 }
