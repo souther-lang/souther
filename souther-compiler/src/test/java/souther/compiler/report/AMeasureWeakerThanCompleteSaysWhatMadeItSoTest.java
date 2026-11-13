@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import tools.jackson.databind.JsonNode;
@@ -96,7 +97,8 @@ class AMeasureWeakerThanCompleteSaysWhatMadeItSoTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.withEvaluationPolicy(BOUNDED);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        // The row that never comes back is stopped at its budget.
+        ACompiledModel.refusedWith(List.of("E1910"), compilation);
         report = AdequacyReport.of(compilation);
     }
 

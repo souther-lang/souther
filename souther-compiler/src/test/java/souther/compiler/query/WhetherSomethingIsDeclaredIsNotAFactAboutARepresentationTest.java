@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.Derived;
 import souther.compiler.check.Registry;
@@ -9,6 +10,7 @@ import souther.compiler.types.TypeKey;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -80,7 +82,7 @@ class WhetherSomethingIsDeclaredIsNotAFactAboutARepresentationTest {
         edited.put("prices.sou", MOVED);
         edited.put("cart.sou", IMPORTING);
         c.update(edited, Set.of(), TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(), "the edited workspace compiles: "
                 + c.db().allReports());
 
@@ -133,15 +135,16 @@ class WhetherSomethingIsDeclaredIsNotAFactAboutARepresentationTest {
                 "and it is a type its module declares all the same");
         assertNull(derived.identify(new TypeKey("shop.prices", "Nothing")),
                 "while an address nothing declares is still nothing");
+        ACompiledModel.refusedWith(List.of("E1023"), c);
     }
 
     private static Compilation started() {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("prices.sou", DECLARING);
         byId.put("cart.sou", IMPORTING);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
-                .writtenOn(TestDay.DATE);
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+                        .writtenOn(TestDay.DATE));
         assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with: "
                 + c.db().allReports());
         return c;

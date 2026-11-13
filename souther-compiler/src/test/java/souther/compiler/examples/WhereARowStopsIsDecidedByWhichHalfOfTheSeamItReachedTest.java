@@ -17,6 +17,7 @@ import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.query.Shapes;
@@ -326,7 +327,7 @@ class WhereARowStopsIsDecidedByWhichHalfOfTheSeamItReachedTest {
     }
 
     private static Observations evaluated(String model, Answerer answerer) {
-        Compilation c = Compilation.ofSource(model, "Main");
+        Compilation c = ACompiledModel.answered(model);
         c.db().ask(new Output.All());
         String name = c.modules().get(0);
         souther.compiler.generated.EvaluationArtifact artifact = c.db()

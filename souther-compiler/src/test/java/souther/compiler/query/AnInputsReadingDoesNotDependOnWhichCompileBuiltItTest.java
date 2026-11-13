@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ARuleNoReadingTakesIn;
 import souther.compiler.meta.ModulePath;
 
@@ -122,7 +123,7 @@ class AnInputsReadingDoesNotDependOnWhichCompileBuiltItTest {
         byId.put("prices.sou", prices);
         byId.put("cart.sou", cart);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(), "the workspace compiles to begin with: "
                 + c.db().allReports());
         return c;

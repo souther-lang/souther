@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.Carrier;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
@@ -56,9 +57,7 @@ class AMeasureIsHeldUnderThePositionItMeasuresTest {
             """;
 
     private static Partitions.Partitioning divided() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         Partitions.Partitioning read = compilation.db()
                 .ask(new Adequacy.Divided(compilation.modules().get(0), "gate")).value();
         assertNotNull(read, "the model under test compiles and is measured");

@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AnalysisBody;
@@ -374,10 +375,7 @@ class HowLongThePathASearchAnswersIsReadTest {
     private static String report(String search) {
         Compilation compilation = Compilation.ofSource(CHAIN.formatted(search), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(),
-                "compiles, and every row answers what it says when it is run");
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
@@ -408,8 +406,6 @@ class HowLongThePathASearchAnswersIsReadTest {
                 .replace("| \"a\" : (tree, 2) -> Yes", "| \"a\" : (tree, 3) -> No")
                 .replace(">= 2", ">= 3");
         Compilation compilation = measuredModel(model);
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList());
         String json = AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
         assertFalse(json.contains("searched_line"), humanOf(compilation));
@@ -504,8 +500,6 @@ class HowLongThePathASearchAnswersIsReadTest {
         Compilation after = measuredModel(DEEPEST_LINE_MODEL.formatted(SEARCH, written));
         String human = humanOf(after);
         assertTrue(human.contains("borders 1   obligations 4/4"), human);
-        assertEquals(List.of(), after.errors().stream()
-                .map(each -> each.diagnostic().code()).toList());
     }
 
     /**
@@ -523,8 +517,6 @@ class HowLongThePathASearchAnswersIsReadTest {
                         "let tree = Node { v = 1, below = [] }\n")
                 .replace("| \"a\" : (tree, 2) -> Yes", "| \"a\" : (tree, 1) -> No");
         Compilation compilation = measuredModel(model);
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList());
         assertEquals(List.of(), Adequacy.offeredFor(compilation.db(),
                         OfferingRequest.overTheModule("demo"))
                 .rowsByBehavior().getOrDefault("f", List.of()).stream()
@@ -547,8 +539,6 @@ class HowLongThePathASearchAnswersIsReadTest {
         Compilation compilation = measuredModel(
                 DEEPEST_LINE_MODEL.formatted(SEARCH, "").replace(">= 2", ">= 100000")
                         .replace("| \"a\" : (tree, 2) -> Yes", "| \"a\" : (tree, 2) -> No"));
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList());
         String human = humanOf(compilation);
         assertTrue(human.contains("how many elements a proposed collection holds"), human);
         assertFalse(human.contains("no row can stand at the"), human);
@@ -594,8 +584,6 @@ class HowLongThePathASearchAnswersIsReadTest {
     void aFieldThatHasOneValueIsOfferedARowAtTheLineOfOne() {
         // With no row at the line of one, so that it is owed.
         Compilation before = measuredModel(ONE_VALUE_MODEL.formatted(""));
-        assertEquals(List.of(), before.errors().stream()
-                .map(each -> each.diagnostic().code()).toList());
         List<String> offered = Adequacy.offeredFor(before.db(),
                         OfferingRequest.overTheModule("demo"))
                 .rowsByBehavior().getOrDefault("f", List.of()).stream()
@@ -610,8 +598,6 @@ class HowLongThePathASearchAnswersIsReadTest {
                     .append(") -> No\n");
         }
         Compilation after = measuredModel(ONE_VALUE_MODEL.formatted(written));
-        assertEquals(List.of(), after.errors().stream()
-                .map(each -> each.diagnostic().code()).toList());
         String human = humanOf(after);
         assertTrue(human.contains("borders 1   obligations 1/4"), human);
         // And what no node can be written for is said as what it is.
@@ -621,8 +607,7 @@ class HowLongThePathASearchAnswersIsReadTest {
     private static Compilation measuredModel(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     private static String humanOf(Compilation compilation) {
@@ -661,9 +646,7 @@ class HowLongThePathASearchAnswersIsReadTest {
     private static String humanReportOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList());
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
@@ -772,9 +755,7 @@ class HowLongThePathASearchAnswersIsReadTest {
                 """;
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList());
+        ACompiledModel.compiles(compilation);
         AdequacyReport report = AdequacyReport.of(compilation);
         String json = report.json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
         String human = report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
@@ -829,8 +810,6 @@ class HowLongThePathASearchAnswersIsReadTest {
                     .append('\n');
         }
         Compilation after = measuredModel(model + written);
-        assertEquals(List.of(), after.errors().stream()
-                .map(each -> each.diagnostic().code()).toList());
         List<BorderAssessment.Point> owed = BorderAssessment.pointsOf(
                         Adequacy.boundariesOf(after.db(), "demo").get("approvalChainFor"))
                 .stream().filter(point -> point.owed() != null)
@@ -961,9 +940,7 @@ class HowLongThePathASearchAnswersIsReadTest {
                 let f (i) =
                     if (%s) then 1 else 0
                 """.formatted(condition), "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), () -> "compiles: " + condition);
+        ACompiledModel.compiles(compilation);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");

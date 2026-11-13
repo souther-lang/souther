@@ -132,7 +132,7 @@ class ADivisorThatIsAListTotalIsAnsweredByARowHoldingAnElementTest {
     private static String report(Model model, Adequacy.Level level) {
         Compilation compilation = Compilation.ofSource(source(model), "Main");
         compilation.measure(Adequacy.Asked.reportOnly(level));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -217,9 +217,7 @@ class ADivisorThatIsAListTotalIsAnsweredByARowHoldingAnElementTest {
                 """;
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
+        ACompiledModel.compiles(compilation);
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains(UNREAD), report);

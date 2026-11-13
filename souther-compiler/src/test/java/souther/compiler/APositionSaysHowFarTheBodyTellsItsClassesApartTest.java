@@ -452,14 +452,14 @@ class APositionSaysHowFarTheBodyTellsItsClassesApartTest {
     }
 
     private static Compilation compiled(String model) {
-        return Compiler.analyzedModules(List.of(model), ModulePath.EMPTY, new ArrayList<>(),
-                Adequacy.Asked.fullReport());
+        return ACompiledModel.compiles(Compiler.analyzedModules(List.of(model), ModulePath.EMPTY,
+                new ArrayList<>(), Adequacy.Asked.fullReport()));
     }
 
     private static String report(String model) {
         List<Located> warnings = new ArrayList<>();
-        Compilation compilation = Compiler.analyzedModules(List.of(model), ModulePath.EMPTY,
-                warnings, Adequacy.Asked.fullReport());
+        Compilation compilation = ACompiledModel.compiles(Compiler.analyzedModules(List.of(model),
+                ModulePath.EMPTY, warnings, Adequacy.Asked.fullReport()));
         return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

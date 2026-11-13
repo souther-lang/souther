@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.GenerationOutcome;
 import souther.compiler.partition.PointRole;
@@ -201,10 +202,6 @@ class ALineReadUnderEachCaseIsOneRowToWriteTest {
     }
 
     private static Compilation compiled(String rows) {
-        Compilation compilation =
-                Compilation.ofSource(SPREAD.replace("ROWS", rows), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(SPREAD.replace("ROWS", rows), Adequacy.Asked.fullReport());
     }
 }

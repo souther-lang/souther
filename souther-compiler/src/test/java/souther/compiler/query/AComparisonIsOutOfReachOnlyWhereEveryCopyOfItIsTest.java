@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.PathReachability;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.ComparisonEmissionIndex;
@@ -300,8 +301,7 @@ class AComparisonIsOutOfReachOnlyWhereEveryCopyOfItIsTest {
                             List<CoverageSites.ArmSite> arms, SourcePos where) {}
 
     private static Compiled compiled() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(MODEL);
         String module = compilation.modules().getFirst();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         Core emitted = checked.behaviorBodies().get("pick");

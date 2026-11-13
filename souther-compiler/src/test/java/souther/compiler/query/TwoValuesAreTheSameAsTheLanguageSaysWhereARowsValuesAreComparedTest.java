@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.types.Type;
@@ -29,7 +30,7 @@ class TwoValuesAreTheSameAsTheLanguageSaysWhereARowsValuesAreComparedTest {
     @Test
     void aDecimalIsTheSameWhateverScaleItWasWrittenAt() {
         BehaviorInputs.SameValue same = ExampleExecutions.sameValue(
-                Compilation.ofSource(MODEL, "Main").db());
+                ACompiledModel.answered(MODEL).db());
         ObservedValue oneAndATenth = new ObservedValue.Decimal(new BigDecimal("1.0"));
         ObservedValue oneAndAHundredth = new ObservedValue.Decimal(new BigDecimal("1.00"));
 
@@ -43,7 +44,7 @@ class TwoValuesAreTheSameAsTheLanguageSaysWhereARowsValuesAreComparedTest {
     @Test
     void aSetIsTheSameInWhateverOrderItsElementsWereMet() {
         BehaviorInputs.SameValue same = ExampleExecutions.sameValue(
-                Compilation.ofSource(MODEL, "Main").db());
+                ACompiledModel.answered(MODEL).db());
         ObservedValue oneThenTwo = new ObservedValue.Sequence(List.of(
                 new ObservedValue.Integer(1), new ObservedValue.Integer(2)));
         ObservedValue twoThenOne = new ObservedValue.Sequence(List.of(

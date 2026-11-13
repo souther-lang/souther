@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -95,9 +96,7 @@ class ARecordIsComposedOnceHoweverOftenASearchAsksForItTest {
     }
 
     private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSource(A_RECORD_CASE, "Main");
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.answered(A_RECORD_CASE);
     }
 
     private static RuleReadingSource rulesOf(Compilation compilation) {

@@ -2,6 +2,8 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+
 import java.util.List;
 import java.util.Map;
 
@@ -141,9 +143,6 @@ class ADecimalOperationTheRelationDoesNotReadLeavesThePlacesItReadsReachedTest {
         compilation.measure(Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> evidence =
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), compilation.errors().toString());
 
         for (String behavior : List.of("difference", "times")) {
             assertEquals(reasonsOf(evidence, "control"), reasonsOf(evidence, behavior), behavior);
@@ -157,5 +156,6 @@ class ADecimalOperationTheRelationDoesNotReadLeavesThePlacesItReadsReachedTest {
             assertEquals(reasonsOf(evidence, "controlWalked"), reasonsOf(evidence, behavior),
                     behavior);
         }
+        ACompiledModel.compiles(compilation);
     }
 }

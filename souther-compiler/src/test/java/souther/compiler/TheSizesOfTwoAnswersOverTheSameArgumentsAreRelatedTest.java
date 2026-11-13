@@ -44,8 +44,8 @@ class TheSizesOfTwoAnswersOverTheSameArgumentsAreRelatedTest {
     private static Set<String> notProved(List<Row> rows) {
         StringBuilder module = new StringBuilder(INPUT);
         rows.forEach(each -> module.append(each.source()).append('\n'));
-        Compilation compilation = Compilation.ofSource(module.toString(), "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.refusedOnlyWith(Set.of("E2010"),
+                Compilation.ofSource(module.toString(), "Main"));
         Set<String> out = new LinkedHashSet<>();
         List<Located> found = new ArrayList<>(compilation.errors());
         found.addAll(compilation.warnings());

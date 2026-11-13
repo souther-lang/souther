@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.TypeSymbol;
 
@@ -23,13 +24,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
 
-    private static List<List<String>> reported(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                        .flatMap(List::stream).map(each -> each.diagnostic().code().toString())
-                        .filter(each -> !each.equals("E1013")).toList(),
-                "the model this reads has to be one somebody could write");
+    /** The groups said of {@code source}, which is refused with exactly {@code codes}. */
+    private static List<List<String>> reported(List<String> codes, String source) {
+        Compilation compilation = ACompiledModel.refusedWith(codes,
+                Compilation.ofSource(source, "Main"));
         List<souther.compiler.ast.Hir.Def> defs = compilation.module("demo").defs().stream()
                 .map(each -> each.declaration().node()).toList();
         return UninhabitableTypes.withNoValueOfTheirOwn(
@@ -41,7 +39,7 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
 
     @Test
     void nothingIsSaidOfAModelWhereEverythingHasAValue() {
-        assertEquals(List.of(), reported("""
+        assertEquals(List.of(), reported(List.of(), """
                 module demo
 
                 data Chain = { next: Chain? }
@@ -51,7 +49,7 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
     /** Two written in terms of each other, named together and once. */
     @Test
     void recordsWrittenInTermsOfEachOtherAreOneThingToSay() {
-        assertEquals(List.of(List.of("A", "B")), reported("""
+        assertEquals(List.of(List.of("A", "B")), reported(List.of("E1013"), """
                 module demo
 
                 data A = { b: B }
@@ -62,7 +60,7 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
     /** A sum and its cases are the one recursion, however many declarations it is spread over. */
     @Test
     void aSumAndItsCasesAreOneRecursion() {
-        assertEquals(List.of(List.of("Leaf", "Branch", "Shape")), reported("""
+        assertEquals(List.of(List.of("Leaf", "Branch", "Shape")), reported(List.of("E1013"), """
                 module demo
 
                 data Leaf = { s: Shape }
@@ -74,7 +72,7 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
     /** The record holding it has no value either, and nothing is the matter with it. */
     @Test
     void aRecordThatHoldsOneIsNotNamedBesideIt() {
-        assertEquals(List.of(List.of("Leaf", "Branch", "Shape")), reported("""
+        assertEquals(List.of(List.of("Leaf", "Branch", "Shape")), reported(List.of("E1013"), """
                 module demo
 
                 data Leaf = { s: Shape }
@@ -92,7 +90,7 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
      */
     @Test
     void aGroupWithALackOfItsOwnIsNamedBesideTheOneItReads() {
-        assertEquals(List.of(List.of("Bad"), List.of("A", "B")), reported("""
+        assertEquals(List.of(List.of("Bad"), List.of("A", "B")), reported(List.of("E1013", "E1013"), """
                 module demo
 
                 data Bad = Int
@@ -114,7 +112,7 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
      */
     @Test
     void oneMemberOfAGroupMayHaveALackTheOthersDoNot() {
-        assertEquals(List.of(List.of("Other"), List.of("A")), reported("""
+        assertEquals(List.of(List.of("Other"), List.of("A")), reported(List.of("E1013", "E1013"), """
                 module demo
 
                 data Other = Int
@@ -137,7 +135,7 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
      */
     @Test
     void aLackReachingASetThroughATypeThatHasValuesIsStillTheLackOfTheFirst() {
-        assertEquals(List.of(List.of("Bad")), reported("""
+        assertEquals(List.of(List.of("Bad")), reported(List.of("E1013"), """
                 module demo
 
                 data Bad = Int
@@ -161,7 +159,7 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
      */
     @Test
     void aLackTravellingThroughAValueBearingMemberOfItsOwnGroupIsStillTheFirstsLack() {
-        assertEquals(List.of(List.of("A")), reported("""
+        assertEquals(List.of(List.of("A")), reported(List.of("E1013"), """
                 module demo
 
                 data A = { b: B, n: Int }
@@ -185,7 +183,7 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
      */
     @Test
     void aDependencyThatIsOptionalOnTheWayBackDoesNotMakeTheLackShared() {
-        assertEquals(List.of(List.of("A")), reported("""
+        assertEquals(List.of(List.of("A")), reported(List.of("E1013"), """
                 module demo
 
                 data A = { b: B?, n: Int }
@@ -204,7 +202,7 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
      */
     @Test
     void aGrantedNameIsNotReadBackThroughWhatItWraps() {
-        assertEquals(List.of(List.of("A", "B")), reported("""
+        assertEquals(List.of(List.of("A", "B")), reported(List.of("E1013"), """
                 module demo
 
                 data A = B
@@ -222,7 +220,7 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
      */
     @Test
     void aReaderAnsweredBesideARecursionIsNotPartOfIt() {
-        assertEquals(List.of(List.of("A", "B")), reported("""
+        assertEquals(List.of(List.of("A", "B")), reported(List.of("E1013"), """
                 module demo
 
                 data C = { a: A }
@@ -244,7 +242,7 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
      */
     @Test
     void twoRecursionsAnsweredTogetherAreTwoThingsToSay() {
-        assertEquals(List.of(List.of("A", "B"), List.of("C", "D")), reported("""
+        assertEquals(List.of(List.of("A", "B"), List.of("C", "D")), reported(List.of("E1013", "E1013"), """
                 module demo
 
                 data A =
@@ -264,7 +262,7 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
     /** A set that cannot be filled is its own group, its element having a value of its own. */
     @Test
     void aSetThatCannotBeFilledIsNamedAndItsElementIsNot() {
-        assertEquals(List.of(List.of("Pair")), reported("""
+        assertEquals(List.of(List.of("Pair")), reported(List.of("E1013"), """
                 module demo
 
                 data One = Int
@@ -277,7 +275,7 @@ class AGroupIsNamedForItsOwnLackAndNotAnotherGroupsTest {
 
     @Test
     void aNameWhoseValueIsANonEmptyCollectionOfItselfIsNamedAlone() {
-        assertEquals(List.of(List.of("Nest")), reported("""
+        assertEquals(List.of(List.of("Nest")), reported(List.of("E1013"), """
                 module demo
 
                 data Nest = List<Nest>

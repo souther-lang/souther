@@ -67,8 +67,7 @@ class AListGrownFromAnElementTheCompilerCouldNotBuildSaysWhichFigureTest {
     private static List<String> verdicts(String element) {
         Compilation compilation = Compilation.ofSource(MODEL.formatted(element), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model compiles");
+        ACompiledModel.compiles(compilation);
         JsonNode replacement = JSON.readTree(AdequacyReport.of(compilation)
                         .json(SourceRendering.namedByIdentity(compilation.texts())))
                 .get("modules").get(0).get("behaviors").get(0).get("replacement");

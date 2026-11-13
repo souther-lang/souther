@@ -340,10 +340,6 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
     private static Compilation compiled(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code().toString()).toList(),
-                () -> "the source compiles: " + model);
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

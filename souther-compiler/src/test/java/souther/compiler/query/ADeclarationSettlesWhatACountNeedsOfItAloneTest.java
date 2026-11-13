@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.TypeKey;
@@ -61,7 +62,7 @@ class ADeclarationSettlesWhatACountNeedsOfItAloneTest {
         byId.put(ID, MODULE);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
                 .writtenOn(TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
         assertTrue(c.db().allReports().isEmpty(),
                 () -> "the module compiles to begin with: " + c.db().allReports());
         return c;
@@ -89,7 +90,7 @@ class ADeclarationSettlesWhatACountNeedsOfItAloneTest {
         Answer<?> line = premiseOf(c, "Line");
 
         c.update(Map.of(ID, withWeightUnder(98)), Set.of(), TestDay.DATE);
-        c.answerEverything();
+        ACompiledModel.compiles(c);
 
         assertNotSame(weight, premiseOf(c, "Weight"),
                 "the declaration whose rule moved was not settled again, so this fixture cannot"

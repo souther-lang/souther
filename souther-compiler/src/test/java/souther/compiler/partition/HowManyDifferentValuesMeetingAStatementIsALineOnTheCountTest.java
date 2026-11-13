@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.TermPath;
@@ -856,7 +857,7 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
         String source = "module probe\n\n" + behavior;
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         // Rendered at their places in the source, so the origin of one comparison is none of
         // another's.
         SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
@@ -926,13 +927,8 @@ class HowManyDifferentValuesMeetingAStatementIsALineOnTheCountTest {
 
     private static JsonNode reportOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList(),
-                "every example answers what it writes");
+        ACompiledModel.compiles(compilation);
         return JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
     }

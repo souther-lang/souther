@@ -19,7 +19,6 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Where a law of the library says something of a call, the reading of an input and the discharge of
@@ -225,10 +224,7 @@ class WhereALibraryLawIsReadTheMeasureAndTheDischargeAgreeTest {
     private static Compilation measured(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors()
-                .stream().map(e -> e.diagnostic().code()).toList() + "\n" + model);
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     private static JsonNode reportOf(Compilation compilation) {

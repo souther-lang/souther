@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
@@ -303,7 +304,7 @@ class AStatementHoldingAnElementToOneClassSaysWhatRemaindersARunLeavesTest {
     }
 
     private static SearchRegion region() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module m
 
                 data R = { a: Int, d: Int, days: Int }
@@ -311,7 +312,7 @@ class AStatementHoldingAnElementToOneClassSaysWhatRemaindersARunLeavesTest {
 
                 behavior f : (r: R) -> Yes
                 let f (r) = Yes
-                """, "Main");
+                """);
         var inputs = compilation.db().ask(new Adequacy.Inputs("m")).value().get("f");
         assertNotNull(inputs, "the model under test compiles");
         return inputs.reading(RuleReadings.of(compilation, "m")).quantities().region();

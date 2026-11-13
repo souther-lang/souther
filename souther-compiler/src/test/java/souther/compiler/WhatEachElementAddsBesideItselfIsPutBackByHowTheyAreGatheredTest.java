@@ -34,10 +34,8 @@ class WhatEachElementAddsBesideItselfIsPutBackByHowTheyAreGatheredTest {
 
     private static List<String> notRead(String behavior) {
         Compilation compilation = Compilation.ofSource(HEAD + behavior, "Main");
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         List<String> said = new ArrayList<>();
         for (AdequacyReport.BehaviorReport each :
                 AdequacyReport.of(compilation).modules().get(0).behaviors()) {

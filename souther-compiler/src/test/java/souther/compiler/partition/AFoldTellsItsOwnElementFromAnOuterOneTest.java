@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -16,7 +17,6 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -73,8 +73,7 @@ class AFoldTellsItsOwnElementFromAnOuterOneTest {
                 let %s (x) = %s
                 """.formatted(name, name, body)));
         Compilation made = Compilation.ofSource(source.toString(), "Main");
-        assertEquals(List.of(), made.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
+        ACompiledModel.compiles(made);
         Bodies.Elaborated checked = made.db().ask(new Bodies.Checked("probe.fold")).value();
         RuleReadingSource rules = RuleReadings.of(made, "probe.fold");
         Map<String, InputDomain> inputs = made.db().ask(new Adequacy.Inputs("probe.fold"))

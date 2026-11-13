@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
@@ -60,10 +61,7 @@ class AnElementOfAContainerEveryCaseSpreadsIsReadAtTheNameTest {
     private static final Compilation COMPILATION = compiled();
 
     private static Compilation compiled() {
-        Compilation made = Compilation.ofSource(MODEL, "Main");
-        made.measure(Adequacy.Asked.fullReport());
-        made.answerEverything();
-        return made;
+        return ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
     }
 
     @Test
@@ -101,8 +99,6 @@ class AnElementOfAContainerEveryCaseSpreadsIsReadAtTheNameTest {
 
     @Test
     void aLineOnTheElementIsFiledAtTheElementUnderEachCase() {
-        assertEquals(List.of(), COMPILATION.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
         List<Axis> axes = COMPILATION.db().ask(new Adequacy.Divided("probe.spread", "f")).value()
                 .axes();
         for (String at : List.of("e@First.tags[*]", "e@Second.tags[*]")) {

@@ -58,7 +58,7 @@ class AComparisonInsideAConjunctionIsStillTheModelsLineTest {
     private static String blockOf(String behavior) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String human = AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         StringBuilder block = new StringBuilder();
         boolean inside = false;
@@ -113,7 +113,7 @@ coverageAt("inAConjunction", "inAConjunction/r.cost", "100001").made().orElseThr
                                                           String value) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, List<BorderAssessment>> boundaries =
                 Adequacy.boundariesOf(compilation.db(), "example.repro");
         assertNotNull(boundaries, "the model under test compiles");

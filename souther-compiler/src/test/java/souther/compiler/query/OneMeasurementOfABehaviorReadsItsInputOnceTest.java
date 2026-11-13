@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.AnInputRead;
 import souther.compiler.reading.WhatABodyStates;
 import souther.compiler.revision.RevisionKnowledge;
@@ -54,9 +55,7 @@ class OneMeasurementOfABehaviorReadsItsInputOnceTest {
         long before = RevisionKnowledge.timesDone(AnInputRead.class);
         long meaningsBefore = RevisionKnowledge.timesDone(WhatABodyStates.class);
 
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         Db db = compilation.db();
 
         // Each measure asked outright, so that a report that stopped asking one of them leaves this

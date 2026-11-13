@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -9,7 +10,6 @@ import souther.compiler.types.ACallOfAnOperation;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ValueName;
 
-import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -56,8 +56,7 @@ class ACallHandingAClosureIsKeptBesideWhatItHandedTest {
     @Test
     void oneContainerHandedByTwoCallsIsOneThingHeldAndTwoCalls() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors());
+        ACompiledModel.compiles(compilation);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         assertNotNull(checked, "the model compiles");
         DeclarationNewtypes newtypes = RuleReadings.of(compilation, "demo").newtypes();

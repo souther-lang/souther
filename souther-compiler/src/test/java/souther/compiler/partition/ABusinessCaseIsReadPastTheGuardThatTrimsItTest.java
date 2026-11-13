@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -57,22 +58,12 @@ class ABusinessCaseIsReadPastTheGuardThatTrimsItTest {
     /** The model measured once for every test here, which only read what it came to. */
     private static final class Measured {
 
-        static final Compilation MODEL = measure();
+        static final Compilation MODEL = ACompiledModel.measured(PROPOSES,
+                Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
 
         /** The report, built once: it is the same document for every test. */
         static final String JSON = AdequacyReport.of(MODEL)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
-
-        private static Compilation measure() {
-            Compilation model = Compilation.ofSource(PROPOSES, "Main");
-            model.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-            model.answerEverything();
-            if (!model.errors().isEmpty()) {
-                throw new IllegalStateException("the model compiles: " + model.errors().stream()
-                        .map(e -> e.diagnostic().code() + " " + e.diagnostic().titleKey()).toList());
-            }
-            return model;
-        }
     }
 
     /** The relation is shown over a region at the needs and at the business case. */
@@ -99,7 +90,8 @@ class ABusinessCaseIsReadPastTheGuardThatTrimsItTest {
     /** A class is drawn at both places, over the strings the guard lets the run get to. */
     @Test
     void aClassIsDrawnAtEachPlace() {
-        var evidence = Measured.MODEL.db().ask(new Adequacy.Coverage("cases")).value()
+        Compilation compilation = ACompiledModel.compiles(Measured.MODEL);
+        var evidence = compilation.db().ask(new Adequacy.Coverage("cases")).value()
                 .get("propose");
         for (String path : new String[] {"businessCase", "opp.needs[*]"}) {
             assertTrue(evidence.axes().stream().anyMatch(axis ->

@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.ValueTransformation;
@@ -48,9 +49,7 @@ class AnEmptinessCheckStatesWhatItMeansAboutTheLengthTest {
                 data Name = %s
                     invariant %s
                 """.formatted(carrier, clause);
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Name"));
@@ -150,9 +149,7 @@ class AnEmptinessCheckStatesWhatItMeansAboutTheLengthTest {
                 data Name = { ns: List<Int>, table: Map<String, Int> }
                     invariant %s
                 """.formatted(clause);
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         return FieldDomains.of(TypeSymbols.declared(new TypeKey(module, "Name")),

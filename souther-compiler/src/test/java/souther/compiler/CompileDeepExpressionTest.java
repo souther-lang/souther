@@ -197,7 +197,7 @@ class CompileDeepExpressionTest {
             return thrown.getClass().getName();
         }
         if (handedBack instanceof Compilation compilation
-                && !compilation.errors().isEmpty()) {
+                && !ACompiledModel.diagnosticsOf(compilation).isEmpty()) {
             return null;
         }
         return "compiled";

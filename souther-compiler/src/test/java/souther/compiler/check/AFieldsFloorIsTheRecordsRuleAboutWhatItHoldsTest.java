@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.Scopes;
 import souther.compiler.numeric.Count;
@@ -33,7 +34,7 @@ class AFieldsFloorIsTheRecordsRuleAboutWhatItHoldsTest {
 
     private static FieldDomains domainsIn(String source, String type,
                                           java.util.Map<RuleKey, Count> settled) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Symbols symbols = Scopes.derived(compilation.db(), module).value();
         assertNotNull(symbols, "the model did not compile");

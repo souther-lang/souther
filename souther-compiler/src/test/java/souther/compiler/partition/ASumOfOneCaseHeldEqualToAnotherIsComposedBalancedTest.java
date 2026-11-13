@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadings;
@@ -223,8 +224,7 @@ class ASumOfOneCaseHeldEqualToAnotherIsComposedBalancedTest {
     }
 
     private static Partitions.FieldsChosen composedOrNot(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.answered(source);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule record = TypeSymbols.declared(new TypeKey(symbols.module(), "N"));
         RuleReadingContext reading = RuleReadingContext.unshared(

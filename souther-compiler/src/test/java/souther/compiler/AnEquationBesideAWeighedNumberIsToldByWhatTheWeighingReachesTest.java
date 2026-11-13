@@ -67,12 +67,9 @@ class AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest {
     private static final Map<String, Compilation> COMPILED = new ConcurrentHashMap<>();
 
     private static Compilation compile(String model) {
-        return COMPILED.computeIfAbsent(model, source -> {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            return compilation;
-        });
+        Compilation compilation = COMPILED.computeIfAbsent(model,
+                source -> ACompiledModel.measured(source, Adequacy.Asked.fullReport()));
+        return ACompiledModel.compiles(compilation);
     }
 
     private static String report(String model) {

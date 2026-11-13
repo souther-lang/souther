@@ -52,10 +52,33 @@ class CompileUnusedImportWarningTest {
             data NotExposed = Int
             """;
 
+    /** A module exposing a behavior that has a requirement of its own, which a `depends on` names. */
+    private static final String STOCK_NEEDING_A_LOOKUP = """
+            module probe.need exposing ( StockLine, Count, lookup )
+
+            data Count = Int
+                invariant value >= 0
+
+            data StockLine = { quantity: Count }
+
+            behavior lookup : (line: StockLine) -> Count
+            """;
+
     /** Every unused-import warning a compile of these sources reports, as `name` at line:column. */
     private static List<String> unused(String... sources) {
         Compilation compilation = Compilation.ofSources(List.of(sources), ModulePath.EMPTY);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
+        return unusedIn(compilation);
+    }
+
+    /** The same, of sources that are refused for {@code codes} apart from any unused import. */
+    private static List<String> unusedInRefused(List<String> codes, String... sources) {
+        Compilation compilation = Compilation.ofSources(List.of(sources), ModulePath.EMPTY);
+        ACompiledModel.refusedWith(codes, compilation);
+        return unusedIn(compilation);
+    }
+
+    private static List<String> unusedIn(Compilation compilation) {
         List<String> found = new ArrayList<>();
         for (Db.Found report : compilation.db().allReports()) {
             Diagnostic d = report.report().diagnostic();
@@ -78,12 +101,26 @@ class CompileUnusedImportWarningTest {
      */
     private static List<String> said(String... sources) {
         Compilation compilation = Compilation.ofSources(List.of(sources), ModulePath.EMPTY);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
+        return saidOf(compilation);
+    }
+
+    /** The same, of sources that are refused for {@code codes}. */
+    private static List<String> saidOfRefused(List<String> codes, String... sources) {
+        Compilation compilation = Compilation.ofSources(List.of(sources), ModulePath.EMPTY);
+        ACompiledModel.refusedWith(codes, compilation);
+        return saidOf(compilation);
+    }
+
+    private static List<String> saidOf(Compilation compilation) {
         List<String> found = new ArrayList<>();
         for (Db.Found report : compilation.db().allReports()) {
             Diagnostic d = report.report().diagnostic();
             found.add(d.code() != null ? d.code() : MessageKeys.of(d.said()));
         }
+        List<String> errors = compilation.errors().stream()
+                .map(each -> each.diagnostic().code()).toList();
+        assertTrue(found.containsAll(errors), "every error is among what was said: " + errors);
         return found;
     }
 
@@ -151,16 +188,15 @@ class CompileUnusedImportWarningTest {
     /** The same, for a name only a {@code depends on} clause writes. */
     @Test
     void aBehaviorNamedOnlyByDependsOnIsUsed() {
-        assertEquals(List.of(), unused(STOCK, """
+        assertEquals(List.of(), unused(STOCK_NEEDING_A_LOOKUP, """
                 module probe.picking
 
-                import probe.stock ( StockLine, Count, priced )
+                import probe.need ( StockLine, Count, lookup )
 
                 behavior weigh : (line: StockLine) -> Count
-                    constructs Count
-                    depends on priced
+                    depends on lookup
 
-                let weigh (line) = priced(line)
+                let weigh (line, lookup) = lookup(line)
                 """));
     }
 
@@ -249,14 +285,13 @@ class CompileUnusedImportWarningTest {
     @Test
     void aNameWrittenOnlyByAnAttachedExampleFileIsUsed() {
         assertEquals(List.of(), unused(STOCK, """
-                module probe.picking exposing ( Pick, Count, weigh )
+                module probe.picking exposing ( Pick, weigh )
 
                 import probe.stock ( StockLine, Count, Sku )
 
                 data Pick = { line: StockLine }
 
                 behavior weigh : (p: Pick) -> Count
-                    constructs Count
 
                 let weigh (p) = p.line.quantity
                 """, """
@@ -276,7 +311,7 @@ class CompileUnusedImportWarningTest {
      */
     @Test
     void anImportThatIsAlreadyWrongIsNotAlsoCalledUnused() {
-        List<String> said = said(STOCK, """
+        List<String> said = saidOfRefused(List.of("E1507"), STOCK, """
                 module probe.picking
 
                 import probe.stock ( NotExposed )
@@ -304,7 +339,7 @@ class CompileUnusedImportWarningTest {
     /** A module naming a module this compilation does not have says so, and says nothing else. */
     @Test
     void anImportOfAnUnknownModuleIsNotAlsoCalledUnused() {
-        assertEquals(List.of(), unused("""
+        assertEquals(List.of(), unusedInRefused(List.of("E1504"), """
                 module probe.picking
 
                 import probe.nowhere ( Sku )
@@ -322,7 +357,7 @@ class CompileUnusedImportWarningTest {
      */
     @Test
     void aBodyWithANameThatDenotesNothingIsNotToldAboutItsImports() {
-        assertEquals(List.of(), unused(STOCK, """
+        assertEquals(List.of(), unusedInRefused(List.of("E1023"), STOCK, """
                 module probe.picking
 
                 import probe.stock ( Sku, StockLine )
@@ -342,7 +377,7 @@ class CompileUnusedImportWarningTest {
      */
     @Test
     void aNameWrittenAsACaseOfALocalSumIsUsed() {
-        List<String> said = said("""
+        List<String> said = saidOfRefused(List.of("E1606"), """
                 module probe.base exposing ( Ok, Failed )
                 data Failed = { why: String }
                 data Ok = { v: Int }
@@ -360,7 +395,7 @@ class CompileUnusedImportWarningTest {
      * whether anyone wrote the name. */
     @Test
     void aFailingExampleDoesNotSilenceIt() {
-        assertEquals(List.of("StockLine at 3:27"), unused(STOCK, """
+        assertEquals(List.of("StockLine at 3:27"), unusedInRefused(List.of("E1609"), STOCK, """
                 module probe.picking exposing ( Pick, Count, weigh )
 
                 import probe.stock ( Sku, StockLine, Count )

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -29,7 +30,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhatAModuleMustEmitIsWhatItsExpansionsCouldNotRemoveTest {
 
     private static Db dbOf(String module, String source) {
-        return Compilation.ofDocuments(Map.of(module + ".sou", source), Set.of(), ModulePath.EMPTY)
+        return ACompiledModel.compiles(
+                        Compilation.ofDocuments(Map.of(module + ".sou", source), Set.of(),
+                                ModulePath.EMPTY))
                 .db();
     }
 

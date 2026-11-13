@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Measurement;
 import souther.compiler.report.AdequacyReport;
 import org.junit.jupiter.api.Test;
@@ -86,9 +87,9 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
      */
     @Test
     void aPositionTheWalkDidNotReachIntoLeavesBothMeasuresShort() {
-        PartitionEvidence evidence = evidenceFor(RULES_NOT_REACHED, "f");
+        PartitionEvidence evidence = evidenceFor(RULES_NOT_REACHED, "f", List.of("E1013"));
         souther.compiler.query.Measure<List<souther.compiler.query.BorderAssessment>> reading =
-                readingFor(RULES_NOT_REACHED, "f");
+                readingFor(RULES_NOT_REACHED, "f", List.of("E1013"));
 
         assertEquals(List.of("flag"),
                 evidence.axes().stream().map(PartitionEvidence.AxisCoverage::path).toList(),
@@ -125,21 +126,35 @@ class AMeasureIsShortOfWhateverItsReadingDidNotReachTest {
     }
 
     private static PartitionEvidence evidenceFor(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        return evidenceFor(source, behavior, List.of());
+    }
+
+    private static PartitionEvidence evidenceFor(String source, String behavior,
+            List<String> refusals) {
+        Compilation compilation = measuredRefusing(source, refusals);
         Map<String, PartitionEvidence> partitions = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         return partitions.get(behavior);
     }
 
-    /** How far the reading that found the behavior's lines got. */
+    /** {@code source} measured in full, refused with {@code refusals} and nothing else. */
+    private static Compilation measuredRefusing(String source, List<String> refusals) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        return ACompiledModel.refusedWith(refusals, compilation);
+    }
+
     private static souther.compiler.query.Measure<
             List<souther.compiler.query.BorderAssessment>> readingFor(
             String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        return readingFor(source, behavior, List.of());
+    }
+
+    /** How far the reading that found the behavior's lines got. */
+    private static souther.compiler.query.Measure<
+            List<souther.compiler.query.BorderAssessment>> readingFor(
+            String source, String behavior, List<String> refusals) {
+        Compilation compilation = measuredRefusing(source, refusals);
         return compilation.db()
                 .ask(new Adequacy.BoundaryReadings(compilation.modules().get(0),
                         HowALineIsRead.VALUES_COMPOSED))

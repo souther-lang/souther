@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructOccurrence;
@@ -377,8 +378,8 @@ class WhereTheTwoReadingsOfABodyPartIsAnOperationOfTheLanguageTest {
     private static List<BothReadings> bodiesBothWays(List<List<String>> sources) {
         List<BothReadings> out = new ArrayList<>();
         for (List<String> each : sources) {
-            Compilation compilation = Compilation.ofSources(each, ModulePath.EMPTY);
-            compilation.answerEverything();
+            Compilation compilation = ACompiledModel.compiles(
+                    Compilation.ofSources(each, ModulePath.EMPTY));
             int before = out.size();
             bothWaysOf(compilation, out);
             assertTrue(out.size() > before,

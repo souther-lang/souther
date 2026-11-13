@@ -5,6 +5,7 @@ import souther.compiler.ast.Hir;
 import souther.compiler.ast.RowPosition;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Answer;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
 import souther.compiler.query.Shapes;
@@ -66,8 +67,8 @@ class WhichRuleAppliesIsReadFromWhatADefinitionWasMadeAsTest {
             """;
 
     private static Db db() {
-        return Compilation.ofDocuments(Map.of("rules.sou", RULES, "app.sou", APP),
-                Set.of(), ModulePath.EMPTY).db();
+        return ACompiledModel.compiles(Compilation.ofDocuments(
+                Map.of("rules.sou", RULES, "app.sou", APP), Set.of(), ModulePath.EMPTY)).db();
     }
 
     private static Prepared prepared() {
@@ -96,13 +97,13 @@ class WhichRuleAppliesIsReadFromWhatADefinitionWasMadeAsTest {
      * it says which value it enters, and no position stands behind it. */
     @Test
     void aDefinitionMintedForAPublishedValueSaysWhichValueItEnters() {
-        Db up = Compilation.ofDocuments(Map.of("up.sou", """
+        Db up = ACompiledModel.compiles(Compilation.ofDocuments(Map.of("up.sou", """
                 module up exposing ( Amount, cap )
 
                 data Amount = Int
 
                 let cap = Amount(1000)
-                """), Set.of(), ModulePath.EMPTY).db();
+                """), Set.of(), ModulePath.EMPTY)).db();
         Answer<Prepared> answer = up.ask(new Shapes.Prepared("up"));
         assertTrue(answer.present(), "prepared of up: " + answer.reports());
 

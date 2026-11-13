@@ -2,9 +2,9 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.WhereItSits;
-import souther.compiler.diag.CompileException;
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.WhereItSits;
 import souther.compiler.diag.Primary;
 import souther.compiler.diag.msg.DataMessage;
 import souther.compiler.diag.msg.DeclarationMessage;
@@ -121,7 +121,7 @@ class ADataThatSpreadsItsWayBackToItselfIsRefusedTest {
      */
     @Test
     void theReadersThatWalkTheSpreadsAreNotStarted() {
-        Compilation c = compiled(TWO);
+        Compilation c = compiled(TWO, List.of("E1027"));
         assertAll(
                 () -> assertEquals(1, c.db().allReports().size(),
                         () -> "the ring is said once and nothing under it is read: "
@@ -136,7 +136,7 @@ class ADataThatSpreadsItsWayBackToItselfIsRefusedTest {
     @Test
     void whatIsHandedOnIsTheGraphTheWalkWentOver() {
         Answer<ProductSpreads.WellFounded> validated =
-                compiled(THE_PATHS_MEET).db().ask(new Shapes.WellFoundedSpreads("demo"));
+                compiled(THE_PATHS_MEET, List.of("E1004")).db().ask(new Shapes.WellFoundedSpreads("demo"));
 
         assertTrue(validated.present(), "two spreads meeting one declaration close no ring");
         assertEquals(declarations("Held", "Left", "Right", "Both"),
@@ -181,8 +181,8 @@ class ADataThatSpreadsItsWayBackToItselfIsRefusedTest {
 
                 data Local = { ...Pair, local: Int }
                 """);
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
+        Compilation c = ACompiledModel.refusedWith(List.of("E1027"),
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
 
         assertAll(
                 () -> assertEquals(
@@ -226,8 +226,7 @@ class ADataThatSpreadsItsWayBackToItselfIsRefusedTest {
         c.answerEverything();
 
         assertEquals(List.of(new DeclarationMessage.CyclicModuleDependency()),
-                c.db().allReports().stream().map(found -> found.report().diagnostic().said())
-                        .toList(),
+                c.errors().stream().map(found -> found.diagnostic().said()).toList(),
                 "the modules a ring would have to span cannot see each other");
     }
 
@@ -274,26 +273,14 @@ class ADataThatSpreadsItsWayBackToItselfIsRefusedTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        List<Diagnostic> said = new ArrayList<>();
-        try {
-            c.answerEverything();
-        } catch (CompileException e) {
-            said.addAll(e.diagnostics());
-        }
-        c.db().allReports().forEach(found -> said.add(found.report().diagnostic()));
-        return new Reported(said);
+        return new Reported(new ArrayList<>(ACompiledModel.diagnosticsOf(c)));
     }
 
     /** The compilation itself, for a case that asks it what it holds rather than what it said. */
-    private static Compilation compiled(String source) {
+    private static Compilation compiled(String source, List<String> codes) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("m.sou", source);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        try {
-            c.answerEverything();
-        } catch (CompileException _) {
-            // What it refused is another case's; this one reads an answer it reached on the way.
-        }
-        return c;
+        return ACompiledModel.refusedWith(codes, c);
     }
 }

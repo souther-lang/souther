@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.partition.AuthoredPlacement;
 import souther.compiler.partition.BorderObligationPoint;
@@ -69,7 +70,7 @@ class ASearchIsMadeOnlyWhereWhatItFindsCanBeOwedTest {
         Compilation compilation = analysed(MODEL + """
 
                 example admit
-                    | (-5) -> true
+                    | (-5) -> false
                     | (10) -> true
                     | (11) -> false
                     | (20) -> false
@@ -247,6 +248,7 @@ class ASearchIsMadeOnlyWhereWhatItFindsCanBeOwedTest {
                 let hold (a) = Ok { n = a.value }
                 """), ModulePath.EMPTY);
         compilation.measure(ROWS_READ);
+        ACompiledModel.compiles(compilation);
         List<Item> held = itemsOf(compilation, "example.carrying", "hold", AuthoredPlacement.class);
         assertFalse(held.isEmpty(), "hold reads the line and has no row at it");
         for (Item each : held) {
@@ -350,8 +352,6 @@ class ASearchIsMadeOnlyWhereWhatItFindsCanBeOwedTest {
     }
 
     private static Compilation analysed(String model, Adequacy.Asked asked) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(asked);
-        return compilation;
+        return ACompiledModel.measured(model, asked);
     }
 }

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ARuleNoReadingTakesIn;
 import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredBounds;
@@ -164,8 +165,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
             model.append(ONE_OF_SEVERAL.formatted("f" + i, each.type(), "f" + i, each.size(),
                     each.most()));
         }
-        Map<String, List<BorderAssessment>> read = readingsOf(
-                Compilation.ofSource(model.toString(), "Main"), "p");
+        Map<String, List<BorderAssessment>> read = readingsOf(model.toString(), "p");
         for (int i = 0; i < cases.size(); i++) {
             Case each = cases.get(i);
             BorderAssessment line = lineOf(read, "f" + i, Integer.toString(each.most()));
@@ -345,8 +345,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
     /** The line on the count of {@code f} at {@code value}, and not a line drawn there on
      *  anything else. */
     private static BorderAssessment countLineOf(String model, int value, String said) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), "p");
         assertNotNull(read, () -> said + ": the model under test compiles");
         return read.get("f").stream()
@@ -420,8 +419,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
 
     /** Every row offered for {@code f}, with what stopped it where something did. */
     private static List<FillResult.Offer> offersOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Map<String, Adequacy.Filling> all = Adequacy.generatedOf(compilation.db(), "p");
         assertNotNull(all, "the model under test compiles");
         return all.get("f").composed().offers();
@@ -526,7 +524,7 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
     }
 
     private static RuleReadingContext pastTheFigures() {
-        Compilation compilation = Compilation.ofSource(PAST_THE_FIGURES, "Main");
+        Compilation compilation = ACompiledModel.answered(PAST_THE_FIGURES);
         return RuleReadingContext.unshared(RuleReadings.of(compilation, "p"),
                 ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
     }
@@ -555,11 +553,13 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
     /** A declaration another module makes is counted where it is made. */
     @Test
     void anImportedElementIsCountedAsItsModuleDeclaresIt() {
-        Compilation compilation =
-                Compilation.ofSources(List.of(SERVICES, PICKING), ModulePath.EMPTY);
+        Compilation compilation = Compilation.ofSources(List.of(SERVICES, PICKING),
+                ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
 
         assertEquals(new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
-                lineOf(compilation, "app.p", "3").items()
+                lineOf(Adequacy.readingsOf(compilation.db(), "app.p"), "f", "3").items()
                         .get(new DomainPoint.BesideTheLine(Towards.ABOVE)));
     }
 
@@ -574,28 +574,27 @@ class AContainerHoldsNoMoreThanItsElementsHaveValuesTest {
         Compilation compilation = Compilation.ofDocuments(
                 Map.of("s", SERVICES, "p", PICKING), Set.of(), ModulePath.EMPTY)
                 .writtenOn(TestDay.DATE);
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
         assertEquals(new ItemAssessment.NotOwed(NotOwedReason.NO_VALUE_CAN_STAND_THERE),
-                lineOf(compilation, "app.p", "3").items()
+                lineOf(Adequacy.readingsOf(compilation.db(), "app.p"), "f", "3").items()
                         .get(new DomainPoint.BesideTheLine(Towards.ABOVE)));
 
         compilation.update(Map.of("s", SERVICES_AND_ONE_MORE, "p", PICKING), Set.of(),
                 TestDay.DATE);
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
 
-        assertTrue(lineOf(compilation, "app.p", "3").items()
+        assertTrue(lineOf(Adequacy.readingsOf(compilation.db(), "app.p"), "f", "3").items()
                 .get(new DomainPoint.BesideTheLine(Towards.ABOVE)) instanceof ItemAssessment.Owed);
     }
 
     private static BorderAssessment lineOf(String model, String module, String value) {
-        return lineOf(Compilation.ofSource(model, "Main"), module, value);
+        return lineOf(readingsOf(model, module), "f", value);
     }
 
-    private static BorderAssessment lineOf(Compilation compilation, String module, String value) {
-        return lineOf(readingsOf(compilation, module), "f", value);
-    }
-
-    private static Map<String, List<BorderAssessment>> readingsOf(Compilation compilation,
-                                                                  String module) {
-        compilation.measure(Adequacy.Asked.fullReport());
+    private static Map<String, List<BorderAssessment>> readingsOf(String model, String module) {
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> read = Adequacy.readingsOf(compilation.db(), module);
         assertNotNull(read, "the model under test compiles");
         return read;

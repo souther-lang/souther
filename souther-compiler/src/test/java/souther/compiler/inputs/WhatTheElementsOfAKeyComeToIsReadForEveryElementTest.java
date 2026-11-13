@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
@@ -127,7 +128,7 @@ class WhatTheElementsOfAKeyComeToIsReadForEveryElementTest {
      */
     @Test
     void aTotalOverAListIsWhatTheLibrarysTotalAnswers() {
-        Compilation compilation = Compilation.ofSource(SOURCE, "Main");
+        Compilation compilation = ACompiledModel.answered(SOURCE);
         RuleReadingSource rules = RuleReadings.of(compilation, compilation.modules().get(0));
         NumericTerm total = NumericTerm.TakenOver.of(ValueName.Stdlib.operation("List", "sum"),
                 RunSource.overTheOccurrencesAt(AMOUNT.from(TermPath.of("ps").element())),
@@ -195,7 +196,7 @@ class WhatTheElementsOfAKeyComeToIsReadForEveryElementTest {
     }
 
     private static Quantities quantities() {
-        Compilation compilation = Compilation.ofSource(SOURCE, "Main");
+        Compilation compilation = ACompiledModel.answered(SOURCE);
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

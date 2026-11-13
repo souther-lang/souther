@@ -5,6 +5,7 @@ import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ARuleNoReadingTakesIn;
 import souther.compiler.numeric.Towards;
 import souther.compiler.query.Adequacy;
@@ -14,10 +15,13 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
 import souther.compiler.query.WhereTheReadingsDiffer;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -61,8 +65,30 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
                     No }
 
                 example take
-                    | "one" : (H { a = A(%s) }) -> No
-                """.formatted(carrier, rule, guard, row);
+                    | "one" : (H { a = A(%s) }) -> %s
+                """.formatted(carrier, rule, guard, row, verdictAt(guard, row));
+    }
+
+    /** What {@code take} answers for a row at {@code row}: {@code No} where the guard holds. */
+    private static String verdictAt(String guard, String row) {
+        String[] parts = guard.strip().split(" ", 2);
+        return verdictOf(parts[0], new BigDecimal(row.replace("m", ""))
+                .compareTo(new BigDecimal(parts[1].strip().replace("m", ""))));
+    }
+
+    /** What a guard {@code op} answers when its left is {@code order} to its right, which is
+     *  negative, nought or positive: {@code No} where it holds. */
+    private static String verdictOf(String op, int order) {
+        boolean holds = switch (op) {
+            case "==" -> order == 0;
+            case "/=" -> order != 0;
+            case "<" -> order < 0;
+            case "<=" -> order <= 0;
+            case ">" -> order > 0;
+            case ">=" -> order >= 0;
+            default -> throw new IllegalArgumentException(op);
+        };
+        return holds ? "No" : "Ok";
     }
 
     /**
@@ -963,7 +989,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
                     () -> "every uncovered point of `guard a " + op + " b` is offered a row");
             for (Map.Entry<String, String> offered : offeredFor(model).entrySet()) {
                 String point = offered.getKey();
-                Map<String, BorderAssessment> after = bordersOf(withRow(model, offered.getValue()));
+                Map<String, BorderAssessment> after = bordersOf(withRow(model, op, offered.getValue()));
                 BorderAssessment line = after.get("p.a = p.b");
                 assertNotNull(line, after.keySet().toString());
                 PointRole role = java.util.stream.Stream.of(PointRole.values())
@@ -1028,9 +1054,13 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
         return out;
     }
 
-    /** The same model with one more row written at {@code inputs}. */
-    private static String withRow(String model, String inputs) {
-        return model + "    | \"offered\" : (" + inputs + ") -> Ok\n";
+    /** The same model, whose guard is {@code op}, with one more row written at {@code inputs}, a
+     *  pair of the form {@code P { a = 1, b = 0 }}, and the answer the guard gives there. */
+    private static String withRow(String model, String op, String inputs) {
+        Matcher pair = Pattern.compile("a = (-?\\d+), b = (-?\\d+)").matcher(inputs);
+        assertTrue(pair.find(), inputs);
+        int order = Integer.compare(Integer.parseInt(pair.group(1)), Integer.parseInt(pair.group(2)));
+        return model + "    | \"offered\" : (" + inputs + ") -> " + verdictOf(op, order) + "\n";
     }
 
     /** Each point of the model's one line, as {@code role: relation against}. */
@@ -1057,8 +1087,8 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
                     No }
 
                 example cmp
-                    | "on the line" : (P { a = 3, b = 3 }) -> Ok
-                """.formatted(op);
+                    | "on the line" : (P { a = 3, b = 3 }) -> %s
+                """.formatted(op, verdictOf(op, 0));
     }
 
     /**
@@ -1141,10 +1171,7 @@ class ABorderSaysWhyItOwesNoRowAtAPointTest {
 
     /** {@code model} measured: what is read of it is the measure's, which asks for what it reads. */
     private static Compilation compiled(String model) {
-        return MEASURED.computeIfAbsent(model, source -> {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            return compilation;
-        });
+        return ACompiledModel.compiles(MEASURED.computeIfAbsent(model,
+                source -> ACompiledModel.measured(source, Adequacy.Asked.fullReport())));
     }
 }

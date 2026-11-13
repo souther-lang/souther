@@ -3,7 +3,7 @@ package souther.compiler.reading;
 import org.junit.jupiter.api.Test;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
-import souther.compiler.diag.Severity;
+import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
@@ -60,14 +60,7 @@ class AWayThroughTwoPositionsIsOneTheRulesRelatingThemLeaveTest {
 
     /** What each way into either arm reads of the two comparisons, in the order they are met. */
     private static List<List<Boolean>> waysThrough(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                        .flatMap(List::stream)
-                        .filter(said -> said.diagnostic().severity() == Severity.ERROR)
-                        .map(said -> said.diagnostic().code() + " " + said.diagnostic().titleKey())
-                        .toList(),
-                "a model that did not compile answers every question with nothing");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("f");

@@ -92,9 +92,6 @@ class WhatABodyNeverTellsApartIsInNoCombinationTest {
     }
 
     private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
     }
 }

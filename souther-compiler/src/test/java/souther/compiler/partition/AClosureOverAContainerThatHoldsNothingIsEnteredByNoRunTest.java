@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -195,14 +196,11 @@ class AClosureOverAContainerThatHoldsNothingIsEnteredByNoRunTest {
     }
 
     private static Compilation compiled(String parameters, String body) {
-        Compilation compilation = Compilation.ofSource("""
+        return ACompiledModel.measured("""
                 module w1
                 behavior m : (%s) -> Bool
                 let m (%s) = %s
                 """.formatted(parameters, parameters.replaceAll(":\\s*[A-Za-z]+", ""), body),
-                "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+                Adequacy.Asked.fullReport());
     }
 }

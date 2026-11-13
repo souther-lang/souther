@@ -1,8 +1,10 @@
 package souther.lsp.analysis;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Abandonment;
+import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
 import souther.compiler.sites.MemberReceiver;
 import souther.compiler.sites.SemanticSnapshot;
@@ -31,6 +33,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WhatIsAskedOfAHalfWrittenLineIsAskedOfWhatItSaysNowTest {
 
     private static final String URI = "file:///m.sou";
+
+    /** What the line finished off with a name of the probe's is refused with: the field it names
+     *  is no field of what stands before the dot. */
+    private static final List<String> REFUSED_AS_FINISHED = List.of("E1321");
 
     private static final String HEAD = """
             module m
@@ -92,7 +98,7 @@ class WhatIsAskedOfAHalfWrittenLineIsAskedOfWhatItSaysNowTest {
         String head = """
                 module m
 
-                data Address = { city: Text }
+                data Address = { city: String }
                 data Amount = { units: Int }
                 data Customer = { address: Address, amount: Amount }
 
@@ -119,7 +125,9 @@ class WhatIsAskedOfAHalfWrittenLineIsAskedOfWhatItSaysNowTest {
      */
     private static List<String> fieldsAfterTheDot(SemanticProbe probe, String text) {
         Reading reading = reading(probe, text);
-        SemanticSnapshot snapshot = SemanticSnapshot.of(reading.compilation().db(), "m")
+        Compilation compilation = reading.compilation();
+        ACompiledModel.refusedWith(REFUSED_AS_FINISHED, compilation);
+        SemanticSnapshot snapshot = SemanticSnapshot.of(compilation.db(), "m")
                 .orElseThrow(() -> new AssertionError("the repaired source has a snapshot"));
         int cursor = text.lastIndexOf(".\n") + 1;
         // The reading's own layout, which is of the text it compiled and not of the buffer.
@@ -147,7 +155,9 @@ class WhatIsAskedOfAHalfWrittenLineIsAskedOfWhatItSaysNowTest {
 
     /** The `let`'s body, which every source here writes as one field taken off another. */
     private static Hir.FieldAccess accessOf(Reading reading) {
-        Hir.Module module = reading.compilation().db()
+        Compilation compilation = reading.compilation();
+        ACompiledModel.refusedWith(REFUSED_AS_FINISHED, compilation);
+        Hir.Module module = compilation.db()
                 .ask(new Names.Resolved("m")).value();
         assertNotNull(module, "the repaired source resolves");
         for (Hir.FnDef fn : module.fns()) {

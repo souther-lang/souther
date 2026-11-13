@@ -89,13 +89,9 @@ class ASumOfTheCountsOfListsMadeByFlatMapOfAnAttemptIsReadTest {
 
     private static String reportOf(String statements, String account, String contact,
                                    String both) {
-        Compilation compilation = Compilation.ofSource(TWO_BOOKS.formatted(statements)
+        Compilation compilation = ACompiledModel.measured(TWO_BOOKS.formatted(statements)
                 .replace("@ACCOUNT@", account).replace("@CONTACT@", contact)
-                .replace("@BOTH@", both), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model under test compiles");
+                .replace("@BOTH@", both), Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -233,9 +229,7 @@ class ASumOfTheCountsOfListsMadeByFlatMapOfAnAttemptIsReadTest {
      */
     @Test
     void theStringsAListOfPiecesHoldsSomethingForAreNotReportedAsDividingNothing() {
-        Compilation compilation = Compilation.ofSource(PLAIN_COUNT, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(PLAIN_COUNT, Adequacy.Asked.fullReport());
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(notRead(report).stream().anyMatch(line -> line.contains("fork@")), report);

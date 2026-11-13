@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -34,16 +35,14 @@ class ARunGetsPastWhatItWorksOutOnlyWhereItsOperatorsAnswerTest {
     private static final String BELOW_THE_GREATEST = "9223372036854775806";
 
     private static String report(String body) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module w1
                 behavior f : (xs: List<Int>, n: Int, a: Int, b: Int) -> Ok | No
                 let f (xs, n, a, b) = {
                 %s
                     Ok
                 }
-                """.formatted(body), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.formatted(body), Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }

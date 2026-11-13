@@ -4,8 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.Compilation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -39,10 +39,8 @@ class ASetOfEveryCaseOfASumIsSatisfiedByItsRowsTest {
 
     @Test
     void theFeeIsSatisfiedAndNothingKeepsItOpen() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        AdequacyReport report = AdequacyReport.of(compilation);
+        AdequacyReport report = AdequacyReport.of(
+                ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport()));
         String human = report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
 
         assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, report.adequacy(), human);

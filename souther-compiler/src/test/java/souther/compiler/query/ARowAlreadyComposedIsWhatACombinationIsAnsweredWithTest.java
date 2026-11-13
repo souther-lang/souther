@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.ClassDisposition;
 import souther.compiler.partition.FillResult;
 import souther.compiler.partition.GenerationAnswer;
@@ -130,9 +131,7 @@ class ARowAlreadyComposedIsWhatACombinationIsAnsweredWithTest {
 
     /** What the search made of this behavior, asked of the compilation that made it. */
     private static FillResult fill() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         Map<String, Adequacy.Filling> filled =
                 Adequacy.generatedOf(compilation.db(), "example.reuse");
         if (filled == null || filled.get("submit") == null) {

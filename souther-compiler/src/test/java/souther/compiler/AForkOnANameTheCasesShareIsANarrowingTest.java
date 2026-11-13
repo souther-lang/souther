@@ -273,22 +273,11 @@ class AForkOnANameTheCasesShareIsANarrowingTest {
     /** The model measured once for every question here: each asks of the one measurement, and
      *  none of them changes it. */
     private static Compilation measured() {
-        Compilation c = Measured.ONCE;
-        assertEquals(List.of(), c.errors().stream()
-                .map(e -> e.diagnostic().code() + " " + e.diagnostic().said()).toList(),
-                "the model is measured");
-        return c;
+        return Measured.ONCE;
     }
 
     private static final class Measured {
 
-        static final Compilation ONCE = measure();
-
-        private static Compilation measure() {
-            Compilation c = Compilation.ofSource(MODEL, "Main");
-            c.measure(Adequacy.Asked.fullReport());
-            c.answerEverything();
-            return c;
-        }
+        static final Compilation ONCE = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
     }
 }

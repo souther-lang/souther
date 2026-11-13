@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -375,9 +376,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
 
     /** Each item of the model's borders as {@code point:relation against}, in document order. */
     private static List<String> pointsAsked(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         JsonNode root = JsonMapper.builder().build()
                 .readTree(AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
         List<String> out = new ArrayList<>();
@@ -388,9 +387,7 @@ class ABorderSaysWhichOfItsTwoPointsALineIsTest {
     }
 
     private static String report(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.ElementBindings;
@@ -582,10 +583,8 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
                     %s
                 """).formatted(body.indent(4).strip());
         Compilation compilation = Compilation.ofSource(model, "Main");
+        ACompiledModel.compiles(compilation);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
-        // The errors of what was asked, which is the body checked: a model that does not check
-        // has no body to read, whatever it says.
-        assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + body);
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
         InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("demo")).value().get("f");

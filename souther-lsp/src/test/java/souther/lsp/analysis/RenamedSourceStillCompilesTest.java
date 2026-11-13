@@ -1,6 +1,7 @@
 package souther.lsp.analysis;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.lsp.protocol.Position;
@@ -98,7 +99,7 @@ class RenamedSourceStillCompilesTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(URI, source);
         List<String> out = new ArrayList<>();
-        Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).diagnostics()
+        ACompiledModel.compiles(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)).diagnostics()
                 .forEach((id, found) -> found.forEach(d -> out.add(d.toString())));
         return out;
     }

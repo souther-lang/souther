@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.test.ClosedWorldContract;
@@ -65,16 +66,16 @@ class AMeasurementIsNeverStrongerThanWhatItIsAssembledFromTest {
                 invariant value >= 1 && value <= 28
             data Res = { n: Int }
 
-            let over (a: Int, b: Days): Int = if a > b.value then a - b.value else 0
-
-            behavior late : (lent: Days, from: Int, to: Int) -> Res
+            behavior late : (lent: Days, code: String) -> Res
                 constructs Res
-            let late (lent, from, to) = Res { n = over(to - from, lent) }
+            let late (lent, code) =
+                if String.startsWith("JP", String.uppercase(code)) then Res { n = 0 }
+                else Res { n = lent.value }
 
             example late
-                | "one" : (14, 1, 2) -> Res { n = 0 }
-                | "lo" : (1, 1, 2) -> Res { n = 0 }
-                | "hi" : (28, 1, 2) -> Res { n = 0 }
+                | "one" : (Days(14), "JP") -> Res { n = 0 }
+                | "lo" : (Days(1), "US") -> Res { n = 1 }
+                | "hi" : (Days(28), "US") -> Res { n = 28 }
             """;
 
     /**
@@ -209,7 +210,7 @@ class AMeasurementIsNeverStrongerThanWhatItIsAssembledFromTest {
         List<String> sources = ConformanceCorpus.load("catalog").sources();
         Compilation compilation = Compilation.ofSources(sources, ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
@@ -218,9 +219,6 @@ class AMeasurementIsNeverStrongerThanWhatItIsAssembledFromTest {
     }
 
     private static AdequacyReport reportOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation);
+        return AdequacyReport.of(ACompiledModel.measured(source, Adequacy.Asked.fullReport()));
     }
 }

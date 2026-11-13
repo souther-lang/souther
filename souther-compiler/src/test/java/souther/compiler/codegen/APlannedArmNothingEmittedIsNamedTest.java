@@ -3,6 +3,7 @@ package souther.compiler.codegen;
 import souther.compiler.diag.QuotedFrom;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.DerivedSymbols;
 import souther.compiler.check.NewtypeInners;
 import souther.compiler.coverage.CoverageSites;
@@ -54,7 +55,8 @@ class APlannedArmNothingEmittedIsNamedTest {
             }
             """;
 
-    private final Compilation compilation = Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY);
+    private final Compilation compilation =
+            ACompiledModel.compiles(Compilation.ofSources(List.of(MODEL), ModulePath.EMPTY));
 
     /** The numbering of this module's bodies, which is the one a generation of them would be given. */
     private CoverageSites.Plan planned() {

@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.check.RuleKey;
@@ -390,15 +391,11 @@ class AnArmOnACaseThatIsASumNarrowsToItsLeavesTest {
      * of them changes one.
      */
     private static Compilation measured(String model) {
-        return MEASURED.computeIfAbsent(model, written -> {
+        return ACompiledModel.compiles(MEASURED.computeIfAbsent(model, written -> {
             Compilation c = Compilation.ofSource(written, "Main");
             c.measure(Adequacy.Asked.fullReport());
-            c.answerEverything();
-            assertEquals(List.of(), c.errors().stream()
-                    .map(e -> e.diagnostic().code() + " " + e.diagnostic().said() + " "
-                            + e.diagnostic().literalMessage()).toList(), "the model is measured");
             return c;
-        });
+        }));
     }
 
     @AfterAll

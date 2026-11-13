@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.ReadingPolicy;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.query.Adequacy;
@@ -119,7 +120,7 @@ class ARuleHeldBesideAnUnreadOneStillDrawsItsLinesTest {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.db().set(new Front.Reading(), policy);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         for (String module : compilation.modules()) {
             Map<String, PartitionEvidence> coverage =
                     compilation.db().ask(new Adequacy.Coverage(module)).value();

@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.WhatStillHoldsAPlaceUnderAFindingIsReadOnTwoAxesTest.Because;
@@ -215,8 +216,8 @@ class WhatStillHoldsAPlaceUnderAFindingIsWhatTheModelsShowTest {
         for (int i = 0; i < files.size(); i++) {
             byId.put(files.get(i), sources.get(i));
         }
-        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        c.answerEverything();
+        Compilation c = ACompiledModel.compiles(
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
         c.modules().forEach(module -> c.db().ask(new Adequacy.Findings(module)));
         return c.db();
     }

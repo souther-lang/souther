@@ -1800,7 +1800,7 @@ class EverySchemaWordIsAccountedForTest {
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.withJvmExampleDeadlines(
                 DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go")));
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1923"), compilation);
 
         JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
                 .json(souther.compiler.diag.SourceRendering.namedByIdentity(compilation.texts())));

@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.partition.FixtureTemplate;
@@ -157,7 +158,7 @@ class ARowOfACalleeIsLiftedThroughAFieldAndACaseOfTheCallersInputTest {
             let inspect (all, key, n) = Map.size(all) == n
             example inspect
                 | ([("a", 1), ("b", 2)], "a", 1) -> false
-                | ([("c", 1), ("d", 2)], "c", 2) -> false
+                | ([("c", 1), ("d", 2)], "c", 2) -> true
             behavior f : (m: Map<String, Int>) -> Bool
             let f (m) = Map.size(Map.filterEntries((k, v) -> inspect(m, k, v), m)) == 0
             """;
@@ -365,9 +366,7 @@ class ARowOfACalleeIsLiftedThroughAFieldAndACaseOfTheCallersInputTest {
 
     /** How many times the decoder is asked to build a value while {@code f} is seeded. */
     private static int decoderAskedFor(String source, int limit) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         Db db = compilation.db();
         var behavior = Adequacy.specOf(db.ask(new Shapes.CheckSurface("repro.lift")).value(), "f");
         InputReading input = Adequacy.inputReadingOf(db, "repro.lift", behavior);
@@ -386,9 +385,7 @@ class ARowOfACalleeIsLiftedThroughAFieldAndACaseOfTheCallersInputTest {
 
     /** The inputs, written, of each row {@code f} is offered from the rows of its callees. */
     private static List<String> seededInputs(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         Db db = compilation.db();
         var surface = db.ask(new Shapes.CheckSurface("repro.lift")).value();
         var behavior = Adequacy.specOf(surface, "f");

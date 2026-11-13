@@ -53,9 +53,7 @@ class AnArmOfALibraryForkIsNotTheAuthorsPredicateTest {
             """;
 
     private static Adequacy.BranchEvidence armsOfTwice() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         Map<String, Adequacy.BranchEvidence> arms =
                 compilation.db().ask(new Adequacy.BranchCoverage(MODULE)).value();
         assertNotNull(arms, "the model under test compiles");
@@ -98,7 +96,7 @@ class AnArmOfALibraryForkIsNotTheAuthorsPredicateTest {
      */
     @Test
     void aHelpersOwnForkIsOneArmHoweverManyTimesItIsSplicedIn() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module example.people
 
                 data Age = Int
@@ -115,9 +113,7 @@ class AnArmOfALibraryForkIsNotTheAuthorsPredicateTest {
 
                 example both
                     | "both grown" : (Person { age = Age(20) }, Person { age = Age(30) }) -> Yes
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
         Adequacy.BranchEvidence both = compilation.db()
                 .ask(new Adequacy.BranchCoverage(MODULE)).value().get("both");
         assertNotNull(both, "the model under test compiles");

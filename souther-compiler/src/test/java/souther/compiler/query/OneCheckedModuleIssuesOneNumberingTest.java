@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.coverage.SiteNumbering;
 import souther.compiler.meta.ModulePath;
@@ -82,7 +83,7 @@ class OneCheckedModuleIssuesOneNumberingTest {
      */
     @Test
     void aModuleWhoseBodiesWereNotCheckedHasNoNumbering() {
-        Compilation compilation = compiled(UNCHECKABLE);
+        Compilation compilation = uncheckable();
         String module = compilation.modules().get(0);
 
         assertTrue(compilation.db().ask(new Bodies.Checked(module)).value() == null,
@@ -94,9 +95,12 @@ class OneCheckedModuleIssuesOneNumberingTest {
     }
 
     private static Compilation compiled(String source) {
-        Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(Compilation.ofSources(List.of(source), ModulePath.EMPTY));
+    }
+
+    private static Compilation uncheckable() {
+        Compilation compilation = Compilation.ofSources(List.of(UNCHECKABLE), ModulePath.EMPTY);
+        return ACompiledModel.refusedWith(List.of("E1023"), compilation);
     }
 
     private static Bodies.Elaborated checkedOf(Compilation compilation) {

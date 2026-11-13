@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Citation;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
@@ -124,9 +125,6 @@ class ARunThroughAnAttemptIsPlacedAtTheRuleOfTheArmItTookTest {
     }
 
     private static Compilation compiled(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(model, Adequacy.Asked.fullReport());
     }
 }

@@ -914,7 +914,7 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     }
 
     private static Drawn drawn(String model) {
-        Compilation compilation = compiled(model);
+        Compilation compilation = ACompiledModel.compiles(compiled(model));
         String report = reportOf(compilation);
         return new Drawn(report, pointsOf(report), rowsOf(compilation));
     }
@@ -954,7 +954,8 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     }
 
     private static String report(String model) {
-        return reportOf(compiled(model));
+        Compilation compilation = ACompiledModel.compiles(compiled(model));
+        return reportOf(compilation);
     }
 
     /**
@@ -966,10 +967,7 @@ class AFoldThatKeepsAnEndIsReadAsEveryOrSomeElementTest {
     private static String readingReport(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(new Adequacy.Asked(Adequacy.Level.OFF, false));
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code().toString()).toList(),
-                () -> "the source compiles: " + model);
+        ACompiledModel.compiles(compilation);
         return reportOf(compilation);
     }
 

@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
 import souther.compiler.query.Bodies;
@@ -250,7 +251,7 @@ class ARunIsReadOnlyWhereBothHalvesAreProvedTest {
     }
 
     private static Bodies.CheckedBody body(String behavior) {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         return compilation.db().ask(new Bodies.CheckedBehavior(
                 compilation.modules().get(0), behavior)).value();
     }

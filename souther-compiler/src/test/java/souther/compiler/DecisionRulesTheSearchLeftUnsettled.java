@@ -11,8 +11,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-
 /**
  * The rules of a module's decisions that no row took and the search for one settled neither way.
  *
@@ -50,10 +48,7 @@ final class DecisionRulesTheSearchLeftUnsettled {
                                                 String module) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(e -> e.diagnostic().code().toString()).toList(),
-                "the model under test compiles");
+        ACompiledModel.compiles(compilation);
         List<DecisionRule> unsettled = new ArrayList<>();
         Map<String, DecisionEvidence> decisions =
                 compilation.db().ask(new Adequacy.Decides(module)).value();

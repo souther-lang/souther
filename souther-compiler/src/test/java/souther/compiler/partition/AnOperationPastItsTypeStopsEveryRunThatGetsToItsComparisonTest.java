@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
@@ -468,11 +469,8 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     }
 
     private static Compilation measured(String model) {
-        return MEASURED.computeIfAbsent(model, source -> {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            return compilation;
-        });
+        Compilation compilation = MEASURED.computeIfAbsent(model,
+                source -> ACompiledModel.measured(source, Adequacy.Asked.fullReport()));
+        return ACompiledModel.compiles(compilation);
     }
 }

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.Prepared;
 import souther.compiler.check.RuleReadingSource;
@@ -60,7 +61,7 @@ class ARewriteSearchedWhereNothingRunsSaysNothingRanTest {
 
     /** What looking for a row the body answering zero always is told apart on came to. */
     private static ReplacementDisposition searchedWith(Generator.Trial trial) {
-        Compilation compilation = Compilation.ofSource(DOUBLED, "Main");
+        Compilation compilation = ACompiledModel.answered(DOUBLED);
         String module = compilation.modules().getFirst();
         Prepared prepared = compilation.db().ask(new Shapes.Prepared(module)).value();
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

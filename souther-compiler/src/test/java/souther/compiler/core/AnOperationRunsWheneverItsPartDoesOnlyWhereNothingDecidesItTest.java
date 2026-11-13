@@ -3,6 +3,7 @@ package souther.compiler.core;
 import org.junit.jupiter.api.Test;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -71,7 +72,7 @@ class AnOperationRunsWheneverItsPartDoesOnlyWhereNothingDecidesItTest {
     }
 
     private static Core bodyOfTheModel() {
-        Compilation compilation = Compilation.ofSource(SOURCE, "Main");
+        Compilation compilation = ACompiledModel.answered(SOURCE);
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(compilation.modules().get(0))).value();
         assertNotNull(checked, "the model under test compiles");

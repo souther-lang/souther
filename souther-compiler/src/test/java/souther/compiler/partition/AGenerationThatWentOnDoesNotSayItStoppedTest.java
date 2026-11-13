@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Lookup;
 import souther.compiler.carrier.Membership;
@@ -65,13 +66,7 @@ class AGenerationThatWentOnDoesNotSayItStoppedTest {
 
     /** The model these read, compiled once. Held rather than compiled per question, because the
      *  block below asks it where the rules it names are written. */
-    private static final Compilation COMPILED = compiled();
-
-    private static Compilation compiled() {
-        Compilation compilation = Compilation.ofSource(TRIP, "Main");
-        compilation.answerEverything();
-        return compilation;
-    }
+    private static final Compilation COMPILED = ACompiledModel.answered(TRIP);
 
     private static MeasuredInput subject() {
         Compilation compilation = COMPILED;

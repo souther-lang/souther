@@ -2,6 +2,7 @@ package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
@@ -103,10 +104,9 @@ class AWayAProofLeftUndecidedIsSaidWithItsFigureTest {
     private static Undecided undecidedWay() {
         Compilation bodies = Compilation.ofSource(BODIES, "Main");
         bodies.measure(Adequacy.Asked.fullReport());
-        bodies.answerEverything();
-        assertEquals(List.of(), bodies.errors(), "the model the body is read off compiles");
+        ACompiledModel.compiles(bodies);
         AdequacyReport own = AdequacyReport.of(bodies);
-        DecisionReading read = Allowances.DECLARED
+        DecisionReading read =Allowances.DECLARED
                 .with(CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE, SPENT_AT)
                 .over(() -> readUnderTheOtherRules(bodies));
         assertEquals(1, read.undecided().size(), () -> "the way into the constructions: "
@@ -137,9 +137,10 @@ class AWayAProofLeftUndecidedIsSaidWithItsFigureTest {
 
     /** The reading of `two` under the other rules, held to {@code allowance} conditions taken in. */
     private static DecisionReading readAt(Compilation bodies, int allowance) {
+        Compilation held = ACompiledModel.compiles(bodies);
         return Allowances.DECLARED
                 .with(CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE, allowance)
-                .over(() -> readUnderTheOtherRules(bodies));
+                .over(() -> readUnderTheOtherRules(held));
     }
 
     /**
@@ -158,8 +159,7 @@ class AWayAProofLeftUndecidedIsSaidWithItsFigureTest {
     void aProofCutOffAtItsAllowanceIsUndecidedAndNeverAProvenExclusion() {
         Compilation bodies = Compilation.ofSource(BODIES, "Main");
         bodies.measure(Adequacy.Asked.fullReport());
-        bodies.answerEverything();
-        assertEquals(List.of(), bodies.errors(), "the model the body is read off compiles");
+        ACompiledModel.compiles(bodies);
         AdequacyReport own = AdequacyReport.of(bodies);
         DecisionReading unbounded = readUnderTheOtherRules(bodies);
         assertEquals(1, unbounded.everyRunStops().size(), () -> "the proof in full: "
@@ -299,7 +299,7 @@ class AWayAProofLeftUndecidedIsSaidWithItsFigureTest {
     }
 
     private static DecisionReading readUnderTheOtherRules(Compilation bodies) {
-        RuleReadingSource rules = RuleReadings.of(Compilation.ofSource(RULES, "Main"), "demo");
+        RuleReadingSource rules = RuleReadings.of(ACompiledModel.answered(RULES), "demo");
         Bodies.Elaborated checked = bodies.db().ask(new Bodies.Checked("demo")).value();
         Map<String, InputDomain> inputs = bodies.db().ask(new Adequacy.Inputs("demo")).value();
         AnalysisBody analysis = checked.analysisBodies().get("two");

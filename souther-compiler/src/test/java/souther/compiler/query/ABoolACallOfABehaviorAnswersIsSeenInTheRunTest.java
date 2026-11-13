@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
@@ -102,9 +103,7 @@ class ABoolACallOfABehaviorAnswersIsSeenInTheRunTest {
 
     @Test
     void theModelThatDelegatesItsAnswerEndsSatisfiedWithItsThreeRows() {
-        Compilation compilation = Compilation.ofSource(WON, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(WON, Adequacy.Asked.fullReport());
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
@@ -172,9 +171,7 @@ class ABoolACallOfABehaviorAnswersIsSeenInTheRunTest {
     }
 
     private static void assertMeasuresWithoutError(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertEquals(List.of(), compilation.errors().stream()
@@ -232,9 +229,7 @@ class ABoolACallOfABehaviorAnswersIsSeenInTheRunTest {
     }
 
     private static DecisionEvidence evidenceOf(String model, String behavior) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return compilation.db().ask(new Adequacy.Decides(compilation.modules().get(0))).value()
                 .get(behavior);
     }

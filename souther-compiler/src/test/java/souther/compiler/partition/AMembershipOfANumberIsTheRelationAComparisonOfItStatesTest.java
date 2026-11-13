@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -274,12 +275,8 @@ class AMembershipOfANumberIsTheRelationAComparisonOfItStatesTest {
     }
 
     private static Compilation measured(String model) {
-        return MEASURED.computeIfAbsent(model, source -> {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
-            assertEquals(List.of(), compilation.errors(), source);
-            return compilation;
-        });
+        Compilation shared = MEASURED.computeIfAbsent(model,
+                source -> ACompiledModel.measured(source, Adequacy.Asked.fullReport()));
+        return ACompiledModel.compiles(shared);
     }
 }

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -67,7 +68,7 @@ class TheWaysOfOneStatementAreWalkedOnceForTheInputTest {
         long before = DemandReading.walksMade();
         Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         assertTrue(compilation.diagnostics().values().stream().allMatch(List::isEmpty),
                 () -> "the model under test compiles clean: " + compilation.diagnostics());
         Adequacy.offeredFor(compilation.db(),

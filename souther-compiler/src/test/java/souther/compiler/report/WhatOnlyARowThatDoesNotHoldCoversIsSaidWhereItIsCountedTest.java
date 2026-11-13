@@ -3,6 +3,7 @@ package souther.compiler.report;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -12,9 +13,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -71,7 +70,7 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
      */
     @Test
     void whatAnotherRowAlsoCoversIsNotMarked() {
-        String human = human(FAILING);
+        String human = human(ONE_ROW_DOES_NOT_HOLD, FAILING);
         assertEquals(List.of("      ~ only a row that does not hold is at the OFF point"
                         + " (comparison@5:28): label 24 is warm (9:7)"),
                 marked(human), human);
@@ -86,7 +85,7 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
      */
     @Test
     void whatOnlyTheRowThatDoesNotHoldReachesIsMarkedInEveryMeasure() {
-        String human = human(ONLY);
+        String human = human(ONE_ROW_DOES_NOT_HOLD, ONLY);
         assertEquals(List.of(
                         "      ~ only a row that does not hold is in `t: 24 <= x` at t:"
                                 + " label 24 is warm (9:7)",
@@ -109,7 +108,7 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
      */
     @Test
     void theReportEndsOnTheRowsThatDoNotHold() {
-        String human = human(FAILING);
+        String human = human(ONE_ROW_DOES_NOT_HOLD, FAILING);
         assertTrue(human.endsWith("""
                 adequacy: satisfied
                 1 row does not hold:
@@ -129,10 +128,11 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
     void whereARowStoppedIsSaidWithIt() {
         String model = HOLDING.replace("(Celsius(24)) -> Warm", "(Celsius(24)) -> Hot")
                 .replace("data Celsius = Int\n", "data Celsius = Int\ndata Hot\n");
-        String human = human(model);
+        List<String> refused = List.of("E1904");
+        String human = human(refused, model);
         assertTrue(human.contains("label 24 is warm (0:10:7): what it expects could not be built\n"),
                 human);
-        JsonNode label = behavior(json(model), "label");
+        JsonNode label = behavior(json(refused, model), "label");
         assertEquals("expected_fixture",
                 label.get("rowsThatDoNotHold").get(0).get("failedAt").asString(), label::toString);
     }
@@ -140,12 +140,12 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
     /** And a report whose rows all hold says nothing of the kind. */
     @Test
     void rowsThatAllHoldAddNothing() {
-        String human = human(HOLDING);
+        String human = human(HOLDS, HOLDING);
         assertEquals(List.of(), marked(human), human);
         assertFalse(human.contains("does not hold"), human);
         assertTrue(human.endsWith("adequacy: satisfied\n"), human);
 
-        JsonNode root = json(HOLDING);
+        JsonNode root = json(HOLDS, HOLDING);
         assertEquals(0, behavior(root, "label").get("rowsThatDoNotHold").size(), root::toString);
         assertEquals(List.of(), onlyWitnessedBy(root));
     }
@@ -153,7 +153,8 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
     /** Two rows that do not hold through one arm are both named, in the order they were read. */
     @Test
     void everyRowThatDoesNotHoldIsNamed() {
-        String human = human(ONLY.replace("    | \"10 is cold\" : (Celsius(10)) -> Cold\n",
+        String human = human(List.of("E1905", "E1905"),
+                ONLY.replace("    | \"10 is cold\" : (Celsius(10)) -> Cold\n",
                 "    | \"25 is warm\" : (Celsius(25)) -> Cold\n"));
         assertTrue(human.contains("      ~ only rows that do not hold go through `else` (5:17):"
                         + " label 24 is warm (9:7), label 25 is warm (10:7)\n"),
@@ -169,7 +170,8 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
      */
     @Test
     void aRowWaitingForItsAnswerIsAnotherRow() {
-        String human = human(FAILING.replace("    | \"10 is cold\" : (Celsius(10)) -> Cold\n",
+        String human = human(ONE_ROW_DOES_NOT_HOLD,
+                FAILING.replace("    | \"10 is cold\" : (Celsius(10)) -> Cold\n",
                 "    | \"24 again\" : (Celsius(24)) -> <?>\n"));
         assertEquals(List.of(), marked(human), human);
         assertTrue(human.contains("1 row does not hold:"),
@@ -184,7 +186,7 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
      */
     @Test
     void theDocumentNamesTheSameRowsAtTheSameObligations() {
-        JsonNode root = json(ONLY);
+        JsonNode root = json(ONE_ROW_DOES_NOT_HOLD, ONLY);
         DocumentShape.assertShapedLikeTheSchema(root);
         JsonNode label = behavior(root, "label");
         JsonNode failing = label.get("rowsThatDoNotHold");
@@ -232,20 +234,20 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
      */
     @Test
     void aCombinationOfClassesOnlyARowThatDoesNotHoldIsInIsMarked() {
-        String human = human(PAIRS);
+        String human = human(ONE_ROW_DOES_NOT_HOLD, PAIRS);
         assertTrue(human.contains("      ~ only a row that does not hold is in `Metered` at"
                 + " charge/plan with `usage: 100 < x` at charge/usage: charge metered, past 100"
                 + " (21:7)\n"), human);
-        JsonNode between = behavior(json(PAIRS), "charge").get("partition").get("pairs")
+        JsonNode between = behavior(json(ONE_ROW_DOES_NOT_HOLD, PAIRS), "charge").get("partition").get("pairs")
                 .get("between").get(0);
         assertEquals("usage: 100 < x", between.get("coveredOnlyBy").get(0).get("other").asString(),
                 between::toString);
 
         String withAnother = PAIRS + "    | \"metered, at 200\" : (Metered, Usage(200))"
                 + " -> Fee(800)\n";
-        assertTrue(marked(human(withAnother)).stream().noneMatch(line -> line.contains(" with ")),
-                withAnother);
-        assertFalse(behavior(json(withAnother), "charge").get("partition").get("pairs")
+        assertTrue(marked(human(ONE_ROW_DOES_NOT_HOLD, withAnother)).stream()
+                .noneMatch(line -> line.contains(" with ")), withAnother);
+        assertFalse(behavior(json(ONE_ROW_DOES_NOT_HOLD, withAnother), "charge").get("partition").get("pairs")
                 .get("between").get(0).has("coveredOnlyBy"));
     }
 
@@ -291,16 +293,16 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
      */
     @Test
     void aCombinationOfTheDecisionsOnlyARowThatDoesNotHoldMakesIsMarked() {
-        String human = human(MEETINGS);
+        String human = human(ONE_ROW_DOES_NOT_HOLD, MEETINGS);
         assertTrue(human.contains("      ~ only a row that does not hold makes this combination of"
                 + " the decisions: shippingFee #4 in 0 (32:7)\n"), human);
-        assertEquals(1, onlyWitnessedByIn(behavior(json(MEETINGS), "shippingFee")
+        assertEquals(1, onlyWitnessedByIn(behavior(json(ONE_ROW_DOES_NOT_HOLD, MEETINGS), "shippingFee")
                 .get("interaction")), MEETINGS);
 
         String withAnother = MEETINGS + "    | (Total(6000), Standard, Express) -> Fee(500)\n";
-        assertTrue(marked(human(withAnother)).stream()
+        assertTrue(marked(human(ONE_ROW_DOES_NOT_HOLD, withAnother)).stream()
                 .noneMatch(line -> line.contains("combination of the decisions")), withAnother);
-        assertEquals(0, onlyWitnessedByIn(behavior(json(withAnother), "shippingFee")
+        assertEquals(0, onlyWitnessedByIn(behavior(json(ONE_ROW_DOES_NOT_HOLD, withAnother), "shippingFee")
                 .get("interaction")), withAnother);
     }
 
@@ -345,7 +347,7 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
      */
     @Test
     void anArmOnlyAnotherBehaviorsRowThatDoesNotHoldGoesThroughIsMarked() {
-        String narrowed = human(THROUGH, "classify");
+        String narrowed = human(ONE_ROW_DOES_NOT_HOLD, THROUGH, "classify");
         assertTrue(narrowed.contains("      ~ only a row that does not hold goes through `else`"
                 + " (14:5): submit dear (26:7)\n"), narrowed);
         assertFalse(narrowed.contains("row does not hold:"), narrowed);
@@ -356,7 +358,7 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
                 "    | \"cheap\" : (Amount(50)) -> Submitted { cost = Amount(50) }\n",
                 "    | \"cheap\" : (Amount(50)) -> Submitted { cost = Amount(50) }\n"
                         + "    | \"dear\" : (Amount(200)) -> Waiting { cost = Amount(200) }\n");
-        assertTrue(marked(human(withAnother, "classify")).stream()
+        assertTrue(marked(human(ONE_ROW_DOES_NOT_HOLD, withAnother, "classify")).stream()
                 .noneMatch(line -> line.contains("goes through `else`")), withAnother);
     }
 
@@ -404,11 +406,11 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
      */
     @Test
     void anArmReachedAtTwoPlacesIsCoveredByARowThroughEither() {
-        String human = human(TWICE);
+        String human = human(ONE_ROW_DOES_NOT_HOLD, TWICE);
         assertTrue(human.contains("~ only a row that does not hold goes through `case Off`"),
                 human);
         String withAnother = TWICE + "    | \"safe off\"  : (Safe, Off)  -> X\n";
-        assertTrue(marked(human(withAnother)).stream()
+        assertTrue(marked(human(ONE_ROW_DOES_NOT_HOLD, withAnother)).stream()
                 .noneMatch(line -> line.contains("goes through `case Off`")), withAnother);
     }
 
@@ -450,7 +452,7 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
      */
     @Test
     void aReportNarrowedToAnotherBehaviorStillCountsWhatRestsOnTheRow() {
-        String human = human(CARRIED, "touch");
+        String human = human(ONE_ROW_DOES_NOT_HOLD, CARRIED, "touch");
         assertFalse(human.contains("row does not hold:"), human);
         assertTrue(human.contains("~ only a row that does not hold is at the ON point"),
                 human);
@@ -468,7 +470,8 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
      */
     @Test
     void aRowAtTheSamePointThroughAnotherReadingIsAnotherRow() {
-        String human = human(CARRIED.replace("UserId(\"abcd\")", "UserId(\"y\")"));
+        String human = human(ONE_ROW_DOES_NOT_HOLD,
+                CARRIED.replace("UserId(\"abcd\")", "UserId(\"y\")"));
         // The one rule of `schedule` its only row takes, and not the point.
         assertEquals(List.of("      ~ only a row that does not hold takes a decision rule:"
                 + " schedule at the boundary (19:7)"), marked(human), human);
@@ -477,37 +480,42 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
 
     /** Each model measured once for the class: most are read both as the page and as the document,
      *  and some by more than one question, none of which changes what was answered. */
-    private static final Map<String, Compilation> MEASURED = new HashMap<>();
+    private static final ACompiledModel.Shared SHARED = new ACompiledModel.Shared();
+
+    /** What a model with no row that fails is refused with: nothing. */
+    private static final List<String> HOLDS = List.of();
+
+    /** What a model with one row that does not hold is refused with. */
+    private static final List<String> ONE_ROW_DOES_NOT_HOLD = List.of("E1905");
 
     /** Given back when the class is done, since a fork keeps its JVM for the classes after it. */
     @AfterAll
-    static synchronized void released() {
-        MEASURED.clear();
+    static void released() {
+        SHARED.release();
     }
 
-    /** {@code model} compiled, with every measure asked for and its rows run. */
-    private static synchronized Compilation measured(String model) {
-        return MEASURED.computeIfAbsent(model,
-                WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest::measuredAfresh);
+    /**
+     * {@code model} compiled, with every measure asked for and its rows run, and refused with
+     * {@code refused}: a row that does not hold is an error of the model it is written in.
+     */
+    private static Compilation measured(List<String> refused, String model) {
+        return SHARED.refusedWith(refused, model, () -> {
+            Compilation made = Compilation.ofSource(model, "Main");
+            made.measure(Adequacy.Asked.fullReport());
+            return made;
+        });
     }
 
-    private static Compilation measuredAfresh(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
-    }
-
-    private static String human(String model) {
-        return human(model, null);
+    private static String human(List<String> refused, String model) {
+        return human(refused, model, null);
     }
 
     /**
      * The page, narrowed to {@code behavior} where one is named, and held to its own closing line:
      * the number of lines it says it marked `~` is the number it marked.
      */
-    private static String human(String model, String behavior) {
-        Compilation compilation = measured(model);
+    private static String human(List<String> refused, String model, String behavior) {
+        Compilation compilation = measured(refused, model);
         AdequacyReport report = AdequacyReport.of(compilation);
         String human = (behavior == null ? report : report.only(null, behavior))
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
@@ -520,8 +528,8 @@ class WhatOnlyARowThatDoesNotHoldCoversIsSaidWhereItIsCountedTest {
     private static final Pattern LEGEND = Pattern.compile(
             "(\\d+) obligations? counted as met (?:is|are) covered only by rows that do not hold");
 
-    private static JsonNode json(String model) {
-        Compilation compilation = measured(model);
+    private static JsonNode json(List<String> refused, String model) {
+        Compilation compilation = measured(refused, model);
         return JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts())));
     }

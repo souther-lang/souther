@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.PointRole;
 
 import java.util.List;
@@ -100,9 +101,7 @@ class ADeclarationThatCannotMoveACutIsNotNamedAtItTest {
 
     /** Who a report says owes the row at one line. */
     private static String ownersAtTheLine(String source, String module, String said) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         Adequacy.DeclaredBoundaries account =
                 compilation.db().ask(new Adequacy.DeclaredBorders(module)).value();
         assertNotNull(account, "the model under test compiles");

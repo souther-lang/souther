@@ -114,8 +114,7 @@ class ARunStoppedAtAConstructionSaysTheModuleItIsWrittenInTest {
     private static Compilation compiled(String... sources) {
         Compilation compilation = Compilation.ofSources(List.of(sources), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        assertEquals(List.of(), compilation.errors(), "the model under test compiles");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     /** What the document says of a run stopped at lib's construction written in {@code lib}. */

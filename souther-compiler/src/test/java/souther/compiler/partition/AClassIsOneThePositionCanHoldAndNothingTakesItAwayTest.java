@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
@@ -53,9 +54,19 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
 
     /** The same, over several modules, reading the behavior out of the {@code nth} of them. */
     private static Read of(List<String> sources, String behavior, int nth) {
-        Compilation compilation = Compilation.ofSources(sources,
+        return of(ACompiledModel.compiles(Compilation.ofSources(sources,
+                souther.compiler.meta.ModulePath.EMPTY)), behavior, nth);
+    }
+
+    /** The same, of a model that is refused with {@code codes} and still read. */
+    private static Read ofWhatIsRefused(String source, String behavior, List<String> codes) {
+        Compilation compilation = Compilation.ofSources(List.of(source),
                 souther.compiler.meta.ModulePath.EMPTY);
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(codes, compilation);
+        return of(compilation, behavior, 0);
+    }
+
+    private static Read of(Compilation compilation, String behavior, int nth) {
         String module = compilation.modules().get(nth);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
@@ -65,7 +76,10 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
 
     /** The classes of the one position, off the declarations alone. */
     private static List<String> declared(String source, String behavior) {
-        Read read = of(source, behavior);
+        return declaredOf(of(source, behavior));
+    }
+
+    private static List<String> declaredOf(Read read) {
         RuleReadingContext reading = RuleReadingContext.unshared(read.rules(),
                 ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
         return classesOf(Partitions.of(read.behavior(), InputDomain.of(read.sig(), reading,
@@ -81,12 +95,13 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
     /** Every axis of the behavior, with what its own body draws taken in. */
     private static Partitions.Partitioning drawnByTheBody(String source, String behavior) {
         Read read = of(source, behavior);
+        Compilation compilation = ACompiledModel.compiles(read.compilation());
         Bodies.Elaborated checked =
-                read.compilation().db().ask(new Bodies.Checked(read.module())).value();
+                compilation.db().ask(new Bodies.Checked(read.module())).value();
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get(behavior);
         assertNotNull(body, "the behavior under test has a body");
-        InputDomain inputs = read.compilation().db()
+        InputDomain inputs = compilation.db()
                 .ask(new souther.compiler.query.Adequacy.Inputs(read.module())).value()
                 .get(behavior);
         GuardThresholds.Guards guards = ThresholdFixtures.guardsOf(behavior,
@@ -216,7 +231,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
      */
     @Test
     void aPositionThatCanHoldNoneOfItsClassesIsNotOneDividedNoWay() {
-        assertEquals(List.of("Prospecting", "Qualified", "Won"), declared("""
+        assertEquals(List.of("Prospecting", "Qualified", "Won"), declaredOf(ofWhatIsRefused("""
                 module g
 
                 data Prospecting
@@ -230,7 +245,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                 data Accepted = { at: String }
 
                 behavior classify : (s: StageI) -> Accepted
-                """, "classify"));
+                """, "classify", List.of("E1013"))));
     }
 
     /**
@@ -420,15 +435,16 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
     /** The same partitioning, with what the behavior's body draws taken in. */
     private static Partitions.Partitioning withThresholdsOf(Read read,
                                                             Partitions.Partitioning base) {
+        Compilation compilation = ACompiledModel.compiles(read.compilation());
         Bodies.Elaborated checked =
-                read.compilation().db().ask(new Bodies.Checked(read.module())).value();
+                compilation.db().ask(new Bodies.Checked(read.module())).value();
         assertNotNull(checked, "the model under test compiles");
         Core body = checked.behaviorBodies().get(read.behavior());
         assertNotNull(body, "the behavior under test has a body");
         GuardThresholds.Guards guards = ThresholdFixtures.guardsOf(read.behavior(),
                 checked.analysisBodies().get(read.behavior()), body,
                 checked.plan(),
-                read.compilation().db()
+                compilation.db()
                         .ask(new souther.compiler.query.Adequacy.Inputs(read.module())).value()
                         .get(read.behavior()),
                 read.rules());
@@ -485,7 +501,7 @@ class AClassIsOneThePositionCanHoldAndNothingTakesItAwayTest {
                     if s.value < Qualified then Accepted { at = "x" }
                     else Refused { at = "y" }
                 """, "Main");
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1013"), compilation);
 
         assertEquals(List.of("E1013"), compilation.diagnostics().values().stream()
                         .flatMap(List::stream)

@@ -84,7 +84,7 @@ class NoEntryOfAWeaklyKeyedTableHoldsItsOwnKeyTest {
                         }
                         """, "Main");
                 compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
-                compilation.answerEverything();
+                ACompiledModel.compiles(compilation);
                 AdequacyReport.of(compilation);
                 KEPT.add(compilation);
             },

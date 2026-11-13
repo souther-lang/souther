@@ -36,7 +36,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
     /** The classes of each position the model divides, by the path of the position. */
     private static Map<String, List<String>> classesOf(String first, String second,
                                                        String body) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module example.equal
 
                 data L = String
@@ -48,9 +48,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                 behavior f : (a: L, b: M) -> Bool
 
                 let f (a, b) = %s
-                """.formatted(first, second, body), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.formatted(first, second, body), Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         assertNotNull(all, "the model under test compiles");
@@ -61,7 +59,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
 
     /** The classes of {@code a} and {@code b} of {@code f} over the two and a number {@code n}. */
     private static Map<String, List<String>> classesOfTheStringsBehind(String guard) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module example.equal
 
                 data L = String
@@ -76,9 +74,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                     %s
                     a.value == b.value
                 }
-                """.formatted(LETTERS, LETTERS_AND_DIGITS, guard), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.formatted(LETTERS, LETTERS_AND_DIGITS, guard), Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         assertNotNull(all, "the model under test compiles");
@@ -91,7 +87,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
 
     /** The places of {@code f} whose equality is not shown to reach every value of them. */
     private static List<String> notShownToReachEveryValue(String lets) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module example.equal
 
                 data L = String
@@ -107,9 +103,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                 behavior f : (a: L, rows: List<Row>) -> List<Row>
 
                 %s
-                """.formatted(LETTERS, lets), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.formatted(LETTERS, lets), Adequacy.Asked.fullReport());
         PartitionEvidence evidence = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value().get("f");
         assertNotNull(evidence, "the model under test compiles");
@@ -157,7 +151,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
     /** What {@code f} comes to, the emails and the domains being those {@code emails} and
      *  {@code domains} spell. */
     private static PartitionEvidence evidenceOf(String emails, String domains, String lets) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module example.pieces
 
                 data Email = String
@@ -178,9 +172,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                 behavior f : (email: Email, book: Book) -> List<Row>
 
                 %s
-                """.formatted(emails, domains, lets), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.formatted(emails, domains, lets), Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         assertNotNull(all, "the model under test compiles");

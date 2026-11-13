@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.execute.EvaluationPolicy;
 
 import java.util.List;
@@ -45,8 +46,7 @@ class AValueIsBuiltByTheCodeThatShipsToShowItsConstructionsHoldTest {
     @Test
     void aValueThatDoesNotShowsItsConstructionsHold() {
         Compilation compilation = Compilation.ofSource(MODULE.formatted("2"), "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors());
+        ACompiledModel.compiles(compilation);
         var built = compilation.db().ask(new Output.BuiltValues("demo"));
         assertTrue(built.present());
         assertFalse(built.value().isEmpty(), "the table is written in a value that was built");
@@ -65,9 +65,7 @@ class AValueIsBuiltByTheCodeThatShipsToShowItsConstructionsHoldTest {
 
     private static int constructionsBuildingRuns(String sample) {
         Compilation compilation = Compilation.ofSource(ROW.formatted(sample), "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
+        ACompiledModel.compiles(compilation);
         var built = compilation.db().ask(new Output.BuiltValues("demo"));
         assertTrue(built.present());
         return built.value().size();
@@ -115,9 +113,7 @@ class AValueIsBuiltByTheCodeThatShipsToShowItsConstructionsHoldTest {
                 let f (cur) = cur
                 """;
         Compilation compilation = Compilation.ofSource(module, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code() + " " + each.diagnostic().said()).toList());
+        ACompiledModel.compiles(compilation);
         var built = compilation.db().ask(new Output.BuiltValues("demo"));
         assertTrue(built.present());
         assertTrue(built.value().isEmpty(), "nothing was shown to hold: " + built.value());
@@ -138,15 +134,13 @@ class AValueIsBuiltByTheCodeThatShipsToShowItsConstructionsHoldTest {
                 let f (cur) = cur
                 """;
         Compilation roomy = Compilation.ofSource(module, "Main");
-        roomy.answerEverything();
+        ACompiledModel.compiles(roomy);
         assertEquals(1, roomy.db().ask(new Output.BuiltValues("demo")).value().size(),
                 "within the default, the value is built and its construction recorded");
 
         Compilation tight = Compilation.ofSource(module, "Main")
                 .withEvaluationPolicy(EvaluationPolicy.DEFAULT.withStepLimit(100));
-        tight.answerEverything();
-        assertEquals(List.of(), tight.errors().stream()
-                .map(each -> each.diagnostic().code()).toList());
+        ACompiledModel.compiles(tight);
         assertTrue(tight.db().ask(new Output.BuiltValues("demo")).value().isEmpty());
     }
 

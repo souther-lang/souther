@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.meta.ModulePath;
@@ -77,6 +78,11 @@ class AWrittenConstructIsMaterialisedOnceUnderOneExpansionTest {
             behavior over : (xs: List<Int>) -> Bool
             let over (xs) = List.all(x -> x >= 240, xs)
             """;
+
+    /** The conformance corpus whose checked-in answer is a refusal, which its bodies are walked for. */
+    private static final List<String> REFUSED_ON_PURPOSE = ConformanceCorpus.load("booking").sources();
+
+    private static final List<String> REFUSED_ON_PURPOSE_CODES = List.of("E2010", "E1013");
 
     /** What one walk of one body in one representation found. */
     private static final class Found {
@@ -186,7 +192,9 @@ class AWrittenConstructIsMaterialisedOnceUnderOneExpansionTest {
         List<Found> out = new ArrayList<>();
         for (List<String> each : sources) {
             Compilation compilation = Compilation.ofSources(each, ModulePath.EMPTY);
-            compilation.answerEverything();
+            ACompiledModel.refusedWith(
+                    each.equals(REFUSED_ON_PURPOSE) ? REFUSED_ON_PURPOSE_CODES : List.of(),
+                    compilation);
             int before = out.size();
             for (String module : compilation.modules()) {
                 Bodies.Elaborated checked =

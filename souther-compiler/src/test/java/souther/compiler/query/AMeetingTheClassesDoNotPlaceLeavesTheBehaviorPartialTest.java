@@ -1,6 +1,6 @@
 package souther.compiler.query;
 
-import souther.compiler.diag.SourceRendering;
+import souther.compiler.ACompiledModel;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.report.AdequacyReport;
 
@@ -83,10 +83,7 @@ class AMeetingTheClassesDoNotPlaceLeavesTheBehaviorPartialTest {
     private static AdequacyReport.BehaviorReport behaviorOf(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(),
-                () -> AdequacyReport.of(compilation)
-                        .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())));
+        ACompiledModel.compiles(compilation);
         List<AdequacyReport.BehaviorReport> behaviors =
                 AdequacyReport.of(compilation).modules().getFirst().behaviors();
         assertEquals(1, behaviors.size(), "one behavior in the model");

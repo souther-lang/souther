@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Scopes;
@@ -48,11 +49,7 @@ class ABranchDeadOnlyByItsPatternsLeavesNothingBehindTest {
             """;
 
     private static FieldDomains read() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.answerEverything();
-        assertEquals(java.util.List.of(), compilation.diagnostics().values().stream()
-                .flatMap(java.util.List::stream).map(each -> each.diagnostic().code()).toList(),
-                "the model this reads has to be one somebody could write");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule name = TypeSymbols.declared(new TypeKey(symbols.module(), "Pair"));
         return FieldDomains.of(name,

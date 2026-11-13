@@ -3,6 +3,7 @@ package souther.compiler.coverage;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Adequacy;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
@@ -31,9 +32,7 @@ class WhoOwnsTheRuleAForkDecidesBySaysWhatOneObligationIsTest {
     private static final String MODULE = "example.rules";
 
     private static Adequacy.BranchEvidence arms(String model, String behavior) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         Adequacy.BranchEvidence said = compilation.db()
                 .ask(new Adequacy.BranchCoverage(MODULE)).value().get(behavior);
         assertNotNull(said, () -> "the model under test compiles: " + behavior);

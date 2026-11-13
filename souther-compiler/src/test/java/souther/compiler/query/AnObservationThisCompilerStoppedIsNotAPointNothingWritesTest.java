@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
@@ -7,7 +8,6 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -141,10 +141,6 @@ class AnObservationThisCompilerStoppedIsNotAPointNothingWritesTest {
     private static Compilation compiled(int names) {
         Compilation compilation = Compilation.ofSource(model(names), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                        .map(each -> each.diagnostic().code()).toList(),
-                () -> "the model under test compiles at " + names + " names");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.report.AdequacyReport;
 
 import java.io.IOException;
@@ -118,7 +119,7 @@ class ARunIsMeasuredInTheElaborationThatProducedItsClassesTest {
         Compilation compilation = Compilation.ofSources(List.of(DOWN, UP),
                 souther.compiler.meta.ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E2010"), compilation);
 
         assertEquals(List.of("apart"),
                 new ArrayList<>(compilation.db().ask(new Bodies.Observable("probe.up"))

@@ -1,5 +1,6 @@
 package souther.compiler.report;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -93,8 +94,7 @@ class AStepOfACopyIsSaidByEveryFieldThatTellsItApartTest {
                     | (6, 6) -> 20
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors());
+        ACompiledModel.compiles(compilation);
         JsonNode document = JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts())));
 

@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
@@ -199,9 +200,6 @@ class ARemainderByAValueTheRowChoosesIsARelationBetweenTheTwoTest {
                 }
                 """.formatted(prelude, parameters,
                 parameters.replaceAll(":\\s*[A-Za-z<>]+", ""), condition);
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(model, Adequacy.Asked.fullReport());
     }
 }

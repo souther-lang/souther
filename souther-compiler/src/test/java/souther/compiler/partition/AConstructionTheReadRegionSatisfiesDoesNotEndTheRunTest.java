@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -87,9 +88,7 @@ class AConstructionTheReadRegionSatisfiesDoesNotEndTheRunTest {
     private static Compilation compiled(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertTrue(compilation.errors().isEmpty(), () -> "compiles: " + compilation.errors());
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     /** The places read by a rule, and the reasons a rule is not read at each of them. */

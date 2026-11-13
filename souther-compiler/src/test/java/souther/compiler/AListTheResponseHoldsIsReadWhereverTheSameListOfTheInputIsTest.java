@@ -191,8 +191,7 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
     private static String reportOf(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(0, compilation.errors().size(), () -> "the source compiles: " + model);
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
                 .replaceAll("\\d+:\\d+", "");

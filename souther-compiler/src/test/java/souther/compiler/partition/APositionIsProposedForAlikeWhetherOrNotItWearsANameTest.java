@@ -2,10 +2,12 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
+import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeKey;
@@ -32,13 +34,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class APositionIsProposedForAlikeWhetherOrNotItWearsANameTest {
 
-    private static final RuleReadingSource RULES = RuleReadings.ofSource("""
+    private static final RuleReadingSource RULES = refusedReading("""
             module demo
 
             data F = Bool
 
             data O = Option<String>
             """);
+
+    /**
+     * The reading of a model in which a name over an option is refused for wrapping one, which is
+     * the name the second test is about.
+     */
+    private static RuleReadingSource refusedReading(String source) {
+        Compilation compilation = ACompiledModel.refusedWith(List.of("E1009"),
+                Compilation.ofSource(source, "Main"));
+        return RuleReadings.of(compilation, compilation.modules().get(0));
+    }
 
     private static List<String> proposedFor(Type type) {
         return Partitions.representativesOf(type,

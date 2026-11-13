@@ -3,6 +3,7 @@ package souther.compiler.coverage;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.ValueName;
 
@@ -53,7 +54,7 @@ class ARunOfAHelpersMethodIsOneCallsOnlyWhereARunMakesItOnceTest {
     }
 
     private static boolean runsOnce(String guard) {
-        Compilation compilation = Compilation.ofSource(MODEL.replace("GUARD", guard), "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL.replace("GUARD", guard));
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("probe")).value();
         assertNotNull(checked, "the model under test compiles");
         RunBodies run = checked.run("pick");

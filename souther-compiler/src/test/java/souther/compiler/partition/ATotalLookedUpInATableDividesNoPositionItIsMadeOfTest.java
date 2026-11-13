@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -59,16 +60,14 @@ class ATotalLookedUpInATableDividesNoPositionItIsMadeOfTest {
     }
 
     private static List<String> classesAt(String table, String body, String path) {
-        Compilation compilation = Compilation.ofSource("module demo\n\n" + DECLARATIONS + table
+        Compilation compilation = ACompiledModel.measured("module demo\n\n" + DECLARATIONS + table
                 + GRADE_OF + """
 
                 behavior f : (a: N, b: N) -> Int
 
                 let f (a, b) =
                     %s
-                """.formatted(body), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """.formatted(body), Adequacy.Asked.fullReport());
         PartitionEvidence evidence =
                 compilation.db().ask(new Adequacy.Coverage("demo")).value().get("f");
         return evidence.axes().stream().filter(axis -> axis.path().equals(path))

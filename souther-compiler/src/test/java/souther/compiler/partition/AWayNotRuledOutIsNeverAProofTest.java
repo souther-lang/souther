@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.NonAffineOperation;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.flow.AWayThrough;
@@ -99,14 +100,14 @@ class AWayNotRuledOutIsNeverAProofTest {
     }
 
     private static InputReading reading() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module m
 
                 data Yes
 
                 behavior f : (xs: List<Int>) -> Yes
                 let f (xs) = Yes
-                """, "Main");
+                """);
         String module = compilation.modules().getFirst();
         var inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get("f");
         assertNotNull(inputs, "the model under test compiles");

@@ -97,8 +97,6 @@ class AGapAtAMeetingOfTheBodysDecisionsIsOfferedARowTest {
         assertFalse(rows.isEmpty(), () -> "a row is offered for them: " + block);
 
         Compilation after = measured(MODEL + String.join("\n", rows) + "\n");
-        assertEquals(List.of(), after.errors(),
-                () -> "the rows offered are rows this model admits:\n" + String.join("\n", rows));
         assertEquals(List.of(), gapsOf(after),
                 () -> "and they answer the combinations: " + report(after));
         assertTrue(rowsOf(block(after)).isEmpty(),
@@ -230,7 +228,6 @@ class AGapAtAMeetingOfTheBodysDecisionsIsOfferedARowTest {
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

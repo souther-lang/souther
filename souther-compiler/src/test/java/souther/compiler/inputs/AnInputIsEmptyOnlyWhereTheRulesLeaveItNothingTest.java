@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.Emptiness;
@@ -316,7 +317,7 @@ class AnInputIsEmptyOnlyWhereTheRulesLeaveItNothingTest {
 
     @Test
     void everyCaseRefusedLeavesTheInputNone() {
-        Optional<EmptyInput> why = emptinessOf(EVERY_CASE_REFUSED);
+        Optional<EmptyInput> why = emptinessOf(EVERY_CASE_REFUSED, "E1013", "E1013");
 
         assertTrue(why.isPresent(), "no value of Q is left, so no value of the input is");
         Emptiness proof = ((EmptyInput.ProvedByTheDeclarations) why.orElseThrow()).why();
@@ -329,7 +330,7 @@ class AnInputIsEmptyOnlyWhereTheRulesLeaveItNothingTest {
 
     @Test
     void andOneStandingCaseIsEnoughToLeaveIt() {
-        assertEquals(Optional.empty(), emptinessOf(ONE_CASE_STANDS),
+        assertEquals(Optional.empty(), emptinessOf(ONE_CASE_STANDS, "E1013"),
                 "every B is a row this behavior takes");
     }
 
@@ -342,14 +343,14 @@ class AnInputIsEmptyOnlyWhereTheRulesLeaveItNothingTest {
      */
     @Test
     void aCaseThisReadingDidNotEnterProvesNothing() {
-        assertEquals(Optional.empty(), emptinessOf(NEVER_ENTERED),
+        assertEquals(Optional.empty(), emptinessOf(NEVER_ENTERED, "E1013"),
                 "a tree of one node is a row this behavior takes, and the deeper sums were never"
                         + " read");
     }
 
     @Test
     void aCaseItsOwnRulesRefuseLeavesTheInputItsOtherCases() {
-        assertEquals(Optional.empty(), emptinessOf(DEAD_CASE),
+        assertEquals(Optional.empty(), emptinessOf(DEAD_CASE, "E1013"),
                 "every B is a row this behavior takes, so the input is not proved empty");
     }
 
@@ -361,25 +362,25 @@ class AnInputIsEmptyOnlyWhereTheRulesLeaveItNothingTest {
 
     @Test
     void aSequenceInsideACaseIsRefusedNoFurtherThanTheCase() {
-        assertEquals(Optional.empty(), emptinessOf(A_SEQUENCE_INSIDE_A_CASE),
+        assertEquals(Optional.empty(), emptinessOf(A_SEQUENCE_INSIDE_A_CASE, "E1013"),
                 "every B is a row this behavior takes, whatever A's list would have to hold");
     }
 
     @Test
     void andACaseInsideASequenceLeavesTheSequenceItsOtherCase() {
-        assertEquals(Optional.empty(), emptinessOf(A_CASE_INSIDE_A_SEQUENCE),
+        assertEquals(Optional.empty(), emptinessOf(A_CASE_INSIDE_A_SEQUENCE, "E1013"),
                 "a list of Items that are all B is a row this behavior takes");
     }
 
     @Test
     void anEmptySequenceIsAValueWhateverItsElementWouldBe() {
-        assertEquals(Optional.empty(), emptinessOf(MAY_BE_EMPTY),
+        assertEquals(Optional.empty(), emptinessOf(MAY_BE_EMPTY, "E1013"),
                 "an empty list is a row this behavior takes");
     }
 
     @Test
     void andOneThatCannotBeEmptyIsRefusedByWhatItWouldHold() {
-        Optional<EmptyInput> why = emptinessOf(HOLDS_AT_LEAST_ONE);
+        Optional<EmptyInput> why = emptinessOf(HOLDS_AT_LEAST_ONE, "E1013");
 
         assertTrue(why.isPresent(), "the list holds an Item and there is no Item to hold");
         Emptiness proof = ((EmptyInput.ProvedByTheDeclarations) why.orElseThrow()).why();
@@ -399,20 +400,21 @@ class AnInputIsEmptyOnlyWhereTheRulesLeaveItNothingTest {
     @Test
     void aSumNothingIsKnownAboutDoesNotHideWhatTheSumBesideItRefuses() {
         for (String source : List.of(UNREAD_BESIDE_REFUSED, REFUSED_BESIDE_UNREAD)) {
-            assertTrue(emptinessOf(source).isPresent(),
+            assertTrue(emptinessOf(source, "E1013", "E1013").isPresent(),
                     "no value of Q exists, so no row does, whatever was read of the tree");
         }
     }
 
     @Test
     void andWhichOfTheTwoIsDeclaredFirstIsNoPartOfTheAnswer() {
-        assertEquals(emptinessOf(UNREAD_BESIDE_REFUSED), emptinessOf(REFUSED_BESIDE_UNREAD),
+        assertEquals(emptinessOf(UNREAD_BESIDE_REFUSED, "E1013", "E1013"),
+                emptinessOf(REFUSED_BESIDE_UNREAD, "E1013", "E1013"),
                 "the same two structures, whichever order the fields were written in");
     }
 
     @Test
     void andASequenceThatCannotBeFilledIsNotHiddenEither() {
-        assertTrue(emptinessOf(UNREAD_BESIDE_A_DEAD_ELEMENT).isPresent(),
+        assertTrue(emptinessOf(UNREAD_BESIDE_A_DEAD_ELEMENT, "E1013").isPresent(),
                 "the list holds an Item and there is no Item to hold");
     }
 
@@ -437,18 +439,19 @@ class AnInputIsEmptyOnlyWhereTheRulesLeaveItNothingTest {
         }
     }
 
-    private static Optional<EmptyInput> emptinessOf(String source) {
-        InputDomain read = reading(source, "read");
-        return read.quantities(rulesOf(source)).emptiness();
+    /**
+     * What the rules leave of the input of {@code read}, in a model refused once for each type of
+     * {@code refusals} that has no value, and for nothing else.
+     */
+    private static Optional<EmptyInput> emptinessOf(String source, String... refusals) {
+        Compilation compilation = ACompiledModel.refusedWith(List.of(refusals),
+                Compilation.ofSources(List.of(source), ModulePath.EMPTY));
+        InputDomain read = reading(compilation, "read");
+        return read.quantities(RuleReadings.of(compilation, compilation.modules().get(0)))
+                .emptiness();
     }
 
-    private static RuleReadingSource rulesOf(String source) {
-        Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        return RuleReadings.of(compilation, compilation.modules().get(0));
-    }
-
-    private static InputDomain reading(String source, String behavior) {
-        Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
+    private static InputDomain reading(Compilation compilation, String behavior) {
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

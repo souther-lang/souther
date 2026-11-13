@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
@@ -288,7 +289,7 @@ class AFoldThatAddsWhatEachKeyFilesAnswersTheTotalOfItsValuesTest {
                 model.formatted("(p.amount + 1 - 1)", "ps",
                         List.of(posting("0"), posting(last)).toString()),
                 model.formatted("p.amount", "ps", passing))) {
-            Compilation compilation = ran(stops);
+            Compilation compilation = ranAndStopped(stops);
             assertTrue(unmetOf(compilation).contains("ON"),
                     () -> "a row whose run stops is at no point: " + report(compilation));
         }
@@ -301,12 +302,17 @@ class AFoldThatAddsWhatEachKeyFilesAnswersTheTotalOfItsValuesTest {
         return "Posting { account = \"a\", amount = " + amount + " }";
     }
 
-    /** The source measured, whose examples may stop where they run. */
-    private static Compilation ran(String source) {
+    /** The source measured, whose one example stops where it runs and so is not the answer it states. */
+    private static Compilation ranAndStopped(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        // The row stops before it answers.
+        return ACompiledModel.refusedWith(List.of("E1905"), compilation);
+    }
+
+    /** The source measured, whose examples may stop where they run. */
+    private static Compilation ran(String source) {
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     /**
@@ -713,12 +719,6 @@ class AFoldThatAddsWhatEachKeyFilesAnswersTheTotalOfItsValuesTest {
 
     /** The source measured, which is a source that compiles. */
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code().toString()).toList(),
-                () -> "the source compiles: " + source);
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 }

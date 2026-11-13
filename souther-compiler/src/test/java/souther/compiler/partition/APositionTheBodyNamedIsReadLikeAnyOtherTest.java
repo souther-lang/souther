@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -97,9 +98,7 @@ class APositionTheBodyNamedIsReadLikeAnyOtherTest {
 
     /** Where each line {@code behavior}'s positions met is, and the rule that drew it. */
     private static List<String> linesReadBy(String model, String behavior) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return Adequacy.boundariesOf(compilation.db(), compilation.modules().get(0))
                 .get(behavior).stream()
                 .map(each -> each.label() + " (" + each.origin().saidWithoutAPlace() + ")")
@@ -129,7 +128,6 @@ class APositionTheBodyNamedIsReadLikeAnyOtherTest {
             data Ok
 
             behavior f : (h: Held) -> Ok
-                constructs Ok
             let f (h) =
                 match h.flag with
                     | On -> Ok
@@ -220,9 +218,7 @@ class APositionTheBodyNamedIsReadLikeAnyOtherTest {
     }
 
     private static String report(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
         return AdequacyReport.of(compilation).humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 }

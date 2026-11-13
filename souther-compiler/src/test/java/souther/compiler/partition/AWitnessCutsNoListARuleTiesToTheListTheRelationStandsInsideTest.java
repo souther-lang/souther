@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -13,7 +14,6 @@ import tools.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -48,9 +48,7 @@ class AWitnessCutsNoListARuleTiesToTheListTheRelationStandsInsideTest {
     private static List<String> notRead(String source) {
         Compilation model = Compilation.ofSource(source, "Main");
         model.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        model.answerEverything();
-        assertEquals(List.of(), model.errors().stream()
-                .map(e -> e.diagnostic().code()).toList(), "the model compiles");
+        ACompiledModel.compiles(model);
         JsonNode report = new ObjectMapper().readTree(AdequacyReport.of(model)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         List<String> out = new ArrayList<>();

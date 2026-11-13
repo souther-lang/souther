@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.ClosedImports;
@@ -57,9 +58,9 @@ class AnImportIsClosedUnderThePolicyItsReaderExpandsInTest {
             """;
 
     private static Db db() {
-        return Compilation.ofDocuments(
+        return ACompiledModel.compiles(Compilation.ofDocuments(
                 Map.of("bottom.sou", BOTTOM, "middle.sou", MIDDLE, "top.sou", TOP),
-                Set.of(), ModulePath.EMPTY).db();
+                Set.of(), ModulePath.EMPTY)).db();
     }
 
     private static ClosedImports importedBy(Db db, String module, InliningPolicy policy) {

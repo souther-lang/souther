@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
@@ -41,7 +42,7 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
     private static final SourcePos POS = new SourcePos(1, 1);
 
     private static final String SOURCE = """
-            module demo exposing ( Money, Wrapped, Chain, Bounded, Deeper, Plain, keep )
+            module demo exposing ( NonNegInt, Middle, Money, Wrapped, Chain, Bounded, Deeper, Plain, keep )
 
             data NonNegInt = Int
                 invariant value >= 0
@@ -79,7 +80,7 @@ class WhatATypeGuaranteesIsOneAnswerWhoeverAsksTest {
             new GuaranteeWalk(engine.guarantees(), DeclarationNewtypes.asWritten(symbols));
 
     private static RuleReadingSource rules() {
-        Compilation compilation = Compilation.ofSource(SOURCE, "Main");
+        Compilation compilation = ACompiledModel.answered(SOURCE);
         return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 

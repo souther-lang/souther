@@ -19,6 +19,7 @@ import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.query.Scopes;
@@ -407,7 +408,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
 
     private static Map<String, ClassFileImage> compiled(String model) {
         return EMITTED.computeIfAbsent(model,
-                written -> Compilation.ofSource(written, "Main").db().ask(new Output.All()).value());
+                written -> ACompiledModel.answered(written).db().ask(new Output.All()).value());
     }
 
     private static RowOutcome named(Observations observed, String name) {
@@ -437,7 +438,7 @@ class ARecordedRowIsRunAgainstABoundImplementationTest {
     }
 
     private static Observations run(String model, String implementation) throws Exception {
-        Compilation c = Compilation.ofSource(model, "Main");
+        Compilation c = ACompiledModel.answered(model);
         c.db().ask(new Output.All());
         assertEquals(List.of(), c.diagnostics().values().stream().flatMap(List::stream)
                         .map(d -> String.valueOf(d.diagnostic().code())).toList(),

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.Sig;
@@ -167,7 +168,7 @@ class WhatOnlyAComposedValueShowsIsUnknownWhereNothingComposedOneTest {
                                                                   HowALineIsRead reading) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Db db = compilation.db();
         String module = "example.composeonly";
         Answer<CheckSurface> prepared = db.ask(new Shapes.CheckSurface(module));

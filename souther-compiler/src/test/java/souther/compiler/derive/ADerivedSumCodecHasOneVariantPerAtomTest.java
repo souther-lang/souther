@@ -9,6 +9,7 @@ import souther.compiler.check.ScopedDeclarations;
 import souther.compiler.check.Boundary;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
 import souther.compiler.types.Type;
@@ -114,7 +115,7 @@ class ADerivedSumCodecHasOneVariantPerAtomTest {
         byId.put("m.sou", source);
         // The module as it is below the derivation, which is the resolved one: what deriving
         // establishes is carried by the declarations and not written back into the tree.
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)
+        return ACompiledModel.compiles(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY))
                 .db().ask(new Names.Resolved("m")).value();
     }
 }

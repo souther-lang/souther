@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -47,8 +48,7 @@ class EachReadingOfAnObligationSaysTheApplicationsItWasReadOnTest {
     private static JsonNode obligations(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors(), source);
+        ACompiledModel.compiles(compilation);
         JsonNode document = JSON.readTree(AdequacyReport.of(compilation)
                 .json(SourceRendering.namedByIdentity(compilation.texts())));
         DocumentShape.assertShapedLikeTheSchema(document);

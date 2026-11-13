@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
@@ -51,7 +52,8 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
             data Span = { a: Slot }
 
             data Wide
-            data Shape = Wide
+            data Narrow
+            data Shape = Wide | Narrow
 
             behavior classify : (s: Span) -> Shape
             let classify (s) = Wide
@@ -70,7 +72,8 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
             data Span = { a: Slot, d: Day }
 
             data Wide
-            data Shape = Wide
+            data Narrow
+            data Shape = Wide | Narrow
 
             behavior classify : (s: Span) -> Shape
             let classify (s) = Wide
@@ -120,7 +123,7 @@ class ACarrierNothingReadsUnmeasuresItsSiblingsTest {
                         souther.compiler.inputs.Quantities reading, RuleReadingSource rules) {}
 
     private static Read read(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Map<String, DeclaredSig> sigs =

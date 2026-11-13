@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.Sig;
@@ -52,12 +53,12 @@ class ARenamedParameterDoesNotReachWhatCrossesTheBoundaryTest {
         Compilation compilation = Compilation.ofDocuments(
                 Map.of("a.sou", written("userId")), Set.of(), ModulePath.EMPTY)
                 .writtenOn(TestDay.DATE);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, DeclaredSig> declared = declarations(compilation);
         Map<String, Sig> crossing = boundaries(compilation);
 
         compilation.update(Map.of("a.sou", written("id")), Set.of(), TestDay.DATE);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         assertEquals(List.of("id"),
                 declarations(compilation).get("take").inputs().stream()
@@ -81,12 +82,12 @@ class ARenamedParameterDoesNotReachWhatCrossesTheBoundaryTest {
         Compilation compilation = Compilation.ofDocuments(
                 Map.of("a.sou", written("userId")), Set.of(), ModulePath.EMPTY)
                 .writtenOn(TestDay.DATE);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Answer<?> crossing = compilation.db().ask(new Bodies.Signatures("m.a"));
         Answer<?> declaring = compilation.db().ask(new Bodies.DeclaredSignatures("m.a"));
 
         compilation.update(Map.of("a.sou", written("id")), Set.of(), TestDay.DATE);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         assertNotSame(declaring, compilation.db().ask(new Bodies.DeclaredSignatures("m.a")),
                 "the rename is an edit to the declaration, so that answer is not the one it was —"
@@ -109,11 +110,11 @@ class ARenamedParameterDoesNotReachWhatCrossesTheBoundaryTest {
         Compilation compilation = Compilation.ofDocuments(
                 Map.of("a.sou", written("userId")), Set.of(), ModulePath.EMPTY)
                 .writtenOn(TestDay.DATE);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, ClassFileImage> published = classes(compilation);
 
         compilation.update(Map.of("a.sou", written("id")), Set.of(), TestDay.DATE);
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
 
         assertNotEquals(published, classes(compilation),
                 "what a module publishes carries the declaration as it is written");

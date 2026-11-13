@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.PointRole;
 import souther.compiler.partition.UndividedPosition;
 import souther.compiler.query.Adequacy;
@@ -1038,9 +1039,6 @@ class AnElementOfAWalksAnswerIsTheStepsAnswerOnOneElementTest {
     private static Compilation compiled(String body) {
         Compilation compilation = Compilation.ofSource("module probe\n\n" + body, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(), "the model compiles");
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 }

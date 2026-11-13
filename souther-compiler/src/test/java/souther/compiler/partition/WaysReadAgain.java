@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
@@ -283,12 +284,12 @@ final class WaysReadAgain {
 
     /** What the declarations leave the numbers the relation reads. */
     private static SearchRegion region() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.answered("""
                 module m
                 data Yes
                 behavior f : (x: Int, y: Int, xs: List<Int>, z: Int, w: Int) -> Yes
                 let f (x, y, xs, z, w) = Yes
-                """, "Main");
+                """);
         return compilation.db().ask(new Adequacy.Inputs("m")).value().get("f")
                 .reading(RuleReadings.of(compilation, "m")).quantities().region();
     }

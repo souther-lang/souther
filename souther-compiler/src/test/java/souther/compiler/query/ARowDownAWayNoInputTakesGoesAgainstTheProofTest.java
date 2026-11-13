@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.coverage.AlignedObservation;
 import souther.compiler.coverage.ComparisonEmissionIndex;
 import souther.compiler.coverage.ControlPlace;
@@ -169,7 +170,7 @@ class ARowDownAWayNoInputTakesGoesAgainstTheProofTest {
         Fixture(String model, int ways) {
             Compilation compilation = Compilation.ofSource(model, "Main");
             compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            ACompiledModel.compiles(compilation);
             String module = compilation.modules().getFirst();
             read = compilation.db().ask(new Adequacy.Decides(module)).value().get("f").read();
             assertEquals(ways, read.impossible().size(),

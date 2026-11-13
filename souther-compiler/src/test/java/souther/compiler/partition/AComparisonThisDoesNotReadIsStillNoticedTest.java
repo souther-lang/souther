@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.NonAffineOperation;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -71,7 +72,7 @@ class AComparisonThisDoesNotReadIsStillNoticedTest {
                 """.replace("PARAMETER", parameter)
                         .replace("NAME", parameter.substring(0, parameter.indexOf(':')).trim())
                         .replace("CONDITION", condition);
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

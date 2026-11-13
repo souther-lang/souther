@@ -33,7 +33,7 @@ class OneDivisionReadsAlikeHoweverItIsWrittenTest {
     /** What the report says about the one position, as the classes and the four points of each
      *  border. */
     private static List<String> readingOf(String type, String guard) {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module example.same
 
                 data Yes = { n: %s }
@@ -48,12 +48,9 @@ class OneDivisionReadsAlikeHoweverItIsWrittenTest {
                 }
 
                 example f
-                    | (%s) -> Yes { n = %s }
+                    | (%s) -> <?>
                 """.formatted(type, type, type, guard,
-                        type.equals("Decimal") ? "0.1m" : "1",
-                        type.equals("Decimal") ? "0.1m" : "1"), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                        type.equals("Decimal") ? "0.1m" : "1"), Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> all = compilation.db()
                 .ask(new Adequacy.Coverage(compilation.modules().get(0))).value();
         assertNotNull(all, "the model under test compiles: " + guard);

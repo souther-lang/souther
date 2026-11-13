@@ -125,11 +125,16 @@ class SoManyElementsOfAListFiledInAMapAreComposedTest {
                     "Items([Item { q = 0, sku = \"x\" }, Item { q = 0, sku = \"xx\" }])",
                     "[(\"x\", \"x\")]"));
 
+    /** {@code source}, measured, whatever the compile says of it: for a test about what it refuses. */
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
         return compilation;
+    }
+
+    private static Compilation compiled(String source) {
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     private static String report(Compilation compilation) {
@@ -163,7 +168,7 @@ class SoManyElementsOfAListFiledInAMapAreComposedTest {
     @Test
     void eachFormIsComposedWithAKeyForEachElementCounted() {
         COMPOSED.forEach((model, expected) -> assertEquals(List.of(expected),
-                composedForTheRules(measured(model)), model));
+                composedForTheRules(compiled(model)), model));
     }
 
     /**
@@ -180,7 +185,7 @@ class SoManyElementsOfAListFiledInAMapAreComposedTest {
         COMPOSED.keySet().forEach(model -> {
             StringBuilder rows = new StringBuilder();
             int written = 0;
-            for (List<String> row : everyRowComposed(measured(model))) {
+            for (List<String> row : everyRowComposed(compiled(model))) {
                 String inputs = String.join(", ", row);
                 String filed = "    | \"row " + written + "\" : (" + inputs + ") -> ";
                 boolean answersOne = errors(measured(model + filed + "1\n")).isEmpty();
@@ -189,7 +194,7 @@ class SoManyElementsOfAListFiledInAMapAreComposedTest {
                 rows.append(filed).append(answersOne ? "1" : "0").append('\n');
                 written++;
             }
-            String report = report(measured(model + rows));
+            String report = report(compiled(model + rows));
 
             assertFalse(report.contains("no row is at"), () -> report);
             assertFalse(report.contains("nothing could show a row can be written"),
@@ -217,10 +222,9 @@ class SoManyElementsOfAListFiledInAMapAreComposedTest {
     @Test
     void theRowsComposedTakeTheRuleTheyWereComposedFor() {
         COMPOSED.forEach((model, expected) -> {
-            Compilation answered = measured(model + "    | \"filed\" : ("
+            Compilation answered = compiled(model + "    | \"filed\" : ("
                     + String.join(", ", expected) + ") -> 1\n");
 
-            assertEquals(List.of(), errors(answered), model);
             assertFalse(report(answered).contains("no row takes a decision rule"),
                     () -> report(answered));
         });
@@ -232,11 +236,10 @@ class SoManyElementsOfAListFiledInAMapAreComposedTest {
      */
     @Test
     void aListMadeToHoldSeveralIsComposedWithNoneFiledAtACountBelowIt() {
-        assertEquals(List.of(NONE_FILED), composedForTheRules(measured(FEWER_OF_SEVERAL)));
+        assertEquals(List.of(NONE_FILED), composedForTheRules(compiled(FEWER_OF_SEVERAL)));
 
-        Compilation answered = measured(FEWER_OF_SEVERAL + "    | \"none\" : ("
+        Compilation answered = compiled(FEWER_OF_SEVERAL + "    | \"none\" : ("
                 + String.join(", ", NONE_FILED) + ") -> 0\n");
-        assertEquals(List.of(), errors(answered));
         assertFalse(report(answered).contains("no row takes a decision rule"),
                 () -> report(answered));
         assertFalse(errors(measured(FEWER_OF_SEVERAL + "    | \"none\" : ("
@@ -250,7 +253,7 @@ class SoManyElementsOfAListFiledInAMapAreComposedTest {
      */
     @Test
     void aCountOverAMapInsideEachElementIsNotTakenForTheModels() {
-        String report = report(measured("""
+        String report = report(compiled("""
                 module p
                 import List ( filterMap, length )
                 data Item = { tags: Map<String, String> }

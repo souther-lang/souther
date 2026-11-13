@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
@@ -164,8 +165,6 @@ class AClauseReadsTheSameWhicheverCompileBuiltTheTermTest {
     private static final SourcePos POS = new SourcePos(1, 1);
 
     private static Compilation compiled(String source) {
-        Compilation c = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
-        c.answerEverything();
-        return c;
+        return ACompiledModel.compiles(Compilation.ofSources(List.of(source), ModulePath.EMPTY));
     }
 }

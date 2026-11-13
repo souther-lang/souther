@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.DocumentShape;
 import souther.compiler.check.PathReachability;
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.types.SourceConstruct;
@@ -73,13 +74,11 @@ class AWalkProofARowWentAgainstIsWrittenBesideTheProofsOfReachTest {
     /** The schema shipped beside the report declares it on the behavior, with every key it has. */
     @Test
     void theSchemaDeclaresItOnTheBehavior() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module m
                 behavior f : (x: Int) -> Int
                 let f (x) = x
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
         ObjectNode written = JSON.createObjectNode();
         AdequacyReport.walkProofsContradicted(written, contradicting(Set.of(FOLD)));
 

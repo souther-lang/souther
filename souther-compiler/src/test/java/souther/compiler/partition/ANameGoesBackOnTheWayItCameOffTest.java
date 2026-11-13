@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 
@@ -162,9 +163,7 @@ class ANameGoesBackOnTheWayItCameOffTest {
      */
     @Test
     void aRowIsWrittenUnderTheNameAndReadBackThroughIt() {
-        Compilation compilation = Compilation.ofSource(MODULE, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODULE, Adequacy.Asked.fullReport());
         PartitionEvidence evidence = compilation.db()
                 .ask(new Adequacy.Coverage("demo")).value().get("run");
 
@@ -179,12 +178,10 @@ class ANameGoesBackOnTheWayItCameOffTest {
      *  show. */
     @Test
     void aRowAnAuthorWroteIsCountedAtTheClassItIsIn() {
-        Compilation compilation = Compilation.ofSource(MODULE + """
+        Compilation compilation = ACompiledModel.measured(MODULE + """
                 example run
                     | (DecisionN(Approved { id = 1 })) -> Ok
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
         PartitionEvidence evidence = compilation.db()
                 .ask(new Adequacy.Coverage("demo")).value().get("run");
 

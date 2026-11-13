@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.RuleReadingContext;
@@ -89,7 +90,7 @@ class AQuotientNoDecimalWritesIsAProofAndNotAGivingUpTest {
     }
 
     private static SearchRegion region() {
-        Compilation compilation = Compilation.ofSource(ONE_DECIMAL_FIELD, "Main");
+        Compilation compilation = ACompiledModel.answered(ONE_DECIMAL_FIELD);
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();

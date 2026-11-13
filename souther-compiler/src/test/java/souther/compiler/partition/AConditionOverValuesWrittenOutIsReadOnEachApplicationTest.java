@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -304,9 +305,6 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
                 """.formatted(condition);
         Compilation compilation = Compilation.ofSource(source, "Main");
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
-        // The errors of what was asked, which is the body checked: a model that does not check
-        // has no fork to read, whatever its condition says.
-        assertEquals(List.of(), compilation.errors(), () -> "the model compiles: " + condition);
         assertNotNull(checked, "the model under test compiles");
         AnalysisBody analysis = checked.analysisBodies().get("f");
         RuleReadingSource rules = RuleReadings.of(compilation, "demo");
@@ -314,6 +312,8 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
         InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
                 inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
                 inputs.dependencies());
+        // A model that does not check has no fork to read, whatever its condition says.
+        ACompiledModel.compiles(compilation);
         return new Model(analysis, inputs, rules, reads);
     }
 }

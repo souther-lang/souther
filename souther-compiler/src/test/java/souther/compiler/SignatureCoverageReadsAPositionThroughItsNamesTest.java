@@ -8,10 +8,8 @@ import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.OutputCaseEvidence;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.query.Db;
 import souther.compiler.types.TypeSymbol;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -140,7 +138,6 @@ class SignatureCoverageReadsAPositionThroughItsNamesTest {
                     | (1) -> DecisionN(Approved { id = 1 })
                 """;
 
-        assertEquals(List.of(), errors(rows));
         Adequacy.SignatureEvidence makes = signatures(rows).get("makes");
         assertEquals(MeasurementStatus.NOT_APPLICABLE, AdequacyReport.statusOf(makes.output().cases()));
         assertEquals(OutputCaseEvidence.NotASum.NOT_A_SUM, makes.output().cases().why());
@@ -155,10 +152,10 @@ class SignatureCoverageReadsAPositionThroughItsNamesTest {
      */
     @Test
     void aNameThePositionDoesNotWriteIsNotComeOffOf() {
-        InputCaseEvidence wrapped = input("""
+        InputCaseEvidence wrapped = inputOfRefused("""
                 example wrapped
                     | (OtherN(Approved { id = 1 })) -> Ok
-                """, "wrapped");
+                """, "wrapped", List.of("E1812"));
 
         assertFalse(names(wrapped.seen().specified()).contains("Approved"),
                 "a name the position does not write is not read through: " + wrapped.seen().specified());
@@ -184,26 +181,24 @@ class SignatureCoverageReadsAPositionThroughItsNamesTest {
         return evidence.positions().get(0);
     }
 
+    /** The position of the one behavior {@code rows} are about, in a model refused with {@code codes}. */
+    private static InputCaseEvidence inputOfRefused(String rows, String behavior, List<String> codes) {
+        Compilation compilation = Compilation.ofSource(DECLARATIONS + "\n" + rows, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.refusedWith(codes, compilation);
+        Adequacy.SignatureEvidence evidence = compilation.db()
+                .ask(new Adequacy.Witnesses(compilation.modules().get(0))).value().get(behavior);
+        assertEquals(1, evidence.positions().size());
+        return evidence.positions().get(0);
+    }
+
     private static Map<String, Adequacy.SignatureEvidence> signatures(String rows) {
         Compilation compilation = measured(rows);
         return compilation.db().ask(new Adequacy.Witnesses(compilation.modules().get(0))).value();
     }
 
-    private static List<String> errors(String rows) {
-        List<String> codes = new ArrayList<>();
-        for (Db.Found found : measured(rows).db().allReports()) {
-            if (found.report().isError()) {
-                codes.add(found.report().diagnostic().code());
-            }
-        }
-        return codes;
-    }
-
     private static Compilation measured(String rows) {
-        Compilation compilation = Compilation.ofSource(DECLARATIONS + "\n" + rows, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(DECLARATIONS + "\n" + rows, Adequacy.Asked.fullReport());
     }
 
     private static List<String> names(java.util.Collection<TypeSymbol> cases) {

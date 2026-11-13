@@ -6,6 +6,7 @@ import souther.compiler.DefaultStdlib;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.core.Core;
 import souther.compiler.query.Bodies;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Compilation;
 
 import java.util.List;
@@ -55,7 +56,21 @@ class CoverageSitesTest {
                            DeclarationNewtypes newtypes) {}
 
     private static Checked bodiesOf(String source) {
+        return bodiesOf(ACompiledModel.answered(source));
+    }
+
+    /** The same, of a source whose abort stands at a case the model admits, which it is told of. */
+    private static Checked bodiesOfWhatAbortsWhereItIsAdmitted(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        ACompiledModel.refusedWith(List.of("E1326"), compilation);
+        return bodiesOf(compilation);
+    }
+
+    private static CoverageSites.Plan planOfWhatAbortsWhereItIsAdmitted(String source) {
+        return planOf(bodiesOfWhatAbortsWhereItIsAdmitted(source));
+    }
+
+    private static Checked bodiesOf(Compilation compilation) {
         String module = compilation.modules().get(0);
         Bodies.Elaborated checked = compilation.db()
                 .ask(new Bodies.Checked(module)).value();
@@ -81,7 +96,7 @@ class CoverageSitesTest {
 
     @Test
     void everyArmOfEveryForkIsASiteAndNothingElseIs() {
-        CoverageSites.Plan plan = planOf(MODEL);
+        CoverageSites.Plan plan = planOfWhatAbortsWhereItIsAdmitted(MODEL);
 
         assertEquals(List.of("case UnderThirty", "then", "else"), labels(plan));
         assertEquals(List.of(OutcomeName.CASE, OutcomeName.THEN, OutcomeName.ELSE),
@@ -98,7 +113,7 @@ class CoverageSitesTest {
      */
     @Test
     void anArmThatAnswersNothingIsNotAnArm() {
-        CoverageSites.Plan plan = planOf(MODEL);
+        CoverageSites.Plan plan = planOfWhatAbortsWhereItIsAdmitted(MODEL);
 
         assertFalse(labels(plan).contains("case ThirtyOrOver"),
                 "the arm answers `unreachable`, so no row can be in it");
@@ -109,7 +124,7 @@ class CoverageSitesTest {
      * a bare {@code unreachable}, however many forks stand between. */
     @Test
     void anArmWhoseEveryPathAbortsIsNotAnArmEither() {
-        CoverageSites.Plan plan = planOf("""
+        CoverageSites.Plan plan = planOfWhatAbortsWhereItIsAdmitted("""
                 module example.nested
 
                 data Yes
@@ -145,7 +160,7 @@ class CoverageSitesTest {
      */
     @Test
     void aForkBelowSomethingThatAbortsIsNotAForkToCover() {
-        CoverageSites.Plan plan = planOf("""
+        CoverageSites.Plan plan = planOfWhatAbortsWhereItIsAdmitted("""
                 module example.dead
 
                 data Yes
@@ -181,7 +196,7 @@ class CoverageSitesTest {
      */
     @Test
     void aForkNothingReachesIsPlannedWithNoArms() {
-        Checked checked = bodiesOf("""
+        Checked checked = bodiesOfWhatAbortsWhereItIsAdmitted("""
                 module example.dead
 
                 data Yes
@@ -341,7 +356,7 @@ class CoverageSitesTest {
      */
     @Test
     void anArmWithoutAProbeKeepsItsPlaceInTheArray() {
-        Checked checked = bodiesOf("""
+        Checked checked = bodiesOfWhatAbortsWhereItIsAdmitted("""
                 module example.order
 
                 data Yes
@@ -367,7 +382,7 @@ class CoverageSitesTest {
 
     @Test
     void aGuardKeepsBothOfItsArmsTogether() {
-        CoverageSites.Plan plan = planOf(MODEL);
+        CoverageSites.Plan plan = planOfWhatAbortsWhereItIsAdmitted(MODEL);
 
         assertEquals(1, plan.guards().size());
         CoverageSites.GuardRef guard = plan.guards().get(0);
@@ -389,7 +404,7 @@ class CoverageSitesTest {
      * a row can be at. */
     @Test
     void aGuardWithOneArmLeftIsStillAGuard() {
-        CoverageSites.Plan plan = planOf(MODEL.replace("if senior then Days(120) else Days(90)",
+        CoverageSites.Plan plan = planOfWhatAbortsWhereItIsAdmitted(MODEL.replace("if senior then Days(120) else Days(90)",
                 "if senior then unreachable \"no senior is under thirty\" else Days(90)"));
 
         assertEquals(1, plan.guards().size());
@@ -407,7 +422,7 @@ class CoverageSitesTest {
      */
     @Test
     void anIfWithNoArmsLeftIsNotAGuard() {
-        CoverageSites.Plan plan = planOf("""
+        CoverageSites.Plan plan = planOfWhatAbortsWhereItIsAdmitted("""
                 module example.leave
 
                 data UnderThirty
@@ -435,7 +450,7 @@ class CoverageSitesTest {
 
     @Test
     void aSiteIsFoundByTheNodeInstanceTheEmitterHolds() {
-        Checked checked = bodiesOf(MODEL);
+        Checked checked = bodiesOfWhatAbortsWhereItIsAdmitted(MODEL);
         CoverageSites.Plan plan = planOf(checked);
 
         Core body = checked.bodies().get("daysFor");
@@ -456,8 +471,8 @@ class CoverageSitesTest {
     /** A body's arms are its own. Rows do not move them, and neither does anything above them. */
     @Test
     void theNumberingDependsOnTheBodyAndNothingElse() {
-        List<String> without = labels(planOf(MODEL));
-        List<String> withRows = labels(planOf(MODEL + """
+        List<String> without = labels(planOfWhatAbortsWhereItIsAdmitted(MODEL));
+        List<String> withRows = labels(planOfWhatAbortsWhereItIsAdmitted(MODEL + """
 
                 example daysFor
                     | (UnderThirty, true)  -> Days(120)
@@ -465,7 +480,7 @@ class CoverageSitesTest {
                 """));
 
         assertEquals(without, withRows);
-        assertEquals(labels(planOf(MODEL)), without, "and it is the same on a second walk");
+        assertEquals(labels(planOfWhatAbortsWhereItIsAdmitted(MODEL)), without, "and it is the same on a second walk");
     }
 
     /**

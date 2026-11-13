@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -9,7 +10,6 @@ import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -71,8 +71,7 @@ class ASearchHeldToAShareOfItsStepsSaysTheShareTest {
     private static List<String> stopsOf(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors());
+        ACompiledModel.compiles(compilation);
         String said = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         List<String> stops = said.lines().filter(each -> each.contains(STEPS.name() + ","))

@@ -2,6 +2,7 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -131,10 +132,7 @@ class HowManyNamesAValueIsReadThroughDoesNotDecideWhatIsReadTest {
     private static BorderAssessment totalsLine(String source, String said) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code()).toList(),
-                () -> "the model under test compiles at " + said);
+        ACompiledModel.compiles(compilation);
         PartitionEvidence measured = compilation.db()
                 .ask(new Adequacy.Coverage("example.through")).value().get("判定する");
         assertEquals(List.of(), measured.notRead().stream()

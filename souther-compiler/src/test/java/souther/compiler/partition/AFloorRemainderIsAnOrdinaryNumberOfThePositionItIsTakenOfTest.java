@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
@@ -653,14 +654,14 @@ class AFloorRemainderIsAnOrdinaryNumberOfThePositionItIsTakenOfTest {
         MEASURED.clear();
     }
 
-    /** {@code model} measured and asked nothing else: what is read of it is the measure's, which
-     *  asks for what it reads. */
+    /** {@code model} measured and answered in full, held to compile. */
     private static Compilation measuredModel(String model) {
-        return MEASURED.computeIfAbsent(model, source -> {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            return compilation;
+        Compilation compilation = MEASURED.computeIfAbsent(model, source -> {
+            Compilation made = Compilation.ofSource(source, "Main");
+            made.measure(Adequacy.Asked.fullReport());
+            return ACompiledModel.compiles(made);
         });
+        return ACompiledModel.compiles(compilation);
     }
 
     private static List<String> bordersOf(String parameters, String condition) {

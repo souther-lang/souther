@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -253,11 +254,7 @@ class AWayPastALaterGuardIsTakenAlongTheWayAnEarlierOneWasHeldAlongTest {
 
     private static Read read(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertTrue(compilation.errors().isEmpty(),
-                () -> "the model under test compiles: " + compilation.errors().stream()
-                        .map(each -> each.diagnostic().code() + " " + each.diagnostic().said())
-                        .toList());
+        ACompiledModel.compiles(compilation);
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.Generator;
 
 import org.junit.jupiter.api.Test;
@@ -111,9 +112,7 @@ class AClassNobodyMeasuredIsNotAClassNothingCoversTest {
 
     /** The classes the rows this request is offered were composed for, in order. */
     private static List<String> classesOffered(String source, Adequacy.Asked asked) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(asked);
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, asked);
         Offering offering = Adequacy.offeredFor(compilation.db(),
                 OfferingRequest.overTheModule(MODULE));
         assertNotNull(offering, "the model under test compiles");

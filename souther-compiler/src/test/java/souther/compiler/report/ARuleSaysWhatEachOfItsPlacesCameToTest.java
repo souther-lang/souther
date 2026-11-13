@@ -10,6 +10,7 @@ import souther.compiler.partition.CompositionShortfall;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.Generator;
 import souther.compiler.publish.PublicationOrders;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.DecisionEvidence;
@@ -120,9 +121,7 @@ class ARuleSaysWhatEachOfItsPlacesCameToTest {
 
     /** One rule of the compiled body at two places: its own, and a second way standing under it. */
     private static List<DecisionReading.Ruled> twoPlaces() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
         DecisionEvidence decided = compilation.db()
                 .ask(new Adequacy.Decides(compilation.modules().getFirst())).value().get("f");
         DecisionReading.Ruled first = decided.read().found().get(0);

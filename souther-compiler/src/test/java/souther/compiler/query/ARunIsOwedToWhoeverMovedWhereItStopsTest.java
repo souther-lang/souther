@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.FarEnd;
 import souther.compiler.partition.PointRole;
@@ -86,9 +87,7 @@ class ARunIsOwedToWhoeverMovedWhereItStopsTest {
     }
 
     private static Adequacy.DeclaredDebt debtOf(PointRole role, String said) {
-        Compilation compilation = Compilation.ofSource(NARROWED, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(NARROWED, Adequacy.Asked.fullReport());
         Adequacy.DeclaredBoundaries account =
                 compilation.db().ask(new Adequacy.DeclaredBorders("example.narrow")).value();
         assertNotNull(account, "the model under test compiles");

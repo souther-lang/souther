@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.WhereItSits;
 import souther.compiler.diag.DiagnosticPlace;
 import souther.compiler.meta.ModulePath;
@@ -187,8 +188,6 @@ class WhatAClauseMeansAndWhereItIsWrittenAreTwoAnswersTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("limits.sou", declaring);
         byId.put("app.sou", CONSTRUCTING);
-        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
     }
 }

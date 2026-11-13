@@ -68,11 +68,11 @@ class ARowIsHeldToStepsAndNotToTheClockTest {
         return EvaluationPolicy.of(steps).withCompilerTimeout(Duration.ofSeconds(30));
     }
 
-    private static Compilation compiled(String source, EvaluationPolicy policy) {
+    /** The model compiled under {@code policy}, with the errors it is refused for. */
+    private static Compilation compiled(String source, EvaluationPolicy policy, List<String> errors) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.withEvaluationPolicy(policy);
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.refusedWith(errors, compilation);
     }
 
     private static RowOutcome onlyRowOf(Compilation compilation, String module) {
@@ -91,7 +91,7 @@ class ARowIsHeldToStepsAndNotToTheClockTest {
      */
     @Test
     void aRowThatLoopsIsReportedForSpendingItsSteps() {
-        RowOutcome row = onlyRowOf(compiled(LOOPS, holdingTo(10_000L)), "example.loops");
+        RowOutcome row = onlyRowOf(compiled(LOOPS, holdingTo(10_000L), List.of("E1910")), "example.loops");
 
         assertEquals(Disposition.INCOMPLETE, row.disposition());
         assertEquals(FailurePhase.STEP_LIMIT, row.failurePhase());
@@ -115,8 +115,10 @@ class ARowIsHeldToStepsAndNotToTheClockTest {
      */
     @Test
     void theSameRowIsDecidedByTheStepsItIsAllowed() {
-        RowOutcome withRoom = onlyRowOf(compiled(COUNTS_DOWN, holdingTo(1_000_000L)), "example.loops");
-        RowOutcome withoutRoom = onlyRowOf(compiled(COUNTS_DOWN, holdingTo(100L)), "example.loops");
+        RowOutcome withRoom =
+                onlyRowOf(compiled(COUNTS_DOWN, holdingTo(1_000_000L), List.of()), "example.loops");
+        RowOutcome withoutRoom =
+                onlyRowOf(compiled(COUNTS_DOWN, holdingTo(100L), List.of("E1910")), "example.loops");
 
         assertEquals(Disposition.HELD, withRoom.disposition());
         assertEquals(Disposition.INCOMPLETE, withoutRoom.disposition());
@@ -132,7 +134,7 @@ class ARowIsHeldToStepsAndNotToTheClockTest {
      */
     @Test
     void aRowThatSpendsItsStepsSaysWhatItCost() {
-        RowOutcome row = onlyRowOf(compiled(LOOPS, holdingTo(10_000L)), "example.loops");
+        RowOutcome row = onlyRowOf(compiled(LOOPS, holdingTo(10_000L), List.of("E1910")), "example.loops");
 
         assertEquals(10_000L, steps(row),
                 "it spent what it was allowed, and that is what it reports");
@@ -150,7 +152,7 @@ class ARowIsHeldToStepsAndNotToTheClockTest {
     void aRowThatSpendsItsStepsLeavesNoWorkerRunning() {
         Set<Thread> before = evaluationWorkers();
 
-        compiled(LOOPS, holdingTo(10_000L));
+        compiled(LOOPS, holdingTo(10_000L), List.of("E1910"));
 
         assertTrue(noWorkerRemainsBeyond(before), "an evaluation worker was left running");
     }

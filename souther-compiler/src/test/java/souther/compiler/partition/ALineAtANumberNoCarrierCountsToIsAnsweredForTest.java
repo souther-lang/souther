@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
@@ -42,21 +43,44 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  */
 class ALineAtANumberNoCarrierCountsToIsAnsweredForTest {
 
+    /**
+     * A rule written with an operator put in, and how nought on its left side stands against its
+     * right side where every position is at nought: below it, equal to it, or above it. That is
+     * what decides the answer the one example of the behavior states.
+     */
+    private record Shape(String text, int noughtAgainstTheRight) {
+
+        /** What the behavior answers with every position at nought, under {@code operator}. */
+        String answerAtNought(String operator) {
+            boolean holds = switch (operator) {
+                case "<" -> noughtAgainstTheRight < 0;
+                case "<=" -> noughtAgainstTheRight <= 0;
+                case ">" -> noughtAgainstTheRight > 0;
+                case ">=" -> noughtAgainstTheRight >= 0;
+                default -> noughtAgainstTheRight == 0;
+            };
+            return holds ? "Yes { v = 1 }" : "No { why = 0 }";
+        }
+    }
+
     /** The rules over one position, each written with an operator put in. */
-    private static final List<String> ONE_POSITION = List.of(
-            "n %s 1 / 3",
-            "n %s 2 / 3",
-            "n %s 1 / 7",
-            "n %s -1 / 3",
-            "1 / 3 * n %s 2",
-            "n / 3 %s 2",
-            "n / 3 %s 1 / 3");
+    private static final List<Shape> ONE_POSITION = List.of(
+            new Shape("n %s 1 / 3", -1),
+            new Shape("n %s 2 / 3", -1),
+            new Shape("n %s 1 / 7", -1),
+            new Shape("n %s -1 / 3", 1),
+            new Shape("1 / 3 * n %s 2", -1),
+            new Shape("n / 3 %s 2", -1),
+            new Shape("n / 3 %s 1 / 3", -1));
 
     /** And over two, where a third is a coefficient and where it is on both sides at once. */
-    private static final List<String> TWO_POSITIONS = List.of(
-            "m %s -1 / 3 * n + 30",
-            "m / 3 %s n / 3",
-            "n / 3 + m / 6 %s 1 / 2");
+    private static final List<Shape> TWO_POSITIONS = List.of(
+            new Shape("m %s -1 / 3 * n + 30", -1),
+            new Shape("m / 3 %s n / 3", 0),
+            new Shape("n / 3 + m / 6 %s 1 / 2", -1));
+
+    /** What each behavior of the crossing answers with every position at nought, by name. */
+    private static final Map<String, String> ANSWERED_AT_NOUGHT = new LinkedHashMap<>();
 
     /** Every operator a rule over two numbers can be written with. The disequality is not one this
      *  language writes, so it is not one an author reaches a line at a third by. */
@@ -70,11 +94,15 @@ class ALineAtANumberNoCarrierCountsToIsAnsweredForTest {
         int at = 0;
         for (String type : List.of("Int", "Decimal")) {
             for (String operator : OPERATORS) {
-                for (String shape : ONE_POSITION) {
-                    out.put("b" + at++ + " " + type, shape.formatted(operator));
+                for (Shape shape : ONE_POSITION) {
+                    String named = "b" + at++ + " " + type;
+                    out.put(named, shape.text().formatted(operator));
+                    ANSWERED_AT_NOUGHT.put(named, shape.answerAtNought(operator));
                 }
-                for (String shape : TWO_POSITIONS) {
-                    out.put("b" + at++ + " " + type, shape.formatted(operator));
+                for (Shape shape : TWO_POSITIONS) {
+                    String named = "b" + at++ + " " + type;
+                    out.put(named, shape.text().formatted(operator));
+                    ANSWERED_AT_NOUGHT.put(named, shape.answerAtNought(operator));
                 }
             }
         }
@@ -153,7 +181,7 @@ class ALineAtANumberNoCarrierCountsToIsAnsweredForTest {
      * before it.
      */
     private static Map<String, PartitionEvidence> divided(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = ACompiledModel.answered(source);
         return compilation.db().ask(new Adequacy.Coverage("example.form")).value();
     }
 
@@ -189,6 +217,7 @@ class ALineAtANumberNoCarrierCountsToIsAnsweredForTest {
             String type = parts[1];
             boolean two = guard.contains("m");
             String value = type.equals("Int") ? "0" : "0m";
+            String written = type.equals("Int") ? guard : guard.replaceAll("(\\d+)", "$1m");
             out.append("""
 
                     behavior %s : (%s) -> Result
@@ -198,11 +227,12 @@ class ALineAtANumberNoCarrierCountsToIsAnsweredForTest {
                         Yes { v = 1 }
                     }
                     example %s
-                        | "one" : (%s) -> No { why = 0 }
+                        | "one" : (%s) -> %s
                     """.formatted(name,
                     two ? "n: " + type + ", m: " + type : "n: " + type,
                     name, two ? "n, m" : "n",
-                    guard, name, two ? value + ", " + value : value));
+                    written, name, two ? value + ", " + value : value,
+                    ANSWERED_AT_NOUGHT.get(named)));
         });
         return out.toString();
     }

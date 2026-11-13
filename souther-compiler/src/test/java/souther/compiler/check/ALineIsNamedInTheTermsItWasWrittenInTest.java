@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Front;
@@ -147,8 +148,7 @@ class ALineIsNamedInTheTermsItWasWrittenInTest {
     private static Compilation compiled() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
         compilation.measure(souther.compiler.query.Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.compiles(compilation);
     }
 
     /**

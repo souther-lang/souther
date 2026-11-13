@@ -4,6 +4,7 @@ import net.unit8.notation199x.pattern.PatternParser;
 import net.unit8.notation199x.pattern.PatternRead;
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.query.Compilation;
@@ -511,12 +512,7 @@ class AChoiceIsDecidedByEveryClauseAndAnsweredByItsOwnTest {
     }
 
     private static FieldDomains read(String source, String name) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.diagnostics().values().stream()
-                .flatMap(List::stream)
-                .map(each -> each.diagnostic().code())
-                .toList(), "the model this reads has to be one somebody could write");
+        Compilation compilation = ACompiledModel.answered(source);
         Symbols symbols = Scopes.derived(compilation.db(), "demo").value();
         TypeSymbol.AtModule at = TypeSymbols.declared(new TypeKey(symbols.module(), name));
         return FieldDomains.of(at,

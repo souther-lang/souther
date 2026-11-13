@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.HelperGraph;
@@ -53,8 +54,8 @@ class OneModuleIsExpandedAgainstOneTableTest {
             """;
 
     private static Db db() {
-        return Compilation.ofDocuments(
-                Map.of("up.sou", UP, "down.sou", DOWN), Set.of(), ModulePath.EMPTY).db();
+        return ACompiledModel.compiles(Compilation.ofDocuments(
+                Map.of("up.sou", UP, "down.sou", DOWN), Set.of(), ModulePath.EMPTY)).db();
     }
 
     /** The table the check expands against: the settled module, and what its imports publish beside

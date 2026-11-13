@@ -1,8 +1,8 @@
 package souther.compiler.report;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
-import souther.compiler.query.Compilation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -68,9 +68,6 @@ class APageShowsTheRulesOfWhatItShowsTest {
     }
 
     private static AdequacyReport reportOf(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return AdequacyReport.of(compilation);
+        return AdequacyReport.of(ACompiledModel.measured(source, Adequacy.Asked.fullReport()));
     }
 }

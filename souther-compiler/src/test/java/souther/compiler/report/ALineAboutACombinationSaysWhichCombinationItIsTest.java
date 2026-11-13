@@ -5,6 +5,7 @@ import souther.compiler.coverage.ControlPlace;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.partition.InteractionRequirements;
 import souther.compiler.partition.ObligationIdentity;
+import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.CombinationCriterion;
 import souther.compiler.query.Compilation;
@@ -615,10 +616,15 @@ class ALineAboutACombinationSaysWhichCombinationItIsTest {
         return AdequacyReport.of(measured(source)).modules().getFirst().behaviors().getFirst();
     }
 
+    /** The source measured: a model that compiles, except the one whose last row states an answer
+     *  the behavior does not give, which is refused for that row alone. */
     private static Compilation measured(String source) {
+        if (!source.equals(MEETING)) {
+            return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
+        }
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        // The row that does not hold is the one error.
+        return ACompiledModel.refusedWith(List.of("E1905"), compilation);
     }
 }

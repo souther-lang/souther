@@ -47,10 +47,8 @@ class CompileExampleCoverageTest {
             """;
 
     private static Adequacy.BranchEvidence branch(String source, String behavior) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
         // Measuring the arms is opted into, so a test about them opts in.
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         Map<String, Adequacy.BranchEvidence> all = compilation.db()
                 .ask(new Adequacy.BranchCoverage(compilation.modules().get(0))).value();
         assertNotNull(all, "the model under test compiles");
@@ -132,17 +130,18 @@ class CompileExampleCoverageTest {
                 data On
                 data Off
                 data Flag = On | Off
+                data Active = Flag invariant value /= Off
                 data Answer = Int
 
-                behavior pick : (f: Flag) -> Answer
+                behavior pick : (f: Active) -> Answer
                     constructs Answer
 
-                let pick (f) = match f with
+                let pick (f) = match f.value with
                     | On  -> Answer(1)
                     | Off -> unreachable "the probe only ever passes On"
 
                 example pick
-                    | "on" : (On) -> Answer(1)
+                    | "on" : (Active(On)) -> Answer(1)
                 """, "pick");
 
         assertEquals(1, branch.arms().all().size(), "one arm, not two");
@@ -166,17 +165,18 @@ class CompileExampleCoverageTest {
                 data On
                 data Off
                 data Flag = On | Off
+                data Active = Flag invariant value /= On
                 data Answer = Int
 
-                behavior pick : (f: Flag) -> Answer
+                behavior pick : (f: Active) -> Answer
                     constructs Answer
 
-                let pick (f) = match f with
+                let pick (f) = match f.value with
                     | On  -> unreachable "the probe never passes On"
                     | Off -> Answer(0)
 
                 example pick
-                    | "off" : (Off) -> Answer(0)
+                    | "off" : (Active(Off)) -> Answer(0)
                 """, "pick");
 
         assertEquals(List.of("case Off"),
@@ -203,12 +203,13 @@ class CompileExampleCoverageTest {
                 data Answer = Yes | No
 
                 data Score = Int
+                data Given = Answer invariant value /= No
 
-                behavior scoreFor : (a: Answer, b: Answer) -> Score
+                behavior scoreFor : (a: Given, b: Answer) -> Score
                     constructs Score
 
                 let scoreFor (a, b) =
-                    match a with
+                    match a.value with
                         | Yes -> Score(1)
                         | No  -> {
                             let impossible: Int = unreachable "no No arrives"
@@ -218,7 +219,7 @@ class CompileExampleCoverageTest {
                         }
 
                 example scoreFor
-                    | "yes" : (Yes, Yes) -> Score(1)
+                    | "yes" : (Given(Yes), Yes) -> Score(1)
                 """, "scoreFor");
 
         assertEquals(1, branch.arms().all().size(), "one arm a row can be in, not three");
@@ -258,7 +259,7 @@ class CompileExampleCoverageTest {
                 .withJvmExampleDeadlines(
                         DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("go")));
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1923"), compilation);
         String module = compilation.modules().get(0);
         SourceId sourceId = compilation.exampleSourcesOf(module).getFirst();
         List<souther.compiler.observe.RowOutcome> rows = compilation.db()
@@ -382,10 +383,8 @@ class CompileExampleCoverageTest {
                 example submit
                     | (Draft { cost = Amount(500) }) -> Waiting { cost = Amount(500) }
                 """;
-        Compilation compilation = Compilation.ofSource(source, "Main");
         // Measuring the arms is opted into, so a test about them opts in.
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
         String module = compilation.modules().get(0);
 
         Adequacy.BranchEvidence branch = compilation.db()

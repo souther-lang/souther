@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -39,12 +40,13 @@ class AContestBetweenImportsIsSettledTheSameWhereverTheClaimsCameFromTest {
             let filter (x: Int) = x
             """;
 
-    /** What the author is told about {@code own.sou}, by code. */
-    private static Set<String> saidAbout(String own) {
+    /** What the author is told about {@code own.sou}, by code, of a model refused with {@code refused}. */
+    private static Set<String> saidAbout(List<String> refused, String own) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("other.sou", OTHER);
         byId.put("own.sou", own);
-        Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        Compilation compilation = ACompiledModel.refusedWith(refused,
+                Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
         List<String> codes = new ArrayList<>();
         for (Located said : compilation.diagnostics().get(new SourceId("own.sou"))) {
             codes.add(said.diagnostic().code());
@@ -55,7 +57,7 @@ class AContestBetweenImportsIsSettledTheSameWhereverTheClaimsCameFromTest {
     /** Both claims are library ones. */
     @Test
     void twoLibraryLines() {
-        assertTrue(saidAbout("""
+        assertTrue(saidAbout(List.of("E1508"), """
                 module app.own
                 import Map ( insert )
                 import Set ( insert )
@@ -67,7 +69,7 @@ class AContestBetweenImportsIsSettledTheSameWhereverTheClaimsCameFromTest {
     /** Both claims name modules this compilation has. */
     @Test
     void twoUserModuleLines() {
-        assertTrue(saidAbout("""
+        assertTrue(saidAbout(List.of("E1504"), """
                 module app.own
                 import app.other ( map )
                 import app.other2 ( map )
@@ -85,7 +87,7 @@ class AContestBetweenImportsIsSettledTheSameWhereverTheClaimsCameFromTest {
      */
     @Test
     void oneOfEach() {
-        Set<String> codes = saidAbout("""
+        Set<String> codes = saidAbout(List.of("E1508"), """
                 module app.own
                 import List ( map )
                 import app.other ( map )
@@ -108,7 +110,7 @@ class AContestBetweenImportsIsSettledTheSameWhereverTheClaimsCameFromTest {
      */
     @Test
     void aUseOfTheContestedNameIsNotReportedAgain() {
-        Set<String> codes = saidAbout("""
+        Set<String> codes = saidAbout(List.of("E1508"), """
                 module app.own
                 import List ( map )
                 import app.other ( map )

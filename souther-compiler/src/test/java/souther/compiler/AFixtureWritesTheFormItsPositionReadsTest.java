@@ -46,7 +46,7 @@ class AFixtureWritesTheFormItsPositionReadsTest {
 
     private static List<RowOutcome> rowsOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Output.Examples key = Output.Examples.asked(compilation.db(),
                 compilation.modules().get(0), compilation.sourceIds().get(0));
         Output.Examples.Of answer = compilation.db().ask(key).value();

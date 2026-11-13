@@ -1,12 +1,20 @@
 package souther.compiler.reading;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
+import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.RuleReadings;
+import souther.compiler.core.Core;
+import souther.compiler.inputs.InputDomain;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Bodies;
+import souther.compiler.query.Compilation;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static souther.compiler.reading.ReadInteractions.reachKinds;
-import static souther.compiler.reading.ReadInteractions.read;
 import static souther.compiler.reading.ReadInteractions.shape;
 
 /**
@@ -45,7 +53,7 @@ class AnArmUnderAnOperatorThatStopsEarlyIsWalkedTest {
      */
     @Test
     void theMeetingInTheArmIsFound() {
-        List<Interaction> found = read(STOPS_ON_THE_LEFT, "fee");
+        List<Interaction> found = readWhatEmissionRefuses(STOPS_ON_THE_LEFT, "fee");
         assertEquals(List.of(List.of(2, 2)), shape(found),
                 "the arm the comparison fails into holds one meeting of two two-way decisions");
     }
@@ -58,8 +66,26 @@ class AnArmUnderAnOperatorThatStopsEarlyIsWalkedTest {
      */
     @Test
     void theWayInIsTheComparisonAndNotTheArm() {
-        List<Interaction> found = read(STOPS_ON_THE_LEFT, "fee");
+        List<Interaction> found = readWhatEmissionRefuses(STOPS_ON_THE_LEFT, "fee");
         assertEquals(List.of(List.of("Side")), reachKinds(found));
+    }
+
+    /**
+     * The interactions of a body whose abort stands as an operand, where nothing states a type for
+     * it to take: emission refuses it, and the checked body is there all the same.
+     */
+    private static List<Interaction> readWhatEmissionRefuses(String source, String behavior) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        ACompiledModel.refusedWith(List.of("E1307"), compilation);
+        String module = compilation.modules().get(0);
+        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();
+        assertNotNull(checked, "the checked body is there");
+        Core body = checked.behaviorBodies().get(behavior);
+        assertNotNull(body, "the behavior under test has a body");
+        RuleReadingSource rules = RuleReadings.of(compilation, module);
+        InputDomain inputs = compilation.db().ask(new Adequacy.Inputs(module)).value().get(behavior);
+        return CoverageRead.of(behavior, checked.run(behavior), inputs.reading(rules))
+                .interactions();
     }
 
 }

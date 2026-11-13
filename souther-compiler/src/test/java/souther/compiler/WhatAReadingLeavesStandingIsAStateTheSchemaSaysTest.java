@@ -122,9 +122,19 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
     }
 
     private static JsonNode partitionOf(String source, String behavior) {
+        return partitionIn(ACompiledModel.measured(source, Adequacy.Asked.fullReport()), behavior);
+    }
+
+    /** The same, of a model that is refused with {@code codes} and still read. */
+    private static JsonNode partitionOfWhatIsRefused(
+            String source, String behavior, List<String> codes) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(codes, compilation);
+        return partitionIn(compilation, behavior);
+    }
+
+    private static JsonNode partitionIn(Compilation compilation, String behavior) {
         JsonNode document = JSON.readTree(
                 AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
         for (JsonNode each : document.get("modules").get(0).get("behaviors")) {
@@ -213,7 +223,7 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
      */
     @Test
     void aRuleNothingTookInAndRulesOutOfSightAreIndependent() {
-        JsonNode partition = partitionOf(BOTH_FACTS, "f");
+        JsonNode partition = partitionOfWhatIsRefused(BOTH_FACTS, "f", List.of("E1319"));
 
         // The rule nothing took in, at the position it is about. Asked of the questions rather than
         // of an axis: the classes at `r.n` are ones a comparison in the body draws, and this model
@@ -320,8 +330,7 @@ class WhatAReadingLeavesStandingIsAStateTheSchemaSaysTest {
     private static boolean isRefused(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
-        return !compilation.diagnostics().values().stream()
-                .flatMap(java.util.List::stream).toList().isEmpty();
+        return !compilation.errors().isEmpty();
     }
 
 }

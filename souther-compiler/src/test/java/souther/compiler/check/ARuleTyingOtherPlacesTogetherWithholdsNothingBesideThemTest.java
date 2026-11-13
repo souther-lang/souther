@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.query.Compilation;
@@ -34,7 +35,16 @@ class ARuleTyingOtherPlacesTogetherWithholdsNothingBesideThemTest {
     }
 
     private static FieldDomains readingOf(String declarations, String rules) {
-        Compilation compilation = Compilation.ofSource("""
+        return readingOf(List.of(), declarations, rules);
+    }
+
+    /** The reading of rules no value of the record holds together, which the model is refused for. */
+    private static FieldDomains readingOfRulesNothingHolds(String rules) {
+        return readingOf(List.of("E1013"), "", rules);
+    }
+
+    private static FieldDomains readingOf(List<String> refusedWith, String declarations, String rules) {
+        Compilation compilation = ACompiledModel.refusedWith(refusedWith, Compilation.ofSource("""
                 module example.prices
 
                 data Yen = Int
@@ -43,7 +53,7 @@ class ARuleTyingOtherPlacesTogetherWithholdsNothingBesideThemTest {
                 data Priced = { total: Yen, subtotal: Yen, a: String, b: String, c: String }
                     invariant total.value <= subtotal.value
                 %s
-                """.formatted(declarations, rules), "Main");
+                """.formatted(declarations, rules), "Main"));
         String module = compilation.modules().get(0);
         TypeSymbol.AtModule named = TypeSymbols.declared(new TypeKey(module, "Priced"));
         return FieldDomains.of(named, RuleReadingContext.unshared(RuleReadings.of(compilation, module),
@@ -101,7 +111,7 @@ class ARuleTyingOtherPlacesTogetherWithholdsNothingBesideThemTest {
     /** But not where another part of the clause is one no value of the place it names holds. */
     @Test
     void butNotWhereAnotherPartOfTheClauseHoldsOfNoValue() {
-        FieldDomains read = readingOf("""
+        FieldDomains read = readingOfRulesNothingHolds("""
                     invariant String.contains(a, b)
                         && String.matches("A", c) && String.matches("B", c)
                 """);
@@ -124,7 +134,7 @@ class ARuleTyingOtherPlacesTogetherWithholdsNothingBesideThemTest {
             assertTrue(read.projectionAt(RuleKey.of("total")).isCertified(),
                     () -> rule + ": " + read.projectionAt(RuleKey.of("total")));
         }
-        FieldDomains never = readingOf(
+        FieldDomains never = readingOfRulesNothingHolds(
                 "    invariant Bool.not(String.contains(a, b)) && String.contains(a, b)");
         assertFalse(never.projectionAt(RuleKey.of("total")).isCertified(),
                 "a rule and its denial hold of no value together");
@@ -145,7 +155,7 @@ class ARuleTyingOtherPlacesTogetherWithholdsNothingBesideThemTest {
     /** And of places inside another field, written as a value of that field's declaration. */
     @Test
     void soDoesOneInsideAFieldOfItsOwnDeclaration() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.compiles(Compilation.ofSource("""
                 module example.prices
 
                 data Yen = Int
@@ -156,7 +166,7 @@ class ARuleTyingOtherPlacesTogetherWithholdsNothingBesideThemTest {
 
                 data Priced = { total: Yen, subtotal: Yen, pair: Pair }
                     invariant total.value <= subtotal.value
-                """, "Main");
+                """, "Main"));
         String module = compilation.modules().get(0);
         FieldDomains read = FieldDomains.of(TypeSymbols.declared(new TypeKey(module, "Priced")),
                 RuleReadingContext.unshared(RuleReadings.of(compilation, module),

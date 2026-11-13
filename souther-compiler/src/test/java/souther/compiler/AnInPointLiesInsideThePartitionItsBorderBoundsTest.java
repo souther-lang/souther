@@ -54,9 +54,8 @@ class AnInPointLiesInsideThePartitionItsBorderBoundsTest {
             """;
 
     private static BorderAssessment borderAt(String rows, String value) {
-        Compilation compilation = Compilation.ofSource(BANDS.formatted(rows), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        Compilation compilation =
+                ACompiledModel.measured(BANDS.formatted(rows), Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> all =
                 Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");
@@ -113,7 +112,7 @@ border.owedAt(PointRole.IN).coverage().made().orElseThrow());
      */
     @Test
     void aSecondLineOverOneFormBoundsTheFirstOnesInPoint() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module example.form
 
                 data Bound = Int
@@ -136,10 +135,8 @@ border.owedAt(PointRole.IN).coverage().made().orElseThrow());
                 }
 
                 example f
-                    | "one" : (Bound(1), Bound(1)) -> Yes { v = 1 }
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                    | "one" : (Bound(1), Bound(1)) -> No { why = 0 }
+                """, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> all =
                 Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");
@@ -162,7 +159,7 @@ border.owedAt(PointRole.IN).coverage().made().orElseThrow());
      */
     @Test
     void twoScalesOfOneQuantityBoundEachOther() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module example.scales
 
                 data Bound = Int
@@ -185,9 +182,7 @@ border.owedAt(PointRole.IN).coverage().made().orElseThrow());
 
                 example f
                     | "one" : (Bound(1), Bound(1)) -> No { why = 0 }
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> all =
                 Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");
@@ -222,7 +217,7 @@ border.owedAt(PointRole.IN).coverage().made().orElseThrow());
      */
     @Test
     void aLineThePositionCanNameAndOneItCannotBoundEachOther() {
-        Compilation compilation = Compilation.ofSource("""
+        Compilation compilation = ACompiledModel.measured("""
                 module example.mixed
 
                 data No = { why: Int }
@@ -241,9 +236,7 @@ border.owedAt(PointRole.IN).coverage().made().orElseThrow());
                 example f
                     | "low" : (0.1m) -> No { why = 0 }
                     | "high" : (0.5m) -> Yes { v = 1 }
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+                """, Adequacy.Asked.fullReport());
         Map<String, List<BorderAssessment>> all =
                 Adequacy.readingsOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(all, "the model under test compiles");

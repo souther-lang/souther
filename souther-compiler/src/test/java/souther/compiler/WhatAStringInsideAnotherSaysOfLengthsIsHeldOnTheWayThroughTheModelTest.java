@@ -109,10 +109,7 @@ class WhatAStringInsideAnotherSaysOfLengthsIsHeldOnTheWayThroughTheModelTest {
                     | ("aa", "b") -> %s
                 """.formatted(row.body(), row.answer()), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code().toString()).toList(),
-                row.body() + " compiles");
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }

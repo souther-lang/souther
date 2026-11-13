@@ -201,7 +201,7 @@ class ARowOfferedForACombinationIsRunWhereAnythingCanRunItTest {
                                                  Adequacy.Level level) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.reportOnly(level));
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         Map<String, Adequacy.Filling> filled = Adequacy.generatedOf(compilation.db(), compilation.modules().get(0));
         assertNotNull(filled, "the model under test compiles and is measured");
         Adequacy.Filling filling = filled.get(behavior);

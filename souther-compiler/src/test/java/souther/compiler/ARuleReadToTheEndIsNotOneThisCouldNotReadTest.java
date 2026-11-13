@@ -12,7 +12,9 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -65,7 +67,7 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
      * off the clause rather than off anything the body does with it, and a body comparing the same
      * field would put a second reading over the first.
      */
-    private static String model(String clause) {
+    private static String model(String clause, String name) {
         return """
                 module m
 
@@ -85,8 +87,8 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
                         | Large -> Manual
 
                 example byBox
-                    | "one" : (Box { size = Small, name = "n", lo = 1, hi = 2 }) -> Auto
-                """.formatted(clause);
+                    | "one" : (Box { size = Small, name = "%s", lo = 1, hi = 2 }) -> Auto
+                """.formatted(clause, name);
     }
 
     /** What one of these models came to, in the words both surfaces write it in. */
@@ -99,9 +101,23 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
     }
 
     private static Measured of(String clause) {
-        Compilation compilation = Compilation.ofSource(model(clause), "Main");
+        return of(clause, "n", List.of());
+    }
+
+    /** The model with the row's name written as {@code name}, which the clause is to admit. */
+    private static Measured of(String clause, String name) {
+        return of(clause, name, List.of());
+    }
+
+    /** The model refused for {@code codes}, which a clause no row satisfies leaves it. */
+    private static Measured ofRefused(String clause, List<String> codes) {
+        return of(clause, "n", codes);
+    }
+
+    private static Measured of(String clause, String name, List<String> codes) {
+        Compilation compilation = Compilation.ofSource(model(clause, name), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(codes, compilation);
         AdequacyReport report = AdequacyReport.of(compilation);
         JsonNode document = JSON.readTree(report.json(SourceRendering.namedByIdentity(compilation.texts())));
         JsonNode behavior = document.get("modules").get(0).get("behaviors").get(0);
@@ -214,11 +230,14 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
                 "lo - lo == 0: every row", "lo - lo == 1: not every row",
                 "lo - lo == -1: not every row");
 
+        List<String> unsatisfiable = List.of(
+                "lo - lo >= 1", "lo - lo == 1", "lo - lo == -1");
         List<String> answered = new ArrayList<>();
         for (String operator : List.of(">=", "==")) {
             for (String against : List.of("0", "1", "-1")) {
                 String clause = "lo - lo " + operator + " " + against;
-                Measured measured = of("    invariant " + clause);
+                Measured measured = of("    invariant " + clause, "n",
+                        unsatisfiable.contains(clause) ? List.of("E1013") : List.of());
                 answered.add(clause + ": "
                         + (measured.status().equals("complete") ? "every row" : "not every row"));
             }
@@ -256,7 +275,7 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
      */
     @Test
     void aClauseNoRowSatisfiesIsNotOneThatRestrictsNothing() {
-        Measured measured = of("    invariant lo - lo >= 1");
+        Measured measured = ofRefused("    invariant lo - lo >= 1", List.of("E1013"));
 
         assertEquals("partial", measured.status());
         assertTrue(measured.kinds().contains("rule_unaccounted"), measured.kinds().toString());
@@ -330,7 +349,7 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
      */
     @Test
     void aProvedEmptyInputOutranksWhatAReadingOfItManaged() {
-        Measured measured = of("    invariant String.length(name) <= 0 - 1");
+        Measured measured = ofRefused("    invariant String.length(name) <= 0 - 1", List.of("E1013"));
 
         assertTrue(measured.says("the rules reaching this behavior's input leave it no value"),
                 measured.human());
@@ -352,13 +371,13 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
      *
      * <p>Whichever side the number is written on, since that is spelling.
      *
-     * <p>The model's one row has a name of one letter, so it does not hold and the measurement is
-     * partial for that. What is asked here is the account of the rule alone.
+     * <p>The model's one row has a name of two letters, so it holds. What is asked here is the
+     * account of the rule alone.
      */
     @Test
     void anEqualityOnANumberTakenOfAPositionIsMeasuredWhole() {
         for (String clause : List.of("String.length(name) == 2", "2 == String.length(name)")) {
-            Measured measured = of("    invariant " + clause);
+            Measured measured = of("    invariant " + clause, "ab");
 
             assertFalse(measured.kinds().contains("rule_unaccounted"), clause + ": "
                     + measured.kinds());
@@ -378,8 +397,9 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
      */
     @Test
     void anEqualityReportsWhatTheTwoBoundsLeavingTheSameNumberReport() {
-        Measured named = of("    invariant String.length(name) == 2");
-        Measured bounded = of("    invariant String.length(name) >= 2 && String.length(name) <= 2");
+        Measured named = of("    invariant String.length(name) == 2", "ab");
+        Measured bounded = of(
+                "    invariant String.length(name) >= 2 && String.length(name) <= 2", "ab");
 
         assertEquals(bounded.human(), named.human());
     }
@@ -395,7 +415,7 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
         for (String clause : List.of(
                 "String.length(name) == 2 && String.length(name) <= 2",
                 "String.length(name) == 2 && String.length(name) == 2")) {
-            Measured measured = of("    invariant " + clause);
+            Measured measured = of("    invariant " + clause, "ab");
 
             assertFalse(measured.kinds().contains("rule_unaccounted"), clause + ": "
                     + measured.kinds());
@@ -417,7 +437,7 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
         for (String clause : List.of(
                 "name /= \"x\" && String.length(name) == 2",
                 "String.length(name) == 2 && name /= \"x\"")) {
-            Measured measured = of("    invariant " + clause);
+            Measured measured = of("    invariant " + clause, "ab");
 
             assertFalse(measured.kinds().contains("rule_unaccounted"), clause + ": "
                     + measured.kinds() + "\n" + measured.human());
@@ -434,9 +454,9 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
      */
     @Test
     void aConjunctionOfTwoReadingsIsAccountedForAsTheTwoRulesWrittenApartAre() {
-        Measured together = of("    invariant name == \"ab\" && String.length(name) == 2");
+        Measured together = of("    invariant name == \"ab\" && String.length(name) == 2", "ab");
         Measured apart = of("    invariant name == \"ab\"\n"
-                + "    invariant String.length(name) == 2");
+                + "    invariant String.length(name) == 2", "ab");
 
         assertFalse(together.kinds().contains("rule_unaccounted"), together.human());
         assertEquals(apart.kinds().contains("rule_unaccounted"),
@@ -465,7 +485,7 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
                     | "one" : (Pair([1, 2])) -> 0
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         String human = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
 
@@ -482,7 +502,7 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
     @Test
     void anEqualityThatIsNotTheWholeOfWhatTheRuleStatesIsNotReadByIt() {
         String clause = "String.length(name) == 2 && String.length(name) <= 3 - 0";
-        Measured measured = of("    invariant " + clause);
+        Measured measured = of("    invariant " + clause, "ab");
 
         assertTrue(measured.kinds().contains("rule_unaccounted"), clause + ": "
                 + measured.kinds() + "\n" + measured.human());
@@ -495,12 +515,14 @@ class ARuleReadToTheEndIsNotOneThisCouldNotReadTest {
      */
     @Test
     void aRuleThatTakesLengthsOutFromBetweenItsEndsIsReadByIt() {
-        for (String clause : List.of(
-                "String.length(name) == 2 || String.length(name) == 4",
-                "String.length(name) <= 1 || String.length(name) >= 3",
-                "String.length(name) /= 2",
-                "name /= \"x\" && String.length(name) /= 2")) {
-            Measured measured = of("    invariant " + clause);
+        Map<String, String> rowNames = new LinkedHashMap<>();
+        rowNames.put("String.length(name) == 2 || String.length(name) == 4", "ab");
+        rowNames.put("String.length(name) <= 1 || String.length(name) >= 3", "n");
+        rowNames.put("String.length(name) /= 2", "n");
+        rowNames.put("name /= \"x\" && String.length(name) /= 2", "n");
+        for (Map.Entry<String, String> written : rowNames.entrySet()) {
+            String clause = written.getKey();
+            Measured measured = of("    invariant " + clause, written.getValue());
 
             assertFalse(measured.kinds().contains("rule_unaccounted"), clause + ": "
                     + measured.kinds() + "\n" + measured.human());

@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,7 @@ class WhereADiagnosticIsSaidTest {
     @Test
     void aCompileOfOneSourceStillFilesItsProblemsUnderThatSource() {
         Compilation c = Compilation.ofSource(BROKEN, "Main");
+        ACompiledModel.refusedWith(List.of("E1023"), c);
 
         Map<SourceId, List<Located>> found = c.diagnostics();
 
@@ -39,6 +41,7 @@ class WhereADiagnosticIsSaidTest {
     @Test
     void aCompileOfOneSourceFilesUnderTheSourceItQuotesFrom() {
         Compilation c = Compilation.ofSource(BROKEN, "Main");
+        ACompiledModel.refusedWith(List.of("E1023"), c);
 
         Map<SourceId, List<Located>> found = c.diagnostics();
 
@@ -58,7 +61,7 @@ class WhereADiagnosticIsSaidTest {
     @Test
     void aCompileOfOneSourceNamesItLikeAnyOther() {
         Compilation c = Compilation.ofSource(BROKEN, "Main");
-        c.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1023"), c);
 
         Db.Found only = c.db().allReports().get(0);
 
@@ -76,7 +79,7 @@ class WhereADiagnosticIsSaidTest {
                 import a ( N )
                 let f (n: N) = bogus
                 """), souther.compiler.meta.ModulePath.EMPTY);
-        c.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1023"), c);
 
         List<SourceId> said = c.db().allReports().stream().map(c::filedUnderOf).toList();
 
@@ -88,7 +91,7 @@ class WhereADiagnosticIsSaidTest {
     @Test
     void aReportIsSaidWhereItPointsAndNowhereElse() {
         Compilation c = Compilation.ofSource(BROKEN, "Main");
-        c.answerEverything();
+        ACompiledModel.refusedWith(List.of("E1023"), c);
 
         for (Db.Found found : c.db().allReports()) {
             List<SourceId> saidAt = c.publishSourceIdsOf(found);
@@ -130,6 +133,7 @@ class WhereADiagnosticIsSaidTest {
                 behavior g : (n: N) -> Int
                 let g (n) = joined(n)
                 """), souther.compiler.meta.ModulePath.EMPTY);
+        ACompiledModel.refusedWith(List.of("E1324"), c);
 
         Map<SourceId, List<Located>> found = c.diagnostics();
 
@@ -152,6 +156,7 @@ class WhereADiagnosticIsSaidTest {
                 behavior g : (n: N) -> Int
                 let g (n) = bogusTwo
                 """), souther.compiler.meta.ModulePath.EMPTY);
+        ACompiledModel.refusedWith(List.of("E1023", "E1023"), c);
 
         Map<SourceId, List<Located>> found = c.diagnostics();
 
@@ -174,6 +179,7 @@ class WhereADiagnosticIsSaidTest {
         Compilation c = Compilation.ofSources(
                 List.of("module a\n" + same, "module b\n" + same),
                 souther.compiler.meta.ModulePath.EMPTY);
+        ACompiledModel.refusedWith(List.of("E1023", "E1023"), c);
 
         Map<SourceId, List<Located>> found = c.diagnostics();
 

@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
@@ -64,7 +65,6 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
             data Basket = { item: Item }
 
             behavior f : (b: Basket) -> Ok
-                constructs Ok
             let f (b) = Ok
             """;
 
@@ -88,7 +88,8 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
      */
     @Test
     void aPositionTheReadingDidNotReachNamesNoRule() {
-        List<PartitionEvidence.NotRead> said = notRead(A_POSITION);
+        List<PartitionEvidence.NotRead> said = notRead(
+                reportOfWhatIsRefused(A_POSITION, List.of("E1319")));
 
         assertTrue(said.stream().anyMatch(each ->
                         each instanceof PartitionEvidence.NotRead.APosition
@@ -112,7 +113,8 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
     void theTwoAreWrittenApart() {
         assertTrue(human(A_RULE).contains("not read: comparison@"), human(A_RULE));
         assertFalse(human(A_RULE).contains("not read: n "), human(A_RULE));
-        assertTrue(human(A_POSITION).contains("not read: b.item ("), human(A_POSITION));
+        String refused = human(reportOfWhatIsRefused(A_POSITION, List.of("E1319")));
+        assertTrue(refused.contains("not read: b.item ("), refused);
     }
 
     private static List<Adequacy.Kind> kinds(String model) {
@@ -127,17 +129,30 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
     }
 
     private static List<PartitionEvidence.NotRead> notRead(String model) {
-        return report(model).modules().get(0).behaviors().get(0).partition().notRead();
+        return notRead(report(model));
+    }
+
+    private static List<PartitionEvidence.NotRead> notRead(AdequacyReport report) {
+        return report.modules().get(0).behaviors().get(0).partition().notRead();
     }
 
     private static String human(String model) {
-        return report(model).humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+        return human(report(model));
+    }
+
+    private static String human(AdequacyReport report) {
+        return report.humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
     private static AdequacyReport report(String model) {
+        return AdequacyReport.of(ACompiledModel.measured(model, Adequacy.Asked.fullReport()));
+    }
+
+    /** The report of a model that is refused with {@code codes} and still read. */
+    private static AdequacyReport reportOfWhatIsRefused(String model, List<String> codes) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(codes, compilation);
         return AdequacyReport.of(compilation);
     }
     /**
@@ -156,14 +171,16 @@ class WhatWasNotReadIsSaidByWhoeverKnowsWhichRuleTest {
      */
     @Test
     void theModelThatSaysSoIsOneThisCompilerRefuses() {
-        assertTrue(isRefused(A_POSITION), A_POSITION);
-        assertFalse(isRefused(A_RULE), "and a rule read and given up on is not that");
+        assertTrue(isRefused(A_POSITION, List.of("E1319")), A_POSITION);
+        assertFalse(isRefused(A_RULE, List.of()), "and a rule read and given up on is not that");
     }
 
-    /** Whether this compiler refuses {@code source}, which is what the fixture above turns on. */
-    private static boolean isRefused(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.answerEverything();
+    /**
+     * Whether this compiler refuses {@code source}, which is what the fixture above turns on. The
+     * errors it is refused with are {@code codes}.
+     */
+    private static boolean isRefused(String source, List<String> codes) {
+        Compilation compilation = ACompiledModel.refusedWith(codes, Compilation.ofSource(source, "Main"));
         return !compilation.diagnostics().values().stream()
                 .flatMap(java.util.List::stream).toList().isEmpty();
     }

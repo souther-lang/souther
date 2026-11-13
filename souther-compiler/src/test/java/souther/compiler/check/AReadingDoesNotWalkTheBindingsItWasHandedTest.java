@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -56,7 +57,7 @@ class AReadingDoesNotWalkTheBindingsItWasHandedTest {
      */
     @Test
     void aWalkAsksTheTableForABindingRatherThanGoingThroughIt() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
+        Compilation compilation = ACompiledModel.answered(MODEL);
         Map<BindingId, BindingEvidence> declared = compilation.db()
                 .ask(new Bodies.DeclaredParameterBindings("demo")).value();
         assertFalse(declared.isEmpty(),

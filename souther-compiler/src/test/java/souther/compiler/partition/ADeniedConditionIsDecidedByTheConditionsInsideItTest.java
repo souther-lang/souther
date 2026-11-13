@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -58,6 +59,11 @@ class ADeniedConditionIsDecidedByTheConditionsInsideItTest {
      * answers every reading of the three.
      */
     private static String model(String guarded) {
+        return model(guarded, "Done");
+    }
+
+    /** As above, where the third row of {@code deniedAll} states {@code third}. */
+    private static String model(String guarded, String third) {
         return """
                 module notdemo
 
@@ -86,8 +92,8 @@ class ADeniedConditionIsDecidedByTheConditionsInsideItTest {
                 example deniedAll
                     | (0, [], [])  -> Fresh
                     | (0, [0], []) -> Done
-                    | (0, [], [0]) -> Done
-                """.formatted(guarded, A_OR_B);
+                    | (0, [], [0]) -> %3$s
+                """.formatted(guarded, A_OR_B, third);
     }
 
     @Test
@@ -128,8 +134,8 @@ class ADeniedConditionIsDecidedByTheConditionsInsideItTest {
      *  measure asks for above is the condition on {@code b} and not a row of any kind. */
     @Test
     void aBodyWithNoConditionOnTheSecondHalfOwesNoFurtherRow() {
-        assertEquals(0, uncoveredRulesOf(measured(model("Bool.not(Set.contains(n, a))")),
-                "denied"));
+        assertEquals(0, uncoveredRulesOf(
+                measured(model("Bool.not(Set.contains(n, a))", "Fresh")), "denied"));
     }
 
     /**
@@ -197,10 +203,7 @@ class ADeniedConditionIsDecidedByTheConditionsInsideItTest {
     }
 
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(source, Adequacy.Asked.fullReport());
     }
 
     private static long uncoveredRulesOf(Compilation compilation, String behavior) {

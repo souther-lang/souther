@@ -54,6 +54,11 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
             """;
 
     private static Compilation measured(String source) {
+        return ACompiledModel.compiles(attempted(source));
+    }
+
+    /** The model measured and answered in full, whether or not it compiles. */
+    private static Compilation attempted(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         compilation.answerEverything();
@@ -280,13 +285,14 @@ class AMapLookupIsReadAsTheEntryItSelectsTest {
     /** The control: the same rows with one answer the lookup does not give are refused. */
     @Test
     void anAnswerTheLookupDoesNotGiveIsRefused() {
-        Compilation compilation = measured(WITH_DEFAULT + """
+        Compilation compilation = attempted(WITH_DEFAULT + """
 
                 example f
                     | "another key holds the large value" : ("A", [("B", 10), ("A", 2)], 5) -> true
                 """);
 
-        assertFalse(compilation.errors().isEmpty(), () -> report(compilation));
+        ACompiledModel.refusedWith(List.of("E1905"), compilation);
+        assertFalse(report(compilation).isEmpty(), () -> report(compilation));
     }
 
     /** One row offered for a line: what it was offered for, and the values it writes. */

@@ -151,7 +151,7 @@ class WhatAPositionAdmitsIsTheSameWhicheverModuleAsksTest {
         Compilation compilation =
                 Compilation.ofSources(List.of(DECLARING, IMPORTING), ModulePath.EMPTY);
         compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
+        ACompiledModel.compiles(compilation);
         JsonNode document = JSON.readTree(
                 AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts())));
         Map<String, JsonNode> out = new LinkedHashMap<>();

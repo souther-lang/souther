@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import org.junit.jupiter.api.Test;
 import souther.compiler.coverage.ControlPlace;
@@ -99,7 +100,7 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
     }
 
     private static List<Reachability> armsOf(String source, String behavior) {
-        Compilation c = Compilation.ofSource(source, "d");
+        Compilation c = ACompiledModel.compiles(Compilation.ofSource(source, "d"));
         Map<String, PathReachability.Answers> byBehavior =
                 c.db().ask(new Adequacy.PathReached("d")).value();
         assertTrue(byBehavior != null && byBehavior.containsKey(behavior),
@@ -300,7 +301,7 @@ class AGuardTheGuardsAboveItRuleOutIsProvenTest {
 
     @Test
     void aForkAnotherModuleWroteIsProvenHereAndNotToldAbout() {
-        Compilation c = Compilation.ofSource(A_LIBRARY_FORK, "d");
+        Compilation c = ACompiledModel.compiles(Compilation.ofSource(A_LIBRARY_FORK, "d"));
         Map<String, PathReachability.Answers> byBehavior =
                 c.db().ask(new Adequacy.PathReached("d")).value();
         List<ControlPlace.Arm> proven = byBehavior.get("mk").found().entrySet().stream()

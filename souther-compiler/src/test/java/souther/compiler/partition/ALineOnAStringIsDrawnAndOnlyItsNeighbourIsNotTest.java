@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceLayouts;
 import org.junit.jupiter.api.Test;
 
@@ -85,10 +86,7 @@ class ALineOnAStringIsDrawnAndOnlyItsNeighbourIsNotTest {
     }
 
     private static Compilation measured() {
-        Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        compilation.answerEverything();
-        return compilation;
+        return ACompiledModel.measured(MODEL, Adequacy.Asked.fullReport());
     }
 
     private static List<String> classes() {

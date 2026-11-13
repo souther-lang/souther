@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.ast.Hir;
 import souther.compiler.meta.ModulePath;
 
@@ -43,7 +44,7 @@ class BodyForInvariantDischargeTest {
     private static Db db() {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", SOURCE);
-        return Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY).db();
+        return ACompiledModel.compiles(Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY)).db();
     }
 
     private static List<String> calls(Hir.Expr e) {

@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.ast.Hir;
 import souther.compiler.core.Core;
@@ -56,7 +57,10 @@ class ANewtypeChainIsReadOneNameAtATimeTest {
     }
 
     private static RuleReadingSource rules(int links) {
-        Compilation compilation = Compilation.ofSource(chainOf(links), "Main");
+        Compilation compilation = ACompiledModel.notCompiled(
+                Compilation.ofSource(chainOf(links), "Main"),
+                "a chain this long overflows the stack of a compile, and what is read is the"
+                        + " declarations");
         return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 

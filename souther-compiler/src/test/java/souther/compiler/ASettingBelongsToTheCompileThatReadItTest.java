@@ -36,9 +36,10 @@ class ASettingBelongsToTheCompileThatReadItTest {
               | "counts down": (N(2000)) -> Out(0)
             """;
 
-    private static RowOutcome onlyRow() {
+    /** The row of the model, which the compile refuses with {@code refusals} and nothing else. */
+    private static RowOutcome onlyRow(List<String> refusals) {
         Compilation compilation = Compilation.ofSource(COUNTS_DOWN, "Main");
-        compilation.answerEverything();
+        ACompiledModel.refusedWith(refusals, compilation);
         SourceId sourceId = compilation.exampleSourcesOf("example.setting").getFirst();
         List<RowOutcome> rows = compilation.db()
                 .ask(new Output.Examples("example.setting", sourceId, ArmObservation.OMIT))
@@ -60,11 +61,11 @@ class ASettingBelongsToTheCompileThatReadItTest {
         String before = System.getProperty("souther.example.step.limit");
         try {
             System.setProperty("souther.example.step.limit", "100000000");
-            assertEquals(FailurePhase.NONE, onlyRow().failurePhase(),
+            assertEquals(FailurePhase.NONE, onlyRow(List.of()).failurePhase(),
                     "with steps to spare the row comes back");
 
             System.setProperty("souther.example.step.limit", "100");
-            assertEquals(FailurePhase.STEP_LIMIT, onlyRow().failurePhase(),
+            assertEquals(FailurePhase.STEP_LIMIT, onlyRow(List.of("E1910")).failurePhase(),
                     "the compile after the change is held to what it says");
         } finally {
             if (before == null) {

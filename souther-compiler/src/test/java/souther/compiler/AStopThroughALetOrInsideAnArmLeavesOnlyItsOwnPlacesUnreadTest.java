@@ -61,9 +61,7 @@ class AStopThroughALetOrInsideAnArmLeavesOnlyItsOwnPlacesUnreadTest {
                     c
                 }
                 """.formatted(model.before(), comparison);
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly(level));
-        compilation.answerEverything();
+        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.reportOnly(level));
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.opentest4j.AssertionFailedError;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
@@ -20,7 +21,6 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -1383,23 +1383,22 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
 
     /** Each source measured once for the class at each level: several tests read the same model,
      *  and only read it. */
-    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+    private static final ACompiledModel.Shared MEASURED = new ACompiledModel.Shared();
 
-    private static final Map<String, Compilation> READ = new ConcurrentHashMap<>();
+    private static final ACompiledModel.Shared READ = new ACompiledModel.Shared();
 
     /** And given back when the class is done with them: a fork keeps its JVM, so what is held
      *  statically is held for every class after this one. */
     @AfterAll
     static void released() {
-        MEASURED.clear();
-        READ.clear();
+        MEASURED.release();
+        READ.release();
     }
 
     /** The source measured, which is a source that compiles: a model that did not would have no
      *  line to draw whatever its folds are. */
     private static Compilation measured(String source) {
-        return MEASURED.computeIfAbsent(source,
-                text -> compiled(text, Adequacy.Asked.fullReport()));
+        return MEASURED.compiles(source, () -> measuring(source, Adequacy.Asked.fullReport()));
     }
 
     /**
@@ -1407,17 +1406,13 @@ class AFoldThatFilesACounterUnderEachKeyAnswersHowOftenTheKeyOccursTest {
      * that is about what a count is read as, and nothing about a row put on either side of it.
      */
     private static Compilation read(String source) {
-        return READ.computeIfAbsent(source,
-                text -> compiled(text, Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS)));
+        return READ.compiles(source,
+                () -> measuring(source, Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS)));
     }
 
-    private static Compilation compiled(String source, Adequacy.Asked asked) {
+    private static Compilation measuring(String source, Adequacy.Asked asked) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(asked);
-        compilation.answerEverything();
-        assertEquals(List.of(), compilation.errors().stream()
-                .map(each -> each.diagnostic().code().toString()).toList(),
-                () -> "the source compiles: " + source);
         return compilation;
     }
 }
