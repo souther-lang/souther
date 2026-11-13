@@ -108,10 +108,9 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
      * The same, of a value that is one element of a container whose rules state something of every
      * element it holds.
      *
-     * <p>What the container states is read as a rule of the value where the value stands under no
-     * declaration of its own, which is what a string or a number held in a list is. A value that
-     * wears a declaration is read as that declaration, as before: its clauses are its own, and a
-     * clause of the container is not written across.
+     * <p>What the container states is read as rules of the value, beside its own where it wears a
+     * declaration. It is a reading of this element in this container: what the same declaration
+     * holds elsewhere is not changed by it.
      */
     static PlacedRules of(TermPath root, Type type, RuleReadingContext reading,
                           Reaching alsoReaching, List<ElementGuarantee> inherited) {
@@ -125,8 +124,8 @@ record PlacedRules(TermPath root, TypeSymbol value, Rules rules, Reaching alsoRe
         // of the value this was narrowed from — one answer, however many paths are asked about it.
         // Made per call instead, every ask would get its own allowance and the whole of what a
         // reading costs would be bounded by nothing.
-        Rules rules = read == null && !inherited.isEmpty()
-                ? Rules.ofElement(type, inherited, reading) : Rules.of(read, reading);
+        Rules rules = inherited.isEmpty()
+                ? Rules.of(read, reading) : Rules.ofElement(read, type, inherited, reading);
         return new PlacedRules(root, read, rules, alsoReaching,
                 reading.policy().allowanceForAdmittedValues(answersFor(read, machines).lending()),
                 machines);

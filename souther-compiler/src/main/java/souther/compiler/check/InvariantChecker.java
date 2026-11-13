@@ -834,6 +834,10 @@ public final class InvariantChecker {
     private static Seeded seedFieldsFresh(TypeSymbol.AtModule named, RuleReadingContext world,
                              Map<NumberAt<RuleKey>, Count> settled, Reach reach,
                              StringMachineAnswers answers, Inherited inherited) {
+        if (named == null && inherited == null) {
+            throw new IllegalArgumentException("a reading is of a declaration's rules or of what a"
+                    + " container states of its elements, and this is of neither");
+        }
         READINGS.incrementAndGet();
         Symbols symbols = world.source().symbols();
         ReadingPolicy policy = world.policy();
@@ -945,23 +949,27 @@ public final class InvariantChecker {
         // the predicate with its parameter put for the value. Each is a part of the container's own
         // rule and keeps its name, so what these say is attributed to the rule that was written.
         //
-        // One of a rule's parts and no more. A rule is read once as one reading and answered for as
-        // one, so a second part of the same rule would be a second reading of it.
+        // Each part of a rule of the container that states something of every element, as a clause
+        // of the rule it is a part of and under the name it was given: two statements of the one
+        // rule are two parts of it, which a reading can be made without apart.
+        //
+        // Whatever a rule states of the element and this reading has no place for leaves the
+        // position short of it, said as a rule that was not worked out. It is never dropped
+        // unsaid, since a position that said it held everything the rules leave it would be
+        // wrong about a value the container refuses.
         if (opened && inherited != null) {
-            Set<RuleRef.Invariant> seen = new LinkedHashSet<>();
-            for (ElementGuarantee guarantee : inherited.guarantees()) {
-                if (!seen.add(guarantee.part().rule())) {
-                    read = false;
-                    gathering.missed(RuleKey.THE_VALUE, new RulesMissed.ClausesNotExpanded());
-                    continue;
+            for (Map.Entry<RuleRef.Invariant, List<ElementGuarantee>> rule
+                    : inherited.byRule().entrySet()) {
+                for (ElementGuarantee guarantee : rule.getValue()) {
+                    Core stated = statedOfTheValue(guarantee, atTheValue, fields, bindings);
+                    if (stated == null) {
+                        read = false;
+                        gathering.missed(RuleKey.THE_VALUE, new RulesMissed.ClausesNotExpanded());
+                        continue;
+                    }
+                    toRead.add(new ClauseToRead(rule.getKey(), new Clauses.AsStated(stated,
+                            new ClauseMeaning.Parts.One(guarantee.part(), Set.of()))));
                 }
-                Core value = new Core.Read(THE_VALUE_FIELD, bindings.get(THE_VALUE_FIELD),
-                        fields.get(THE_VALUE_FIELD), NOWHERE);
-                Core stated = Clauses.substituted(guarantee.predicate().body(),
-                        Map.of(guarantee.predicate().params().getFirst().binding(), value));
-                toRead.add(new ClauseToRead(guarantee.part().rule(),
-                        new Clauses.AsStated(stated,
-                                new ClauseMeaning.Parts.One(guarantee.part(), Set.of()))));
             }
         }
         for (ClauseToRead each : toRead) {
@@ -1476,6 +1484,43 @@ public final class InvariantChecker {
     }
 
     /**
+     * What {@code guarantee} states of the value standing here: its predicate with the element put
+     * where the predicate names it. Null where the predicate says something of the element that is
+     * not a place of this value.
+     *
+     * <p>A value that is its own value — a newtype, or what no declaration stands under — is the
+     * element itself. A record is read through its fields, which are where its places are, so
+     * {@code e.size} is the field {@code size}; the element named any other way, handed to a helper
+     * or compared whole, is not something a field stands for.
+     */
+    private static Core statedOfTheValue(ElementGuarantee guarantee, boolean atTheValue,
+                                         Map<String, Type> fields,
+                                         Map<String, BindingId> bindings) {
+        BindingId element = guarantee.predicate().params().getFirst().binding();
+        Core body = guarantee.predicate().body();
+        if (atTheValue) {
+            BindingId value = bindings.get(THE_VALUE_FIELD);
+            return value == null ? null : Clauses.substituted(body, Map.of(element,
+                    new Core.Read(THE_VALUE_FIELD, value, fields.get(THE_VALUE_FIELD), NOWHERE)));
+        }
+        Core ofItsFields = withItsFieldsRead(body, element, fields, bindings);
+        return WhatABodyReads.binding(ofItsFields, element) ? null : ofItsFields;
+    }
+
+    /** {@code e} with each field of {@code element} that it reads read as the field itself. */
+    private static Core withItsFieldsRead(Core e, BindingId element, Map<String, Type> fields,
+                                          Map<String, BindingId> bindings) {
+        if (Core.withoutStanding(e) instanceof Core.FieldAccess access
+                && Core.withoutStanding(access.target()) instanceof Core.Read target
+                && target.binding().equals(element) && bindings.containsKey(access.field())) {
+            return new Core.Read(access.field(), bindings.get(access.field()),
+                    fields.get(access.field()), access.pos());
+        }
+        return Core.mapAll(e, child -> withItsFieldsRead(child, element, fields, bindings),
+                name -> name);
+    }
+
+    /**
      * One clause a reading takes in: the rule it is of, and what it states with the parts it is
      * written as.
      *
@@ -1501,6 +1546,16 @@ public final class InvariantChecker {
                         "an element inherits something from its container, and is of some type");
             }
             guarantees = List.copyOf(guarantees);
+        }
+
+        /** What the container states of every element, apart by the rule it is a part of, the
+         *  rules in the order they were met. */
+        Map<RuleRef.Invariant, List<ElementGuarantee>> byRule() {
+            Map<RuleRef.Invariant, List<ElementGuarantee>> out = new LinkedHashMap<>();
+            for (ElementGuarantee each : guarantees) {
+                out.computeIfAbsent(each.part().rule(), _ -> new ArrayList<>()).add(each);
+            }
+            return out;
         }
 
         /** The binding the element is read through, which the first rule's own parameter is. */

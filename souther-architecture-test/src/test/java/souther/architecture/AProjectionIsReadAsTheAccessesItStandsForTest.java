@@ -399,6 +399,12 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/InvariantChecker", "walk", "(" + core + "L" + c + "check/Known;" + at
                 + "L" + c + "check/ContextMultiplicity;)L" + c + "check/Known;",
                 Reading.STRUCTURE, EVALUATION);
+        row(out, c + "check/InvariantChecker", "withItsFieldsRead", "(" + core + "L" + c
+                + "types/BindingId;Ljava/util/Map;Ljava/util/Map;)" + core, Reading.STRUCTURE,
+                "puts the field a record's element is read at in place of the access that names it,"
+                        + " and passes every other node, a projection among them, as it is: one that"
+                        + " is left still reads the element, which says the statement has no place"
+                        + " in the fields");
         row(out, c + "check/InvariantChecker", "without",
                 "(" + core + "Ljava/util/Set;" + core + ")" + core,
                 Reading.STRUCTURE, REWRITES_THE_BASE);

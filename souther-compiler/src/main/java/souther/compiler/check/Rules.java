@@ -231,16 +231,31 @@ public sealed interface Rules {
     }
 
     /**
-     * The rules a value has that stands under no declaration and is one element of a container
-     * whose rules state something of every element.
+     * The rules a value has that is one element of a container whose rules state something of every
+     * element: its own, if it wears a declaration, and what the container states.
      *
      * <p>Read, and not {@link NoneWritten}: what is written about the value is what the container
      * wrote about each element it holds, and a reader that took the value for one with nothing
      * written would answer of every element that nothing was said.
+     *
+     * <p>A declaration that is not a product — a choice between cases, a unit, one the library
+     * writes — is a value this has no way to read what a container states into. It is said to be
+     * unread, and not read as its own rules alone: those say less of the element than the
+     * container does, and a position claiming to hold everything they leave would be claiming it
+     * of values the container refuses.
+     *
+     * @param named the declaration the element wears, or null where it wears none
      */
-    public static Rules ofElement(Type type, List<ElementGuarantee> guarantees,
+    public static Rules ofElement(TypeSymbol named, Type type, List<ElementGuarantee> guarantees,
                                   RuleReadingContext reading) {
-        return new Read(FieldDomains.ofElement(null, type, guarantees, reading));
+        if (named == null) {
+            return new Read(FieldDomains.ofElement(null, type, guarantees, reading));
+        }
+        if (named instanceof TypeSymbol.AtModule at
+                && reading.source().kinds().of(at.key()) == DeclarationKind.PRODUCT) {
+            return new Read(FieldDomains.ofElement(at, type, guarantees, reading));
+        }
+        return new Read(FieldDomains.NONE);
     }
 
     /** The same, for a value whose type may name no declaration at all. */

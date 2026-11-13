@@ -226,7 +226,10 @@ public final class FieldDomains {
     private final ConstraintState<FactSubject> constraints;
     /** What this was read from, so that it can be read again without one declaration's clauses —
      *  the declaration the reading is of, which a lent reading may have of a name beneath the one
-     *  asked about. */
+     *  asked about. Null where the value stands under no declaration — a string or a number a
+     *  container holds — which is a reading of {@link #inherited} alone. The rules a container
+     *  states are named by the part that states each, so what a rule came from is never read off
+     *  this. */
     private final TypeSymbol.AtModule named;
     /** What a container states of every element, where this is the reading of one of its elements;
      *  null where it is not. Held to read the value again without a rule of it. */
