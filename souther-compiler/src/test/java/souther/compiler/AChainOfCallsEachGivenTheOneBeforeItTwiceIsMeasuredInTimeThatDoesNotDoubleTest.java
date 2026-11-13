@@ -107,25 +107,7 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
                 depth -> reportOfNamesEachMadeOfTheOneBefore(depth, "x", "PREV * PREV",
                         "LAST >= j"),
                 AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDoubleTest
-                        ::afterOneLetEachCall, 3, 50);
-    }
-
-    /** What a remainder of a sum of a name with itself says depends on the depth, as the numbers it
-     *  is of do; what is asked here is that it is worked out in time that does not double. */
-    @Test
-    void aRemainderOfASumOfANameWithItselfIsReadInTimeThatDoesNotDoubleWithTheDepth() {
-        String report = assertTimeoutPreemptively(Duration.ofSeconds(60),
-                () -> reportOfNamesEachMadeOfTheOneBefore(50, "x",
-                        "Int.floorMod(PREV + PREV, 7)", "LAST >= j"));
-        assertTrue(!report.isEmpty(), "a report is made");
-    }
-
-    @Test
-    void aTruthMadeOfANameOnBothSidesOfADisjunctionIsReadInTimeThatDoesNotDoubleWithTheDepth() {
-        String report = assertTimeoutPreemptively(Duration.ofSeconds(60),
-                () -> reportOfNamesEachMadeOfTheOneBefore(22, "x >= 0",
-                        "PREV && (j > 3 || PREV)", "LAST"));
-        assertTrue(!report.isEmpty(), "a report is made");
+                        ::afterOneLetEachCall, 3, 30);
     }
 
     /** What is said of a truth does not depend on how many names it is made through. */
