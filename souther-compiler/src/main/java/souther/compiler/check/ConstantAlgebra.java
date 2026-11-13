@@ -14,7 +14,7 @@ import net.unit8.notation199x.pattern.PatternMeaning;
 import net.unit8.notation199x.pattern.PatternParser;
 import net.unit8.notation199x.pattern.PatternRead;
 import souther.compiler.regex.Recognizer;
-import souther.compiler.values.JoinedText;
+import souther.compiler.evaluate.JoinedText;
 import net.unit8.notation199x.ScalarValues;
 
 /**

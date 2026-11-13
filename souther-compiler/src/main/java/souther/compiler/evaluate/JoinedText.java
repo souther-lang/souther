@@ -1,6 +1,5 @@
-package souther.compiler.values;
+package souther.compiler.evaluate;
 
-import souther.compiler.evaluate.EvaluationContext;
 import souther.runtime.ConstraintViolation;
 import souther.runtime.Strings;
 
