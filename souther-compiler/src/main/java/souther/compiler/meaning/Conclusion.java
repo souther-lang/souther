@@ -374,9 +374,9 @@ public final class Conclusion {
 
     /** Whether a part nothing read numbered as one of {@code numbers} stands in {@code stated}. */
     private static boolean stands(Proposition stated, Set<Integer> numbers) {
-        return stated instanceof Proposition.Unread unread
-                ? numbers.contains(unread.ordinal())
-                : stated.partsHeld().stream().anyMatch(part -> stands(part, numbers));
+        return StatementReading.<Boolean>over((each, again) ->
+                each instanceof Proposition.Unread unread
+                        ? numbers.contains(unread.ordinal()) : each.anyPart(again)).read(stated);
     }
 
     /** A part nothing read, for a number of a way that cannot be held. */
@@ -416,7 +416,10 @@ public final class Conclusion {
         }
         // Its parts, and the statements a count or a sum in it is taken over, which a reader of the
         // number walks as much as a part.
-        long out = 1 + partsIn(stated.partsHeld()) + switch (stated) {
+        // What each part comes to is kept in {@code shared.parts}, across every statement counted
+        // here, so the reading only hands each part to it.
+        long out = 1 + stated.sumOverParts(StatementReading.<Long>over((each, _) -> partsIn(each)))
+                + switch (stated) {
             case Proposition.Compared compared -> switch (compared.relation()) {
                 case Relation.Affine affine -> {
                     long held = 0;

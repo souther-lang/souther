@@ -27,16 +27,19 @@ public final class GivenTotals {
 
     /** Whether {@code stated} is made of parts that {@link #in} can give a way. */
     public static boolean canBeGiven(Proposition stated) {
+        return StatementReading.<Boolean>over(GivenTotals::canBeGivenAt).read(stated);
+    }
+
+    private static boolean canBeGivenAt(Proposition stated, StatementReading<Boolean> again) {
         return switch (stated) {
             case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.SameValue _, Proposition.InTheStrings _,
                  Proposition.StringInside _, Proposition.LastToHold _ -> true;
             case Proposition.Compared compared -> compared.relation() instanceof Relation.Affine
                     || compared.relation() instanceof Relation.Ordered;
-            case Proposition.All all -> all.parts().stream().allMatch(GivenTotals::canBeGiven);
-            case Proposition.Any any -> any.parts().stream().allMatch(GivenTotals::canBeGiven);
-            case Proposition.WhereItAnswers where -> canBeGiven(where.answers())
-                    && canBeGiven(where.states());
+            case Proposition.All _, Proposition.Any _ -> stated.everyPart(again);
+            case Proposition.WhereItAnswers where -> again.read(where.answers())
+                    && again.read(where.states());
             case Proposition.Some _, Proposition.SomeReachable _, Proposition.OnAnApplication _,
                  Proposition.Carried _, Proposition.SoManyHold _, Proposition.Unread _,
                  Proposition.OfTheWays _ -> false;
@@ -49,21 +52,28 @@ public final class GivenTotals {
      */
     public static ExactAnswer<Proposition> in(Proposition stated,
                                               Map<Quantity, LinearForm<Quantity>> totals) {
+        return StatementReading.<ExactAnswer<Proposition>>over((each, again) ->
+                givenAt(each, totals, again)).read(stated);
+    }
+
+    private static ExactAnswer<Proposition> givenAt(
+            Proposition stated, Map<Quantity, LinearForm<Quantity>> totals,
+            StatementReading<ExactAnswer<Proposition>> again) {
         return switch (stated) {
             case Proposition.Compared compared -> comparedGiven(compared, totals);
-            case Proposition.All all -> switch (given(all.parts(), totals)) {
+            case Proposition.All _ -> switch (given(stated.overParts(again))) {
                 case ExactAnswer.Held<List<Proposition>>(var parts) ->
                         ExactAnswer.held(Proposition.all(parts));
                 case ExactAnswer.Unheld<List<Proposition>>(var why) -> ExactAnswer.unheld(why);
             };
-            case Proposition.Any any -> switch (given(any.parts(), totals)) {
+            case Proposition.Any _ -> switch (given(stated.overParts(again))) {
                 case ExactAnswer.Held<List<Proposition>>(var parts) ->
                         ExactAnswer.held(Proposition.any(parts));
                 case ExactAnswer.Unheld<List<Proposition>>(var why) -> ExactAnswer.unheld(why);
             };
-            case Proposition.WhereItAnswers where -> switch (in(where.answers(), totals)) {
+            case Proposition.WhereItAnswers where -> switch (again.read(where.answers())) {
                 case ExactAnswer.Held<Proposition>(var answers) ->
-                        switch (in(where.states(), totals)) {
+                        switch (again.read(where.states())) {
                             case ExactAnswer.Held<Proposition>(var states) ->
                                     ExactAnswer.held(Proposition.whereItAnswers(answers, states));
                             case ExactAnswer.Unheld<Proposition>(var why) ->
@@ -83,11 +93,11 @@ public final class GivenTotals {
         };
     }
 
-    private static ExactAnswer<List<Proposition>> given(List<Proposition> parts,
-                                                        Map<Quantity, LinearForm<Quantity>> totals) {
+    /** The parts as given, or why the first that could not be is not. */
+    private static ExactAnswer<List<Proposition>> given(List<ExactAnswer<Proposition>> parts) {
         List<Proposition> out = new ArrayList<>(parts.size());
-        for (Proposition part : parts) {
-            switch (in(part, totals)) {
+        for (ExactAnswer<Proposition> part : parts) {
+            switch (part) {
                 case ExactAnswer.Held<Proposition>(var one) -> out.add(one);
                 case ExactAnswer.Unheld<Proposition>(var why) -> {
                     return ExactAnswer.unheld(why);

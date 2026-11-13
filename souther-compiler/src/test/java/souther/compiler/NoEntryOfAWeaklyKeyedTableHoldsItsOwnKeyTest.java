@@ -90,11 +90,6 @@ class NoEntryOfAWeaklyKeyedTableHoldsItsOwnKeyTest {
                 CountsWrittenOut.of(counted);
                 KEPT.add(counted);
             },
-            "souther.compiler.meaning.SharedPropositions#FACTS", () -> {
-                Proposition counted = count();
-                Proposition.firstStopIn(counted);
-                KEPT.add(counted);
-            },
             "souther.compiler.meaning.SharedPropositions#WRITTEN", () -> {
                 Proposition.OfTheWays ways = WaysSamples.over(CompoundSamples.truth("w"));
                 ways.written();

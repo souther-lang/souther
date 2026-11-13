@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * What a statement holds the values of the input to wherever it holds: which cases a value is, or
@@ -58,61 +59,61 @@ public final class CasesHeldTo {
      * order the statement names them.
      */
     public static Map<TermPath, Held> of(Proposition stated) {
-        Map<TermPath, Held> out = heldTo(stated);
-        return out == null ? Map.of() : out;
+        return StatementReading.<Optional<Map<TermPath, Held>>>over(CasesHeldTo::heldTo)
+                .read(stated).orElse(Map.of());
     }
 
-    /** The same, or null where {@code stated} holds nowhere. */
-    private static Map<TermPath, Held> heldTo(Proposition stated) {
+    /** The same, or none where {@code stated} holds nowhere. */
+    private static Optional<Map<TermPath, Held>> heldTo(
+            Proposition stated, StatementReading<Optional<Map<TermPath, Held>>> again) {
         return switch (stated) {
-            case Proposition.Always(boolean holds) -> holds ? new LinkedHashMap<>() : null;
-            case Proposition.WhereItAnswers where ->
-                    heldTo(Proposition.all(List.of(where.answers(), where.states())));
-            case Proposition.OfTheWays ways -> heldTo(ways.written());
-            case Proposition.All all -> {
+            case Proposition.Always(boolean holds) ->
+                    holds ? Optional.of(new LinkedHashMap<>()) : Optional.empty();
+            case Proposition.WhereItAnswers where -> heldTo(
+                    Proposition.all(List.of(where.answers(), where.states())), again);
+            case Proposition.OfTheWays ways -> again.read(ways.written());
+            case Proposition.All _ -> {
                 Map<TermPath, Held> out = new LinkedHashMap<>();
-                for (Proposition part : all.parts()) {
-                    Map<TermPath, Held> each = heldTo(part);
-                    if (each == null) {
-                        yield null;
+                for (Optional<Map<TermPath, Held>> each : stated.overParts(again)) {
+                    if (each.isEmpty()) {
+                        yield Optional.empty();
                     }
-                    for (Map.Entry<TermPath, Held> one : each.entrySet()) {
+                    for (Map.Entry<TermPath, Held> one : each.get().entrySet()) {
                         Held before = out.get(one.getKey());
                         Held both = before == null ? one.getValue() : both(before, one.getValue());
                         if (both == null) {
-                            yield null;
+                            yield Optional.empty();
                         }
                         out.put(one.getKey(), both);
                     }
                 }
-                yield out;
+                yield Optional.of(out);
             }
-            case Proposition.Any any -> {
+            case Proposition.Any _ -> {
                 Map<TermPath, Held> out = null;
-                for (Proposition part : any.parts()) {
-                    Map<TermPath, Held> each = heldTo(part);
-                    if (each == null) {
+                for (Optional<Map<TermPath, Held>> each : stated.overParts(again)) {
+                    if (each.isEmpty()) {
                         continue;
                     }
-                    out = out == null ? each : either(out, each);
+                    out = out == null ? each.get() : either(out, each.get());
                 }
-                yield out;
+                yield Optional.ofNullable(out);
             }
             case Proposition.InCases(DecisionSubject.AnInput(TermPath of, var _), CasesLeft cases,
-                    boolean holds, var _) -> one(of, holds ? new Held.OneOf(cases)
-                    : new Held.NoneOf(cases));
+                    boolean holds, var _) -> Optional.of(one(of, holds ? new Held.OneOf(cases)
+                    : new Held.NoneOf(cases)));
             case Proposition.Present(DecisionSubject.AnInput(TermPath of, var _), boolean holds,
-                    var _) ->
-                    one(of, new Held.OneOf(CasesLeft.of(Refinement.of(new Case.Presence(holds)))));
+                    var _) -> Optional.of(one(of,
+                    new Held.OneOf(CasesLeft.of(Refinement.of(new Case.Presence(holds))))));
             case Proposition.Truth(DecisionSubject.AnInput(TermPath of, var _), boolean holds,
                     var _) ->
-                    one(of, new Held.ATruth(holds));
+                    Optional.of(one(of, new Held.ATruth(holds)));
             // A count of statements holds no value to anything here: less than it may, never more.
             case Proposition.InCases _, Proposition.Present _, Proposition.Truth _,
                  Proposition.Compared _, Proposition.InTheStrings _, Proposition.SameValue _,                 Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
                  Proposition.SomeReachable _, Proposition.Unread _, Proposition.OnAnApplication _,
                  Proposition.SoManyHold _ ->
-                    new LinkedHashMap<>();
+                    Optional.of(new LinkedHashMap<>());
         };
     }
 

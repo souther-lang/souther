@@ -102,6 +102,7 @@ import souther.compiler.meaning.PositionsAStatementReads.ReadSubject;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
 import souther.compiler.meaning.Spelling;
+import souther.compiler.meaning.StatementReading;
 import souther.compiler.meaning.StringsLanguage;
 import souther.compiler.meaning.TruthTable;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
@@ -338,13 +339,18 @@ final class Pullback {
 
         /** The spelling of each part {@code stated} turns on, either way round, into {@code into}. */
         static void partsOf(Proposition stated, Set<Spelling> into) {
+            StatementReading.<Boolean>over((each, again) -> partsAt(each, into, again))
+                    .read(stated);
+        }
+
+        private static boolean partsAt(Proposition stated, Set<Spelling> into,
+                                       StatementReading<Boolean> again) {
             switch (stated) {
                 case Proposition.Always _ -> { }
                 case Proposition.Unread unread when unread.fixed() -> { }
                 case Proposition.All _, Proposition.Any _, Proposition.OnAnApplication _,
                      Proposition.SoManyHold _, Proposition.Some _, Proposition.OfTheWays _,
-                     Proposition.WhereItAnswers _ ->
-                        stated.partsHeld().forEach(part -> partsOf(part, into));
+                     Proposition.WhereItAnswers _ -> stated.eachPart(again);
                 case Proposition.Unread _, Proposition.Compared _, Proposition.Truth _,
                      Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
                      Proposition.SameValue _,                     Proposition.StringInside _, Proposition.LastToHold _,
@@ -353,6 +359,7 @@ final class Pullback {
                     into.add(stated.deniedSpelling());
                 }
             }
+            return true;
         }
     }
 
@@ -11287,12 +11294,12 @@ final class Pullback {
             new SharedReads<>(new TheScene());
 
     /** The way into the value an arithmetic stopped at, kept ({@link #aWayInAt}). */
-    private final SharedReads<ReadingState.Inputs, Guards, Met, Optional<Inside>> sharedWaysIn =
-            new SharedReads<>(new TheScene(true));
+    private final SharedReads<ReadingState.Inputs, Guards, Met, Spendless<Optional<Inside>>>
+            sharedWaysIn = new SharedReads<>(new TheScene(true));
 
-    /** The forms the factors of a product come to, kept ({@link #formOfAFactor}). */
-    private final SharedReads<ReadingState.Inputs, Guards, Met,
-            Optional<LinearForm<NumericTerm>>> sharedForms = new SharedReads<>(new TheScene(true));
+    /** What reading a factor of a product as a form comes to, kept ({@link #formOfAFactor}). */
+    private final SharedReads<ReadingState.Inputs, Guards, Met, Spendless<FormRead>>
+            sharedForms = new SharedReads<>(new TheScene(true));
 
 
     /** How the value a name stands for answered each side, kept ({@link #observe}), by the side. */
@@ -13186,25 +13193,38 @@ final class Pullback {
      * no form for was handed — or null where what it stopped at is no such value.
      */
     private Inside aWayInAt(AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped) {
+        // A stop inside the arguments of a call is the way in of the innermost stop, so what is
+        // asked, and what the answer is kept by, is that one: the node it stopped at and the
+        // reading it stopped at. Only a stop for want of a rule, or for values that disagree, has
+        // a way in, and nothing else of the stop says.
+        AffineForms.Outcome.StoppedAt<Quantity, InputReads> innermost = whereItStopped(stopped);
+        if (!(innermost.why() instanceof AffineForms.Halt.NoRule<Quantity, InputReads>
+                || innermost.why() instanceof AffineForms.Halt.ValuesDisagree<Quantity,
+                        InputReads>)) {
+            return null;
+        }
         // Asked at every name a stop was read inside of, and each asking searches the value down
         // to the way in: a stop is one node read at one reading, and is searched once.
-        return sharedWaysIn.shared(stopped.node(), stopped.at(), stopped.why().getClass(),
-                () -> Optional.ofNullable(aWayInAtAfresh(stopped)), _ -> true).orElse(null);
+        Denotation where = new Denotation(innermost.node(), innermost.at());
+        return sharedWaysIn.shared(where.value(), where.at(), null,
+                () -> spendingNothing(() -> Optional.ofNullable(
+                        aWayInto(underItsAccesses(where), new HashSet<>()))),
+                Spendless::spentNothing).value().orElse(null);
     }
 
-    private Inside aWayInAtAfresh(AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped) {
-        return switch (stopped.why()) {
-            case AffineForms.Halt.AnArgumentStopped<Quantity, InputReads>(var argument) ->
-                    aWayInAt(argument);
-            case AffineForms.Halt.NoRule<Quantity, InputReads> _,
-                 AffineForms.Halt.ValuesDisagree<Quantity, InputReads> _ ->
-                    aWayInto(underItsAccesses(new Denotation(stopped.node(), stopped.at())),
-                            new HashSet<>());
-            case AffineForms.Halt.NotLinear<Quantity, InputReads> _,
-                 AffineForms.Halt.NoNumberOnARun<Quantity, InputReads> _,
-                 AffineForms.Halt.NotHeld<Quantity, InputReads> _,
-                 AffineForms.Halt.DeclinedAtAFigure<Quantity, InputReads> _ -> null;
-        };
+    /**
+     * What a reading that is shared came to, and whether it spent none of the readings the
+     * figures allow ({@link #readingsLeft}).
+     *
+     * <p>A reading taken again charges nothing, so one that was charged is not one to take again:
+     * the figure would be spent once by the reading and not at all by the ones that took it.
+     */
+    private record Spendless<R>(R value, boolean spentNothing) {}
+
+    private <R> Spendless<R> spendingNothing(Supplier<R> reading) {
+        long before = readingsLeft;
+        R value = reading.get();
+        return new Spendless<>(value, readingsLeft == before);
     }
 
     /**
@@ -14733,15 +14753,38 @@ final class Pullback {
      */
     private LinearForm<NumericTerm> formOfAFactor(Core factor, InputReads at, ElementsMet met) {
         // A name stands for the same reading wherever it is used, and each use of it is a node of
-        // its own: kept by the value it stands for, a name used twice is read once. A factor the
-        // arithmetic stops on is an answer as well, and kept as one.
-        Denotation denoted = Core.withoutStanding(factor) instanceof Core.Read name
-                && at.meaningOf(name, read.rules().symbols(), read.rules().newtypes())
-                        instanceof ReadMeaning.Through through ? through.denotes() : null;
-        return sharedForms.shared(denoted != null ? denoted.value() : factor,
-                denoted != null ? denoted.at() : at, null, met,
-                () -> Optional.ofNullable(AffineReading.formOf(factor, at, read, met)),
-                _ -> true).orElse(null);
+        // its own: what is read, and what the answer is kept by, is the value it stands for at the
+        // reading that value is read at, so a name used twice is read once.
+        Denotation read = Core.withoutStanding(factor) instanceof Core.Read name
+                && at.meaningOf(name, this.read.rules().symbols(), this.read.rules().newtypes())
+                        instanceof ReadMeaning.Through through
+                ? through.denotes() : new Denotation(factor, at);
+        return sharedForms.shared(read.value(), read.at(), null, met,
+                () -> spendingNothing(() -> FormRead.of(AffineReading.outcomeOf(read.value(),
+                        read.at(), this.read, met))),
+                answer -> answer.spentNothing() && !answer.value().reachedAFigure())
+                .value().form().orElse(null);
+    }
+
+    /**
+     * What reading a factor as a form of the input's numbers came to: the form, or none where the
+     * arithmetic stopped, and whether it stopped at a figure of this compiler's work.
+     *
+     * <p>What a reading that stopped at a figure is not kept to be taken again: that the work was
+     * past the figure is a fact of the work done and of the figure it is counted against, which a
+     * reading that takes it again is not asked to do again. Any other stop is the expression's, at
+     * the reading it was read at, and is kept as an answer.
+     */
+    private record FormRead(Optional<LinearForm<NumericTerm>> form, boolean reachedAFigure) {
+
+        static FormRead of(AffineForms.Outcome<NumericTerm, InputReads> outcome) {
+            return switch (outcome) {
+                case AffineForms.Outcome.Composed<NumericTerm, InputReads>(var form) ->
+                        new FormRead(Optional.of(form), false);
+                case AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stopped ->
+                        new FormRead(Optional.empty(), stopped.why().declinedFigure().isPresent());
+            };
+        }
     }
 
     /**

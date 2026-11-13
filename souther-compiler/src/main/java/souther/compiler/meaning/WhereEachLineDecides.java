@@ -762,11 +762,14 @@ public final class WhereEachLineDecides {
         /** How many places a part stands at in {@code stated}, inside the quantifiers it holds as
          *  well: what saying a quantifier over it again writes out. */
         private static long placesIn(Proposition stated) {
+            return StatementReading.<Long>over(Lifting::placesAt).read(stated);
+        }
+
+        private static long placesAt(Proposition stated, StatementReading<Long> again) {
             return switch (stated) {
                 case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
-                     Proposition.OfTheWays _ ->
-                        stated.partsHeld().stream().mapToLong(Lifting::placesIn).sum();
-                case Proposition.Some some -> 1 + placesIn(some.ofTheElement());
+                     Proposition.OfTheWays _ -> stated.sumOverParts(again);
+                case Proposition.Some some -> 1 + again.read(some.ofTheElement());
                 case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
                 case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                      Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
@@ -1436,12 +1439,17 @@ public final class WhereEachLineDecides {
     }
 
     private static boolean statesARelation(Proposition stated) {
+        return StatementReading.<Boolean>over(WhereEachLineDecides::statesARelationAt)
+                .read(stated);
+    }
+
+    private static boolean statesARelationAt(Proposition stated,
+                                             StatementReading<Boolean> again) {
         return switch (stated) {
             case Proposition.Compared _ -> true;
             case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
-                 Proposition.OfTheWays _ -> stated.partsHeld().stream()
-                    .anyMatch(WhereEachLineDecides::statesARelation);
-            case Proposition.WhereItAnswers where -> statesARelation(where.states());
+                 Proposition.OfTheWays _ -> stated.anyPart(again);
+            case Proposition.WhereItAnswers where -> again.read(where.states());
             case Proposition.Always _, Proposition.Truth _, Proposition.InCases _,
                  Proposition.Present _, Proposition.InTheStrings _, Proposition.SameValue _, Proposition.StringInside _,
                  Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
@@ -1476,10 +1484,16 @@ public final class WhereEachLineDecides {
     /** Every part {@code stated} joins, held, and each place one stands, by its own spelling. */
     private static void gather(Proposition stated, Map<Spelling, Proposition> parts,
                                Map<Spelling, Literal> leaves) {
+        StatementReading.<Boolean>over((each, again) -> gatherAt(each, parts, leaves, again))
+                .read(stated);
+    }
+
+    private static boolean gatherAt(Proposition stated, Map<Spelling, Proposition> parts,
+                                    Map<Spelling, Literal> leaves,
+                                    StatementReading<Boolean> again) {
         switch (stated) {
             case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
-                 Proposition.SoManyHold _, Proposition.OfTheWays _ ->
-                    stated.partsHeld().forEach(part -> gather(part, parts, leaves));
+                 Proposition.SoManyHold _, Proposition.OfTheWays _ -> stated.eachPart(again);
             case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
                  Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
                  Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
@@ -1490,6 +1504,7 @@ public final class WhereEachLineDecides {
                 leaves.putIfAbsent(stated.spelling(), new Literal(held.spelling(), held == stated));
             }
         }
+        return true;
     }
 
     /**
@@ -1501,31 +1516,56 @@ public final class WhereEachLineDecides {
     private static Set<Spelling> onlyWhereItAnswers(Proposition stated) {
         Map<Spelling, Proposition> answering = new TreeMap<>();
         Map<Spelling, Proposition> stating = new TreeMap<>();
-        partsBy(stated, false, answering, stating);
+        new FiledByWhereItStands(answering, stating).from(stated);
         Set<Spelling> out = new HashSet<>(answering.keySet());
         out.removeAll(stating.keySet());
         return out;
     }
 
-    /** Every part {@code stated} joins, held, filed by whether it stands in where it answers. */
-    private static void partsBy(Proposition stated, boolean answering,
-                                Map<Spelling, Proposition> where, Map<Spelling, Proposition> what) {
-        switch (stated) {
-            case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
-                 Proposition.OfTheWays _ ->
-                    stated.partsHeld().forEach(part -> partsBy(part, answering, where, what));
-            case Proposition.WhereItAnswers inside -> {
-                partsBy(inside.answers(), true, where, what);
-                partsBy(inside.states(), answering, where, what);
+    /**
+     * Every part a statement joins, held, filed by whether it stands in where it answers.
+     *
+     * <p>What a part comes to depends on which side of an answering it stands, so there is a
+     * reading for each side, and a statement met on both sides is filed on both.
+     */
+    private static final class FiledByWhereItStands {
+
+        private final Map<Spelling, Proposition> where;
+        private final Map<Spelling, Proposition> what;
+        private final StatementReading<Boolean> inWhereItAnswers =
+                StatementReading.over((stated, again) -> filed(stated, true, again));
+        private final StatementReading<Boolean> elsewhere =
+                StatementReading.over((stated, again) -> filed(stated, false, again));
+
+        FiledByWhereItStands(Map<Spelling, Proposition> where, Map<Spelling, Proposition> what) {
+            this.where = where;
+            this.what = what;
+        }
+
+        void from(Proposition stated) {
+            elsewhere.read(stated);
+        }
+
+        private boolean filed(Proposition stated, boolean answering,
+                              StatementReading<Boolean> again) {
+            switch (stated) {
+                case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
+                     Proposition.OfTheWays _ -> stated.eachPart(again);
+                case Proposition.WhereItAnswers inside -> {
+                    inWhereItAnswers.read(inside.answers());
+                    again.read(inside.states());
+                }
+                case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
+                     Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
+                     Proposition.SameValue _, Proposition.StringInside _,
+                     Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
+                     Proposition.SomeReachable _, Proposition.Unread _,
+                     Proposition.OnAnApplication _ -> {
+                    Proposition held = held(stated);
+                    (answering ? where : what).putIfAbsent(held.spelling(), held);
+                }
             }
-            case Proposition.Always _, Proposition.Compared _, Proposition.Truth _,
-                 Proposition.InCases _, Proposition.Present _, Proposition.InTheStrings _,
-                 Proposition.SameValue _, Proposition.StringInside _, Proposition.LastToHold _, Proposition.Some _, Proposition.Carried _,
-                 Proposition.SomeReachable _, Proposition.Unread _,
-                 Proposition.OnAnApplication _ -> {
-                Proposition held = held(stated);
-                (answering ? where : what).putIfAbsent(held.spelling(), held);
-            }
+            return true;
         }
     }
 

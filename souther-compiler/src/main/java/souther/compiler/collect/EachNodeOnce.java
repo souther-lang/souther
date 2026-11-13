@@ -2,6 +2,7 @@ package souther.compiler.collect;
 
 import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 
 /**
@@ -40,7 +41,11 @@ public final class EachNodeOnce<N, R> {
             return known;
         }
         R made = work.apply(node);
-        worked.put(node, made);
+        // A node with no answer would be worked out again each time it is asked, which is the
+        // cost of every way down to it that this is for.
+        worked.put(node, Objects.requireNonNull(made,
+                "what is worked out of a node is some answer; one that is none is a value of its"
+                        + " own (an Optional)"));
         return made;
     }
 }

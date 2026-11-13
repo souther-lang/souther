@@ -154,6 +154,24 @@ class AReadingIsKeptToBeTakenAgainOnlyWhereItWouldBeTheSameReadingTest {
     }
 
     @Test
+    void aReadingHeldToElementsOfItsOwnIsTakenWhereThoseAreHeldAndNotWhereTheScenesAre() {
+        ElementsMet its = new ElementsMet();
+        reads.shared(NODE, READS, "key", its, () -> {
+            made++;
+            return "read";
+        }, _ -> true);
+
+        reads.shared(NODE, READS, "key", its, () -> {
+            made++;
+            return "read";
+        }, _ -> true);
+        assertEquals(1, made, "the elements it was read with are the ones it is taken with");
+
+        read("key");
+        assertEquals(2, made, "the scene's elements are not the ones it was read with");
+    }
+
+    @Test
     void whereNothingMayBeSharedNothingIsKept() {
         scene.mayShare = false;
         read("key");

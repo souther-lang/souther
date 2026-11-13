@@ -378,8 +378,21 @@ public final class ReadThroughNames {
                 : new Proposition.InTheStrings.Strings.AtAPosition(string.at(), identity);
     }
 
+    /**
+     * {@code stated} told by {@code telling}, each statement of it told once however many
+     * statements hold it. What is told is the same wherever a statement stands, since one
+     * {@code telling} is for the whole of the reading; inside a quantifier it is another, and a
+     * statement there is told by a reading of its own.
+     */
     private static Proposition told(Proposition stated, Telling telling,
                                     Supplier<Proposition> twoAsOne) {
+        return StatementReading.<Proposition>over((each, again) ->
+                toldAt(each, telling, twoAsOne, again)).read(stated);
+    }
+
+    private static Proposition toldAt(Proposition stated, Telling telling,
+                                      Supplier<Proposition> twoAsOne,
+                                      StatementReading<Proposition> again) {
         return switch (stated) {
             case Proposition.Always _ -> stated;
             // What a part would be said as is of whatever that statement is of, and says nothing
@@ -430,21 +443,21 @@ public final class ReadThroughNames {
             // not put together again: joining parts orders them, which is no small thing to do
             // for each statement a reader tells.
             case Proposition.All all -> {
-                List<Proposition> parts = eachTold(all.parts(), telling, twoAsOne);
+                List<Proposition> parts = changed(all.parts(), stated.overParts(again));
                 yield parts == null ? stated : Proposition.all(parts);
             }
             case Proposition.Any any -> {
-                List<Proposition> parts = eachTold(any.parts(), telling, twoAsOne);
+                List<Proposition> parts = changed(any.parts(), stated.overParts(again));
                 yield parts == null ? stated : Proposition.any(parts);
             }
             case Proposition.WhereItAnswers where -> {
-                Proposition answers = told(where.answers(), telling, twoAsOne);
-                Proposition states = told(where.states(), telling, twoAsOne);
+                Proposition answers = again.read(where.answers());
+                Proposition states = again.read(where.states());
                 yield answers == where.answers() && states == where.states() ? stated
                         : Proposition.whereItAnswers(answers, states);
             }
             case Proposition.OnAnApplication applied -> {
-                List<Proposition> each = eachTold(applied.each(), telling, twoAsOne);
+                List<Proposition> each = changed(applied.each(), stated.overParts(again));
                 yield each == null ? stated : Proposition.onAnApplication(each);
             }
             // Inside a quantifier its container's element is its own, and stays as it stands: a
@@ -481,7 +494,8 @@ public final class ReadThroughNames {
             }
             // How many of some statements hold is of whatever those statements are of.
             case Proposition.SoManyHold many -> {
-                List<Proposition> statements = eachTold(many.statements(), telling, twoAsOne);
+                List<Proposition> statements =
+                        changed(many.statements(), stated.overParts(again));
                 yield statements == null ? stated : Proposition.SoManyHold.counting(statements,
                         many.weights(), many.admitted());
             }
@@ -511,17 +525,14 @@ public final class ReadThroughNames {
         };
     }
 
-    /** Each of {@code parts} told, or null where none of them was told anything. */
-    private static List<Proposition> eachTold(List<Proposition> parts, Telling telling,
-                                              Supplier<Proposition> twoAsOne) {
-        List<Proposition> out = new ArrayList<>(parts.size());
-        boolean changed = false;
-        for (Proposition each : parts) {
-            Proposition told = told(each, telling, twoAsOne);
-            changed |= told != each;
-            out.add(told);
+    /** {@code told}, the parts as they were told, or null where none of them was told anything. */
+    private static List<Proposition> changed(List<Proposition> parts, List<Proposition> told) {
+        for (int at = 0; at < parts.size(); at++) {
+            if (told.get(at) != parts.get(at)) {
+                return told;
+            }
         }
-        return changed ? out : null;
+        return null;
     }
 
     /** {@code telling}, with what stands at {@code container}'s element left as it is. */

@@ -2428,15 +2428,18 @@ public sealed interface Derivation {
          * written at.
          */
         private static Proposition distributed(Proposition stated) {
+            return StatementReading.<Proposition>over(ATreeSearched::distributedAt).read(stated);
+        }
+
+        private static Proposition distributedAt(Proposition stated,
+                                                 StatementReading<Proposition> again) {
             return switch (stated) {
                 case Proposition.All all -> {
-                    List<Proposition> each = all.parts().stream()
-                            .map(ATreeSearched::distributed).toList();
+                    List<Proposition> each = stated.overParts(again);
                     yield each.equals(all.parts()) ? stated : Proposition.all(each);
                 }
                 case Proposition.Any any -> {
-                    List<Proposition> each = any.parts().stream()
-                            .map(ATreeSearched::distributed).toList();
+                    List<Proposition> each = stated.overParts(again);
                     yield each.equals(any.parts()) ? stated : Proposition.any(each);
                 }
                 case Proposition.Some some
@@ -2892,11 +2895,17 @@ public sealed interface Derivation {
          *  counted, gathering the classes those count into {@code named}. */
         private static boolean onlyOfACharacter(int within, Proposition element,
                                                 Set<CodePointClass> named) {
+            return StatementReading.<Boolean>over((each, again) ->
+                    onlyOfACharacterAt(within, each, named, again)).read(element);
+        }
+
+        private static boolean onlyOfACharacterAt(int within, Proposition element,
+                                                  Set<CodePointClass> named,
+                                                  StatementReading<Boolean> again) {
             return switch (element) {
                 case Proposition.Always _ -> true;
                 case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _ ->
-                        element.partsHeld().stream()
-                                .allMatch(part -> onlyOfACharacter(within, part, named));
+                        element.everyPart(again);
                 case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, var _),
                                           var _, var _, var _) -> {
                     for (Quantity each : form.coefs().keySet()) {
@@ -2922,12 +2931,16 @@ public sealed interface Derivation {
          *  {@code countOf} says of its class. */
         private static boolean holds(Proposition element,
                                      ToIntFunction<CodePointClass> countOf) {
+            return StatementReading.<Boolean>over((each, again) -> holdsAt(each, countOf, again))
+                    .read(element);
+        }
+
+        private static boolean holdsAt(Proposition element, ToIntFunction<CodePointClass> countOf,
+                                       StatementReading<Boolean> again) {
             return switch (element) {
                 case Proposition.Always(boolean holds) -> holds;
-                case Proposition.All(List<Proposition> parts, var _, var _) ->
-                        parts.stream().allMatch(part -> holds(part, countOf));
-                case Proposition.Any(List<Proposition> parts, var _, var _) ->
-                        parts.stream().anyMatch(part -> holds(part, countOf));
+                case Proposition.All _ -> element.everyPart(again);
+                case Proposition.Any _ -> element.anyPart(again);
                 case Proposition.Compared(Relation.Affine(LinearForm<Quantity> form, Rel rel),
                                           boolean holds, var _, var _) -> {
                     ExactRatio value = form.constant();
@@ -2946,7 +2959,7 @@ public sealed interface Derivation {
                 case Proposition.SoManyHold counted -> {
                     int holding = 0;
                     for (int one = 0; one < counted.statements().size(); one++) {
-                        if (holds(counted.statements().get(one), countOf)) {
+                        if (again.read(counted.statements().get(one))) {
                             holding += counted.weights().get(one);
                         }
                     }

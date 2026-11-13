@@ -33,9 +33,11 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.function.BinaryOperator;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * What a condition states, about the subjects it is finally about.
@@ -178,6 +180,72 @@ public sealed interface Proposition {
     }
 
     /**
+     * Whether {@code again} says yes of some part, going down each part once ({@link
+     * StatementReading}).
+     *
+     * <p>The ways down the parts, for every reader outside this file: one handed a
+     * {@link StatementReading} is one that asks each statement once, however many statements hold
+     * it. {@link #partsHeld} is the owner's own.
+     */
+    default boolean anyPart(StatementReading<Boolean> again) {
+        for (Proposition part : partsHeld()) {
+            if (again.read(part)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether {@code again} says yes of every part, going down each part once. */
+    default boolean everyPart(StatementReading<Boolean> again) {
+        for (Proposition part : partsHeld()) {
+            if (!again.read(part)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** {@code again} asked of each part, each once, in the order the parts are kept. */
+    default void eachPart(StatementReading<?> again) {
+        for (Proposition part : partsHeld()) {
+            again.read(part);
+        }
+    }
+
+    /** What {@code again} comes to of the parts, each part counted as often as it is held. */
+    default long sumOverParts(StatementReading<Long> again) {
+        long sum = 0;
+        for (Proposition part : partsHeld()) {
+            sum += again.read(part);
+        }
+        return sum;
+    }
+
+    /** What {@code again} comes to of each part, in the order the parts are kept: for a reading
+     *  that makes a statement of what it comes to of the parts. */
+    default <R> List<R> overParts(StatementReading<R> again) {
+        List<Proposition> parts = partsHeld();
+        List<R> out = new ArrayList<>(parts.size());
+        for (Proposition part : parts) {
+            out.add(again.read(part));
+        }
+        return out;
+    }
+
+    /**
+     * What {@code again} comes to of the parts, put together one after another in the order they
+     * are kept from {@code none}: for a reading whose answer for a statement is made of its parts'.
+     */
+    default <R> R foldParts(R none, BinaryOperator<R> together, StatementReading<R> again) {
+        R out = none;
+        for (Proposition part : partsHeld()) {
+            out = together.apply(out, again.read(part));
+        }
+        return out;
+    }
+
+    /**
      * The statements this one holds as parts of what it states, in the order it keeps them.
      *
      * <p>The one place that says which they are. A reader asking something of every part — whether
@@ -185,6 +253,11 @@ public sealed interface Proposition {
      * asks this for them, so a statement a kind comes to hold is one every such reader meets. Each
      * reading the parts off the components for itself, a part added to a kind was met by none of
      * them. What a count is taken over is a statement inside a number and not a part here.
+     *
+     * <p>For this file, which goes down them through {@link StatementReading}, and for a test. A
+     * reader elsewhere goes down the parts through {@link #anyPart}, {@link #everyPart},
+     * {@link #eachPart} or {@link #sumOverParts}: asked for here, the parts are a list a reader
+     * recurses into for every way down to each of them.
      */
     default List<Proposition> partsHeld() {
         return switch (this) {
@@ -221,29 +294,34 @@ public sealed interface Proposition {
      * past a figure, which no line is read of.
      */
     default Proposition withTheValuesItHoldsCompared() {
+        return StatementReading.<Proposition>over((each, again) ->
+                each.comparedAt(again)).read(this);
+    }
+
+    private Proposition comparedAt(StatementReading<Proposition> again) {
         return switch (this) {
             case SameValue same -> same.asAComparison() instanceof Compared compared
                     ? compared : this;
             case All all -> {
-                List<Proposition> parts = comparedEach(all.parts());
+                List<Proposition> parts = comparedEach(all.parts(), again);
                 yield parts == null ? this : all(parts);
             }
             case Any any -> {
-                List<Proposition> parts = comparedEach(any.parts());
+                List<Proposition> parts = comparedEach(any.parts(), again);
                 yield parts == null ? this : any(parts);
             }
             case OnAnApplication applications -> {
-                List<Proposition> each = comparedEach(applications.each());
+                List<Proposition> each = comparedEach(applications.each(), again);
                 yield each == null ? this : onAnApplication(each);
             }
             case WhereItAnswers where -> {
-                Proposition answers = where.answers().withTheValuesItHoldsCompared();
-                Proposition states = where.states().withTheValuesItHoldsCompared();
+                Proposition answers = again.read(where.answers());
+                Proposition states = again.read(where.states());
                 yield answers == where.answers() && states == where.states() ? this
                         : whereItAnswers(answers, states);
             }
             case Some some -> {
-                Proposition element = some.ofTheElement().withTheValuesItHoldsCompared();
+                Proposition element = again.read(some.ofTheElement());
                 yield element == some.ofTheElement() ? this
                         : new Some(some.container(), element, some.holds());
             }
@@ -251,13 +329,14 @@ public sealed interface Proposition {
         };
     }
 
-    /** {@code parts}, each read so ({@link #withTheValuesItHoldsCompared}) — or null where none
-     *  of them is read as anything else. */
-    private static List<Proposition> comparedEach(List<Proposition> parts) {
+    /** {@code parts}, each read so ({@link #withTheValuesItHoldsCompared}) through {@code again}
+     *  — or null where none of them is read as anything else. */
+    private static List<Proposition> comparedEach(List<Proposition> parts,
+                                                  StatementReading<Proposition> again) {
         List<Proposition> out = null;
         for (int at = 0; at < parts.size(); at++) {
             Proposition part = parts.get(at);
-            Proposition compared = part.withTheValuesItHoldsCompared();
+            Proposition compared = again.read(part);
             if (out == null && compared != part) {
                 out = new ArrayList<>(parts.subList(0, at));
             }
@@ -278,6 +357,14 @@ public sealed interface Proposition {
      * without any part of it saying so.
      */
     default boolean mayTurnOnAnElementOf(DecisionSubject container) {
+        return StatementReading.<Boolean>over((stated, again) ->
+                stated.mayTurnOnAnElementOfAt(container, again)).read(this);
+    }
+
+    /** {@link #mayTurnOnAnElementOf}, of this statement alone, its parts read through
+     *  {@code again}. */
+    private boolean mayTurnOnAnElementOfAt(DecisionSubject container,
+                                           StatementReading<Boolean> again) {
         return switch (this) {
             case Always _, Carried _ -> false;
             case Unread unread -> !unread.fixed();
@@ -302,20 +389,15 @@ public sealed interface Proposition {
                     || mayBeAnElementOf(inside.outer(), container);
             case LastToHold last -> isAnElementOf(last.position(), container);
             case All _, Any _, OnAnApplication _, SoManyHold _, WhereItAnswers _ ->
-                    somePartMayTurnOnAnElementOf(container);
-            case OfTheWays ways -> ways.written().mayTurnOnAnElementOf(container);
-            case Some some -> isAnElementOf(some.container(), container)
-                    || somePartMayTurnOnAnElementOf(container);
+                    anyPart(again);
+            case OfTheWays ways -> again.read(ways.written());
+            case Some some -> isAnElementOf(some.container(), container) || anyPart(again);
             // What it is written over is not what it is about, so it is taken to turn on an element
             // wherever it might, as a part nothing sees into is.
             case SomeReachable reached ->
                     isAnElementOf(new DecisionSubject.AnInput(reached.at()), container)
-                            || somePartMayTurnOnAnElementOf(container);
+                            || anyPart(again);
         };
-    }
-
-    private boolean somePartMayTurnOnAnElementOf(DecisionSubject container) {
-        return partsHeld().stream().anyMatch(part -> part.mayTurnOnAnElementOf(container));
     }
 
     /** Whether {@code quantity} may be read off an element of {@code container}. A value a body
@@ -2016,19 +2098,29 @@ public sealed interface Proposition {
     /** Why the first part of {@code stated} nothing read stopped, in the order its parts are
      *  kept, or null where every part was read. */
     static WhyUnread firstStopIn(Proposition stated) {
-        return SharedPropositions.<Optional<WhyUnread>>fact(stated,
-                SharedPropositions.Fact.FIRST_STOP, Proposition::firstStopAfresh).orElse(null);
+        return firstStops().read(stated).orElse(null);
     }
 
-    private static Optional<WhyUnread> firstStopAfresh(Proposition stated) {
+    private static StatementReading<Optional<WhyUnread>> firstStops() {
+        return StatementReading.over(Proposition::firstStopAt);
+    }
+
+    private static Optional<WhyUnread> firstStopAt(Proposition stated,
+                                                   StatementReading<Optional<WhyUnread>> again) {
         return switch (stated) {
             case Unread unread -> Optional.of(unread.why());
             // Written out to be told: whether a number of some way cannot be held is not known of
             // the parts it is made of, and is found where the cases are.
             case All _, Any _, OnAnApplication _, SoManyHold _, Some _, SomeReachable _,
-                 WhereItAnswers _, OfTheWays _ -> stated.partsHeld().stream()
-                    .map(part -> Optional.ofNullable(firstStopIn(part)))
-                    .flatMap(Optional::stream).findFirst();
+                 WhereItAnswers _, OfTheWays _ -> {
+                for (Proposition part : stated.partsHeld()) {
+                    Optional<WhyUnread> stop = again.read(part);
+                    if (stop.isPresent()) {
+                        yield stop;
+                    }
+                }
+                yield Optional.empty();
+            }
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
                  SameValue _, StringInside _, LastToHold _, Carried _ -> Optional.empty();
         };
@@ -2037,14 +2129,16 @@ public sealed interface Proposition {
     /** Why each part of {@code stated} nothing read stopped, in the order its parts are kept. */
     static List<WhyUnread> stopsIn(Proposition stated) {
         List<WhyUnread> out = new ArrayList<>();
-        stopsIn(stated, out);
+        stopsIn(stated, out, firstStops());
         return List.copyOf(out);
     }
 
-    /** Each stop in {@code stated} added to {@code into} in the order its parts are kept. A part
-     *  that holds none is not gone down: the stops written out are the ones the answer lists. */
-    private static void stopsIn(Proposition stated, List<WhyUnread> into) {
-        if (firstStopIn(stated) == null) {
+    /** Each stop in {@code stated} added to {@code into} in the order its parts are kept, a stop
+     *  as often as the ways down to it: they are what the answer lists. A part that holds none is
+     *  not gone down. */
+    private static void stopsIn(Proposition stated, List<WhyUnread> into,
+                                StatementReading<Optional<WhyUnread>> first) {
+        if (first.read(stated).isEmpty()) {
             return;
         }
         if (stated instanceof Unread unread) {
@@ -2052,7 +2146,7 @@ public sealed interface Proposition {
             return;
         }
         for (Proposition part : stated.partsHeld()) {
-            stopsIn(part, into);
+            stopsIn(part, into, first);
         }
     }
 
@@ -2061,7 +2155,8 @@ public sealed interface Proposition {
      * which a map filed from a list says of the entry under a key.
      */
     static boolean saysTheLastToHold(Proposition stated) {
-        return !stated.lastsToHold().isEmpty();
+        return StatementReading.<Boolean>over((each, again) ->
+                each instanceof LastToHold || each.anyPart(again)).read(stated);
     }
 
     /**
@@ -2074,10 +2169,14 @@ public sealed interface Proposition {
      * parts of.
      */
     default List<LastToHold> lastsToHold() {
-        if (this instanceof LastToHold last) {
-            return List.of(last);
-        }
-        return partsHeld().stream().flatMap(part -> part.lastsToHold().stream()).toList();
+        return StatementReading.<List<LastToHold>>over((each, again) -> {
+            if (each instanceof LastToHold last) {
+                return List.of(last);
+            }
+            return each.foldParts(List.<LastToHold>of(), (so, more) -> more.isEmpty() ? so
+                    : so.isEmpty() ? more : Stream.concat(so.stream(), more.stream()).toList(),
+                    again);
+        }).read(this);
     }
 
     /**
@@ -2165,16 +2264,16 @@ public sealed interface Proposition {
      * something.
      */
     static boolean saysASearchReachesBelow(Proposition stated) {
-        return SharedPropositions.fact(stated, SharedPropositions.Fact.SEARCH_BELOW,
-                Proposition::saysASearchReachesBelowAfresh);
+        return StatementReading.<Boolean>over(Proposition::saysASearchReachesBelowAt)
+                .read(stated);
     }
 
-    private static boolean saysASearchReachesBelowAfresh(Proposition stated) {
+    private static boolean saysASearchReachesBelowAt(Proposition stated,
+                                                     StatementReading<Boolean> again) {
         return switch (stated) {
             case SomeReachable _ -> true;
             case All _, Any _, OnAnApplication _, SoManyHold _, Some _, WhereItAnswers _,
-                 OfTheWays _ ->
-                    stated.partsHeld().stream().anyMatch(Proposition::saysASearchReachesBelow);
+                 OfTheWays _ -> stated.anyPart(again);
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
                  SameValue _, StringInside _, Unread _, Carried _, LastToHold _ -> false;
         };
@@ -2189,11 +2288,10 @@ public sealed interface Proposition {
      * statement about it names.
      */
     static boolean aboutAnAnswer(Proposition stated) {
-        return SharedPropositions.fact(stated, SharedPropositions.Fact.ABOUT_AN_ANSWER,
-                Proposition::aboutAnAnswerAfresh);
+        return StatementReading.<Boolean>over(Proposition::aboutAnAnswerAt).read(stated);
     }
 
-    private static boolean aboutAnAnswerAfresh(Proposition stated) {
+    private static boolean aboutAnAnswerAt(Proposition stated, StatementReading<Boolean> again) {
         return switch (stated) {
             case Always _, Unread _, Carried _ -> false;
             case LastToHold last -> last.container() instanceof DecisionSubject.AnAnswer;
@@ -2211,10 +2309,9 @@ public sealed interface Proposition {
                     || same.otherSubject() instanceof DecisionSubject.AnAnswer;
             case StringInside inside -> anAnswerIn(inside.inner()) || anAnswerIn(inside.outer());
             case All _, Any _, OnAnApplication _, SoManyHold _, SomeReachable _,
-                 WhereItAnswers _, OfTheWays _ ->
-                    stated.partsHeld().stream().anyMatch(Proposition::aboutAnAnswer);
+                 WhereItAnswers _, OfTheWays _ -> stated.anyPart(again);
             case Some some -> some.container() instanceof DecisionSubject.AnAnswer
-                    || some.partsHeld().stream().anyMatch(Proposition::aboutAnAnswer);
+                    || some.anyPart(again);
         };
     }
 
@@ -2509,18 +2606,17 @@ public sealed interface Proposition {
 
     /** Whether some part of {@code stated} answers only where an operation does. */
     private static boolean holdsAnAnswering(Proposition stated) {
-        return SharedPropositions.fact(stated, SharedPropositions.Fact.ANSWERING,
-                Proposition::holdsAnAnsweringAfresh);
+        return StatementReading.<Boolean>over(Proposition::holdsAnAnsweringAt).read(stated);
     }
 
-    private static boolean holdsAnAnsweringAfresh(Proposition stated) {
+    private static boolean holdsAnAnsweringAt(Proposition stated,
+                                              StatementReading<Boolean> again) {
         return switch (stated) {
             case WhereItAnswers _ -> true;
             // What one of these holds answers on every row, which its constructor saw to, so
             // nothing under it is walked again for each one it stands inside.
             case Some _, SoManyHold _, SomeReachable _ -> false;
-            case All _, Any _, OnAnApplication _, OfTheWays _ ->
-                    stated.partsHeld().stream().anyMatch(Proposition::holdsAnAnswering);
+            case All _, Any _, OnAnApplication _, OfTheWays _ -> stated.anyPart(again);
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
                  SameValue _, StringInside _, LastToHold _, Carried _, Unread _ -> false;
         };
@@ -2541,11 +2637,15 @@ public sealed interface Proposition {
      * each row how many elements or nodes meet them: a number, holding or failing.
      */
     static boolean deniedWhereverItFails(Proposition stated) {
+        return StatementReading.<Boolean>over(Proposition::deniedWhereverItFailsAt).read(stated);
+    }
+
+    private static boolean deniedWhereverItFailsAt(Proposition stated,
+                                                   StatementReading<Boolean> again) {
         return switch (stated) {
             case WhereItAnswers _, OnAnApplication _, Unread _ -> false;
-            case All all -> all.parts().stream().allMatch(Proposition::deniedWhereverItFails);
-            case Any any -> any.parts().stream().allMatch(Proposition::deniedWhereverItFails);
-            case OfTheWays ways -> deniedWhereverItFails(ways.written());
+            case All _, Any _ -> stated.everyPart(again);
+            case OfTheWays ways -> again.read(ways.written());
             case Always _, Compared _, Truth _, InCases _, Present _, InTheStrings _,
                  SameValue _, StringInside _, LastToHold _, Carried _, Some _, SoManyHold _,
                  SomeReachable _ -> true;

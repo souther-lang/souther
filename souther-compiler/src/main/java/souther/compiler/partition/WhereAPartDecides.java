@@ -5,12 +5,11 @@ import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.CasesHeldTo;
+import souther.compiler.meaning.StatementReading;
 import souther.compiler.meaning.Proposition;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Deque;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -59,23 +58,15 @@ public record WhereAPartDecides(PlaceOfALine part, Proposition decides, CasesWor
      */
     static List<Proposition> atomsOf(Proposition decides) {
         Set<Proposition> out = new LinkedHashSet<>();
-        Deque<Proposition> open = new ArrayDeque<>(List.of(decides));
-        while (!open.isEmpty()) {
-            Proposition each = open.pop();
+        StatementReading.<Boolean>over((each, again) -> {
             switch (each) {
-                case Proposition.All all -> pushInOrder(open, all.parts());
-                case Proposition.Any any -> pushInOrder(open, any.parts());
+                case Proposition.All _, Proposition.Any _ -> each.eachPart(again);
                 case Proposition.Always _ -> { }
                 default -> out.add(each);
             }
-        }
+            return true;
+        }).read(decides);
         return List.copyOf(out);
-    }
-
-    private static void pushInOrder(Deque<Proposition> open, List<Proposition> parts) {
-        for (int at = parts.size() - 1; at >= 0; at--) {
-            open.push(parts.get(at));
-        }
     }
 
     /**
