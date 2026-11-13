@@ -11528,7 +11528,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param onlyItsEnds whether, where that is not every value, it is the values between the ends
      *                    and nothing else
      *                    ({@link #onlyItsEnds(Position, NumericTerm.ValueOf, boolean, Set)})
-     * @param named       whether a rule of a value it sits in names it
+     * @param named       whether a rule of a value it sits in relates it to another place. A rule
+     *                    that reads it alone holds it back and ties it to nothing, so it is not
+     *                    named ({@link Named#BY_ONE_PLACE}).
      */
     private record Source(Takes takes, boolean onlyItsEnds, boolean named, boolean relaxed) {
 
@@ -11636,18 +11638,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     instanceof NameReach.Standing.UnderTheCases(var standings)
                     ? takesUnderEvery(standings, read) : null;
         }
-        // A rule naming the place relates it to the places beside it, which leaves it whatever its
-        // bounds say only where they are shown to be the whole of what the rules leave it, and
-        // where no end of its order cuts them.
+        // A rule of a value around it leaves the place whatever its bounds say only where they are
+        // shown to be the whole of what the rules leave it. One that relates it to the places
+        // beside it also leaves it that only where no end of its order cuts them.
         Named named = namedByTheDeclarations(value.position(), read);
         boolean relating = named == Named.BY_A_RULE;
-        boolean byARule = relating || named == Named.BY_ONE_PLACE;
+        boolean ruled = relating || named == Named.BY_ONE_PLACE;
         if (named == Named.UNSEEN
-                || (byARule && !certifiedAsideFromTheRelationOf(at.projection(), except))
+                || (ruled && !certifiedAsideFromTheRelationOf(at.projection(), except))
                 || (relating && !wholeOnItsOrder(value, read))) {
             return null;
         }
-        NumericDomain.Bounds ends = endsOf(at.boundsFor(value), byARule);
+        NumericDomain.Bounds ends = endsOf(at.boundsFor(value), ruled);
         AdmissibleSet admitted = at.admitted();
         // Every value where nothing holds any back: the reading of the values here took every rule
         // in, or the relation is the one rule it did not and the bounds, shown to hold all the
@@ -11655,13 +11657,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // from the longer ones.
         boolean every = ends == null && admitted.approximation().isAny()
                 && (admitted.completeness() instanceof AdmissibleSet.Completeness.Complete
-                        || (byARule && onlyARelationWentUnread(admitted)
+                        || (ruled && onlyARelationWentUnread(admitted)
                                 && at.bounds().stream()
                                         .allMatch(each -> endsOf(each, true) == null)));
         Takes takes = every ? new Takes.Every(at.type())
                 : new Takes.Some(at.type(), admitted, ends);
-        return new Source(takes, !every && onlyItsEnds(at, value, byARule, except), byARule,
-                byARule && !at.projection().isCertified());
+        return new Source(takes, !every && onlyItsEnds(at, value, ruled, except), relating,
+                ruled && !at.projection().isCertified());
     }
 
     /**
@@ -11730,11 +11732,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * {@code issuedOn >= 0 && expiresOn >= issuedOn} no rule places an end on {@code expiresOn},
      * and it stops at nought. A range with neither end is no end.
      */
-    private static NumericDomain.Bounds endsOf(PositionBounds bounds, boolean byARule) {
+    private static NumericDomain.Bounds endsOf(PositionBounds bounds, boolean ruled) {
         if (bounds == null) {
             return null;
         }
-        NumericDomain.Bounds ends = byARule ? bounds.rangeLeft() : bounds.admissible();
+        NumericDomain.Bounds ends = ruled ? bounds.rangeLeft() : bounds.admissible();
         return ends == null || ends.saysNothing() ? null : ends;
     }
 
@@ -11755,16 +11757,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * another number — how long a string is — keeps the value from some of its own values, which
      * the ends on it do not say.
      *
-     * @param byARule whether a rule of a value it sits in names it, so that what bounds each number
-     *                is where it stops once every rule is taken in ({@link #endsOf})
+     * @param ruled whether a rule of a value it sits in reads it, so that what bounds each number
+     *              is where it stops once every rule is taken in ({@link #endsOf})
      */
-    private static boolean onlyItsEnds(Position at, NumericTerm.ValueOf value, boolean byARule,
+    private static boolean onlyItsEnds(Position at, NumericTerm.ValueOf value, boolean ruled,
                                        Set<RuleRef> except) {
         if (!certifiedAsideFromTheRelationOf(at.projection(), except)) {
             return false;
         }
         for (PositionBounds each : at.bounds()) {
-            if (!each.term().equals(value) && endsOf(each, byARule) != null) {
+            if (!each.term().equals(value) && endsOf(each, ruled) != null) {
                 return false;
             }
         }
@@ -11988,8 +11990,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private record Declared(String head, Set<Object> ignoring) {}
 
     /**
-     * What the rules of the values a position sits in say of it: nothing, that one names it, or
-     * nothing anyone can tell.
+     * What the rules of the values a position sits in say of it: nothing, that one reads it alone,
+     * that one relates it to another place, or nothing anyone can tell.
      *
      * <p>In the order they hold more back, which is the order two of them are put together in.
      */
@@ -12029,7 +12031,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * that reads a place at, under or around what stands at {@code path}.
      *
      * <p>A rule on the position's own type is about it alone and ties it to nothing; one on a
-     * value around it is where a rule over two of its positions is written. A rule there that reads
+     * value around it is where a rule over two of its positions is written, unless what it reads is
+     * that place alone, which is a rule of the place as one on its own type is. A rule there that reads
      * only places beside the path leaves every value of the path standing beside some value of the
      * rest — what it holds back is which of the rest stand together — and one reading a container
      * around the path for nothing but how many it holds leaves its elements every value, wherever
@@ -12153,17 +12156,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * many a container holds, or an element, is not a rule about one place alone.
      */
     private static boolean readsOnePlaceAlone(ClauseMeaning.Parts.One part) {
-        List<String> only = null;
-        for (ClauseRead each : part.reads()) {
-            if (each.kind() != ClauseRead.Kind.ITS_VALUES) {
-                return false;
-            }
-            if (only != null && !only.equals(each.at().steps())) {
-                return false;
-            }
-            only = each.at().steps();
-        }
-        return only != null;
+        return !part.reads().isEmpty()
+                && part.reads().stream().allMatch(each -> each.kind() == ClauseRead.Kind.ITS_VALUES)
+                && part.reads().stream().map(each -> each.at().steps()).distinct().count() == 1;
     }
 
     /**

@@ -133,6 +133,72 @@ class ALengthRuleOnARecordAboutOneFieldIsReadAsARuleOfThatFieldTest {
                 classesOf(onTheRecord).get("approver"));
     }
 
+    /**
+     * What a behavior over a record's field {@code x} is measured to be does not depend on whether
+     * the rule on it is written on the record or on the field's own type.
+     *
+     * @param type   the type of {@code x} and of {@code y}
+     * @param rule   the rule, {@code %s} standing for the value it is about
+     * @param param  the parameter {@code other} is, as written after its name
+     * @param bodies behaviors over {@code r.x}, {@code r.y} and {@code other}
+     */
+    private record Shape(String type, String rule, String param, List<String> bodies) {
+
+        String onTheRecord(String body) {
+            return """
+                    module bounded
+                    data R = { x: %s, y: %s } invariant %s
+                    behavior f : (r: R, other: %s) -> Bool
+                    let f (r, other) = %s
+                    """.formatted(type, type, rule.formatted("x"), param, body);
+        }
+
+        String onTheField(String body) {
+            return """
+                    module bounded
+                    data X = %s invariant %s
+                    data R = { x: X, y: %s }
+                    behavior f : (r: R, other: %s) -> Bool
+                    let f (r, other) = %s
+                    """.formatted(type, rule.formatted("value"), type, param,
+                    body.replace("r.x", "r.x.value"));
+        }
+    }
+
+    private static final List<Shape> SHAPES = List.of(
+            new Shape("Int", "%1$s >= 0 && %1$s <= 120", "Int", List.of(
+                    "r.x < 18", "r.x == other", "r.x + r.y < 100", "r.x < 18 || other > 5",
+                    "r.x <= r.y", "r.x * 2 >= other", "Int.floorMod(r.x, 3) == other",
+                    "r.x == 5 && r.y == other")),
+            new Shape("String", "String.length(%s) <= 20", "List<String>", List.of(
+                    "String.length(r.x) > 10", "r.x == r.y", "String.startsWith(r.x, \"a\")",
+                    "List.any(own -> own == r.x, other)",
+                    "List.any(own -> own == String.lowercase(r.x), other)",
+                    "r.x == r.y || List.any(own -> own == r.x, other)")));
+
+    @Test
+    void aBehaviorIsMeasuredAsItIsWhereTheRuleIsWrittenOnTheRecordOrOnTheField() {
+        List<String> differing = new ArrayList<>();
+        for (Shape shape : SHAPES) {
+            for (String body : shape.bodies()) {
+                PartitionEvidence record = evidence(shape.onTheRecord(body));
+                PartitionEvidence field = evidence(shape.onTheField(body));
+                String onRecord = measured(record);
+                String onField = measured(field);
+                if (!onRecord.equals(onField)) {
+                    differing.add(body + "\n  on the record " + onRecord + "\n  on the field  "
+                            + onField);
+                }
+            }
+        }
+        assertEquals(List.of(), differing);
+    }
+
+    private static String measured(PartitionEvidence found) {
+        return found.partitioned().getClass().getSimpleName() + " " + unanswered(found) + " "
+                + classesOf(found);
+    }
+
     private static Map<String, List<String>> classesOf(PartitionEvidence found) {
         Map<String, List<String>> out = new TreeMap<>();
         found.axes().forEach(axis -> out.put(axis.path(), axis.classes()));
