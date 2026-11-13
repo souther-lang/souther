@@ -14985,6 +14985,14 @@ final class Pullback {
      * What {@code fresh} comes to, a reading of {@code node} at {@code at} that is read through
      * the names it is made of and so reads the readings of the nodes under it, taken from the
      * reading made before where there is one ({@code table} holds them).
+     *
+     * <p>A reading is taken where the inputs it asked after stand as they did. Of the side being
+     * read, what an answer is collected into, the counts met and whether the candidate is being
+     * told ({@link InputAskedAfter}), that is the ones it asked after and no others: a reading
+     * that did not look at one comes to the same whatever it stands as, and one that wrote into
+     * the lists is not kept at all, since it changed what it must leave alone. What a reading
+     * taken again asked after is asked after by the reading it is taken in, so that is told to it,
+     * as it is for a reading {@link SharedReads} takes.
      */
     private <R> R kept(Map<Core, List<ReadingTaken<R>>> table, Core node, InputReads at,
                        Supplier<R> fresh) {

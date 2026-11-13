@@ -54,6 +54,18 @@ public final class InputReading {
      * each reader for itself, it is worked out once per reader, and the readers of one input are
      * many; kept here, it is worked out once for the reading they share. One value of each kind,
      * so {@code make} is the one way of working that kind out.
+     *
+     * <p>What is kept here is the answer of a question that its key and this reading settle, and
+     * that is asked of no reader's state: a question worked out by a function of them, or by a
+     * reader made for the question and for nothing else. It is not a reading in the middle of a
+     * reader that has met elements, been told what a candidate says, or carries a walk's names:
+     * what the reader is left with is part of what such a reading comes to, and one kept here and
+     * taken by another reader is taken where that is not the same, and leaves out what it left.
+     * Those are kept inside the reader, compared with the state they were made in and told again
+     * ({@code SharedReads}, {@code Pullback#kept}).
+     *
+     * <p>Readers of one input ask from more than one thread, so what {@code make} makes is safe to
+     * be asked by several at once.
      */
     public synchronized <T> T derived(Class<T> kind, Function<InputReading, T> make) {
         Object kept = derived.get(kind);
