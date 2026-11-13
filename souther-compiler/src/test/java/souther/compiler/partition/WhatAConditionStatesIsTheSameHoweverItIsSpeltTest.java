@@ -512,7 +512,7 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
 
                 behavior f : (b: Box) -> Int
                 let f (b) = if %s then 1 else 0
-                """.formatted(condition), condition);
+                """.formatted(condition));
     }
 
     /** The same, of a condition over {@code xs}, which is what one call of a dependency answers:
@@ -527,10 +527,10 @@ class WhatAConditionStatesIsTheSameHoweverItIsSpeltTest {
                 behavior f : (b: Box) -> Int
                     depends on listed
                 let f (b, listed) = if asked(listed(b)) then 1 else 0
-                """.formatted(condition), condition);
+                """.formatted(condition));
     }
 
-    private static Proposition statedIn(String model, String condition) {
+    private static Proposition statedIn(String model) {
         Compilation compilation = Compilation.ofSource(model, "Main");
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
         assertNotNull(checked, "the model under test compiles");
