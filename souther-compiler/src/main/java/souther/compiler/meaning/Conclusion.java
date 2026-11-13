@@ -79,6 +79,12 @@ public final class Conclusion {
         private final Map<Derivation, Kept> last = new IdentityHashMap<>();
         /** The carried values each step being concluded has read so far, innermost last. */
         private final Deque<Set<ACarriedValue>> reading = new ArrayDeque<>();
+        /** Whether each step being concluded has met, at it or under it, a stop other than coming
+         *  to too many parts, innermost last. Kept only where steps are kept ({@link #reusing}). */
+        private final Deque<boolean[]> stopping = new ArrayDeque<>();
+        /** Whether a statement stops for nothing but coming to too many parts. */
+        private final StatementReading<Boolean> onlyPastTheParts =
+                Proposition.stopsOnlyPastThePartsReading();
         /** How many parts each statement concluded here comes to written out, past the figure
          *  held at one past it. By identity, since a part held twice is one statement counted
          *  twice wherever it is held. */
@@ -109,9 +115,11 @@ public final class Conclusion {
         }
     }
 
-    /** What a step came to, and how each carried value it read was supposed then — absent where
-     *  nothing supposed it. */
-    private record Kept(Map<ACarriedValue, Optional<Boolean>> read, Proposition concluded) {}
+    /** What a step came to, how each carried value it read was supposed then — absent where
+     *  nothing supposed it — and whether it, or a step under it, stopped for something besides
+     *  coming to too many parts. */
+    private record Kept(Map<ACarriedValue, Optional<Boolean>> read, Proposition concluded,
+                        boolean stoppedBesidesItsSize) {}
 
     private final Shared shared;
     private final Map<ACarriedValue, Boolean> supposed;
@@ -215,29 +223,59 @@ public final class Conclusion {
             for (Kept each : shared.kept.getOrDefault(step, List.of())) {
                 if (agrees(each.read())) {
                     readAll(each.read().keySet());
+                    stoppedUnder(each.stoppedBesidesItsSize());
                     shared.last.put(step, each);
                     return each.concluded();
                 }
             }
         }
         shared.reading.push(new HashSet<>());
+        shared.stopping.push(new boolean[1]);
         Proposition out;
         Set<ACarriedValue> read;
+        boolean stopped;
         try {
             out = step.conclusion(this);
         } finally {
             read = shared.reading.pop();
+            stopped = shared.stopping.pop()[0];
         }
+        // Asked of what the step came to before it is given up for coming to too many parts: the
+        // statement it is given up as says that and nothing of the stops inside it.
+        stopped |= shared.reusing && !shared.onlyPastTheParts.read(out);
         out = withinTheParts(out);
         Map<ACarriedValue, Optional<Boolean>> how = new HashMap<>();
         read.forEach(each -> how.put(each, Optional.ofNullable(supposed.get(each))));
-        Kept concluded = new Kept(Map.copyOf(how), out);
+        Kept concluded = new Kept(Map.copyOf(how), out, stopped);
         if (shared.reusing) {
             shared.kept.computeIfAbsent(step, _ -> new ArrayList<>()).add(concluded);
         }
         readAll(read);
+        stoppedUnder(stopped);
         shared.last.put(step, concluded);
         return out;
+    }
+
+    /**
+     * Whether {@code step}, as it was last concluded here, or a step under it, stopped for
+     * something besides coming to too many parts.
+     *
+     * <p>A step that comes to too many parts is given up as one part nothing read, and what stopped
+     * inside it is not in what it is given up as. So this is asked of the steps and not of what
+     * they came to. Where a step was never concluded here it is told as having stopped, since
+     * nothing says it did not. Only a concluding that keeps its steps ({@link #reusing}) tells.
+     */
+    public boolean stoppedBesidesItsSize(Derivation step) {
+        Kept last = shared.last.get(step);
+        return !shared.reusing || last == null || last.stoppedBesidesItsSize();
+    }
+
+    /** That the step being concluded has {@code stopped} at it or under it. */
+    private void stoppedUnder(boolean stopped) {
+        boolean[] into = shared.stopping.peek();
+        if (stopped && into != null) {
+            into[0] = true;
+        }
     }
 
     /**
