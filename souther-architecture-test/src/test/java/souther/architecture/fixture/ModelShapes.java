@@ -1,10 +1,12 @@
 package souther.architecture.fixture;
 
 import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.RepeatedTest;
 
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Db;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.source.SourceId;
 
@@ -630,6 +632,167 @@ public final class ModelShapes {
             Compilation model = TheDoor.answered(source);
             model.db().forget(new SourceId("main.sou"), "main");
             return AdequacyReport.of(model);
+        }
+    }
+
+    /** Code that is not walked, written to change the model it is handed. */
+    public static final class ProductionChanger {
+
+        private ProductionChanger() { }
+
+        public static void rewrite(Compilation model) {
+            model.update(Map.of(), Set.of(), LocalDate.MIN);
+        }
+    }
+
+    /** Hands an asked-about model to code that changes it, and reads it. */
+    public static final class HandedToCodeThatChangesIt {
+
+        private HandedToCodeThatChangesIt() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            ProductionChanger.rewrite(model);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Reads the report in a method of its own that changes the model and then asks about it. */
+    public static final class ReadThenChangedThenAskedInAMethod {
+
+        private ReadThenChangedThenAskedInAMethod() { }
+
+        private static void readThenReplaceAndCheck(Compilation model,
+                                                    Map<String, String> replacement) {
+            AdequacyReport.of(model);
+            model.update(replacement, Set.of(), LocalDate.MIN);
+            TheDoor.compiles(model);
+        }
+
+        public static void read(String source, Map<String, String> other) {
+            readThenReplaceAndCheck(Compilation.ofSource(source, "Main"), other);
+        }
+    }
+
+    /** Keeps an asked-about model in a field and changes it there. */
+    public static final class FieldMutatedAfterTheLook {
+
+        private Compilation model;
+
+        public AdequacyReport read(String source, Map<String, String> other) {
+            model = TheDoor.answered(source);
+            model.update(other, Set.of(), LocalDate.MIN);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Hands the store of an asked-about model to a method that changes it. */
+    public static final class DbHandedToAMethod {
+
+        private DbHandedToAMethod() { }
+
+        private static void replaceText(Db store) {
+            store.forget(new SourceId("main.sou"), "main");
+        }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            replaceText(model.db());
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Changes the store through a variable it was put in. */
+    public static final class DbChangedThroughAVariable {
+
+        private DbChangedThroughAVariable() { }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            Db store = model.db();
+            store.forget(new SourceId("main.sou"), "main");
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Hands the store of an asked-about model to a method that only reads it. */
+    public static final class DbHandedToAReader {
+
+        private DbHandedToAReader() { }
+
+        private static boolean holds(Db store) {
+            return store.allowances() != null;
+        }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            Objects.requireNonNull(Boolean.valueOf(holds(model.db())));
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Changes the model and tells the caller it is asked about again. */
+    public static final class HelperThatChangesAndAsks {
+
+        private HelperThatChangesAndAsks() { }
+
+        private static Compilation edit(Compilation model, Map<String, String> other) {
+            model.update(other, Set.of(), LocalDate.MIN);
+            return TheDoor.compiles(model);
+        }
+
+        public static AdequacyReport read(String source, Map<String, String> other) {
+            Compilation model = TheDoor.answered(source);
+            edit(model, other);
+            return AdequacyReport.of(model);
+        }
+    }
+
+    /** Changes a model and fails, and the caller that catches the failure reads the model. */
+    public static final class ChangedThenFailedAndCaught {
+
+        private ChangedThenFailedAndCaught() { }
+
+        private static void changeAndFail(Compilation model) {
+            model.update(Map.of(), Set.of(), LocalDate.MIN);
+            throw new IllegalStateException("changed");
+        }
+
+        public static AdequacyReport read(String source) {
+            Compilation model = TheDoor.answered(source);
+            try {
+                changeAndFail(model);
+            } catch (IllegalStateException failed) {
+                return AdequacyReport.of(model);
+            }
+            return null;
+        }
+    }
+
+    /** Marks a method that is no test with something that does not run it. */
+    public static final class MarkedAndNotRun {
+
+        private MarkedAndNotRun() { }
+
+        @DisplayName("a report")
+        private static AdequacyReport reportOf(Compilation model) {
+            return AdequacyReport.of(model);
+        }
+
+        public static AdequacyReport read(String source) {
+            return reportOf(TheDoor.answered(source));
+        }
+    }
+
+    /** Says a model is read without compiling it, and reads every report its store holds. */
+    public static final class NotCompiledReadsAllReports {
+
+        private NotCompiledReadsAllReports() { }
+
+        public static boolean read(String source) {
+            Compilation model = TheDoor.notCompiled(Compilation.ofSource(source, "Main"),
+                    "too long");
+            return model.db().allReports().isEmpty();
         }
     }
 

@@ -32,18 +32,22 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
     /** The shapes written for this check to read, and which of them it refuses. */
     private static final Set<String> REFUSED_SHAPES = new TreeSet<>(List.of(
             "ADerivedModelNeverAsked", "AnotherClassMadeIt", "AnotherModelAsked",
-            "AskedOnOneWayOnly", "ChangedThroughAMethod", "ChangedThroughTheDb",
-            "EngineHandsItIn", "ErrorsDropped", "ErrorsKept", "FieldNeverAsked",
-            "FromACollection", "HandedOnManyTimes", "LambdaMadeNotRun", "LeftBeforeTheAsk",
+            "AskedOnOneWayOnly", "ChangedThenFailedAndCaught", "ChangedThroughAMethod",
+            "ChangedThroughTheDb", "DbChangedThroughAVariable", "DbHandedToAMethod",
+            "EngineHandsItIn", "ErrorsDropped", "ErrorsKept", "FieldMutatedAfterTheLook",
+            "FieldNeverAsked", "FromACollection", "HandedOnManyTimes",
+            "HandedToCodeThatChangesIt", "LambdaMadeNotRun", "LeftBeforeTheAsk",
             "LeftOpenFor", "MadeInALambda", "MeasuredThenRead", "MutatedAfterTheLook",
-            "NotCompiledButReportRead", "NotCompiledOffTheList", "ParameterNobodyPasses",
-            "ReadThenChangedThenAsked", "ReassignedOnOneWay", "ReplacedAfterTheLook",
+            "NotCompiledButReportRead", "NotCompiledOffTheList", "NotCompiledReadsAllReports",
+            "ParameterNobodyPasses", "ReadThenChangedThenAsked",
+            "ReadThenChangedThenAskedInAMethod", "ReassignedOnOneWay", "ReplacedAfterTheLook",
             "SwallowedFailure", "UpdatedAfterTheLook", "WarningsOfAnUnaskedModel"));
 
     private static final Set<String> ACCEPTED_SHAPES = new TreeSet<>(List.of(
             "ADerivedModelAsked", "AliasOfAnAskedModel", "AnotherClassAskedAboutIt",
             "AskedAfterTheRead", "AskedByAMethodOfItsOwn", "AskedOnEveryWay", "AskedThenCaptured",
-            "AskedThenRead", "ConfiguredThroughTheDbBeforeTheLook", "FieldAskedWhereWritten",
+            "AskedThenRead", "ConfiguredThroughTheDbBeforeTheLook", "DbHandedToAReader",
+            "FieldAskedWhereWritten", "HelperThatChangesAndAsks", "MarkedAndNotRun",
             "NotCompiledOnTheList",
             "ParameterHandedByACaller", "TheErrorsAreWhatWasMeant", "ThroughTheDoor",
             "UpdatedThenAsked"));
@@ -67,29 +71,9 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
                     "(Lsouther/lsp/analysis/SemanticProbe;Ljava/util/Map;Ljava/lang/String;"
                             + "Ljava/lang/String;I)V"));
 
-    /**
-     * The code of the compiler, not walked here, that a test hands a model to and that leaves what
-     * it is compiled from as it was. A model handed to any other is taken to be changed by it, and
-     * stands as a model nothing was asked of until it is asked about again.
-     */
-    private static final Set<String> READ_ONLY = Set.of(
-            "souther/bench/Corpus#check(Lsouther/compiler/query/Compilation;)V",
-            "souther/compiler/program/CheckedProgramAssembler#of("
-                    + "Lsouther/compiler/query/Compilation;)"
-                    + "Lsouther/compiler/program/CheckedProgram;",
-            "souther/compiler/query/Acceptance#of(Lsouther/compiler/query/Compilation;)V",
-            "souther/compiler/report/GeneratedRows#of(Lsouther/compiler/query/Compilation;"
-                    + "Ljava/lang/String;Ljava/lang/String;Lsouther/compiler/diag/SourceRendering;)"
-                    + "Lsouther/compiler/report/GeneratedRows$Block;",
-            "souther/compiler/report/GeneratedRows#of(Lsouther/compiler/query/Compilation;"
-                    + "Lsouther/compiler/diag/SourceRendering;Ljava/util/Map;)"
-                    + "Lsouther/compiler/report/GeneratedRows$Block;",
-            "souther/compiler/report/GeneratedRows#offered(Lsouther/compiler/query/Compilation;"
-                    + "Ljava/lang/String;Ljava/lang/String;)Ljava/util/Map;");
-
     /** The door the tests of this repository go through. */
     private static final UncheckedModelReports ASKING =
-            new UncheckedModelReports(HELPER, CANNOT_BE_COMPILED, READ_ONLY);
+            new UncheckedModelReports(HELPER, CANNOT_BE_COMPILED);
 
     /** What the repository's tests do with the models they read, worked out once for the class. */
     private static UncheckedModelReports.Findings findings;
@@ -97,7 +81,9 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
     private static synchronized UncheckedModelReports.Findings findings() {
         if (findings == null) {
             List<ClassModel> tests = new ArrayList<>();
+            List<ClassModel> production = new ArrayList<>();
             for (Path module : COMPILED.modules()) {
+                production.addAll(COMPILED.classesOf(module));
                 for (ClassModel each : COMPILED.testClassesOf(module)) {
                     if (!each.thisClass().asInternalName()
                             .startsWith("souther/architecture/fixture/")) {
@@ -105,7 +91,7 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
                     }
                 }
             }
-            findings = ASKING.of(tests);
+            findings = ASKING.of(tests, production);
         }
         return findings;
     }
@@ -132,8 +118,9 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
         UncheckedModelReports door = new UncheckedModelReports(FIXTURES + "TheDoor", Set.of(
                 AMethod.of(FIXTURES + "NotCompiledOnTheList", "read", "(Ljava/lang/String;)Z"),
                 AMethod.of(FIXTURES + "NotCompiledButReportRead", "read",
-                        "(Ljava/lang/String;)Lsouther/compiler/report/AdequacyReport;")),
-                Set.of());
+                        "(Ljava/lang/String;)Lsouther/compiler/report/AdequacyReport;"),
+                AMethod.of(FIXTURES + "NotCompiledReadsAllReports", "read",
+                        "(Ljava/lang/String;)Z")));
         List<ClassModel> shapes = new ArrayList<>();
         for (String shape : REFUSED_SHAPES) {
             shapes.add(COMPILED.read(FIXTURES + shape));
@@ -143,7 +130,8 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
         }
         shapes.add(COMPILED.read(FIXTURES + "Factory"));
         Set<String> refused = new TreeSet<>();
-        for (String method : door.of(shapes).refused()) {
+        List<ClassModel> production = List.of(COMPILED.read(FIXTURES + "ProductionChanger"));
+        for (String method : door.of(shapes, production).refused()) {
             refused.add(method.substring(method.indexOf('$') + 1, method.indexOf('#')));
         }
         assertEquals(REFUSED_SHAPES, refused,
@@ -159,6 +147,21 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
                         + " read, on every way, through a copy of the variable, saying what the"
                         + " errors are meant to be, asking in a method of its own, and a model"
                         + " handed in by a caller that asked are not");
+    }
+
+    /**
+     * And what a model and its store can do is each said to read, to change or to do neither.
+     *
+     * <p>The check proves a read only of what it follows, so a method added to either class is
+     * one it does not know to be a change until it is said here.
+     */
+    @Test
+    void everyMethodOfAModelAndItsStoreIsSaidToReadChangeOrNeither() {
+        assertEquals(Set.of(), ModelVocabulary.unsaid(
+                        COMPILED.read(ModelVocabulary.COMPILATION),
+                        COMPILED.read(ModelVocabulary.DB)),
+                "a method of Compilation or Db is not said in ModelVocabulary to read what a model"
+                        + " says, to change what it is, or to do neither");
     }
 
     /**

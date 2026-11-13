@@ -63,25 +63,17 @@ import java.util.Set;
  */
 final class ModelWalk {
 
-    static final String COMPILATION = "souther/compiler/query/Compilation";
+    static final String COMPILATION = ModelVocabulary.COMPILATION;
 
-    static final String COMPILATION_TYPE = "L" + COMPILATION + ";";
+    static final String COMPILATION_TYPE = ModelVocabulary.COMPILATION_TYPE;
 
-    static final String REPORT = "souther/compiler/report/AdequacyReport";
+    static final String REPORT = ModelVocabulary.REPORT;
 
-    /** What a test calls on a model to read what is said of it. */
-    private static final Set<String> READERS = Set.of("db", "adequacy", "warnings");
+    private static final String DB = ModelVocabulary.DB;
 
-    /**
-     * What changes a model once it has been asked about, so that what was asked is no longer what
-     * it is: the sources it is made of and the way it is compiled.
-     */
-    private static final Set<String> MUTATORS = Set.of("update", "measure", "observe",
-            "abandonWhen", "allowing", "withExampleBudget", "withJvmExampleDeadlines",
-            "withEvaluationPolicy", "writtenOn", "withReadingPolicy", "withAdequacyPolicy");
+    private static final String DB_TYPE = ModelVocabulary.DB_TYPE;
 
-    /** The helper's way of saying a model is read without being compiled. */
-    private static final String NOT_COMPILED = "notCompiled";
+    private static final String NOT_COMPILED = ModelVocabulary.NOT_COMPILED;
 
     /** What marks a method the test engine runs, handing it what its parameters ask for. */
     private static final Set<String> RUN_BY_THE_ENGINE = Set.of(
@@ -91,11 +83,6 @@ final class ModelWalk {
             "Lorg/junit/jupiter/api/BeforeAll;", "Lorg/junit/jupiter/api/AfterEach;",
             "Lorg/junit/jupiter/api/AfterAll;");
 
-    /** What a model keeps what it is compiled from in, and hands out. */
-    private static final String DB = "souther/compiler/query/Db";
-
-    /** What changes what a model is compiled from, through the store it hands out. */
-    private static final Set<String> DB_MUTATORS = Set.of("set", "forget", "allowing");
 
     /**
      * What the walks of every method have found about the others so far.
@@ -132,11 +119,11 @@ final class ModelWalk {
      * @param captured  how many arguments each method that stands for a lambda is handed by the
      *                  one that made it
      * @param exempt    the methods that may read a model they did not compile, and say so
-     * @param readOnly  the code of the compiler, not walked, that is handed a model and leaves
-     *                  what it is compiled from as it was
+     * @param changing  the code of the compiler, not walked, that can change a model it is handed
+     *                  or the store of one
      */
     record World(String helper, Set<String> analysed, Set<String> written,
-                 Map<String, Integer> captured, Set<String> exempt, Set<String> readOnly) { }
+                 Map<String, Integer> captured, Set<String> exempt, Set<String> changing) { }
 
     /** What holds a model where it is used. */
     sealed interface Operand {
@@ -149,6 +136,9 @@ final class ModelWalk {
 
         /** A field. */
         record Field(String key) implements Operand { }
+
+        /** A store made here with {@code new}, which belongs to no model. */
+        record FreshStore() implements Operand { }
 
         /** No model at all, which a read stops on. */
         record Nothing() implements Operand { }
@@ -168,10 +158,13 @@ final class ModelWalk {
      *                  it until the lambda is run, so what the lambda asks has not been asked
      * @param mutates   the call changes what the model is compiled from or how, so that what was
      *                  asked of it before is no longer what it is
+     * @param store     what holds the store the call is given or is made on, where it is one, and
+     *                  {@link Operand.Nothing} where it is not; the model is the one the store was
+     *                  got from, where that can be told
      */
     record Site(int at, String callee, int parameter, boolean readsDirectly, boolean report,
                 boolean asksDirectly, boolean exempts, boolean creation, boolean mutates,
-                Operand operand) { }
+                Operand operand, Operand store) { }
 
     /** What one walk found. */
     static final class Result {
@@ -201,6 +194,7 @@ final class ModelWalk {
     private final int[][] handlers;
     private final Map<Integer, Integer> parameterAt = new HashMap<>();
     private final Set<Integer> modelParameters = new HashSet<>();
+    private final Set<Integer> storeParameters = new HashSet<>();
     private final Set<Integer> stored = new HashSet<>();
     private final Map<Integer, Integer> storeCounts = new HashMap<>();
     private Map<Integer, Set<Integer>> groups;
@@ -284,10 +278,14 @@ final class ModelWalk {
             if (parameter.descriptorString().equals(COMPILATION_TYPE)) {
                 modelParameters.add(slot);
             }
+            if (parameter.descriptorString().equals(DB_TYPE)) {
+                storeParameters.add(slot);
+            }
             index++;
             slot += sizeOf(parameter);
         }
-        boolean mentions = method.methodTypeSymbol().descriptorString().contains(COMPILATION_TYPE);
+        boolean mentions = method.methodTypeSymbol().descriptorString().contains(COMPILATION_TYPE)
+                || method.methodTypeSymbol().descriptorString().contains(DB_TYPE);
         for (CodeElement element : flow) {
             switch (element) {
                 case StoreInstruction store when store.typeKind() == TypeKind.REFERENCE -> {
@@ -305,11 +303,13 @@ final class ModelWalk {
                 case InvokeInstruction call -> {
                     String name = call.owner().asInternalName();
                     mentions |= name.equals(COMPILATION) || name.equals(REPORT)
-                            || isHelper(name, helper)
-                            || call.type().stringValue().contains(COMPILATION_TYPE);
+                            || name.equals(DB) || isHelper(name, helper)
+                            || call.type().stringValue().contains(COMPILATION_TYPE)
+                            || call.type().stringValue().contains(DB_TYPE);
                 }
                 case InvokeDynamicInstruction call -> {
-                    mentions |= call.type().stringValue().contains(COMPILATION_TYPE);
+                    mentions |= call.type().stringValue().contains(COMPILATION_TYPE)
+                            || call.type().stringValue().contains(DB_TYPE);
                     String impl = lambdaImplementation(call);
                     if (impl != null) {
                         capturedByLambdas.merge(impl, capturedArguments(call), Math::max);
@@ -418,7 +418,7 @@ final class ModelWalk {
                             mutations.computeIfAbsent(member, s -> new HashSet<>())
                                     .add(site.at());
                         }
-                    } else {
+                    } else if (!(site.operand() instanceof Operand.Nothing)) {
                         mutatesAnyAt.add(site.at());
                     }
                 }
@@ -445,6 +445,7 @@ final class ModelWalk {
             }
             for (int to : handlers[at]) {
                 merge(to, before, work);
+                merge(to, after, work);
             }
         }
         for (int at = 0; at < size; at++) {
@@ -526,22 +527,52 @@ final class ModelWalk {
      * is not walked and so is not known not to.
      */
     private boolean mutating(Site site) {
-        if (facts.leavesAsked().contains(site.callee() + "#" + site.parameter())) {
+        String parameter = site.callee() + "#" + site.parameter();
+        if (facts.leavesAsked().contains(parameter)) {
             return false;
         }
-        return site.mutates() || facts.mutatesParameter()
-                .contains(site.callee() + "#" + site.parameter())
-                || (escapes(site) && !world.readOnly().contains(site.callee()));
+        return site.mutates() || facts.mutatesParameter().contains(parameter)
+                || handedToCodeThatChangesIt(site);
     }
 
-    /** Whether the call hands the model to code of the compiler that is not walked. */
-    private boolean escapes(Site site) {
+    /**
+     * Whether the call hands the model, or the store of one, to code of the compiler that is not
+     * walked and can reach a change to a model, which {@link ProductionMutation} works out.
+     */
+    private boolean handedToCodeThatChangesIt(Site site) {
         String owner = site.callee().substring(0, site.callee().indexOf('#'));
         return !site.creation() && owner.startsWith("souther/")
-                && !owner.equals(COMPILATION) && !owner.equals(REPORT)
-                && !isHelper(owner, world.helper()) && !world.analysed().contains(site.callee());
+                && !owner.equals(COMPILATION) && !owner.equals(REPORT) && !owner.equals(DB)
+                && !isHelper(owner, world.helper()) && !world.analysed().contains(site.callee())
+                && world.changing().contains(site.callee());
     }
 
+    /**
+     * Whether the model in {@code slot} is asked about on every way from just after the node at
+     * {@code at} out of the method. What the node itself does does not count, so that a call that
+     * reads a model and asks about it afterwards is not excused of the read by the asking.
+     */
+    private boolean afterNode(int slot, int at) {
+        boolean[] held = lookedAfter(slot);
+        CodeElement element = flow.get(at);
+        boolean value;
+        if (element instanceof ReturnInstruction) {
+            value = false;
+        } else if (element instanceof ThrowInstruction) {
+            value = true;
+        } else if (next[at].length == 0) {
+            value = false;
+        } else {
+            value = true;
+            for (int to : next[at]) {
+                value &= held[to];
+            }
+        }
+        for (int to : handlers[at]) {
+            value &= held[to];
+        }
+        return value;
+    }
 
     /**
      * The variables that hold the model {@code slot} holds: those it was copied to, or copied
@@ -594,11 +625,20 @@ final class ModelWalk {
                 read(site.operand(), at, state, result, site.report() || facts
                         .readsReportParameter().contains(site.callee() + "#" + site.parameter()));
             }
-            if (mutating(site) && site.operand() instanceof Operand.Local local) {
-                for (int member : membersOf(local.slot())) {
-                    if (modelParameters.contains(member) && !stored.contains(member)) {
-                        result.mutatesParameter.add(parameterAt.get(member));
+            if (mutating(site)) {
+                if (site.operand() instanceof Operand.Local local) {
+                    for (int member : membersOf(local.slot())) {
+                        if (modelParameters.contains(member) && !stored.contains(member)) {
+                            result.mutatesParameter.add(parameterAt.get(member));
+                        }
                     }
+                } else if (site.operand() instanceof Operand.Field field) {
+                    result.fieldWrites.merge(field.key(), ModelStanding.UNASKED,
+                            ModelStanding::join);
+                }
+                if (site.store() instanceof Operand.Local held
+                        && storeParameters.contains(held.slot()) && !stored.contains(held.slot())) {
+                    result.mutatesParameter.add(parameterAt.get(held.slot()));
                 }
             }
         }
@@ -662,7 +702,7 @@ final class ModelWalk {
             return;
         }
         if (operand instanceof Operand.Local local) {
-            boolean after = lookedAfter(local.slot())[at];
+            boolean after = afterNode(local.slot(), at);
             if (standing == ModelStanding.ASKED) {
                 if (asks.containsKey(local.slot())) {
                     result.asked++;
@@ -703,7 +743,7 @@ final class ModelWalk {
     private ModelStanding standing(Operand operand, Map<Integer, ModelStanding> state) {
         return switch (operand) {
             case Operand.Lost _ -> ModelStanding.LOST;
-            case Operand.Nothing _ -> ModelStanding.ASKED;
+            case Operand.Nothing _, Operand.FreshStore _ -> ModelStanding.ASKED;
             case Operand.Field field -> field(field.key());
             case Operand.Local local -> state.getOrDefault(local.slot(), ModelStanding.HANDED_IN);
             case Operand.Answer answer -> answered(answer, state);
@@ -817,7 +857,7 @@ final class ModelWalk {
             if (flow.get(at) instanceof InvokeInstruction call
                     && call.opcode() != Opcode.INVOKESTATIC
                     && call.owner().asInternalName().equals(DB)
-                    && DB_MUTATORS.contains(call.name().stringValue())) {
+                    && ModelVocabulary.DB_CHANGES.contains(call.name().stringValue())) {
                 int others = 0;
                 for (ClassDesc type : call.typeSymbol().parameterList()) {
                     others += sizeOf(type);
@@ -846,7 +886,8 @@ final class ModelWalk {
                         if (type.descriptorString().equals(COMPILATION_TYPE)) {
                             boolean receiver = instance && i == 0;
                             boolean reads = receiver
-                                    ? target.equals(COMPILATION) && READERS.contains(name)
+                                    ? target.equals(COMPILATION)
+                                            && ModelVocabulary.COMPILATION_READS.contains(name)
                                             && !configuring.contains(at)
                                     : target.equals(REPORT) && name.equals("of");
                             boolean report = reads && !(receiver && name.equals("db"));
@@ -855,17 +896,30 @@ final class ModelWalk {
                             boolean exempts = helping && name.equals(NOT_COMPILED)
                                     && world.exempt().contains(key);
                             boolean mutates = receiver && target.equals(COMPILATION)
-                                    && MUTATORS.contains(name);
+                                    && ModelVocabulary.COMPILATION_CHANGES.contains(name);
                             found.computeIfAbsent(at, k -> new ArrayList<>()).add(new Site(at,
                                     callee, instance ? i - 1 : i, reads, report, asks, exempts,
-                                    false, mutates, producer(at, above)));
+                                    false, mutates, producer(at, above), new Operand.Nothing()));
+                        } else if (type.descriptorString().equals(DB_TYPE)) {
+                            boolean receiver = instance && i == 0;
+                            Operand store = producer(at, above);
+                            Operand model = modelOfTheDb(store);
+                            if (receiver && target.equals(DB)) {
+                                boolean changes = ModelVocabulary.DB_CHANGES.contains(name);
+                                boolean readsReport = ModelVocabulary.DB_READS_A_REPORT
+                                        .contains(name);
+                                if (changes || readsReport) {
+                                    found.computeIfAbsent(at, k -> new ArrayList<>())
+                                            .add(new Site(at, callee, -1, readsReport, readsReport,
+                                                    false, false, false, changes, model, store));
+                                }
+                            } else if (!receiver || !target.equals(DB)) {
+                                found.computeIfAbsent(at, k -> new ArrayList<>())
+                                        .add(new Site(at, callee, instance ? i - 1 : i, false,
+                                                false, false, false, false, false, model, store));
+                            }
                         }
                         above += sizeOf(type);
-                    }
-                    if (instance && target.equals(DB) && DB_MUTATORS.contains(name)) {
-                        found.computeIfAbsent(at, k -> new ArrayList<>()).add(new Site(at,
-                                callee, -1, false, false, false, false, false, true,
-                                modelOfTheDb(producer(at, above - 1))));
                     }
                 }
                 case InvokeDynamicInstruction call -> {
@@ -879,7 +933,7 @@ final class ModelWalk {
                             if (type.descriptorString().equals(COMPILATION_TYPE) && i >= shift) {
                                 found.computeIfAbsent(at, k -> new ArrayList<>()).add(new Site(at,
                                         impl, i - shift, false, false, false, false, true, false,
-                                        producer(at, above)));
+                                        producer(at, above), new Operand.Nothing()));
                             }
                             above += sizeOf(type);
                         }
@@ -897,10 +951,45 @@ final class ModelWalk {
      * nothing that can be placed, so that changing it is a change to whatever model there is.
      */
     private Operand modelOfTheDb(Operand db) {
-        if (db instanceof Operand.Answer answer
-                && answer.call().owner().asInternalName().equals(COMPILATION)
-                && answer.call().name().stringValue().equals("db")) {
-            return producer(answer.at(), 0);
+        return modelOfTheDb(db, 0);
+    }
+
+    /**
+     * Followed through the store's own methods that return it, and through a variable that is
+     * given one store once. A store made here with {@code new} belongs to no model, and says
+     * {@link Operand.Nothing}.
+     */
+    private Operand modelOfTheDb(Operand db, int depth) {
+        if (depth > 16) {
+            return new Operand.Lost();
+        }
+        if (db instanceof Operand.Answer answer) {
+            String owner = answer.call().owner().asInternalName();
+            if (owner.equals(COMPILATION) && answer.call().name().stringValue().equals("db")) {
+                return producer(answer.at(), 0);
+            }
+            if (owner.equals(DB) && answer.call().typeSymbol().returnType().descriptorString()
+                    .equals(DB_TYPE)) {
+                int arguments = 0;
+                for (ClassDesc parameter : answer.call().typeSymbol().parameterList()) {
+                    arguments += sizeOf(parameter);
+                }
+                return modelOfTheDb(producer(answer.at(), arguments), depth + 1);
+            }
+            return new Operand.Lost();
+        }
+        if (db instanceof Operand.FreshStore) {
+            return new Operand.Nothing();
+        }
+        if (db instanceof Operand.Local local && storeCounts.getOrDefault(local.slot(), 0) == 1
+                && !storeParameters.contains(local.slot())) {
+            for (int at = 0; at < flow.size(); at++) {
+                if (flow.get(at) instanceof StoreInstruction store
+                        && store.typeKind() == TypeKind.REFERENCE
+                        && store.slot() == local.slot()) {
+                    return modelOfTheDb(producer(at, 0), depth + 1);
+                }
+            }
         }
         return new Operand.Lost();
     }
@@ -915,7 +1004,7 @@ final class ModelWalk {
                 ? handle : null;
     }
 
-    private static String lambdaImplementation(InvokeDynamicInstruction call) {
+    static String lambdaImplementation(InvokeDynamicInstruction call) {
         DirectMethodHandleDesc handle = lambdaHandle(call);
         if (handle == null) {
             return null;
@@ -976,6 +1065,7 @@ final class ModelWalk {
                 return new Operand.Lost();
             }
             if (need <= effect[1]) {
+                int found = i;
                 return switch (instruction) {
                     case LoadInstruction load when load.typeKind() == TypeKind.REFERENCE ->
                             new Operand.Local(load.slot());
@@ -983,6 +1073,8 @@ final class ModelWalk {
                             when constant.opcode() == Opcode.ACONST_NULL ->
                             new Operand.Nothing();
                     case InvokeInstruction call -> new Operand.Answer(call, i);
+                    case StackInstruction dup when dup.opcode() == Opcode.DUP
+                            && madeADbBefore(found) -> new Operand.FreshStore();
                     case FieldInstruction field when field.opcode() == Opcode.GETFIELD
                             || field.opcode() == Opcode.GETSTATIC ->
                             new Operand.Field(fieldKey(field));
@@ -992,6 +1084,11 @@ final class ModelWalk {
             need = need - effect[1] + effect[0];
         }
         return new Operand.Lost();
+    }
+
+    private boolean madeADbBefore(int at) {
+        return at > 0 && flow.get(at - 1) instanceof NewObjectInstruction made
+                && made.className().asInternalName().equals(DB);
     }
 
     /** What an instruction takes off the stack and what it puts on, or null where not known. */

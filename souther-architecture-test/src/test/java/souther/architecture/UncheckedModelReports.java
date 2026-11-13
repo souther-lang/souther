@@ -51,23 +51,22 @@ final class UncheckedModelReports {
 
     private final Set<String> exempt;
 
-    private final Set<String> readOnly;
-
     /**
-     * @param helper   the class a test goes through to ask that a model compiles
-     * @param exempt   the methods, as {@link AMethod} says them, that read a model they did not
-     *                 compile and say so
-     * @param readOnly the methods of the compiler, as {@link AMethod} says them, that a model is
-     *                 handed to and that leave what it is compiled from as it was
+     * @param helper the class a test goes through to ask that a model compiles
+     * @param exempt the methods, as {@link AMethod} says them, that read a model they did not
+     *               compile and say so
      */
-    UncheckedModelReports(String helper, Set<String> exempt, Set<String> readOnly) {
+    UncheckedModelReports(String helper, Set<String> exempt) {
         this.helper = helper;
         this.exempt = Set.copyOf(exempt);
-        this.readOnly = Set.copyOf(readOnly);
     }
 
-    /** What {@code classes} do with the models they read. */
-    Findings of(Collection<ClassModel> classes) {
+    /**
+     * What {@code classes} do with the models they read, where {@code production} is the
+     * compiler's own code they hand models to, and a model handed to what can reach a change to
+     * one is a model that was changed.
+     */
+    Findings of(Collection<ClassModel> classes, Collection<ClassModel> production) {
         Map<String, ModelWalk> walks = new LinkedHashMap<>();
         Set<String> written = new HashSet<>();
         Map<String, Integer> captured = new HashMap<>();
@@ -85,7 +84,8 @@ final class UncheckedModelReports {
             }
         }
         ModelWalk.World world = new ModelWalk.World(helper, Set.copyOf(walks.keySet()),
-                Set.copyOf(written), Map.copyOf(captured), exempt, readOnly);
+                Set.copyOf(written), Map.copyOf(captured), exempt,
+                ProductionMutation.reaching(production));
         ModelWalk.Facts facts = ModelWalk.Facts.NONE;
         Map<ModelWalk, ModelWalk.Result> results = new LinkedHashMap<>();
         for (int round = 0; round < ROUNDS; round++) {
