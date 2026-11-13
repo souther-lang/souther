@@ -118,13 +118,19 @@ class AStringACaseConversionLeavesAsItStandsIsItsOwnAnswerTest {
                 METER).has("ΟΣ"));
     }
 
-    /** The outer conversion leaves {@code ß} alone, and the two together answer {@code ss} of
-     *  it: so nothing is answered as it stands for two. */
+    /**
+     * The outer conversion leaves {@code ß} alone, and the two together answer {@code ss} of it,
+     * since the inner one does not: so a string is answered as it stands by two only where each
+     * leaves it alone, as a combining acute is.
+     */
     @Test
-    void twoConversionsAnswerNoStringAsItStands() {
+    void twoConversionsAnswerAsItStandsOnlyWhatEachLeavesAlone() {
         CaseMapping both = new CaseMapping.Lowercase(CaseMapping.UPPERCASE);
         assertEquals("ss", BoundUnderEvaluation.mapped(both, "ß"));
-        assertTrue(CaseMaps.answeredAsTheyStand(both, Language.EVERY_STRING, METER).isEmpty());
+        Language standing = CaseMaps.answeredAsTheyStand(both, Language.EVERY_STRING, METER);
+        assertFalse(standing.has("ß"));
+        assertTrue(standing.has("́"));
+        assertEquals("́", BoundUnderEvaluation.mapped(both, "́"));
     }
 
     /** A run gets past a conversion at the strings it is exactly a map on and at the strings it
@@ -139,7 +145,8 @@ class AStringACaseConversionLeavesAsItStandsIsItsOwnAnswerTest {
         CaseMapping both = new CaseMapping.Lowercase(CaseMapping.UPPERCASE);
         Language pastBoth = CaseMaps.gottenPastExactly(both, METER);
         assertTrue(pastBoth.has("abc"));
-        assertFalse(pastBoth.has("́"));
+        assertTrue(pastBoth.has("́"));
+        assertFalse(pastBoth.has("ß"));
     }
 
     /**

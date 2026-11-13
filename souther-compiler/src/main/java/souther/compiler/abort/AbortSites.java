@@ -398,15 +398,15 @@ public final class AbortSites {
      *
      * <p>{@code ++} of two lists puts the elements of the second after those of the first, so it
      * answers wherever the two together hold no more than a list holds ({@code Capacity}). Of two
-     * strings it is not that: the joined text is put in canonical form, whose length no count of
-     * the two says ({@code Strings.append}). An operator that ends no run whatever its types
-     * answers always; any other is not known here.
+     * strings it joins the two texts and puts the join in canonical form ({@code Strings.append}).
+     * An operator that ends no run whatever its types answers always; any other is not known
+     * here.
      */
     public static GetsPast completionOfAnOperator(BinOp op, Type answer) {
         return switch (op) {
             case BinOp.CONCAT -> answer instanceof Type.ListOf
                     ? new GetsPast.WhereTheAnswerFits(GetsPast.together(0, 0, 1))
-                    : new GetsPast.NotKnown();
+                    : new GetsPast.WhereTheTextBuiltFits(new GetsPast.TextBuilt.Joined(0, 1));
             case BinOp.EQ, BinOp.NE, BinOp.LT, BinOp.LE, BinOp.GT, BinOp.GE, BinOp.AND,
                  BinOp.OR -> new GetsPast.Always();
             case BinOp.ADD, BinOp.SUB, BinOp.MUL ->

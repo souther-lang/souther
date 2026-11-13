@@ -46,25 +46,32 @@ final class WhatAConversionAnswers {
      * for them are more than {@code meter} allows.
      */
     static WhatAConversionAnswers of(Language partner, CaseMapping through, Meter meter) {
+        // Strings left as they stand are shown wherever the side holds them, so that failing to
+        // work them out leaves what is shown without them and does not lose it. With no
+        // conversion that is every string of the side.
+        Language standing = CaseMaps.answeredAsTheyStand(through, partner, meter);
         if (through.equals(CaseMapping.NONE)) {
             Language held = partner.heldAsWritten().language(meter);
-            return held == null ? null : new WhatAConversionAnswers(held, null, partner);
+            return held == null ? null : new WhatAConversionAnswers(held, standing, partner);
         }
         CodeMap map = CaseMaps.of(through);
         Language exact = map.strings(meter);
         Language within = exact == null ? null : partner.and(exact, meter);
         Language outside = exact == null ? null : partner.and(exact.not(meter), meter);
         Language values = within == null ? null : map.answersTo(within, meter);
-        Language left = outside == null || outside.isEmpty() ? null
+        // A string outside the map that is left as it stands is its own answer, which is among
+        // the strings left standing. Only a string of neither kind is answered with what nothing
+        // here works out, and every code point of that is one the outermost conversion leaves.
+        Language answeredUnseen = outside == null || standing == null ? outside
+                : outside.and(standing.not(meter), meter);
+        Language left = answeredUnseen == null || answeredUnseen.isEmpty() ? null
                 : CodeMap.stringsOf(map.leftAlone(), meter);
-        Language may = values == null || outside == null ? null
-                : left == null ? values : values.or(left, meter);
+        Language shown = values == null || standing == null ? values : values.or(standing, meter);
+        Language may = shown == null || outside == null ? null
+                : left == null ? shown : shown.or(left, meter);
         if (may == null) {
             return null;
         }
-        // Strings left as they stand are shown wherever the side holds them, so that failing to
-        // work them out leaves what is shown without them and does not lose it.
-        Language standing = CaseMaps.answeredAsTheyStand(through, partner, meter);
         return new WhatAConversionAnswers(values, standing, may);
     }
 

@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>An operation nothing says the answer of is no operation a run gets past. A reader that took the
  * absence of a stop for a run getting past would credit a witness the program never reaches, so every
  * place that asks a completion whether it is {@code NotKnown} is written down with what it does:
- * the three below treat it as an operation to refuse, never as one to pass. Every other reader asks
+ * the readers below treat it as an operation to refuse, never as one to pass. Every other reader asks
  * for the variant it can use ({@code Always}, {@code WhereTheTotalFits}, ...) and so is never handed
  * a {@code NotKnown} as an answer.
  *
@@ -31,10 +31,10 @@ class NotKnownIsReadOnlyWhereItIsRefusedAsAStopTest {
     private static final Map<String, Integer> READERS = Map.of(
             // The cases of a completion in a switch over it: not known is not an answer on a run.
             "check/ContainerSizesUnderAWitness.java", 1,
-            // An operator not known to complete is left unsaid and owed no proof, one that read no
-            // place is left unsaid on what no place holds unless it is shown to stop none, and an
-            // obligation is refused the completion.
-            "partition/Pullback.java", 3);
+            // Whether a completion is owed a proof: one not known to complete is owed none, so it
+            // is left unsaid over what it reads, one that read no place is left unsaid on what no
+            // place holds unless it is shown to stop none, and an obligation is refused it.
+            "partition/Pullback.java", 1);
 
     @Test
     void theseAreTheOnlyPlacesThatAskWhetherACompletionIsNotKnown() throws IOException {

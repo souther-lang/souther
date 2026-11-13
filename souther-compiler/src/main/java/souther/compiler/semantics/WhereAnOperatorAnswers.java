@@ -124,6 +124,16 @@ public sealed interface WhereAnOperatorAnswers {
     }
 
     /**
+     * Where a product of numbers of the type {@code answer} answers, that a library operation
+     * multiplies exactly and holds to the type only once it has: where the exact product is a
+     * number a product of that type answers, however far a product on the way strays. An
+     * {@code Int} product answers where it is one an {@code Int} holds.
+     */
+    static WhereAnOperatorAnswers ofAProduct(Type answer) {
+        return ofAnOperator(BinOp.MUL, answer);
+    }
+
+    /**
      * Where a negation answering {@code answer} answers: an {@code Int} has no negation of the least
      * of them, and a {@code Decimal} or a {@code Rational} only changes its sign.
      */

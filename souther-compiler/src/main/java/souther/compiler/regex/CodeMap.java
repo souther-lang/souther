@@ -377,6 +377,20 @@ public final class CodeMap {
         return leftAlone;
     }
 
+    /**
+     * The code points of the domain sent to themselves. A string of only these converts to itself,
+     * however many of each it holds and in whatever order.
+     */
+    public CodePoints sentToThemselves() {
+        List<CodePoints.Range> out = new ArrayList<>();
+        for (Run run : runs) {
+            if (run.shift() == 0) {
+                out.add(new CodePoints.Range(run.from(), run.to()));
+            }
+        }
+        return new CodePoints(out);
+    }
+
     /** The code points {@code over} holds that the map is defined on, sent where they go. */
     public CodePoints image(CodePoints over) {
         List<CodePoints.Range> out = new ArrayList<>();

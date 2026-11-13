@@ -4,6 +4,7 @@ import souther.compiler.check.PredicateStatement;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.values.ValueSet;
+import souther.compiler.values.ValuesAtLengths;
 import souther.compiler.values.ValuesWithin;
 
 import java.util.ArrayList;
@@ -34,18 +35,29 @@ import java.util.List;
  * have to name a class after where a rule was written.
  *
  * <p><b>And where neither side is shown.</b> A rule read off what another value can hold may show
- * some strings on neither side: the strings of {@code notShown}, and those of the set
- * {@code whenTrue} is of that are longer than it is shown at ({@link #leftOpen}). Those are no
+ * some strings on neither side: the strings of {@code notShown}, those of
+ * {@code pastWhatIsWritten} and those of {@code notReached} ({@link #leftOpen}). Those are no
  * class of either side, and a reader is told they are left open rather than counted on the side
- * nothing showed them on.
+ * nothing showed them on — and why, which differs between the three: only the first are open for
+ * the operations of the library.
+ *
+ * <p><b>Each side is a set and the lengths of its values.</b> A length is a number of a string and
+ * not a set of strings, so a side holding the strings of a set at some lengths is the set and the
+ * lengths, whatever lengths those are: made into one set of strings they would be a machine as
+ * long as the longest of them, and a long one is past what this compiler builds. The strings
+ * shorter than some fewest code points or longer than some most are two runs of lengths and one
+ * side.
  *
  * @param term      the position it is about, which one position answers
  * @param whenTrue  the values shown to satisfy the rule, a length and all
- * @param whenFalse the values that do not
+ * @param whenFalse the values shown not to, a length and all
  * @param statement what the rule states, in the words the model states it in
  * @param origin    which rule this is, which reading of it, and where a reader is sent to find it
- * @param notShown  the values shown on neither side, whatever their length; none where every value
- *                  is shown on one
+ * @param notShown  the values shown on neither side for {@code operations}, each as long as it is
+ *                  left open at; none where every value is shown on one
+ * @param pastWhatIsWritten the values of the true side's set longer than a value of the other side
+ *                  can be written round them, each as long as it is left open at: open for the
+ *                  longest string, and for no operation; none where every length is written
  * @param notReached the values of the lengths at which no run gets to the relation, each as long
  *                  as it is left open at: shown on neither side, because the relation is not
  *                  worked out for a string of that length; none where a run gets to it at every
@@ -57,10 +69,11 @@ import java.util.List;
  *                  to the relation with them, which are shown on neither side as the values of
  *                  {@code notReached} are; kept apart because a length bounds none of them
  */
-public record SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTrue,
-                          ValueSet whenFalse, PredicateStatement statement,
-                          PredicateOrigin origin, ValueSet notShown,
-                          List<ValuesWithin> notReached, BlockReason.OperationsNotShown operations,
+public record SetStatement(NumericTerm.FromOnePosition term, ValuesAtLengths whenTrue,
+                          ValuesAtLengths whenFalse, PredicateStatement statement,
+                          PredicateOrigin origin, List<ValuesWithin> notShown,
+                          List<ValuesWithin> pastWhatIsWritten, List<ValuesWithin> notReached,
+                          BlockReason.OperationsNotShown operations,
                           List<NotCounted> notCounted) {
 
     /**
@@ -82,10 +95,13 @@ public record SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTr
     public SetStatement {
         if (term == null || whenTrue == null || whenFalse == null
                 || statement == null || origin == null || notShown == null
-                || notReached == null || operations == null || notCounted == null) {
+                || pastWhatIsWritten == null || notReached == null || operations == null
+                || notCounted == null) {
             throw new IllegalArgumentException(
                     "a statement about a position names some values, and some rule made it");
         }
+        notShown = List.copyOf(notShown);
+        pastWhatIsWritten = List.copyOf(pastWhatIsWritten);
         notReached = List.copyOf(notReached);
         notCounted = List.copyOf(notCounted);
         // Whether the two sides hold anything is not asked here, and cannot be. What a rule leaves
@@ -95,36 +111,19 @@ public record SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTr
         // position's values, and it is asked where they are known ({@link Classing}).
     }
 
-    /** The same, with no values open for how many code points of a class they hold. */
-    public SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTrue,
-                        ValueSet whenFalse, PredicateStatement statement,
-                        PredicateOrigin origin, ValueSet notShown,
-                        List<ValuesWithin> notReached, List<String> imagesNotShown) {
-        this(term, whenTrue, whenFalse, statement, origin, notShown, notReached,
-                BlockReason.OperationsNotShown.ofImages(imagesNotShown), List.of());
-    }
-
     /** A rule that shows its values at every length a run gets to it at, and whose open values are
      *  open for no operation's image. */
-    public SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTrue,
-                        ValueSet whenFalse, PredicateStatement statement,
-                        PredicateOrigin origin, ValueSet notShown) {
-        this(term, whenTrue, whenFalse, statement, origin, notShown, List.of(), List.of());
-    }
-
-    /** The same, with the lengths no run gets to the relation at, and open for no operation's
-     *  image. */
-    public SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTrue,
-                        ValueSet whenFalse, PredicateStatement statement,
-                        PredicateOrigin origin, ValueSet notShown,
-                        List<ValuesWithin> notReached) {
-        this(term, whenTrue, whenFalse, statement, origin, notShown, notReached, List.of());
+    public SetStatement(NumericTerm.FromOnePosition term, ValuesAtLengths whenTrue,
+                        ValuesAtLengths whenFalse, PredicateStatement statement,
+                        PredicateOrigin origin, List<ValuesWithin> notShown) {
+        this(term, whenTrue, whenFalse, statement, origin, notShown, List.of(), List.of(),
+                BlockReason.OperationsNotShown.NONE, List.of());
     }
 
     /** The same statement of the same values, about the position {@code at}. */
     public SetStatement measuredAt(NumericTerm.FromOnePosition at) {
-        return new SetStatement(at, whenTrue, whenFalse, statement, origin, notShown, notReached,
-                operations, notCounted);
+        return new SetStatement(at, whenTrue, whenFalse, statement, origin, notShown,
+                pastWhatIsWritten, notReached, operations, notCounted);
     }
 
     /** Whether every value is shown on one side or the other. */
@@ -133,19 +132,13 @@ public record SetStatement(NumericTerm.FromOnePosition term, ValuesWithin whenTr
     }
 
     /**
-     * The values shown on neither side: those of {@code notShown}, those of the lengths no run
-     * gets to the relation at, and those of the set the true side is of past the length it is
-     * shown at. A string shorter than that is on one side.
+     * The values shown on neither side: those of {@code notShown}, those longer than a value of
+     * the other side is written round, and those of the lengths no run gets to the relation at.
      */
     public List<ValuesWithin> leftOpen() {
-        List<ValuesWithin> out = new ArrayList<>();
-        if (!notShown.isEmpty()) {
-            out.add(ValuesWithin.all(notShown));
-        }
+        List<ValuesWithin> out = new ArrayList<>(notShown);
+        out.addAll(pastWhatIsWritten);
         out.addAll(notReached);
-        if (whenTrue.longest() != null) {
-            out.add(ValuesWithin.longerThan(whenTrue.values(), whenTrue.longest()));
-        }
         return out;
     }
 }

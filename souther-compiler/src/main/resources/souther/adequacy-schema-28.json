@@ -214,6 +214,8 @@
         "rule_sets_in_all",
         "strings_parted_one_machine",
         "strings_parted_in_all",
+        "strings_a_partner_holds_one_machine",
+        "strings_a_partner_holds_in_all",
         "evaluation_steps",
         "recursion_depth",
         "compiler_time",
@@ -8749,12 +8751,12 @@
                         "longerThan": {
                           "type": "integer",
                           "minimum": 0,
-                          "description": "The fewest code points less one an open value of a bounded length has: some values longer than this may be in no class, because nothing here wrote the other value out round them within the longest string, or because no value of the other numbers the way ties their length to gets a run past it to the relation, and none shorter is open for that. Absent where no value is open for being long."
+                          "description": "The fewest code points less one an open value of a bounded length has: some values longer than this may be in no class, because nothing here wrote the other value out round them within the longest string, because no value of the other numbers the way ties their length to gets a run past it to the relation, or because the other value is held to no more code points than this and is derived through a function that may lengthen it (`imagesNotShown`), and none shorter is open for that. Absent where no value is open for being long."
                         },
                         "shorterThan": {
                           "type": "integer",
                           "minimum": 1,
-                          "description": "The most code points plus one an open value of a bounded length has: some values shorter than this may be in no class, because no value of the other numbers the way ties their length to gets a run past it to the relation, and none longer is open for that. Absent where no value is open for being short."
+                          "description": "The most code points plus one an open value of a bounded length has: some values shorter than this may be in no class, because no value of the other numbers the way ties their length to gets a run past it to the relation, or because the other value is held to no fewer code points than this and is derived through a function that may shorten it (`imagesNotShown`), and none longer is open for that. Absent where no value is open for being short."
                         },
                         "atAnyLength": {
                           "type": "boolean",
@@ -8767,7 +8769,7 @@
                           "items": {
                             "type": "string"
                           },
-                          "description": "The functions of the library the other value is derived through whose image over the strings of the position is not shown, so the values they take it to are not among those the classes hold. Present only where some are open whatever their length, and sorted."
+                          "description": "The functions of the library the other value is derived through whose image over the strings of the position is not shown, so the values they take it to are not among those the classes hold. Present where some of the values open are open for them, at the lengths `longerThan`, `shorterThan` and `atAnyLength` say: a value of a length the other value is not held to may still be what such a function takes one of its values to, lengthened or shortened, and is open for that. Sorted."
                         },
                         "notShownGottenPast": {
                           "type": "array",
@@ -8776,7 +8778,7 @@
                           "items": {
                             "type": "string"
                           },
-                          "description": "The functions of the library a run gets to the relation past, each ending a run where its answer has more code points than a String holds, that are not shown to answer within that for some strings of the position: those strings are not among those the classes hold. Present only where some are open whatever their length, and sorted."
+                          "description": "The functions of the library a run gets to the relation past, each ending a run where its answer has more code points than a String holds, that are not shown to answer within that for some strings of the position: those strings are not among those the classes hold. Present where some of the values open are open for them, at the lengths `longerThan`, `shorterThan` and `atAnyLength` say. Sorted."
                         },
                         "codePoints": {
                           "type": "array",

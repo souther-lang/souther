@@ -211,7 +211,7 @@ class CodePointsPastTheWayTest {
         CodePointsPastTheWay held = counted(NOT_WHITESPACE, 2, null);
         UndividedByARelation.StringsAPartnerCanHold shown =
                 new UndividedByARelation.StringsAPartnerCanHold(ValueSet.ANY, ValueSet.ANY, null,
-                        reached, held, "b",
+                        null, reached, held, "b",
                         BlockReason.OperationsNotShown.ofImages(List.of("String.uppercase")));
 
         UndividedByARelation.StringsAPartnerCanHold other =

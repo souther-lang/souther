@@ -22,8 +22,9 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
  * readings and by neither together left that unanswered, and took the positions that relate to it
  * down with it.
  *
- * <p>{@code emails} holds any string and is what keeps the measure partial; what is asked is that
- * nothing else does.
+ * <p>{@code emails} holds any string, and the domains are free to be strings apart from
+ * {@code email} whatever it is, so the right is reached at every {@code email} and the list read
+ * there is divided whole: the measure is complete, and no position the two rules hold is left.
  */
 class AFormatAndALengthRuleTogetherLeaveThePartitionMeasuredTest {
 
@@ -49,14 +50,14 @@ class AFormatAndALengthRuleTogetherLeaveThePartitionMeasuredTest {
             modelWith("String.matches(\"[^\\\\s]+\", value) && String.length(value) <= 254");
 
     @Test
-    void theTwoRulesLeaveOnlyWhatTheUnconstrainedListLeavesUnanswered() {
+    void theTwoRulesLeaveNoPositionUnanswered() {
         PartitionEvidence two = evidence(A_FORMAT_AND_A_LENGTH);
 
-        assertInstanceOf(Measurement.Partial.class, two.partitioned(),
-                "the measure was reached, with what the unconstrained list leaves of it");
-        assertEquals(List.of("emails", "emails[*]"), notDerivable(two),
+        assertInstanceOf(Measurement.Complete.class, two.partitioned(),
+                "the measure was reached, and the list read on the right is divided whole");
+        assertEquals(List.of("emails"), notDerivable(two),
                 "and the positions the two rules hold are answered");
-        assertEquals(List.of("emails[*]"), unanswered(two));
+        assertEquals(List.of(), unanswered(two));
     }
 
     private static List<String> notDerivable(PartitionEvidence found) {

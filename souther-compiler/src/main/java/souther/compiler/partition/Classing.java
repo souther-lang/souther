@@ -18,11 +18,13 @@ import souther.compiler.numeric.Text;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.WorkFigure;
+import souther.compiler.regex.Language;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.Allowance;
 import souther.compiler.values.Sameness;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
+import souther.compiler.values.ValuesAtLengths;
 import souther.compiler.values.ValuesWithin;
 
 import java.math.BigDecimal;
@@ -140,15 +142,16 @@ final class Classing {
                 if (carrier instanceof Carrier.Whole && wholeOf(it.value()) != null) {
                     // A whole number singled out is the one number and every other.
                     Value one = Value.number(new BigDecimal(wholeOf(it.value())));
-                    yield new AsASet(ValuesWithin.all(ValueSet.just(one)), ValueSet.allBut(one),
+                    yield new AsASet(ValuesAtLengths.all(ValueSet.just(one)),
+                            ValuesAtLengths.all(ValueSet.allBut(one)),
                             new PredicateStatement.Equalling(wholeOf(it.value()).toString()));
                 }
                 if (!(carrier instanceof Carrier.Text) || !(it.value() instanceof Text text)) {
                     yield null;
                 }
                 Value one = new Value.Text(text.at());
-                yield new AsASet(ValuesWithin.all(new ValueSet.Finite(Set.of(one))),
-                        new ValueSet.Cofinite(Set.of(one)),
+                yield new AsASet(ValuesAtLengths.all(new ValueSet.Finite(Set.of(one))),
+                        ValuesAtLengths.all(new ValueSet.Cofinite(Set.of(one))),
                         new PredicateStatement.Equalling(text.at()));
             }
             // A line across whole numbers is the numbers up to it and the numbers from the next:
@@ -165,8 +168,9 @@ final class Classing {
                 if (below == null || above == null || !above.equals(below.add(BigInteger.ONE))) {
                     yield null;
                 }
-                yield new AsASet(ValuesWithin.all(ValueSet.wholeNumbers(WholeNumberRuns.one(null,
-                        below))), ValueSet.wholeNumbers(WholeNumberRuns.one(above, null)),
+                yield new AsASet(ValuesAtLengths.all(ValueSet.wholeNumbers(WholeNumberRuns.one(
+                        null, below))),
+                        ValuesAtLengths.all(ValueSet.wholeNumbers(WholeNumberRuns.one(above, null))),
                         new PredicateStatement.AtMost(below.toString()));
             }
         };
@@ -187,10 +191,12 @@ final class Classing {
      * nothing, which is what makes the question about the distinction rather than about which
      * reader produced it.
      *
-     * @param whenTrue the values shown on the side the rule holds on, a length and all: what is
-     *                 asked of that side is asked of the length as well
+     * @param whenTrue  the values shown on the side the rule holds on, a length and all: what is
+     *                  asked of that side is asked of the length as well
+     * @param whenFalse the values shown on the other side, a length and all
      */
-    private record AsASet(ValuesWithin whenTrue, ValueSet whenFalse, PredicateStatement states) {}
+    private record AsASet(ValuesAtLengths whenTrue, ValuesAtLengths whenFalse,
+                          PredicateStatement states) {}
 
     /**
      * What the rules of one position came to: the classes, and the rules that make none.
@@ -461,7 +467,7 @@ final class Classing {
         if (cells.isEmpty() && !open.isEmpty()) {
             return notComposed(mine, told, BlockReason.RelationShownOverARegion.of(
                     open.stream().flatMap(each -> each.open().stream()).toList(),
-                    open.stream().map(each -> each.statement().operations())
+                    open.stream().map(LeftOpen::operations)
                             .reduce(BlockReason.OperationsNotShown.NONE,
                                     BlockReason.OperationsNotShown::and),
                     open.stream().flatMap(each -> each.byCodePoints().stream()).toList()), open);
@@ -484,14 +490,17 @@ final class Classing {
 
     /**
      * The values of a position one rule shows on neither of its sides, which no class holds: the
-     * strings it shows nothing of at any length, and the strings of its true side longer than it
-     * is shown at ({@link SetStatement#leftOpen}), each met with what the position holds.
+     * strings it shows nothing of for its operations, those longer than the other side is written
+     * round, and those of lengths no run gets to it at ({@link SetStatement#leftOpen}), each met
+     * with what the position holds.
      *
      * @param statement the rule
      * @param open      the values left open, each as long as it is left open at; none of them
      *                  shown to hold nothing
+     * @param forTheOperations whether some of {@code open} are open for the rule's operations
+     *                  ({@link SetStatement#notShown}), which a reader is then told beside them
      */
-    record LeftOpen(SetStatement statement, List<ValuesWithin> open,
+    record LeftOpen(SetStatement statement, List<ValuesWithin> open, boolean forTheOperations,
                     List<BlockReason.CodePointsLeftOpen> byCodePoints) {
 
         LeftOpen {
@@ -501,6 +510,12 @@ final class Classing {
             }
             open = List.copyOf(open);
             byCodePoints = List.copyOf(byCodePoints);
+        }
+
+        /** The operations the values open are open for: the rule's, where some are open for
+         *  them, and none otherwise. */
+        BlockReason.OperationsNotShown operations() {
+            return forTheOperations ? statement.operations() : BlockReason.OperationsNotShown.NONE;
         }
     }
 
@@ -512,17 +527,20 @@ final class Classing {
                                              SetStatement statement,
                                              Allowance<NumericTerm.FromOnePosition> allowance) {
         List<ValuesWithin> open = new ArrayList<>();
-        for (ValuesWithin each : statement.leftOpen()) {
-            Allowance.Composed held =
-                    allowance.meet(Sameness.Block.of(term), admits, each.values());
-            if (held.gaveUp()) {
-                return Worked.refusedAt(held.refused());
-            }
-            ValuesWithin here = each.over(held.set());
-            if (!here.shownToHoldNone()) {
-                open.add(here);
-            }
+        Worked<List<ValuesWithin>> forTheOperations =
+                heldOf(term, admits, statement.notShown(), allowance);
+        if (forTheOperations.refused() != null) {
+            return Worked.refusedAt(forTheOperations.refused());
         }
+        open.addAll(forTheOperations.answer());
+        List<ValuesWithin> otherwise = new ArrayList<>(statement.pastWhatIsWritten());
+        otherwise.addAll(statement.notReached());
+        Worked<List<ValuesWithin>> forAnotherReason =
+                heldOf(term, admits, otherwise, allowance);
+        if (forAnotherReason.refused() != null) {
+            return Worked.refusedAt(forAnotherReason.refused());
+        }
+        open.addAll(forAnotherReason.answer());
         List<BlockReason.CodePointsLeftOpen> byCodePoints = new ArrayList<>();
         for (SetStatement.NotCounted each : statement.notCounted()) {
             Allowance.Composed held =
@@ -535,7 +553,28 @@ final class Classing {
             }
         }
         return Worked.to(open.isEmpty() && byCodePoints.isEmpty() ? null
-                : new LeftOpen(statement, open, byCodePoints));
+                : new LeftOpen(statement, open, !forTheOperations.answer().isEmpty(),
+                        byCodePoints));
+    }
+
+    /** Each of {@code open} met with what {@code term} holds, leaving out those shown to hold
+     *  nothing; or the limit the allowance refused a meet at. */
+    private static Worked<List<ValuesWithin>> heldOf(
+            NumericTerm.FromOnePosition term, ValueSet admits, List<ValuesWithin> open,
+            Allowance<NumericTerm.FromOnePosition> allowance) {
+        List<ValuesWithin> out = new ArrayList<>();
+        for (ValuesWithin each : open) {
+            Allowance.Composed held =
+                    allowance.meet(Sameness.Block.of(term), admits, each.values());
+            if (held.gaveUp()) {
+                return Worked.refusedAt(held.refused());
+            }
+            ValuesWithin here = each.over(held.set());
+            if (!here.shownToHoldNone()) {
+                out.add(here);
+            }
+        }
+        return Worked.to(out);
     }
 
     /**
@@ -639,12 +678,13 @@ final class Classing {
         if (yes.gaveUp()) {
             return Worked.refusedAt(yes.refused());
         }
-        Allowance.Composed no = allowance.meet(Sameness.Block.of(term), admits, said.whenFalse());
+        Allowance.Composed no =
+                allowance.meet(Sameness.Block.of(term), admits, said.whenFalse().values());
         if (no.gaveUp()) {
             return Worked.refusedAt(no.refused());
         }
-        ValuesWithin holding = said.whenTrue().over(yes.set());
-        ValuesWithin failing = ValuesWithin.all(no.set());
+        ValuesAtLengths holding = said.whenTrue().over(yes.set());
+        ValuesAtLengths failing = said.whenFalse().over(no.set());
         if (open == null && (holding.shownToHoldNone() || failing.shownToHoldNone())) {
             return Worked.to(Telling.NOTHING_APART);
         }
@@ -656,7 +696,7 @@ final class Classing {
     }
 
     /** Whether {@code side} is shown to hold a value or shown to hold none. */
-    private static boolean settled(ValuesWithin side) {
+    private static boolean settled(ValuesAtLengths side) {
         return side.shownToHoldAValue() || side.shownToHoldNone();
     }
 
@@ -685,7 +725,7 @@ final class Classing {
      * cell from its neighbours — so the assignment is what a cell is, and a reader names the class
      * out of it.
      */
-    record Cell(ValuesWithin values, List<Answered> under) {
+    record Cell(ValuesAtLengths values, List<Answered> under) {
 
         Cell {
             if (values == null || values.values().isEmpty()) {
@@ -696,7 +736,7 @@ final class Classing {
         }
 
         /** The same cell, with one more rule coming out {@code holding} and what that leaves. */
-        Cell and(ValuesWithin narrowed, PredicateStatement states, boolean holding) {
+        Cell and(ValuesAtLengths narrowed, PredicateStatement states, boolean holding) {
             List<Answered> wider = new ArrayList<>(under);
             wider.add(new Answered(states, holding));
             return new Cell(narrowed, wider);
@@ -731,19 +771,18 @@ final class Classing {
         // strings instead, a rule would divide values the declarations already refused and the
         // position would come back with classes no run is ever in.
         List<Cell> cells = new ArrayList<>();
-        cells.add(new Cell(ValuesWithin.all(admits), List.of()));
+        cells.add(new Cell(ValuesAtLengths.all(admits), List.of()));
         for (AsASet each : said) {
             List<Cell> narrower = new ArrayList<>();
             for (Cell cell : cells) {
                 for (boolean holding : new boolean[] {true, false}) {
-                    ValuesWithin side = holding ? each.whenTrue()
-                            : ValuesWithin.all(each.whenFalse());
+                    ValuesAtLengths side = holding ? each.whenTrue() : each.whenFalse();
                     Allowance.Composed met = allowance.meet(Sameness.Block.of(term),
                             cell.values().values(), side.values());
                     if (met.gaveUp()) {
                         return Worked.refusedAt(met.refused());
                     }
-                    ValuesWithin both = cell.values().meeting(side, met.set());
+                    ValuesAtLengths both = cell.values().meeting(side, met.set());
                     if (both.shownToHoldAValue()) {
                         narrower.add(cell.and(both, each.states(), holding));
                     } else if (!both.shownToHoldNone()) {
@@ -755,6 +794,25 @@ final class Classing {
             cells = narrower;
         }
         return Worked.to(cells);
+    }
+
+    /**
+     * The set a value standing for {@code values} is looked for in ({@link ValuesWithin#toLookIn}),
+     * and where its strings are held to some fewest code points, those of its strings that have
+     * as many: the string found in a set is its shortest, which no string held to more code points
+     * is, so the strings of the lengths are made into one set, out of an allowance of their own.
+     * Where that is past the allowance, the set as it is, in which a value found is too short to
+     * stand for these.
+     */
+    private static ValueSet toLookIn(ValuesWithin values, Supplier<Meter> perWitness) {
+        ValueSet looked = values.toLookIn();
+        if (values.shortest() == 0 || looked instanceof ValueSet.Finite) {
+            return looked;
+        }
+        Language strings = UndividedByARelation.languageOf(looked);
+        Language within = strings == null ? null : Partitions.ofTheLengths(strings,
+                LengthsPastTheWay.Lengths.of(values), perWitness.get());
+        return within == null ? looked : ValueSet.matching(within);
     }
 
     /** One cell as a class: what it holds, what it is called, and what a row would carry for it. */
@@ -782,12 +840,18 @@ final class Classing {
         // Over the whole of the order and away from nothing: what the cell holds is already what
         // the rules leave, met together where the cells were refined. An allowance of this class's
         // own, because what one of them costs to write is nothing the class beside it should be
-        // short of. Looked for among the values of the cell's lengths, and a value found past them
-        // is in no class, so it stands for none.
-        Place stands = carrier.somewhereIn(cell.values().toLookIn(),
-                new OrderedInterval(null, null), PlacesApart.NONE, perWitness.get());
-        if (stands instanceof Text(String text) && !cell.values().has(new Value.Text(text))) {
-            stands = null;
+        // short of. Looked for among the values of each run of the cell's lengths in turn, the
+        // shortest first, and a value found past them is in no class, so it stands for none.
+        Place stands = null;
+        for (ValuesWithin run : cell.values().pieces()) {
+            stands = carrier.somewhereIn(toLookIn(run, perWitness),
+                    new OrderedInterval(null, null), PlacesApart.NONE, perWitness.get());
+            if (stands instanceof Text(String text) && !run.has(new Value.Text(text))) {
+                stands = null;
+            }
+            if (stands != null) {
+                break;
+            }
         }
         FixtureTemplate written =
                 stands == null ? null : writing.apply(stands);

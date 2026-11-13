@@ -429,7 +429,7 @@ final class AnswerClosure {
                 m("souther.compiler.partition.PartitionClass", "recognises"),
                 m("souther.compiler.partition.Recognition$Under", "inner"),
                 m("souther.compiler.partition.Recognition$OfASet", "values"),
-                m("souther.compiler.values.ValuesWithin", "values"),
+                m("souther.compiler.values.ValuesAtLengths", "values"),
                 m("souther.compiler.values.ValueSet$Matching", "language"),
                 m("souther.compiler.regex.Language", "machine")));
         return new Known(at(question, "net.unit8.notation199x.pattern.Automaton",
@@ -983,7 +983,7 @@ final class AnswerClosure {
                 part("souther.compiler.partition.PartitionClass", "recognises"),
                 arm("souther.compiler.partition.Recognition$OfASet"),
                 part("souther.compiler.partition.Recognition$OfASet", "values"),
-                part("souther.compiler.values.ValuesWithin", "values"));
+                part("souther.compiler.values.ValuesAtLengths", "values"));
         theMachineUnderALanguage(out, Q + "Adequacy$Dividing",
                 THE_GEOMETRY_THE_READING_LEFT,
                 part("souther.compiler.partition.Partitions$Partitioning", "measurements"), HELD,
@@ -1037,7 +1037,7 @@ final class AnswerClosure {
                             part("souther.compiler.partition.PartitionClass", "recognises"),
                             arm("souther.compiler.partition.Recognition$OfASet"),
                             part("souther.compiler.partition.Recognition$OfASet", "values"),
-                            part("souther.compiler.values.ValuesWithin", "values")));
+                            part("souther.compiler.values.ValuesAtLengths", "values")));
         }
         // And through what the position itself was left holding, which is what a behavior's rules
         // divide: an invariant restricts and a behavior divides what is left, so the values the
