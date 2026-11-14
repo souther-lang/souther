@@ -1456,7 +1456,7 @@ final class Pullback {
         // read it says of the operations they get past is said of the written one.
         Trial kept = triedAndConcluded.get(read);
         if (kept != null && kept.working != null) {
-            trial().working = kept.working;
+            trial().says(kept.working);
         }
         trial().restatedAs(new Once<>(() -> workingOf(kept, arithmeticOf(stated, reads))));
         return new Derivation.Restated(read);
@@ -1494,8 +1494,8 @@ final class Pullback {
         Trial theRule = trial();
         if (read != null && !theRule.restated().isEmpty()
                 && besideTheOperandsNothingEndsARun(written, reads, operands, operation)) {
-            theRule.working = UndividedByARelation.Working.together(
-                    theRule.restated().stream().map(Supplier::get).toList());
+            theRule.says(UndividedByARelation.Working.together(
+                    theRule.restated().stream().map(Supplier::get).toList()));
         }
         return read;
     }
@@ -3305,12 +3305,41 @@ final class Pullback {
      * What one candidate, a rule being tried at a comparison, says of the rows of what it
      * concludes where that is more than the reading of the comparison says.
      */
-    private static final class Trial implements ReadingState.Marked {
+    static final class Trial implements ReadingState.Marked {
 
-        /** What the candidate has said so far, which is the same only while it has said no more. */
+        /**
+         * What the candidate has said so far, which is the same only while it has said no more.
+         * Taken once for as long as it says nothing: a reading asks after it far more often than
+         * the candidate says anything.
+         */
         @Override
         public Object mark() {
-            return ReadingState.snapshotOfFields(this);
+            Object held = marked;
+            if (held == null) {
+                held = ReadingState.snapshotOfFieldsBut(this, Set.of(MARKED));
+                marked = held;
+            }
+            return held;
+        }
+
+        /** The name of {@link #marked}, which is no part of what the candidate has said. */
+        private static final String MARKED = "marked";
+
+        /** {@link #mark} as it was taken, or null where the candidate has said something since.
+         *  Every way of saying something puts it back to null. */
+        private Object marked;
+
+        /** What the rows of the comparison get past is {@code told}. */
+        void says(UndividedByARelation.Working told) {
+            marked = null;
+            working = told;
+        }
+
+        /** The expressions the rule reads the comparison again with each value of are those
+         *  {@code answers} holds for. */
+        void answersFor(Predicate<Core> answers) {
+            marked = null;
+            answersFor = answers;
         }
 
         /** What the rows of the comparison get past, as the rule worked it out; null where the
@@ -3346,6 +3375,7 @@ final class Pullback {
         // them: most say nothing, and an identity map holds a table before it holds anything.
 
         void readByTheFormOf(Core call, Core dividend) {
+            marked = null;
             if (readByTheFormOf == null) {
                 readByTheFormOf = new IdentityHashMap<>();
             }
@@ -3363,7 +3393,7 @@ final class Pullback {
          */
         Object markBesidesTheRemainders() {
             return ReadingState.snapshotOfFieldsBut(this,
-                    Set.of("readByTheFormOf", "dividendBesideTheRows"));
+                    Set.of("readByTheFormOf", "dividendBesideTheRows", MARKED));
         }
 
         /** The remainders read so far, as two tables apart from the candidate's own. */
@@ -3376,6 +3406,7 @@ final class Pullback {
         }
 
         void dividendBesideTheRows(Core call, Core dividend) {
+            marked = null;
             if (dividendBesideTheRows == null) {
                 dividendBesideTheRows = new IdentityHashMap<>();
             }
@@ -3387,6 +3418,7 @@ final class Pullback {
         }
 
         void landsInAMonth(Core node, UndividedByARelation.IntOperation count) {
+            marked = null;
             if (landsInAMonth == null) {
                 landsInAMonth = new IdentityHashMap<>();
             }
@@ -3398,6 +3430,7 @@ final class Pullback {
         }
 
         void restatedAs(Supplier<UndividedByARelation.Working> working) {
+            marked = null;
             if (restated == null) {
                 restated = new ArrayList<>();
             }
@@ -3411,6 +3444,7 @@ final class Pullback {
         }
 
         void readOnAnArm(Relation relation, Supplier<StopEvidence> stops) {
+            marked = null;
             if (onTheArms == null) {
                 onTheArms = new LinkedHashMap<>();
             }
@@ -3424,6 +3458,7 @@ final class Pullback {
         }
 
         void tell(Relation relation, UndividedByARelation.Working told) {
+            marked = null;
             if (relations == null) {
                 relations = new LinkedHashMap<>();
             }
@@ -3484,7 +3519,7 @@ final class Pullback {
      */
     private Derivation readingTheComparisonAgain(Derivation read) {
         if (read != null) {
-            trial().answersFor = _ -> true;
+            trial().answersFor(_ -> true);
         }
         return read;
     }
@@ -3502,7 +3537,7 @@ final class Pullback {
                 choices.add(Core.withoutStanding(chosen.value()));
             }
         }
-        trial().answersFor = node -> choices.contains(Core.withoutStanding(node));
+        trial().answersFor(node -> choices.contains(Core.withoutStanding(node)));
     }
 
     /**
@@ -13627,7 +13662,7 @@ final class Pullback {
                         && besideTheOperandsNothingEndsARun(comparison, reads,
                                 List.of(ordered.arguments().left(), ordered.arguments().right()),
                                 null)) {
-                    trial().working = workingOf(triedAndConcluded.get(arguments), arithmetic);
+                    trial().says(workingOf(triedAndConcluded.get(arguments), arithmetic));
                 }
                 yield new Derivation.AnOrderOfItsArguments(callOfAnOrder(operation, ordered),
                         ordered.sign(), arguments);
@@ -15342,7 +15377,7 @@ final class Pullback {
         if (answers == null || states == null) {
             return null;
         }
-        trial().working = told;
+        trial().says(told);
         return new Derivation.WhereItAnswers(answers, states);
     }
 
