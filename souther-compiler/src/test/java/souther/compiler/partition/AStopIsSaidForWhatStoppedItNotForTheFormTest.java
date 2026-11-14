@@ -98,9 +98,9 @@ class AStopIsSaidForWhatStoppedItNotForTheFormTest {
                     weekday(calendar, d) >= 1 && weekday(calendar, d) <= 5
                         && Bool.not(Set.contains(d, calendar.holidays))
 
-                let firstBusinessDay (calendar: PaymentCalendar, from: Date, step: Int): Date =
-                    List.rangeInclusive(0, 10)
-                        |> List.map(n -> Date.addDays(n * step, from))
+                let firstBusinessDay (calendar: PaymentCalendar, from: Date): Date =
+                    List.rangeInclusive(0, 1)
+                        |> List.map(n -> Date.addDays(n, from))
                         |> List.find(d -> isBusinessDay(calendar, d))
                         |> Option.withDefault(from)
 
@@ -108,7 +108,7 @@ class AStopIsSaidForWhatStoppedItNotForTheFormTest {
                         -> List<Date>
                 let unpayable (calendar, from, days) =
                     List.rangeInclusive(0, days)
-                        |> List.map(n -> firstBusinessDay(calendar, Date.addDays(n, from), 1))
+                        |> List.map(n -> firstBusinessDay(calendar, Date.addDays(n, from)))
                         |> List.filter(d -> Bool.not(isBusinessDay(calendar, d)))
                 """);
         assertEquals(List.of("calendar.aSunday " + REMAINDER, "calendar.holidays[*] " + REMAINDER,
