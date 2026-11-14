@@ -286,6 +286,30 @@ class ARuleAListStatesOfEveryElementIsPlacedOnTheElementsTest {
             behavior f : (rs: Rs) -> Ok
             """;
 
+    /** The elements are of the kind that holds them, so the rule is the elements' own as well. */
+    private static final String ELEMENTS_OF_ITS_OWN_KIND = """
+            module bounded
+
+            data Issue = { size: Int, more: List<Issue> }
+                invariant List.all(each -> each.size <= 10, more)
+
+            data Ok
+
+            behavior f : (i: Issue) -> Ok
+            """;
+
+    /** And the statement names a field of the value that holds the list, which is the same name. */
+    private static final String ELEMENTS_OF_ITS_OWN_KIND_AGAINST_THE_HOLDER = """
+            module bounded
+
+            data Issue = { size: Int, more: List<Issue> }
+                invariant List.all(each -> each.size <= size, more)
+
+            data Ok
+
+            behavior f : (i: Issue) -> Ok
+            """;
+
     private static RuleReadingContext readingOf(Compilation compilation) {
         RuleReadingSource rules = RuleReadings.of(compilation, compilation.modules().get(0));
         return RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
@@ -576,6 +600,36 @@ class ARuleAListStatesOfEveryElementIsPlacedOnTheElementsTest {
         }
         assertEquals(whole.completeness().getClass(), wrapped.completeness().getClass());
         assertEquals(whole.unansweredQuestions().size(), wrapped.unansweredQuestions().size());
+    }
+
+    /**
+     * A rule is answered for once, and an element of the kind that holds it is read under that very
+     * rule. What the list states of the element is then said to be unread, and not read beside the
+     * element's own copy of it.
+     */
+    @Test
+    void whatAListOfItsOwnKindStatesOfItsElementsIsSaidToBeUnread() {
+        for (String model : new String[] {ELEMENTS_OF_ITS_OWN_KIND,
+                ELEMENTS_OF_ITS_OWN_KIND_AGAINST_THE_HOLDER}) {
+            assertInstanceOf(AdmissibleSet.Completeness.Wider.class,
+                    positionOf(model, "i.more[*]").completeness(), model);
+        }
+        // And nothing is placed where the statement names the holder's own field: read as the
+        // element's, `each.size <= size` would be a statement of the element alone.
+        Compilation compilation = ACompiledModel.answered(
+                ELEMENTS_OF_ITS_OWN_KIND_AGAINST_THE_HOLDER);
+        String module = compilation.modules().get(0);
+        DeclaredSig sig =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value().get("f");
+        RuleReadingContext reading = readingOf(compilation);
+        for (Position each : InputDomain.of(sig, reading,
+                TypeCardinality.Counts.workedOutIn(reading),
+                souther.compiler.carrier.Membership.none()).positions()) {
+            if (each.path().toString().equals("i.more[*].size")) {
+                assertNull(each.bounds().getFirst().admissible());
+                assertInstanceOf(AdmissibleSet.Completeness.Wider.class, each.completeness());
+            }
+        }
     }
 
     @Test

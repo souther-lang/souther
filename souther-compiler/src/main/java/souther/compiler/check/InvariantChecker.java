@@ -959,13 +959,21 @@ public final class InvariantChecker {
         // position short of it, said as a rule that was not worked out. It is never dropped
         // unsaid, since a position that said it held everything the rules leave it would be
         // wrong about a value the container refuses.
+        //
+        // That includes a rule of the element's own declaration. A value holding elements of its
+        // own kind states its rule of them, and the rule is then both what the element is read
+        // under and what its container states of it: one rule written once, answered for twice,
+        // and the reading keeps one answer for a rule.
         if (opened && inherited != null) {
+            Set<RuleRef.Invariant> readAsItsOwn = new HashSet<>();
+            toRead.forEach(each -> readAsItsOwn.add(each.origin()));
             for (Map.Entry<RuleRef.Invariant, List<ElementGuarantee>> rule
                     : inherited.byRule().entrySet()) {
                 Clauses.AsStated clause = null;
                 for (ElementGuarantee guarantee : rule.getValue()) {
-                    Core stated = statedOfTheValue(guarantee, atTheValue, inherited.type(),
-                            fields, bindings);
+                    Core stated = readAsItsOwn.contains(rule.getKey()) ? null
+                            : statedOfTheValue(guarantee, atTheValue, inherited.type(), fields,
+                                    bindings);
                     if (stated == null) {
                         read = false;
                         gathering.missed(RuleKey.THE_VALUE, new RulesMissed.ClausesNotExpanded());
@@ -1526,6 +1534,14 @@ public final class InvariantChecker {
                                          Map<String, BindingId> bindings) {
         BindingId parameter = guarantee.predicate().params().getFirst().binding();
         Core body = guarantee.predicate().body();
+        // A name the statement reads that is one of this value's own fields is a field of the
+        // container, which this value is held by: the same declaration's fields share their
+        // names, and read as this value's the statement would say something of it it does not.
+        for (BindingId field : bindings.values()) {
+            if (!field.equals(parameter) && WhatABodyReads.binding(body, field)) {
+                return null;
+            }
+        }
         if (atTheValue) {
             BindingId value = bindings.get(THE_VALUE_FIELD);
             return value == null ? null : Clauses.substituted(body, Map.of(parameter,
