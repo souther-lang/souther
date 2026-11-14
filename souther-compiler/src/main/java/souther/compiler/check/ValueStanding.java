@@ -10,6 +10,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.function.BiPredicate;
+import java.util.function.Supplier;
 
 /**
  * What an occurrence stands as, once every step with one successor has been taken: a name the
@@ -154,6 +155,40 @@ public final class ValueStanding {
          * holds over the parts of a member as well as over the member.
          */
         N oneAtATime();
+
+        /**
+         * What the value a name was given comes to as the answer to {@code question}, which is
+         * {@code fresh} unless this holds an answer it may give in place of working it out again.
+         *
+         * <p>Asked of the answers the value is read with, before it is read, by the walks that
+         * follow a name ({@link AffineForms}, {@link FoldedValue}), and by nothing else. What an
+         * override may keep is the answer and nothing the walk did to reach it: the names it read
+         * and what it told of what it passed are not replayed, so only a reading that does not
+         * consume them keeps. The answer is then a function of {@code value}, of {@code at} as the
+         * very environment, of these answers' own policy and of whatever state the override
+         * guards. The name is not among them, which only decides whether to go round, and that is
+         * decided before this is asked.
+         */
+        default <T> T answerOfAName(NameQuestion question, Core value, E at, Supplier<T> fresh) {
+            return fresh.get();
+        }
+    }
+
+    /** What is asked of the value a name was given: the form it reads as, or the constant it
+     *  folds to. Answers of one are not answers of the other. */
+    public enum NameQuestion {
+        FORM, FOLD
+    }
+
+    /** Whether {@link Names#answerOfAName} is asked at all. A test turns it off to hold the
+     *  answers kept to the ones worked out again. */
+    static boolean KEEPING_NAMES = true;
+
+    /** What {@code fresh} comes to for {@code question} of {@code value} read in {@code at},
+     *  taken from {@code names} where it holds the answer. */
+    static <E, N extends Names<E, N>, T> T answered(N names, NameQuestion question, Core value,
+                                                    E at, Supplier<T> fresh) {
+        return KEEPING_NAMES ? names.answerOfAName(question, value, at, fresh) : fresh.get();
     }
 
     /**

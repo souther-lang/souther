@@ -90,6 +90,8 @@ final class ReadingRoles {
             Map.entry("consulted", COUNTER),
             Map.entry("sharedSums", MEMO),
             Map.entry("sharedForms", MEMO),
+            Map.entry("sharedNames", MEMO),
+            Map.entry("sharedFactorNames", MEMO),
             Map.entry("sharedWaysIn", MEMO),
             Map.entry("sharedApplications", MEMO),
             Map.entry("sharedObservations", MEMO),
