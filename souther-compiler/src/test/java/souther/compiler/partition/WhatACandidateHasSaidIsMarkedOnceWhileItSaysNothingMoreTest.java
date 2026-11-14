@@ -58,12 +58,15 @@ class WhatACandidateHasSaidIsMarkedOnceWhileItSaysNothingMoreTest {
         assertEquals(afresh(trial), afterAnswering);
     }
 
-    @Test
-    void everyWayOfSayingSomethingIsInTheNextMark() {
+    /** The remainders a candidate reads are the third and the fourth of its ways. */
+    private static final Set<Integer> REMAINDERS = Set.of(2, 3);
+
+    /** Every way a candidate says something. */
+    private static List<Consumer<Pullback.Trial>> waysOfSaying() {
         Relation relation = new Relation.Affine(LinearForm.constant(ExactRatio.ZERO), Rel.GE);
         UndividedByARelation.IntOperation operation = new UndividedByARelation.IntOperation(
                 LinearForm.constant(ExactRatio.ZERO), BigInteger.ZERO, BigInteger.ONE, List.of());
-        List<Consumer<Pullback.Trial>> ways = List.of(
+        return List.of(
                 trial -> trial.says(UndividedByARelation.Working.UNREAD),
                 trial -> trial.answersFor(_ -> true),
                 trial -> trial.readByTheFormOf(number(1), number(2)),
@@ -73,6 +76,31 @@ class WhatACandidateHasSaidIsMarkedOnceWhileItSaysNothingMoreTest {
                 trial -> trial.readOnAnArm(relation,
                         () -> new StopEvidence(UndividedByARelation.Working.UNREAD)),
                 trial -> trial.tell(relation, UndividedByARelation.Working.UNREAD));
+    }
+
+    @Test
+    void whatItSaysBesidesTheRemaindersIsNeitherTheMarkNorTheRemainders() {
+        List<Consumer<Pullback.Trial>> ways = waysOfSaying();
+        for (int i = 0; i < ways.size(); i++) {
+            Pullback.Trial trial = new Pullback.Trial();
+            Object before = trial.markBesidesTheRemainders();
+            trial.mark();
+            assertEquals(before, trial.markBesidesTheRemainders(),
+                    "taking the mark is no part of what is said, at way " + i);
+            ways.get(i).accept(trial);
+            if (REMAINDERS.contains(i)) {
+                assertEquals(before, trial.markBesidesTheRemainders(),
+                        "a remainder is said beside the rest, at way " + i);
+            } else {
+                assertNotEquals(before, trial.markBesidesTheRemainders(),
+                        "what is said besides the remainders is in it, at way " + i);
+            }
+        }
+    }
+
+    @Test
+    void everyWayOfSayingSomethingIsInTheNextMark() {
+        List<Consumer<Pullback.Trial>> ways = waysOfSaying();
         for (int i = 0; i < ways.size(); i++) {
             Pullback.Trial trial = new Pullback.Trial();
             Object before = trial.mark();
