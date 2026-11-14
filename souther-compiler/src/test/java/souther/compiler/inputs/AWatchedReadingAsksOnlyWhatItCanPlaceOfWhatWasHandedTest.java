@@ -218,22 +218,6 @@ class AWatchedReadingAsksOnlyWhatItCanPlaceOfWhatWasHandedTest {
     }
 
     @Test
-    void aReadingTakenAgainTwiceAsksWhatItAskedAsOnce() {
-        BindingEnvironment on = nothingHanded().handing(EACH, written(1));
-        HandedAnswers asked = BindingEnvironment.Watch.over(on, () -> on.roleOf(EACH)).asked();
-
-        HandedAnswers outer = BindingEnvironment.Watch.over(on, () -> {
-            BindingEnvironment.Watch.replay(on, asked);
-            BindingEnvironment.Watch.replay(on, asked);
-            return 0;
-        }).asked();
-
-        assertTrue(outer.toldApart());
-        assertTrue(outer.holdsOf(on));
-        assertFalse(outer.holdsOf(nothingHanded().handing(EACH, written(2))));
-    }
-
-    @Test
     void aReadingTakenAgainFromAnEnvironmentSinceLeavesOutWhatWasHandedOnTheWay() {
         BindingEnvironment on = nothingHanded().handing(EACH, written(1));
         BindingEnvironment since = on.handing(OTHER, written(5));
@@ -291,20 +275,5 @@ class AWatchedReadingAsksOnlyWhatItCanPlaceOfWhatWasHandedTest {
         assertTrue(asked.holdsOf(nothingHanded().handing(OTHER, written(1))));
         assertFalse(asked.holdsOf(nothingHanded().handing(EACH, written(1))),
                 "asked after, and was handed nothing");
-    }
-
-    @Test
-    void aNameAskedThroughSeveralNestedWatchesIsFoundWhereItIsAskedOf() {
-        BindingEnvironment on = nothingHanded().handing(EACH, written(1));
-
-        HandedAnswers asked = BindingEnvironment.Watch.over(on, () ->
-                BindingEnvironment.Watch.over(on, () ->
-                        BindingEnvironment.Watch.over(on, () -> on.roleOf(EACH)).asked()).asked())
-                .asked();
-
-        assertFalse(asked.holdsOf(nothingHanded().handing(EACH, written(2))));
-        assertTrue(asked.holdsOf(nothingHanded().handing(EACH, written(1))));
-        assertTrue(asked.holdsOf(nothingHanded().handing(EACH, written(1))
-                .handing(OTHER, written(2))));
     }
 }

@@ -373,9 +373,15 @@ public final class InputReads {
         return BindingEnvironment.Watch.over(names, reading);
     }
 
-    /** A reading that asked {@code asked} of what was handed, taken again here instead of read:
-     *  what it asked is asked of the reading being watched, if there is one, as reading it again
-     *  would have. */
+    /**
+     * A reading that asked {@code asked} of what was handed, taken again here instead of read:
+     * what it asked is asked of the reading being watched, if there is one, as reading it again
+     * would have.
+     *
+     * <p>Only where what was asked is handed here what it was handed to the reading
+     * ({@link #handsAsAsked}), or where the reading did not say what it asked: the names are
+     * asked as the values handed here, which is then what the reading was answered.
+     */
     public void takingAgain(HandedAnswers asked) {
         BindingEnvironment.Watch.replay(names, asked);
     }
