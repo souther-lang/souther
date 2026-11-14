@@ -38,11 +38,9 @@ public sealed interface WhyNotTaken {
     default Optional<Figure> figure() {
         return switch (this) {
             case MeaningUnread(WhyUnread why) -> why.figure();
-            case MoreWaysThanAreRead _ ->
-                    Optional.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure());
+            case MoreWaysThanAreRead(var stoppedAt) -> Optional.of(stoppedAt);
             case MoreAlternativesThanAreTried(Figure stoppedAt) -> Optional.of(stoppedAt);
-            case MoreChoicesThanAreWrittenOut(CompositionBudget figure) ->
-                    Optional.of(figure.figure());
+            case MoreChoicesThanAreWrittenOut(var stoppedAt) -> Optional.of(stoppedAt);
             case OutsideDomain _ -> Optional.empty();
         };
     }
@@ -91,7 +89,18 @@ public sealed interface WhyNotTaken {
      * figure lifts it; nothing about the model or about either domain does, so neither of the
      * other two is said of it.
      */
-    record MoreWaysThanAreRead() implements WhyNotTaken {}
+    record MoreWaysThanAreRead(Figure.Budget stoppedAt) implements WhyNotTaken {
+
+        public MoreWaysThanAreRead {
+            Objects.requireNonNull(stoppedAt, "ways not read were past some figure");
+        }
+    }
+
+    /** More ways than are read, made where that is reached: it holds the figure the compilation
+     *  held the readings of one condition to. */
+    static WhyNotTaken pastTheWaysRead() {
+        return new MoreWaysThanAreRead(CompositionBudget.READINGS_OF_ONE_CONDITION.reached());
+    }
 
     /**
      * What the condition means was read and a path has words for it, and taking it into them
@@ -124,7 +133,7 @@ public sealed interface WhyNotTaken {
      *
      * @param stoppedAt which of the two the choices were past
      */
-    record MoreChoicesThanAreWrittenOut(CompositionBudget stoppedAt) implements WhyNotTaken {
+    record MoreChoicesThanAreWrittenOut(Figure.Budget stoppedAt) implements WhyNotTaken {
 
         public MoreChoicesThanAreWrittenOut {
             Objects.requireNonNull(stoppedAt, "choices not written out were past some figure");

@@ -41,15 +41,25 @@ public final class Allowances {
      * The budgets a compilation may hold to another figure: those every reader asks for its
      * figure where it uses it.
      *
-     * <p>A class that copies a figure into a constant of its own when it is loaded holds the one in
-     * force then, which is the one declared, for every compilation after; another figure said for
-     * it would be said and not held. So only these are, and a figure said for any other budget is
-     * refused rather than left unheld. That no class copies one of these is held of the compiled
-     * code ({@code AFigureACompilationSetsIsReadWhereItIsUsedTest}).
+     * <p>A budget is a name, and holding it is safe: what is asked of it where it is used is asked
+     * of the compilation using it. What is not safe is keeping, past the compilation, what was
+     * worked out under its figure — the figure itself, a stop made where it was reached, an answer
+     * computed from it. A class that does so when it is loaded keeps the one in force for whichever
+     * compilation loaded it, for every compilation after; and a table that outlives a compilation
+     * keeps it for them all. So only these are settable, and a figure said for any other budget is
+     * refused rather than left unheld.
+     *
+     * <p>That is held of the compiled code, by what each can see: that no class, loaded, runs what
+     * asks one of these for its figure ({@code AFigureACompilationSetsIsReadWhereItIsUsedTest}),
+     * and that every table that outlives a compilation says what it turns on
+     * ({@code EveryTableThatOutlivesACompilationSaysWhatItTurnsOnTest}).
      */
     public static final Set<CompositionBudget> SETTABLE = Collections.unmodifiableSet(
             EnumSet.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
-                    CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE));
+                    CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE,
+                    CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN,
+                    CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION,
+                    CompositionBudget.READINGS_OF_ONE_CONDITION));
 
     private static final ScopedValue<Allowances> IN_FORCE = ScopedValue.newInstance();
 

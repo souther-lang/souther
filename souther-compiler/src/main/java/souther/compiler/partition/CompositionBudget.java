@@ -824,6 +824,15 @@ public enum CompositionBudget {
     }
 
     /**
+     * This budget as the figure it stands at where it is declared, whatever a compilation holds
+     * it to. For what says which kind of stop it was and is no stop that was made, such as the
+     * word for a reason; a stop that was made is {@link #reached}.
+     */
+    public Figure.Budget atDeclared() {
+        return new Figure.Budget(this, maximum);
+    }
+
+    /**
      * This budget as the figure something stopped at, made where it stopped: the figure the
      * compilation stopping there held it to. What carries the stop carries this.
      */

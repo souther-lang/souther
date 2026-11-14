@@ -295,6 +295,14 @@ class ACanonicalPublicationOrderIsCompleteAndOnePerKindTest {
             }
             return out;
         }
+        if (arm == ReadingGap.ReachNotRead.class) {
+            // One per word, whatever figure it was met at: the figure is where it was met.
+            List<Object> out = new ArrayList<>();
+            for (ReadingGap.ReachNotRead.Why why : ReadingGap.ReachNotRead.Why.values()) {
+                out.add(new ReadingGap.ReachNotRead(why));
+            }
+            return out;
+        }
         if (arm == ReadingGap.CasesNotWorkedOut.class) {
             // One, whatever figures it was met at.
             return List.of(CASES_NOT_WORKED_OUT);

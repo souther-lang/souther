@@ -65,7 +65,7 @@ class AListWrittenOutPastAFigureNamesTheFigureTest {
                                     List<BlockReason.RuleReadingStopped> said) {
         assertFalse(said.isEmpty(), "the reading stopped");
         assertTrue(said.stream().allMatch(each -> each
-                instanceof BlockReason.WhatItStatesIsNoLine(var why) && why == figure),
+                instanceof BlockReason.WhatItStatesIsNoLine(var why, var _) && why == figure),
                 said::toString);
     }
 
