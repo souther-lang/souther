@@ -474,6 +474,44 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                     if List.any(positive, xs) && List.any(positive, ys) then Yes else No
                 }
                 """.formatted(ANSWER)));
+        // A value chosen by a membership of a list and held to a membership of the same list: the
+        // two memberships are two elements of one list, which no form over its position holds.
+        out.put(UndividedPosition.Reason.RULE_RELATING_TWO_ELEMENTS_OF_ONE_CONTAINER, of("""
+                module m
+
+                behavior f : (hs: List<Int>, ns: List<Int>) -> List<Int>
+                let f (hs, ns) =
+                    ns
+                        |> List.map(n -> if Bool.not(List.contains(n, hs)) then n else n + 1)
+                        |> List.filter(d -> List.contains(d, hs))
+                """));
+        // The weekday of a date a walk found, held to a bound: a remainder whose dividend is a
+        // number the body works out and no position holds.
+        out.put(UndividedPosition.Reason.RULE_ABOUT_A_REMAINDER_NO_POSITION_HOLDS, of("""
+                module m
+
+                data PaymentCalendar = { holidays: Set<Date>, aSunday: Date }
+
+                let weekday (calendar: PaymentCalendar, d: Date): Int =
+                    Int.floorMod(Date.daysBetween(calendar.aSunday, d), 7)
+
+                let isBusinessDay (calendar: PaymentCalendar, d: Date): Bool =
+                    weekday(calendar, d) >= 1 && weekday(calendar, d) <= 5
+                        && Bool.not(Set.contains(d, calendar.holidays))
+
+                let firstBusinessDay (calendar: PaymentCalendar, from: Date, step: Int): Date =
+                    List.rangeInclusive(0, 10)
+                        |> List.map(n -> Date.addDays(n * step, from))
+                        |> List.find(d -> isBusinessDay(calendar, d))
+                        |> Option.withDefault(from)
+
+                behavior unpayable : (calendar: PaymentCalendar, from: Date, days: Int)
+                        -> List<Date>
+                let unpayable (calendar, from, days) =
+                    List.rangeInclusive(0, days)
+                        |> List.map(n -> firstBusinessDay(calendar, Date.addDays(n, from), 1))
+                        |> List.filter(d -> Bool.not(isBusinessDay(calendar, d)))
+                """));
         // Read to the end, and the positions cancel: the rule is about the position and the
         // quantity it cuts is nothing.
         out.put(UndividedPosition.Reason.RULE_CUTS_NOTHING, of("""

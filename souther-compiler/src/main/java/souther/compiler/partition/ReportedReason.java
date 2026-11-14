@@ -276,6 +276,10 @@ public final class ReportedReason {
                 case REMAINDER_BY_NON_CONSTANT_VALUE ->
                         UndividedPosition.Reason.NON_CONSTANT_REMAINDER_DIVISOR;
             };
+            case BlockReason.RuleAboutARemainderNoPositionHolds _ ->
+                    UndividedPosition.Reason.RULE_ABOUT_A_REMAINDER_NO_POSITION_HOLDS;
+            case BlockReason.RuleRelatingTwoElementsOfOneContainer _ ->
+                    UndividedPosition.Reason.RULE_RELATING_TWO_ELEMENTS_OF_ONE_CONTAINER;
             case BlockReason.RuleAboutAnElementOfSeveralContainers _ ->
                     UndividedPosition.Reason.RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS;
             case BlockReason.TypeUnresolved _ -> UndividedPosition.Reason.TYPE_UNRESOLVED;

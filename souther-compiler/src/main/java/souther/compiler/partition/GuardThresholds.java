@@ -65,6 +65,7 @@ import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
@@ -763,6 +764,58 @@ public final class GuardThresholds {
                 PlacesStopped.of(leftAtEachPlace(comparison, stopped, read, reads, answering),
                         stoppedAtThe(stopped)),
                 whereItStopped(stopped, read));
+    }
+
+    /**
+     * What a remainder of a number no position holds leaves each place the comparison is filed at,
+     * where nothing but the remainder is what the arithmetic stopped at.
+     *
+     * <p>A figure of this compiler's work, or a product the arithmetic has no form for, is what
+     * stopped it and is said as {@link #whatEachPlaceIsLeftWith} says it. Otherwise the stop is
+     * the remainder's, which the places do not word differently: it is the same at each. The
+     * container of elements that are places here is not one of them, since the statement says
+     * nothing of the container but that it holds the elements.
+     */
+    static Cutting.Read.Stopped whatEachPlaceIsLeftWithByARemainder(
+            StatedComparison comparison, AffineReading.OfAComparison.Stopped stopped,
+            InputReading read, InputReads reads, Arrivals answering) {
+        if (stopped.failure().why().declinedFigure().isPresent()
+                || stopped.failure().why().nonAffineOperation().isPresent()) {
+            return whatEachPlaceIsLeftWith(comparison, stopped, read, reads, answering);
+        }
+        SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> left =
+                leftAtEachPlace(comparison, stopped, read, reads, answering);
+        BlockReason.RuleReadingStopped why = new BlockReason.RuleAboutARemainderNoPositionHolds();
+        SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> said =
+                new LinkedHashMap<>();
+        for (FilingCoordinate at : withoutTheContainersOfTheirElements(left.keySet())) {
+            said.put(at, why);
+        }
+        return new Cutting.Read.Stopped(PlacesStopped.of(said, stoppedAtThe(stopped)),
+                whereItStopped(stopped, read));
+    }
+
+    /**
+     * {@code places} without those that are the container of an element among them.
+     *
+     * <p>A statement over {@code hs[*]} says of {@code hs} that it holds that element, and what
+     * stopped at the element is not left at the container beside it.
+     */
+    static List<FilingCoordinate> withoutTheContainersOfTheirElements(
+            Collection<FilingCoordinate> places) {
+        return places.stream()
+                .filter(each -> places.stream().noneMatch(other ->
+                        holdsTheElementsOf(each.path(), other.path())))
+                .toList();
+    }
+
+    private static boolean holdsTheElementsOf(TermPath container, TermPath element) {
+        List<TermPath.Step> inside = element.steps();
+        List<TermPath.Step> outside = container.steps();
+        return container.head().equals(element.head())
+                && inside.size() > outside.size()
+                && inside.subList(0, outside.size()).equals(outside)
+                && inside.get(outside.size()) instanceof TermPath.Step.Element;
     }
 
     /**

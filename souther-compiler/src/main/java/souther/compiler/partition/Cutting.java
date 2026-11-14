@@ -1564,8 +1564,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
             return onTheInput.arithmetic().get()
                     instanceof AffineReading.OfAComparison.Stopped stopped
-                    ? GuardThresholds.whatEachPlaceIsLeftWith(comparison, stopped, read, reads,
-                            answering)
+                    ? GuardThresholds.whatEachPlaceIsLeftWithByARemainder(comparison, stopped,
+                            read, reads, answering)
                     : noLine(comparison, stated.proposition(), List.of(), Set.of(),
                             onTheInput.arithmetic(), read, reads, answering);
         }
@@ -1782,6 +1782,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             from.replaceAll((place, was) -> decided);
             return new Read.Stopped(from, WhereAReadingStopped.ELSEWHERE);
         }
+        if (!stops.isEmpty()
+                && stops.stream().allMatch(WhyUnread.TwoElementsOfOneContainer.class::isInstance)) {
+            return stoppedAtTwoElementsOfOneContainer(comparison, read, reads, answering);
+        }
         BlockReason.WhatItStatesIsNoLine said = whatItStates(stated, stops);
         // A number no position holds is all the statement says of what it relates. Which number
         // that is — one the body worked out, what a dependency answered, what an operation did —
@@ -1812,6 +1816,29 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         out.replaceAll((at, was) -> was instanceof BlockReason.RuleAboutADerivedValue
                 && saysMoreThanAPartNotRead(why) ? why : was);
         return new Read.Stopped(out, WhereAReadingStopped.ELSEWHERE);
+    }
+
+    /**
+     * A statement that needs two elements of one container, at the places its elements stand. The
+     * stop is the statement's, so every place is left with it; but a container is not a place the
+     * elements of it are not read at, so it is named only where none of its elements is.
+     */
+    private static Read stoppedAtTwoElementsOfOneContainer(StatedComparison comparison,
+                                                           InputReading read, InputReads reads,
+                                                           Arrivals answering) {
+        BlockReason.RuleReadingStopped why =
+                new BlockReason.RuleRelatingTwoElementsOfOneContainer();
+        List<FilingCoordinate> filed = GuardThresholds.filedAt(comparison, read, reads, answering);
+        List<FilingCoordinate> places = GuardThresholds.withoutTheContainersOfTheirElements(filed);
+        if (!places.isEmpty()) {
+            return new Read.Stopped(ComparisonAssessment.atEachOf(places, why),
+                    WhereAReadingStopped.ELSEWHERE);
+        }
+        SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> from =
+                new LinkedHashMap<>();
+        GuardThresholds.cameFrom(comparison, reads, read.newtypes(), from);
+        from.replaceAll((place, was) -> why);
+        return new Read.Stopped(from, WhereAReadingStopped.ELSEWHERE);
     }
 
     /**

@@ -311,6 +311,29 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         RULE_RELATING_ELEMENTS,
         /**
+         * The rule says how two elements of one container stand to each other, which this compiler
+         * does not read.
+         *
+         * <p>Two values of one container are two entries at one position, and a form over the
+         * position would hold them as one number. A statement that needs both, such as a value
+         * chosen by one membership of a container and then held to a membership of the same
+         * container, is not read on its elements, and what stopped it is this and not a form nothing
+         * takes apart: {@link #UNSUPPORTED_SYNTAX} would send an author after a rewrite of a
+         * comparison that is written in a form this compiler reads.
+         */
+        RULE_RELATING_TWO_ELEMENTS_OF_ONE_CONTAINER,
+        /**
+         * The rule is about what a division leaves of a number no position of the input holds, and
+         * what it says about the values here is not worked out.
+         *
+         * <p>Its own word beside {@link #RULE_ABOUT_A_REMAINDER}, which says the remainder was
+         * read to the end. Here the dividend is a number the body works out, such as the weekday
+         * of a date a walk found, so no line is drawn on the remainder and none relates it to
+         * another value; and beside {@link #UNSUPPORTED_SYNTAX}, since the comparison is written
+         * in a form this compiler reads.
+         */
+        RULE_ABOUT_A_REMAINDER_NO_POSITION_HOLDS,
+        /**
          * The rule relates the value here to another value rather than dividing the values here.
          *
          * <p>{@code x < y} says where one position stands against another, and a class here is a

@@ -441,6 +441,8 @@
         "relation_not_shown_reached_at_every_value",
         "relation_shown_over_a_region",
         "rule_relating_elements",
+        "rule_relating_two_elements_of_one_container",
+        "rule_about_a_remainder_no_position_holds",
         "rule_about_a_derived_value",
         "rule_about_an_element_of_several_containers",
         "unread_alternative_of_a_choice",

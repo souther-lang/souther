@@ -146,7 +146,7 @@ class AMembershipIsReadAsTheComparisonOfEachElementTest {
     @Test
     void anElementHeldAgainstAnotherOfTheSameListIsSaidUnreadWhereTheComparisonIs() {
         String report = reportOf("List.any(k -> List.contains(k + 1, ns), ns)");
-        assertTrue(report.contains("ns[*]:unsupported_syntax"), report);
+        assertTrue(report.contains("ns[*]:rule_relating_two_elements_of_one_container"), report);
         assertFalse(report.startsWith("complete"), report);
         sameAs("List.any(k -> List.contains(k + 1, ns), ns)",
                 "List.any(k -> List.any(own -> own == k + 1, ns), ns)");
