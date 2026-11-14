@@ -19,7 +19,7 @@ final class Weighed<A> {
     private final Map<A, ExactRatio> coefs;
 
     /** What the last basis that was asked worked out, or null; replaced whole, and never changed. */
-    private volatile PrefixBasis.Prepared<A> prepared;
+    private volatile PrefixBasis.Prepared prepared;
 
     private Weighed(Map<A, ExactRatio> coefs) {
         this.coefs = coefs;
@@ -35,11 +35,11 @@ final class Weighed<A> {
         return coefs;
     }
 
-    PrefixBasis.Prepared<A> prepared() {
+    PrefixBasis.Prepared prepared() {
         return prepared;
     }
 
-    void prepared(PrefixBasis.Prepared<A> now) {
+    void prepared(PrefixBasis.Prepared now) {
         prepared = now;
     }
 }

@@ -151,7 +151,7 @@ final class PrefixBasis<A> {
      * positions the two add are placed apart. An entry is read by a basis that holds as many places
      * as the one that made it did, and not by one with fewer.
      */
-    private static final class Line<A> {
+    private static final class Line {
 
         private int written;
 
@@ -165,7 +165,7 @@ final class PrefixBasis<A> {
      * places the basis that worked them out held. Kept by the form ({@link Weighed}), and read by a
      * basis of the same line that holds as many places and not by one that holds fewer.
      */
-    record Prepared<A>(Object line, int placed, Map<Integer, ExactRatio> weights) {}
+    record Prepared(Object line, int placed, Map<Integer, ExactRatio> weights) {}
 
     private static final LongAdder TERMS_READ = new LongAdder();
 
@@ -196,7 +196,7 @@ final class PrefixBasis<A> {
         return TERMS_READ.sum();
     }
 
-    private final Line<A> line;
+    private final Line line;
 
     /**
      * The positions of the shortest prefix in the order the places were given them in, which is
@@ -208,7 +208,7 @@ final class PrefixBasis<A> {
 
     private PrefixBasis(Map<A, Integer> places, Closed closed, List<AffineConstraint<A>> rules,
                         List<AffineConstraint<Integer>> moved, int smallest, int largest,
-                        Set<A> positions, Line<A> line, List<A> first) {
+                        Set<A> positions, Line line, List<A> first) {
         this.line = line;
         this.first = first;
         this.places = places;
@@ -318,7 +318,7 @@ final class PrefixBasis<A> {
         first.sort(order);
         PrefixBasis<A> basis = new PrefixBasis<>(places, closed, List.copyOf(constraints), moved,
                 supports.getFirst().size(), supports.getLast().size(),
-                Collections.unmodifiableSet(positions), new Line<>(places.size()),
+                Collections.unmodifiableSet(positions), new Line(places.size()),
                 Collections.unmodifiableList(first));
         return basis.holdsNothing() || basis.box != null ? basis : null;
     }
@@ -431,13 +431,13 @@ final class PrefixBasis<A> {
             return null;
         }
         Map<A, Integer> placed = Map.copyOf(places);
-        Line<A> line;
+        Line line;
         synchronized (before.line) {
             if (before.line.written == before.places.size()) {
                 line = before.line;
                 line.written = placed.size();
             } else {
-                line = new Line<>(placed.size());
+                line = new Line(placed.size());
             }
         }
         PrefixBasis<A> basis = new PrefixBasis<>(placed, closed, List.copyOf(constraints),
@@ -555,14 +555,14 @@ final class PrefixBasis<A> {
      * position that is in no prefix here may be in one of the next.
      */
     private Map<Integer, ExactRatio> weighedOver(Weighed<A> form) {
-        Prepared<A> kept = form.prepared();
+        Prepared kept = form.prepared();
         if (kept != null && kept.line() == line && kept.placed() <= places.size()) {
             return kept.weights();
         }
         Map<Integer, ExactRatio> weights = weighed(form.coefs().entrySet(), places);
         // A form of one position or two is weighed as fast as it is looked up.
         if (weights != null && form.coefs().size() > 2) {
-            form.prepared(new Prepared<>(line, places.size(), weights));
+            form.prepared(new Prepared(line, places.size(), weights));
         }
         return weights;
     }

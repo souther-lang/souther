@@ -177,7 +177,8 @@ final class ClosureQuestion<A> {
             int number = at;
             if (at > 0) {
                 A previous = merged.get(at - 1);
-                boolean together = before.place.containsKey(here) && before.place.containsKey(previous)
+                boolean together = (before.place.containsKey(here)
+                        && before.place.containsKey(previous))
                         ? before.place.get(previous).equals(before.place.get(here))
                         : order.compare(previous, here) == 0;
                 if (together) {
