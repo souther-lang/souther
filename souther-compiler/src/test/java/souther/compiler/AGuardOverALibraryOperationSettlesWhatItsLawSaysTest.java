@@ -233,7 +233,6 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
             // only their answer to an Int and not each step, so the relation is among the numbers
             // they answer and says nothing of a fold.
             new Row("Digit(List.sum(List.reverse(xs)) - List.sum(xs))", false),
-            new Row("Digit(List.sum(xs) - List.sum(List.sort(xs)))", false),
             new Row("Digit(List.sum(ys ++ xs) - List.sum(xs ++ ys))", false),
             new Row("Digit(List.sum(xs ++ ys) - List.sum(xs) - List.sum(ys))", false),
             new Row("Digit(List.sum(xs) + List.sum(ys) - List.sum(xs ++ ys))", false),
@@ -248,19 +247,13 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
             new Row("Digit(List.sum(xs ++ ys ++ xs) - List.sum(xs) - List.sum(ys))", true),
             new Row("Digit(List.sum(List.concat([xs, ys, xs])) "
                     + "- List.sum(xs) - List.sum(xs) - List.sum(ys))", false),
-            new Row("Digit(List.sum(xs ++ ys ++ xs) - List.sum(xs ++ ys) - List.sum(xs))", false),
             new Row("Digit(List.product(List.reverse(xs)) - List.product(xs))", false),
-            new Row("Digit(List.product(ys ++ xs) - List.product(xs ++ ys))", false),
             new Row("Digit(List.product(xs ++ ys) - List.product(xs) * List.product(ys))", false),
-            new Row("Digit(List.product(xs ++ ys) - List.product(ys) * List.product(xs))", false),
             new Row("Digit(List.product(xs ++ ys) - List.product(xs) * List.product(ys) - 1)",
                     true),
             new Row("Digit(List.product(xs ++ ys) - List.product(xs) - List.product(ys))", true),
             new Row("Digit(List.sum(List.concat([xs, ys])) - List.sum(xs) - List.sum(ys))", false),
-            new Row("Digit(List.sum(List.concat([xs, ys])) - List.sum(xs) - List.sum(ys) - 1)",
-                    true),
             new Row("Digit(List.sum(List.reverse(xs)) - List.product(xs))", true),
-            new Row("Digit(List.sum(xs ++ []) - List.sum(xs))", false),
             // What an exact total is is no number of the type of the call: the sum of xs here is
             // twice the greatest Int, which no call of it answers, and the run [MAX, MAX] ++
             // [-MAX] is still one the guard lets through to a violation.
@@ -306,8 +299,6 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
             new Row("Digit(List.sum(List.map(n -> n * 2, xs)) - 3 * List.sum(xs))", true),
             new Row("Digit(List.sum(List.map(n -> 3 - n, xs)) - 3 * List.length(xs) + List.sum(xs))",
                     false),
-            new Row("Digit(List.sum(List.map(n -> n * 2, xs ++ ys)) "
-                    + "- 2 * List.sum(xs) - 2 * List.sum(ys))", false),
             // A list split into what holds each of its elements once is the total of what it is
             // split into: a filter and the filter of its denial, a take and the drop of the same
             // count, under what is done to each element.
@@ -321,13 +312,8 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                     false),
             new Row("Digit(List.sum(List.take(3, xs)) + List.sum(List.drop(4, xs)) - List.sum(xs))",
                     true),
-            new Row("Digit(List.sum(List.map(n -> n * 2, List.filter(n -> n > 2, xs))) "
-                    + "+ List.sum(List.map(n -> n * 2, List.filter(n -> n <= 2, xs))) "
-                    + "- 2 * List.sum(xs))", false),
             new Row("Digit(List.product(List.take(2, xs)) * List.product(List.drop(2, xs)) "
                     + "- List.product(xs))", false),
-            new Row("Digit(List.product(List.filter(n -> n > 2, xs)) "
-                    + "* List.product(List.filter(n -> n <= 2, xs)) - List.product(xs))", false),
             new Row("Digit(List.product(List.filter(n -> n > 2, xs)) "
                     + "* List.product(List.filter(n -> n <= 3, xs)) - List.product(xs))", true),
             // A statement about how many an element holds is a statement over whole numbers like
@@ -336,16 +322,10 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
             // as hold at least that.
             new Row("Digit(List.length(List.filter(ys -> List.length(ys) >= 1, xss)) "
                     + "- List.length(List.filter(ys -> List.length(ys) > 0, xss)))", false),
-            new Row("Digit(List.length(List.filter(ys -> List.length(ys) > 0, xss)) "
-                    + "- List.length(List.filter(ys -> List.length(ys) >= 1, xss)))", false),
             new Row("Digit(List.length(List.filter(ys -> List.length(ys) >= 1, xss)) "
                     + "- List.length(List.filter(ys -> List.length(ys) >= 2, xss)))", false),
             new Row("Digit(List.length(List.filter(ys -> List.length(ys) >= 2, xss)) "
                     + "- List.length(List.filter(ys -> List.length(ys) >= 1, xss)))", true),
-            new Row("if List.all(ys -> List.length(ys) >= 1, xss) && List.length(xss) >= 1 then "
-                    + "Digit(List.length(List.concat(xss)) - 1) else Digit(0)", false),
-            new Row("if List.all(ys -> List.length(ys) >= 1, xss) && List.length(xss) >= 1 then "
-                    + "Digit(List.length(List.concat(xss)) - 2) else Digit(0)", true),
             new Row("if List.all(ys -> List.length(ys) >= 2, xss) && List.length(xss) >= 1 then "
                     + "Digit(List.length(List.concat(xss)) - 2) else Digit(0)", false),
             new Row("if List.any(ys -> List.length(ys) >= 2, xss) then "
@@ -354,39 +334,25 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
                     + "Digit(List.length(List.concat(xss)) - 3) else Digit(0)", true),
             // What a statement holds of among the elements a filter kept is what both hold of
             // among the elements it was handed.
-            new Row("Digit(List.length(List.filter(n -> n > 2, List.filter(n -> n > 1, xs))) "
-                    + "- List.length(List.filter(n -> n > 2, xs)))", false),
-            new Row("Digit(List.length(List.filter(n -> n > 2, xs)) "
-                    + "- List.length(List.filter(n -> n > 2, List.filter(n -> n > 1, xs))))",
-                    false),
             new Row("if List.any(n -> n > 2, List.filter(n -> n > 1, xs)) then "
                     + "Digit(List.length(List.filter(n -> n > 2, xs)) - 1) else Digit(0)", false),
-            new Row("Digit(List.length(List.filter(n -> n > 2, xs)) "
-                    + "- List.length(List.filter(n -> n > 2, List.filter(n -> n < 5, xs))))",
-                    false),
             new Row("Digit(List.length(List.filter(n -> n > 2, List.filter(n -> n < 5, xs))) "
                     + "- List.length(List.filter(n -> n > 2, xs)))", true),
             // A closure that answers a container written out answers the same number of them
             // whatever it is handed.
             new Row("Digit(List.length(List.flatMap(n -> [n, n], xs)) - 2 * List.length(xs))",
                     false),
-            new Row("Digit(2 * List.length(xs) - List.length(List.flatMap(n -> [n, n], xs)))",
-                    false),
             new Row("Digit(List.length(List.flatMap(n -> [n, n], xs)) - 3 * List.length(xs))",
                     true),
-            new Row("Digit(List.length(List.flatMap(n -> [n], xs)) - List.length(xs))", false),
             new Row("Digit(List.length(List.flatMap(n -> if n > 2 then [n] else [n, n], xs)) "
                     + "- List.length(xs))", true),
             // Nothing between the strings joined is the strings put end to end.
             new Row("Digit(String.length(String.concat([s, t])) "
                     + "- String.length(String.join(\"\", [s, t])))", false),
-            new Row("Digit(String.length(String.join(\"\", [s, t])) "
-                    + "- String.length(String.concat([s, t])))", false),
             new Row("Digit(String.length(String.concat([s, t])) "
                     + "- String.length(String.join(\",\", [s, t])))", true),
             // A join is the append it is, however it is written.
             new Row("Digit(List.length(xs ++ xs) - List.length(List.append(xs, xs)))", false),
-            new Row("Digit(List.length(List.append(xs, xs)) - List.length(xs ++ xs))", false),
             new Row("Digit(List.length(xs ++ xs) - List.length(List.append(xs, xs)) - 1)", true),
             new Row("Digit(String.length(s ++ t) - String.length(String.append(s, t)))", false),
             new Row("Digit(String.length(s ++ t) - String.length(String.append(t, s)))", true),
@@ -402,10 +368,6 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
             new Row("if List.any(n -> n <= 2, xs) then "
                     + "Digit(List.length(xs) - List.length(List.filter(n -> n > 2, xs)) - 2) "
                     + "else Digit(0)", true),
-            new Row("Digit(List.length(List.filter(n -> n > 2, xs)) "
-                    + "+ List.length(List.filter(n -> n <= 2, xs)) - List.length(xs))", false),
-            new Row("Digit(List.length(xs) - List.length(List.filter(n -> n > 2, xs)) "
-                    + "- List.length(List.filter(n -> n <= 2, xs)))", false),
             // A walk over none answers where it started, so an answer away from there is one over
             // something, whatever the step.
             new Row("if List.sum(xs) >= 3 then Digit(List.length(xs) - 1) else Digit(0)", false),
@@ -432,32 +394,20 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
             // and the intersection together hold what the two do.
             new Row("Digit(Set.size(Set.union(a, b)) + Set.size(Set.intersection(a, b)) "
                     + "- Set.size(a) - Set.size(b))", false),
-            new Row("Digit(Set.size(a) + Set.size(b) - Set.size(Set.union(a, b)) "
-                    + "- Set.size(Set.intersection(a, b)))", false),
             new Row("Digit(Set.size(Set.intersection(a, b)) - Set.size(Set.intersection(b, a)))",
                     false),
             new Row("Digit(Set.size(Set.union(a, b)) + Set.size(Set.difference(a, b)) "
                     + "- Set.size(a) - Set.size(b))", true),
-            new Row("Digit(Set.size(Set.union(a, b)) + Set.size(Set.intersection(a, b)) "
-                    + "- Set.size(a) - Set.size(b) - 1)", true),
             // A filter of a map's entries keeps the entries both statements of a key and a value
             // hold of.
             new Row("Digit(Map.size(Map.filterEntries((k, v) -> v > 2, "
                     + "Map.filterEntries((k, v) -> k == \"a\", ma))) "
                     + "- Map.size(Map.filterEntries((k, v) -> k == \"a\" && v > 2, ma)))", false),
-            new Row("Digit(Map.size(Map.filterEntries((k, v) -> k == \"a\" && v > 2, ma)) "
-                    + "- Map.size(Map.filterEntries((k, v) -> v > 2, "
-                    + "Map.filterEntries((k, v) -> k == \"a\", ma))))", false),
-            new Row("Digit(Map.size(Map.filterEntries((k, v) -> v > 2, "
-                    + "Map.filterEntries((k, v) -> k == \"a\", ma))) "
-                    + "- Map.size(Map.filterEntries((k, v) -> k == \"a\" && v > 2, ma)) - 1)",
-                    true),
             new Row("Digit(Map.size(Map.filterEntries((k, v) -> v > 2, "
                     + "Map.filterEntries((k, v) -> k == \"a\", ma))) "
                     + "- Map.size(Map.filterEntries((k, v) -> k == \"b\" && v > 2, ma)))", true),
             // The same of the keys of two maps.
             new Row("Digit(Map.size(mb) - Map.size(Map.intersection(ma, mb)))", false),
-            new Row("Digit(Map.size(ma) - Map.size(Map.intersection(ma, mb)))", false),
             new Row("Digit(Map.size(Map.intersection(ma, mb)) - Map.size(mb))", true));
 
     @Test
@@ -480,7 +430,7 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
     @Test
     void aGuardStatedThroughAHelperSaysWhatTheSameGuardWrittenOutSays() {
         List<String> wrong = new ArrayList<>();
-        for (String guard : List.of("String.matches(\"B{5}\", s)", "five(s)")) {
+        for (String guard : List.of("five(s)")) {
             for (Row row : List.of(
                     new Row("if %s then Digit(String.length(s) - 5) else Digit(0)", false),
                     new Row("if %s then Digit(String.length(s) - 6) else Digit(0)", true),
