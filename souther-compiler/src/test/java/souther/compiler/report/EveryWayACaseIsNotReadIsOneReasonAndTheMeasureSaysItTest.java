@@ -1,6 +1,10 @@
 package souther.compiler.report;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
 import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.query.Measurement;
 import souther.compiler.query.OutputCaseEvidence;
@@ -72,6 +76,15 @@ class EveryWayACaseIsNotReadIsOneReasonAndTheMeasureSaysItTest {
 
     private static final String A_MISS = "    | \"a miss\" : (0, Miss) -> 0\n";
 
+    /** The report of {@code source}, refused with {@code codes} and nothing else. What it says of
+     *  a case is read off the rows and the signature, so the arms are not asked for. */
+    private static AdequacyReport refusedOnly(List<String> codes, String source) {
+        Compilation compilation = Compilation.ofSources(List.of(source), ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+        ACompiledModel.refusedWith(codes, compilation);
+        return AdequacyReport.of(compilation);
+    }
+
     private static OutputCaseEvidence theOutcome(AdequacyReport report) {
         return report.modules().getFirst().behaviors().getFirst().signature().output();
     }
@@ -95,7 +108,7 @@ class EveryWayACaseIsNotReadIsOneReasonAndTheMeasureSaysItTest {
      */
     @Test
     void aRowRefusedBeforeItsExpectationWasReadLeavesNoOutputCaseUndecided() {
-        AdequacyReport report = WrittenWitness.refusedOnly(List.of("E1903"), output(
+        AdequacyReport report = refusedOnly(List.of("E1903"), output(
                 "    | \"invalid\" : (1, 2) -> Kept(1)\n    | \"dropped\" : (-1) -> Dropped\n"));
         OutputCaseEvidence outcome = theOutcome(report);
 
@@ -110,7 +123,7 @@ class EveryWayACaseIsNotReadIsOneReasonAndTheMeasureSaysItTest {
     /** An input that breaks the invariant of its type is refused the same way at an input. */
     @Test
     void aRowRefusedAtAnInputLeavesNoInputCaseUndecided() {
-        AdequacyReport report = WrittenWitness.refusedOnly(List.of("E1903"), input(
+        AdequacyReport report = refusedOnly(List.of("E1903"), input(
                 "h.value + bonus", "",
                 "    | \"hit below nought\" : (0, Hit(-1)) -> 0\n" + A_MISS));
         InputCaseEvidence shot = theShot(report);
@@ -130,7 +143,7 @@ class EveryWayACaseIsNotReadIsOneReasonAndTheMeasureSaysItTest {
      */
     @Test
     void aRowThatStoppedAfterItsValuesWereHandedOverIsBothReasons() {
-        AdequacyReport report = WrittenWitness.refusedOnly(List.of("E1910"), input(
+        AdequacyReport report = refusedOnly(List.of("E1910"), input(
                 "spin(h.value)", SPIN,
                 "    | \"spins\" : (0, hit(0)) -> 0\n" + A_MISS));
         InputCaseEvidence shot = theShot(report);
@@ -154,7 +167,7 @@ class EveryWayACaseIsNotReadIsOneReasonAndTheMeasureSaysItTest {
      */
     @Test
     void aRowThatStoppedAfterItsCaseWasReadLeavesTheCaseCounted() {
-        AdequacyReport report = WrittenWitness.refusedOnly(List.of("E1910"), input(
+        AdequacyReport report = refusedOnly(List.of("E1910"), input(
                 "spin(h.value)", SPIN,
                 "    | \"spins\" : (0, Hit(0)) -> 0\n" + A_MISS));
         InputCaseEvidence shot = theShot(report);
@@ -171,7 +184,7 @@ class EveryWayACaseIsNotReadIsOneReasonAndTheMeasureSaysItTest {
      */
     @Test
     void aRowWhoseTextNamesNoCaseIsStillTheOnlyReasonItIsReadAsWhenNothingStoppedIt() {
-        AdequacyReport report = WrittenWitness.reportOf(input("h.value + bonus", "",
+        AdequacyReport report = refusedOnly(List.of(), input("h.value + bonus", "",
                 "    | \"a hit\" : (0, hit(0)) -> 0\n" + A_MISS));
         InputCaseEvidence shot = theShot(report);
 
