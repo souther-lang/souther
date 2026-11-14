@@ -15756,7 +15756,7 @@ final class Pullback {
     private AffineReading.NamesKept namesOfAFactor(ElementsMet met) {
         return (value, at, fresh) -> sharedFactorNames.shared(value, at, new SameObject(at), met,
                 () -> spendingNothing(fresh),
-                answer -> answer.spentNothing() && answer.value().spentNothing()
+                answer -> answer.spentNothing() && answer.value().leftTheFigureAlone()
                         && !(answer.value().outcome()
                         instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stop
                         && stop.why().declinedFigure().isPresent())).value().outcome();

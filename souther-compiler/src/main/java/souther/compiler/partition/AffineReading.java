@@ -317,9 +317,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 reading(read, new LinkedHashSet<>(), met, new WhatWasTold(), null, kept));
     }
 
-    /** What the reading of a name came to, and whether it took nothing from the figures that
-     *  count the readings of one comparison. */
-    record Kept(AffineForms.Outcome<NumericTerm, InputReads> outcome, boolean spentNothing) {}
+    /** What the reading of a name came to, and whether it left alone the figure that counts the
+     *  readings of one comparison: neither spent it nor was refused by it. */
+    record Kept(AffineForms.Outcome<NumericTerm, InputReads> outcome,
+                boolean leftTheFigureAlone) {}
 
     /** Where what a name came to is kept to be taken by another reading. */
     interface NamesKept {
@@ -583,20 +584,24 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              *  asks it of. */
             private final WorkedOutToReachIt reached = WorkedOutToReachIt.of(ofTheInput);
 
-            // A name comes to the same wherever it is read again at an equal reading, where the
-            // reading holds nothing the walk before it has put in: no accumulator carried, no
-            // stopped value held aside, and none of the figures counting elements drawn on.
+            // What a name comes to is a function of the value, the environment, the elements it
+            // asks of and what is left of the figure counting elements; the rest this reading
+            // holds is told, which the reading made by outcomeOf drops, or is read only to tell.
+            // Kept where the reading holds nothing the walk before it has put in that the answer
+            // could depend on: no accumulator carried, no stopped value held aside, and the
+            // figure not asked of, which an answer that declined would be a function of.
             @Override
             public AffineForms.Outcome<NumericTerm, InputReads> answerOfAName(
                     Core value, InputReads at,
                     Supplier<AffineForms.Outcome<NumericTerm, InputReads>> fresh) {
-                if (namesKept == null || stoppedAt != null || told.productsStop || !carried.isEmpty()) {
+                if (namesKept == null || stoppedAt != null || told.productsStop
+                        || !carried.isEmpty()) {
                     return fresh.get();
                 }
                 return namesKept.answerOf(value, at, () -> {
-                    int before = told.elementsRead();
+                    int before = told.askedOfTheFigure();
                     AffineForms.Outcome<NumericTerm, InputReads> came = fresh.get();
-                    return new Kept(came, told.elementsRead() == before);
+                    return new Kept(came, told.askedOfTheFigure() == before);
                 });
             }
 
@@ -2070,7 +2075,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          *  was asked with the node ({@link NumbersOnTheWayToATotal}). */
         private final Set<BindingId> readByATerm = new HashSet<>();
         /** How many elements the reading of the comparison has read a closure applied to one by
-         *  one, shared with every reading tried apart from it ({@link #apart}). */
+         *  one, and how many times the figure that bounds them has been asked of, shared with
+         *  every reading tried apart from it ({@link #apart}). */
         private final int[] elementsRead;
         private boolean exact = true;
         /** Whether a product of two non-constant numbers is a stop and not a number of its own. */
@@ -2086,16 +2092,24 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private final List<WhatWasTold> besideTheRows = new ArrayList<>();
 
         WhatWasTold() {
-            this(new int[1]);
+            this(new int[2]);
         }
 
         private WhatWasTold(int[] elementsRead) {
             this.elementsRead = elementsRead;
         }
 
-        /** How many elements the reading of the comparison has read one by one so far. */
-        int elementsRead() {
-            return elementsRead[0];
+        /**
+         * How many times the figure that bounds the elements read one by one has been asked of,
+         * whether it answered or declined.
+         *
+         * <p>What a reading reads depends on what is left of the figure, so a reading that asked it
+         * anything is a reading of what was left then. A declined ask adds nothing to
+         * {@link #elementsRead}, which is why the count of what was read does not say whether the
+         * figure was asked.
+         */
+        int askedOfTheFigure() {
+            return elementsRead[1];
         }
 
         /** Nothing told yet, for a part of the comparison read apart: what it reads element by
@@ -2118,6 +2132,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * of the answer has the figure with the refusal.
          */
         Optional<WhyUnread> declinedAtCounting(int elements) {
+            elementsRead[1]++;
             if (elements > CompositionBudget.READINGS_OF_ONE_CONDITION.maximum()) {
                 return Optional.of(WhyUnread.PAST_THE_READINGS);
             }
