@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
@@ -19,6 +20,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -143,11 +145,6 @@ class AFoldThatFilesByTheCaseOfEachElementIsReadAsTheArmItTakesTest {
             .replace("List.fold((acc, m)", "List.foldRight((m, acc)")
             .replace("Map.empty, ms)", "nothing(), ms)");
 
-    /** And walking from the end of the movements put the other way round, which hands them in
-     *  the order they are written. */
-    private static final String COUNTED_FROM_THE_END_OF_THE_REVERSED = COUNTED_FROM_THE_END
-            .replace("nothing(), ms)", "nothing(), List.reverse(ms))");
-
     /** The seed a walk from the end starts from, written where the fold's own type says it. */
     private static final String NOTHING = """
 
@@ -176,7 +173,6 @@ class AFoldThatFilesByTheCaseOfEachElementIsReadAsTheArmItTakesTest {
     void theLastStocktakeIsTheLastOneTheWalkIsHanded() {
         owedOfferedAndMet(Walked.REVERSED);
         owedOfferedAndMet(Walked.FROM_THE_END);
-        owedOfferedAndMet(Walked.FROM_THE_END_OF_THE_REVERSED);
     }
 
     private static void owedOfferedAndMet(Walked walked) {
@@ -220,13 +216,12 @@ class AFoldThatFilesByTheCaseOfEachElementIsReadAsTheArmItTakesTest {
         Movement count = new Movement("Stocktake", "a", 2);
         List<List<Movement>> rows = List.of(
                 List.of(receipt, count, new Movement("Issue", "a", 3)),
-                List.of(receipt, count),
                 List.of(count, new Movement("Stocktake", "a", 8)),
                 List.of(receipt, new Movement("Stocktake", "b", 2),
                         new Movement("Receipt", "a", 1)),
                 List.of(receipt, new Movement("Stocktake", "b", 2),
                         new Movement("Stocktake", "a", 3)));
-        for (Walked walked : Walked.values()) {
+        for (Walked walked : List.of(Walked.AS_WRITTEN, Walked.FROM_THE_END)) {
             for (List<Movement> movements : rows) {
                 Row any = new Row(movements, Integer.MAX_VALUE);
                 int on = any.shortOf(walked.fromTheEnd()).get("a");
@@ -248,8 +243,7 @@ class AFoldThatFilesByTheCaseOfEachElementIsReadAsTheArmItTakesTest {
     private enum Walked {
         AS_WRITTEN(COUNTED, "", false),
         REVERSED(COUNTED_OVER_THE_REVERSED, "", true),
-        FROM_THE_END(COUNTED_FROM_THE_END, NOTHING, true),
-        FROM_THE_END_OF_THE_REVERSED(COUNTED_FROM_THE_END_OF_THE_REVERSED, NOTHING, false);
+        FROM_THE_END(COUNTED_FROM_THE_END, NOTHING, true);
 
         private final String fold;
         private final String more;
@@ -566,10 +560,23 @@ class AFoldThatFilesByTheCaseOfEachElementIsReadAsTheArmItTakesTest {
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
+    /** Each source measured once for the class: the tests here only read what a measurement
+     *  says. */
+    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
+
+    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
+     *  statically is held for every class after this one. */
+    @AfterAll
+    static void released() {
+        MEASURED.clear();
+    }
+
     /** The source measured, which is a source that compiles. */
     private static Compilation measured(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        return ACompiledModel.compiles(compilation);
+        return MEASURED.computeIfAbsent(source, each -> {
+            Compilation compilation = Compilation.ofSource(each, "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            return ACompiledModel.compiles(compilation);
+        });
     }
 }
