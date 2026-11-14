@@ -11,13 +11,11 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 
 /**
@@ -52,14 +50,15 @@ public final class LocalRepository implements AutoCloseable {
     private final Map<String, Serving> serving = new ConcurrentHashMap<>();
     private final List<String> asked = new CopyOnWriteArrayList<>();
 
-    /** What a client that asks for poms one at a time costs the build, where it is not going to ask
-     *  for them together. Nothing that is answered waits on it. */
-    private static final long HUNG_MILLIS = 20_000;
-
-    private volatile CountDownLatch pomsTogether;
-    private volatile int pomsHeld;
-    private final AtomicInteger pomsArrived = new AtomicInteger();
-    private final AtomicInteger pomsReleasedTogether = new AtomicInteger();
+    /** Guards the poms held for one another: their width, how many are left to answer, how many
+     *  are waiting now, and the groups already let go. */
+    private final Object pomGate = new Object();
+    private int pomWidth;
+    private int pomsUnanswered;
+    private int pomsWaiting;
+    private int pomGroups;
+    private boolean closed;
+    private final List<Integer> pomsLetGoTogether = new ArrayList<>();
 
     private LocalRepository(HttpServer server) {
         this.server = server;
@@ -175,19 +174,45 @@ public final class LocalRepository implements AutoCloseable {
     }
 
     /**
-     * Begins the answer for no pom until {@code together} poms have been asked for and are waiting,
-     * as a repository far away leaves a client that asks one at a time waiting for each. A client
-     * that asks one at a time never has {@code together} waiting, and the first pom is then given
-     * up on after {@link #HUNG_MILLIS}.
+     * Begins the answer for no pom until as many are waiting as there are to ask for in a group:
+     * {@code width}, or the poms still unanswered where that is fewer, out of {@code poms} in all.
+     * A repository far away leaves a client that asks one at a time waiting for each, and such a
+     * client never has a group waiting, so its first pom is never answered. A test that holds poms
+     * is bounded by its own timeout.
      */
-    public void holdPomsUntilTogether(int together) {
-        pomsHeld = together;
-        pomsTogether = new CountDownLatch(together);
+    public void holdPomsInGroupsOf(int width, int poms) {
+        synchronized (pomGate) {
+            pomWidth = width;
+            pomsUnanswered = poms;
+        }
     }
 
-    /** Whether the poms held by {@link #holdPomsUntilTogether} were all waiting at once. */
-    public boolean pomsWereAskedTogether() {
-        return pomsReleasedTogether.get() == pomsHeld;
+    /** How many poms were waiting together each time the poms held by {@link #holdPomsInGroupsOf}
+     *  were let go, in the order they were. */
+    public List<Integer> pomsLetGoTogether() {
+        synchronized (pomGate) {
+            return List.copyOf(pomsLetGoTogether);
+        }
+    }
+
+    private void holdPom() throws InterruptedException {
+        synchronized (pomGate) {
+            if (pomWidth == 0) {
+                return;
+            }
+            int mine = pomGroups;
+            pomsWaiting++;
+            if (pomsWaiting >= Math.min(pomWidth, pomsUnanswered)) {
+                pomsLetGoTogether.add(pomsWaiting);
+                pomsUnanswered -= pomsWaiting;
+                pomsWaiting = 0;
+                pomGroups++;
+                pomGate.notifyAll();
+            }
+            while (pomGroups == mine && !closed) {
+                pomGate.wait();
+            }
+        }
     }
 
     public void put(String path, String content) {
@@ -204,13 +229,9 @@ public final class LocalRepository implements AutoCloseable {
         String path = exchange.getRequestURI().getPath();
         asked.add(path);
         String file = path.startsWith(ROOT) ? path.substring(ROOT.length()) : path;
-        CountDownLatch together = pomsTogether;
-        if (file.endsWith(".pom") && together != null && pomsArrived.incrementAndGet() <= pomsHeld) {
-            together.countDown();
+        if (file.endsWith(".pom")) {
             try {
-                if (together.await(HUNG_MILLIS, TimeUnit.MILLISECONDS)) {
-                    pomsReleasedTogether.incrementAndGet();
-                }
+                holdPom();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
@@ -246,6 +267,10 @@ public final class LocalRepository implements AutoCloseable {
 
     @Override
     public void close() {
+        synchronized (pomGate) {
+            closed = true;
+            pomGate.notifyAll();
+        }
         server.stop(0);
     }
 }

@@ -3,6 +3,7 @@ package souther.cli.backend;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
@@ -190,26 +191,33 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
     }
 
     @Test
+    @Timeout(20)
     void releasesAreAskedForSeveralAtATimeAndTheNewestBuiltAgainstThisSoutherIsTaken()
             throws Exception {
+        // Two windows of eight and a narrower last one, with the release taken in the last. The
+        // width is the claim, so it is written here and not read from Central.
+        int window = 8;
+        int releases = 2 * window + 5;
         List<String> versions = new ArrayList<>();
-        for (int i = 0; i < 16; i++) {
+        for (int i = 0; i < releases; i++) {
             versions.add("0." + i + ".0");
             repository.pom(WASM, "0." + i + ".0", LocalRepository.builtAgainst(WASM,
-                    "0." + i + ".0", i == 3 || i == 1 ? HERE : OTHER));
+                    "0." + i + ".0", i == 2 || i == 1 ? HERE : OTHER));
         }
         repository.metadata(WASM, versions.toArray(String[]::new));
-        repository.jar(WASM, "0.3.0", "cli", jar("third", "wasm", HERE));
-        // No pom is answered before several are waiting at once, which only a client that asks for
-        // them together ever has.
-        repository.holdPomsUntilTogether(4);
+        repository.jar(WASM, "0.2.0", "cli", jar("third", "wasm", HERE));
+        // A pom is answered only when every pom of its window is waiting, which only a client that
+        // asks for a whole window at once ever has; a client that asks one at a time, or only the
+        // first window together, is never answered and ends at the test's timeout.
+        repository.holdPomsInGroupsOf(window, releases);
 
         BackendFetch.Fetched fetched = assertInstanceOf(BackendFetch.Fetched.class,
                 fetch("wasm"));
 
-        assertEquals("0.3.0", fetched.release().version());
-        assertTrue(repository.pomsWereAskedTogether(),
-                "poms asked for one at a time are never several waiting at once");
+        assertEquals("0.2.0", fetched.release().version());
+        assertEquals(List.of(window, window, releases - 2 * window),
+                repository.pomsLetGoTogether(),
+                "each window of poms was asked for all at once");
     }
 
     @Test
