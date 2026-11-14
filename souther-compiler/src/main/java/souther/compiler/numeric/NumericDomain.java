@@ -998,7 +998,7 @@ public final class NumericDomain<A> {
      * each reduction of the rules of the part it is of; null where none of them bounds it above.
      */
     private ExactCut tightestBound(Split<A> split, int part, Map<A, ExactRatio> piece) {
-        ExactCut best = highestProven(new Goal<>(piece, ExactRatio.ZERO), true);
+        ExactCut best = highestProven(Goal.of(piece, ExactRatio.ZERO), true);
         if (part == NO_PART) {
             return best;
         }
@@ -1007,7 +1007,7 @@ public final class NumericDomain<A> {
                     reduced.rules().put(new ReducedRules.Goal<>(piece, ExactRatio.ZERO));
             if (freed != null && freed.coefs().keySet().stream().allMatch(spaces::contains)) {
                 ExactCut bound = reduced.over().highestProven(
-                        new Goal<>(freed.coefs(), freed.constant()), true);
+                        Goal.of(freed.coefs(), freed.constant()), true);
                 best = tighter(best, bound);
             }
         }
@@ -1227,7 +1227,7 @@ public final class NumericDomain<A> {
 
     /** {@code form - at}, which is what is bounded to decide whether {@code form <= at}. */
     private Goal<A> below(CanonicalForm<A> form, ExactRatio at) {
-        return new Goal<>(form.coefs(), at.negated());
+        return Goal.of(form.coefs(), at.negated());
     }
 
     /**
@@ -1243,7 +1243,7 @@ public final class NumericDomain<A> {
 
     /** A form's weights with the positions it does not actually weigh left out. A form composed by
      *  the arithmetic drops those as it goes; one built by naming its coefficients need not have. */
-    private Map<A, ExactRatio> weighed(LinearForm<A> f) {
+    private static <A> Map<A, ExactRatio> weighed(LinearForm<A> f) {
         Map<A, ExactRatio> coefs = new LinkedHashMap<>();
         f.coefs().forEach((atom, coef) -> {
             if (!coef.isZero()) {
@@ -1254,12 +1254,20 @@ public final class NumericDomain<A> {
     }
 
     /** A goal as a weighted sum and a constant, which is what a comparison against nought is. */
-    private record Goal<A>(Map<A, ExactRatio> coefs, ExactRatio constant) {
+    private record Goal<A>(Weighed<A> weighed, ExactRatio constant) {
+
+        static <A> Goal<A> of(Map<A, ExactRatio> coefs, ExactRatio constant) {
+            return new Goal<>(Weighed.of(coefs), constant);
+        }
+
+        Map<A, ExactRatio> coefs() {
+            return weighed.coefs();
+        }
 
         Goal<A> negated() {
             Map<A, ExactRatio> out = new LinkedHashMap<>();
-            coefs.forEach((atom, coef) -> out.put(atom, coef.negated()));
-            return new Goal<>(out, constant.negated());
+            coefs().forEach((atom, coef) -> out.put(atom, coef.negated()));
+            return of(out, constant.negated());
         }
     }
 
@@ -1272,7 +1280,12 @@ public final class NumericDomain<A> {
      * far as {@code a - b}, and an answer about the second handed back for the first is out by a
      * factor with nothing to say it is.
      */
-    private record Asked<A>(Goal<A> goal, ExactRatio by) {}
+    private record Asked<A>(Goal<A> goal, Goal<A> negated, ExactRatio by) {
+
+        static <A> Asked<A> of(Goal<A> goal, ExactRatio by) {
+            return new Asked<>(goal, goal.negated(), by);
+        }
+    }
 
     /**
      * A question, in the one form every way of asking it comes to.
@@ -1287,7 +1300,7 @@ public final class NumericDomain<A> {
      * <p>Divided through by what the weights share, which is a positive number and so leaves which
      * side of nought the question is about.
      */
-    private Asked<A> goalOf(LinearForm<A> f) {
+    private static <A> Asked<A> goalOf(LinearForm<A> f) {
         Map<A, ExactRatio> coefs = weighed(f);
         ExactRatio constant = f.constant();
         // Canonicalised by the one thing that canonicalises, so a question and a rule that say the
@@ -1295,11 +1308,11 @@ public final class NumericDomain<A> {
         // would be a second account of what one rule is — which is the thing being removed.
         return switch (CanonicalForm.of(coefs)) {
             case CanonicalForm.NoTerms<A> _ ->
-                    new Asked<>(new Goal<>(Map.of(), constant), ExactRatio.ONE);
+                    Asked.of(Goal.of(Map.of(), constant), ExactRatio.ONE);
             case CanonicalForm.Unheld<A> _ -> null;
             case CanonicalForm.Scaled<A> scaled -> switch (constant.dividedBy(scaled.by())) {
                 case ExactAnswer.Held<ExactRatio> held ->
-                        new Asked<>(new Goal<>(scaled.form().coefs(), held.value()), scaled.by());
+                        Asked.of(Goal.of(scaled.form().coefs(), held.value()), scaled.by());
                 case ExactAnswer.Unheld<ExactRatio> _ -> null;
             };
         };
@@ -1353,11 +1366,91 @@ public final class NumericDomain<A> {
             if (exact instanceof PrefixBasis.Highest.Unbounded) {
                 return null;
             }
+            PrefixBasis.Highest byTheParts = highestAcrossTheParts(goal);
+            if (byTheParts instanceof PrefixBasis.Highest.Within within) {
+                return within.at();
+            }
+            if (byTheParts instanceof PrefixBasis.Highest.Unbounded) {
+                return null;
+            }
         }
         FormReach<A> reading = readingFor(goal.coefs());
         return withRules
                 ? reading.most(goal.coefs(), goal.constant())
                 : reading.mostFromTheEndsAndTheDifferences(goal.coefs(), goal.constant());
+    }
+
+    /**
+     * How high a goal over positions of several parts comes to, where every part says how high its
+     * own positions' share of it comes to, exactly; not answered otherwise.
+     *
+     * <p>The parts share no position and no rule names positions of two of them, so what the rules
+     * leave is the product of what each part leaves, and a sum over the product is as high as the
+     * parts' shares are, added. A part says its share exactly where it was closed in a basis that
+     * answers the share ({@link PrefixBasis#highest}), or where every one of its rules bounds one
+     * position and its positions are left their ends and nothing more. What the reading of all
+     * the rules ({@link FormReach}) comes to is never lower than this, so where a part says its
+     * share exactly the rules are not read for it at all. Asked in {@link #highestProven}, with the
+     * basis, so that {@link #boundsOf(LinearForm)}, {@link #entails} and {@link #refutes} read one
+     * statement of how high a form comes to.
+     */
+    private PrefixBasis.Highest highestAcrossTheParts(Goal<A> goal) {
+        if (isBottom()) {
+            return PrefixBasis.Highest.NOT_ANSWERED;
+        }
+        List<ClosedStates.Parted.Share<A>> shares = parted().sharedOutByPart(goal.coefs());
+        if (shares == null || shares.size() < 2) {
+            return PrefixBasis.Highest.NOT_ANSWERED;
+        }
+        ExactCut sum = ExactCut.inclusive(goal.constant());
+        for (ClosedStates.Parted.Share<A> share : shares) {
+            PrefixBasis.Highest part = shareOf(share);
+            if (part instanceof PrefixBasis.Highest.Within within) {
+                if (!(ExactCut.meetingBoth(sum, within.at()) instanceof ExactAnswer.Held<ExactCut> held)) {
+                    return PrefixBasis.Highest.NOT_ANSWERED;
+                }
+                sum = held.value();
+            } else if (part instanceof PrefixBasis.Highest.Unbounded) {
+                return PrefixBasis.Highest.UNBOUNDED;
+            } else {
+                return PrefixBasis.Highest.NOT_ANSWERED;
+            }
+        }
+        return new PrefixBasis.Highest.Within(sum);
+    }
+
+    /** How high one part's share of a goal comes to, exactly where the part says so. */
+    private PrefixBasis.Highest shareOf(ClosedStates.Parted.Share<A> share) {
+        ClosedState<A> closure = share.closure();
+        if (closure.holdsNothing()) {
+            return PrefixBasis.Highest.NOT_ANSWERED;
+        }
+        PrefixBasis.Highest answered =
+                closure.highestInBasis(Weighed.of(share.coefs()), ExactRatio.ZERO);
+        if (!(answered instanceof PrefixBasis.Highest.NotAnswered)) {
+            return answered;
+        }
+        for (AffineConstraint<A> rule : share.rules()) {
+            if (!(rule instanceof AffineConstraint.HalfSpace<A> half) || half.form().coefs().size() != 1) {
+                return PrefixBasis.Highest.NOT_ANSWERED;
+            }
+        }
+        ExactCut sum = ExactCut.inclusive(ExactRatio.ZERO);
+        for (Map.Entry<A, ExactRatio> each : share.coefs().entrySet()) {
+            boolean above = each.getValue().signum() > 0;
+            ExactCut end = above ? closure.box().mostOf(each.getKey())
+                    : closure.box().leastOf(each.getKey());
+            if (end == null) {
+                return PrefixBasis.Highest.UNBOUNDED;
+            }
+            ExactRatio weighed = each.getValue().times(end.at()).orNull();
+            if (weighed == null || !(ExactCut.meetingBoth(sum, new ExactCut(weighed, end.inclusive()))
+                    instanceof ExactAnswer.Held<ExactCut> held)) {
+                return PrefixBasis.Highest.NOT_ANSWERED;
+            }
+            sum = held.value();
+        }
+        return new PrefixBasis.Highest.Within(sum);
     }
 
     /**
@@ -1372,9 +1465,19 @@ public final class NumericDomain<A> {
      * that keeps a part at a time giving a domain the same rules the same to say.
      */
     private PrefixBasis.Highest highestInTheBasis(Goal<A> goal) {
+        List<ClosedState<A>> based = parted().closuresInABasis();
+        if (based != null) {
+            for (ClosedState<A> each : based) {
+                PrefixBasis.Highest answer = each.highestInBasis(goal.weighed(), goal.constant());
+                if (!(answer instanceof PrefixBasis.Highest.NotAnswered)) {
+                    return answer;
+                }
+            }
+            return PrefixBasis.Highest.NOT_ANSWERED;
+        }
         ClosedState<A> closure = parted().closureWeighing(goal.coefs().keySet());
         return closure == null ? PrefixBasis.Highest.NOT_ANSWERED
-                : closure.highestInBasis(goal.coefs(), goal.constant());
+                : closure.highestInBasis(goal.weighed(), goal.constant());
     }
 
     /**
@@ -1520,16 +1623,45 @@ public final class NumericDomain<A> {
      * caller looking for somewhere to put a value asks.
      */
     public Bounds boundsOf(LinearForm<A> f) {
+        return boundsOf(prepare(f));
+    }
+
+    /**
+     * What a form asks, worked out: the form divided through by what its weights share, and the
+     * same negated, for whoever asks the one form of one domain after another and would otherwise
+     * have each of them work it out again. Of the form and of no domain, so it is made once and kept
+     * by whoever knows the form is asked again — and not by a table of every form asked, which a
+     * form asked once would fill.
+     *
+     * @param <A> what a position is
+     */
+    public static final class Prepared<A> {
+
+        /** Null where the form's lowest terms have no representation. */
+        private final Asked<A> asked;
+
+        private Prepared(Asked<A> asked) {
+            this.asked = asked;
+        }
+    }
+
+    /** {@code f} worked out for being asked of a domain ({@link #boundsOf(Prepared)}). */
+    public static <A> Prepared<A> prepare(LinearForm<A> f) {
+        return new Prepared<>(goalOf(f));
+    }
+
+    /** The same as {@link #boundsOf(LinearForm)}, of a form already prepared. */
+    public Bounds boundsOf(Prepared<A> form) {
         if (isBottom()) {
             return new Bounds(null, null);
         }
-        Asked<A> asked = goalOf(f);
+        Asked<A> asked = form.asked;
         if (asked == null) {
             // A form whose lowest terms have no representation is one nothing here can bound.
             return new Bounds(null, null);
         }
         ExactCut highest = highestProven(asked.goal(), true);
-        ExactCut lowest = highestProven(asked.goal().negated(), true);
+        ExactCut lowest = highestProven(asked.negated(), true);
         // Back into the units the caller asked in. The question was answered about the form divided
         // through by what its weights share, and the caller wants the form it wrote.
         return new Bounds(

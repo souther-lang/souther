@@ -2,6 +2,7 @@ package souther.compiler.numeric;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -9,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
@@ -57,6 +59,9 @@ final class ClosureQuestion<A> {
     /** Worked out on the first asking. Comparing two of these walks every rule, and so would this. */
     private int hash;
 
+    /** The positions in the order, for a question that follows this one; null until asked for. */
+    private volatile List<A> sorted;
+
     private ClosureQuestion(List<AffineConstraint<A>> rules, Map<A, Granularity> spacing,
                            Map<A, Integer> place, CanonicalOrder<A> placedBy) {
         this.rules = rules;
@@ -90,6 +95,128 @@ final class ClosureQuestion<A> {
                                      Function<Set<A>, Map<A, Integer>> placing) {
         Set<A> weighed = new LinkedHashSet<>();
         rules.forEach(each -> weighed.addAll(each.form().coefs().keySet()));
+        return stated(rules, weighed, spacing, order, placing);
+    }
+
+    /**
+     * The question {@code rules} put, which are the very rules of {@code before} followed by others,
+     * with the positions of {@code before} taken as they are and only the rules after them read for
+     * what they weigh; the question {@link #of} puts for the same rules where they are not.
+     */
+    static <A> ClosureQuestion<A> following(ClosureQuestion<A> before,
+                                            List<AffineConstraint<A>> rules,
+                                            Function<A, Granularity> spacing,
+                                            CanonicalOrder<A> order,
+                                            Function<Set<A>, Map<A, Integer>> placing) {
+        int had = before == null ? 0 : before.rules.size();
+        if (before == null || rules.size() <= had) {
+            return of(rules, spacing, order, placing);
+        }
+        for (int at = 0; at < had; at++) {
+            if (rules.get(at) != before.rules.get(at)) {
+                return of(rules, spacing, order, placing);
+            }
+        }
+        Set<A> weighed = new LinkedHashSet<>(before.place.keySet());
+        rules.subList(had, rules.size()).forEach(each -> weighed.addAll(each.form().coefs().keySet()));
+        Placed<A> placed = placedFrom(before, weighed, order);
+        if (placed == null) {
+            return stated(rules, weighed, spacing, order, placing);
+        }
+        ClosureQuestion<A> out = stated(rules, weighed, spacing, order, _ -> placed.place());
+        out.sorted = placed.sorted();
+        return out;
+    }
+
+    /** Where each position is, and the positions in the order they are. */
+    private record Placed<A>(Map<A, Integer> place, List<A> sorted) {}
+
+    /**
+     * Where {@code order} puts each of {@code weighed}, which are the positions of {@code before} and
+     * some more, worked out from where it put the ones before: only a position that was not there is
+     * compared, with as many of the others as it takes to find where it goes — and not every
+     * position with the ones near it, which is what {@link #placesIn} does for the positions of
+     * a question that has none to follow. Null where {@code before} was placed by another order.
+     *
+     * <p>The places are the ones {@link #placesIn} gives: how many of the others come before a
+     * position, two that the order cannot tell apart sharing one. Two positions that were next to
+     * one another before and are still are told apart as they were.
+     */
+    private static <A> Placed<A> placedFrom(ClosureQuestion<A> before, Set<A> weighed,
+                                           CanonicalOrder<A> order) {
+        if (before.placedBy != order) {
+            return null;
+        }
+        List<A> added = new ArrayList<>();
+        for (A position : weighed) {
+            if (!before.place.containsKey(position)) {
+                added.add(position);
+            }
+        }
+        if (before.place.size() + added.size() != weighed.size()) {
+            return null;
+        }
+        List<A> merged = new ArrayList<>(before.positionsInOrder());
+        added.sort(order);
+        for (A position : added) {
+            int low = 0;
+            int high = merged.size();
+            while (low < high) {
+                int middle = (low + high) >>> 1;
+                if (order.compare(position, merged.get(middle)) < 0) {
+                    high = middle;
+                } else {
+                    low = middle + 1;
+                }
+            }
+            merged.add(low, position);
+        }
+        Map<A, Integer> place = HashMap.newHashMap(merged.size());
+        for (int at = 0; at < merged.size(); at++) {
+            A here = merged.get(at);
+            int number = at;
+            if (at > 0) {
+                A previous = merged.get(at - 1);
+                boolean together = (before.place.containsKey(here)
+                        && before.place.containsKey(previous))
+                        ? before.place.get(previous).equals(before.place.get(here))
+                        : order.compare(previous, here) == 0;
+                if (together) {
+                    number = place.get(previous);
+                }
+            }
+            place.put(here, number);
+        }
+        PLACED_FROM_BEFORE.increment();
+        return new Placed<>(Map.copyOf(place), merged);
+    }
+
+    private static final LongAdder PLACED_FROM_BEFORE = new LongAdder();
+
+    /**
+     * How many questions have been placed from the question before them, for a test holding that a
+     * question made from another is placed by where the positions it adds go and not by sorting all
+     * of them again: that is a shape, and the question is the same either way.
+     */
+    static long placedFromBefore() {
+        return PLACED_FROM_BEFORE.sum();
+    }
+
+    /** The positions in the order, the ones it cannot tell apart next to one another. */
+    private List<A> positionsInOrder() {
+        List<A> held = sorted;
+        if (held == null) {
+            held = new ArrayList<>(place.keySet());
+            held.sort(Comparator.comparingInt(place::get));
+            sorted = held;
+        }
+        return held;
+    }
+
+    private static <A> ClosureQuestion<A> stated(List<AffineConstraint<A>> rules, Set<A> weighed,
+                                                 Function<A, Granularity> spacing,
+                                                 CanonicalOrder<A> order,
+                                                 Function<Set<A>, Map<A, Integer>> placing) {
         Map<A, Granularity> spaced = new HashMap<>();
         for (A position : weighed) {
             Granularity it = spacing.apply(position);

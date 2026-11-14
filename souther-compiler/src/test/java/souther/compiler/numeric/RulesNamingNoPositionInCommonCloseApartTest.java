@@ -461,6 +461,13 @@ class RulesNamingNoPositionInCommonCloseApartTest {
             }
         }
         int made = parts.size();
+        int[] firstAt = new int[made];
+        int[] lastAt = new int[made];
+        for (int at = 0; at < made; at++) {
+            firstAt[at] = first.indexOf(parts.get(at).getFirst());
+            lastAt[at] = first.indexOf(parts.get(at).getLast());
+        }
+        int partsThereWere = made;
         Set<Integer> reachedAtAll = new LinkedHashSet<>();
         boolean joined = false;
         for (AffineConstraint<String> later : both.subList(cut, both.size())) {
@@ -470,13 +477,36 @@ class RulesNamingNoPositionInCommonCloseApartTest {
                     reached.add(partOf.get(position));
                 }
             });
+            int part;
             if (reached.size() > 1) {
                 places.joinedTwo++;
-                joined = true;
-                break;
-            }
-            int part;
-            if (reached.isEmpty()) {
+                // Parts the rules said since made are joined to any part, and a part there was is
+                // joined to another only where the rules of the two do not interleave.
+                part = reached.stream().min(Integer::compare).orElseThrow();
+                for (int each : reached) {
+                    if (each == part) {
+                        continue;
+                    }
+                    if (part < partsThereWere && each < partsThereWere) {
+                        if (firstAt[each] <= lastAt[part]) {
+                            joined = true;
+                            break;
+                        }
+                        lastAt[part] = Math.max(lastAt[part], lastAt[each]);
+                    }
+                    for (Map.Entry<String, Integer> entry : partOf.entrySet()) {
+                        if (entry.getValue() == each) {
+                            entry.setValue(part);
+                        }
+                    }
+                    if (reachedAtAll.remove(each)) {
+                        reachedAtAll.add(part);
+                    }
+                }
+                if (joined) {
+                    break;
+                }
+            } else if (reached.isEmpty()) {
                 places.stoodApart++;
                 part = made++;
             } else {

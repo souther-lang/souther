@@ -7,9 +7,13 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableSet;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -328,15 +332,16 @@ public final class ClosedStates {
                 continue;
             }
             everyPartLent = false;
-            ClosureQuestion<A> asked =
-                    ClosureQuestion.of(lent.parts.get(at), spacing, order, placing);
+            ClosureQuestion<A> asked = ClosureQuestion.following(lent.grownFrom.get(at),
+                    lent.parts.get(at), spacing, order, placing);
             questions.add(asked);
             closed.add(of(asked, lent.closed.get(at)));
         }
         if (everyPartLent && lent.complete) {
             return lent;
         }
-        return new Parted<>(this, rules, lent.parts, questions, closed, lent.partOf, null, true);
+        return new Parted<>(this, rules, lent.parts, questions, closed, lent.partOf, null, true,
+                Map.of());
     }
 
     /**
@@ -372,10 +377,14 @@ public final class ClosedStates {
         /** Whether every part has its closure, which is what a closure of all the rules is. */
         private final boolean complete;
 
+        /** The question each part that these rules grew was asked as before they did, by the part. */
+        private final Map<Integer, ClosureQuestion<A>> grownFrom;
+
         private Parted(ClosedStates owner, List<AffineConstraint<A>> rules,
                        List<List<AffineConstraint<A>>> parts, List<ClosureQuestion<A>> questions,
                        List<ClosedState<A>> closed, Map<A, Integer> partOf,
-                       ClosedState<A> state, boolean complete) {
+                       ClosedState<A> state, boolean complete,
+                       Map<Integer, ClosureQuestion<A>> grownFrom) {
             this.owner = owner;
             this.rules = rules;
             this.parts = parts;
@@ -384,12 +393,13 @@ public final class ClosedStates {
             this.partOf = Map.copyOf(partOf);
             this.state = state;
             this.complete = complete;
+            this.grownFrom = grownFrom;
         }
 
         /** A closure worked out in one piece, with no parts to lend. */
         private static <A> Parted<A> whole(ClosedState<A> state) {
             return new Parted<>(null, List.of(), List.of(), List.of(), List.of(), Map.of(), state,
-                    true);
+                    true, Map.of());
         }
 
         /** {@code parts} of {@code rules}, none of them asked yet. */
@@ -405,7 +415,8 @@ public final class ClosedStates {
                 unasked.add(null);
                 unclosed.add(null);
             }
-            return new Parted<>(owner, rules, parts, unasked, unclosed, partOf, null, false);
+            return new Parted<>(owner, rules, parts, unasked, unclosed, partOf, null, false,
+                    Map.of());
         }
 
         /** The parts the rules fall into, which is none where they were closed in one piece. */
@@ -514,6 +525,62 @@ public final class ClosedStates {
         }
 
         /**
+         * The closures of the parts that were closed in a basis, which are the only ones that can
+         * answer a form from one; null where the rules were closed in one piece, or the parts are
+         * not all asked yet. A form weighing a position of two parts is answered by none of them,
+         * and one weighing a position of no part by none, so asking each of these is asking the
+         * part weighing them all.
+         */
+        public List<ClosedState<A>> closuresInABasis() {
+            if (owner == null || !complete) {
+                return null;
+            }
+            List<ClosedState<A>> held = based;
+            if (held == null) {
+                held = new ArrayList<>();
+                for (ClosedState<A> each : closed) {
+                    if (each.isClosedInABasis()) {
+                        held.add(each);
+                    }
+                }
+                based = held;
+            }
+            return held;
+        }
+
+        private volatile List<ClosedState<A>> based;
+
+        /**
+         * What one part of the rules is asked of a form that weighs positions of several: the part's
+         * closure, its rules, and the weights of the positions of the form that are the part's.
+         */
+        public record Share<A>(ClosedState<A> closure, List<AffineConstraint<A>> rules,
+                               Map<A, ExactRatio> coefs) {}
+
+        /**
+         * {@code coefs} shared out among the parts that weigh the positions, each part with its own
+         * positions' weights, or null where a position is of no part or the rules were closed in one
+         * piece. Of the parts there are and not of the rules: no rule is read.
+         */
+        public List<Share<A>> sharedOutByPart(Map<A, ExactRatio> coefs) {
+            if (owner == null || !complete) {
+                return null;
+            }
+            Map<Integer, Map<A, ExactRatio>> byPart = new LinkedHashMap<>();
+            for (Map.Entry<A, ExactRatio> each : coefs.entrySet()) {
+                Integer at = partOf.get(each.getKey());
+                if (at == null) {
+                    return null;
+                }
+                byPart.computeIfAbsent(at, _ -> new HashMap<>()).put(each.getKey(), each.getValue());
+            }
+            List<Share<A>> out = new ArrayList<>(byPart.size());
+            byPart.forEach((at, weights) -> out.add(new Share<>(closed.get(at), parts.get(at),
+                    Map.copyOf(weights))));
+            return out;
+        }
+
+        /**
          * {@code order}, walking a form whose positions are all of one part by the places that part
          * was asked with ({@link PartedOrder}), and {@code order} itself where the rules were not
          * parted. Made for the rules as they stand, from what the closure already holds.
@@ -537,9 +604,12 @@ public final class ClosedStates {
          * order of their first rule with each part's rules in the order they were said
          * ({@link ClosureQuestion#independentRules}). So a later rule weighing positions of one part
          * goes at the end of that part, and one weighing no position of any goes into a part after
-         * all of these. A rule weighing positions of two parts joins them, and where the rules of
-         * the two then go is a merge this does not make: it is null, and the parts are worked out
-         * from the rules.
+         * all of these. A rule weighing positions of two parts joins them: where at most one of them
+         * is a part there was, the others being parts the rules said since made, the rules of all of
+         * them go after the rules of that one in the order they were said, which is the order the
+         * parts of all the rules hold them in. Where two parts there were are joined, the rules of
+         * the two are a merge this does not make: it is null, and the parts are worked out from the
+         * rules.
          *
          * <p>Null as well where {@code more} does not start with these rules, the very ones in the
          * same order, or is kept by another owner. Whether a part not reached still puts its
@@ -558,62 +628,175 @@ public final class ClosedStates {
             if (more.size() == rules.size()) {
                 return this;
             }
-            Map<A, Integer> into = new HashMap<>(partOf);
-            List<List<AffineConstraint<A>>> grown = new ArrayList<>(parts);
-            List<ClosureQuestion<A>> asked = new ArrayList<>(questions);
+            int had = parts.size();
+            int added = more.size() - rules.size();
+            // The parts the rules said since fall into, found before any list is grown: the parts
+            // there were keep the numbers they had, and the others are numbered above them. Two of
+            // the parts there were joined by a rule said since is a merge of lists that are each
+            // in the order of their own rules, which is not made here.
+            int[] joinedTo = new int[had + added];
+            for (int at = 0; at < joinedTo.length; at++) {
+                joinedTo[at] = at;
+            }
+            // Where each part there was begins and ends among the rules, for the one case of two of
+            // them joined that is a merge of lists whose rules do not interleave. Worked out
+            // when two are first joined.
+            int[] firstAt = null;
+            int[] lastAt = null;
+            Map<A, Integer> namedBy = new HashMap<>();
+            int[] ruleIn = new int[added];
+            int numbered = had;
+            for (int at = 0; at < added; at++) {
+                AffineConstraint<A> later = more.get(rules.size() + at);
+                NavigableSet<Integer> reached = new TreeSet<>();
+                reachedBy(later, partOf, namedBy, joinedTo, reached);
+                int root = reached.isEmpty() ? numbered++ : reached.first();
+                for (int other : reached.tailSet(root + 1)) {
+                    if (other < had && root < had) {
+                        if (firstAt == null) {
+                            firstAt = new int[had];
+                            lastAt = new int[had];
+                            if (!whereThePartsAre(firstAt, lastAt)) {
+                                return null;
+                            }
+                        }
+                        if (firstAt[other] <= lastAt[root]) {
+                            return null;
+                        }
+                        lastAt[root] = Math.max(lastAt[root], lastAt[other]);
+                    }
+                    joinedTo[other] = root;
+                }
+                naming(later, root, partOf, namedBy);
+                ruleIn[at] = root;
+            }
+            // The parts there were that are not joined to an earlier one, in their order: a part
+            // joined to an earlier one is gone from here, and the parts after it are one place
+            // sooner.
+            List<List<AffineConstraint<A>>> grown = new ArrayList<>(had);
+            List<ClosureQuestion<A>> asked = new ArrayList<>(had);
+            List<ClosedState<A>> kept = new ArrayList<>(had);
+            int[] placed = new int[had];
+            for (int part = 0; part < had; part++) {
+                if (rootOf(joinedTo, part) == part) {
+                    placed[part] = grown.size();
+                    grown.add(parts.get(part));
+                    asked.add(questions.get(part));
+                    kept.add(closed.get(part));
+                }
+            }
+            Map<A, Integer> into = HashMap.newHashMap(partOf.size());
+            for (Map.Entry<A, Integer> each : partOf.entrySet()) {
+                into.put(each.getKey(), placed[rootOf(joinedTo, each.getValue())]);
+            }
+            for (int part = 0; part < had; part++) {
+                int root = rootOf(joinedTo, part);
+                if (root != part) {
+                    placed[part] = placed[root];
+                }
+            }
             // Which parts hold a list of their own here, to be added to; the rest are this one's.
             BitSet ownList = new BitSet();
-            for (int at = rules.size(); at < more.size(); at++) {
-                AffineConstraint<A> rule = more.get(at);
-                int part = partWeighedBy(rule, into);
-                if (part == SEVERAL) {
-                    return null;
+            Map<Integer, ClosureQuestion<A>> was = new HashMap<>();
+            for (int part = 0; part < had; part++) {
+                if (rootOf(joinedTo, part) != part) {
+                    int into2 = placed[part];
+                    owning(into2, grown, asked, ownList, was);
+                    grown.get(into2).addAll(parts.get(part));
                 }
-                if (part == NONE) {
+            }
+            Map<Integer, Integer> numberOf = new HashMap<>();
+            for (int at = 0; at < added; at++) {
+                AffineConstraint<A> rule = more.get(rules.size() + at);
+                int root = rootOf(joinedTo, ruleIn[at]);
+                int part;
+                if (root < had) {
+                    part = placed[root];
+                    owning(part, grown, asked, ownList, was);
+                } else if (numberOf.containsKey(root)) {
+                    part = numberOf.get(root);
+                } else {
                     part = grown.size();
+                    numberOf.put(root, part);
                     grown.add(new ArrayList<>());
                     asked.add(null);
-                } else if (!ownList.get(part)) {
-                    grown.set(part, new ArrayList<>(grown.get(part)));
-                    asked.set(part, null);
+                    kept.add(null);
+                    ownList.set(part);
                 }
-                ownList.set(part);
                 grown.get(part).add(rule);
                 putting(rule, part, into);
             }
             List<List<AffineConstraint<A>>> parted = new ArrayList<>(grown.size());
             grown.forEach(each -> parted.add(List.copyOf(each)));
-            List<ClosedState<A>> kept = new ArrayList<>(closed);
-            while (kept.size() < asked.size()) {
-                kept.add(null);
-            }
-            return new Parted<>(owner, more, parted, asked, kept, into, null, false);
+            return new Parted<>(owner, more, parted, asked, kept, into, null, false, was);
         }
 
-        /** What {@link #partWeighedBy} answers for a rule weighing no position of any part. */
-        private static final int NONE = -1;
-
-        /** What {@link #partWeighedBy} answers for a rule weighing positions of two parts. */
-        private static final int SEVERAL = -2;
+        /** The part at {@code part} given a list of its own to be added to, and asked as it was
+         *  recorded in {@code was}, unless it has one already. */
+        private static <A> void owning(int part, List<List<AffineConstraint<A>>> grown,
+                                       List<ClosureQuestion<A>> asked, BitSet ownList,
+                                       Map<Integer, ClosureQuestion<A>> was) {
+            if (!ownList.get(part)) {
+                grown.set(part, new ArrayList<>(grown.get(part)));
+                was.put(part, asked.get(part));
+                asked.set(part, null);
+                ownList.set(part);
+            }
+        }
 
         /**
-         * The one part {@code partOf} has the positions {@code rule} weighs in, {@link #NONE} where
-         * it has none of them and {@link #SEVERAL} where they are in more than one — which of its
-         * positions is taken first decides none of the three.
+         * Where each part's first and last rule are among these rules, in {@code firstAt} and
+         * {@code lastAt}; false where a rule is among them twice, which is no position to be told by.
          */
-        private static <A> int partWeighedBy(AffineConstraint<A> rule, Map<A, Integer> partOf) {
-            int found = NONE;
-            for (A position : rule.form().coefs().keySet()) {
-                Integer its = partOf.get(position);
-                if (its == null) {
-                    continue;
+        private boolean whereThePartsAre(int[] firstAt, int[] lastAt) {
+            Map<AffineConstraint<A>, Integer> at = new IdentityHashMap<>();
+            for (int rule = 0; rule < rules.size(); rule++) {
+                if (at.put(rules.get(rule), rule) != null) {
+                    return false;
                 }
-                if (found != NONE && found != its) {
-                    return SEVERAL;
-                }
-                found = its;
             }
-            return found;
+            for (int part = 0; part < parts.size(); part++) {
+                List<AffineConstraint<A>> held = parts.get(part);
+                firstAt[part] = at.get(held.getFirst());
+                lastAt[part] = at.get(held.getLast());
+            }
+            return true;
+        }
+
+        /**
+         * The parts {@code rule} reaches, each as the part it has been joined to: a set, since
+         * which of its positions is taken first decides none of what is joined.
+         */
+        private static <A> void reachedBy(AffineConstraint<A> rule, Map<A, Integer> partOf,
+                                          Map<A, Integer> namedBy, int[] joinedTo,
+                                          NavigableSet<Integer> reached) {
+            for (A position : rule.form().coefs().keySet()) {
+                Integer found = partOf.containsKey(position) ? partOf.get(position)
+                        : namedBy.get(position);
+                if (found != null) {
+                    reached.add(rootOf(joinedTo, found));
+                }
+            }
+        }
+
+        /** {@code namedBy} with every position {@code rule} weighs that no part there was has, in
+         *  {@code part}, unless a rule said before it already put it somewhere. */
+        private static <A> void naming(AffineConstraint<A> rule, int part, Map<A, Integer> partOf,
+                                       Map<A, Integer> namedBy) {
+            for (A position : rule.form().coefs().keySet()) {
+                if (!partOf.containsKey(position)) {
+                    namedBy.putIfAbsent(position, part);
+                }
+            }
+        }
+
+        /** The part {@code part} has been joined to, among the parts numbered in {@code joinedTo}. */
+        private static int rootOf(int[] joinedTo, int part) {
+            int at = part;
+            while (joinedTo[at] != at) {
+                at = joinedTo[at];
+            }
+            return at;
         }
 
         /** {@code partOf} with every position {@code rule} weighs in {@code part}. */
@@ -651,7 +834,7 @@ public final class ClosedStates {
         ClosureQuestion<A> asking = (ClosureQuestion<A>) question;
         ClosureWork<A> parent = before == null ? null : works.of(before);
         ClosureWork<A> mine = new ClosureWork<>(placesKept);
-        ClosedState<A> state = ClosedState.of(asking, parent, mine);
+        ClosedState<A> state = ClosedState.of(asking, parent, mine, before);
         works.keep(state, mine);
         premisesMoved.addAndGet(mine.moved());
         return state;
