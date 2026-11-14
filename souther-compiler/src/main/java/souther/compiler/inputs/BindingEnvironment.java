@@ -9,8 +9,11 @@ import souther.compiler.core.Core;
 import souther.compiler.types.ACallOfAnOperation;
 import souther.compiler.types.BindingId;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -134,7 +137,7 @@ final class BindingEnvironment {
      * names alone, every application of a closure over the values written out is one hash, and
      * telling them apart walks the values each time two of them meet.
      */
-    private static final class Handed {
+    static final class Handed {
 
         static final Handed NONE = new Handed(Map.of(), 0, null, null);
 
@@ -142,12 +145,16 @@ final class BindingEnvironment {
         private final int hash;
         private final Handed parent;
         private final BindingId step;
+        /** How many applications there were on the way here: none for {@link #NONE}, which every
+         *  application comes from. */
+        private final int depth;
 
         private Handed(Map<BindingId, Core> values, int hash, Handed parent, BindingId step) {
             this.values = values;
             this.hash = hash;
             this.parent = parent;
             this.step = step;
+            this.depth = parent == null ? 0 : parent.depth + 1;
         }
 
         /** This, with {@code binding} handed {@code value} in place of whatever it held. */
@@ -173,7 +180,7 @@ final class BindingEnvironment {
 
         /** Where a read of {@code binding} here stands to the environment {@code began} a watch
          *  on. */
-        Placing placing(Handed began, BindingId binding) {
+        private Placing placing(Handed began, BindingId binding) {
             boolean handedSince = false;
             for (Handed each = this; each != null; each = each.parent) {
                 if (each == began) {
@@ -184,6 +191,86 @@ final class BindingEnvironment {
             // Not reached from here, whatever was handed on the way up: a step that hands the name
             // in an environment apart from the one the watch began on is not a step since it.
             return Placing.OFF_THE_WAY;
+        }
+
+        /**
+         * The names handed on the way from the environment {@code began} to this one, or null where
+         * this does not come from it. A name in the answer is handed again since: what a reading
+         * made here was answered of it is no answer of {@code began}.
+         *
+         * <p>The same walk as {@link #placing}, once for a set and not once for each name in it.
+         * It goes up as many applications as there are between the two and no further: an
+         * environment with fewer applications than {@code began} does not come from it.
+         */
+        Steps stepsSince(Handed began) {
+            if (this == began) {
+                return Steps.NONE;
+            }
+            if (depth < began.depth) {
+                return null;
+            }
+            Since last = lastSince;
+            if (last != null && last.began() == began) {
+                return last.steps();
+            }
+            Set<BindingId> steps = new HashSet<>();
+            Handed each = this;
+            while (each.depth > began.depth) {
+                AskedNames.counted(3, 1);
+                steps.add(each.step);
+                each = each.parent;
+            }
+            if (each != began) {
+                return null;
+            }
+            Steps made = new Steps(steps);
+            lastSince = new Since(began, made);
+            return made;
+        }
+
+        /** The steps since an ancestor, which is a fact of this application and the ancestor and
+         *  of nothing else. */
+        private record Since(Handed began, Steps steps) {}
+
+        /** The last one asked, held by this application and so for as long as it is: a watch
+         *  taking in again from an application it took in from before does not walk to the ancestor
+         *  again, and holds no record of the applications it met to know it. Replaced whole, so
+         *  that other threads see one or the other; an ancestor is held already, by the parent. */
+        private volatile Since lastSince;
+
+        /**
+         * Whether the names are handed the same here and in {@code other}.
+         *
+         * <p>Two applications hand a name differently only where a step on the way from the one
+         * they share hands it, so those steps are the names looked at, and what either holds apart
+         * from them is not. Where the reading asked of no name, nothing is looked at.
+         */
+        boolean agreesOn(AskedNames names, Handed other) {
+            if (this == other || !names.hasNames()) {
+                return true;
+            }
+            Handed mine = this;
+            Handed theirs = other;
+            while (mine != theirs) {
+                if (mine.depth >= theirs.depth) {
+                    if (differsOn(mine.step, names, other)) {
+                        return false;
+                    }
+                    mine = mine.parent;
+                } else {
+                    if (differsOn(theirs.step, names, other)) {
+                        return false;
+                    }
+                    theirs = theirs.parent;
+                }
+            }
+            return true;
+        }
+
+        private boolean differsOn(BindingId name, AskedNames names, Handed other) {
+            AskedNames.counted(1, 1);
+            return names.contains(name)
+                    && !Objects.equals(values.get(name), other.values.get(name));
         }
 
         @Override
@@ -245,7 +332,10 @@ final class BindingEnvironment {
         private static final ThreadLocal<Watch> RUNNING = new ThreadLocal<>();
 
         private final Handed started;
-        private final Map<BindingId, Core> asked = new LinkedHashMap<>();
+        /** The names this reading read itself, which were answered as {@link #started} has them. */
+        private final Set<BindingId> asked = new HashSet<>();
+        /** What the readings taken in asked, or null where none was: most watches take in none. */
+        private Takings takings;
         private boolean unsure;
 
         private Watch(Handed started) {
@@ -263,11 +353,14 @@ final class BindingEnvironment {
             RUNNING.set(watch);
             try {
                 T result = reading.get();
+                AskedNames names = watch.unsure ? AskedNames.NONE
+                        : AskedNames.of(watch.asked,
+                                watch.takings == null ? List.of() : watch.takings.sets);
                 if (outer != null) {
-                    outer.note(on.handed, watch.asked, watch.unsure);
+                    outer.note(on.handed, names, watch.unsure);
                 }
                 return new Watched<>(result,
-                        watch.unsure ? HandedAnswers.UNTOLD : new HandedAnswers(watch.asked));
+                        watch.unsure ? HandedAnswers.UNTOLD : new HandedAnswers(on.handed, names));
             } finally {
                 if (outer == null) {
                     RUNNING.remove();
@@ -281,24 +374,40 @@ final class BindingEnvironment {
          *  stands for would have. */
         static void replay(BindingEnvironment at, HandedAnswers answers) {
             Watch watch = RUNNING.get();
+            assert !answers.toldApart() || answers.holdsOf(at)
+                    : "a reading is taken again where what it asked is handed what it was handed";
             if (watch != null) {
-                watch.note(at.handed, answers.answers(), !answers.toldApart());
+                watch.note(at.handed, answers.names(), !answers.toldApart());
             }
         }
 
-        /** What was asked of the values handed in {@code in}, noted as this watch notes a read
-         *  there. */
-        private void note(Handed in, Map<BindingId, Core> answers, boolean notTold) {
+        /**
+         * What was asked of the values handed in {@code in}, noted as this watch notes a read
+         * there: the names asked are taken in as they are, but for the ones handed again on the
+         * way from where this began to {@code in}, and are none of this one's where {@code in}
+         * does not come from there.
+         *
+         * <p>Placed once for the set and not for each name, and the set is shared and not copied
+         * ({@link AskedNames}).
+         */
+        private void note(Handed in, AskedNames names, boolean notTold) {
             if (notTold) {
                 unsure = true;
+                return;
             }
-            for (Map.Entry<BindingId, Core> each : answers.entrySet()) {
-                switch (in.placing(started, each.getKey())) {
-                    case AS_BEGUN -> asked.putIfAbsent(each.getKey(), each.getValue());
-                    case HANDED_SINCE -> { }
-                    case OFF_THE_WAY -> unsure = true;
-                }
+            if (!names.hasNames()) {
+                return;
             }
+            AskedNames.counted(2, 1);
+            Steps since = in.stepsSince(started);
+            if (since == null) {
+                unsure = true;
+                return;
+            }
+            if (takings == null) {
+                takings = new Takings();
+            }
+            takings.add(takings.projection(names, since));
         }
 
         static boolean running() {
@@ -325,7 +434,7 @@ final class BindingEnvironment {
             Watch watch = RUNNING.get();
             if (watch != null) {
                 switch (in.placing(watch.started, binding)) {
-                    case AS_BEGUN -> watch.asked.putIfAbsent(binding, answer);
+                    case AS_BEGUN -> watch.asked.add(binding);
                     case HANDED_SINCE -> { }
                     case OFF_THE_WAY -> watch.unsure = true;
                 }
@@ -334,14 +443,106 @@ final class BindingEnvironment {
         }
     }
 
+    /**
+     * The names handed on the way from one application to another, compared by what they are and
+     * with the hash worked out once: a set is asked for its hash at each use, which walks it.
+     */
+    static final class Steps {
+
+        static final Steps NONE = new Steps(Set.of());
+
+        private final Set<BindingId> names;
+        private final int hash;
+
+        Steps(Set<BindingId> names) {
+            this.names = names;
+            this.hash = names.hashCode();
+        }
+
+        Set<BindingId> names() {
+            return names;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other || (other instanceof Steps that && hash == that.hash
+                    && names.equals(that.names));
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+    }
+
+    /** A set of names asked, by what object it is, and the names left out of it, by what they are. */
+    private record Without(AskedNames names, Steps out) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Without that && names == that.names && out.equals(that.out);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * System.identityHashCode(names) + out.hashCode();
+        }
+    }
+
+    /**
+     * What one watch took in, and how each came to be.
+     *
+     * <p>What is kept is what the watch took in, and not the applications it met: those are made
+     * for the occasion and let go, and what was asked of one that handed nothing the watch was
+     * told of is nothing to keep. A set left out of the same names, whichever applications they
+     * came from, is the one set; a set that is no different without them is itself, and is not
+     * kept.
+     */
+    private static final class Takings {
+
+        /** The sets taken in, as each stands to where the watch began, each once. */
+        final List<AskedNames> sets = new ArrayList<>();
+        private final Set<AskedNames> distinct = Collections.newSetFromMap(new IdentityHashMap<>());
+        private Map<Without, AskedNames> projected;
+
+        /** {@code names} as it stands to where the watch began, which is without the names handed
+         *  again on the way ({@code since}). */
+        AskedNames projection(AskedNames names, Steps since) {
+            if (since.names().isEmpty()) {
+                return names;
+            }
+            Without key = new Without(names, since);
+            AskedNames kept = projected == null ? null : projected.get(key);
+            if (kept != null) {
+                return kept;
+            }
+            AskedNames made = names.without(since.names());
+            if (made != names) {
+                if (projected == null) {
+                    projected = new HashMap<>();
+                }
+                projected.put(key, made);
+                AskedNames.counted(4, 1);
+            }
+            return made;
+        }
+
+        void add(AskedNames passed) {
+            if (passed.hasNames() && distinct.add(passed)) {
+                sets.add(passed);
+            }
+        }
+    }
+
     /** What {@code binding} was handed on the way here, or null. */
     private Core handedTo(BindingId binding) {
         return Watch.read(handed, binding);
     }
 
-    /** What {@code binding} is handed here, unwatched: the question {@link HandedAnswers} asks. */
-    Core handedUnwatched(BindingId binding) {
-        return handed.unwatched(binding);
+    /** Whether every name of {@code names} is handed here what it is handed in the application
+     *  {@code began}: the question {@link HandedAnswers} asks. Unwatched. */
+    boolean handedAgrees(Handed began, AskedNames names) {
+        return began.agreesOn(names, handed);
     }
 
     /** Whether {@code that} is this but for what was handed. */
