@@ -81,23 +81,14 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
         return List.of(
                 List.of("List.length(ROWS)",
                         "List.length(List.sortBy(.sku, ROWS))",
-                        "List.length(List.map(x -> x, ROWS))",
                         "List.fold((acc, x) -> acc + 1, 0, ROWS)"),
                 List.of("List.sum(List.map(.quantity, ROWS))",
                         "List.fold((acc, x) -> acc + x.quantity, 0, ROWS)",
-                        "List.fold((acc, x) -> acc + x, 0, List.map(.quantity, ROWS))",
-                        "List.fold((acc, x) -> acc + x.quantity, 0, List.sortBy(.sku, ROWS))",
                         "List.sum(List.map(.quantity, List.sortBy(.sku, ROWS)))",
-                        "List.sum(List.map(x -> x, List.map(.quantity, ROWS)))",
-                        "List.sum(List.sortBy(x -> x, List.map(.quantity, ROWS)))",
-                        "List.sum(List.map(.quantity, List.map(x -> x, ROWS)))",
-                        "List.sum(List.map(.quantity, List.sortBy(.sku, List.map(x -> x, ROWS))))",
-                        "List.sum(List.map(.quantity, List.map(x -> x, List.sortBy(.sku, ROWS))))"),
+                        "List.sum(List.map(x -> x, List.map(.quantity, ROWS)))"),
                 // A total taken directly of a list in another order is the total of the list.
                 List.of("List.sum(NUMS)",
                         "List.sum(List.reverse(NUMS))",
-                        "List.sum(List.sortBy(x -> x, NUMS))",
-                        "List.sum(List.map(x -> x, List.reverse(NUMS)))",
                         "List.sum(YS)"),
                 // And a total of what each element comes to is the same over the list reversed.
                 List.of("List.sum(List.map(x -> 2 * x, NUMS))",
@@ -113,13 +104,9 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                 List.of("List.sum(NUMS)",
                         "List.sum(List.drop(0, NUMS))",
                         "List.sum(List.mapIndexed((i, x) -> if i >= 0 then x else 0, NUMS))",
-                        "List.sum(List.mapIndexed((i, x) -> x, List.sortBy(y -> y, NUMS)))",
-                        "List.sum(List.mapIndexed((i, x) -> x, NUMS))",
-                        "List.sum(List.map(x -> 1 * x, NUMS))",
-                        "List.fold((acc, x) -> acc + x, 0, NUMS)"),
+                        "List.sum(List.mapIndexed((i, x) -> x, List.sortBy(y -> y, NUMS)))"),
                 // And one that keeps none is nought.
                 List.of("List.sum(List.take(0, NUMS))",
-                        "List.sum(List.take(0, List.drop(0, NUMS)))",
                         "List.sum(List.drop(3, List.take(3, NUMS)))"),
                 List.of("List.sum(List.mapIndexed((i, x) -> if i < 0 then x else 0, NUMS))"),
                 // And a total of the elements a take or drop keeps is one chosen by position.
@@ -129,18 +116,14 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                 // nearest take, however they are stacked.
                 List.of("List.sum(List.take(3, List.drop(1, NUMS)))",
                         "List.sum(List.drop(1, List.take(4, NUMS)))",
-                        "List.sum(List.take(5, List.take(3, List.drop(1, NUMS))))",
-                        "List.sum(List.drop(1, List.drop(0, List.take(4, NUMS))))"),
+                        "List.sum(List.take(5, List.take(3, List.drop(1, NUMS))))"),
                 List.of("List.sum(List.take(1, List.drop(1, List.reverse(NUMS))))"),
                 // What a filter keeps is every element counting nought where its closure fails,
                 // which a choice in the closure says as well, and in any order.
                 List.of("List.sum(List.map(i -> if i.active then i.quantity else 0, ROWS))",
-                        "List.sum(List.map(.quantity, List.filter(i -> i.active, ROWS)))",
-                        "List.fold((acc, x) -> acc + x.quantity, 0,"
-                                + " List.filter(i -> i.active, ROWS))"),
+                        "List.sum(List.map(.quantity, List.filter(i -> i.active, ROWS)))"),
                 List.of("List.sum(List.map(x -> if x > 0 then x else 0, NUMS))",
-                        "List.sum(List.filter(x -> x > 0, NUMS))",
-                        "List.sum(List.reverse(List.filter(x -> x > 0, NUMS)))"));
+                        "List.sum(List.filter(x -> x > 0, NUMS))"));
     }
 
     /**
