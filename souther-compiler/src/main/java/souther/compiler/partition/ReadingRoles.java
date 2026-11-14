@@ -95,8 +95,7 @@ final class ReadingRoles {
             Map.entry("sharedWaysIn", MEMO),
             Map.entry("sharedApplications", MEMO),
             Map.entry("sharedObservations", MEMO),
-            Map.entry("keptRemainders", MEMO),
-            Map.entry("keptReasons", MEMO),
+            Map.entry("keptByTheInput", MEMO),
             // Whether the reading of a remainder is noting what it tells the candidate, which a
             // remainder taken tells again; what it holds is no input of a reading.
             Map.entry("telling", FLAG),
