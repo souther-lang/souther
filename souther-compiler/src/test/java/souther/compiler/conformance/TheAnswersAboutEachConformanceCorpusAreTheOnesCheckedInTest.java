@@ -39,6 +39,11 @@ class TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest {
      * Rewrites every document instead of checking it. A deliberate act, spelled out, and it fails
      * afterwards: a run that rewrote what it was going to be measured against has not measured
      * anything, and one that said so quietly would read as a passing run.
+     *
+     * <p>Not for a change of which errors a corpus is refused with. The analysis holds the corpus
+     * to the {@code error} lines of its {@code expected.diagnostics.txt} before anything is
+     * written, so a corpus refused for something else stops there: edit those lines first, then
+     * rewrite.
      */
     private static final String UPDATE = "souther.conformance.update";
 

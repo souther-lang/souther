@@ -104,10 +104,6 @@ class EveryKindOfTermACorpusWritesIsReadForWhatItSaysTest {
             }
             """;
 
-    /** The corpora written to be refused, and what each is refused for. */
-    private static final Map<String, List<String>> CORPUS_REFUSALS =
-            Map.of("booking", List.of("E2010", "E1013"));
-
     /** Every checked body of every corpus, and the same again with every line moved down. */
     private static List<Core> bodies(String before) {
         List<Core> out = new ArrayList<>();
@@ -119,7 +115,7 @@ class EveryKindOfTermACorpusWritesIsReadForWhatItSaysTest {
                 byId.put(corpus.files().get(i), before + corpus.sources().get(i));
             }
             workspaces.add(byId);
-            refused.add(CORPUS_REFUSALS.getOrDefault(corpus.name(), List.of()));
+            refused.add(corpus.refusedWith());
         }
         workspaces.add(Map.of("wide.sou", before + WIDE));
         refused.add(List.of());

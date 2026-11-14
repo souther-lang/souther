@@ -2,7 +2,6 @@ package souther.compiler.conformance;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.ACompiledModel;
 import souther.compiler.check.PathReachability;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -49,8 +48,7 @@ class NoProofOfReachIsOneARowWentAgainstTest {
         List<String> wrong = new ArrayList<>();
         int read = 0;
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            Compilation compilation = RepositoryModels.analysed(corpus).compilation();
-            ACompiledModel.compiles(compilation);
+            Compilation compilation = RepositoryModels.analysed(corpus).answered();
             for (String module : compilation.modules()) {
                 Map<String, PathReachability.Answers.AsRun> arrived =
                         compilation.db().ask(new Adequacy.Arrived(module)).value();

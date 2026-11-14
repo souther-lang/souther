@@ -140,8 +140,8 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
             return everyReading;
         }
         List<InputDomain> out = new ArrayList<>();
-        for (Compilation compilation : RepositoryModels.all()) {
-            readings(compilation, out);
+        for (RepositoryModels.Model model : RepositoryModels.all()) {
+            readings(model.answered(), out);
         }
         everyReading = List.copyOf(out);
         return everyReading;
@@ -165,7 +165,6 @@ class APositionARuleWasNotReadAtDoesNotReadAsOneEveryRuleWasReadAtTest {
      * model has already done.
      */
     private static void readings(Compilation compilation, List<InputDomain> out) {
-        ACompiledModel.compiles(compilation);
         for (String module : compilation.modules()) {
             Answer<Map<String, InputDomain>> read =
                     compilation.db().ask(new Adequacy.Inputs(module));

@@ -192,17 +192,13 @@ class EveryChildANodeHandsOverStandsInANamedSlotTest {
         checked = null;
     }
 
-    /** The corpora written to be refused, and what each is refused for. */
-    private static final Map<String, List<String>> CORPUS_REFUSALS =
-            Map.of("booking", List.of("E2010", "E1013"));
-
     private static List<Core> checkedBodies() {
         List<Core> out = new ArrayList<>();
         List<List<String>> sources = new ArrayList<>();
         List<List<String>> refused = new ArrayList<>();
         ConformanceCorpus.all().forEach(corpus -> {
             sources.add(corpus.sources());
-            refused.add(CORPUS_REFUSALS.getOrDefault(corpus.name(), List.of()));
+            refused.add(corpus.refusedWith());
         });
         sources.add(List.of(BESIDE_THE_CORPORA));
         refused.add(List.of());

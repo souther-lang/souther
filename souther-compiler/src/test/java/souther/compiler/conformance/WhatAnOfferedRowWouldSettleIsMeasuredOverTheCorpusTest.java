@@ -1,7 +1,6 @@
 package souther.compiler.conformance;
 
 import org.junit.jupiter.api.Test;
-import souther.compiler.ACompiledModel;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -64,7 +63,7 @@ class WhatAnOfferedRowWouldSettleIsMeasuredOverTheCorpusTest {
         int settledNotComposedFor = 0;
         for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
             ConformanceCorpus.Analysed analysed = RepositoryModels.analysed(corpus);
-            Compilation compilation = ACompiledModel.compiles(analysed.compilation());
+            Compilation compilation = analysed.answered();
             for (String module : compilation.modules()) {
                 Map<String, Adequacy.Filling> filled =
                         Adequacy.generatedOf(compilation.db(), module);

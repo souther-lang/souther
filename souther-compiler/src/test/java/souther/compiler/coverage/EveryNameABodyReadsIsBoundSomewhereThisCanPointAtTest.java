@@ -10,10 +10,6 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.test.ClosedWorldContract;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
@@ -186,30 +182,10 @@ class EveryNameABodyReadsIsBoundSomewhereThisCanPointAtTest {
     private static List<Body> everyBody() {
         List<SourceSet> sources = new ArrayList<>();
         ConformanceCorpus.all().forEach(corpus -> sources.add(
-                new SourceSet(corpus.sources(), checkedInErrors(corpus.name()))));
+                new SourceSet(corpus.sources(), corpus.refusedWith())));
         sources.add(SourceSet.compiling(SPLICED));
         sources.add(SourceSet.compiling(BINDING_SHAPES));
         return bodiesOf(sources);
-    }
-
-    /**
-     * The codes of the errors a corpus is checked in as refused with, in the order they are said;
-     * none where it is checked in with no diagnostics.
-     */
-    private static List<String> checkedInErrors(String corpus) {
-        String resource = "/souther/compiler/conformance/" + corpus + "/expected.diagnostics.txt";
-        try (InputStream in = EveryNameABodyReadsIsBoundSomewhereThisCanPointAtTest.class
-                .getResourceAsStream(resource)) {
-            if (in == null) {
-                return List.of();
-            }
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8).lines()
-                    .filter(line -> line.startsWith("error "))
-                    .map(line -> line.split("\\s+")[1])
-                    .toList();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
     }
 
     private static List<Body> bodiesOf(List<SourceSet> sources) {

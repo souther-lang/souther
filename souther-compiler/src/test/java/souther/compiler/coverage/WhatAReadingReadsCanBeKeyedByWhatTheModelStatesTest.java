@@ -423,9 +423,9 @@ class WhatAReadingReadsCanBeKeyedByWhatTheModelStatesTest {
      */
     private static List<Module> everyModule() {
         List<Module> out = new ArrayList<>();
-        for (Compilation compilation : RepositoryModels.all()) {
+        for (RepositoryModels.Model model : RepositoryModels.all()) {
+            Compilation compilation = model.answered();
             int before = out.size();
-            ACompiledModel.compiles(compilation);
             modulesOf(compilation, out);
             assertTrue(out.size() > before,
                     () -> "a model this repository carries compiled to no module at all: "

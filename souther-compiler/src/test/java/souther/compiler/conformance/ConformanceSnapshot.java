@@ -57,7 +57,7 @@ final class ConformanceSnapshot {
     static String report(ConformanceCorpus.Analysed analysed) {
         AdequacyReport report = analysed.report();
         SourceRendering rendering = new SourceRendering(analysed.corpus().names(),
-                analysed.compilation().texts());
+                analysed.answered().texts());
         return report.json(rendering).replace("\"" + report.compilerVersion() + "\"",
                 "\"" + VERSION_PLACEHOLDER + "\"") + System.lineSeparator();
     }
@@ -129,12 +129,13 @@ final class ConformanceSnapshot {
      * putting a value through this module's own decoders.
      */
     static String generated(ConformanceCorpus.Analysed analysed) {
+        Compilation compilation = analysed.answered();
         SourceRendering rendering = new SourceRendering(analysed.corpus().names(),
-                analysed.compilation().texts());
+                compilation.texts());
         // Every module and every behavior, which is what the command does when it is told no
         // narrower.
         return "// --generate" + System.lineSeparator()
-                + GeneratedRows.of(analysed.compilation(), null, null, rendering).textInEnglish();
+                + GeneratedRows.of(compilation, null, null, rendering).textInEnglish();
     }
 
     /**
@@ -150,7 +151,7 @@ final class ConformanceSnapshot {
      */
     static String diagnostics(ConformanceCorpus.Analysed analysed) {
         SourceRendering rendering = new SourceRendering(analysed.corpus().names(),
-                analysed.compilation().texts());
+                analysed.answered().texts());
         List<String> lines = new ArrayList<>();
         for (Located located : analysed.said()) {
             Diagnostic diagnostic = located.diagnostic();

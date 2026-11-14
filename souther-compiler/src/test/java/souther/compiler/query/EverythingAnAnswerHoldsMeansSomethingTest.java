@@ -74,9 +74,7 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
         List<Db> out = new ArrayList<>();
         switch (scenario) {
             case THE_CORPORA -> ConformanceCorpus.all().forEach(corpus -> {
-                Compilation compilation = ACompiledModel.refusedWith(
-                        corpus.refusedWith(), corpus.analyse().compilation());
-                out.add(compilation.db());
+                out.add(corpus.analyse().answered().db());
             });
             case A_MODULE_SPOKEN_ABOUT -> {
                 Compilation compilation = ACompiledModel.measured(SPOKEN_ABOUT,

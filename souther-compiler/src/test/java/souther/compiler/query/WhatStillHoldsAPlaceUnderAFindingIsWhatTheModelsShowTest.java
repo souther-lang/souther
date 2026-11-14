@@ -216,7 +216,7 @@ class WhatStillHoldsAPlaceUnderAFindingIsWhatTheModelsShowTest {
         for (int i = 0; i < files.size(); i++) {
             byId.put(files.get(i), sources.get(i));
         }
-        Compilation c = ACompiledModel.compiles(
+        Compilation c = ACompiledModel.refusedWith(corpus.refusedWith(),
                 Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY));
         c.modules().forEach(module -> c.db().ask(new Adequacy.Findings(module)));
         return c.db();

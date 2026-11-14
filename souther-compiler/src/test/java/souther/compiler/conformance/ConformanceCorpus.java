@@ -63,12 +63,8 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
     /** What a line of the manifest begins with where it declares a purpose rather than uses one. */
     private static final String DECLARES = "purpose";
 
-    /**
-     * The errors a corpus is written to be refused with, in the order the compiler gives them. A
-     * corpus not named here compiles.
-     */
-    private static final Map<String, List<String>> REFUSED_WITH =
-            Map.of("booking", List.of("E2010", "E1013"));
+    /** The checked-in diagnostics of a corpus, beside the answers about it. */
+    private static final String DIAGNOSTICS = "expected.diagnostics.txt";
 
     /** Where the answers about them are, which is this module's own resources. */
     static final String ROOT = "/souther/compiler/conformance/";
@@ -210,20 +206,41 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
     }
 
     /**
-     * A compilation of this corpus of its own, written on the day every test is and with nothing
-     * measured or answered yet.
+     * A compilation of this corpus of its own, written on the day every test is, answered in full
+     * and held to be refused with what the corpus is written to be refused with.
      *
-     * <p>For a reader that asks a few questions of a model and does not want the compilation
-     * {@code RepositoryModels} shares among the readers of every model, or to set what it measures
-     * on that one. What the caller measures is the caller's to say.
+     * <p>For a reader of a model that is not analysed, which is every corpus written for something
+     * other than the answers checked in. Never the compilation as it is: given without what it is
+     * written to be refused with, it leaves the reader to choose what to hold it to.
      */
-    public Compilation compilation() {
-        return Compilation.ofSources(sources, ModulePath.EMPTY).writtenOn(TestDay.DATE);
+    Compilation answered() {
+        return ACompiledModel.refusedWith(refusedWith(),
+                Compilation.ofSources(sources, ModulePath.EMPTY).writtenOn(TestDay.DATE));
     }
 
-    /** The errors this corpus is written to be refused with, in the order the compiler gives them. */
+    /**
+     * The errors this corpus is written to be refused with, in the order the compiler gives them:
+     * the ones its checked-in diagnostics say, and none for a corpus with no diagnostics checked in,
+     * which compiles.
+     *
+     * <p>The one place this is said. It is what the checked-in answer already holds, and a second
+     * statement of it — a table of names, or a list in the test that wants it — answers separately
+     * and is wrong without anything failing the day the corpus is refused for something else.
+     * Held to the compiler by {@code TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest}.
+     */
     public List<String> refusedWith() {
-        return REFUSED_WITH.getOrDefault(name, List.of());
+        try (InputStream in = ConformanceCorpus.class
+                .getResourceAsStream(ROOT + name + "/" + DIAGNOSTICS)) {
+            if (in == null) {
+                return List.of();
+            }
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8).lines()
+                    .filter(line -> line.startsWith("error "))
+                    .map(line -> line.split("\\s+")[1])
+                    .toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     /**
@@ -242,8 +259,7 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
      */
     public Analysed analyse() {
         List<Located> warnings = new ArrayList<>();
-        Compilation compilation = ACompiledModel.refusedWith(
-                REFUSED_WITH.getOrDefault(name, List.of()),
+        Compilation compilation = ACompiledModel.refusedWith(refusedWith(),
                 Compiler.analyzedModules(sources, ModulePath.EMPTY, warnings,
                         Adequacy.Asked.fullReport(), TestDay.DATE));
         return new Analysed(this, compilation, compilation.errors(), warnings,
@@ -264,15 +280,54 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
      * this settles is not which document but that there is one: the questions are put where the
      * analysis happens, and no caller can have the analysis without them.
      */
-    public record Analysed(ConformanceCorpus corpus, Compilation compilation,
-                           List<Located> errors, List<Located> warnings, AdequacyReport report) {
+    public static final class Analysed {
 
-        /** The compilation, held to be refused with what its corpus is meant to be refused with
-         *  and nothing else, for a reader that takes the model out of this record. */
+        private final ConformanceCorpus corpus;
+
+        private final Compilation compilation;
+
+        private final List<Located> errors;
+
+        private final List<Located> warnings;
+
+        private final AdequacyReport report;
+
+        private Analysed(ConformanceCorpus corpus, Compilation compilation, List<Located> errors,
+                         List<Located> warnings, AdequacyReport report) {
+            this.corpus = corpus;
+            this.compilation = compilation;
+            this.errors = errors;
+            this.warnings = warnings;
+            this.report = report;
+        }
+
+        public ConformanceCorpus corpus() {
+            return corpus;
+        }
+
+        public List<Located> errors() {
+            return errors;
+        }
+
+        public List<Located> warnings() {
+            return warnings;
+        }
+
+        public AdequacyReport report() {
+            return report;
+        }
+
+        /**
+         * The compilation, held to be refused with what its corpus is written to be refused with
+         * and nothing else.
+         *
+         * <p>The only way to it, and not only from outside this package: an access level cannot
+         * say that, and a reader of the same package would be left to choose what to hold it to.
+         * Holding a corpus written to be refused to compile is the choice that failed
+         * twenty-five tests.
+         */
         public Compilation answered() {
-            Compilation held = compilation;
-            return ACompiledModel.refusedWith(REFUSED_WITH.getOrDefault(corpus.name(), List.of()),
-                    held);
+            return ACompiledModel.refusedWith(corpus.refusedWith(), compilation);
         }
 
         /** Everything said about this corpus, errors before warnings, as the report writes them. */
