@@ -66,6 +66,7 @@ import souther.compiler.inputs.CaseCompared;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.HandedAnswers;
 import souther.compiler.inputs.HeldIn;
 import souther.compiler.inputs.ElementComputation;
 import souther.compiler.inputs.ElementKey;
@@ -87,6 +88,7 @@ import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.Watched;
 import souther.compiler.inputs.WhatAConstructionAsks;
 import souther.compiler.inputs.WrittenOutElements;
 import souther.compiler.meaning.Conclusion;
@@ -15438,19 +15440,25 @@ final class Pullback {
      */
     private <R> R kept(Map<Core, List<ReadingTaken<R>>> table, Core node, InputReads at,
                        Supplier<R> fresh) {
-        if (InputReads.watching() || elementsMet.crowded()
-                || !READING_STATE.holdsNothing(this)) {
+        if (elementsMet.crowded() || !READING_STATE.holdsNothing(this)) {
             return fresh.get();
         }
+        // Inside a watch of what is handed, a reading kept is one that said what it asked of it,
+        // and taking it tells the watch that, as reading it again would have.
+        boolean watched = InputReads.watching();
         Trial told = underTrial.peek();
         Object said = told == null ? null : told.markBesidesTheRemainders();
         ReadingState.Inputs inputs = READING_STATE.inputsOf(this);
         List<ReadingTaken<R>> before = table.computeIfAbsent(node, _ -> new ArrayList<>());
         for (ReadingTaken<R> each : before) {
-            if (each.at() == at && READING_STATE.sameInputsBut(each.inputs(), inputs, false,
+            if (each.at() == at && (!watched || each.asked() != null)
+                    && READING_STATE.sameInputsBut(each.inputs(), inputs, false,
                             UNCONSULTED[each.consulted()], CONTENT_ASKED[each.consulted()])
                     && elementsMet.agrees(each.footprint())
                     && Objects.equals(each.said(), said)) {
+                if (each.asked() != null) {
+                    at.takingAgain(each.asked());
+                }
                 elementsMet.takes(each.footprint());
                 consulted |= each.consulted();
                 met.addAll(each.met());
@@ -15473,8 +15481,15 @@ final class Pullback {
         int consultedHere;
         R result;
         ElementsMet.Footprint footprint;
+        HandedAnswers handed = null;
         try {
-            result = fresh.get();
+            if (watched) {
+                Watched<R> read = at.watchingWhatIsHanded(fresh);
+                result = read.result();
+                handed = read.asked();
+            } else {
+                result = fresh.get();
+            }
         } finally {
             telling = outer;
             consultedHere = endConsultingInputs(consultedBefore);
@@ -15495,7 +15510,7 @@ final class Pullback {
                         && told.remaindersRead().equals(withTold(remainders, mine))))) {
             before.add(new ReadingTaken<>(result, at, List.copyOf(mine), footprint, inputs, said,
                     consultedHere & ~InputAskedAfter.TELLING.bit(),
-                    List.copyOf(met.subList(metFrom, met.size()))));
+                    List.copyOf(met.subList(metFrom, met.size())), handed));
         }
         return result;
     }
@@ -15519,10 +15534,12 @@ final class Pullback {
         }
     }
 
-    /** A reading made, with what it told the candidate and left behind. */
+    /** A reading made, with what it told the candidate and left behind, and what it asked of the
+     *  values handed where it was made inside a watch of them — null where it was not. */
     private record ReadingTaken<R>(R result, InputReads at, List<Notice> told,
                                    ElementsMet.Footprint footprint, ReadingState.Inputs inputs,
-                                   Object said, int consulted, List<Met> met) {}
+                                   Object said, int consulted, List<Met> met,
+                                   HandedAnswers asked) {}
 
     /** {@code remainders}, the two tables the candidate holds, with {@code notices} told. */
     private static List<Map<Core, Core>> withTold(List<Map<Core, Core>> remainders,
