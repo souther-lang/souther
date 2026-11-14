@@ -883,7 +883,8 @@ public final class GuardThresholds {
             java.util.SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> said =
                     new java.util.LinkedHashMap<>();
             for (FilingCoordinate at : filedAt(comparison, read, reads, answering)) {
-                said.putIfAbsent(at, new BlockReason.WhatItStatesIsNoLine(word));
+                said.putIfAbsent(at,
+                        new BlockReason.WhatItStatesIsNoLine(word, declined.get()));
             }
             return said;
         }

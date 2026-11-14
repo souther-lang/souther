@@ -153,7 +153,7 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
         assertFalse(unreadIn(within), () -> "within the figure: " + within);
         Proposition past = stated(choices("w.n", side + 1) + " > "
                 + choices("w.first.days", side + 1));
-        assertEquals(List.of(new WhyUnread.MoreTotalReadingsThanAreMade()), whysIn(past));
+        assertEquals(List.of(WhyUnread.PAST_THE_TOTAL_READINGS), whysIn(past));
     }
 
     /**

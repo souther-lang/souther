@@ -2060,8 +2060,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
         for (BlockReason.WhatItStatesIsNoLine.Why each
                 : BlockReason.WhatItStatesIsNoLine.Why.values()) {
-            if (each.says() != null && stops.contains(each.says())) {
-                return new BlockReason.WhatItStatesIsNoLine(each);
+            for (WhyUnread stop : stops) {
+                if (each.saysTheKindOf(stop)) {
+                    return new BlockReason.WhatItStatesIsNoLine(each, stop);
+                }
             }
         }
         stops.stream().filter(why -> why.figure().isPresent()).findFirst().ifPresent(why -> {

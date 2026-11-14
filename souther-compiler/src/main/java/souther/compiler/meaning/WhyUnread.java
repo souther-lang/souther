@@ -40,8 +40,10 @@ public sealed interface WhyUnread {
     /** A part read more times than the reading of one condition makes along one way down. */
     WhyUnread PAST_THE_READINGS = new MoreReadingsThanAreMade();
 
-    /** A part read once more where the reading had made as many readings in all as it makes. */
-    WhyUnread PAST_THE_TOTAL_READINGS = new MoreTotalReadingsThanAreMade();
+    /** A part read once more where the reading had made as many readings in all as it makes, at
+     *  the figure declared: what a word for the reason says, which is the kind of a stop and not
+     *  one that was made. A stop made is {@link #pastTheTotalReadings}. */
+    WhyUnread PAST_THE_TOTAL_READINGS = pastTheTotalReadings();
 
     /** A part whose step states more parts, written out, than a step is concluded with. */
     WhyUnread PAST_THE_PARTS = new MorePartsThanAreConcluded();
@@ -52,6 +54,11 @@ public sealed interface WhyUnread {
 
     /** A part about a container holding more than a walk writes out. */
     WhyUnread PAST_THE_ELEMENTS = new MoreElementsThanAreWrittenOut();
+
+    /** Whether this stopped for the reason {@code other} names, whatever figure each stopped at. */
+    default boolean isTheKindOf(WhyUnread other) {
+        return getClass() == other.getClass();
+    }
 
     /**
      * The figure of this compiler's work the part stopped at, or none where it stopped at none.
@@ -70,8 +77,7 @@ public sealed interface WhyUnread {
         return switch (this) {
             case MoreReadingsThanAreMade _ ->
                     Optional.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure());
-            case MoreTotalReadingsThanAreMade _ ->
-                    Optional.of(CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.figure());
+            case MoreTotalReadingsThanAreMade(var stoppedAt) -> Optional.of(stoppedAt);
             case MorePartsThanAreConcluded _ ->
                     Optional.of(CompositionBudget.PARTS_A_DERIVATION_CONCLUDES.figure());
             case MoreWaysThanAreWrittenOut _ ->
@@ -347,7 +353,19 @@ public sealed interface WhyUnread {
      * <p>Its own reason and not that one, because the two are two figures: a reader told the
      * wrong one would raise a figure that stopped nothing.
      */
-    record MoreTotalReadingsThanAreMade() implements WhyUnread {}
+    record MoreTotalReadingsThanAreMade(Figure.Budget stoppedAt) implements WhyUnread {
+
+        public MoreTotalReadingsThanAreMade {
+            Objects.requireNonNull(stoppedAt, "a stop at a figure holds the figure");
+        }
+    }
+
+    /** A part read once more where the reading had made as many readings in all as the
+     *  compilation holds it to, made where that is reached. */
+    static WhyUnread pastTheTotalReadings() {
+        return new MoreTotalReadingsThanAreMade(
+                CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.reached());
+    }
 
     /**
      * A step of the reading whose statement, written out with every part it holds as many times as

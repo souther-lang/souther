@@ -3765,7 +3765,7 @@ final class Pullback {
     private WhyUnread made(long more) {
         if (more > readingsLeft) {
             readingsLeft = 0;
-            return new WhyUnread.MoreTotalReadingsThanAreMade();
+            return WhyUnread.pastTheTotalReadings();
         }
         readingsLeft -= more;
         return null;

@@ -5772,7 +5772,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     new ReportMessage.WhetherTheTwoValuesAreTheSameIsNotToldByARow();
             // The value was read; what is not known is whether the run compared anything through
             // the element it stands in, and what that turned on is what is said.
-            case ReadingGap.ReachNotRead(ReadingGap.ReachNotRead.Why unread) ->
+            case ReadingGap.ReachNotRead(ReadingGap.ReachNotRead.Why unread, var _) ->
                     new ReportMessage.WhetherTheRunGotToTheRuleTurnsOn(switch (unread) {
                         case A_PART_NOT_READ -> new ReportMessage.APartOfTheWayNotRead();
                         case MORE_READINGS_THAN_ARE_MADE ->

@@ -1298,6 +1298,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
             Map.entry("souther.compiler.meaning.WhyUnread#figure()Ljava/util/Optional;",
                     "the figure each reason a part was not read stopped at, which every reader"
                             + " naming the figure reads"),
+            Map.entry("souther.compiler.meaning.WhyUnread#pastTheTotalReadings()"
+                            + "Lsouther/compiler/meaning/WhyUnread;",
+                    "the stop where the readings in all of one condition run out, which holds"
+                            + " the figure the compilation held them to"),
             Map.entry("souther.compiler.meaning.WhyNotTaken#figure()Ljava/util/Optional;",
                     "the figure each reason a condition was not taken in stopped at, the same"
                             + " way"),

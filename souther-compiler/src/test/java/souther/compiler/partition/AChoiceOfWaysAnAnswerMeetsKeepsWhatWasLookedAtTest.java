@@ -80,7 +80,7 @@ class AChoiceOfWaysAnAnswerMeetsKeepsWhatWasLookedAtTest {
         Map<WhyUnread, CompositionBudget> figures = Map.of(
                 new WhyUnread.MoreReadingsThanAreMade(),
                 CompositionBudget.READINGS_OF_ONE_CONDITION,
-                new WhyUnread.MoreTotalReadingsThanAreMade(),
+                WhyUnread.PAST_THE_TOTAL_READINGS,
                 CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION,
                 new WhyUnread.MorePartsThanAreConcluded(),
                 CompositionBudget.PARTS_A_DERIVATION_CONCLUDES);

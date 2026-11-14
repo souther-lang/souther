@@ -2133,7 +2133,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
             if (elementsRead[0] + elements
                     > CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.maximum()) {
-                return Optional.of(WhyUnread.PAST_THE_TOTAL_READINGS);
+                return Optional.of(WhyUnread.pastTheTotalReadings());
             }
             elementsRead[0] += elements;
             return Optional.empty();
