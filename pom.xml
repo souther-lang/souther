@@ -333,6 +333,15 @@
                              what is checked here has to be checked on the stack the bound was set
                              for. A test that wants a smaller one makes its own thread. -->
                         <argLine>${test.jvm.args} -Xss${souther.jvm.stack} ${souther.jvm.layout}</argLine>
+                        <!-- The one place a test is held to a clock, and only to stop a build that
+                             has hung: no test asserts on how long it took, so no test is wrong for
+                             being slow, and a test that does not come back is stopped here and
+                             named, not waited for until the job is killed. Far past anything a
+                             test does on a loaded machine, so that it never decides a result. -->
+                        <configurationParameters>
+                            junit.jupiter.execution.timeout.default = 15 m
+                            junit.jupiter.execution.timeout.mode = enabled
+                        </configurationParameters>
                         <systemPropertyVariables>
                             <souther.example.step.limit>${test.example.step.limit}</souther.example.step.limit>
                         </systemPropertyVariables>
