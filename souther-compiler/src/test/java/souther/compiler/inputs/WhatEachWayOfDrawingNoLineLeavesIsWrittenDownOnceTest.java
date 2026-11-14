@@ -107,6 +107,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // each of them. A run allowed more meets it again — nothing was compared against a figure.
         table.put("RuleAboutAnElementOfSeveralContainers",
                 "RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS/UNAFFECTED");
+        // A remainder of a number no position holds: what stopped the reading is not a form
+        // nothing takes apart, and nothing was compared against a figure, so a run allowed more
+        // meets it again.
+        table.put("RuleAboutARemainderNoPositionHolds",
+                "RULE_ABOUT_A_REMAINDER_NO_POSITION_HOLDS/UNAFFECTED");
         table.put("UnreadValueRule", "UNSUPPORTED_SYNTAX/UNAFFECTED");
         // Arithmetic no form says, which the arithmetic named where it met it. Nothing was made of
         // a position and nothing was compared against a figure, so a run allowed more meets it
@@ -226,6 +231,11 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         table.put("WhatItStatesIsNoLine:MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT",
                 "RULE_MEANING_NOT_READ/MAY_CHANGE");
         table.put("WhatItStatesIsNoLine:A_PART_NOT_READ", "RULE_MEANING_NOT_READ/UNAFFECTED");
+        // Two elements of one container: no figure was reached, so a run allowed more meets it
+        // again; and the comparison may be written in a form this compiler reads, so it is not
+        // said as a form nothing takes apart.
+        table.put("WhatItStatesIsNoLine:TWO_ELEMENTS_OF_ONE_CONTAINER",
+                "RULE_RELATING_TWO_ELEMENTS_OF_ONE_CONTAINER/UNAFFECTED");
         table.put("WhatItStatesIsNoLine:A_NUMBER_NO_POSITION_HOLDS",
                 "RULE_ABOUT_A_DERIVED_VALUE/UNAFFECTED");
         table.put("WhatItStatesIsNoLine:NO_RELATION_OF_NUMBERS", "UNSUPPORTED_DOMAIN/UNAFFECTED");
@@ -577,6 +587,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                         souther.compiler.numeric.UnheldNumber.NO_REPRESENTATION_EXISTS),
                 new BlockReason.RuleAboutADerivedValue(),
                 new BlockReason.RuleAboutAnElementOfSeveralContainers(),
+                new BlockReason.RuleAboutARemainderNoPositionHolds(),
                 new BlockReason.UnreadValueRule(),
                 new BlockReason.NonAffineArithmetic(
                         NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES),

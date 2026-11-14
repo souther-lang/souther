@@ -311,6 +311,7 @@ public sealed interface BlockReason {
                     case A_PART_NOT_READ -> 20;
                     case A_NUMBER_NO_POSITION_HOLDS -> 21;
                     case NO_RELATION_OF_NUMBERS -> 22;
+                    case TWO_ELEMENTS_OF_ONE_CONTAINER -> 32;
                 };
                 case RelationNotShownToReachEveryValue _ -> 23;
                 case WhereALineDecidesNotWorkedOut _ -> 24;
@@ -320,6 +321,7 @@ public sealed interface BlockReason {
                 case RelationShownOverARegion _ -> 29;
                 case RelationRowsNotShownComputed _ -> 30;
                 case RelationNotShownWhereItsRowsStopped _ -> 31;
+                case RuleAboutARemainderNoPositionHolds _ -> 33;
             };
         }
 
@@ -424,7 +426,8 @@ public sealed interface BlockReason {
                         ((WhatItStatesIsNoLine) other).stoppedAt()
                                 .map(List::of).orElseGet(List::of));
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                     RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
+                     RuleAboutAnElementOfSeveralContainers _, RuleAboutARemainderNoPositionHolds _,
+                     UnreadValueRule _,
                      ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
                      EndLeftOpenByAChoice _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
@@ -476,7 +479,8 @@ public sealed interface BlockReason {
                 // the position holds whatever a value taking the unread branch may hold.
                 case PatternTooCostly _, OrderedExtentTooCostly _,
                      UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                     RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
+                     RuleAboutAnElementOfSeveralContainers _, RuleAboutARemainderNoPositionHolds _,
+                     UnreadValueRule _,
                      NonAffineArithmetic _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      LineSideNotWorkedOut _,
@@ -531,7 +535,8 @@ public sealed interface BlockReason {
                 // enter, and there is no figure it stopped at. So is a run whose end is no value:
                 // a longer walk finds the same end.
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                     RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
+                     RuleAboutAnElementOfSeveralContainers _, RuleAboutARemainderNoPositionHolds _,
+                     UnreadValueRule _,
                      NonAffineArithmetic _, OrderedExtentEndIsNoValue _,
                      ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
                      EndLeftOpenByAChoice _,
@@ -569,7 +574,8 @@ public sealed interface BlockReason {
                 case WhatItStatesIsNoLine(var _, var stoppedAt) ->
                         stoppedAt.map(List::of).orElseGet(List::of);
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
-                     RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
+                     RuleAboutAnElementOfSeveralContainers _, RuleAboutARemainderNoPositionHolds _,
+                     UnreadValueRule _,
                      NonAffineArithmetic _, OrderedExtentEndIsNoValue _,
                      ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
                      EndLeftOpenByAChoice _,
@@ -1009,6 +1015,21 @@ public sealed interface BlockReason {
      * author can do about it today is write the block twice.
      */
     record RuleAboutAnElementOfSeveralContainers() implements RuleReadingStopped {}
+
+    /**
+     * A statement that compares what a division leaves of a number no position of the input
+     * holds, such as the weekday of a date a walk found.
+     *
+     * <p>Its own case beside {@link UnreadComparisonForm} and {@link ComparisonOnARemainder}. The
+     * remainder was read, and so was its divisor; what stopped the reading is that its dividend is
+     * no form of the input's numbers, so no line is drawn on the remainder and none relates it to
+     * another value. The other says the form was read to the end, and this says it was not.
+     *
+     * <p>A fact of the statement, and said at a place only where the place has no word of its own:
+     * the word for a form nothing takes apart gives way to it, and a place made by an operation, or
+     * one no line can be drawn on, keeps what it says.
+     */
+    record RuleAboutARemainderNoPositionHolds() implements RuleReadingStopped {}
 
     /**
      * A rule naming which values the position may hold is written in a form no reader here takes
@@ -1785,6 +1806,14 @@ public sealed interface BlockReason {
 
             /** Some other part of what it states was not read. */
             A_PART_NOT_READ(null),
+
+            /** It needs two elements of one container, which a form over the container's
+             *  position would hold as one number. The stop is the statement's and no place's:
+             *  the comparison may be written in a form this compiler reads, and an author told
+             *  otherwise would rewrite what is not the difficulty. Said after the figures and
+             *  before {@link #A_PART_NOT_READ}, and never where a place words a part for itself
+             *  ({@code Cutting#whatStopsSay}). */
+            TWO_ELEMENTS_OF_ONE_CONTAINER(null),
 
             /** It relates a number no position of the input holds: a value the body works out,
              *  or what a run of values comes to. */

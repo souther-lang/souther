@@ -1564,8 +1564,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
             return onTheInput.arithmetic().get()
                     instanceof AffineReading.OfAComparison.Stopped stopped
-                    ? GuardThresholds.whatEachPlaceIsLeftWith(comparison, stopped, read, reads,
-                            answering)
+                    ? GuardThresholds.whatEachPlaceIsLeftWithByARemainder(comparison, stopped,
+                            read, reads, answering)
                     : noLine(comparison, stated.proposition(), List.of(), Set.of(),
                             onTheInput.arithmetic(), read, reads, answering);
         }
@@ -1798,6 +1798,11 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         BlockReason.WhatItStatesIsNoLine.Why.A_PART_NOT_READ);
         List<FilingCoordinate> filed =
                 GuardThresholds.filedAt(comparison, read, reads, answering);
+        // Two elements of one container are what the statement needs, and the container is no
+        // place they are not read at: it is left out where an element of it is among the places.
+        if (why.why() == BlockReason.WhatItStatesIsNoLine.Why.TWO_ELEMENTS_OF_ONE_CONTAINER) {
+            filed = GuardThresholds.withoutTheContainerPositionsOfTheirElements(filed);
+        }
         if (!filed.isEmpty()) {
             return new Read.Stopped(ComparisonAssessment.atEachOf(filed, why),
                     WhereAReadingStopped.ELSEWHERE);
@@ -2050,8 +2055,14 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
     /**
      * What parts that stopped for {@code stops} say of the statement they are parts of — or null
-     * where one is worded by each place the rule is filed at. A figure that stopped a part is the
-     * word, in the order the words are declared, and any other stop is a part not read.
+     * where one is worded by each place the rule is filed at.
+     *
+     * <p>Where several parts stopped for different reasons, the one said is the first of these: a
+     * part a place words, which sends an author to the place; a figure of this compiler's work, in
+     * the order the words are declared, since a run allowed more may read past it; two elements of
+     * one container, which no run reads past either and is the statement's own; and any other part,
+     * as a part not read. Every reader of a stop that says what a statement is left with asks this,
+     * so the order is the same where a comparison is stopped and where a fork over a part is.
      *
      * @param stops what stopped the parts, which are not empty
      */
@@ -2070,6 +2081,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         stops.stream().filter(why -> why.figure().isPresent()).findFirst().ifPresent(why -> {
             throw new IllegalStateException("no word says a part stopped at " + why);
         });
+        if (stops.stream().anyMatch(WhyUnread.TwoElementsOfOneContainer.class::isInstance)) {
+            return new BlockReason.WhatItStatesIsNoLine(
+                    BlockReason.WhatItStatesIsNoLine.Why.TWO_ELEMENTS_OF_ONE_CONTAINER);
+        }
         return new BlockReason.WhatItStatesIsNoLine(
                 BlockReason.WhatItStatesIsNoLine.Why.A_PART_NOT_READ);
     }
@@ -2094,14 +2109,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     /**
      * Whether a part that stopped for {@code why} is worded by each place the rule is filed at: a
      * form nothing takes apart, what an operation answered, or a value the terms name no position
-     * for. The rest are a step of the reading, a figure of its work or something a call or an
-     * invariant holds, and say the same at every place.
+     * for. The rest are a step of the reading, a figure of its work, two elements of one container
+     * or something a call or an invariant holds, and say the same at every place.
      */
     private static boolean wordedByThePlace(WhyUnread why) {
         return switch (why) {
             case WhyUnread.OutsideTheLinearFragment _, WhyUnread.NotArithmetic _,
-                 WhyUnread.NoNumberOnARun _,
-                 WhyUnread.TwoElementsOfOneContainer _, WhyUnread.NoLawFor _,
+                 WhyUnread.NoNumberOnARun _, WhyUnread.NoLawFor _,
                  WhyUnread.NoWordsFor _, WhyUnread.NotProvedOfItsBody _,
                  WhyUnread.NoFormOfWhatItAnswers _,
                  WhyUnread.ANumberOfWhatAnOperationAnswers _,
@@ -2111,7 +2125,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                  WhyUnread.NoMeasureOfItsSize _, WhyUnread.WhichElementARunStopsAt _ -> true;
             case WhyUnread.MoreReadingsThanAreMade _, WhyUnread.MoreTotalReadingsThanAreMade _,
                  WhyUnread.MorePartsThanAreConcluded _, WhyUnread.MoreWaysThanAreWrittenOut _,
-                 WhyUnread.MoreElementsThanAreWrittenOut _, WhyUnread.SeveralValuesNotGoneInto _, WhyUnread.ANumberNotHeld _,
+                 WhyUnread.MoreElementsThanAreWrittenOut _, WhyUnread.SeveralValuesNotGoneInto _,
+                 WhyUnread.ANumberNotHeld _, WhyUnread.TwoElementsOfOneContainer _,
                  WhyUnread.AClauseOfAnInvariant _, WhyUnread.AnInvariantNotReached _,
                  WhyUnread.InACalledBody _, WhyUnread.CopiesStateDifferentThings _,
                  WhyUnread.NotMetByTheReading _ -> false;
