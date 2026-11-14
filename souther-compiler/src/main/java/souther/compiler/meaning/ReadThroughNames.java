@@ -61,9 +61,9 @@ public final class ReadThroughNames {
      * put inside its own part is a quantifier over its own element, which {@link Proposition.Some}
      * refuses, and the refusal says nothing of the telling that asked for it.
      */
-    private static final Supplier<Proposition> EVERY_PART_IS_TOLD_A_VALUE = () -> {
+    private static Proposition noPartIsToldAsTwo() {
         throw new IllegalStateException("a telling that gives every part a value told one as two");
-    };
+    }
 
     /**
      * {@code stated} with each number and subject at an element of a container {@code names}
@@ -114,7 +114,7 @@ public final class ReadThroughNames {
      */
     public static Proposition atThePositions(Proposition stated) {
         return told(stated, (position, had) -> ValueIdentity.AT_THE_POSITION,
-                EVERY_PART_IS_TOLD_A_VALUE);
+                ReadThroughNames::noPartIsToldAsTwo);
     }
 
     /**
@@ -147,7 +147,7 @@ public final class ReadThroughNames {
                 }
             }
             return had;
-        }, EVERY_PART_IS_TOLD_A_VALUE);
+        }, ReadThroughNames::noPartIsToldAsTwo);
         Map<BindingId, BindingId> renaming = new LinkedHashMap<>();
         copiesOf.forEach((name, copies) -> {
             if (!toNone.contains(name) && copies.size() == 1) {
@@ -177,7 +177,7 @@ public final class ReadThroughNames {
                 before.add(name);
             }
             return had;
-        }, EVERY_PART_IS_TOLD_A_VALUE);
+        }, ReadThroughNames::noPartIsToldAsTwo);
         Set<BindingId> after = new HashSet<>();
         for (BindingId each : before) {
             after.add(renaming.getOrDefault(each, each));
@@ -188,7 +188,8 @@ public final class ReadThroughNames {
         return told(stated, (position, had) ->
                 had instanceof ValueIdentity.OfAnElement(BindingId name)
                         && renaming.get(name) instanceof BindingId to
-                        ? new ValueIdentity.OfAnElement(to) : had, EVERY_PART_IS_TOLD_A_VALUE);
+                        ? new ValueIdentity.OfAnElement(to) : had,
+                ReadThroughNames::noPartIsToldAsTwo);
     }
 
     /**
@@ -289,7 +290,7 @@ public final class ReadThroughNames {
         told(stated, (position, had) -> {
             out.add(new Told(position, had));
             return had;
-        }, EVERY_PART_IS_TOLD_A_VALUE);
+        }, ReadThroughNames::noPartIsToldAsTwo);
         return out.stream().map(Told::identity).toList();
     }
 
@@ -395,7 +396,7 @@ public final class ReadThroughNames {
                 }
             }
             return had;
-        }, EVERY_PART_IS_TOLD_A_VALUE);
+        }, ReadThroughNames::noPartIsToldAsTwo);
         return ElementsNamed.of(found);
     }
 
