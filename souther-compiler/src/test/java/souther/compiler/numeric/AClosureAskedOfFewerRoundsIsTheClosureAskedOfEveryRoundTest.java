@@ -66,7 +66,7 @@ class AClosureAskedOfFewerRoundsIsTheClosureAskedOfEveryRoundTest {
         written.add(RulesAsWritten.rule("1b <= " + (limit - 1)));
         written.add(RulesAsWritten.rule("1b >= " + -limit));
         for (int extra = random.nextInt(4); extra > 0; extra--) {
-            long at = random.nextInt(links) + 1;
+            long at = 1L + random.nextInt(links);
             long weight = doubling ? 1L << at : 1;
             String sum = weight + "a + " + (doubling ? weight - 1 : at) + "b";
             long bound = random.nextInt((int) (2 * limit)) - limit;
