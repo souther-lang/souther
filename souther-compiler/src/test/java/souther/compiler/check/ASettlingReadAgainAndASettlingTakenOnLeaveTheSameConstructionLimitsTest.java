@@ -213,7 +213,7 @@ class ASettlingReadAgainAndASettlingTakenOnLeaveTheSameConstructionLimitsTest {
         for (RepositoryModels.Model model : RepositoryModels.all()) {
             Compilation compilation = model.answered();
             ReadingPolicy policy = compilation.db().ask(new Front.Reading()).value();
-            DeclarationReadings lent = RepositoryModels.knownTo(compilation);
+            DeclarationReadings lent = RepositoryModels.knownTo(model);
             for (String module : compilation.modules()) {
                 RuleReadingSource source = RuleReadings.of(compilation, module);
                 Set<TypeSymbol> seen = new LinkedHashSet<>();

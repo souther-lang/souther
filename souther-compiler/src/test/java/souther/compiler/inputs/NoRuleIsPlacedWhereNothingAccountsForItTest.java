@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
+import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -193,11 +194,11 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
             """;
 
     /**
-     * The models asked about here: what the repository carries, and one this class writes.
+     * The model this class writes, asked about beside the ones the repository carries.
      *
-     * <p>The written one crosses a name through a sum, which the corpora do not, and the questions
-     * below are about every model that reaches them either way. Answered once for the class, as the
-     * repository's are, because each question here asks about all of them.
+     * <p>It crosses a name through a sum, which the corpora do not, and the questions below are
+     * about every model that reaches them either way. Made once for the class, as the repository's
+     * are, because each question here asks about all of them.
      */
     private static final Compilation THROUGH_A_SUM = ACompiledModel.compiles(
             Compilation.ofSources(List.of(NAMES_THROUGH_A_SUM), ModulePath.EMPTY));
@@ -246,9 +247,9 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
         }
         List<PlacedRules> out = new ArrayList<>();
         for (RepositoryModels.Model model : RepositoryModels.all()) {
-            valuesRead(model.answered(), out);
+            valuesRead(model.answered(), RepositoryModels.knownTo(model), out);
         }
-        valuesRead(THROUGH_A_SUM, out);
+        valuesRead(THROUGH_A_SUM, THROUGH_A_SUM.db().readings(), out);
         everyValueRead = List.copyOf(out);
         return everyValueRead;
     }
@@ -260,7 +261,8 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
         everyValueRead = null;
     }
 
-    private static void valuesRead(Compilation compilation, List<PlacedRules> out) {
+    private static void valuesRead(Compilation compilation, DeclarationReadings known,
+                                   List<PlacedRules> out) {
         for (String module : compilation.modules()) {
             Map<String, DeclaredSig> sigs =
                     compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
@@ -269,7 +271,7 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
                 for (DeclaredSig.Input input : declared.inputs()) {
                     out.add(PlacedRules.of(TermPath.of("p"), input.type(),
                             RuleReadingContext.of(rules, ReadAs.THE_COMPILATION_DOES,
-                                    RepositoryModels.knownTo(compilation), TestDay.TODAY)));
+                                    known, TestDay.TODAY)));
                 }
             }
         }

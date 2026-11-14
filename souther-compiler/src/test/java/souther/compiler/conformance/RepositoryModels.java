@@ -32,9 +32,9 @@ import java.util.SequencedMap;
  *
  * <p><b>Built once for the JVM that asks.</b> Answering these is most of what such a test costs, and
  * a class with three questions about the population would otherwise pay for the population three
- * times. The compilations are handed out to be read: the answers are kept in each one's store, so a
- * second reader finds the questions already put. A caller that would change one — update its
- * documents, give it another budget — makes its own rather than taking these.
+ * times. The compilations are handed out to be read, each as a {@link Model}: the answers are kept in
+ * each one's store, so a second reader finds the questions already put. A caller that would change
+ * one — update its documents, give it another budget — makes its own rather than taking these.
  */
 public final class RepositoryModels {
 
@@ -67,7 +67,7 @@ public final class RepositoryModels {
     }
 
     /**
-     * The conformance corpora among them, each with the compilation {@link #all()} holds for it.
+     * The conformance corpora among them, each as the model {@link #all()} holds for it.
      *
      * <p>For a test whose subject is what the language declares it accepts and nothing written to be
      * worked with: each of these was compiled the way {@link ConformanceCorpus#analyse()} compiles
@@ -146,15 +146,16 @@ public final class RepositoryModels {
      * is usually about, so no reading is lent here — a lender that handed one would be answering
      * the question instead of sharing the work under it.
      *
-     * <p><b>For the compilations {@link #all()} hands out and no others.</b> What is kept here is
-     * knowledge of one revision, and a compilation is not one: the same object takes another set of
-     * sources when it is updated, and what its sets are is then settled by sources these answers
-     * were not worked out under. These are never updated — they are the models as this repository
-     * carries them, compiled once for the JVM — so the object stands in for the revision here and
-     * would not anywhere else.
+     * <p><b>For the models {@link #all()} hands out and no others, which is why it takes one.</b>
+     * What is kept here is knowledge of one revision, and a compilation is not one: the same object
+     * takes another set of sources when it is updated, and what its sets are is then settled by
+     * sources these answers were not worked out under. These are never updated — they are the
+     * models as this repository carries them, compiled once for the JVM — so the object stands in
+     * for the revision here and would not anywhere else. A compilation a test makes for itself
+     * lends its own, {@code db().readings()}.
      */
-    public static synchronized DeclarationReadings knownTo(Compilation compilation) {
-        return KNOWN.computeIfAbsent(compilation, _ -> knowingWhereSetsStop());
+    public static synchronized DeclarationReadings knownTo(Model model) {
+        return KNOWN.computeIfAbsent(model.compilation, _ -> knowingWhereSetsStop());
     }
 
     private static DeclarationReadings knowingWhereSetsStop() {

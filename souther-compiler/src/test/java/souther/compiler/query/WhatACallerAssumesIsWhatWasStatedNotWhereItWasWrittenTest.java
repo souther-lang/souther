@@ -65,18 +65,13 @@ class WhatACallerAssumesIsWhatWasStatedNotWhereItWasWrittenTest {
         return out;
     }
 
-    /** The corpora written to be refused, and what each is refused for. */
-    private static final Map<String, List<String>> CORPUS_REFUSALS =
-            Map.of("booking", List.of("E2010", "E1013"));
-
     private static Compilation compiled(ConformanceCorpus corpus, String before) {
         Map<String, String> byId = new LinkedHashMap<>();
         for (int i = 0; i < corpus.sources().size(); i++) {
             byId.put(corpus.files().get(i), before + corpus.sources().get(i));
         }
         Compilation compilation = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        return ACompiledModel.refusedWith(
-                CORPUS_REFUSALS.getOrDefault(corpus.name(), List.of()), compilation);
+        return ACompiledModel.refusedWith(corpus.refusedWith(), compilation);
     }
 
     @Test

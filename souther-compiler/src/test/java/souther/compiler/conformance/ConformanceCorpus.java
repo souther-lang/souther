@@ -63,12 +63,8 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
     /** What a line of the manifest begins with where it declares a purpose rather than uses one. */
     private static final String DECLARES = "purpose";
 
-    /**
-     * The errors a corpus is written to be refused with, in the order the compiler gives them. A
-     * corpus not named here compiles.
-     */
-    private static final Map<String, List<String>> REFUSED_WITH =
-            Map.of("booking", List.of("E2010", "E1013"));
+    /** The checked-in diagnostics of a corpus, beside the answers about it. */
+    private static final String DIAGNOSTICS = "expected.diagnostics.txt";
 
     /** Where the answers about them are, which is this module's own resources. */
     static final String ROOT = "/souther/compiler/conformance/";
@@ -221,9 +217,29 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
         return Compilation.ofSources(sources, ModulePath.EMPTY).writtenOn(TestDay.DATE);
     }
 
-    /** The errors this corpus is written to be refused with, in the order the compiler gives them. */
+    /**
+     * The errors this corpus is written to be refused with, in the order the compiler gives them:
+     * the ones its checked-in diagnostics say, and none for a corpus with no diagnostics checked in,
+     * which compiles.
+     *
+     * <p>The one place this is said. It is what the checked-in answer already holds, and a second
+     * statement of it — a table of names, or a list in the test that wants it — answers separately
+     * and is wrong without anything failing the day the corpus is refused for something else.
+     * Held to the compiler by {@code TheAnswersAboutEachConformanceCorpusAreTheOnesCheckedInTest}.
+     */
     public List<String> refusedWith() {
-        return REFUSED_WITH.getOrDefault(name, List.of());
+        try (InputStream in = ConformanceCorpus.class
+                .getResourceAsStream(ROOT + name + "/" + DIAGNOSTICS)) {
+            if (in == null) {
+                return List.of();
+            }
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8).lines()
+                    .filter(line -> line.startsWith("error "))
+                    .map(line -> line.split("\\s+")[1])
+                    .toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     /**
@@ -242,8 +258,7 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
      */
     public Analysed analyse() {
         List<Located> warnings = new ArrayList<>();
-        Compilation compilation = ACompiledModel.refusedWith(
-                REFUSED_WITH.getOrDefault(name, List.of()),
+        Compilation compilation = ACompiledModel.refusedWith(refusedWith(),
                 Compiler.analyzedModules(sources, ModulePath.EMPTY, warnings,
                         Adequacy.Asked.fullReport(), TestDay.DATE));
         return new Analysed(this, compilation, compilation.errors(), warnings,
@@ -270,9 +285,7 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
         /** The compilation, held to be refused with what its corpus is meant to be refused with
          *  and nothing else, for a reader that takes the model out of this record. */
         public Compilation answered() {
-            Compilation held = compilation;
-            return ACompiledModel.refusedWith(REFUSED_WITH.getOrDefault(corpus.name(), List.of()),
-                    held);
+            return ACompiledModel.refusedWith(corpus.refusedWith(), compilation);
         }
 
         /** Everything said about this corpus, errors before warnings, as the report writes them. */

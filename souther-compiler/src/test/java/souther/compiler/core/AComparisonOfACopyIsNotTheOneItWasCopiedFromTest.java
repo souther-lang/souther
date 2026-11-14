@@ -215,15 +215,11 @@ class AComparisonOfACopyIsNotTheOneItWasCopiedFromTest {
         }
     }
 
-    /** What the conformance corpora are refused for, as checked in beside each corpus: the models
-     * that say what the compiler refuses are among the ones whose bodies are walked. */
-    private static final Map<String, List<String>> CORPUS_REFUSALS =
-            Map.of("booking", List.of("E2010", "E1013"));
-
     private static List<Map.Entry<String, Core>> everyBody() {
         List<Model> sources = new ArrayList<>();
-        ConformanceCorpus.all().forEach(corpus -> sources.add(new Model(corpus.sources(),
-                CORPUS_REFUSALS.getOrDefault(corpus.name(), List.of()))));
+        // The models that say what the compiler refuses are among the ones whose bodies are walked.
+        ConformanceCorpus.all().forEach(corpus ->
+                sources.add(new Model(corpus.sources(), corpus.refusedWith())));
         sources.add(Model.clean(List.of(SPLICED)));
         sources.add(Model.clean(List.of(COMBINATOR)));
         return bodiesOf(sources);
