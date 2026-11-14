@@ -212,7 +212,7 @@ class ASettlingReadAgainAndASettlingTakenOnLeaveTheSameConstructionLimitsTest {
     private static List<Record> recordsRead() {
         List<Record> out = new ArrayList<>();
         for (Compilation compilation : RepositoryModels.all()) {
-            ACompiledModel.compiles(compilation);
+            ACompiledModel.refusedWith(RepositoryModels.refusedWith(compilation), compilation);
             ReadingPolicy policy = compilation.db().ask(new Front.Reading()).value();
             DeclarationReadings lent = RepositoryModels.knownTo(compilation);
             for (String module : compilation.modules()) {

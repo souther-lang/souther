@@ -780,7 +780,7 @@ class EveryFindingAboutAnObligationJoinsToItsAccountTest {
     private static List<JsonNode> documents() {
         List<JsonNode> out = new ArrayList<>();
         RepositoryModels.conformance().forEach((corpus, held) -> {
-            Compilation compilation = ACompiledModel.compiles(held);
+            Compilation compilation = ACompiledModel.refusedWith(corpus.refusedWith(), held);
             out.add(JSON.readTree(AdequacyReport.of(compilation).json(
                     new SourceRendering(corpus.names(), compilation.texts()))));
         });

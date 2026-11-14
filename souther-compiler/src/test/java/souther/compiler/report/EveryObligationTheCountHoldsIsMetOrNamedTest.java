@@ -462,7 +462,7 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
         stopped.withJvmExampleDeadlines(DoesNotComeBack.overrunningOn(
                 DoesNotComeBack.everythingAboutRowsOf("go")));
         stopped.measure(Adequacy.Asked.fullReport());
-        ACompiledModel.compiles(stopped);
+        ACompiledModel.refusedWith(List.of("E1923"), stopped);
         out.add(new Reported("example.loop", AdequacyReport.of(stopped),
                 SourceRendering.namedByIdentity(stopped.texts())));
         Compilation gate = ACompiledModel.measured(ONE_ARM_OF_TWO, Adequacy.Asked.fullReport());

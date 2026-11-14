@@ -1,7 +1,6 @@
 package souther.compiler.meta;
 
 import souther.compiler.ACompiledModel;
-import souther.compiler.conformance.ConformanceCorpus;
 import souther.compiler.conformance.RepositoryModels;
 import souther.compiler.jvm.ClassFileImage;
 import souther.compiler.jvm.GeneratedClass;
@@ -93,8 +92,7 @@ class EveryClassOfAnotherModuleAClassNamesIsOneItRecordsReadingTest {
     void everyClassOfAnotherModuleNamedIsOfADeclarationRecordedAsRead() {
         List<String> unrecorded = new ArrayList<>();
         int checked = 0;
-        Compilation fixture = ACompiledModel.compiles(
-                Compilation.ofSources(REACHING_EVERY_WAY, ModulePath.of(Map.of())));
+        Compilation fixture = reachingEveryWay();
         List<Compilation> compilations = new ArrayList<>(List.of(fixture));
         compilations.addAll(RepositoryModels.all());
         for (Compilation carried : compilations) {
@@ -140,18 +138,17 @@ class EveryClassOfAnotherModuleAClassNamesIsOneItRecordsReadingTest {
                 "a class names a class of another module no recorded declaration accounts for");
     }
 
+    private static Compilation reachingEveryWay() {
+        return ACompiledModel.compiles(
+                Compilation.ofSources(REACHING_EVERY_WAY, ModulePath.of(Map.of())));
+    }
+
     /**
-     * {@code carried}, held to compile — or, where it is a conformance corpus the manifest expects
-     * refused, to be refused as that corpus says.
+     * {@code carried}, held to what it is written to be: to compile, or, where it is a conformance
+     * corpus the manifest expects refused, to be refused as that corpus says.
      */
     private static Compilation asked(Compilation carried) {
-        for (ConformanceCorpus corpus : ConformanceCorpus.all()) {
-            ConformanceCorpus.Analysed analysed = RepositoryModels.analysed(corpus);
-            if (analysed.compilation() == carried) {
-                return analysed.answered();
-            }
-        }
-        return ACompiledModel.compiles(carried);
+        return ACompiledModel.refusedWith(RepositoryModels.refusedWith(carried), carried);
     }
 
     /**

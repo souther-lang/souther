@@ -96,6 +96,26 @@ public final class RepositoryModels {
     }
 
     /**
+     * What {@code carried}, one of the compilations {@link #all()} hands out, is written to be
+     * refused with: the errors its corpus declares, and none for a model written to compile.
+     *
+     * <p>For the test that holds a model it took from here to what it is meant to be, as
+     * {@code ACompiledModel.refusedWith(RepositoryModels.refusedWith(carried), carried)}. Holding
+     * one of these to compile is wrong for a corpus written to be refused, and the list of what
+     * each is refused with is said once, by {@link ConformanceCorpus#refusedWith()}. A compilation
+     * that is not one of these was made by the test that holds it, which writes it to compile.
+     */
+    public static List<String> refusedWith(Compilation carried) {
+        for (Map.Entry<String, Compilation> each : BY_CORPUS.entrySet()) {
+            if (each.getValue() == carried) {
+                ConformanceCorpus.Analysed analysed = ANALYSED.get(each.getKey());
+                return analysed == null ? List.of() : analysed.corpus().refusedWith();
+            }
+        }
+        return List.of();
+    }
+
+    /**
      * What one of these models already knows, to be handed to every reading made of it.
      *
      * <p>Where a set's strings stop is settled by the set and by an allowance minted for that set,

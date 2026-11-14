@@ -203,9 +203,13 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
 
     private static List<Compilation> askedAbout() {
         List<Compilation> out = new ArrayList<>(RepositoryModels.all());
-        out.add(ACompiledModel.compiles(
-                Compilation.ofSources(List.of(NAMES_THROUGH_A_SUM), ModulePath.EMPTY)));
+        out.add(throughASum());
         return List.copyOf(out);
+    }
+
+    private static Compilation throughASum() {
+        return ACompiledModel.compiles(
+                Compilation.ofSources(List.of(NAMES_THROUGH_A_SUM), ModulePath.EMPTY));
     }
 
     /**
@@ -216,7 +220,7 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
     private static List<InputDomain> everyReading() {
         List<InputDomain> out = new ArrayList<>();
         for (Compilation compilation : ASKED_ABOUT) {
-            ACompiledModel.compiles(compilation);
+            ACompiledModel.refusedWith(RepositoryModels.refusedWith(compilation), compilation);
             for (String module : compilation.modules()) {
                 Answer<Map<String, InputDomain>> read =
                         compilation.db().ask(new Adequacy.Inputs(module));
@@ -262,7 +266,7 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
     }
 
     private static void valuesRead(Compilation compilation, List<PlacedRules> out) {
-        ACompiledModel.compiles(compilation);
+        ACompiledModel.refusedWith(RepositoryModels.refusedWith(compilation), compilation);
         for (String module : compilation.modules()) {
             Map<String, DeclaredSig> sigs =
                     compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
