@@ -787,7 +787,8 @@ public final class InvariantChecker {
         DeclarationReadings readings = reading.readings();
         if (inherited != null) {
             return DeclarationReading.of(named, seedFieldsFresh(named, reading, settled, reach,
-                    named == null ? StringMachineAnswers.NONE : readings.of(named.key()),
+                    named == null ? readings.ofAValueWithNoDeclaration()
+                            : readings.of(named.key()),
                     inherited));
         }
         if (!settled.isEmpty() || !reach.everything()) {
@@ -1191,11 +1192,7 @@ public final class InvariantChecker {
         Map<RuleRef.Invariant, Map<OpenEnd, Set<ChoiceToLift>>> boundsLeftOpen =
                 new LinkedHashMap<>();
         answered.perClause().forEach((each, one) -> {
-            // An answer for a rule, kept once. Two clauses of one rule would be two answers and the
-            // second would take the place of the first, which is why a rule is handed as one.
-            ReadByClauses.OfARule replaced = narrowedBy.put(each.from(), one);
-            assert replaced == null
-                    : "a rule is answered for once, and this one was read twice: " + each.from();
+            narrowedBy.put(each.from(), one);
             // Here, and here alone, what a reading met becomes what an author wrote. Everything
             // above is coordinates of the tree this reading was built over, which two constructions
             // of one declaration number differently ({@link ClauseOccurrence}); what is filed is

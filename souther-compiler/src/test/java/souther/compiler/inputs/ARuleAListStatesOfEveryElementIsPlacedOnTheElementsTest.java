@@ -33,6 +33,7 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A rule a list states of every element it holds is placed where the elements stand.
@@ -310,6 +311,22 @@ class ARuleAListStatesOfEveryElementIsPlacedOnTheElementsTest {
             behavior f : (i: Issue) -> Ok
             """;
 
+    /** The statement names a field of the holder, which the element's reading holds no value of. */
+    private static String statedAgainstTheHolder(String entry, String holder) {
+        return """
+                module bounded
+
+                data Entry = { %s }
+
+                data R = { limit: Int, entries: List<Entry> } invariant
+                    %s List.all(e -> e.amount <= limit, entries)
+
+                data Ok
+
+                behavior f : (r: R) -> Ok
+                """.formatted(entry, holder);
+    }
+
     private static RuleReadingContext readingOf(Compilation compilation) {
         RuleReadingSource rules = RuleReadings.of(compilation, compilation.modules().get(0));
         return RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
@@ -544,6 +561,29 @@ class ARuleAListStatesOfEveryElementIsPlacedOnTheElementsTest {
                 positionOf(ELEMENTS_WITH_NOTHING_STATED, "entries[*].size").completeness());
         assertInstanceOf(AdmissibleSet.Completeness.Wider.class,
                 positionOf(ELEMENTS_ASKED_AS_A_WHOLE, "entries[*].size").completeness());
+    }
+
+    /**
+     * What a statement names of the container that holds the list is no place of an element, and the
+     * element is not stopped by it however the container's own rules leave that name: bound,
+     * unbound, or a name the element's declaration has as well.
+     */
+    @Test
+    void aStatementNamingAFieldOfTheHolderStopsNoElementAndSaysItIsUnread() {
+        for (String model : new String[] {
+                statedAgainstTheHolder("amount: Int", "limit == 3 &&"),
+                statedAgainstTheHolder("amount: Int", ""),
+                statedAgainstTheHolder("amount: Int, limit: Int", "limit == 3 &&")}) {
+            Position amount = positionOf(model, "r.entries[*].amount");
+            assertNull(amount.bounds().getFirst().admissible(), model);
+            assertInstanceOf(AdmissibleSet.Completeness.Wider.class, amount.completeness(), model);
+            // The statement never reached the element, rather than reached it and been read as
+            // something the element's own places did not say.
+            assertTrue(amount.unansweredQuestions().isEmpty(), model);
+        }
+        Position own = positionOf(statedAgainstTheHolder("amount: Int, limit: Int",
+                "limit == 3 &&"), "r.entries[*].limit");
+        assertNull(own.bounds().getFirst().admissible());
     }
 
     /** A choice between cases is not read the container's statement into, and says so. */

@@ -7,7 +7,6 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
 
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,9 +25,10 @@ import java.util.Set;
  *       a value that is its own value, which a newtype and what no declaration stands under are,
  *       stands as the type it was written as; a record is read through its fields, so
  *       {@code e.size} is the field {@code size};
- *   <li>it reads no name of the value that holds the list. The fields of a declaration are the
- *       same bindings wherever the declaration is, so one read here would be taken for this
- *       value's own;
+ *   <li>it reads no name but the element and the ones it makes itself. What else it names is the
+ *       container's, which a reading of one element has no place for; and the fields of a
+ *       declaration are the same bindings wherever the declaration is, so one read here would be
+ *       taken for this value's own;
  *   <li>the rule it is a part of is not one this value is read under already. A reading answers
  *       once for a rule, and the same rule as the declaration's own and as what its container
  *       states of an element of that declaration are two statements it cannot keep apart.
@@ -87,9 +87,13 @@ final class ElementStatements {
     private static Core ofTheValue(ElementGuarantee guarantee, Frame frame) {
         BindingId parameter = guarantee.predicate().params().getFirst().binding();
         Core body = guarantee.predicate().body();
-        Set<BindingId> own = new HashSet<>(frame.bindings().values());
-        own.remove(parameter);
-        if (WhatABodyReads.anyOf(body, own)) {
+        // The element and what the statement makes itself are the only names it may read. Any other
+        // is the container's — a field of the value that holds the list, or of its declaration —
+        // and has no place in a reading of one element: one of this value's own bindings would be
+        // taken for the element's, and any other would be a value nothing here says anything of.
+        Set<BindingId> free = WhatABodyReads.freeIn(body);
+        free.remove(parameter);
+        if (!free.isEmpty()) {
             return null;
         }
         if (frame.atTheValue()) {

@@ -506,7 +506,7 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                         + " none and is walked on into, where the access it holds is met");
         row(out, c + "inputs/InputUses$Walk", "heldWithoutReading",
                 "(" + core + "L" + c + "inputs/InputReads;)" + core, 2, GOES_ON_INTO_IT);
-        row(out, c + "inputs/InputReads", "walkNames",
+        row(out, c + "core/WhatABodyReads", "namesIn",
                 "(" + core + "Ljava/util/Set;Ljava/util/List;)V", 1, COUNTS_THROUGH_IT);
         row(out, c + "inputs/InputReads", "applicationsRead",
                 "(" + core + "Ljava/util/Set;Ljava/util/Set;)V", 1, COUNTS_THROUGH_IT);

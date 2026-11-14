@@ -348,8 +348,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.STRUCTURE, "a chain read off one of the value's fields is one place, whose"
                         + " names Location.of reads; a projection read off anything else names"
                         + " no place, so its base is all there is to go down to");
-        row(out, c + "inputs/InputReads", "walkNames", "(" + core + "Ljava/util/Set;Ljava/util/List;)V",
-                Reading.STRUCTURE, BINDINGS);
+        row(out, c + "core/WhatABodyReads", "namesIn",
+                "(" + core + "Ljava/util/Set;Ljava/util/List;)V", Reading.STRUCTURE, BINDINGS);
         row(out, c + "flow/ValueArrivals", "readCopies", "(" + core + "L" + c
                 + "types/OccurrenceLineage$Expansion;)V", Reading.STRUCTURE,
                 "which copy of an application each node is code of: a name read off a value says"
