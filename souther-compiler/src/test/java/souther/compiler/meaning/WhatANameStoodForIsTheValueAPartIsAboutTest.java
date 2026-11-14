@@ -331,6 +331,23 @@ class WhatANameStoodForIsTheValueAPartIsAboutTest {
     }
 
     /**
+     * Asking whether a statement holds one value at each element puts nothing together: a part
+     * of two values inside a quantifier over another container is answered as false, and the
+     * statement, which holds that quantifier, is never put inside it.
+     */
+    @Test
+    void askingForOneValueAtEachElementPutsNothingTogether() {
+        TermPath hs = TermPath.of("x").then("hs");
+        Proposition inside = Proposition.all(List.of(truth(PAID, of(A)), truth(PAID, of(B))));
+        Proposition stated = new Proposition.Some(
+                new DecisionSubject.AnInput(hs, ValueIdentity.AT_THE_POSITION), inside, true);
+        assertFalse(ReadThroughNames.holdsOneValueAtEachElement(stated));
+        assertTrue(ReadThroughNames.holdsOneValueAtEachElement(new Proposition.Some(
+                new DecisionSubject.AnInput(hs, ValueIdentity.AT_THE_POSITION),
+                truth(PAID, of(A)), true)));
+    }
+
+    /**
      * Two statements are one statement whatever they named their values only where the names
      * stand one to one: {@code a.paid && !a.paid} and {@code a.paid && !b.paid} are one statement
      * at positions and two in what they say.

@@ -65,6 +65,24 @@ public final class ReadThroughNames {
         throw new IllegalStateException("a telling that gives every part a value told one as two");
     }
 
+    /** Thrown by {@link #stopsAtAPartOfNoOneValue} and caught where that was asked for. */
+    private static final class NoOneValue extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        NoOneValue() {
+            super("a part is of no one value", null, false, false);
+        }
+    }
+
+    /**
+     * What a reader that only asks whether every part is of one value puts where a part is of
+     * none: nothing. The telling stops there, so no statement is put together and no part is
+     * chosen to stand in the place of the one that was refused.
+     */
+    private static Proposition stopsAtAPartOfNoOneValue() {
+        throw new NoOneValue();
+    }
+
     /**
      * {@code stated} with each number and subject at an element of a container {@code names}
      * holds told the name that stood for it; a part at one more than one name stood for is
@@ -221,17 +239,15 @@ public final class ReadThroughNames {
     /** Whether {@code stated} holds one value at each element's position
      *  ({@link #oneValueAtEachElement}): what a reader of positions can be handed.
      *
-     *  <p>Asked of what the telling does and answered by whether it told a part as two, so the
-     *  statement it puts together is thrown away and the part it puts is any part: a part that
-     *  holds and says nothing. Put as the statement itself, it is the statement inside one of its
-     *  own quantifiers' elements. */
+     *  <p>The telling stops at the first part that reads a second value, so nothing is put
+     *  together and no part stands where another stood. */
     public static boolean holdsOneValueAtEachElement(Proposition stated) {
-        boolean[] two = {false};
-        oneValueAtEachElement(stated, () -> {
-            two[0] = true;
-            return new Proposition.Always(true);
-        });
-        return !two[0];
+        try {
+            oneValueAtEachElement(stated, ReadThroughNames::stopsAtAPartOfNoOneValue);
+            return true;
+        } catch (NoOneValue _) {
+            return false;
+        }
     }
 
     /**
@@ -829,17 +845,15 @@ public final class ReadThroughNames {
      * {@code stated}, a statement a number is made of, told — or null where some part of it is no
      * one value, which makes the number no one number rather than one holding a part nothing read.
      *
-     * <p>What is put where a part is no one value is a part that holds and says nothing, since the
-     * statement put together is thrown away; it is never {@code stated}, which would stand inside
-     * a quantifier it is already a part of.
+     * <p>The telling stops at the first part that is no one value, so no part is put where
+     * another stood.
      */
     private static Proposition toldWhole(Proposition stated, Telling telling) {
-        boolean[] noOne = {false};
-        Proposition out = told(stated, telling, () -> {
-            noOne[0] = true;
-            return new Proposition.Always(true);
-        });
-        return noOne[0] ? null : out;
+        try {
+            return told(stated, telling, ReadThroughNames::stopsAtAPartOfNoOneValue);
+        } catch (NoOneValue _) {
+            return null;
+        }
     }
 
     /**
