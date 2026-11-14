@@ -468,7 +468,7 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
             int piece = (slow.length + 5) / 6;
             for (int i = 0; i < 6; i++) {
                 int from = i * piece;
-                jar.after(Duration.ofSeconds(4 * (i + 1)), () -> jar.bytes(Arrays.copyOfRange(
+                jar.after(Duration.ofSeconds(4L * (i + 1)), () -> jar.bytes(Arrays.copyOfRange(
                         slow, from, Math.min(from + piece, slow.length))));
             }
             jar.after(Duration.ofSeconds(24), jar::end);
