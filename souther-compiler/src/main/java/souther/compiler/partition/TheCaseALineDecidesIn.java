@@ -10,6 +10,7 @@ import souther.compiler.numeric.WholeNumberRuns;
 import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -145,7 +146,7 @@ public final class TheCaseALineDecidesIn {
             }
             // Where the way and the point settle a part apart, no row is both along the way and
             // at this way of standing at the point.
-            if (agree && !noTruthMakesItHold(decides, parts.asked(), truths)) {
+            if (agree && !noTruthMakesItHoldUnder(truths)) {
                 return CasePossibility.NOT_REFUTED;
             }
         }
@@ -158,7 +159,8 @@ public final class TheCaseALineDecidesIn {
      * {@code asked} each part where the case holds it, by identity, as the place of its question
      * in them, negated for a denial, and nought for a part that is no question of its own.
      */
-    private record Parts(List<Proposition> each, Map<Proposition, Integer> asked) {}
+    private record Parts(List<Proposition> each, Map<Proposition, Integer> asked,
+                         LaidOut laid) {}
 
     /** What the parts are, worked out the first time they are asked. */
     private volatile Parts parts;
@@ -174,6 +176,22 @@ public final class TheCaseALineDecidesIn {
     /** What each way a row stands at a point makes of each part, worked out once for a point
      *  whichever way it is asked along. */
     private final Map<Standing, List<Boolean[]>> atThePoint = new ConcurrentHashMap<>();
+
+    /** What {@link #noTruthMakesItHoldUnder} answered, by the truths it was asked under. */
+    private final Map<List<Boolean>, Boolean> refutedUnder = new ConcurrentHashMap<>();
+
+    /**
+     * Whether no truth of the parts {@code truths} leaves open ({@code null}) makes the case
+     * hold, wherever the truths came from: the case and its parts are the same whichever way and
+     * point settled them, so a different way and point that settle the same truths ask the same
+     * thing. Asked once for the truths as they are when it is asked; {@code truths} is as it was
+     * afterwards.
+     */
+    boolean noTruthMakesItHoldUnder(Boolean[] truths) {
+        LaidOut laid = parts().laid();
+        return refutedUnder.computeIfAbsent(Arrays.asList(truths.clone()),
+                ignored -> noTruthMakesItHold(laid, truths));
+    }
 
     /** What every row standing each way {@code point} is stood at makes of each part. */
     private static List<Boolean[]> madeAt(Parts parts, Standing point) {
@@ -229,7 +247,7 @@ public final class TheCaseALineDecidesIn {
                     default -> held.put(one, asked.getOrDefault(one, 0));
                 }
             }
-            had = new Parts(List.copyOf(each), held);
+            had = new Parts(List.copyOf(each), held, LaidOut.of(decides, held));
             parts = had;
         }
         return had;
@@ -291,31 +309,39 @@ public final class TheCaseALineDecidesIn {
      */
     static boolean noTruthMakesItHold(Proposition stated, Map<Proposition, Integer> asked,
                                       Boolean[] truths) {
-        return new Choosing(asked, truths).refuted(stated);
+        return noTruthMakesItHold(LaidOut.of(stated, asked), truths);
+    }
+
+    private static boolean noTruthMakesItHold(LaidOut stated, Boolean[] truths) {
+        return new Choosing(stated, truths).refuted();
     }
 
     /** The truths of the parts, some unsettled, and how many of them were tried. */
     private static final class Choosing {
 
-        private final Map<Proposition, Integer> asked;
+        private final LaidOut laid;
         private final Boolean[] truths;
-        /** What each part came to under the truths settled when it was last worked out: emptied
-         *  before each working out, and read by nothing after it, so one table serves every one
-         *  rather than one grown again for each. */
-        private final Map<Proposition, Object> worked = new IdentityHashMap<>();
+        /** What each node came to under the truths settled, and for which working out: one pair
+         *  of arrays serves every working out, which is the one {@code working} counts, rather
+         *  than one table grown again for each. */
+        private final int[] seen;
+        private final byte[] value;
+        private int working;
         private int tried;
 
-        /** The first question met unsettled while working {@code stated} out, signed as it is
+        /** The first question met unsettled while working the statement out, signed as it is
          *  held there; nought where none was. */
         private int firstOpen;
 
-        Choosing(Map<Proposition, Integer> asked, Boolean[] truths) {
-            this.asked = asked;
+        Choosing(LaidOut laid, Boolean[] truths) {
+            this.laid = laid;
             this.truths = truths;
+            this.seen = new int[laid.size()];
+            this.value = new byte[laid.size()];
         }
 
         /**
-         * Whether no truth of the unsettled parts makes {@code stated} hold. Refuted where it
+         * Whether no truth of the unsettled parts makes the statement hold. Refuted where it
          * fails under the truths settled; not where it holds, where it is still not settled with
          * no question left open in it, or past {@link #TRUTHS_TRIED}; and otherwise where a
          * question it leaves open is refuted holding and refuted failing.
@@ -326,12 +352,12 @@ public final class TheCaseALineDecidesIn {
          * hold. Which is chosen decides how soon a truth making it hold is found, and not what is
          * refuted: a choice is refuted only where both ways of it are.
          */
-        boolean refuted(Proposition stated) {
+        boolean refuted() {
             firstOpen = 0;
-            worked.clear();
-            Boolean now = valueOf(stated, worked);
-            if (now != null) {
-                return !now;
+            working++;
+            byte now = valueOf(laid.root);
+            if (now != OPEN) {
+                return now == FAILS;
             }
             if (++tried > TRUTHS_TRIED || firstOpen == 0) {
                 return false;
@@ -340,7 +366,7 @@ public final class TheCaseALineDecidesIn {
             Boolean held = firstOpen > 0;
             for (Boolean truth : List.of(held, !held)) {
                 truths[at] = truth;
-                boolean refuted = refuted(stated);
+                boolean refuted = refuted();
                 truths[at] = null;
                 if (!refuted) {
                     return false;
@@ -349,64 +375,155 @@ public final class TheCaseALineDecidesIn {
             return true;
         }
 
-        /** No settled truth, as {@code worked} holds it: a part that comes to neither. */
-        private static final Object OPEN = new Object();
+        /** What a node comes to under the truths settled. */
+        private static final byte HOLDS = 1;
+        private static final byte FAILS = 2;
+        /** No settled truth: a part that comes to neither. */
+        private static final byte OPEN = 3;
 
         /**
-         * What {@code stated} comes to under the truths settled, or null where that is not
-         * settled — each part worked out once however many parts hold it, as {@code worked}
-         * keeps it: a statement shares its parts, and walked as a tree it is as long as the ways
-         * down it.
+         * What the node {@code at} comes to under the truths settled, each node worked out once
+         * however many parts hold it, as {@code seen} and {@code value} keep it for the one
+         * working out: a statement shares its parts, and walked as a tree it is as long as the
+         * ways down it.
          */
-        private Boolean valueOf(Proposition stated, Map<Proposition, Object> worked) {
-            Object had = worked.get(stated);
-            if (had != null) {
-                return had == OPEN ? null : (Boolean) had;
+        private byte valueOf(int at) {
+            if (seen[at] == working) {
+                return value[at];
             }
-            Boolean out = valueOnce(stated, worked);
-            worked.put(stated, out == null ? OPEN : out);
+            byte out = valueOnce(at);
+            seen[at] = working;
+            value[at] = out;
             return out;
         }
 
-        private Boolean valueOnce(Proposition stated, Map<Proposition, Object> worked) {
-            return switch (stated) {
-                case Proposition.All all -> {
+        private byte valueOnce(int at) {
+            return switch (laid.kind[at]) {
+                case ALL -> {
                     boolean open = false;
-                    for (Proposition part : all.parts()) {
-                        Boolean one = valueOf(part, worked);
-                        if (Boolean.FALSE.equals(one)) {
-                            yield false;
+                    for (int part : laid.parts[at]) {
+                        byte one = valueOf(part);
+                        if (one == FAILS) {
+                            yield FAILS;
                         }
-                        open |= one == null;
+                        open |= one == OPEN;
                     }
-                    yield open ? null : true;
+                    yield open ? OPEN : HOLDS;
                 }
-                case Proposition.Any any -> {
+                case ANY -> {
                     boolean open = false;
-                    for (Proposition part : any.parts()) {
-                        Boolean one = valueOf(part, worked);
-                        if (Boolean.TRUE.equals(one)) {
-                            yield true;
+                    for (int part : laid.parts[at]) {
+                        byte one = valueOf(part);
+                        if (one == HOLDS) {
+                            yield HOLDS;
                         }
-                        open |= one == null;
+                        open |= one == OPEN;
                     }
-                    yield open ? null : false;
+                    yield open ? OPEN : FAILS;
                 }
-                case Proposition.Always(boolean holds) -> holds;
-                // A part that is no question of its own comes to no settled truth: whatever is
-                // refuted is refuted whichever way it comes out at each place it is held.
-                default -> {
-                    int signed = asked.get(stated);
+                case ALWAYS_HOLDS -> HOLDS;
+                case ALWAYS_FAILS -> FAILS;
+                case QUESTION -> {
+                    // A part that is no question of its own comes to no settled truth: whatever
+                    // is refuted is refuted whichever way it comes out at each place it is held.
+                    int signed = laid.signed[at];
                     if (signed == 0) {
-                        yield null;
+                        yield OPEN;
                     }
                     Boolean truth = truths[Math.abs(signed) - 1];
-                    if (truth == null && firstOpen == 0) {
-                        firstOpen = signed;
+                    if (truth == null) {
+                        if (firstOpen == 0) {
+                            firstOpen = signed;
+                        }
+                        yield OPEN;
                     }
-                    yield truth == null ? null : truth == signed > 0;
+                    yield truth == signed > 0 ? HOLDS : FAILS;
                 }
             };
+        }
+    }
+
+    /**
+     * A statement of conjunctions and alternatives over parts, laid out once as numbered nodes: a
+     * node shared by identity is one node, and what a part is asked as is read once. What
+     * {@link Choosing} works out for each truth it tries is then a walk over arrays, in the order
+     * the statement is written and stopping where it is settled, as walking the statement itself.
+     */
+    private static final class LaidOut {
+
+        /** What a node is: a conjunction, an alternative, a statement that holds or fails
+         *  whatever the truths, or a part. */
+        enum Kind { ALL, ANY, ALWAYS_HOLDS, ALWAYS_FAILS, QUESTION }
+
+        final Kind[] kind;
+        /** The nodes a conjunction or an alternative is of, in order. */
+        final int[][] parts;
+        /** The place of the question a part asks, negated for a denial, and nought for a part
+         *  that is no question. */
+        final int[] signed;
+        final int root;
+
+        private LaidOut(Kind[] kind, int[][] parts, int[] signed, int root) {
+            this.kind = kind;
+            this.parts = parts;
+            this.signed = signed;
+            this.root = root;
+        }
+
+        int size() {
+            return kind.length;
+        }
+
+        /** {@code stated} laid out; {@code asked} is as for
+         *  {@link TheCaseALineDecidesIn#noTruthMakesItHold}. */
+        static LaidOut of(Proposition stated, Map<Proposition, Integer> asked) {
+            List<Kind> kind = new ArrayList<>();
+            List<int[]> parts = new ArrayList<>();
+            List<Integer> signed = new ArrayList<>();
+            Map<Proposition, Integer> numbered = new IdentityHashMap<>();
+            int root = lay(stated, asked, numbered, kind, parts, signed);
+            return new LaidOut(kind.toArray(new Kind[0]), parts.toArray(new int[0][]),
+                    signed.stream().mapToInt(Integer::intValue).toArray(), root);
+        }
+
+        private static int lay(Proposition stated, Map<Proposition, Integer> asked,
+                               Map<Proposition, Integer> numbered, List<Kind> kind,
+                               List<int[]> parts, List<Integer> signed) {
+            Integer had = numbered.get(stated);
+            if (had != null) {
+                return had;
+            }
+            int[] of = new int[0];
+            Kind what;
+            int place = 0;
+            switch (stated) {
+                case Proposition.All all -> {
+                    what = Kind.ALL;
+                    of = new int[all.parts().size()];
+                    for (int at = 0; at < of.length; at++) {
+                        of[at] = lay(all.parts().get(at), asked, numbered, kind, parts, signed);
+                    }
+                }
+                case Proposition.Any any -> {
+                    what = Kind.ANY;
+                    of = new int[any.parts().size()];
+                    for (int at = 0; at < of.length; at++) {
+                        of[at] = lay(any.parts().get(at), asked, numbered, kind, parts, signed);
+                    }
+                }
+                case Proposition.Always(boolean holds) -> what = holds ? Kind.ALWAYS_HOLDS
+                        : Kind.ALWAYS_FAILS;
+                default -> {
+                    what = Kind.QUESTION;
+                    place = asked.get(stated);
+                }
+            }
+            int number = kind.size();
+            kind.add(what);
+            parts.add(of);
+            signed.add(place);
+            numbered.put(stated, number);
+            return number;
         }
     }
 }
