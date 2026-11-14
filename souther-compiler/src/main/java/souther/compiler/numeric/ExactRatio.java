@@ -645,6 +645,32 @@ public final class ExactRatio implements Comparable<ExactRatio> {
         return parts.isZero();
     }
 
+    /**
+     * This as a {@code double}, off by no more than a few units of the last place, or not a number
+     * where it is beyond what a {@code double} holds either way.
+     *
+     * <p>For a reader that only chooses what is worked out exactly and says nothing itself: a number
+     * that is not a number is a question it does not answer. Never to be compared for equality, and
+     * never to decide anything.
+     */
+    double approximately() {
+        long twos = parts.twos();
+        long fives = parts.fives();
+        if (Math.abs(twos) > 1000 || Math.abs(fives) > 300) {
+            return Double.NaN;
+        }
+        double value = parts.inLongs()
+                ? (double) parts.numeratorInALong() / (double) parts.denominatorInALong()
+                : parts.numerator().doubleValue() / parts.denominator().doubleValue();
+        if (twos != 0) {
+            value = Math.scalb(value, (int) twos);
+        }
+        if (fives != 0) {
+            value *= Math.pow(5.0, fives);
+        }
+        return Double.isInfinite(value) || (value == 0.0 && !isZero()) ? Double.NaN : value;
+    }
+
     /** Whether this is a whole number, which is a fraction of one with no power below the line. */
     public boolean isWhole() {
         return isZero() || (parts.overOne() && twos() >= 0 && fives() >= 0);

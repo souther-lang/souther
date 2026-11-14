@@ -575,14 +575,10 @@ public final class ClosedState<A> {
     private static <A> boolean theRulesLeaveAFormNothing(FormReach<A> reading,
                                                          List<AffineConstraint<A>> constraints) {
         Set<Map<A, ExactRatio>> asked = new LinkedHashSet<>();
-        FormReach.Indexed<A> indexed = reading.indexedPremises();
         for (AffineConstraint<A> each : constraints) {
             Map<A, ExactRatio> form = each.form().coefs();
-            if (form.size() > 1 && asked.add(form)) {
-                Reach reach = indexed == null ? null : reading.reachWith(indexed, form);
-                if ((reach == null ? reading.ofKept(each, form) : reach).isEmpty()) {
-                    return true;
-                }
+            if (form.size() > 1 && asked.add(form) && reading.ofKept(each, form).isEmpty()) {
+                return true;
             }
         }
         return false;
