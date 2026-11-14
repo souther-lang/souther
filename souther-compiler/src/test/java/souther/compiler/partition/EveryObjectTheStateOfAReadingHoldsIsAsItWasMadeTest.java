@@ -2,6 +2,11 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.ACompiledModel;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +28,52 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * readings kept, so a population of them would audit nothing.
  */
 class EveryObjectTheStateOfAReadingHoldsIsAsItWasMadeTest {
+
+    /**
+     * A lookup of an average over the months a filter keeps, with a guard before it. The readings
+     * kept are of the average's form, of the elements the filter and the walk name, and of the
+     * comparisons against a path of the input, which is every kind of object the lookups hand to a
+     * kept reading; a table of two rows is the least that gives the form more than one number.
+     */
+    private static final String LOOKUP = """
+            module demo
+
+            data Yen = Int
+                invariant value >= 0
+            data Month = { days: Int, pay: Yen }
+            data Window = { first: Month, second: Month }
+            data Row = { grade: Int, lowerBound: Yen }
+            data Decision = { grade: Int }
+            data NoPayable = { nothing: Int }
+            let table: List<Row> = [
+                Row { grade = 1, lowerBound = Yen(0) },
+                Row { grade = 2, lowerBound = Yen(1000) } ]
+            let gradeRowFor (m: Yen): Row =
+                List.fold((acc, r) -> if r.lowerBound <= m then r else acc,
+                          Row { grade = 0, lowerBound = Yen(0) }, table)
+            let payableOf (w: Window): List<Month> =
+                List.filter(r -> r.days >= 17, [ w.first, w.second ])
+            let averageOf (records: List<Month>): Yen =
+                Yen(Rational.toInt(DOWN, List.sum(List.map(r -> r.pay.value, records))
+                    / List.length(records)))
+
+            behavior f : (w: Window) -> Decision | NoPayable
+                constructs Decision, Row, Yen, NoPayable
+            let f (w) = {
+                let payable = payableOf(w)
+                guard List.length(payable) >= 1 else NoPayable { nothing = 0 }
+                Decision { grade = gradeRowFor(averageOf(payable)).grade }
+            }
+            """;
+
+    /** What the report of {@code source} leaves unread, which asks every reading of its rules. */
+    private static void readRulesOf(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+        ACompiledModel.compiles(compilation);
+        AdequacyReport.of(compilation).modules().get(0).behaviors()
+                .forEach(each -> each.partition().notRead());
+    }
 
     /**
      * The collections that can change and are not changed, and why. One entry per component, with
@@ -50,8 +101,7 @@ class EveryObjectTheStateOfAReadingHoldsIsAsItWasMadeTest {
         ReadingState.FOUND.clear();
         ReadingState.auditing = true;
         try {
-            TheLookupOfAFilteredAverageIsReadInATableOfAnyLengthTest.unread(3,
-                    TheLookupOfAFilteredAverageIsReadInATableOfAnyLengthTest.ABOVE_THE_BOUND);
+            readRulesOf(LOOKUP);
         } finally {
             ReadingState.auditing = false;
         }

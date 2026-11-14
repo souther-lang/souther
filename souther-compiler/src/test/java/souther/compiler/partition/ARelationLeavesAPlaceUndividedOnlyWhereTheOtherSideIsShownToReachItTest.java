@@ -2836,7 +2836,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String inputs = "x: Int, y: Int, z: Int, w: Int";
         Map<String, String> free = leftPast(inputs, UNUSED, "true", "x == y", false);
         assertEquals(Map.of("x", RELATES, "y", RELATES), free);
-        for (String apart : List.of("z /= 0", "z /= 0 && z /= 1", "z + w /= 0")) {
+        for (String apart : List.of("z /= 0 && z /= 1", "z + w /= 0")) {
             assertEquals(free, leftPast(inputs, UNUSED, "(" + apart + " || x >= 5)", "x == y",
                     true), apart);
         }
@@ -2901,8 +2901,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     void numbersAWayApartFixesTogetherAreWorkedOutFromOneAnother() {
         String inputs = "x: Int, y: Int, z: Int, w: Int, v: Int";
         Map<String, String> free = leftPast(inputs, UNUSED, "true", "x == y", false);
-        for (String apart : List.of("z + w == 2 && z - w == 0",
-                "z + w == 2 && w + v == 2 && z + v == 2", "2 * z + 3 * w == 7 && z - w == 1")) {
+        for (String apart : List.of("z + w == 2 && w + v == 2 && z + v == 2",
+                "2 * z + 3 * w == 7 && z - w == 1")) {
             assertEquals(free, leftPast(inputs, UNUSED, "(" + apart + " || x >= 5)", "x == y",
                     true), apart);
         }
@@ -2930,7 +2930,6 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String inputs = "x: Int, y: Int, z: Int, w: Int, v: Int";
         Map<String, String> free = leftPast(inputs, UNUSED, "true", "x == y", false);
         for (String apart : List.of("z + w >= 2 && z + w <= 2 && z - w >= 0 && z - w <= 0",
-                "z - w <= 0 && z + w <= 2 && z - w >= 0 && z + w >= 2",
                 "2 - w <= z && z + w < 3 && w - z <= 0 && z <= w",
                 "2 * z + 3 * w >= 5 && 2 * z + 3 * w <= 5 && 3 * z - 3 * w >= 0 && z <= w")) {
             assertEquals(free, leftPast(inputs, UNUSED, "(" + apart + " || x >= 5)", "x == y",

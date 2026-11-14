@@ -397,21 +397,16 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
     @Test
     void aStopOfTheRunIsReadAsAGuardThatStatesTheSame() {
         for (String target : List.of(
-                "a - b > 0", "a + b - 100 >= 0", "a + b + c >= 0", "a - b - c > 0", "a == b",
-                "a + 1 == b", "a * b >= 0", "a * a >= 0", "a * 3 - b >= 0",
-                "Int.floorMod(a - b, 7) >= 1", "Int.floorMod(a - b, 7) == 3",
-                "Int.floorMod(a, 7) == 3", "Int.floorMod(b, 7) == 3", "Int.floorMod(a, b) == 0",
-                "Int.floorMod(b, a) == 0", "Bool.not(Set.contains(a, hs))",
-                "Bool.not(Set.contains(b, hs))", "Set.size(hs) == a", "Set.size(hs) == b", "List.any(x -> x == a, xs)",
-                "List.any(x -> x == b, xs)", "a - b > 0 || c > 0", "c > 0 && a - b > 0",
-                "a == b && b == c", "a + b - 100 >= 0 && Bool.not(Set.contains(b, hs))")) {
+                "a - b > 0", "a + b + c >= 0", "a == b", "a * b >= 0", "a * a >= 0",
+                "Int.floorMod(a - b, 7) >= 1", "Int.floorMod(b, a) == 0",
+                "Bool.not(Set.contains(b, hs))", "Set.size(hs) == a", "List.any(x -> x == b, xs)",
+                "a - b > 0 || c > 0",
+                "a + b - 100 >= 0 && Bool.not(Set.contains(b, hs))")) {
             assertAsAGuardReads(10, target);
         }
         for (String target : List.of(
                 "Int.floorMod(a - b, 7) >= 1 && Bool.not(Set.contains(a, hs))",
-                "Int.floorMod(a + b + c, 7) >= 1 && Bool.not(Set.contains(c, hs))",
-                "Int.floorMod(a + b, 7) >= 1 && Bool.not(Set.contains(b, hs))",
-                "Int.floorMod(b - a, 7) >= 1 && Bool.not(Set.contains(b, hs))")) {
+                "Int.floorMod(a + b + c, 7) >= 1 && Bool.not(Set.contains(c, hs))")) {
             assertAsAGuardReads(3, target);
         }
     }

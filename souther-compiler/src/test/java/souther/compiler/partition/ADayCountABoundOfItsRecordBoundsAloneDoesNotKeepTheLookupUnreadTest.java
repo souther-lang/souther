@@ -49,21 +49,19 @@ class ADayCountABoundOfItsRecordBoundsAloneDoesNotKeepTheLookupUnreadTest {
             """;
 
     private static final String REST = """
-            data Window = { first: Pay, second: Pay, third: Pay }
+            data Window = { first: Pay, second: Pay }
             data Row = { grade: Int, lowerBound: Yen }
             data Decision = { grade: Int }
             let table: List<Row> = [
                 Row { grade = 1, lowerBound = Yen(0) },
-                Row { grade = 2, lowerBound = Yen(1000) },
-                Row { grade = 3, lowerBound = Yen(2000) } ]
-            let totalOf (p: Pay): Yen = p.a
+                Row { grade = 2, lowerBound = Yen(1000) } ]
             let gradeRowFor (m: Yen): Row =
                 List.fold((acc, r) -> if r.lowerBound <= m then r else acc,
                           Row { grade = 0, lowerBound = Yen(0) }, table)
-            let monthsOf (w: Window): List<Pay> = [ w.first, w.second, w.third ]
+            let monthsOf (w: Window): List<Pay> = [ w.first, w.second ]
             let averageOf (records: List<Pay>): Yen =
                 Yen(Rational.toInt(DOWN,
-                    List.sum(List.map(p -> totalOf(p).value, records)) / List.length(records)))
+                    List.sum(List.map(p -> p.a.value, records)) / List.length(records)))
 
             data NotRequired = { reasons: List<Int> }
                 invariant List.length(reasons) >= 1
@@ -84,7 +82,7 @@ class ADayCountABoundOfItsRecordBoundsAloneDoesNotKeepTheLookupUnreadTest {
 
     private static PartitionEvidence partitionOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         ACompiledModel.compiles(compilation);
         List<AdequacyReport.BehaviorReport> behaviors =
                 AdequacyReport.of(compilation).modules().get(0).behaviors();

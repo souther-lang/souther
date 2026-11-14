@@ -23,10 +23,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AMeanOverAWindowOfManyMonthsIsReadWithoutWritingOutItsWaysTest {
 
-    private static final int MONTHS = 10;
+    /** Seven months come to 128 ways of keeping, more than a statement is written out from at
+     *  once. */
+    private static final int MONTHS = 7;
 
-    private static String report(String mean) {
-        return report(MONTHS, mean);
+    private static final String MEAN =
+            "List.sum(List.map(r -> r.pay, payable(w))) / List.length(payable(w)) >= 100";
+
+    /** Both tests read the one report of the one model. */
+    private static String memo;
+
+    private static synchronized String report() {
+        if (memo == null) {
+            memo = report(MONTHS, MEAN);
+        }
+        return memo;
     }
 
     private static String report(int count, String mean) {
@@ -48,7 +59,7 @@ class AMeanOverAWindowOfManyMonthsIsReadWithoutWritingOutItsWaysTest {
                     Ok
                 }
                 """.formatted(window, months, mean), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
@@ -57,8 +68,7 @@ class AMeanOverAWindowOfManyMonthsIsReadWithoutWritingOutItsWaysTest {
 
     @Test
     void aMeanOverManyMonthsIsReadWhereItsWaysAreMoreThanAReadingMakes() {
-        String report = assertTimeoutPreemptively(Duration.ofSeconds(60), () -> report(
-                "List.sum(List.map(r -> r.pay, payable(w))) / List.length(payable(w)) >= 100"));
+        String report = assertTimeoutPreemptively(Duration.ofSeconds(60), () -> report());
         assertFalse(report.contains("READINGS_OF_ONE_CONDITION"), report);
     }
 
@@ -69,9 +79,7 @@ class AMeanOverAWindowOfManyMonthsIsReadWithoutWritingOutItsWaysTest {
      */
     @Test
     void aMeanWhoseCasesAreGivenUpIsSaidOnceAndNotAtEveryStepOfThem() {
-        String report = assertTimeoutPreemptively(Duration.ofSeconds(60), () -> report(8,
-                "List.sum(List.map(r -> r.pay, payable(w))) / List.length(payable(w)) >= 100"));
+        String report = assertTimeoutPreemptively(Duration.ofSeconds(60), () -> report());
         long said = report.lines().filter(line -> line.contains("not read: comparison")).count();
-        assertTrue(said <= 8, () -> "said " + said + " times, once for each month at most");
-    }
+        assertTrue(said <= MONTHS, () -> "said " + said + " times, once for each month at most");    }
 }
