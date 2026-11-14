@@ -181,4 +181,130 @@ class AWatchedReadingAsksOnlyWhatItCanPlaceOfWhatWasHandedTest {
 
         assertFalse(asked.toldApart());
     }
+
+    private static final BindingId THIRD = new BindingId(OWNER, 2);
+
+    @Test
+    void aNameHandedAgainTheSameValueSinceIsStillTheReadingsOwn() {
+        BindingEnvironment on = nothingHanded().handing(EACH, written(1));
+        BindingEnvironment since = on.handing(EACH, written(1));
+
+        HandedAnswers asked = BindingEnvironment.Watch.over(on, () ->
+                BindingEnvironment.Watch.over(on, () -> since.roleOf(EACH)).asked()).asked();
+
+        assertTrue(asked.toldApart());
+        assertTrue(asked.holdsOf(nothingHanded().handing(EACH, written(2))),
+                "equal to what the watch began with, and handed since all the same");
+    }
+
+    @Test
+    void aSetTakenInAcrossSeveralStepsLeavesOutTheNamesHandedOnAnyOfThem() {
+        BindingEnvironment on = nothingHanded();
+        BindingEnvironment far = on.handing(EACH, written(1)).handing(OTHER, written(2))
+                .handing(EACH, written(3));
+
+        HandedAnswers asked = BindingEnvironment.Watch.over(on, () ->
+                BindingEnvironment.Watch.over(on, () -> {
+                    far.roleOf(EACH);
+                    far.roleOf(OTHER);
+                    return far.roleOf(THIRD);
+                }).asked()).asked();
+
+        assertTrue(asked.toldApart());
+        assertTrue(asked.holdsOf(nothingHanded().handing(EACH, written(9))
+                .handing(OTHER, written(9))), "EACH and OTHER were handed on the way");
+        assertFalse(asked.holdsOf(nothingHanded().handing(THIRD, written(9))),
+                "THIRD was not, and the watch began with it handed nothing");
+    }
+
+    @Test
+    void aReadingTakenAgainTwiceAsksWhatItAskedAsOnce() {
+        BindingEnvironment on = nothingHanded().handing(EACH, written(1));
+        HandedAnswers asked = BindingEnvironment.Watch.over(on, () -> on.roleOf(EACH)).asked();
+
+        HandedAnswers outer = BindingEnvironment.Watch.over(on, () -> {
+            BindingEnvironment.Watch.replay(on, asked);
+            BindingEnvironment.Watch.replay(on, asked);
+            return 0;
+        }).asked();
+
+        assertTrue(outer.toldApart());
+        assertTrue(outer.holdsOf(on));
+        assertFalse(outer.holdsOf(nothingHanded().handing(EACH, written(2))));
+    }
+
+    @Test
+    void aReadingTakenAgainFromAnEnvironmentSinceLeavesOutWhatWasHandedOnTheWay() {
+        BindingEnvironment on = nothingHanded().handing(EACH, written(1));
+        BindingEnvironment since = on.handing(OTHER, written(5));
+        HandedAnswers asked = BindingEnvironment.Watch.over(since, () -> {
+            since.roleOf(EACH);
+            return since.roleOf(OTHER);
+        }).asked();
+
+        HandedAnswers outer = BindingEnvironment.Watch.over(on, () -> {
+            BindingEnvironment.Watch.replay(since, asked);
+            return 0;
+        }).asked();
+
+        assertTrue(outer.toldApart());
+        assertFalse(outer.holdsOf(nothingHanded().handing(EACH, written(2))));
+        assertTrue(outer.holdsOf(nothingHanded().handing(EACH, written(1))
+                .handing(OTHER, written(8))), "OTHER was handed since the watch began");
+    }
+
+    @Test
+    void aSetOfNoNameTakenInFromAnEnvironmentApartLeavesTheWatchSure() {
+        BindingEnvironment on = nothingHanded().handing(EACH, written(1));
+        BindingEnvironment apart = nothingHanded().handing(OTHER, written(1));
+        HandedAnswers nothing = BindingEnvironment.Watch.over(apart, () -> 0).asked();
+
+        HandedAnswers outer = BindingEnvironment.Watch.over(on, () -> {
+            BindingEnvironment.Watch.replay(apart, nothing);
+            return 0;
+        }).asked();
+
+        assertTrue(outer.toldApart());
+    }
+
+    @Test
+    void aSetOfNamesAllHandedAgainSinceTakenInFromAnEnvironmentApartIsStillUnplaced() {
+        BindingEnvironment on = nothingHanded().handing(OTHER, written(1));
+        BindingEnvironment apart = nothingHanded().handing(EACH, written(1));
+        HandedAnswers asked = BindingEnvironment.Watch.over(apart, () -> apart.roleOf(EACH))
+                .asked();
+
+        HandedAnswers outer = BindingEnvironment.Watch.over(on, () -> {
+            BindingEnvironment.Watch.replay(apart, asked);
+            return 0;
+        }).asked();
+
+        assertFalse(outer.toldApart());
+    }
+
+    @Test
+    void aNameHandedNothingIsAnAnswerAndAHandedValueBreaksIt() {
+        BindingEnvironment on = nothingHanded();
+
+        HandedAnswers asked = BindingEnvironment.Watch.over(on, () -> on.roleOf(EACH)).asked();
+
+        assertTrue(asked.holdsOf(nothingHanded().handing(OTHER, written(1))));
+        assertFalse(asked.holdsOf(nothingHanded().handing(EACH, written(1))),
+                "asked after, and was handed nothing");
+    }
+
+    @Test
+    void aNameAskedThroughSeveralNestedWatchesIsFoundWhereItIsAskedOf() {
+        BindingEnvironment on = nothingHanded().handing(EACH, written(1));
+
+        HandedAnswers asked = BindingEnvironment.Watch.over(on, () ->
+                BindingEnvironment.Watch.over(on, () ->
+                        BindingEnvironment.Watch.over(on, () -> on.roleOf(EACH)).asked()).asked())
+                .asked();
+
+        assertFalse(asked.holdsOf(nothingHanded().handing(EACH, written(2))));
+        assertTrue(asked.holdsOf(nothingHanded().handing(EACH, written(1))));
+        assertTrue(asked.holdsOf(nothingHanded().handing(EACH, written(1))
+                .handing(OTHER, written(2))));
+    }
 }
