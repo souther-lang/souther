@@ -2322,9 +2322,13 @@ final class Pullback {
         FormRange apart = FormRange.combined(BinOp.SUB, exactRangeOf(last, reads),
                 exactRangeOf(first, reads));
         FormRange together = null;
-        if (AffineForms.outcome(last, reads, quantities())
+        // One reading for both ends, so that they are held to the elements together: two names for
+        // two elements of one container are one position, and their difference is no span of none.
+        AffineForms.Reading<Quantity, InputReads> ends =
+                quantities(null, null, elementsOfAForm());
+        if (AffineForms.outcome(last, reads, ends)
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var ofTheLast)
-                && AffineForms.outcome(first, reads, quantities())
+                && AffineForms.outcome(first, reads, ends)
                         instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var ofTheFirst)
                 && ofTheLast.minus(ofTheFirst)
                         instanceof ExactAnswer.Held<LinearForm<Quantity>>(var difference)) {
@@ -5154,10 +5158,13 @@ final class Pullback {
         if (between == null) {
             return Optional.empty();
         }
+        // The two ends are subtracted where the element's numbers are read, so they are held to the
+        // elements together, apart from the comparison's own.
+        ElementsMet ends = new ElementsMet();
         LinearForm<NumericTerm> from = AffineReading.formOf(
-                call.args().get(between.from().position()), container.at(), read);
+                call.args().get(between.from().position()), container.at(), read, ends);
         LinearForm<NumericTerm> to = AffineReading.formOf(
-                call.args().get(between.to().position()), container.at(), read);
+                call.args().get(between.to().position()), container.at(), read, ends);
         return from == null || to == null ? Optional.empty()
                 : Optional.of(new Quantity.AWholeNumberInTurn(from, to));
     }
@@ -5695,7 +5702,7 @@ final class Pullback {
         Set<Quantity> countedBefore = counting == null ? null
                 : Set.copyOf(counting.keySet());
         int alikeBefore = alike == null ? 0 : alike.size();
-        ElementsMet metBefore = elementsMet.copied();
+        ElementsMet.Mark metBefore = elementsMet.mark();
         Sized read = reading.get();
         if (read instanceof Sized.AsAForm(LinearForm<Quantity> form)) {
             if (carried.isIn(form)) {
@@ -5712,7 +5719,7 @@ final class Pullback {
         if (alike != null) {
             alike.subList(alikeBefore, alike.size()).clear();
         }
-        elementsMet = metBefore;
+        elementsMet.rewind(metBefore);
         return read;
     }
 
@@ -11576,7 +11583,7 @@ final class Pullback {
         Quantity.TheKeptTotal sum = new Quantity.TheKeptTotal(reading.number, false);
         AnAggregateInACase standing = new AnAggregateInACase(total.call(), total.at(),
                 LinearForm.atom(sum));
-        ElementsMet metBefore = elementsMet.copied();
+        ElementsMet.Mark metBefore = elementsMet.mark();
         aggregatesInACase.add(standing);
         keptReading = reading;
         Derivation read;
@@ -11585,7 +11592,7 @@ final class Pullback {
         } finally {
             keptReading = null;
             aggregatesInACase.remove(standing);
-            elementsMet = metBefore;
+            elementsMet.rewind(metBefore);
         }
         if (reading.refused || read == null
                 || !GivenTotals.canBeGiven(new Conclusion(Optional.empty()).of(read))) {
@@ -11647,7 +11654,7 @@ final class Pullback {
      * where one composes into none.
      */
     private List<LinearForm<Quantity>> formsOfTheKept(Inside.ATotalByKeeping total) {
-        ElementsMet metBefore = elementsMet.copied();
+        ElementsMet.Mark metBefore = elementsMet.mark();
         try {
             List<LinearForm<Quantity>> forms = new ArrayList<>();
             for (ReadMeaning.Occurrence occurrence : total.occurrences()) {
@@ -11661,7 +11668,7 @@ final class Pullback {
             }
             return forms;
         } finally {
-            elementsMet = metBefore;
+            elementsMet.rewind(metBefore);
         }
     }
 
@@ -11682,13 +11689,13 @@ final class Pullback {
         }
         AnAggregateInACase standing = new AnAggregateInACase(total.call(), total.at(),
                 LinearForm.atom(keptReading.count));
-        ElementsMet metBefore = elementsMet.copied();
+        ElementsMet.Mark metBefore = elementsMet.mark();
         aggregatesInACase.add(standing);
         try {
             return again.apply(on -> on);
         } finally {
             aggregatesInACase.remove(standing);
-            elementsMet = metBefore;
+            elementsMet.rewind(metBefore);
         }
     }
 
@@ -11787,9 +11794,9 @@ final class Pullback {
             long there = IntStream.range(0, total.occurrences().size())
                     .filter(i -> ways.isThere(i, decided)).count();
             return readWithTheAggregate(total, LinearForm.constant(ExactRatio.of(there)),
-                    elementsMet.copied(), again);
+                    elementsMet.mark(), again);
         }
-        return sumOfKept(total, ways, decided, 0, null, List.of(), elementsMet.copied(), at, fixed,
+        return sumOfKept(total, ways, decided, 0, null, List.of(), elementsMet.mark(), at, fixed,
                 again);
     }
 
@@ -11809,7 +11816,7 @@ final class Pullback {
      */
     private Derivation sumOfKept(Inside.ATotalByKeeping total, WaysOfKeeping ways,
                                  Boolean[] decided, int from, Denotation replacing,
-                                 List<LinearForm<Quantity>> forms, ElementsMet metBefore,
+                                 List<LinearForm<Quantity>> forms, ElementsMet.Mark metBefore,
                                  Denotation at, boolean fixed,
                                  Function<UnaryOperator<InputReads>, Derivation> again) {
         List<LinearForm<Quantity>> sofar = new ArrayList<>(forms);
@@ -11819,6 +11826,7 @@ final class Pullback {
             }
             Denotation element = i == from && replacing != null ? replacing
                     : total.occurrences().get(i).value();
+            ElementsMet.Mark beforeTheElement = elementsMet.mark();
             switch (AffineForms.outcome(element.value(), element.at(), quantities())) {
                 case AffineForms.Outcome.Composed<Quantity, InputReads>(
                         LinearForm<Quantity> form) -> sofar.add(form);
@@ -11827,21 +11835,26 @@ final class Pullback {
                         int arms = Choice.of(Core.withoutStanding(chosen.value())).arms().size();
                         WhyUnread past = splitInto(element.at(), arms, chosen);
                         if (past != null) {
-                            elementsMet = metBefore;
+                            elementsMet.rewind(metBefore);
                             return partOf(at, new Derivation.Stopped(past, fixed));
                         }
                         int next = i;
                         List<LinearForm<Quantity>> before = sofar;
                         InputReads application = element.at();
-                        Derivation byArm = byItsCases(chosen, at, arm -> sumOfKept(total, ways,
-                                decided, next, new Denotation(element.value(),
-                                        application.taking(chosen.value(), arm, arms)),
-                                before, metBefore, at, fixed, again));
+                        // The arms are alternatives: each reads the element from where the ones
+                        // before it stood, and none from what another arm met.
+                        Derivation byArm = byItsCases(chosen, at, arm -> {
+                            elementsMet.rewind(beforeTheElement);
+                            return sumOfKept(total, ways, decided, next,
+                                    new Denotation(element.value(),
+                                            application.taking(chosen.value(), arm, arms)),
+                                    before, metBefore, at, fixed, again);
+                        });
                         if (byArm != null) {
                             return new Derivation.AComparisonOfAChoice(byArm);
                         }
                     }
-                    elementsMet = metBefore;
+                    elementsMet.rewind(metBefore);
                     return partOf(at, abortsAt(stopped) ? new Derivation.TheRunStopsHere()
                             : new Derivation.Stopped(noFormOf(stopped), fixed));
                 }
@@ -11851,7 +11864,7 @@ final class Pullback {
         switch (LinearForm.sum(sofar)) {
             case ExactAnswer.Held<LinearForm<Quantity>>(var held) -> sum = held;
             case ExactAnswer.Unheld<LinearForm<Quantity>>(var why) -> {
-                elementsMet = metBefore;
+                elementsMet.rewind(metBefore);
                 return partOf(at, new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), fixed));
             }
         }
@@ -11861,7 +11874,7 @@ final class Pullback {
     /** {@code again} read with what {@code total} adds up to, or counts, in this way of keeping
      *  {@code form}. */
     private Derivation readWithTheAggregate(Inside.ATotalByKeeping total,
-                                            LinearForm<Quantity> form, ElementsMet metBefore,
+                                            LinearForm<Quantity> form, ElementsMet.Mark metBefore,
                                             Function<UnaryOperator<InputReads>, Derivation> again) {
         AnAggregateInACase inThisWay = new AnAggregateInACase(total.call(), total.at(), form);
         aggregatesInACase.add(inThisWay);
@@ -11871,7 +11884,7 @@ final class Pullback {
             aggregatesInACase.remove(inThisWay);
             // The ways are independent readings of one comparison: what one met of the container's
             // elements is no part of what the next meets.
-            elementsMet = metBefore;
+            elementsMet.rewind(metBefore);
         }
     }
 
@@ -11881,10 +11894,10 @@ final class Pullback {
      * named elements no reading taken names, and a later number would be refused beside them.
      */
     private LinearForm<Quantity> unlessUnread(Supplier<LinearForm<Quantity>> reading) {
-        ElementsMet metBefore = elementsMet.copied();
+        ElementsMet.Mark metBefore = elementsMet.mark();
         LinearForm<Quantity> form = reading.get();
         if (form == null) {
-            elementsMet = metBefore;
+            elementsMet.rewind(metBefore);
         }
         return form;
     }
@@ -12740,15 +12753,21 @@ final class Pullback {
      */
     private AffineForms.Reading<Quantity, InputReads> quantities(
             Core asked, Consumer<LinearForm<Quantity>> composedAs) {
-        return new AffineForms.Reading<>() {
+        return quantities(asked, composedAs, elementsOfAForm());
+    }
 
-            // What a form read here holds is held to one element of each container, whether or
-            // not it is a side of a comparison: a form holds a number once, and two elements of
-            // one container stand at one position, so a form holding both would hold one number
-            // twice — and cancel or add up to what was not written. The comparison's own where
-            // one is being read, so that its sides are held together; else this form's.
-            private final ElementsMet held = elementsMet == ElementsMet.NONE ? new ElementsMet()
-                    : elementsMet;
+    // What a form read here holds is held to one element of each container, whether or not it is
+    // a side of a comparison: a form holds a number once, and two elements of one container stand
+    // at one position, so a form holding both would hold one number twice — and cancel or add up
+    // to what was not written. The comparison's own where one is being read, so that its sides
+    // are held together; else this form's.
+    private ElementsMet elementsOfAForm() {
+        return elementsMet == ElementsMet.NONE ? new ElementsMet() : elementsMet;
+    }
+
+    private AffineForms.Reading<Quantity, InputReads> quantities(
+            Core asked, Consumer<LinearForm<Quantity>> composedAs, ElementsMet held) {
+        return new AffineForms.Reading<>() {
 
             @Override
             public void composed(Core operation, LinearForm<Quantity> form) {
@@ -15459,7 +15478,7 @@ final class Pullback {
         } finally {
             telling = outer;
             consultedHere = endConsultingInputs(consultedBefore);
-            footprint = noting.ended(elementsMet);
+            footprint = noting.ended();
         }
         // What the reading told is told to whoever is noting it, and that there is one is what the
         // reading is made for; what it read of the notes was its own.
@@ -15539,7 +15558,7 @@ final class Pullback {
             return null;
         }
         LinearForm<NumericTerm> form = AffineReading.formOf(division.dividend(), division.at(),
-                read);
+                read, new ElementsMet());
         if (form == null) {
             return remainderOverABoundValue(division);
         }
@@ -15780,7 +15799,7 @@ final class Pullback {
         }
         // The two factors held to the same elements, and to those of the form the product stands
         // in where one is being read: a product of two elements' numbers is no number of one.
-        ElementsMet met = elementsMet == ElementsMet.NONE ? new ElementsMet() : elementsMet;
+        ElementsMet met = elementsOfAForm();
         LinearForm<NumericTerm> left = formOfAFactor(written.left(), at, met);
         LinearForm<NumericTerm> right = formOfAFactor(written.right(), at, met);
         NumericTerm.ProductOf.Signed made = NumericTerm.ProductOf.signed(left, right);

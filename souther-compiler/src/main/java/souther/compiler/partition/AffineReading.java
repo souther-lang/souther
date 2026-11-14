@@ -275,17 +275,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     }
 
     /**
-     * One expression as a form of the input's numbers, or null where the arithmetic stops on it.
+     * One expression as a form of the input's numbers, or null where the arithmetic stops on it,
+     * held to the elements {@code met} has met.
      *
      * <p>The reading a side of a comparison gets ({@link #read}), asked of a part of one: a
      * dividend is read as a side is, so the same expression is the same form wherever it stands.
+     * Forms that are put beside one another are read with one {@code met}, since two names for two
+     * elements of one container are one position and what is put beside them would cancel or add
+     * them as one number; a form that stands alone is read with a {@code met} of its own.
      */
-    static LinearForm<NumericTerm> formOf(Core expression, InputReads reads, InputReading read) {
-        return formOf(expression, reads, read, new ElementsMet());
-    }
-
-    /** The same, held to the elements {@code met} has met: for a reader that puts this form
-     *  beside another, whose numbers are to be of the same elements. */
     static LinearForm<NumericTerm> formOf(Core expression, InputReads reads, InputReading read,
                                           ElementsMet met) {
         return outcomeOf(expression, reads, read, met)
@@ -950,8 +948,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 Core.forEachChild(Core.withoutStanding(node), child -> rest[0] &=
                         child == operand || reached.endsNoRun(new Denotation(child, at)));
                 WhatWasTold apart = new WhatWasTold();
+                ElementsMet.Mark metBefore = met.mark();
                 LinearForm<NumericTerm> form = rest[0] ? composedBy(operand, at,
-                        reading(ofTheInput, new LinkedHashSet<>(), met.copied(), apart)) : null;
+                        reading(ofTheInput, new LinkedHashSet<>(), met, apart)) : null;
+                met.rewind(metBefore);
                 if (form == null || !apart.exact || !apart.partials.isEmpty()) {
                     return false;
                 }
@@ -995,9 +995,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 WhatWasTold apart = told.apart();
                 StoppedValues byTheValue = bound.isEmpty() ? null
                         : stoppedAt.heldAt(bound.iterator().next());
-                if (composedBy(dividend, at, reading(ofTheInput, new LinkedHashSet<>(),
-                        met.copied(), apart, byTheValue)) == null
-                        || !apart.partials.isEmpty()) {
+                ElementsMet.Mark metBefore = met.mark();
+                LinearForm<NumericTerm> apartForm = composedBy(dividend, at,
+                        reading(ofTheInput, new LinkedHashSet<>(), met, apart, byTheValue));
+                met.rewind(metBefore);
+                if (apartForm == null || !apart.partials.isEmpty()) {
                     return false;
                 }
                 for (SumOverTheStop sum : apart.sumsOverTheStop) {
@@ -1278,14 +1280,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              */
             private Attempt tried(Function<Arithmetic, Attempt> unrolling) {
                 Set<NumericTerm> namedApart = new LinkedHashSet<>();
-                ElementsMet metApart = met.copied();
+                ElementsMet.Mark metBefore = met.mark();
                 WhatWasTold toldApart = told.apart();
                 Attempt attempt = unrolling.apply(
-                        reading(ofTheInput, namedApart, metApart, toldApart));
+                        reading(ofTheInput, namedApart, met, toldApart));
                 if (attempt instanceof Attempt.Form) {
                     named.addAll(namedApart);
-                    met.takes(metApart);
                     told.absorb(toldApart);
+                } else {
+                    met.rewind(metBefore);
                 }
                 return attempt;
             }
@@ -1902,10 +1905,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              */
             private FormRange rangeOfTheArms(Core node, InputReads at) {
                 FormRange hull = null;
-                // Read apart: what an arm works out is not told of the comparison being read.
+                // Read apart: what an arm works out is not told of the comparison being read, and
+                // the arms are alternatives, so each is read as one of its own.
+                ElementsMet armsMet = new ElementsMet();
+                ElementsMet.Mark none = armsMet.mark();
                 AffineForms.Reading<NumericTerm, InputReads> apart = reading(stoppedAt.read(),
-                        new LinkedHashSet<>(), new ElementsMet(), new WhatWasTold());
+                        new LinkedHashSet<>(), armsMet, new WhatWasTold());
                 for (Choice.Arm arm : Choice.of(Core.withoutStanding(node)).arms()) {
+                    armsMet.rewind(none);
                     if (!(AffineForms.outcome(arm.answers(), at, apart)
                             instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> answer)) {
                         return null;
