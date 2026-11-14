@@ -70,6 +70,24 @@ class AStopIsSaidForWhatStoppedItNotForTheFormTest {
                         """, THE_WORDS_THESE_ARE_ABOUT));
     }
 
+    /** A comparison beside the membership in the search that chose the value is no reason for the
+     *  report to be refused: it is the same two elements of one list, said the same. */
+    @Test
+    void aComparisonBesideTheMembershipThatChoseTheValueIsReportedNotRefused() {
+        assertEquals(List.of("hs[*] " + TWO_ELEMENTS, "ns[*] " + TWO_ELEMENTS),
+                notReadOf("""
+                        module m
+
+                        behavior f : (hs: List<Int>, ns: List<Int>) -> List<Int>
+                        let f (hs, ns) =
+                            ns
+                                |> List.map(n -> [ n, n + 1 ]
+                                    |> List.find(x -> x > 0 && Bool.not(List.contains(x, hs)))
+                                    |> Option.withDefault(n))
+                                |> List.filter(d -> List.contains(d, hs))
+                        """, THE_WORDS_THESE_ARE_ABOUT));
+    }
+
     /** What a part that stopped for something a place words for itself says is the place's: the
      *  product is named, and the two elements are not said beside it. */
     @Test
@@ -145,5 +163,45 @@ class AStopIsSaidForWhatStoppedItNotForTheFormTest {
                 """ + A_WALK_OVER_DAYS, Set.of(REMAINDER, DERIVED));
         assertTrue(notRead.contains("c.holidays " + DERIVED), notRead.toString());
         assertFalse(notRead.contains("c.holidays " + REMAINDER), notRead.toString());
+    }
+
+    /** What is left unread is said at the elements and not at their container, and the container
+     *  still holds its own measure open: the length of {@code hs} is not told apart on what a
+     *  statement over its elements leaves unread, so it is not said to be read to the end. */
+    @Test
+    void theContainerIsNotSaidUnreadButItsMeasureIsStillHeldOpen() {
+        Compilation model = Compilation.ofSource("""
+                module m
+
+                behavior f : (hs: List<Int>, ns: List<Int>) -> List<Int>
+                let f (hs, ns) =
+                    if List.length(hs) >= 2 then
+                        ns
+                            |> List.map(n -> if Bool.not(List.contains(n, hs)) then n else n + 1)
+                            |> List.filter(d -> List.contains(d, hs))
+                    else [ ]
+                """, "Main");
+        model.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+        ACompiledModel.compiles(model);
+        JsonNode partition = new ObjectMapper().readTree(AdequacyReport.of(model)
+                .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)))
+                .path("modules").get(0).path("behaviors").get(0).path("partition");
+
+        List<String> extents = new ArrayList<>();
+        for (JsonNode axis : partition.path("axes")) {
+            extents.add(axis.path("path").asString() + " " + axis.path("read").path("extent")
+                    .asString());
+        }
+        assertEquals(List.of("List.length(hs) partial"), extents);
+
+        List<String> unanswered = new ArrayList<>();
+        for (JsonNode each : partition.path("unanswered")) {
+            unanswered.add(each.path("at").asString());
+        }
+        assertTrue(unanswered.contains("hs"), unanswered.toString());
+
+        for (JsonNode each : partition.path("notRead")) {
+            assertFalse(each.path("position").asString().equals("hs"), each.toString());
+        }
     }
 }

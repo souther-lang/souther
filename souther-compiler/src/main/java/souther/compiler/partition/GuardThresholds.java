@@ -65,7 +65,6 @@ import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
@@ -775,50 +774,21 @@ public final class GuardThresholds {
      * What the place says of itself stays: a value an operation made, a position no line can be
      * drawn on, a figure of this compiler's work, an operation no form says. Only a form nothing
      * takes apart gives way to it, since the form here was read and what no line is drawn through
-     * is the remainder. The container of elements that are places here is not one of them, since
-     * the statement says nothing of the container but that it holds the elements.
+     * is the remainder. Every place stays, the container of an element included: what a stop
+     * leaves unanswered is what weakens the measure of each place it is left at, and that is not a
+     * matter of which of them a report names ({@code PartitionEvidence#notRead}).
      */
     static Cutting.Read.Stopped whatEachPlaceIsLeftWithByARemainder(
             StatedComparison comparison, AffineReading.OfAComparison.Stopped stopped,
             InputReading read, InputReads reads, Arrivals answering) {
-        SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> left =
+        SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> said =
                 leftAtEachPlace(comparison, stopped, read, reads, answering);
         BlockReason.RuleReadingStopped remainder =
                 new BlockReason.RuleAboutARemainderNoPositionHolds();
-        SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> said =
-                new LinkedHashMap<>();
-        for (FilingCoordinate at : withoutTheContainerPositionsOfTheirElements(left.keySet())) {
-            BlockReason.RuleReadingStopped own = left.get(at);
-            said.put(at, own instanceof BlockReason.UnreadComparisonForm ? remainder : own);
-        }
+        said.replaceAll((at, own) ->
+                own instanceof BlockReason.UnreadComparisonForm ? remainder : own);
         return new Cutting.Read.Stopped(PlacesStopped.of(said, stoppedAtThe(stopped)),
                 whereItStopped(stopped, read));
-    }
-
-    /**
-     * {@code places} without a position that is the container of an element among them.
-     *
-     * <p>A statement over {@code hs[*]} says of {@code hs} that it holds that element, and what
-     * stopped at the element is not left at the container beside it. Only the container as a
-     * position goes: a coordinate that names a measure of it, such as its length, is a thing the
-     * statement may be about of its own and stays.
-     */
-    static List<FilingCoordinate> withoutTheContainerPositionsOfTheirElements(
-            Collection<FilingCoordinate> places) {
-        return places.stream()
-                .filter(each -> !(each instanceof FilingCoordinate.AtPosition)
-                        || places.stream().noneMatch(other ->
-                                holdsTheElementsOf(each.path(), other.path())))
-                .toList();
-    }
-
-    private static boolean holdsTheElementsOf(TermPath container, TermPath element) {
-        List<TermPath.Step> inside = element.steps();
-        List<TermPath.Step> outside = container.steps();
-        return container.head().equals(element.head())
-                && inside.size() > outside.size()
-                && inside.subList(0, outside.size()).equals(outside)
-                && inside.get(outside.size()) instanceof TermPath.Step.Element;
     }
 
     /**

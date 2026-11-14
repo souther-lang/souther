@@ -54,6 +54,18 @@ public final class ReadThroughNames {
     }
 
     /**
+     * What a telling puts where it tells two values to one, for a telling that gives every part
+     * some value: it has no part to put, and says so if it is made to.
+     *
+     * <p>A part is put where a part stood, and is never the statement it was told of. A statement
+     * put inside its own part is a quantifier over its own element, which {@link Proposition.Some}
+     * refuses, and the refusal says nothing of the telling that asked for it.
+     */
+    private static final Supplier<Proposition> EVERY_PART_IS_TOLD_A_VALUE = () -> {
+        throw new IllegalStateException("a telling that gives every part a value told one as two");
+    };
+
+    /**
      * {@code stated} with each number and subject at an element of a container {@code names}
      * holds told the name that stood for it; a part at one more than one name stood for is
      * {@code twoAsOne}.
@@ -101,7 +113,8 @@ public final class ReadThroughNames {
      * statement by.
      */
     public static Proposition atThePositions(Proposition stated) {
-        return told(stated, (position, had) -> ValueIdentity.AT_THE_POSITION, () -> stated);
+        return told(stated, (position, had) -> ValueIdentity.AT_THE_POSITION,
+                EVERY_PART_IS_TOLD_A_VALUE);
     }
 
     /**
@@ -134,7 +147,7 @@ public final class ReadThroughNames {
                 }
             }
             return had;
-        }, () -> stated);
+        }, EVERY_PART_IS_TOLD_A_VALUE);
         Map<BindingId, BindingId> renaming = new LinkedHashMap<>();
         copiesOf.forEach((name, copies) -> {
             if (!toNone.contains(name) && copies.size() == 1) {
@@ -164,7 +177,7 @@ public final class ReadThroughNames {
                 before.add(name);
             }
             return had;
-        }, () -> stated);
+        }, EVERY_PART_IS_TOLD_A_VALUE);
         Set<BindingId> after = new HashSet<>();
         for (BindingId each : before) {
             after.add(renaming.getOrDefault(each, each));
@@ -175,7 +188,7 @@ public final class ReadThroughNames {
         return told(stated, (position, had) ->
                 had instanceof ValueIdentity.OfAnElement(BindingId name)
                         && renaming.get(name) instanceof BindingId to
-                        ? new ValueIdentity.OfAnElement(to) : had, () -> stated);
+                        ? new ValueIdentity.OfAnElement(to) : had, EVERY_PART_IS_TOLD_A_VALUE);
     }
 
     /**
@@ -205,12 +218,17 @@ public final class ReadThroughNames {
     }
 
     /** Whether {@code stated} holds one value at each element's position
-     *  ({@link #oneValueAtEachElement}): what a reader of positions can be handed. */
+     *  ({@link #oneValueAtEachElement}): what a reader of positions can be handed.
+     *
+     *  <p>Asked of what the telling does and answered by whether it told a part as two, so the
+     *  statement it puts together is thrown away and the part it puts is any part: a part that
+     *  holds and says nothing. Put as the statement itself, it is the statement inside one of its
+     *  own quantifiers' elements. */
     public static boolean holdsOneValueAtEachElement(Proposition stated) {
         boolean[] two = {false};
         oneValueAtEachElement(stated, () -> {
             two[0] = true;
-            return stated;
+            return new Proposition.Always(true);
         });
         return !two[0];
     }
@@ -271,7 +289,7 @@ public final class ReadThroughNames {
         told(stated, (position, had) -> {
             out.add(new Told(position, had));
             return had;
-        }, () -> stated);
+        }, EVERY_PART_IS_TOLD_A_VALUE);
         return out.stream().map(Told::identity).toList();
     }
 
@@ -377,7 +395,7 @@ public final class ReadThroughNames {
                 }
             }
             return had;
-        }, () -> stated);
+        }, EVERY_PART_IS_TOLD_A_VALUE);
         return ElementsNamed.of(found);
     }
 

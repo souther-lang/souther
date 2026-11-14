@@ -698,6 +698,21 @@ public sealed interface BlockReason {
     }
 
     /**
+     * Whether {@code reason} is a stop of a statement that is about the elements of a container
+     * and says nothing of the container but that it holds them: two elements of one container, and
+     * a remainder of a number no position holds beside a comparison of the elements.
+     *
+     * <p>A question such a stop leaves standing at the container as a position is still asked,
+     * since it is what holds the container's own measure open; a report that names what a stop
+     * left unread names the elements and not the container beside them.
+     */
+    static boolean saysNothingOfTheContainerOfItsElements(RuleReadingStopped reason) {
+        return reason instanceof RuleAboutARemainderNoPositionHolds
+                || (reason instanceof WhatItStatesIsNoLine(WhatItStatesIsNoLine.Why why, var _)
+                        && why == WhatItStatesIsNoLine.Why.TWO_ELEMENTS_OF_ONE_CONTAINER);
+    }
+
+    /**
      * Two accounts of one reason, as one: the same reason, met at every figure either was.
      *
      * <p>Refused for two reasons that are not one, which is the caller's to have asked

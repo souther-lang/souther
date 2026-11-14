@@ -1798,11 +1798,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         BlockReason.WhatItStatesIsNoLine.Why.A_PART_NOT_READ);
         List<FilingCoordinate> filed =
                 GuardThresholds.filedAt(comparison, read, reads, answering);
-        // Two elements of one container are what the statement needs, and the container is no
-        // place they are not read at: it is left out where an element of it is among the places.
-        if (why.why() == BlockReason.WhatItStatesIsNoLine.Why.TWO_ELEMENTS_OF_ONE_CONTAINER) {
-            filed = GuardThresholds.withoutTheContainerPositionsOfTheirElements(filed);
-        }
         if (!filed.isEmpty()) {
             return new Read.Stopped(ComparisonAssessment.atEachOf(filed, why),
                     WhereAReadingStopped.ELSEWHERE);
