@@ -104,13 +104,12 @@ class ALookupOfTwoAveragesIsReadAtEveryLengthOfItsTableTest {
     }
 
     /**
-     * The lengths between the three rows that were read and the six that were, which the
-     * comparison of a row with an average runs out of the readings of one condition at, leave no
-     * month unread either.
+     * A length at which the comparison of a row with an average runs out of the readings of one
+     * condition leaves no month unread.
      *
-     * <p>Where the parts a fork over the comparison turns on were taken from what the stopped
-     * reading got to, four and five rows left the three months of one average unread, and three
-     * and six did not.
+     * <p>A reading that stopped hands the fork over the comparison no parts, so which months are
+     * unread does not turn on where it stopped, and so not on the length. One length at which it
+     * stops stands for them all.
      */
     @Test
     void noLengthOfTheTableLeavesAMonthUnreadThatAnotherLengthDoesNot() {
