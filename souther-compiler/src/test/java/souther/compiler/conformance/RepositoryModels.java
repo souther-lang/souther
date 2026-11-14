@@ -1,5 +1,6 @@
 package souther.compiler.conformance;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.check.DeclarationReadings;
 import souther.compiler.query.Compilation;
 import souther.compiler.revision.RevisionKnowledge;
@@ -42,9 +43,9 @@ public final class RepositoryModels {
      *  first. */
     private static final Map<String, ConformanceCorpus.Analysed> ANALYSED = new LinkedHashMap<>();
 
-    private static final SequencedMap<String, Compilation> BY_CORPUS = compileEverything();
+    private static final SequencedMap<String, Model> BY_CORPUS = compileEverything();
 
-    private static final List<Compilation> ALL = List.copyOf(BY_CORPUS.values());
+    private static final List<Model> ALL = List.copyOf(BY_CORPUS.values());
 
     /** What each of them has worked out about where its sets stop, made when first asked. */
     private static final Map<Compilation, DeclarationReadings> KNOWN = new IdentityHashMap<>();
@@ -53,7 +54,7 @@ public final class RepositoryModels {
     }
 
     /** Every model this repository carries, each with everything about it answered. */
-    public static List<Compilation> all() {
+    public static List<Model> all() {
         return ALL;
     }
 
@@ -61,7 +62,7 @@ public final class RepositoryModels {
      * The same models by the name the manifest gives each corpus, in the manifest's order — for a
      * reader whose answer names one of them.
      */
-    public static SequencedMap<String, Compilation> byCorpus() {
+    public static SequencedMap<String, Model> byCorpus() {
         return BY_CORPUS;
     }
 
@@ -72,9 +73,9 @@ public final class RepositoryModels {
      * worked with: each of these was compiled the way {@link ConformanceCorpus#analyse()} compiles
      * one, so the report built of it is the report that analysis writes.
      */
-    public static Map<ConformanceCorpus, Compilation> conformance() {
-        Map<ConformanceCorpus, Compilation> out = new LinkedHashMap<>();
-        ANALYSED.values().forEach(each -> out.put(each.corpus(), each.compilation()));
+    public static Map<ConformanceCorpus, Model> conformance() {
+        Map<ConformanceCorpus, Model> out = new LinkedHashMap<>();
+        ANALYSED.values().forEach(each -> out.put(each.corpus(), BY_CORPUS.get(each.corpus().name())));
         return Collections.unmodifiableMap(out);
     }
 
@@ -96,23 +97,40 @@ public final class RepositoryModels {
     }
 
     /**
-     * What {@code carried}, one of the compilations {@link #all()} hands out, is written to be
-     * refused with: the errors its corpus declares, and none for a model written to compile.
+     * One model of the repository, and what it is written to be.
      *
-     * <p>For the test that holds a model it took from here to what it is meant to be, as
-     * {@code ACompiledModel.refusedWith(RepositoryModels.refusedWith(carried), carried)}. Holding
-     * one of these to compile is wrong for a corpus written to be refused, and the list of what
-     * each is refused with is said once, by {@link ConformanceCorpus#refusedWith()}. A compilation
-     * that is not one of these was made by the test that holds it, which writes it to compile.
+     * <p>The compilation is not handed out as it is. A corpus is written to compile or to be refused
+     * with the errors it declares, and a test that took the compilation and held it to one of those
+     * by its own choosing would hold some of them to the wrong one. The only way to the compilation
+     * is {@link #answered()}, which holds it to what the corpus declares, so no test chooses.
      */
-    public static List<String> refusedWith(Compilation carried) {
-        for (Map.Entry<String, Compilation> each : BY_CORPUS.entrySet()) {
-            if (each.getValue() == carried) {
-                ConformanceCorpus.Analysed analysed = ANALYSED.get(each.getKey());
-                return analysed == null ? List.of() : analysed.corpus().refusedWith();
-            }
+    public static final class Model {
+
+        private final String name;
+
+        private final Compilation compilation;
+
+        private final List<String> refusedWith;
+
+        private Model(String name, Compilation compilation, List<String> refusedWith) {
+            this.name = name;
+            this.compilation = compilation;
+            this.refusedWith = refusedWith;
         }
-        return List.of();
+
+        /** The name the manifest gives its corpus. */
+        public String name() {
+            return name;
+        }
+
+        /**
+         * The compilation, answered in full and held to be refused with what its corpus is written
+         * to be refused with and nothing else, which is nothing for a model written to compile.
+         * Already held to that where it is a conformance corpus; the same compilation every time.
+         */
+        public Compilation answered() {
+            return ACompiledModel.refusedWith(refusedWith, compilation);
+        }
     }
 
     /**
@@ -156,19 +174,20 @@ public final class RepositoryModels {
         };
     }
 
-    private static SequencedMap<String, Compilation> compileEverything() {
-        SequencedMap<String, Compilation> out = new LinkedHashMap<>();
+    private static SequencedMap<String, Model> compileEverything() {
+        SequencedMap<String, Model> out = new LinkedHashMap<>();
         for (Map.Entry<String, String> corpus : ConformanceCorpus.manifest().entrySet()) {
             if (corpus.getValue().equals(ConformanceCorpus.CONFORMANCE)) {
                 // The analysing entry point, which is what says a conformance corpus was analysed:
                 // it puts the adequacy questions as well as compiling.
                 ConformanceCorpus.Analysed analysed = ConformanceCorpus.load(corpus.getKey()).analyse();
                 ANALYSED.put(corpus.getKey(), analysed);
-                out.put(corpus.getKey(), analysed.compilation());
+                out.put(corpus.getKey(), new Model(corpus.getKey(), analysed.compilation(),
+                        analysed.corpus().refusedWith()));
             } else {
                 Compilation compilation = ConformanceCorpus.load(corpus.getKey()).compilation();
                 compilation.answerEverything();
-                out.put(corpus.getKey(), compilation);
+                out.put(corpus.getKey(), new Model(corpus.getKey(), compilation, List.of()));
             }
         }
         return Collections.unmodifiableSequencedMap(out);

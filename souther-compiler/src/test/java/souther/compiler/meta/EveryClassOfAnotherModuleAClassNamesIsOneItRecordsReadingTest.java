@@ -92,45 +92,11 @@ class EveryClassOfAnotherModuleAClassNamesIsOneItRecordsReadingTest {
     void everyClassOfAnotherModuleNamedIsOfADeclarationRecordedAsRead() {
         List<String> unrecorded = new ArrayList<>();
         int checked = 0;
-        Compilation fixture = reachingEveryWay();
-        List<Compilation> compilations = new ArrayList<>(List.of(fixture));
-        compilations.addAll(RepositoryModels.all());
-        for (Compilation carried : compilations) {
-            Compilation compilation = asked(carried);
-            Map<String, Map<String, ClassFileImage>> byModule = new LinkedHashMap<>();
-            Map<String, ClassFileImage> all = new LinkedHashMap<>();
-            for (String module : compilation.modules()) {
-                Map<String, ClassFileImage> classes =
-                        compilation.db().ask(new Output.Classes(module)).value();
-                if (classes != null) {
-                    byModule.put(module, classes);
-                    all.putAll(classes);
-                }
-            }
-            if (carried == fixture) {
-                assertEquals(Set.of("lib.b", "lib.c"), byModule.keySet(),
-                        () -> "the fixture compiles, or it reaches nothing: "
-                                + compilation.db().allReports().stream()
-                                        .map(f -> f.report().diagnostic().code() + " "
-                                                + f.report().diagnostic().said())
-                                        .toList());
-            }
-            PublishedClasses published = ModulePath.of(all).declarations();
-            for (Map.Entry<String, Map<String, ClassFileImage>> module : byModule.entrySet()) {
-                Set<String> covered = covered(module.getKey(), published);
-                for (Map.Entry<String, ClassFileImage> clazz : module.getValue().entrySet()) {
-                    for (String named : classesNamed(clazz.getValue())) {
-                        String owner = moduleOf(named, byModule.keySet());
-                        if (owner == null || owner.equals(module.getKey())) {
-                            continue;
-                        }
-                        checked++;
-                        if (!covered.contains(named)) {
-                            unrecorded.add(clazz.getKey() + " names " + named);
-                        }
-                    }
-                }
-            }
+        Compilation fixture = ACompiledModel.compiles(
+                Compilation.ofSources(REACHING_EVERY_WAY, ModulePath.of(Map.of())));
+        checked += unrecordedIn(fixture, true, unrecorded);
+        for (RepositoryModels.Model model : RepositoryModels.all()) {
+            checked += unrecordedIn(model.answered(), false, unrecorded);
         }
 
         assertTrue(checked > 0, "no class named a class of another module, so nothing was held");
@@ -138,17 +104,48 @@ class EveryClassOfAnotherModuleAClassNamesIsOneItRecordsReadingTest {
                 "a class names a class of another module no recorded declaration accounts for");
     }
 
-    private static Compilation reachingEveryWay() {
-        return ACompiledModel.compiles(
-                Compilation.ofSources(REACHING_EVERY_WAY, ModulePath.of(Map.of())));
-    }
-
     /**
-     * {@code carried}, held to what it is written to be: to compile, or, where it is a conformance
-     * corpus the manifest expects refused, to be refused as that corpus says.
+     * What {@code compilation} names of another module that no recorded declaration accounts for,
+     * added to {@code unrecorded}, and how many classes it named of another module.
      */
-    private static Compilation asked(Compilation carried) {
-        return ACompiledModel.refusedWith(RepositoryModels.refusedWith(carried), carried);
+    private static int unrecordedIn(Compilation compilation, boolean fixture,
+                                    List<String> unrecorded) {
+        int checked = 0;
+        Map<String, Map<String, ClassFileImage>> byModule = new LinkedHashMap<>();
+        Map<String, ClassFileImage> all = new LinkedHashMap<>();
+        for (String module : compilation.modules()) {
+            Map<String, ClassFileImage> classes =
+                    compilation.db().ask(new Output.Classes(module)).value();
+            if (classes != null) {
+                byModule.put(module, classes);
+                all.putAll(classes);
+            }
+        }
+        if (fixture) {
+            assertEquals(Set.of("lib.b", "lib.c"), byModule.keySet(),
+                    () -> "the fixture compiles, or it reaches nothing: "
+                            + compilation.db().allReports().stream()
+                                    .map(f -> f.report().diagnostic().code() + " "
+                                            + f.report().diagnostic().said())
+                                    .toList());
+        }
+        PublishedClasses published = ModulePath.of(all).declarations();
+        for (Map.Entry<String, Map<String, ClassFileImage>> module : byModule.entrySet()) {
+            Set<String> covered = covered(module.getKey(), published);
+            for (Map.Entry<String, ClassFileImage> clazz : module.getValue().entrySet()) {
+                for (String named : classesNamed(clazz.getValue())) {
+                    String owner = moduleOf(named, byModule.keySet());
+                    if (owner == null || owner.equals(module.getKey())) {
+                        continue;
+                    }
+                    checked++;
+                    if (!covered.contains(named)) {
+                        unrecorded.add(clazz.getKey() + " names " + named);
+                    }
+                }
+            }
+        }
+        return checked;
     }
 
     /**

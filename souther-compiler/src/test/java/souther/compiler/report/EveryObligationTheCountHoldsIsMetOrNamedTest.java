@@ -450,7 +450,7 @@ class EveryObligationTheCountHoldsIsMetOrNamedTest {
         // The corpora as every reader of the repository's models takes them, compiled once for all
         // of those.
         RepositoryModels.conformance().forEach((corpus, shared) -> {
-            Compilation asked = ACompiledModel.refusedWith(corpus.refusedWith(), shared);
+            Compilation asked = shared.answered();
             out.add(new Reported(corpus.name(), AdequacyReport.of(asked),
                     new SourceRendering(corpus.names(), asked.texts())));
         });

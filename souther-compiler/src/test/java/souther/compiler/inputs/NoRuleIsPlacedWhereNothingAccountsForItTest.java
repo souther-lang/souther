@@ -199,18 +199,8 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
      * below are about every model that reaches them either way. Answered once for the class, as the
      * repository's are, because each question here asks about all of them.
      */
-    private static final List<Compilation> ASKED_ABOUT = askedAbout();
-
-    private static List<Compilation> askedAbout() {
-        List<Compilation> out = new ArrayList<>(RepositoryModels.all());
-        out.add(throughASum());
-        return List.copyOf(out);
-    }
-
-    private static Compilation throughASum() {
-        return ACompiledModel.compiles(
-                Compilation.ofSources(List.of(NAMES_THROUGH_A_SUM), ModulePath.EMPTY));
-    }
+    private static final Compilation THROUGH_A_SUM = ACompiledModel.compiles(
+            Compilation.ofSources(List.of(NAMES_THROUGH_A_SUM), ModulePath.EMPTY));
 
     /**
      * The reading of every behavior of every model this repository carries, as the compilation made
@@ -219,17 +209,21 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
      */
     private static List<InputDomain> everyReading() {
         List<InputDomain> out = new ArrayList<>();
-        for (Compilation compilation : ASKED_ABOUT) {
-            ACompiledModel.refusedWith(RepositoryModels.refusedWith(compilation), compilation);
-            for (String module : compilation.modules()) {
-                Answer<Map<String, InputDomain>> read =
-                        compilation.db().ask(new Adequacy.Inputs(module));
-                if (read.present()) {
-                    out.addAll(read.value().values());
-                }
+        for (RepositoryModels.Model model : RepositoryModels.all()) {
+            readingsOf(model.answered(), out);
+        }
+        readingsOf(THROUGH_A_SUM, out);
+        return out;
+    }
+
+    private static void readingsOf(Compilation compilation, List<InputDomain> out) {
+        for (String module : compilation.modules()) {
+            Answer<Map<String, InputDomain>> read =
+                    compilation.db().ask(new Adequacy.Inputs(module));
+            if (read.present()) {
+                out.addAll(read.value().values());
             }
         }
-        return out;
     }
 
     /** The rules of every value the models open, once they have been read. */
@@ -251,9 +245,10 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
             return everyValueRead;
         }
         List<PlacedRules> out = new ArrayList<>();
-        for (Compilation compilation : ASKED_ABOUT) {
-            valuesRead(compilation, out);
+        for (RepositoryModels.Model model : RepositoryModels.all()) {
+            valuesRead(model.answered(), out);
         }
+        valuesRead(THROUGH_A_SUM, out);
         everyValueRead = List.copyOf(out);
         return everyValueRead;
     }
@@ -266,7 +261,6 @@ class NoRuleIsPlacedWhereNothingAccountsForItTest {
     }
 
     private static void valuesRead(Compilation compilation, List<PlacedRules> out) {
-        ACompiledModel.refusedWith(RepositoryModels.refusedWith(compilation), compilation);
         for (String module : compilation.modules()) {
             Map<String, DeclaredSig> sigs =
                     compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
