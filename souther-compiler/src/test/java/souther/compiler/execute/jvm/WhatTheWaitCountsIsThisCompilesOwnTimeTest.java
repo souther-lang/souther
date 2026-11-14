@@ -3,6 +3,7 @@ package souther.compiler.execute.jvm;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourcePos;
+import souther.compiler.examples.CallerApplication;
 import souther.compiler.examples.Deadline;
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.observe.RowIdentity;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Condition;
 
@@ -164,21 +166,45 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
      * Time that passes only where the servicing thread is waiting.
      *
      * <p>What it takes for the wait to be spent is the row passing time, which a row does by working
-     * and which this lets a test say outright. A wait returns when the other side moves, and what
-     * is left of it is what the time passed inside it took.
+     * and which this lets a test say outright. A wait returns when the row has moved, and what is
+     * left of it is what the time passed inside it took. A row says it is about to move by
+     * {@link #crossing} and {@link #row}, which is what a wait that must not return before then
+     * asks for, so a wake-up that is not the row's leaves it waiting.
      */
     private static final class VirtualTime implements Handoff.Spending {
 
         private final AtomicLong now = new AtomicLong();
+        private final AtomicInteger moves = new AtomicInteger();
 
         void pass(Duration length) {
             now.addAndGet(length.toNanos());
         }
 
+        /** {@code application}, handed over at the crossing. */
+        Object crossing(CallerApplication.Application application)
+                throws ReflectiveOperationException {
+            moves.incrementAndGet();
+            return Handoff.onTheThreadThatAsked().call(application);
+        }
+
+        /** {@code body}, which says it is done by returning. */
+        <T> Callable<T> row(Callable<T> body) {
+            return () -> {
+                try {
+                    return body.call();
+                } finally {
+                    moves.incrementAndGet();
+                }
+            };
+        }
+
         @Override
         public long awaiting(Condition moved, long nanos) throws InterruptedException {
             long began = now.get();
-            moved.await();
+            int seen = moves.get();
+            while (moves.get() == seen) {
+                moved.await();
+            }
             return nanos - (now.get() - began);
         }
     }
@@ -201,12 +227,50 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
     void whatTheApplicationTakesIsNotTheCompilesToSpend() throws Exception {
         VirtualTime time = new VirtualTime();
         Handoff handoff = new Handoff(time);
-        startRow(handoff, () -> Handoff.onTheThreadThatAsked().call(() -> {
+        startRow(handoff, time.row(() -> time.crossing(() -> {
             time.pass(Duration.ofMillis(300));
+            return "answered";
+        })));
+
+        assertEquals(Handoff.Serviced.ROW_LEFT, handoff.serviceUntilDone(Duration.ofMillis(100)));
+    }
+
+    /** The same, through the deadline an example is run under: what it takes of the caller is not
+     *  what it is held to. */
+    @Test
+    void aDeadlineIsNotSpentByWhatTheApplicationTakes() {
+        VirtualTime time = new VirtualTime();
+        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(100), 0L, time);
+
+        Deadline.Outcome<Object> came = deadline.given(WORK, time.row(() -> time.crossing(() -> {
+            time.pass(Duration.ofMillis(300));
+            return "answered";
+        })));
+
+        assertEquals("answered", assertInstanceOf(Deadline.Outcome.Finished.class, came).value());
+    }
+
+    /**
+     * And the compile's own time on either side of a crossing is one wait, through the deadline.
+     * The stretches are those of {@link #whatTheCompileSpendsAroundCrossingsIsOneWait}.
+     */
+    @Test
+    void aDeadlineIsSpentByTheCompilesOwnTimeAroundCrossingsAsOneWait() {
+        VirtualTime time = new VirtualTime();
+        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(100), 0L, time);
+
+        Deadline.Outcome<Object> came = deadline.given(WORK, time.row(() -> {
+            for (int each = 0; each < 5; each++) {
+                time.pass(Duration.ofMillis(30));
+                time.crossing(() -> {
+                    time.pass(Duration.ofMillis(40));
+                    return null;
+                });
+            }
             return "answered";
         }));
 
-        assertEquals(Handoff.Serviced.ROW_LEFT, handoff.serviceUntilDone(Duration.ofMillis(100)));
+        assertInstanceOf(Deadline.Outcome.Overran.class, came).abandon().run();
     }
 
     /**
@@ -222,16 +286,16 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
     void whatTheCompileSpendsAroundCrossingsIsOneWait() throws Exception {
         VirtualTime time = new VirtualTime();
         Handoff handoff = new Handoff(time);
-        startRow(handoff, () -> {
+        startRow(handoff, time.row(() -> {
             for (int each = 0; each < 5; each++) {
                 time.pass(Duration.ofMillis(30));
-                Handoff.onTheThreadThatAsked().call(() -> {
+                time.crossing(() -> {
                     time.pass(Duration.ofMillis(40));
                     return null;
                 });
             }
             return "answered";
-        });
+        }));
 
         try {
             assertEquals(Handoff.Serviced.WAIT_SPENT,

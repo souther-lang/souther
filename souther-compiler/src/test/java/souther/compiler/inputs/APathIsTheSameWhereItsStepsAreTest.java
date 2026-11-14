@@ -176,7 +176,7 @@ class APathIsTheSameWhereItsStepsAreTest {
         // is waited for is the queue being fed, not a length of time.
         for (int asked = 0; asked < GC_ROUNDS && TermPath.placesFiled() > before; asked++) {
             System.gc();
-            Thread.yield();
+            Thread.onSpinWait();
         }
 
         assertTrue(TermPath.placesFiled() <= before,
