@@ -10,6 +10,7 @@ import souther.compiler.numeric.WholeNumberRuns;
 import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -145,7 +146,7 @@ public final class TheCaseALineDecidesIn {
             }
             // Where the way and the point settle a part apart, no row is both along the way and
             // at this way of standing at the point.
-            if (agree && !noTruthMakesItHold(decides, parts.asked(), truths)) {
+            if (agree && !noTruthMakesItHoldUnder(truths)) {
                 return CasePossibility.NOT_REFUTED;
             }
         }
@@ -174,6 +175,22 @@ public final class TheCaseALineDecidesIn {
     /** What each way a row stands at a point makes of each part, worked out once for a point
      *  whichever way it is asked along. */
     private final Map<Standing, List<Boolean[]>> atThePoint = new ConcurrentHashMap<>();
+
+    /** What {@link #noTruthMakesItHoldUnder} answered, by the truths it was asked under. */
+    private final Map<List<Boolean>, Boolean> refutedUnder = new ConcurrentHashMap<>();
+
+    /**
+     * Whether no truth of the parts {@code truths} leaves open ({@code null}) makes the case
+     * hold, wherever the truths came from: the case and its parts are the same whichever way and
+     * point settled them, so a different way and point that settle the same truths ask the same
+     * thing. Asked once for the truths as they are when it is asked; {@code truths} is as it was
+     * afterwards.
+     */
+    boolean noTruthMakesItHoldUnder(Boolean[] truths) {
+        Map<Proposition, Integer> asked = parts().asked();
+        return refutedUnder.computeIfAbsent(Arrays.asList(truths.clone()),
+                ignored -> noTruthMakesItHold(decides, asked, truths));
+    }
 
     /** What every row standing each way {@code point} is stood at makes of each part. */
     private static List<Boolean[]> madeAt(Parts parts, Standing point) {
