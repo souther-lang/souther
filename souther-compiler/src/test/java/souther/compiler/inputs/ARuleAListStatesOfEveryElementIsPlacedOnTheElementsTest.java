@@ -7,6 +7,8 @@ import souther.compiler.TestDay;
 import souther.compiler.check.DeclaredSig;
 import souther.compiler.check.ElementGuarantee;
 import souther.compiler.check.FieldDomains;
+import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.LineProvenance;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.RuleReadingContext;
@@ -24,6 +26,7 @@ import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -364,6 +367,49 @@ class ARuleAListStatesOfEveryElementIsPlacedOnTheElementsTest {
             behavior f : (ns: Ns) -> Ok
             """;
 
+    /** One part of one rule, a helper it calls, speaks of two lists. */
+    private static final String ONE_PART_ABOUT_TWO_LISTS = """
+            module bounded
+
+            let bounded (xs: List<Int>, ys: List<Int>): Bool =
+                List.all(x -> x >= 2, xs) && List.all(y -> y >= 2, ys)
+
+            data Pair = { xs: List<Int>, ys: List<Int> } invariant bounded(xs, ys)
+
+            data Ok
+
+            behavior f : (p: Pair) -> Ok
+            """;
+
+    /** One statement of one rule, read at two places: both lists are of a type that states it. */
+    private static final String ONE_STATEMENT_AT_TWO_PLACES = """
+            module bounded
+
+            data Ns = List<Int> invariant List.all(x -> x >= 2, value)
+
+            data Pair = { xs: Ns, ys: Ns }
+
+            data Ok
+
+            behavior f : (p: Pair) -> Ok
+            """;
+
+    /** What the statements say of the elements at {@code place}, each as the statement it is. */
+    private static Set<InvariantStatementId> statementsAt(String source, String place) {
+        Compilation compilation = ACompiledModel.answered(source);
+        String module = compilation.modules().get(0);
+        DeclaredSig sig =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value().get("f");
+        RuleReadingContext reading = readingOf(compilation);
+        List<ElementGuarantee> stated = PlacedRules.of(TermPath.of("p"),
+                sig.inputs().getFirst().type(), reading)
+                .guaranteedOfEveryElementAt(TermPath.of("p").then(place));
+        return FieldDomains.ofElement(null, Type.INT, stated, reading)
+                .placedAt(RuleKey.THE_VALUE).stream()
+                .map(each -> ((LineProvenance.Direct) each.from()).statement())
+                .collect(Collectors.toSet());
+    }
+
     private static RuleReadingContext readingOf(Compilation compilation) {
         RuleReadingSource rules = RuleReadings.of(compilation, compilation.modules().get(0));
         return RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
@@ -608,6 +654,88 @@ class ARuleAListStatesOfEveryElementIsPlacedOnTheElementsTest {
                 "both ends are that part's");
         assertEquals(List.of(), element.leavingOut(parts).placedAt(RuleKey.THE_VALUE),
                 "and leaving it out leaves neither");
+    }
+
+    /**
+     * What one part says of two lists is two statements of the model, though it is one part: the
+     * lower end of each list's elements is that list's statement's, and a debt owed for one is not
+     * paid by the other.
+     */
+    @Test
+    void oneStatementOfAPartIsNotAnotherBecauseTheyShareThePart() {
+        Set<InvariantStatementId> ofXs = statementsAt(ONE_PART_ABOUT_TWO_LISTS, "xs");
+        Set<InvariantStatementId> ofYs = statementsAt(ONE_PART_ABOUT_TWO_LISTS, "ys");
+        assertEquals(1, ofXs.size());
+        assertEquals(1, ofYs.size());
+        assertEquals(ofXs.iterator().next().part(), ofYs.iterator().next().part(),
+                "one part of the rule says both");
+        assertTrue(Collections.disjoint(ofXs, ofYs), "and what it says of each is not one thing");
+    }
+
+    /**
+     * And one statement read at two places is one statement of the model: a rule a type states of
+     * its elements is written once and is owed a row once, wherever the type is held.
+     */
+    @Test
+    void oneStatementReadAtTwoPlacesIsOneStatement() {
+        Set<InvariantStatementId> ofXs = statementsAt(ONE_STATEMENT_AT_TWO_PLACES, "xs");
+        assertEquals(1, ofXs.size());
+        assertEquals(ofXs, statementsAt(ONE_STATEMENT_AT_TWO_PLACES, "ys"));
+    }
+
+    /**
+     * Several things one statement says of the elements are that statement's own: numbered within
+     * it, so that the two of them are two and neither is a statement of the part.
+     */
+    @Test
+    void severalThingsOneStatementSaysAreNumberedWithinIt() {
+        Compilation compilation = ACompiledModel.answered(TWO_BOUNDS_IN_ONE_STATEMENT);
+        String module = compilation.modules().get(0);
+        DeclaredSig sig =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value().get("f");
+        RuleReadingContext reading = readingOf(compilation);
+        List<ElementGuarantee> stated = PlacedRules.of(TermPath.of("ns"),
+                sig.inputs().getFirst().type(), reading)
+                .guaranteedOfEveryElementAt(TermPath.of("ns"));
+        Set<InvariantStatementId> ends = FieldDomains.ofElement(null, Type.INT, stated, reading)
+                .placedAt(RuleKey.THE_VALUE).stream()
+                .map(each -> ((LineProvenance.Direct) each.from()).statement())
+                .collect(Collectors.toSet());
+        assertEquals(2, ends.size());
+        for (InvariantStatementId each : ends) {
+            assertEquals(List.of(0), each.inside(), "both are within the one statement");
+        }
+        assertEquals(Set.of(0, 1),
+                ends.stream().map(InvariantStatementId::ordinal).collect(Collectors.toSet()));
+    }
+
+    /**
+     * A statement inside a statement inside a conjunct is numbered within both: what a list of
+     * lists states of each list's elements is what the inner statement says, which the outer one
+     * says of each list.
+     */
+    @Test
+    void whatIsSaidInsideWhatIsSaidIsNumberedWithinBoth() {
+        Compilation compilation = ACompiledModel.answered(LISTS_OF_LISTS);
+        String module = compilation.modules().get(0);
+        DeclaredSig sig =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value().get("f");
+        RuleReadingContext reading = readingOf(compilation);
+        List<ElementGuarantee> ofEachList = PlacedRules.of(TermPath.of("ws"),
+                sig.inputs().getFirst().type(), reading)
+                .guaranteedOfEveryElementAt(TermPath.of("ws"));
+        List<ElementGuarantee> ofEachString = FieldDomains.ofElement(null,
+                new Type.ListOf(Type.STRING), ofEachList, reading).guaranteesAt(RuleKey.THE_VALUE);
+        assertEquals(1, ofEachString.size());
+        assertEquals(List.of(0), ofEachString.getFirst().statedBy().inside(),
+                "the inner statement is within the outer one");
+        FieldDomains strings = FieldDomains.ofElement(null, Type.STRING, ofEachString, reading);
+        Set<InvariantStatementId> lengths = strings.placedAt(RuleKey.THE_VALUE).stream()
+                .map(each -> ((LineProvenance.Direct) each.from()).statement())
+                .collect(Collectors.toSet());
+        assertEquals(1, lengths.size());
+        assertEquals(List.of(0, 0), lengths.iterator().next().inside(),
+                "and the length it states is within the inner one, which is within the outer");
     }
 
     private static Set<PartId<RuleRef.Invariant>> placingTheLength(FieldDomains domains) {

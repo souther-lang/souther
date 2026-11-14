@@ -1004,9 +1004,7 @@ public final class InvariantChecker {
                                 .computeIfAbsent(part.id(), _ -> new LinkedHashMap<>())
                                 .put(of.at(), new PartAsRead(of, partRead(came))));
                 owed = owed == null ? said : owed.and(said);
-                List<Quantified> quantifiers = new ArrayList<>();
-                c.predicates.quantifiedBy(part.expr(), at, true, quantifiers);
-                quantifiers.forEach(one -> stating.add(one.statedBy(part.id())));
+                c.predicates.quantifiedBy(part, at, true, stating);
             }
             worked.add(new WorkedClause(written.size(), view));
             written.add(new Written(new ReadingId(written.size()), stated, view, constrained,
@@ -2121,7 +2119,7 @@ public final class InvariantChecker {
      */
     static Map<ClauseOccurrence, InvariantStatementId> statementsOf(Written reading) {
         Map<ClauseOccurrence, InvariantStatementId> out = new HashMap<>();
-        reading.parts().forEach(part -> ConjunctStatements.of(part.of(), part.id())
+        reading.parts().forEach(part -> ConjunctStatements.of(part)
                 .forEach(each -> under(each.said(), each.statement(), out)));
         return out;
     }
@@ -2691,7 +2689,7 @@ public final class InvariantChecker {
             if (named == null) {
                 named = new LinkedHashMap<>();
                 stated.forEach(each -> each.parts().forEach(part ->
-                        ConjunctStatements.of(part.of(), part.id()).forEach(reached -> {
+                        ConjunctStatements.of(part).forEach(reached -> {
                             for (Coordinate one : coordinatesIn(reached.said().of(),
                                     inside(reached.crossed(), at), byName,
                                     Arrivals.inTheTree(each.clause()))) {
@@ -2749,7 +2747,7 @@ public final class InvariantChecker {
                 // walk that numbers them ({@link ConjunctStatements}). Counted here, this would be a
                 // second answer to what a conjunct states, and a reading that made less of a clause
                 // than another would name the same rule differently.
-                ConjunctStatements.of(part.of(), part.id()).forEach(reached ->
+                ConjunctStatements.of(part).forEach(reached ->
                         direct(reached.said(), reached.statement(), each, part.id(),
                                 inside(reached.crossed(), at), byName, out, noLines,
                                 withoutAnEnd, aboutOneCoordinate, narrowers,

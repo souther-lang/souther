@@ -68,18 +68,40 @@ final class ConjunctStatements {
         }
     }
 
-    /** Every statement {@code conjunct} states, in the order a reading arrives at them. */
-    static List<Reached> of(ClauseExpr conjunct, PartId<RuleRef.Invariant> part) {
+    /**
+     * Every statement {@code part} states, in the order a reading arrives at them, each with the
+     * number the part was handed for it or, where it was handed none, the next number of its
+     * conjunct.
+     */
+    static List<Reached> of(Clauses.StatedPart part) {
+        List<Stated> stated = statedBy(part.of());
         List<Reached> out = new ArrayList<>();
         // Numbered here, before anything is made of it. Numbered where an end or a hand-over is
         // written down instead, the number would say which of the outcomes this was rather than
         // which of the statements.
-        int statements = 0;
-        for (Stated each : statedBy(conjunct)) {
-            out.add(new Reached(new InvariantStatementId(part, statements++), each.said(),
-                    each.crossed()));
+        if (!part.statements().isEmpty() && part.statements().size() != stated.size()) {
+            throw new IllegalStateException(part.id() + " states " + stated.size()
+                    + " statements here and was handed the numbers of " + part.statements().size());
+        }
+        for (int each = 0; each < stated.size(); each++) {
+            out.add(new Reached(numberedAs(part, each), stated.get(each).said(),
+                    stated.get(each).crossed()));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * The identity of statement {@code index} of {@code part}: the number the part was handed for
+     * it, or the next number of its conjunct.
+     *
+     * <p>The one place a statement is given its identity, for the reading that reads a part and for
+     * the one that finds what it states of every element. Two places each choosing between the
+     * number handed and the next one are two answers to which statement this is, and the second of
+     * them is the one a statement inside a statement inside a conjunct is asked of.
+     */
+    static InvariantStatementId numberedAs(Clauses.StatedPart part, int index) {
+        return new InvariantStatementId(part.id(), part.statements().isEmpty()
+                ? StatementNumber.of(index) : part.statements().get(index));
     }
 
     /**

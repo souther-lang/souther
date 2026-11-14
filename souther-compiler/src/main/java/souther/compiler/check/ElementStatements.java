@@ -7,6 +7,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.Type;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,7 +70,7 @@ final class ElementStatements {
         // What a part states first, as the part: one part an author wrote can state several things
         // of every element — a helper it calls states two — and it is still the one part, which a
         // reading is made without as a whole and whose place in a statement is one.
-        Map<PartId<RuleRef.Invariant>, Core> ofAPart = new LinkedHashMap<>();
+        Map<PartId<RuleRef.Invariant>, OfAPart> ofAPart = new LinkedHashMap<>();
         boolean someLeftOut = false;
         for (ElementGuarantee each : guarantees) {
             Core stated = readAsItsOwn.contains(each.part().rule()) ? null : ofTheValue(each, frame);
@@ -77,14 +78,40 @@ final class ElementStatements {
                 someLeftOut = true;
                 continue;
             }
-            ofAPart.merge(each.part(), stated, ElementStatements::both);
+            ofAPart.merge(each.part(), new OfAPart(stated, statementsOf(each, stated)),
+                    OfAPart::and);
         }
         // And then the rule, whose parts are joined as its author joined them.
         Map<RuleRef.Invariant, Clauses.AsStated> clauses = new LinkedHashMap<>();
         ofAPart.forEach((part, stated) -> clauses.merge(part.rule(),
-                new Clauses.AsStated(stated, new ClauseMeaning.Parts.One(part, Set.of())),
+                new Clauses.AsStated(stated.states(), new ClauseMeaning.Parts.One(part, Set.of(),
+                        stated.statements())),
                 ElementStatements::joined));
         return new CarriedOver(clauses, someLeftOut);
+    }
+
+    /** What one part states of the value, and the identity of each statement it comes to. */
+    private record OfAPart(Core states, List<StatementNumber> statements) {
+
+        OfAPart and(OfAPart other) {
+            List<StatementNumber> both = new ArrayList<>(statements);
+            both.addAll(other.statements);
+            return new OfAPart(both(states, other.states), both);
+        }
+    }
+
+    /**
+     * The number of each statement {@code stated} comes to, which the statement of the container
+     * that says it issues, once. Counted by the shape's walk, as the reading that reads it will
+     * count them, so that the two agree about how many there are.
+     */
+    private static List<StatementNumber> statementsOf(ElementGuarantee guarantee, Core stated) {
+        int count = ConjunctStatements.statedBy(ClauseExpr.of(stated, true)).size();
+        List<StatementNumber> out = new ArrayList<>();
+        for (int each = 0; each < count; each++) {
+            out.add(guarantee.statedBy().number().stating(each));
+        }
+        return out;
     }
 
     /** What {@code guarantee} states with the value put where its predicate names the element, or

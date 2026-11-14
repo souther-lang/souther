@@ -124,12 +124,24 @@ public sealed interface ClauseMeaning permits ClauseMeaning.Stated, ClauseMeanin
          * @param id which rule of which clause this is
          * @param reads the places of the declaration's value this rule reads, and what it reads at
          *     each
+         * @param statements the number of each statement the part states, in the order a reading
+         *     arrives at them; none where they are the part's own and numbered as it is read. Given
+         *     where the part is what a container states of every element, whose statements are
+         *     numbered within the statement of the container that says them, once, where it is
+         *     read — and not again at each place the elements stand
          */
-        record One(PartId<RuleRef.Invariant> id, Set<ClauseRead> reads) implements Parts {
+        record One(PartId<RuleRef.Invariant> id, Set<ClauseRead> reads,
+                   List<StatementNumber> statements) implements Parts {
 
             public One {
                 Objects.requireNonNull(id, "a rule an author wrote is some part of a clause");
                 reads = Set.copyOf(reads);
+                statements = List.copyOf(statements);
+            }
+
+            /** A part whose statements are numbered as it is read. */
+            public One(PartId<RuleRef.Invariant> id, Set<ClauseRead> reads) {
+                this(id, reads, List.of());
             }
 
             /**
@@ -155,7 +167,7 @@ public sealed interface ClauseMeaning permits ClauseMeaning.Stated, ClauseMeanin
         /** The same rules joined the same way, each with the places {@code readsOf} says it reads. */
         default Parts withReads(Function<PartId<RuleRef.Invariant>, Set<ClauseRead>> readsOf) {
             return switch (this) {
-                case One it -> new One(it.id(), readsOf.apply(it.id()));
+                case One it -> new One(it.id(), readsOf.apply(it.id()), it.statements());
                 case Both it -> new Both(it.left().withReads(readsOf),
                         it.right().withReads(readsOf));
             };
@@ -201,7 +213,7 @@ public sealed interface ClauseMeaning permits ClauseMeaning.Stated, ClauseMeanin
 
         private void found(ClauseExpr read, List<Clauses.StatedPart> out) {
             switch (this) {
-                case One it -> out.add(new Clauses.StatedPart(it.id(), read));
+                case One it -> out.add(new Clauses.StatedPart(it.id(), read, it.statements()));
                 case Both it -> {
                     if (!(read instanceof ClauseExpr.Joined joined)) {
                         throw new IllegalStateException("an author wrote two rules where this"
