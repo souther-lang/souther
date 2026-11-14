@@ -35,7 +35,7 @@ class AReadingTakenAgainAsksTheElementsItAskedOfOfWhoeverNotesItTest {
         ElementsMet met = new ElementsMet();
         ElementsMet.Noting noting = met.noting();
         met.admits(through(name));
-        return noting.ended(met);
+        return noting.ended();
     }
 
     /** The footprint of a whole that is made of a part taken from a reading made before. */
@@ -43,7 +43,7 @@ class AReadingTakenAgainAsksTheElementsItAskedOfOfWhoeverNotesItTest {
         ElementsMet met = new ElementsMet();
         ElementsMet.Noting noting = met.noting();
         met.takes(part);
-        return noting.ended(met);
+        return noting.ended();
     }
 
     @Test

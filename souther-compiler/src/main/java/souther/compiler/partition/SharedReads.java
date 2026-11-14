@@ -232,7 +232,7 @@ final class SharedReads<C, E, M, R> {
         } finally {
             consulted = scene.endConsulting(consultedBefore);
         }
-        ElementsMet.Footprint footprint = noting.ended(elements);
+        ElementsMet.Footprint footprint = noting.ended();
         R result = read.result();
         if (result != null && read.asked().toldApart() && footprint != null
                 && scene.metCount() >= metFrom && scene.sameGuards(guards, scene.guards())
