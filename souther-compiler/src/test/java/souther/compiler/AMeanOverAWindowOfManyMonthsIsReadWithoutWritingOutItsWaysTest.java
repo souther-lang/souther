@@ -59,7 +59,7 @@ class AMeanOverAWindowOfManyMonthsIsReadWithoutWritingOutItsWaysTest {
                     Ok
                 }
                 """.formatted(window, months, mean), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
@@ -81,6 +81,5 @@ class AMeanOverAWindowOfManyMonthsIsReadWithoutWritingOutItsWaysTest {
     void aMeanWhoseCasesAreGivenUpIsSaidOnceAndNotAtEveryStepOfThem() {
         String report = assertTimeoutPreemptively(Duration.ofSeconds(60), () -> report());
         long said = report.lines().filter(line -> line.contains("not read: comparison")).count();
-        assertTrue(said <= MONTHS, () -> "said " + said + " times, once for each month at most");
-    }
+        assertTrue(said <= MONTHS, () -> "said " + said + " times, once for each month at most");    }
 }
