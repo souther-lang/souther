@@ -285,24 +285,20 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      * them as one number; a form that stands alone is read with a {@code met} of its own.
      */
     static LinearForm<NumericTerm> formOf(Core expression, InputReads reads, InputReading read,
-                                          ElementsMet met) {
-        return outcomeOf(expression, reads, read, met)
+                                          ElementsMet met, NamesKept kept) {
+        return outcomeOf(expression, reads, read, met, kept)
                 instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> composed
                 ? composed.form() : null;
     }
 
-    /** What reading {@code expression} as a form of the input's numbers comes to ({@link
-     *  #formOf}), and where it stopped where it did not compose. */
-    static AffineForms.Outcome<NumericTerm, InputReads> outcomeOf(Core expression,
-                                                                  InputReads reads,
-                                                                  InputReading read,
-                                                                  ElementsMet met) {
-        return outcomeOf(expression, reads, read, met, null);
-    }
-
     /**
-     * The same, with what each name came to kept by {@code kept} where it is given, for another
-     * reading of the same kind to take.
+     * What reading {@code expression} as a form of the input's numbers comes to ({@link #formOf}),
+     * and where it stopped where it did not compose, with what each name came to kept by
+     * {@code kept}, for another reading of the same kind to take.
+     *
+     * <p>Kept by its owner and by nothing shorter lived: a table that lasts as long as one walk is
+     * a name read down to the bottom of its chain by every walk that starts above it, which is the
+     * square of the chain for the walks one for each link make.
      *
      * <p>Only here, where nothing of what is told is asked for afterwards: what a name comes to is
      * then the form or the stop and the elements it asked of, and not what the walk inside it told.

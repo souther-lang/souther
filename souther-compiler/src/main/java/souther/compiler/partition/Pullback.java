@@ -5164,9 +5164,11 @@ final class Pullback {
         // elements together, apart from the comparison's own.
         ElementsMet ends = new ElementsMet();
         LinearForm<NumericTerm> from = AffineReading.formOf(
-                call.args().get(between.from().position()), container.at(), read, ends);
+                call.args().get(between.from().position()), container.at(), read, ends,
+                sharedFactorNames);
         LinearForm<NumericTerm> to = AffineReading.formOf(
-                call.args().get(between.to().position()), container.at(), read, ends);
+                call.args().get(between.to().position()), container.at(), read, ends,
+                sharedFactorNames);
         return from == null || to == null ? Optional.empty()
                 : Optional.of(new Quantity.AWholeNumberInTurn(from, to));
     }
@@ -15575,7 +15577,7 @@ final class Pullback {
             return null;
         }
         LinearForm<NumericTerm> form = AffineReading.formOf(division.dividend(), division.at(),
-                read, new ElementsMet());
+                read, new ElementsMet(), sharedFactorNames);
         if (form == null) {
             return remainderOverABoundValue(division);
         }
