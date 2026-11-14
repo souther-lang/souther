@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
@@ -20,7 +19,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -560,23 +558,10 @@ class AFoldThatFilesByTheCaseOfEachElementIsReadAsTheArmItTakesTest {
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
-    /** Each source measured once for the class: the tests here only read what a measurement
-     *  says. */
-    private static final Map<String, Compilation> MEASURED = new ConcurrentHashMap<>();
-
-    /** And given back when the class is done with them: a fork keeps its JVM, so what is held
-     *  statically is held for every class after this one. */
-    @AfterAll
-    static void released() {
-        MEASURED.clear();
-    }
-
     /** The source measured, which is a source that compiles. */
     private static Compilation measured(String source) {
-        return MEASURED.computeIfAbsent(source, each -> {
-            Compilation compilation = Compilation.ofSource(each, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            return ACompiledModel.compiles(compilation);
-        });
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        return ACompiledModel.compiles(compilation);
     }
 }
