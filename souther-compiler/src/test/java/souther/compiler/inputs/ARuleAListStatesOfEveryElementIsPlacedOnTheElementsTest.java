@@ -327,6 +327,43 @@ class ARuleAListStatesOfEveryElementIsPlacedOnTheElementsTest {
                 """.formatted(entry, holder);
     }
 
+    /** Two statements of every element made by one part, a helper the rule calls. */
+    private static final String TWO_STATEMENTS_BY_ONE_PART = """
+            module bounded
+
+            let bounded (xs: List<Int>): Bool =
+                List.all(x -> x >= 2, xs) && List.all(x -> x <= 7, xs)
+
+            data Ns = List<Int> invariant bounded(value)
+
+            data Ok
+
+            behavior f : (ns: Ns) -> Ok
+            """;
+
+    /** The same two, as two parts of the rule. */
+    private static final String TWO_STATEMENTS_BY_TWO_PARTS = """
+            module bounded
+
+            data Ns = List<Int> invariant
+                List.all(x -> x >= 2, value) && List.all(x -> x <= 7, value)
+
+            data Ok
+
+            behavior f : (ns: Ns) -> Ok
+            """;
+
+    /** Both said of one element by one statement. */
+    private static final String TWO_BOUNDS_IN_ONE_STATEMENT = """
+            module bounded
+
+            data Ns = List<Int> invariant List.all(x -> x >= 2 && x <= 7, value)
+
+            data Ok
+
+            behavior f : (ns: Ns) -> Ok
+            """;
+
     private static RuleReadingContext readingOf(Compilation compilation) {
         RuleReadingSource rules = RuleReadings.of(compilation, compilation.modules().get(0));
         return RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
@@ -533,6 +570,44 @@ class ARuleAListStatesOfEveryElementIsPlacedOnTheElementsTest {
                                 instanceof BlockReason.RuleRestrictingToAdmittedValues)
                         .map(FieldDomains.NoLine::part).collect(Collectors.toSet());
         return stated.stream().map(each -> holding.contains(each.part())).toList();
+    }
+
+    /**
+     * What a part of a rule states is stated of the elements by that part, however many things it
+     * states: a helper that makes two statements is one part, and the reading is made without it as
+     * a whole. The two spelled as two parts of the rule are two, each left out on its own.
+     */
+    @Test
+    void severalStatementsOfOnePartAreThatPartsAndNotSeveralParts() {
+        for (String model : new String[] {TWO_STATEMENTS_BY_ONE_PART, TWO_STATEMENTS_BY_TWO_PARTS,
+                TWO_BOUNDS_IN_ONE_STATEMENT}) {
+            Position at = positionOf(model, "ns[*]");
+            assertEquals(Endpoint.inclusive(Count.of(2)), at.bounds().getFirst().admissible().min(),
+                    model);
+            assertEquals(Endpoint.inclusive(Count.of(7)), at.bounds().getFirst().admissible().max(),
+                    model);
+        }
+        Compilation compilation = ACompiledModel.answered(TWO_STATEMENTS_BY_ONE_PART);
+        String module = compilation.modules().get(0);
+        DeclaredSig sig =
+                compilation.db().ask(new Bodies.DeclaredSignatures(module)).value().get("f");
+        RuleReadingContext reading = readingOf(compilation);
+        List<ElementGuarantee> stated = PlacedRules.of(TermPath.of("ns"),
+                sig.inputs().getFirst().type(), reading)
+                .guaranteedOfEveryElementAt(TermPath.of("ns"));
+        assertEquals(2, stated.size(), "the helper states two things of each element");
+        Set<PartId<RuleRef.Invariant>> parts =
+                stated.stream().map(ElementGuarantee::part).collect(Collectors.toSet());
+        assertEquals(1, parts.size(), "and it is one part of the rule");
+        FieldDomains element = FieldDomains.ofElement(null, Type.INT, stated, reading);
+        assertEquals(2, element.placedAt(RuleKey.THE_VALUE).stream()
+                .map(FieldDomains.Placed::from).distinct().count(),
+                "each end is the statement that put it there, and the two are not one");
+        assertEquals(parts, element.placedAt(RuleKey.THE_VALUE).stream()
+                .map(FieldDomains.Placed::part).collect(Collectors.toSet()),
+                "both ends are that part's");
+        assertEquals(List.of(), element.leavingOut(parts).placedAt(RuleKey.THE_VALUE),
+                "and leaving it out leaves neither");
     }
 
     private static Set<PartId<RuleRef.Invariant>> placingTheLength(FieldDomains domains) {

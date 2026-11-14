@@ -66,19 +66,24 @@ final class ElementStatements {
     /** The statements of {@code guarantees} as clauses of the value {@code frame} says. */
     static CarriedOver carry(List<ElementGuarantee> guarantees, Frame frame,
                              Set<RuleRef.Invariant> readAsItsOwn) {
-        Map<RuleRef.Invariant, Clauses.AsStated> clauses = new LinkedHashMap<>();
+        // What a part states first, as the part: one part an author wrote can state several things
+        // of every element — a helper it calls states two — and it is still the one part, which a
+        // reading is made without as a whole and whose place in a statement is one.
+        Map<PartId<RuleRef.Invariant>, Core> ofAPart = new LinkedHashMap<>();
         boolean someLeftOut = false;
         for (ElementGuarantee each : guarantees) {
-            RuleRef.Invariant rule = each.part().rule();
-            Core stated = readAsItsOwn.contains(rule) ? null : ofTheValue(each, frame);
+            Core stated = readAsItsOwn.contains(each.part().rule()) ? null : ofTheValue(each, frame);
             if (stated == null) {
                 someLeftOut = true;
                 continue;
             }
-            Clauses.AsStated part = new Clauses.AsStated(stated,
-                    new ClauseMeaning.Parts.One(each.part(), Set.of()));
-            clauses.merge(rule, part, ElementStatements::joined);
+            ofAPart.merge(each.part(), stated, ElementStatements::both);
         }
+        // And then the rule, whose parts are joined as its author joined them.
+        Map<RuleRef.Invariant, Clauses.AsStated> clauses = new LinkedHashMap<>();
+        ofAPart.forEach((part, stated) -> clauses.merge(part.rule(),
+                new Clauses.AsStated(stated, new ClauseMeaning.Parts.One(part, Set.of())),
+                ElementStatements::joined));
         return new CarriedOver(clauses, someLeftOut);
     }
 
@@ -118,11 +123,16 @@ final class ElementStatements {
         return Core.mapAll(e, child -> withItsFieldsRead(child, element, frame), name -> name);
     }
 
+    /** Two statements that both hold. */
+    private static Core both(Core left, Core right) {
+        return new Core.Binary(ConditionJoin.BOTH.operator(), left, right,
+                Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.BOOL,
+                left.pos());
+    }
+
     /** Two clauses stated together, as one clause of two parts. */
     private static Clauses.AsStated joined(Clauses.AsStated left, Clauses.AsStated right) {
-        return new Clauses.AsStated(new Core.Binary(ConditionJoin.BOTH.operator(), left.states(),
-                right.states(), Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(),
-                Type.BOOL, left.states().pos()),
+        return new Clauses.AsStated(both(left.states(), right.states()),
                 new ClauseMeaning.Parts.Both(left.parts(), right.parts()));
     }
 }
