@@ -41,8 +41,8 @@ class AMembershipIsReadAsTheComparisonOfEachElementTest {
             behavior f : (email: String, emails: List<String>, sset: Set<String>, n: Int,
                           ns: List<Int>, ds: Set<Int>, mp: Map<String, Int>, ks: List<String>,
                           rec: Rec, rs: List<Rec>, e: E, es: List<E>, d: Date,
-                          dates: List<Date>, b: Bool) -> Bool
-            let f (email, emails, sset, n, ns, ds, mp, ks, rec, rs, e, es, d, dates, b) =
+                          dates: List<Date>, b: Bool, ms: List<Int>) -> Bool
+            let f (email, emails, sset, n, ns, ds, mp, ks, rec, rs, e, es, d, dates, b, ms) =
                 %s
             """;
 
@@ -212,6 +212,39 @@ class AMembershipIsReadAsTheComparisonOfEachElementTest {
         String byAnother = "ns |> List.find(x -> Set.contains(x, ds)) |> Option.withDefault(n)";
         sameAs("List.contains(" + byAnother + ", ns)",
                 "List.any(own -> own == (" + byAnother + "), ns)");
+    }
+
+    /**
+     * The form the issue was filed with: the candidates and the container held against are two
+     * lists, and the predicate of the {@code find} reads the second.
+     */
+    @Test
+    void aValueAFindOverAnotherListAnswersIsReadAsTheComparisonOfEachElementWithIt() {
+        String found = "ns |> List.find(x -> Bool.not(List.contains(x, ms)))"
+                + " |> Option.withDefault(n)";
+        sameAs("List.contains(" + found + ", ms)",
+                "List.any(own -> own == (" + found + "), ms)");
+        sameAs("Bool.not(List.contains(" + found + ", ms))",
+                "List.all(own -> own /= (" + found + "), ms)");
+        String foundDate = "dates |> List.find(x -> Bool.not(List.contains(x, dates)))"
+                + " |> Option.withDefault(d)";
+        sameAs("List.contains(" + foundDate + ", dates)",
+                "List.any(own -> own == (" + foundDate + "), dates)");
+        String foundKey = "ks |> List.find(x -> Bool.not(Map.containsKey(x, mp)))"
+                + " |> Option.withDefault(email)";
+        sameAs("Map.containsKey(" + foundKey + ", mp)",
+                "List.any(own -> own == (" + foundKey + "), Map.keys(mp))");
+    }
+
+    /** What an application inside a closure is read under is the names of the application, so a
+     *  membership of a value found over the same container, written inside one, is read as the
+     *  comparison written in the same place is. */
+    @Test
+    void aMembershipOfAFoundValueInsideAClosureIsReadAsTheComparisonWrittenThereIs() {
+        String found = "ns |> List.find(x -> Bool.not(List.contains(x, ms)))"
+                + " |> Option.withDefault(k)";
+        sameAs("List.any(k -> List.contains(" + found + ", ms), ns)",
+                "List.any(k -> List.any(own -> own == (" + found + "), ms), ns)");
     }
 
     /** What an element is compared with is told of the places that stand in the comparison, so a
