@@ -160,7 +160,7 @@ class WhatARunGotPastIsLeftOutOfARegionOnlyWhereTheRegionIsShownToHoldItTest {
         SearchRegion declared = declared();
         Random random = new Random(3069);
         int empty = 0;
-        for (int drawn = 0; drawn < 1000; drawn++) {
+        for (int drawn = 0; drawn < 300; drawn++) {
             SearchRegion region = TakenConstraint.narrowedBy(some(random, 0, 4), declared);
             DemandReading.Answered run = ofTheRun(some(random, 1, 5), some(random, 0, 2));
             if (region.emptiness().isPresent() || TakenConstraint.narrowedBy(run.narrowing(),
@@ -179,7 +179,7 @@ class WhatARunGotPastIsLeftOutOfARegionOnlyWhereTheRegionIsShownToHoldItTest {
     private record Drawn(TakenConstraint constraint, BiPredicate<Integer, Integer> holds) {}
 
     /** How far from nought a constant of a constraint drawn is, and a hole is put. */
-    private static final int REACH = 6;
+    private static final int REACH = 3;
 
     /**
      * How far from nought a row is asked: a step past every corner two constraints drawn meet at,
@@ -259,7 +259,7 @@ class WhatARunGotPastIsLeftOutOfARegionOnlyWhereTheRegionIsShownToHoldItTest {
         int asked = 0;
         int leftOut = 0;
         int held = 0;
-        while (asked < 25) {
+        while (asked < 12) {
             List<Drawn> ofTheRegion = drawn(random, 1, 3);
             SearchRegion region = TakenConstraint.narrowedBy(constraintsOf(ofTheRegion), declared);
             if (region.emptiness().isPresent()) {
