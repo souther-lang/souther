@@ -31,6 +31,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * every run whatever else the machine is doing. The data is the test's own and needs no counting
  * wrapper, which the values that hold their parts in fields cannot have.
  *
+ * <p>A walk that reaches the values only through their private fields enters no method of them and
+ * is not seen; a reader that does so inside the counted classes is seen through its own entries.
+ * Counts are of one-time work as well as repeated work, so a test asks for growth between sizes,
+ * with a floor under which a count says nothing, and not for a count of its own.
+ *
  * <p>The entries are counted by the JVM's method timing, which is asked for the classes of the
  * values and the classes nested in them. A count of nothing is a state a test of a cost has to tell
  * from a counter that is not counting, so the counter is asked to count a visit of known number when
