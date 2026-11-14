@@ -2303,20 +2303,30 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     }
 
     /**
-     * What a comparison no reading took to the end says at each place it compares — the
-     * comparison of an element or a key with a value that an application is, by the law of its
-     * operation ({@link Pullback#lawComparisonOf}) — or null where it says nothing there.
+     * What the comparison an application is, by the law of its operation
+     * ({@link Pullback#lawComparisonOf}), says of the input on one application of the closures
+     * around it: the comparison of an element or a key with a value, read as a comparison the
+     * source writes is, or null where what it comes to is not what an application states.
      *
-     * <p>Said as any comparison that stopped is, where it stopped and why, so that an
-     * application whose comparison was not read is not an application that divides no place.
+     * <p>Read once, under the names of the one application it is asked of: which applications
+     * there are, and where each is reached, is what {@link #ofAnApplicationOnEach} walks, so that
+     * a comparison read here and a statement read as lines are told apart by the same walk.
      */
-    static Read ofAComparisonThatStopped(StatedComparison comparison, Proposition stated,
-                                         Supplier<AffineReading.OfAComparison> arithmetic,
-                                         InputReading read, InputReads reads,
-                                         Arrivals answering) {
-        Read stopped = noLine(comparison, stated, Proposition.stopsIn(stated), Set.of(),
-                arithmetic, read, reads, answering);
-        return stopped instanceof Read.Stopped ? stopped : null;
+    static Read ofALawComparison(String behavior, StatedComparison comparison,
+                                 InputReading read, InputReads reads,
+                                 Arrivals answering, WhatConditionsState conditions,
+                                 Optional<ExpansionLineage> writtenIn) {
+        // Nothing is claimed of every element a closure is handed: that is only ever what lets a
+        // comparison of a remainder be read on the elements a list starts with.
+        Read drawn = readOnce(behavior, comparison, read, reads, answering,
+                conditions.comparison(comparison, reads, read), false, writtenIn);
+        // An application states lines, the values it relates, or a stop
+        // ({@link ComparisonAssessment#ofAnApplication}), and takes no other reading of a
+        // comparison as its own.
+        return switch (drawn) {
+            case Read.Stopped _, Read.Several _, Read.AgainstAnotherValue _ -> drawn;
+            default -> null;
+        };
     }
 
     /**
