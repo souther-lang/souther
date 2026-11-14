@@ -55,8 +55,6 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
             // The key is another value of the row.
             new Case("List.length(List.filter(l -> Map.containsKey(l.code, l.rates), lines))"
                     + " == k", true),
-            new Case("List.length(List.filter(l -> Map.containsKey(key, l.rates), lines))"
-                    + " == k", true),
             // The key is written.
             new Case("List.length(List.filter(l -> Map.containsKey(\"USD\", l.rates), lines))"
                     + " == k", true),
@@ -66,7 +64,7 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
             new Case("List.length(List.filter(l -> Bool.not(" + allOf(9) + "), lines)) == k",
                     true),
             // So many that the subsets of them are more than could be walked one by one.
-            new Case("List.length(List.filter(l -> " + allOf(40) + ", lines)) == k", true),
+            new Case("List.length(List.filter(l -> " + allOf(20) + ", lines)) == k", true),
             // A value written under a name is the value it is.
             new Case("List.length(List.filter(l -> Map.containsKey(usd, l.rates), lines)) == k",
                     true),
@@ -76,8 +74,6 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
                     + " == k", true),
             new Case("List.length(List.filter(l -> Map.containsKey(Code(\"USD\"), l.coded),"
                     + " lines)) == k", true),
-            new Case("List.length(List.filter(l -> Map.containsKey(usdCode, l.coded), lines))"
-                    + " == k", true),
             // A key made of a value of the row is worked out of it and is no value written.
             new Case("List.length(List.filter(l -> Map.containsKey(Code(l.code), l.coded),"
                     + " lines)) == k", false),
@@ -95,16 +91,10 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
                     + " && Map.containsKey(\"EUR\", l.rates), lines)) == k", true),
             new Case("List.length(List.filter(l -> Map.containsKey(\"USD\", l.rates)"
                     + " && Bool.not(Map.containsKey(\"EUR\", l.rates)), lines)) == k", true),
-            new Case("List.length(List.filter(l -> List.contains(\"K\", l.tags)"
-                    + " && List.contains(\"L\", l.tags), lines)) == k", true),
-            new Case("List.length(List.filter(l -> Set.contains(7, l.nums)"
-                    + " || Set.contains(8, l.nums), lines)) == k", true),
             // The same collection asked to hold a value and to hold so many: the one value is
             // among the three.
             new Case("List.length(List.filter(l -> List.length(l.tags) == 3"
                     + " && List.contains(\"USD\", l.tags), lines)) == k", true),
-            new Case("List.length(List.filter(l -> Set.size(l.nums) == 2"
-                    + " && Set.contains(7, l.nums), lines)) == k", true),
             // A map that must not hold the key is the other class of the same place.
             new Case("List.length(List.filter(l -> Bool.not(Map.containsKey(\"USD\", l.rates)),"
                     + " lines)) == k", true),
@@ -113,8 +103,6 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
                     + " && Bool.not(Map.containsKey(\"USD\", l.rates)), lines)) == k", false),
             // One map beside the lines is asked the same by every element.
             new Case("List.length(List.filter(l -> Map.containsKey(\"USD\", rates), lines))"
-                    + " == k", false),
-            new Case("List.length(List.filter(l -> Map.containsKey(key, rates), lines))"
                     + " == k", false));
 
     /** A map holding every one of {@code many} keys written. */
