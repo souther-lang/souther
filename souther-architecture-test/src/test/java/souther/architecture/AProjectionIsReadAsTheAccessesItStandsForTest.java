@@ -348,8 +348,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.STRUCTURE, "a chain read off one of the value's fields is one place, whose"
                         + " names Location.of reads; a projection read off anything else names"
                         + " no place, so its base is all there is to go down to");
-        row(out, c + "inputs/InputReads", "walkNames", "(" + core + "Ljava/util/Set;Ljava/util/List;)V",
-                Reading.STRUCTURE, BINDINGS);
+        row(out, c + "core/WhatABodyReads", "namesIn",
+                "(" + core + "Ljava/util/Set;Ljava/util/List;)V", Reading.STRUCTURE, BINDINGS);
         row(out, c + "flow/ValueArrivals", "readCopies", "(" + core + "L" + c
                 + "types/OccurrenceLineage$Expansion;)V", Reading.STRUCTURE,
                 "which copy of an application each node is code of: a name read off a value says"
@@ -403,6 +403,13 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/InvariantChecker", "walk", "(" + core + "L" + c + "check/Known;" + at
                 + "L" + c + "check/ContextMultiplicity;)L" + c + "check/Known;",
                 Reading.STRUCTURE, EVALUATION);
+        row(out, c + "check/ElementStatements", "withItsFieldsRead", "(" + core + "L" + c
+                + "types/BindingId;L" + c + "check/ElementStatements$Frame;)" + core,
+                Reading.STRUCTURE,
+                "puts the field a record's element is read at in place of the access that names it,"
+                        + " and passes every other node, a projection among them, as it is: one that"
+                        + " is left still reads the element, which says the statement has no place"
+                        + " in the fields");
         row(out, c + "check/InvariantChecker", "without",
                 "(" + core + "Ljava/util/Set;" + core + ")" + core,
                 Reading.STRUCTURE, REWRITES_THE_BASE);

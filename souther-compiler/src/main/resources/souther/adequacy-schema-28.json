@@ -3011,6 +3011,15 @@
             "statement": {
               "type": "integer",
               "minimum": 0
+            },
+            "inside": {
+              "type": "array",
+              "description": "Where the line is one a container's statement of every element draws, which of that container's own statements said it, the outermost first. The number in `statement` then counts the statements of that predicate, and not of the conjunct: counted in the conjunct they would be the numbers of statements it already has, and the same statement read at each place the elements stand would be one line for each. Absent for a statement of the conjunct itself.",
+              "minItems": 1,
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
             }
           },
           "additionalProperties": false,
@@ -3029,8 +3038,35 @@
               "minItems": 1,
               "uniqueItems": true,
               "items": {
-                "type": "integer",
-                "minimum": 0
+                "oneOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  {
+                    "description": "A statement of what a container states of every element, which is numbered within the statement that says it (`inside`, as in the statement shape).",
+                    "type": "object",
+                    "properties": {
+                      "statement": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "inside": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "statement",
+                      "inside"
+                    ]
+                  }
+                ]
               }
             }
           },

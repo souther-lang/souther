@@ -6,7 +6,7 @@ import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.DeclaredLine;
-import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.AStatementOfAConjunct;
 import souther.compiler.check.PartId;
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.RuleRef;
@@ -364,7 +364,7 @@ class TwoSpellingsOfOneLevelAreOneDemandTest {
     /** One clause of one declaration, which is only an identity here. */
     private static AuthoredLine aLine() {
         return new AuthoredLine(
-                new WhichLine.OfADeclarationsLine(new DeclaredLine.OfAStatement(new InvariantStatementId(
+                new WhichLine.OfADeclarationsLine(new DeclaredLine.OfAStatement(AStatementOfAConjunct.numbered(
                         new PartId<>(new RuleRef.Invariant(new Clause.Ref(
                                 new Clause.Id(
                                         TypeSymbols.declared(

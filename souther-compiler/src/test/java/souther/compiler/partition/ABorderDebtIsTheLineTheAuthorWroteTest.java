@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.check.ComparisonClaim;
 import souther.compiler.check.DeclaredLine;
-import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.AStatementOfAConjunct;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
@@ -599,7 +599,7 @@ class ABorderDebtIsTheLineTheAuthorWroteTest {
      *  here. */
     private static DeclaredLine aStatementOf(RuleRef.Invariant clause) {
         return new DeclaredLine.OfAStatement(
-                new InvariantStatementId(new PartId<>(clause, 0), 0));
+                AStatementOfAConjunct.numbered(new PartId<>(clause, 0), 0));
     }
 
     /** The clause the bound in these tests names, which is only an identity here. */
