@@ -143,6 +143,11 @@ class AFoldThatFilesByTheCaseOfEachElementIsReadAsTheArmItTakesTest {
             .replace("List.fold((acc, m)", "List.foldRight((m, acc)")
             .replace("Map.empty, ms)", "nothing(), ms)");
 
+    /** And walking from the end of the movements put the other way round, which hands them in
+     *  the order they are written: the walk's direction is turned round twice. */
+    private static final String COUNTED_FROM_THE_END_OF_THE_REVERSED = COUNTED_FROM_THE_END
+            .replace("nothing(), ms)", "nothing(), List.reverse(ms))");
+
     /** The seed a walk from the end starts from, written where the fold's own type says it. */
     private static final String NOTHING = """
 
@@ -219,7 +224,8 @@ class AFoldThatFilesByTheCaseOfEachElementIsReadAsTheArmItTakesTest {
                         new Movement("Receipt", "a", 1)),
                 List.of(receipt, new Movement("Stocktake", "b", 2),
                         new Movement("Stocktake", "a", 3)));
-        for (Walked walked : List.of(Walked.AS_WRITTEN, Walked.FROM_THE_END)) {
+        for (Walked walked : List.of(Walked.AS_WRITTEN, Walked.FROM_THE_END,
+                Walked.FROM_THE_END_OF_THE_REVERSED)) {
             for (List<Movement> movements : rows) {
                 Row any = new Row(movements, Integer.MAX_VALUE);
                 int on = any.shortOf(walked.fromTheEnd()).get("a");
@@ -241,7 +247,8 @@ class AFoldThatFilesByTheCaseOfEachElementIsReadAsTheArmItTakesTest {
     private enum Walked {
         AS_WRITTEN(COUNTED, "", false),
         REVERSED(COUNTED_OVER_THE_REVERSED, "", true),
-        FROM_THE_END(COUNTED_FROM_THE_END, NOTHING, true);
+        FROM_THE_END(COUNTED_FROM_THE_END, NOTHING, true),
+        FROM_THE_END_OF_THE_REVERSED(COUNTED_FROM_THE_END_OF_THE_REVERSED, NOTHING, false);
 
         private final String fold;
         private final String more;
