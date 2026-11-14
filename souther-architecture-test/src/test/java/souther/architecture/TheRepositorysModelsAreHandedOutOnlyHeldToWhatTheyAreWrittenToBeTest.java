@@ -3,20 +3,14 @@ package souther.architecture;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.query.Compilation;
-import souther.test.RepositoryLayout;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.lang.classfile.Attributes;
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.FieldModel;
 import java.lang.classfile.MethodModel;
 import java.lang.reflect.AccessFlag;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.TreeSet;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -32,14 +26,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * corpus declares. There is nothing a test can choose, and so nothing to find in the tests.
  *
  * <p>This holds the shape of that API and not what a test does with a compilation it already holds.
- * A method added to {@code RepositoryModels} or to {@code Model} that returns a compilation, or a
- * collection of them, as it is, is the way back to the choice.
+ * A member added to {@code RepositoryModels}, {@code Model}, {@code ConformanceCorpus} or its
+ * analysis that gives a compilation, or a collection of them, as it is, is the way back to the
+ * choice. What a test writes beside one is not looked for: that a corpus's refusals are not said
+ * a second time is a property of the tests, and a spelling in them is not that property.
  */
 class TheRepositorysModelsAreHandedOutOnlyHeldToWhatTheyAreWrittenToBeTest {
 
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofEverythingCompiledHere();
-
-    private static final RepositoryLayout REPOSITORY = RepositoryLayout.ofWorkingDirectory();
 
     private static final String POPULATION = "souther/compiler/conformance/RepositoryModels";
 
@@ -66,50 +60,13 @@ class TheRepositorysModelsAreHandedOutOnlyHeldToWhatTheyAreWrittenToBeTest {
      */
     @Test
     void aCorpusAndItsAnalysisHandOutTheirCompilationOnlyHeldToWhatItIsWrittenToBe() {
-        assertEquals(List.of(),
+        assertEquals(List.of("answered"),
                 handingOutACompilation(COMPILED.read("souther/compiler/conformance/ConformanceCorpus")),
-                "a corpus gives a compilation as it is");
+                "a corpus gives a compilation by a way other than answered()");
         assertEquals(List.of("answered"),
                 handingOutACompilation(
                         COMPILED.read("souther/compiler/conformance/ConformanceCorpus$Analysed")),
                 "an analysis gives a compilation by a way other than answered()");
-    }
-
-    /**
-     * What a corpus is written to be refused with is said by its checked-in diagnostics, and no test
-     * says it again.
-     *
-     * <p>A second statement of it answers separately and nothing fails when the two part: the test
-     * holding a corpus to a list of its own goes on passing against a corpus that is now refused
-     * for something else. A test that needs it asks {@code ConformanceCorpus#refusedWith()}.
-     * Found by the name the corpus is written to be refused under, which is the one thing every
-     * restatement had, and which no test source has any other reason to write.
-     */
-    @Test
-    void noTestNamesTheCorpusWrittenToBeRefused() {
-        String named = "\"booking\"";
-        TreeSet<String> restating = new TreeSet<>();
-        int read = 0;
-        for (Path module : REPOSITORY.modules()) {
-            Path tree = REPOSITORY.javaTreeOf(module, "test");
-            if (tree == null) {
-                continue;
-            }
-            try (Stream<Path> files = Files.walk(tree)) {
-                for (Path each : files.filter(file -> file.toString().endsWith(".java")).toList()) {
-                    read++;
-                    if (Files.readString(each).contains(named)) {
-                        restating.add(REPOSITORY.root().relativize(each).toString());
-                    }
-                }
-            } catch (IOException unreadable) {
-                throw new UncheckedIOException(unreadable);
-            }
-        }
-        assertTrue(read > 0, "no test source was read, so this holds for no reason");
-        assertEquals(List.of(), List.copyOf(restating),
-                "a test names the corpus written to be refused, which is what restating what it"
-                        + " is refused with starts as: ask ConformanceCorpus#refusedWith()");
     }
 
     /**
@@ -121,7 +78,7 @@ class TheRepositorysModelsAreHandedOutOnlyHeldToWhatTheyAreWrittenToBeTest {
     void andTheCheckSeesACompilationHandedOutAsItIsOrInACollection() {
         assertFalse(handingOutACompilation(COMPILED.read("souther/compiler/ACompiledModel")).isEmpty(),
                 "ACompiledModel hands compilations out, so a check that finds none reads nothing");
-        assertEquals(List.of("HELD", "array", "collected", "single"),
+        assertEquals(List.of("HELD", "array", "collected", "samePackage", "single"),
                 handingOutACompilation(COMPILED.read(Sample.class.getName().replace('.', '/'))));
     }
 
@@ -142,6 +99,11 @@ class TheRepositorysModelsAreHandedOutOnlyHeldToWhatTheyAreWrittenToBeTest {
 
         public static Compilation[] array() {
             return new Compilation[0];
+        }
+
+        /** Not public, and a test in the package of the class it is in reaches it all the same. */
+        static Compilation samePackage() {
+            return null;
         }
     }
 
@@ -164,13 +126,16 @@ class TheRepositorysModelsAreHandedOutOnlyHeldToWhatTheyAreWrittenToBeTest {
     }
 
     /**
-     * The public methods of the class that return a compilation, or a type holding one, and the
-     * public fields that hold one, by name.
+     * The methods of the class that return a compilation, or a type holding one, and the fields
+     * that hold one, by name, whatever their access but private.
+     *
+     * <p>Not only the public ones: a test beside the class reaches what is package-private, and
+     * the test that failed on the corpora is beside the class that held them.
      */
     private static List<String> handingOutACompilation(ClassModel model) {
         TreeSet<String> found = new TreeSet<>();
         for (MethodModel method : model.methods()) {
-            if (!method.flags().has(AccessFlag.PUBLIC)) {
+            if (method.flags().has(AccessFlag.PRIVATE)) {
                 continue;
             }
             String descriptor = method.methodTypeSymbol().returnType().descriptorString();
@@ -183,7 +148,7 @@ class TheRepositorysModelsAreHandedOutOnlyHeldToWhatTheyAreWrittenToBeTest {
             }
         }
         for (FieldModel field : model.fields()) {
-            if (!field.flags().has(AccessFlag.PUBLIC)) {
+            if (field.flags().has(AccessFlag.PRIVATE)) {
                 continue;
             }
             String generic = field.findAttribute(Attributes.signature())

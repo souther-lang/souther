@@ -206,19 +206,16 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
     }
 
     /**
-     * A compilation of this corpus of its own, written on the day every test is and with nothing
-     * measured or answered yet.
+     * A compilation of this corpus of its own, written on the day every test is, answered in full
+     * and held to be refused with what the corpus is written to be refused with.
      *
-     * <p>For a reader that asks a few questions of a model and does not want the compilation
-     * {@code RepositoryModels} shares among the readers of every model, or to set what it measures
-     * on that one. What the caller measures is the caller's to say.
-     *
-     * <p>Not handed outside this package: a compilation given without what it is written to be
-     * refused with leaves the reader to choose what to hold it to. {@code RepositoryModels} holds
-     * it to {@link #refusedWith()}.
+     * <p>For a reader of a model that is not analysed, which is every corpus written for something
+     * other than the answers checked in. Never the compilation as it is: given without what it is
+     * written to be refused with, it leaves the reader to choose what to hold it to.
      */
-    Compilation compilation() {
-        return Compilation.ofSources(sources, ModulePath.EMPTY).writtenOn(TestDay.DATE);
+    Compilation answered() {
+        return ACompiledModel.refusedWith(refusedWith(),
+                Compilation.ofSources(sources, ModulePath.EMPTY).writtenOn(TestDay.DATE));
     }
 
     /**
@@ -324,18 +321,13 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
          * The compilation, held to be refused with what its corpus is written to be refused with
          * and nothing else.
          *
-         * <p>The only way to it from outside this package. A compilation handed out as it is leaves
-         * the reader to choose what to hold it to, and holding a corpus written to be refused to
-         * compile is the choice that failed twenty-five tests.
+         * <p>The only way to it, and not only from outside this package: an access level cannot
+         * say that, and a reader of the same package would be left to choose what to hold it to.
+         * Holding a corpus written to be refused to compile is the choice that failed
+         * twenty-five tests.
          */
         public Compilation answered() {
             return ACompiledModel.refusedWith(corpus.refusedWith(), compilation);
-        }
-
-        /** The compilation as it is, for the readers of this package that take what it says of
-         *  itself — its texts and its rows — and hold nothing to compile. */
-        Compilation compilation() {
-            return compilation;
         }
 
         /** Everything said about this corpus, errors before warnings, as the report writes them. */

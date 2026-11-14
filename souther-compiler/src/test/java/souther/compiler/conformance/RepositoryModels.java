@@ -183,12 +183,12 @@ public final class RepositoryModels {
                 // it puts the adequacy questions as well as compiling.
                 ConformanceCorpus.Analysed analysed = ConformanceCorpus.load(corpus.getKey()).analyse();
                 ANALYSED.put(corpus.getKey(), analysed);
-                out.put(corpus.getKey(), new Model(corpus.getKey(), analysed.compilation(),
+                out.put(corpus.getKey(), new Model(corpus.getKey(), analysed.answered(),
                         analysed.corpus().refusedWith()));
             } else {
-                Compilation compilation = ConformanceCorpus.load(corpus.getKey()).compilation();
-                compilation.answerEverything();
-                out.put(corpus.getKey(), new Model(corpus.getKey(), compilation, List.of()));
+                ConformanceCorpus loaded = ConformanceCorpus.load(corpus.getKey());
+                out.put(corpus.getKey(),
+                        new Model(corpus.getKey(), loaded.answered(), loaded.refusedWith()));
             }
         }
         return Collections.unmodifiableSequencedMap(out);
