@@ -3,18 +3,18 @@ package souther.lsp;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.io.ByteArrayOutputStream;
+import souther.test.WrittenOutput;
+
 import java.io.IOException;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 
@@ -36,55 +36,16 @@ final class Session implements AutoCloseable {
      * decides nothing about a server that is slow, because a wait ends when the message is written
      * and this only bounds the case where it is not going to be.
      */
-    private static final long HUNG_NANOS = 120_000_000_000L;
-
-    /** The frames the server writes, with a way to wait for the next one. */
-    private static final class Written extends ByteArrayOutputStream {
-        private final ReentrantLock lock = new ReentrantLock();
-
-        private final Condition written = lock.newCondition();
-
-        @Override
-        public void write(int b) {
-            lock.lock();
-            try {
-                super.write(b);
-                written.signalAll();
-            } finally {
-                lock.unlock();
-            }
-        }
-
-        @Override
-        public void write(byte[] b, int off, int len) {
-            lock.lock();
-            try {
-                super.write(b, off, len);
-                written.signalAll();
-            } finally {
-                lock.unlock();
-            }
-        }
-
-        void ended() {
-            lock.lock();
-            try {
-                written.signalAll();
-            } finally {
-                lock.unlock();
-            }
-        }
-    }
+    private static final Duration HUNG = Duration.ofSeconds(120);
 
     private final PipedOutputStream toServer = new PipedOutputStream();
 
-    private final Written fromServer = new Written();
+    /** The frames the server writes. */
+    private final WrittenOutput fromServer = new WrittenOutput();
 
     private final Thread serving;
 
     private volatile Throwable stopped;
-
-    private volatile boolean ended;
 
     private int nextBarrier = 1_000_000;
 
@@ -101,7 +62,6 @@ final class Session implements AutoCloseable {
             } catch (Throwable t) {
                 stopped = t;
             } finally {
-                ended = true;
                 fromServer.ended();
             }
         });
@@ -124,7 +84,7 @@ final class Session implements AutoCloseable {
 
     /** Everything the server has written so far that can be read as a whole frame. */
     List<JsonNode> heard() {
-        byte[] wrote = fromServer.toByteArray();
+        byte[] wrote = fromServer.bytes();
         List<JsonNode> messages = new ArrayList<>();
         int at = 0;
         while (true) {
@@ -179,20 +139,13 @@ final class Session implements AutoCloseable {
     }
 
     private void awaitWritten(BooleanSupplier written, String wanted) {
-        fromServer.lock.lock();
         try {
-            long patience = HUNG_NANOS;
-            while (!written.getAsBoolean()) {
-                if (ended || patience <= 0) {
-                    throw new AssertionError("the server never wrote " + wanted, stopped);
-                }
-                patience = fromServer.written.awaitNanos(patience);
+            if (!fromServer.awaitUntil(written, HUNG)) {
+                throw new AssertionError("the server never wrote " + wanted, stopped);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new AssertionError(e);
-        } finally {
-            fromServer.lock.unlock();
         }
     }
 
@@ -200,7 +153,7 @@ final class Session implements AutoCloseable {
     public void close() {
         try {
             toServer.close();
-            serving.join(HUNG_NANOS / 1_000_000);
+            serving.join(HUNG);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         } catch (InterruptedException e) {

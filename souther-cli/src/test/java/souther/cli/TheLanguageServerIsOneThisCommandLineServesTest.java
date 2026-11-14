@@ -1,6 +1,7 @@
 package souther.cli;
 
 import souther.lsp.transport.MessageConnection;
+import souther.test.WrittenOutput;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -14,13 +15,12 @@ import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -104,7 +104,7 @@ class TheLanguageServerIsOneThisCommandLineServesTest {
     private static Answer converse(Consumer<Said> conversation) throws Exception {
         PipedOutputStream toServer = new PipedOutputStream();
         PipedInputStream serverIn = new PipedInputStream(toServer, 1 << 16);
-        Wrote wrote = new Wrote();
+        WrittenOutput wrote = new WrittenOutput();
         ByteArrayOutputStream complained = new ByteArrayOutputStream();
         Environment environment = CliInProcess.environment(Files.createTempDirectory("souther-lsp"),
                 serverIn, wrote, complained);
@@ -120,10 +120,10 @@ class TheLanguageServerIsOneThisCommandLineServesTest {
             conversation.accept(new Said(toServer, wrote));
         } finally {
             toServer.close();
-            serving.join(HUNG_MILLIS);
+            serving.join(HUNG);
         }
         assertFalse(serving.isAlive(), "the server returned at the end of its input");
-        return new Answer(code.get(), framesSoFar(wrote.toByteArray()),
+        return new Answer(code.get(), framesSoFar(wrote.bytes()),
                 complained.toString(StandardCharsets.UTF_8));
     }
 
@@ -131,68 +131,10 @@ class TheLanguageServerIsOneThisCommandLineServesTest {
      * What a hung server costs the build. A wait ends when what it waits for is written, so this
      * decides nothing about a server that is slow; it bounds the case where nothing is coming.
      */
-    private static final long HUNG_MILLIS = 120_000;
-
-    /** What the server writes, with a wait that ends when something more is written. */
-    private static final class Wrote extends ByteArrayOutputStream {
-        private final ReentrantLock lock = new ReentrantLock();
-
-        private final Condition changed = lock.newCondition();
-
-        private boolean ended;
-
-        @Override
-        public void write(int b) {
-            lock.lock();
-            try {
-                super.write(b);
-                changed.signalAll();
-            } finally {
-                lock.unlock();
-            }
-        }
-
-        @Override
-        public void write(byte[] b, int off, int len) {
-            lock.lock();
-            try {
-                super.write(b, off, len);
-                changed.signalAll();
-            } finally {
-                lock.unlock();
-            }
-        }
-
-        void ended() {
-            lock.lock();
-            try {
-                ended = true;
-                changed.signalAll();
-            } finally {
-                lock.unlock();
-            }
-        }
-
-        boolean awaitNotification(String method) throws InterruptedException {
-            lock.lock();
-            try {
-                long patience = HUNG_MILLIS * 1_000_000;
-                while (framesSoFar(toByteArray()).stream()
-                        .noneMatch(m -> m.has("method") && m.get("method").asString().equals(method))) {
-                    if (ended || patience <= 0) {
-                        return false;
-                    }
-                    patience = changed.awaitNanos(patience);
-                }
-                return true;
-            } finally {
-                lock.unlock();
-            }
-        }
-    }
+    private static final Duration HUNG = Duration.ofSeconds(120);
 
     /** What a test says to a session, and what it waits to hear back. */
-    private record Said(PipedOutputStream toServer, Wrote wrote) {
+    private record Said(PipedOutputStream toServer, WrittenOutput wrote) {
 
         void send(String... messages) {
             try {
@@ -205,7 +147,10 @@ class TheLanguageServerIsOneThisCommandLineServesTest {
 
         void awaitNotification(String method) {
             try {
-                assertTrue(wrote.awaitNotification(method), "the server never sent " + method);
+                assertTrue(wrote.awaitUntil(() -> framesSoFar(wrote.bytes()).stream()
+                                .anyMatch(m -> m.has("method")
+                                        && m.get("method").asString().equals(method)), HUNG),
+                        "the server never sent " + method);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(e);
