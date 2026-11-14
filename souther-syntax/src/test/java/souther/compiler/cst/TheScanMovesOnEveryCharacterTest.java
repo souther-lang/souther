@@ -15,9 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>A lexer that dispatches on one question and reads by another does not fail: it stops. The scan
  * asks what a character is, hands the text to the function for that kind, and that function reads
- * nothing — so the offset is where it was, the same character is met again, and the loop makes
- * empty tokens until the heap is gone. Nothing downstream sees a wrong answer, because nothing
- * downstream is reached.
+ * nothing — so the offset is where it was and the same character is met again. The lexer refuses
+ * that with an {@link IllegalStateException} naming the position, and this test reports it.
  *
  * <p>So this is not a list of characters that once went wrong. Every kind the scan can dispatch to
  * is reached with characters chosen from the classes it dispatches on, in and outside the basic
@@ -27,9 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TheScanMovesOnEveryCharacterTest {
 
     /**
-     * A scan that does not move makes empty tokens until the heap is gone, and the heap running out
-     * is how it ends. No clock decides anything: the text it was on is named when that happens, and
-     * a scan that moves finishes every text however long that takes.
+     * A scan that does not move is refused by the lexer itself, which names the position, so every
+     * text lexes without that failure and no token but the end covers nothing. No clock decides
+     * anything.
      */
     @Test
     void andEveryCharacterOfWhatItReadIsInATokenOfIt() {
@@ -39,8 +38,9 @@ class TheScanMovesOnEveryCharacterTest {
             CstLexer.Result lexed;
             try {
                 lexed = CstLexer.lex(written);
-            } catch (OutOfMemoryError exhausted) {
-                throw new AssertionError("the scan did not finish on " + shown(written), exhausted);
+            } catch (IllegalStateException notAdvanced) {
+                stuck.add(shown(written) + ": " + notAdvanced.getMessage());
+                continue;
             }
             StringBuilder back = new StringBuilder();
             for (GreenToken token : lexed.tokens()) {
@@ -53,7 +53,7 @@ class TheScanMovesOnEveryCharacterTest {
                 stuck.add(shown(written) + " came back as " + shown(back.toString()));
             }
         }
-        assertEquals(List.of(), stuck, "the tokens do not join back into what was read");
+        assertEquals(List.of(), stuck, "the scan did not advance, or the tokens do not join back into what was read");
         assertEquals(List.of(), empty, "a token covering nothing is a scan that did not move");
     }
 
