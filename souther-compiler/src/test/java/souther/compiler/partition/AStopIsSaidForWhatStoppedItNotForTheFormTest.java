@@ -121,33 +121,14 @@ class AStopIsSaidForWhatStoppedItNotForTheFormTest {
                     |> List.filter(d -> Bool.not(ok(c, d)))
             """;
 
-    /** The weekday of a date a walk found, held to a bound, beside a membership of a set: the
-     *  remainder is what no line is drawn through, and the set is not named where its elements
-     *  are. */
+    /** The weekday of a date a walk found, held to a bound, beside a membership of a set and the
+     *  length of a lowercased name. The remainder is what no line is drawn through, said at the
+     *  numbers it is made of; a place that has a word of its own keeps it, and the set is not
+     *  named as a place where its elements are.
+     *
+     *  <p>One model for these claims, since the walk over days is what the test costs. */
     @Test
-    void theWeekdayOfADateAWalkFoundIsSaidAtTheNumbersItIsMadeOf() {
-        assertEquals(List.of(
-                        "c.aSunday " + REMAINDER,
-                        "c.holidays[*] " + REMAINDER,
-                        "from " + REMAINDER),
-                notReadOf("""
-                        module o1
-
-                        data C = { holidays: Set<Date>, aSunday: Date }
-
-                        let weekday (c: C, d: Date): Int =
-                            Int.floorMod(Date.daysBetween(c.aSunday, d), 7)
-
-                        let ok (c: C, d: Date): Bool =
-                            weekday(c, d) >= 1 && Bool.not(Set.contains(d, c.holidays))
-
-                        """ + A_WALK_OVER_DAYS, THE_WORDS_THESE_ARE_ABOUT));
-    }
-
-    /** A statement that states a remainder takes no place's own word from it: the set is made by
-     *  an operation and says so, as it did before the remainder was named. */
-    @Test
-    void aPlaceKeepsTheWordItHasOfItsOwnWhereTheStatementStatesARemainder() {
+    void theWeekdayOfADateAWalkFoundIsSaidAtTheNumbersItIsMadeOfAndNoPlaceLosesItsOwnWord() {
         List<String> notRead = notReadOf("""
                 module o1
 
@@ -161,6 +142,8 @@ class AStopIsSaidForWhatStoppedItNotForTheFormTest {
                         && Bool.not(Set.contains(d, c.holidays))
 
                 """ + A_WALK_OVER_DAYS, Set.of(REMAINDER, DERIVED));
+        assertTrue(notRead.containsAll(List.of("c.aSunday " + REMAINDER,
+                "c.holidays[*] " + REMAINDER, "from " + REMAINDER)), notRead.toString());
         assertTrue(notRead.contains("c.holidays " + DERIVED), notRead.toString());
         assertFalse(notRead.contains("c.holidays " + REMAINDER), notRead.toString());
     }
