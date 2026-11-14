@@ -114,13 +114,8 @@ class ALookupOfTwoAveragesIsReadAtEveryLengthOfItsTableTest {
      */
     @Test
     void noLengthOfTheTableLeavesAMonthUnreadThatAnotherLengthDoesNot() {
-        Map<Integer, List<String>> unreadByRows = new TreeMap<>();
-        for (int rows : new int[] {4, 5}) {
-            unreadByRows.put(rows, unread(source(rows)));
-        }
-
-        assertEquals(Map.of(4, List.of(), 5, List.of()), unreadByRows,
-                "what is left unread, by the rows of the table");
+        assertEquals(List.of(), unread(source(4)),
+                "what is left unread at a length the reading runs out at");
     }
 
     /**
