@@ -828,12 +828,16 @@ public final class ReadThroughNames {
     /**
      * {@code stated}, a statement a number is made of, told — or null where some part of it is no
      * one value, which makes the number no one number rather than one holding a part nothing read.
+     *
+     * <p>What is put where a part is no one value is a part that holds and says nothing, since the
+     * statement put together is thrown away; it is never {@code stated}, which would stand inside
+     * a quantifier it is already a part of.
      */
     private static Proposition toldWhole(Proposition stated, Telling telling) {
         boolean[] noOne = {false};
         Proposition out = told(stated, telling, () -> {
             noOne[0] = true;
-            return stated;
+            return new Proposition.Always(true);
         });
         return noOne[0] ? null : out;
     }
