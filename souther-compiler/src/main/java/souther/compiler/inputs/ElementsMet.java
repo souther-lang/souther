@@ -89,15 +89,51 @@ public final class ElementsMet {
         }
     }
 
+    /**
+     * What has been met, as it stood when it was taken ({@link #mark}): the names standing for the
+     * elements, and whether a number was refused. It is a value and nothing puts anything in it, so
+     * what is rewound to it is what it was taken as however often it is rewound to.
+     */
+    public static final class Mark {
+
+        private final Map<Slot, BindingId> standingFor;
+        private final boolean crowded;
+
+        private Mark(Map<Slot, BindingId> standingFor, boolean crowded) {
+            this.standingFor = standingFor;
+            this.crowded = crowded;
+        }
+    }
+
+    /** What has been met, to be put back by {@link #rewind}. */
+    public Mark mark() {
+        return new Mark(holding ? new LinkedHashMap<>(standingFor) : Map.of(), crowded);
+    }
+
+    /**
+     * Puts what has been met back as it was at {@code mark}, in this and not in another: whoever
+     * holds this holds what is put back, and a reading made on it before still reads what is.
+     * Where a reading is not to be taken, it is rewound to what it began with; where its ways are
+     * alternatives, each begins from the mark of the place they part at.
+     */
+    public void rewind(Mark mark) {
+        if (!holding) {
+            return;
+        }
+        standingFor.clear();
+        standingFor.putAll(mark.standingFor);
+        crowded = mark.crowded;
+    }
+
     /** A reading being noted, which says what it left once it has ended. */
     public static final class Noting {
 
         private final ElementsMet owner;
-        private final ElementsMet began;
+        private final Mark began;
         private final Set<Slot> asked;
         private final Set<Slot> outer;
 
-        private Noting(ElementsMet owner, ElementsMet began, Set<Slot> asked, Set<Slot> outer) {
+        private Noting(ElementsMet owner, Mark began, Set<Slot> asked, Set<Slot> outer) {
             this.owner = owner;
             this.began = began;
             this.asked = asked;
@@ -105,22 +141,18 @@ public final class ElementsMet {
         }
 
         /**
-         * What the reading left of the elements, where it ended with {@code ended} met — or null
-         * where a name was refused on the way, since that reading is not one to take from
-         * another.
+         * What the reading left of the elements — or null where a name was refused on the way,
+         * since that reading is not one to take from another.
          */
-        public Footprint ended(ElementsMet ended) {
+        public Footprint ended() {
             owner.asked = outer;
-            if (ended != owner && ended.holding) {
-                ended.asked = outer;
-            }
             if (outer != null) {
                 outer.addAll(asked);
             }
-            if (!began.holding) {
+            if (!owner.holding) {
                 return new Footprint(false, Set.of(), Map.of(), Map.of());
             }
-            if (ended.crowded || began.crowded) {
+            if (owner.crowded || began.crowded) {
                 return null;
             }
             Map<Slot, BindingId> from = new LinkedHashMap<>();
@@ -130,7 +162,7 @@ public final class ElementsMet {
                 if (was != null) {
                     from.put(each, was);
                 }
-                BindingId is = ended.standingFor.get(each);
+                BindingId is = owner.standingFor.get(each);
                 if (is != null) {
                     to.put(each, is);
                 }
@@ -144,7 +176,7 @@ public final class ElementsMet {
     public Noting noting() {
         Set<Slot> outer = asked;
         Set<Slot> mine = new LinkedHashSet<>();
-        ElementsMet began = copied();
+        Mark began = mark();
         if (holding) {
             asked = mine;
         }
@@ -220,34 +252,6 @@ public final class ElementsMet {
             }
         }
         return true;
-    }
-
-    /**
-     * What this comparison has met so far, held apart from it: a reading tried and not taken puts
-     * this back, and leaves no name it met standing for an element.
-     */
-    public ElementsMet copied() {
-        if (!holding) {
-            return this;
-        }
-        ElementsMet copy = new ElementsMet(true);
-        copy.standingFor.putAll(standingFor);
-        copy.crowded = crowded;
-        copy.asked = asked;
-        return copy;
-    }
-
-    /**
-     * Leaves the elements as {@code tried}, a copy of this a reading was tried on, left them:
-     * the reading was taken, and this is shared by readers it cannot hand the copy to.
-     */
-    public void takes(ElementsMet tried) {
-        if (!holding) {
-            return;
-        }
-        standingFor.clear();
-        standingFor.putAll(tried.standingFor);
-        crowded = tried.crowded;
     }
 
     /**

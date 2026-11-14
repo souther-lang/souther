@@ -82,6 +82,44 @@ class ANumberIsReadBesideOthersOnlyOfOneKnownElementTest {
         assertFalse(refused.untouched());
     }
 
+    /**
+     * What is rewound to a mark is what the mark was taken as, however often it is rewound to it:
+     * a reading that began from it and met another element is put back, and so is the next one
+     * that begins from it, which a copy handed back as the state to go on from would not be.
+     */
+    @Test
+    void aMarkIsRewoundToAsOftenAsThereAreWaysFromIt() {
+        ElementsMet met = new ElementsMet();
+        assertTrue(met.admits(through(A)));
+        ElementsMet.Mark atTheParting = met.mark();
+
+        assertFalse(met.admits(through(B)));
+        met.rewind(atTheParting);
+        assertFalse(met.crowded());
+        assertTrue(met.admits(through(A)));
+
+        assertFalse(met.admits(through(B)));
+        met.rewind(atTheParting);
+        assertFalse(met.crowded());
+        assertTrue(met.admits(through(A)));
+        assertFalse(met.admits(through(B)));
+    }
+
+    /** The elements put back are those of the object a reading made on it asks of, which is the
+     *  one rewound and not another standing in for it. */
+    @Test
+    void aMarkRewindsTheObjectItWasTakenOf() {
+        ElementsMet met = new ElementsMet();
+        ElementsMet.Mark none = met.mark();
+        assertTrue(met.admits(through(A)));
+        assertFalse(met.untouched());
+
+        met.rewind(none);
+
+        assertTrue(met.untouched());
+        assertTrue(met.admits(through(B)));
+    }
+
     /** A number read by itself holds nothing, so there is nothing for it to be touched by. */
     @Test
     void aNumberReadByItselfIsNeverTouched() {
