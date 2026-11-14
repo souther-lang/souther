@@ -28,6 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class APathIsTheSameWhereItsStepsAreTest {
 
+    /** How many collections a path is waited on for, counted rather than timed. */
+    private static final int GC_ROUNDS = 2_000;
+
     private static final List<TermPath.Step> STEPS = List.of(
             new TermPath.Step.Field("cost"), new TermPath.Step.Element(),
             new TermPath.Step.Field("value"));
@@ -140,7 +143,7 @@ class APathIsTheSameWhereItsStepsAreTest {
      * sake of a child that is gone would keep every path of that compile with it.
      */
     @Test
-    void pathsNothingHoldsAreLetGoOfWithTheirParentsAndRoots() throws InterruptedException {
+    void pathsNothingHoldsAreLetGoOfWithTheirParentsAndRoots() {
         List<WeakReference<TermPath>> watched = new ArrayList<>();
         TermPath root = TermPath.of("gone-root");
         watched.add(new WeakReference<>(root));
@@ -151,10 +154,9 @@ class APathIsTheSameWhereItsStepsAreTest {
         root = null;
         path = null;
 
-        for (int asked = 0; asked < 50 && watched.stream().anyMatch(each -> each.get() != null);
+        for (int asked = 0; asked < GC_ROUNDS && watched.stream().anyMatch(each -> each.get() != null);
              asked++) {
             System.gc();
-            Thread.sleep(10);
         }
 
         assertTrue(watched.stream().allMatch(each -> each.get() == null),
@@ -164,15 +166,17 @@ class APathIsTheSameWhereItsStepsAreTest {
     /** What the table files is let go of too: a table that kept a name or a step for every path
      *  ever made would grow with the models a process reads. */
     @Test
-    void whatTheTableFilesForPathsLetGoOfIsLetGoOfAsWell() throws InterruptedException {
+    void whatTheTableFilesForPathsLetGoOfIsLetGoOfAsWell() {
         int before = TermPath.placesFiled();
         for (int round = 0; round < 200; round++) {
             TermPath.of("name-" + round).then("a").element().then("b");
         }
         assertTrue(TermPath.placesFiled() > before, "the paths made are filed while they are held");
-        for (int asked = 0; asked < 20 && TermPath.placesFiled() > before; asked++) {
+        // A collected path is queued for the sweep by the JVM's reference handler thread, so what
+        // is waited for is the queue being fed, not a length of time.
+        for (int asked = 0; asked < GC_ROUNDS && TermPath.placesFiled() > before; asked++) {
             System.gc();
-            Thread.sleep(10);
+            Thread.yield();
         }
 
         assertTrue(TermPath.placesFiled() <= before,

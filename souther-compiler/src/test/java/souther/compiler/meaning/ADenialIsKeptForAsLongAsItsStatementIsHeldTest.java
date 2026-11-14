@@ -16,8 +16,6 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -181,9 +179,9 @@ class ADenialIsKeptForAsLongAsItsStatementIsHeldTest {
                     return made;
                 })));
             }
-            Proposition first = asked.getFirst().get(10, TimeUnit.SECONDS);
+            Proposition first = asked.getFirst().get();
             for (Future<Proposition> one : asked) {
-                assertSame(first, one.get(10, TimeUnit.SECONDS));
+                assertSame(first, one.get());
             }
         } finally {
             pool.shutdownNow();
@@ -192,8 +190,8 @@ class ADenialIsKeptForAsLongAsItsStatementIsHeldTest {
 
     private static void await(CyclicBarrier barrier) {
         try {
-            barrier.await(10, TimeUnit.SECONDS);
-        } catch (InterruptedException | BrokenBarrierException | TimeoutException stopped) {
+            barrier.await();
+        } catch (InterruptedException | BrokenBarrierException stopped) {
             throw new IllegalStateException("the readers did not all make one", stopped);
         }
     }

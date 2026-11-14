@@ -10,8 +10,11 @@ import souther.compiler.observe.WaitShown;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
@@ -40,16 +43,20 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
      * this compiler ships starts a worker before it starts servicing.
      *
      * <p>Said here rather than through an arrangement because it is the interleaving that is being
-     * held, and an arrangement services immediately. This waits before it services, which is what a
-     * host that descheduled the servicing thread does.
+     * held, and an arrangement services immediately. The worker is first left until it cannot go
+     * further without the servicing thread, which is what a host that descheduled the servicing
+     * thread does, and what it has done by then is read off a flag rather than off how long it took.
      */
     @Test
     void aRowSpendsNothingOfItsOwnBeforeAnythingIsCountingIt() throws Exception {
         Handoff handoff = new Handoff();
+        AtomicBoolean began = new AtomicBoolean();
+        CountDownLatch release = new CountDownLatch(1);
         Thread worker = new Thread(() -> {
             try {
                 handoff.installedFor(() -> {
-                    Thread.sleep(60);
+                    began.set(true);
+                    release.await();
                     return "the row's own work";
                 });
             } catch (Exception _) {
@@ -58,11 +65,18 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
         });
         worker.setDaemon(true);
         worker.start();
-        Thread.sleep(150);
+        while (worker.getState() != Thread.State.WAITING) {
+            Thread.onSpinWait();
+        }
 
-        assertEquals(Handoff.Serviced.WAIT_SPENT,
-                handoff.serviceUntilDone(Duration.ofMillis(20)),
-                "the row's own work is the compile's time whenever it was run");
+        assertFalse(began.get(), "the row did not begin before anything was counting it");
+        try {
+            assertEquals(Handoff.Serviced.WAIT_SPENT,
+                    handoff.serviceUntilDone(Duration.ofMillis(1)),
+                    "the row's own work is the compile's time, which nothing ends but the wait");
+        } finally {
+            release.countDown();
+        }
     }
 
     /**
@@ -133,10 +147,10 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
     /** A row of the compile's own that will not come back is given up on. */
     @Test
     void aRowThatStopsAnsweringSpendsTheWait() {
-        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(20));
+        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(1));
 
         Deadline.Outcome<String> came = deadline.given(WORK, () -> {
-            Thread.sleep(30_000);
+            new CountDownLatch(1).await();   // until abandoned, which interrupts it
             return "never answered";
         });
 

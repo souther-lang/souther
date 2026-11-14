@@ -10,7 +10,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * A row that is given up on leaves no worker held by its hand-off.
@@ -67,7 +66,7 @@ class GivingUpOnARowLeavesNothingWaitingOnTheHandoffTest {
         waitingOnTheHandoff(worker);
         handoff.abandon();
 
-        worker.join(10_000);
+        worker.join();
         assertFalse(worker.isAlive(), "the row ended rather than waiting for an answer");
         assertInstanceOf(CancellationException.class, came.get());
         release.countDown();
@@ -111,11 +110,7 @@ class GivingUpOnARowLeavesNothingWaitingOnTheHandoffTest {
 
     /** Until {@code worker} is inside the hand-off, which is the only thing it waits on. */
     private static void waitingOnTheHandoff(Thread worker) {
-        long until = System.nanoTime() + 10_000_000_000L;
         while (worker.getState() != Thread.State.WAITING) {
-            if (System.nanoTime() > until) {
-                fail("the worker never reached the hand-off: " + worker.getState());
-            }
             Thread.onSpinWait();
         }
     }

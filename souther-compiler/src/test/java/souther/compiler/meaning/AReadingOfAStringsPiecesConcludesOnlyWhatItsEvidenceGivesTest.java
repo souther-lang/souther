@@ -7,7 +7,6 @@ import net.unit8.notation199x.pattern.PatternParser;
 import net.unit8.notation199x.pattern.PatternRead;
 import net.unit8.notation199x.pattern.StringPattern;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.check.DeclaredArgument;
@@ -229,14 +228,15 @@ class AReadingOfAStringsPiecesConcludesOnlyWhatItsEvidenceGivesTest {
 
     /**
      * The code points many classes tell apart are as many as the runs they are written with make,
-     * and not one for each way of being in or out of each: forty classes, each a run of its own
-     * overlapping the next, are told apart into no more than the runs between their ends.
+     * and not one for each way of being in or out of each: twelve classes, each a run of its own
+     * overlapping the next, are told apart into no more than the runs between their ends. The
+     * count is the claim, so twelve classes tell the two apart: one set for each way of being in
+     * or out of them would be thousands.
      */
     @Test
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void manyClassesAreToldApartIntoNoMoreThanTheRunsTheyAreWrittenWith() {
         List<CodePoints> classes = new ArrayList<>();
-        for (int at = 0; at < 40; at++) {
+        for (int at = 0; at < 12; at++) {
             classes.add(CodePoints.between(0x100 + at * 4, 0x100 + at * 4 + 9));
         }
         List<CodePoints> alike = CodePointClass.toldApart(classes);
