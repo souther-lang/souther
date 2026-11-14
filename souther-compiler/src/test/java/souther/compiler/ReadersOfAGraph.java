@@ -53,8 +53,9 @@ public final class ReadersOfAGraph {
     private static final long VISITS_TOO_FEW_TO_TELL = 64;
 
     /** Readers that go into the longer chain this often are the ones whose growth is asked: the
-     *  ways down it are two to {@link #LONG}, sixty-four times this. */
-    private static final long VISITS_THAT_ARE_THE_WAYS = 1L << 16;
+     *  ways down it are two to {@link #LONG}, four times this, and a reader that is not going down
+     *  every way is nowhere near it, so that a group of them counted together stays under it. */
+    private static final long VISITS_THAT_ARE_THE_WAYS = 1L << 20;
 
     /** How many readers are counted together, before the ones past the figure are told apart. */
     private static final int ASKED_TOGETHER = 64;
