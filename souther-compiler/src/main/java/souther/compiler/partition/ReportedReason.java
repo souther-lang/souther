@@ -268,6 +268,9 @@ public final class ReportedReason {
                 case A_NUMBER_NO_POSITION_HOLDS ->
                         UndividedPosition.Reason.RULE_ABOUT_A_DERIVED_VALUE;
                 case NO_RELATION_OF_NUMBERS -> UndividedPosition.Reason.UNSUPPORTED_DOMAIN;
+                // Its own word: the comparison may be written in a form this compiler reads.
+                case TWO_ELEMENTS_OF_ONE_CONTAINER ->
+                        UndividedPosition.Reason.RULE_RELATING_TWO_ELEMENTS_OF_ONE_CONTAINER;
             };
             case BlockReason.NonAffineArithmetic(var operation) -> switch (operation) {
                 case PRODUCT_OF_NON_CONSTANT_VALUES -> UndividedPosition.Reason.NON_AFFINE_PRODUCT;
@@ -278,8 +281,6 @@ public final class ReportedReason {
             };
             case BlockReason.RuleAboutARemainderNoPositionHolds _ ->
                     UndividedPosition.Reason.RULE_ABOUT_A_REMAINDER_NO_POSITION_HOLDS;
-            case BlockReason.RuleRelatingTwoElementsOfOneContainer _ ->
-                    UndividedPosition.Reason.RULE_RELATING_TWO_ELEMENTS_OF_ONE_CONTAINER;
             case BlockReason.RuleAboutAnElementOfSeveralContainers _ ->
                     UndividedPosition.Reason.RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS;
             case BlockReason.TypeUnresolved _ -> UndividedPosition.Reason.TYPE_UNRESOLVED;

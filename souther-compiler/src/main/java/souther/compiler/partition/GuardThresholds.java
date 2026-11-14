@@ -767,45 +767,48 @@ public final class GuardThresholds {
     }
 
     /**
-     * What a remainder of a number no position holds leaves each place the comparison is filed at,
-     * where nothing but the remainder is what the arithmetic stopped at.
+     * What each place the comparison is filed at is left with, where the statement states a
+     * remainder of a number no position holds.
      *
-     * <p>A figure of this compiler's work, or a product the arithmetic has no form for, is what
-     * stopped it and is said as {@link #whatEachPlaceIsLeftWith} says it. Otherwise the stop is
-     * the remainder's, which the places do not word differently: it is the same at each. The
-     * container of elements that are places here is not one of them, since the statement says
-     * nothing of the container but that it holds the elements.
+     * <p>The remainder is a fact of the statement, read from what the statement states and not
+     * from where the arithmetic stopped, so it is said only where a place has no word of its own.
+     * What the place says of itself stays: a value an operation made, a position no line can be
+     * drawn on, a figure of this compiler's work, an operation no form says. Only a form nothing
+     * takes apart gives way to it, since the form here was read and what no line is drawn through
+     * is the remainder. The container of elements that are places here is not one of them, since
+     * the statement says nothing of the container but that it holds the elements.
      */
     static Cutting.Read.Stopped whatEachPlaceIsLeftWithByARemainder(
             StatedComparison comparison, AffineReading.OfAComparison.Stopped stopped,
             InputReading read, InputReads reads, Arrivals answering) {
-        if (stopped.failure().why().declinedFigure().isPresent()
-                || stopped.failure().why().nonAffineOperation().isPresent()) {
-            return whatEachPlaceIsLeftWith(comparison, stopped, read, reads, answering);
-        }
         SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> left =
                 leftAtEachPlace(comparison, stopped, read, reads, answering);
-        BlockReason.RuleReadingStopped why = new BlockReason.RuleAboutARemainderNoPositionHolds();
+        BlockReason.RuleReadingStopped remainder =
+                new BlockReason.RuleAboutARemainderNoPositionHolds();
         SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> said =
                 new LinkedHashMap<>();
-        for (FilingCoordinate at : withoutTheContainersOfTheirElements(left.keySet())) {
-            said.put(at, why);
+        for (FilingCoordinate at : withoutTheContainerPositionsOfTheirElements(left.keySet())) {
+            BlockReason.RuleReadingStopped own = left.get(at);
+            said.put(at, own instanceof BlockReason.UnreadComparisonForm ? remainder : own);
         }
         return new Cutting.Read.Stopped(PlacesStopped.of(said, stoppedAtThe(stopped)),
                 whereItStopped(stopped, read));
     }
 
     /**
-     * {@code places} without those that are the container of an element among them.
+     * {@code places} without a position that is the container of an element among them.
      *
      * <p>A statement over {@code hs[*]} says of {@code hs} that it holds that element, and what
-     * stopped at the element is not left at the container beside it.
+     * stopped at the element is not left at the container beside it. Only the container as a
+     * position goes: a coordinate that names a measure of it, such as its length, is a thing the
+     * statement may be about of its own and stays.
      */
-    static List<FilingCoordinate> withoutTheContainersOfTheirElements(
+    static List<FilingCoordinate> withoutTheContainerPositionsOfTheirElements(
             Collection<FilingCoordinate> places) {
         return places.stream()
-                .filter(each -> places.stream().noneMatch(other ->
-                        holdsTheElementsOf(each.path(), other.path())))
+                .filter(each -> !(each instanceof FilingCoordinate.AtPosition)
+                        || places.stream().noneMatch(other ->
+                                holdsTheElementsOf(each.path(), other.path())))
                 .toList();
     }
 
