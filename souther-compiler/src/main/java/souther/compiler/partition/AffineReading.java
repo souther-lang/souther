@@ -586,19 +586,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             // What a name comes to is a function of the value, the environment, the elements it
             // asks of and what is left of the figure counting elements; the rest this reading
-            // holds is told, which the reading made by outcomeOf drops, or is read only to tell.
-            // Kept where the reading holds nothing the walk before it has put in that the answer
-            // could depend on: no accumulator carried, no stopped value held aside, and the
-            // figure not asked of, which an answer that declined would be a function of.
+            // holds is told, which the reading made by outcomeOf drops. Given only to that
+            // reading: one made to try a part apart, which carries an accumulator or holds a
+            // value aside, is made without it.
             @Override
             public <T> T answerOfAName(ValueStanding.NameQuestion question, Core value,
                                        InputReads at, Supplier<T> fresh) {
-                if (namesKept == null || stoppedAt != null || told.productsStop
-                        || !carried.isEmpty()) {
-                    return fresh.get();
-                }
-                return namesKept.answerOf(question, value, at, met, fresh,
-                        told::askedOfTheFigure);
+                return namesKept == null ? fresh.get()
+                        : namesKept.answerOf(question, value, at, met, fresh,
+                                told::askedOfTheFigure);
             }
 
             /**
