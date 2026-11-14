@@ -1,6 +1,7 @@
 package souther.runtime;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -169,10 +170,12 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
      * for and no value this type holds is in general. Every pair over a grid of numerators, denominators
      * and both exponents, in both directions.
      *
-     * <p>A bracket that did not hold the number it is about would leave pairs it never separates, and
-     * the width would rise through every count of bits there is.
+     * <p>Held to a time as well. A bracket that did not hold the number it is about would leave pairs it
+     * never separates, and the width rising through every count of bits there is takes long enough to
+     * read as a run that stopped rather than one that failed.
      */
     @Test
+    @Timeout(60)
     void theOrderTheBracketsAnswerIsTheOrderTheWholeNumbersDo() {
         List<Rational> values = new ArrayList<>();
         for (long n : new long[] {1, 3, 7, -1, -3}) {
@@ -312,6 +315,7 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
      * nought, for values above and below one and on either side of nought.
      */
     @Test
+    @Timeout(60)
     void theRoundingTheBracketsAnswerIsTheRoundingTheDigitsDo() {
         for (long n : new long[] {1, 3, 7, 25, -1, -3, -25}) {
             for (long d : new long[] {1, 2, 3, 7}) {
@@ -369,6 +373,7 @@ class ARationalsScaleIsAnExponentAndNotDigitsTest {
      * is not a fact about the pair, so it cannot decide whether the pair has an order.
      */
     @Test
+    @Timeout(60)
     void askingTheOrderTheOtherWayAboutAnswersTheOtherWay() {
         List<Rational> values = new ArrayList<>();
         for (long n : new long[] {1, 3, 7, -1}) {

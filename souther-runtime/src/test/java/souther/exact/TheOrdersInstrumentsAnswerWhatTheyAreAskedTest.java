@@ -1,6 +1,7 @@
 package souther.exact;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -144,6 +145,7 @@ class TheOrdersInstrumentsAnswerWhatTheyAreAskedTest {
      * it has been cut, and that the rising ends where the pair comes apart rather than where it is equal.
      */
     @Test
+    @Timeout(60)
     void theOrderTheRefinementAnswersIsTheOrderTheWholeNumbersDo() {
         List<ExactParts> values = new ArrayList<>();
         for (long n : new long[] {1, 3, 7, -3}) {

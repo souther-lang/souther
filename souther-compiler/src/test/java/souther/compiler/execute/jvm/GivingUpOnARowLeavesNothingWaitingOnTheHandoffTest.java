@@ -1,6 +1,7 @@
 package souther.compiler.execute.jvm;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.time.Duration;
 import java.util.concurrent.CancellationException;
@@ -25,7 +26,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * <p>Driven with a thread servicing it, because a row that nothing is servicing is not a row: what
  * it spends is the compile's time and the servicing thread is what counts it, so a hand-off holds
  * its row until that thread arrives.
+ *
+ * <p>A worker that is still held is waited for to the end of the bound below, which decides
+ * nothing about how long ending takes: a wait here ends when the worker does.
  */
+@Timeout(value = 60, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
 class GivingUpOnARowLeavesNothingWaitingOnTheHandoffTest {
 
     /** A worker holding a question when the row is given up on is told, rather than left waiting. */

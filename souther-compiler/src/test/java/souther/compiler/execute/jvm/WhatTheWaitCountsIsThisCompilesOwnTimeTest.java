@@ -1,6 +1,7 @@
 package souther.compiler.execute.jvm;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import souther.compiler.diag.SourcePos;
 import souther.compiler.examples.CallerApplication;
@@ -33,7 +34,11 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
  * <p>Which makes the three below one rule read three ways: what the compile spends is counted, what
  * the application spends is not, and what the compile spends on either side of a crossing is the
  * same wait rather than a fresh one each time.
+ *
+ * <p>The bound below is what a row that is never answered costs the build, and decides nothing
+ * about how long a wait is spent.
  */
+@Timeout(value = 60, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
 class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
 
     private static final Deadline.Work WORK =
