@@ -202,12 +202,16 @@ final class BindingEnvironment {
          * It goes up as many applications as there are between the two and no further: an
          * environment with fewer applications than {@code began} does not come from it.
          */
-        Set<BindingId> stepsSince(Handed began) {
+        Steps stepsSince(Handed began) {
             if (this == began) {
-                return Set.of();
+                return Steps.NONE;
             }
             if (depth < began.depth) {
                 return null;
+            }
+            Since last = lastSince;
+            if (last != null && last.began() == began) {
+                return last.steps();
             }
             Set<BindingId> steps = new HashSet<>();
             Handed each = this;
@@ -216,8 +220,23 @@ final class BindingEnvironment {
                 steps.add(each.step);
                 each = each.parent;
             }
-            return each == began ? steps : null;
+            if (each != began) {
+                return null;
+            }
+            Steps made = new Steps(steps);
+            lastSince = new Since(began, made);
+            return made;
         }
+
+        /** The steps since an ancestor, which is a fact of this application and the ancestor and
+         *  of nothing else. */
+        private record Since(Handed began, Steps steps) {}
+
+        /** The last one asked, held by this application and so for as long as it is: a watch
+         *  taking in again from an application it took in from before does not walk to the ancestor
+         *  again, and holds no record of the applications it met to know it. Replaced whole, so
+         *  that other threads see one or the other; an ancestor is held already, by the parent. */
+        private volatile Since lastSince;
 
         /**
          * Whether the names are handed the same here and in {@code other}.
@@ -379,17 +398,14 @@ final class BindingEnvironment {
             if (!names.hasNames()) {
                 return;
             }
-            if (takings == null) {
-                takings = new Takings();
-            }
-            if (!takings.firstFrom(names, in)) {
-                return;
-            }
             AskedNames.counted(2, 1);
-            Set<BindingId> since = in.stepsSince(started);
+            Steps since = in.stepsSince(started);
             if (since == null) {
                 unsure = true;
                 return;
+            }
+            if (takings == null) {
+                takings = new Takings();
             }
             takings.add(takings.projection(names, since));
         }
@@ -427,22 +443,40 @@ final class BindingEnvironment {
         }
     }
 
-    /** A set of names asked and the application it was taken in from, each by what object it is. */
-    private record FromWhere(AskedNames names, Handed in) {
+    /**
+     * The names handed on the way from one application to another, compared by what they are and
+     * with the hash worked out once: a set is asked for its hash at each use, which walks it.
+     */
+    static final class Steps {
+
+        static final Steps NONE = new Steps(Set.of());
+
+        private final Set<BindingId> names;
+        private final int hash;
+
+        Steps(Set<BindingId> names) {
+            this.names = names;
+            this.hash = names.hashCode();
+        }
+
+        Set<BindingId> names() {
+            return names;
+        }
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof FromWhere that && names == that.names && in == that.in;
+            return this == other || (other instanceof Steps that && hash == that.hash
+                    && names.equals(that.names));
         }
 
         @Override
         public int hashCode() {
-            return 31 * System.identityHashCode(names) + System.identityHashCode(in);
+            return hash;
         }
     }
 
     /** A set of names asked, by what object it is, and the names left out of it, by what they are. */
-    private record Without(AskedNames names, Set<BindingId> out) {
+    private record Without(AskedNames names, Steps out) {
 
         @Override
         public boolean equals(Object other) {
@@ -458,35 +492,39 @@ final class BindingEnvironment {
     /**
      * What one watch took in, and how each came to be.
      *
-     * <p>Kept for the watch and for as long as it runs, so that what is kept is what the watch met
-     * and not a number chosen beforehand. A set taken in again from the application it was taken
-     * in from is known before the applications between are walked, one taken in from another that
-     * hands the same names again is known by the names left out, and a set left out of the same
-     * names, whichever applications they came from, is the one set.
+     * <p>What is kept is what the watch took in, and not the applications it met: those are made
+     * for the occasion and let go, and what was asked of one that handed nothing the watch was
+     * told of is nothing to keep. A set left out of the same names, whichever applications they
+     * came from, is the one set; a set that is no different without them is itself, and is not
+     * kept.
      */
     private static final class Takings {
 
         /** The sets taken in, as each stands to where the watch began, each once. */
         final List<AskedNames> sets = new ArrayList<>();
         private final Set<AskedNames> distinct = Collections.newSetFromMap(new IdentityHashMap<>());
-        private final Set<FromWhere> from = new HashSet<>();
         private Map<Without, AskedNames> projected;
-
-        /** Whether {@code names} was not taken in from {@code in} before. */
-        boolean firstFrom(AskedNames names, Handed in) {
-            return from.add(new FromWhere(names, in));
-        }
 
         /** {@code names} as it stands to where the watch began, which is without the names handed
          *  again on the way ({@code since}). */
-        AskedNames projection(AskedNames names, Set<BindingId> since) {
-            if (since.isEmpty()) {
+        AskedNames projection(AskedNames names, Steps since) {
+            if (since.names().isEmpty()) {
                 return names;
             }
-            if (projected == null) {
-                projected = new HashMap<>();
+            Without key = new Without(names, since);
+            AskedNames kept = projected == null ? null : projected.get(key);
+            if (kept != null) {
+                return kept;
             }
-            return projected.computeIfAbsent(new Without(names, since), _ -> names.without(since));
+            AskedNames made = names.without(since.names());
+            if (made != names) {
+                if (projected == null) {
+                    projected = new HashMap<>();
+                }
+                projected.put(key, made);
+                AskedNames.counted(4, 1);
+            }
+            return made;
         }
 
         void add(AskedNames passed) {

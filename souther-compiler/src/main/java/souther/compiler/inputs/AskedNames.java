@@ -31,8 +31,9 @@ final class AskedNames {
     static final AskedNames NONE = new AskedNames(Set.of(), List.of(), Set.of());
 
     /** Where a test counts the names handled to work sets out (first), the steps an environment's
-     *  handed values were compared on (second), the sets a watch took in (third) and the steps
-     *  walked up a chain of applications (fourth), and null everywhere else. */
+     *  handed values were compared on (second), the sets a watch took in (third), the steps
+     *  walked up a chain of applications (fourth) and the entries a watch comes to hold of what it
+     *  took in (fifth), and null everywhere else. */
     static long[] COUNTING;
 
     static void counted(int which, int by) {

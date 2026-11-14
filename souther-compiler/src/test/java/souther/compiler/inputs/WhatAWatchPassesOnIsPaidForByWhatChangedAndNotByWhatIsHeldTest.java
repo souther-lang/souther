@@ -55,7 +55,7 @@ class WhatAWatchPassesOnIsPaidForByWhatChangedAndNotByWhatIsHeldTest {
 
     /** What the counting says while {@code run} runs. */
     private static long[] counting(Runnable run) {
-        long[] counting = new long[4];
+        long[] counting = new long[5];
         AskedNames.COUNTING = counting;
         try {
             run.run();
@@ -150,11 +150,8 @@ class WhatAWatchPassesOnIsPaidForByWhatChangedAndNotByWhatIsHeldTest {
 
     @Test
     void aReadingTakenAgainFromTheSameEnvironmentAddsNothingTheSecondTime() {
-        BindingEnvironment on = nothingHanded();
-        BindingEnvironment since = on.handing(Z, written(1)).handing(SPARE, written(2));
-
-        long[] once = counting(() -> takenAgain(on, since, 1));
-        long[] twice = counting(() -> takenAgain(on, since, 2));
+        long[] once = counting(() -> takenAgain(1));
+        long[] twice = counting(() -> takenAgain(2));
 
         assertEquals(once[0], twice[0], "names handled: the second was the first again");
         assertEquals(once[3], twice[3], "steps walked: the second was the first again");
@@ -167,6 +164,39 @@ class WhatAWatchPassesOnIsPaidForByWhatChangedAndNotByWhatIsHeldTest {
 
         assertEquals(once[0], twice[0], "names handled: the second round was the first again");
         assertEquals(once[3], twice[3], "steps walked: the second round was the first again");
+    }
+
+    @Test
+    void aWatchHoldsNothingOfEnvironmentsItTookNothingInFromWhichHandTheSameNamesAgain() {
+        long few = counting(() -> takenAgainFromTemporaries(10, false))[4];
+        long many = counting(() -> takenAgainFromTemporaries(100, false))[4];
+
+        assertEquals(few, many, "entries held after 10 environments and after 100");
+    }
+
+    @Test
+    void aWatchHoldsNothingOfEnvironmentsThatHandNamesTheReadingNeverAsked() {
+        long few = counting(() -> takenAgainFromTemporaries(10, true))[4];
+        long many = counting(() -> takenAgainFromTemporaries(100, true))[4];
+
+        assertEquals(few, many, "entries held after 10 environments and after 100");
+    }
+
+    /** A reading that asked {@code Y}, taken again from {@code times} environments made for the
+     *  purpose and let go: each hands {@code Y} what the watch began with, so the watch is told
+     *  nothing of it, or hands a name of its own that the reading never asked. */
+    private static void takenAgainFromTemporaries(int times, boolean namesOfTheirOwn) {
+        BindingEnvironment on = nothingHanded().handing(Y, written(1));
+        HandedAnswers asked = BindingEnvironment.Watch.over(on, () -> on.roleOf(Y)).asked();
+        BindingEnvironment.Watch.over(on, () -> {
+            for (int i = 0; i < times; i++) {
+                BindingEnvironment temporary = namesOfTheirOwn
+                        ? on.handing(new BindingId(OWNER, 5000 + i), written(1))
+                        : on.handing(Y, written(1));
+                BindingEnvironment.Watch.replay(temporary, asked);
+            }
+            return 0;
+        });
     }
 
     /** A reading that asked 20 names, taken again from 20 environments that each hand one of
@@ -231,9 +261,12 @@ class WhatAWatchPassesOnIsPaidForByWhatChangedAndNotByWhatIsHeldTest {
         });
     }
 
-    /** A reading read on {@code since}, taken again {@code times} times inside a watch on
-     *  {@code on}. Made afresh for each call: what a set holds is worked out once and kept. */
-    private static void takenAgain(BindingEnvironment on, BindingEnvironment since, int times) {
+    /** A reading read two applications on from where a watch began, taken again {@code times}
+     *  times inside the watch. Everything is made afresh for each call: what a set holds is worked
+     *  out once and kept, and so is the way from an application to the one it comes from. */
+    private static void takenAgain(int times) {
+        BindingEnvironment on = nothingHanded();
+        BindingEnvironment since = on.handing(Z, written(1)).handing(SPARE, written(2));
         HandedAnswers asked = BindingEnvironment.Watch.over(since, () -> {
             since.roleOf(Y);
             return since.roleOf(Z);
