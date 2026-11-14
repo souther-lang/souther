@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +14,8 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.DefaultStdlib;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
@@ -101,6 +104,122 @@ class AFormIsReadThroughItsAtomsInTheOrderTheyWereRecordedInTest {
             forms++;
         }
         assertTrue(forms > 100);
+    }
+
+    /**
+     * What an atom says, from a naming whose atoms were recorded in the order {@code recorded} puts
+     * them in. The same recipes and the same relations in every order, so that what each says is
+     * asked of the order alone — an atom met again while it is being derived answers nothing, and
+     * which that is depends on which was read first.
+     */
+    private static List<DerivedNumericFacts.Says> saysWhenRecordedIn(int atoms, long seed,
+                                                                    List<Integer> recorded) {
+        Named named = named(atoms);
+        List<FactSubject> subjects = named.atoms();
+        Random dice = new Random(seed);
+        Map<Integer, LinearForm<FactSubject>> over = new LinkedHashMap<>();
+        for (int each = 1; each < atoms; each++) {
+            Map<FactSubject, ExactRatio> two = new LinkedHashMap<>();
+            two.put(subjects.get(dice.nextInt(each)), ExactRatio.ONE);
+            two.put(subjects.get(dice.nextInt(each)), ExactRatio.ONE.negated());
+            over.put(each, new LinearForm<>(ExactRatio.ZERO, two));
+        }
+        for (int each : recorded) {
+            if (each >= 1) {
+                named.terms().computedBy(subjects.get(each), new AtomKnowledge.Computation.Derived(
+                        new Derivation.Product(over.get(each), over.get(each))));
+            }
+        }
+        for (int each = 0; each < atoms; each++) {
+            FactSubject here = subjects.get(each);
+            FactSubject there = subjects.get(dice.nextInt(atoms));
+            if (!here.equals(there)) {
+                named.terms().carrying(here, List.of(new NumericConstraint(
+                        LinearForm.difference(here, there), Rel.LE)));
+            }
+        }
+        return saysOfEach(named);
+    }
+
+    /**
+     * Which atom answers nothing because it is met again while it is derived is a matter of which
+     * was read first, and the order a form is read in was whatever a map handed its atoms over in.
+     * Held to no difference between the orders atoms are recorded in, over rings of recipes and of
+     * relations: the one order they are read in now is then one of the orders they could have been
+     * read in before, each of which answered alike.
+     */
+    @Test
+    void noOrderTheAtomsAreRecordedInSaysMoreThanTheOrderTheRecipesWereNamedIn() {
+        int differing = 0;
+        int saying = 0;
+        for (long seed = 0; seed < 40; seed++) {
+            int atoms = 9;
+            List<Integer> forwards = new ArrayList<>();
+            for (int each = 0; each < atoms; each++) {
+                forwards.add(each);
+            }
+            List<DerivedNumericFacts.Says> first = saysWhenRecordedIn(atoms, seed, forwards);
+            if (first.stream().anyMatch(each -> !(each instanceof DerivedNumericFacts.Says.Nothing))) {
+                saying++;
+            }
+            Random dice = new Random(seed + 1000);
+            for (int order = 0; order < 5; order++) {
+                List<Integer> shuffled = new ArrayList<>(forwards);
+                Collections.shuffle(shuffled, dice);
+                List<DerivedNumericFacts.Says> other = saysWhenRecordedIn(atoms, seed, shuffled);
+                for (int at = 0; at < first.size(); at++) {
+                    assertTrue(atLeastAsTight(first.get(at), other.get(at)), "atom " + at + " recorded in "
+                            + shuffled + " says " + other.get(at) + " where recorded in the order the"
+                            + " recipes were named in it says " + first.get(at));
+                    if (!first.get(at).equals(other.get(at))) {
+                        differing++;
+                    }
+                }
+            }
+        }
+        assertTrue(saying > 10, "too few of the atoms said anything for this to hold anything: " + saying);
+        assertTrue(differing > 0, "no order said anything but what the recorded one did, so the order"
+                + " is not what this is held to");
+    }
+
+    /** Whether {@code tight} says all that {@code loose} does, and as much more as it says. */
+    private static boolean atLeastAsTight(DerivedNumericFacts.Says tight,
+                                          DerivedNumericFacts.Says loose) {
+        if (loose instanceof DerivedNumericFacts.Says.Nothing || tight.equals(loose)) {
+            return true;
+        }
+        if (!(tight instanceof DerivedNumericFacts.Says.These inner)
+                || !(loose instanceof DerivedNumericFacts.Says.These outer)
+                || inner.facts().size() != outer.facts().size()) {
+            return false;
+        }
+        for (int at = 0; at < inner.facts().size(); at++) {
+            if (inner.facts().get(at).equals(outer.facts().get(at))) {
+                continue;
+            }
+            if (!(inner.facts().get(at) instanceof DerivedNumericFacts.Fact.Between(FactSubject one,
+                            NumericDomain.Bounds within))
+                    || !(outer.facts().get(at) instanceof DerivedNumericFacts.Fact.Between(
+                            FactSubject other, NumericDomain.Bounds without))
+                    || !one.equals(other) || !endsWithin(within, without)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean endsWithin(NumericDomain.Bounds within, NumericDomain.Bounds without) {
+        return (without.min() == null || (within.min() != null
+                && tighterOrEqual(within.min(), without.min(), 1)))
+                && (without.max() == null || (within.max() != null
+                && tighterOrEqual(within.max(), without.max(), -1)));
+    }
+
+    /** Whether {@code one} is at least as far in as {@code other}, which is above it for a least end
+     *  ({@code sign} 1) and below it for a greatest ({@code -1}). */
+    private static boolean tighterOrEqual(Endpoint one, Endpoint other, int sign) {
+        int by = sign * ((Count) one.at()).at().compareTo(((Count) other.at()).at());
+        return by > 0 || (by == 0 && (other.inclusive() || !one.inclusive()));
     }
 
     @Test

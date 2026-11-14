@@ -1465,7 +1465,7 @@ final class DerivedNumericFacts {
      *
      * @param before the run this one follows, or null at the first
      */
-    record Need(Need before, FactSubject atom, boolean named) {}
+    private record Need(Need before, FactSubject atom, boolean named) {}
 
     /**
      * The run each form takes, made once for the form however many readings ask it and kept for as
@@ -1523,7 +1523,7 @@ final class DerivedNumericFacts {
         }
 
         /** The run {@code form} takes, and what it asks of a domain, worked out once. */
-        synchronized Plan of(LinearForm<FactSubject> form, Terms terms) {
+        private synchronized Plan of(LinearForm<FactSubject> form, Terms terms) {
             Plan had = byForm.get(form);
             if (had != null) {
                 return had;
@@ -1547,7 +1547,7 @@ final class DerivedNumericFacts {
      * none, and what it asks of the reading once they are taken in. Both are the form's, and the form
      * is read again by every reading that reaches it.
      */
-    record Plan(Need run, NumericDomain.Prepared<FactSubject> asks) {}
+    private record Plan(Need run, NumericDomain.Prepared<FactSubject> asks) {}
 
     /** The atoms {@code form} is read through, in the order they are taken into a reading, for the
      *  test holding that a run is that order. */

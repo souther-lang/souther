@@ -198,10 +198,19 @@ final class PrefixBasis<A> {
 
     private final Line<A> line;
 
+    /**
+     * The positions of the shortest prefix in the order the places were given them in, which is
+     * the one thing of the order a basis rests on: the places of every position after them follow
+     * from which prefix adds it. A basis is made from this one only for an order that puts these in
+     * the same places, each before the next ({@link #following}).
+     */
+    private final List<A> first;
+
     private PrefixBasis(Map<A, Integer> places, Closed closed, List<AffineConstraint<A>> rules,
                         List<AffineConstraint<Integer>> moved, int smallest, int largest,
-                        Set<A> positions, Line<A> line) {
+                        Set<A> positions, Line<A> line, List<A> first) {
         this.line = line;
+        this.first = first;
         this.places = places;
         this.closed = closed;
         this.rules = rules;
@@ -305,10 +314,34 @@ final class PrefixBasis<A> {
         if (!closed.everyHopWasComposed()) {
             return null;
         }
+        List<A> first = new ArrayList<>(supports.getFirst());
+        first.sort(order);
         PrefixBasis<A> basis = new PrefixBasis<>(places, closed, List.copyOf(constraints), moved,
                 supports.getFirst().size(), supports.getLast().size(),
-                Collections.unmodifiableSet(positions), new Line<>(places.size()));
+                Collections.unmodifiableSet(positions), new Line<>(places.size()),
+                Collections.unmodifiableList(first));
         return basis.holdsNothing() || basis.box != null ? basis : null;
+    }
+
+    /**
+     * Whether a basis made from this one, for the rules these are the very ones of followed by
+     * others, rests on what this rests on: every position of the rules whole-numbered as it was,
+     * and the order putting the positions of the shortest prefix in the same places. The rules being
+     * the same says neither — the rules added name some of the positions, and the spacing and the
+     * order are the question's, which may have changed for the rest.
+     */
+    private boolean restsOnWhatThisRestsOn(Function<A, Granularity> spacing, CanonicalOrder<A> order) {
+        for (A position : positions) {
+            if (spacing.apply(position) != Granularity.DISCRETE) {
+                return false;
+            }
+        }
+        for (int at = 1; at < first.size(); at++) {
+            if (order.compare(first.get(at - 1), first.get(at)) >= 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -326,7 +359,7 @@ final class PrefixBasis<A> {
     static <A> PrefixBasis<A> following(PrefixBasis<A> before, List<AffineConstraint<A>> constraints,
                                         Function<A, Granularity> spacing, CanonicalOrder<A> order) {
         int had = before.rules.size();
-        if (constraints.size() <= had) {
+        if (constraints.size() <= had || !before.restsOnWhatThisRestsOn(spacing, order)) {
             return null;
         }
         for (int at = 0; at < had; at++) {
@@ -408,7 +441,8 @@ final class PrefixBasis<A> {
             }
         }
         PrefixBasis<A> basis = new PrefixBasis<>(placed, closed, List.copyOf(constraints),
-                moved, before.smallest, largest, Collections.unmodifiableSet(positions), line);
+                moved, before.smallest, largest, Collections.unmodifiableSet(positions), line,
+                before.first);
         if (!basis.holdsNothing() && basis.box == null) {
             return null;
         }
