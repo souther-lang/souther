@@ -15,6 +15,7 @@ import souther.compiler.meaning.NumericallyConsistentWays;
 import souther.compiler.meaning.WhyNotTaken;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.types.TypeSymbols;
+import souther.compiler.observe.Figure;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.observe.RunSensitivity;
@@ -384,6 +385,9 @@ class EverySchemaWordIsAccountedForTest {
         if (type == Clause.Ref.class) {
             return List.of(new Clause.Ref(new Clause.Id(TypeSymbols.declared(
                     new TypeKey("m", "T")), 0), Optional.empty()));
+        }
+        if (type == Figure.Budget.class) {
+            return List.of(CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.reached());
         }
         throw new IllegalStateException("nothing here makes a " + type.getName()
                 + ", so the word of a reason carrying one is held to nothing");

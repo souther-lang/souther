@@ -13,6 +13,7 @@ import java.util.Collection;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -260,7 +261,7 @@ public sealed interface ReadingGap {
      * <p>Not a reason about the value at the point, which was read: the row stands there, and what
      * is not known is whether the run compared anything through that reading of it.
      */
-    record ReachNotRead(Why why) implements ReadingGap {
+    record ReachNotRead(Why why, Optional<Figure> stoppedAt) implements ReadingGap {
 
         /**
          * What kept what the way turns on from being read off the row.
@@ -309,13 +310,21 @@ public sealed interface ReadingGap {
                 this.says = says;
             }
 
-            /** The reason that stopped at a figure this word says, or null where it says none. */
+            /** The reason that stopped at a figure this word says, at the figure declared, or
+             *  null where it says none. Which reason a stop was is asked of this, and the figure
+             *  it stopped at of the stop. */
             public WhyUnread says() {
                 return says;
             }
 
-            /** The figure the part was declined at, or none. */
-            public Optional<Figure> figure() {
+            /** Whether this word says a stop for the reason {@code unread}, at whatever figure. */
+            public boolean saysTheKindOf(WhyUnread unread) {
+                return says != null && says.isTheKindOf(unread);
+            }
+
+            /** The figure a stop this word says would be at where the compilation held every
+             *  budget to the figure declared, or none. */
+            public Optional<Figure> declaredFigure() {
                 return says == null ? Optional.empty() : says.figure();
             }
         }
@@ -324,19 +333,28 @@ public sealed interface ReadingGap {
             if (why == null) {
                 throw new IllegalArgumentException("what was not read was not read for a reason");
             }
+            Objects.requireNonNull(stoppedAt, "a figure stopped at, or none");
+            if (stoppedAt.isPresent() != (why.says() != null)) {
+                throw new IllegalArgumentException(why + " says a stop at a figure exactly where"
+                        + " a figure is held: " + stoppedAt);
+            }
+        }
+
+        /** The word {@code why}, for a part that stopped at the figure declared, or at none. */
+        public ReachNotRead(Why why) {
+            this(why, why == null ? Optional.empty() : why.declaredFigure());
         }
 
         /** A part declined at a figure is one a run allowing more may read. */
         @Override
         public RunSensitivity runSensitivity() {
-            return why.figure().isPresent() ? RunSensitivity.MAY_CHANGE
-                    : RunSensitivity.UNAFFECTED;
+            return stoppedAt.isPresent() ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
         }
 
-        /** The figure a part a wider run may read past was declined at, which its reason says. */
+        /** The figure a part a wider run may read past was declined at, as it stopped. */
         @Override
         public List<Figure> figures() {
-            return why.figure().map(List::of).orElseGet(List::of);
+            return stoppedAt.map(List::of).orElseGet(List::of);
         }
 
         /**
@@ -351,8 +369,8 @@ public sealed interface ReadingGap {
                 return new ReachNotRead(Why.NO_VALUE_OF_THE_ROW);
             }
             for (Why each : Why.values()) {
-                if (unread.equals(each.says())) {
-                    return new ReachNotRead(each);
+                if (each.saysTheKindOf(unread)) {
+                    return new ReachNotRead(each, unread.figure());
                 }
             }
             if (unread.figure().isPresent()) {

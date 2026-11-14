@@ -55,7 +55,7 @@ class AGapNamesEveryFigureItReachedTest {
     /** And the figure each names is the one it was declined or stopped at. */
     @Test
     void aReadingGapNamesTheFigureItWasStoppedAt() {
-        assertEquals(List.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure()),
+        assertEquals(List.of(CompositionBudget.READINGS_OF_ONE_CONDITION.reached()),
                 new ReadingGap.ReachNotRead(ReadingGap.ReachNotRead.Why.MORE_READINGS_THAN_ARE_MADE)
                         .figures());
         assertEquals(List.of(WorkFigure.ELEMENTS_A_WALK_WRITES_OUT.at(

@@ -54,7 +54,7 @@ class TheWaysAnElementMayMeetAStatementLeaveOutTheOnesNoElementMeetsTest {
         for (DecisionReading.Ruled each
                 : DecisionReadings.of(THE_INPUT.replace("BODY", body), "f").found()) {
             assertTrue(each.states().declined().stream().noneMatch(declined -> declined.whys()
-                            .contains(new WhyNotTaken.MoreWaysThanAreRead())),
+                            .contains(WhyNotTaken.pastTheWaysRead())),
                     () -> "the closed ways are left out, and the walk is not stopped: "
                             + each.states().declined());
         }
@@ -81,7 +81,7 @@ class TheWaysAnElementMayMeetAStatementLeaveOutTheOnesNoElementMeetsTest {
         boolean said = false;
         for (DecisionReading.Ruled each : DecisionReadings.of(source, "f").found()) {
             said |= each.states().declined().stream().anyMatch(declined -> declined.whys()
-                    .contains(new WhyNotTaken.MoreWaysThanAreRead()));
+                    .contains(WhyNotTaken.pastTheWaysRead()));
         }
         assertTrue(said, "the ways past the figure are said to be where this compiler stopped");
 

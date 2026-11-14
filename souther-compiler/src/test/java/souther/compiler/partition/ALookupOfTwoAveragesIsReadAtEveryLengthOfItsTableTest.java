@@ -90,7 +90,8 @@ class ALookupOfTwoAveragesIsReadAtEveryLengthOfItsTableTest {
 
     /** Everything the report leaves unread, with why and at which figure. */
     private static List<String> unread(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
+        Compilation compilation = Compilation.ofSource(source, "Main").allowing(
+                Allowances.DECLARED.with(CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION, 32));
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         ACompiledModel.compiles(compilation);
         List<String> out = new ArrayList<>();

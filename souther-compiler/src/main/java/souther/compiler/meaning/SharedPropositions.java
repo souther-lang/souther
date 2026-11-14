@@ -1,6 +1,9 @@
 package souther.compiler.meaning;
 
+import souther.compiler.partition.CompositionBudget;
+
 import java.lang.ref.WeakReference;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.function.Supplier;
@@ -34,7 +37,8 @@ final class SharedPropositions {
      * is written out names the count's statements and never the count, so it keeps nothing alive
      * that the count does not, and held weakly it was let go between one reader and the next.
      */
-    private static final Map<Proposition, WhichOfThemHold.Written> CHOICES = new WeakHashMap<>();
+    private static final Map<Proposition, Map<Integer, WhichOfThemHold.Written>> CHOICES =
+            new WeakHashMap<>();
 
     /**
      * The cases a statement over the ways is written out as, by what they are written out from.
@@ -92,15 +96,17 @@ final class SharedPropositions {
      */
     static WhichOfThemHold.Written choices(Proposition.SoManyHold counted,
                                            Supplier<WhichOfThemHold.Written> writing) {
+        int readings = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
         synchronized (CHOICES) {
-            WhichOfThemHold.Written held = CHOICES.get(counted);
+            Map<Integer, WhichOfThemHold.Written> byFigure = CHOICES.get(counted);
+            WhichOfThemHold.Written held = byFigure == null ? null : byFigure.get(readings);
             if (held != null) {
                 return held;
             }
         }
         WhichOfThemHold.Written made = writing.get();
         synchronized (CHOICES) {
-            CHOICES.putIfAbsent(counted, made);
+            CHOICES.computeIfAbsent(counted, _ -> new HashMap<>()).putIfAbsent(readings, made);
         }
         return made;
     }

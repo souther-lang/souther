@@ -32,6 +32,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.observe.Figure;
 import souther.compiler.values.Operand;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.core.ACopyOfAnApplication;
@@ -84,9 +85,12 @@ final class DemandReading {
 
     /**
      * How many ways an element may meet what a quantifier asks are read one by one
-     * ({@link CompositionBudget#READINGS_OF_ONE_CONDITION}), read here and nowhere else.
+     * ({@link CompositionBudget#READINGS_OF_ONE_CONDITION}), read here and nowhere else, at the
+     * figure the compilation asking holds it to.
      */
-    private static final CompositionBudget READINGS = CompositionBudget.READINGS_OF_ONE_CONDITION;
+    private static int readings() {
+        return CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
+    }
 
     /**
      * What a condition asks of a row, or why this reading has no words for it.
@@ -1574,7 +1578,7 @@ final class DemandReading {
      * of them hold, every count in the statement written out together and held to one figure
      * ({@link CountsWrittenOut}); one outside it is asked as a count ({@link Read.Counted}).
      */
-    private static List<Read> pastTheChoices(CompositionBudget figure) {
+    private static List<Read> pastTheChoices(Figure.Budget figure) {
         return List.of(new Read.Unread(new WhyNotTaken.MoreChoicesThanAreWrittenOut(figure)));
     }
 
@@ -1998,15 +2002,16 @@ final class DemandReading {
          * one an element is composed for. Kept beside the ways that were looked at, so those are
          * composed for and a way past all of them is not said to be closed.
          */
-        static final AnElementsWay LEFT_UNREAD = ofTheRow(
-                new Read.Unread(new WhyNotTaken.MoreWaysThanAreRead()));
+        static AnElementsWay leftUnread() {
+            return ofTheRow(new Read.Unread(WhyNotTaken.pastTheWaysRead()));
+        }
 
         /**
          * Every way of taking one choice of each of {@code parts} together, each whole.
          *
          * <p>Any of them meeting is enough, whether some element is asked it or every element is:
          * a row along one way meets what all of them ask together. So the ways are made whole one
-         * at a time and those made are kept however many are not, with {@link #LEFT_UNREAD} beside
+         * at a time and those made are kept however many are not, with {@link #leftUnread} beside
          * them where a figure stopped the making — what is kept is composed for, and what was not
          * looked at is said to be so rather than lost or taken as closed.
          *
@@ -2051,7 +2056,7 @@ final class DemandReading {
             int[] looked = {0};
             if (!walk(parts, 0, ASKING_NOTHING, WhatAnElementIsLeft.of(read.quantities().region()),
                     open, looked)) {
-                open.add(LEFT_UNREAD);
+                open.add(leftUnread());
             }
             return open.isEmpty() ? List.of(NEVER) : List.copyOf(open);
         }
@@ -2068,7 +2073,7 @@ final class DemandReading {
         private static boolean walk(List<List<AnElementsWay>> parts, int at, AnElementsWay so,
                                     WhatAnElementIsLeft left, Set<AnElementsWay> open,
                                     int[] looked) {
-            int most = READINGS.maximum();
+            int most = readings();
             if (at == parts.size()) {
                 // A way kept is as many ways as rows written alike meet it in, each of which a
                 // composer is handed: what is past the first is counted as a choice opening it.
@@ -2111,10 +2116,10 @@ final class DemandReading {
          *
          * <p>One no element meets is none of them, and only where every one is closed is the
          * whole. Those left open are held to the figure, and past it the rest are said to be
-         * {@link #LEFT_UNREAD} and not dropped: the ones kept are composed for all the same.
+         * {@link #leftUnread} and not dropped: the ones kept are composed for all the same.
          */
         static List<AnElementsWay> oneOfEach(List<List<AnElementsWay>> alternatives) {
-            int most = READINGS.maximum();
+            int most = readings();
             Set<AnElementsWay> open = new LinkedHashSet<>();
             boolean someLeft = false;
             for (List<AnElementsWay> alternative : alternatives) {
@@ -2130,7 +2135,7 @@ final class DemandReading {
                 }
             }
             if (someLeft) {
-                open.add(LEFT_UNREAD);
+                open.add(leftUnread());
             }
             return open.isEmpty() ? List.of(NEVER) : List.copyOf(open);
         }

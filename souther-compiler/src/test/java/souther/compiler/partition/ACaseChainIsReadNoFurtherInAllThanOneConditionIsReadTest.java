@@ -13,6 +13,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyUnread;
+import souther.compiler.observe.Figure;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
@@ -20,8 +21,10 @@ import souther.compiler.query.Compilation;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -45,14 +48,31 @@ class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
 
     private static final int MOST = CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.maximum();
 
-    private static final WhyUnread PAST_THE_TOTAL = new WhyUnread.MoreTotalReadingsThanAreMade();
+    /** A figure a compilation may be held to, which a chain of five calls is past. */
+    private static final int NARROW = 14;
 
     /**
-     * The longest chain whose conditions are each read within the figure in all. The last
-     * condition of a chain of {@code calls} is read once for each case of every call before it
-     * and of its own, two each, short of the first: {@code 2^calls - 2} readings.
+     * The longest chain whose conditions are each read within {@code most} readings in all. The
+     * last condition of a chain of {@code calls} is read once for each case of every call before
+     * it and of its own, two each, short of the first: {@code 2^calls - 2} readings.
      */
-    private static final int WITHIN = 31 - Integer.numberOfLeadingZeros(MOST + 2);
+    private static int within(int most) {
+        return 31 - Integer.numberOfLeadingZeros(most + 2);
+    }
+
+    private static final int WITHIN = within(MOST);
+
+    private static final int WITHIN_NARROW = within(NARROW);
+
+    private static Allowances held(int most) {
+        return Allowances.DECLARED.with(CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION, most);
+    }
+
+    /** Whether {@code stated} holds a part given up at the figure in all, whichever figure. */
+    private static boolean givenUpAtTheTotal(Proposition stated) {
+        return Proposition.stopsIn(stated).stream()
+                .anyMatch(WhyUnread.PAST_THE_TOTAL_READINGS::isTheKindOf);
+    }
 
     /** A chain of {@code calls} calls of the helper, each on what the call before it left. */
     static String model(int calls) {
@@ -90,31 +110,40 @@ class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
 
     private record Read(Compilation compilation, List<Proposition> stated) {}
 
+    private record Chain(int calls, int most) {}
+
     /** Each chain read once, for every test asking about it. */
-    private static final Map<Integer, Read> READ = new ConcurrentHashMap<>();
+    private static final Map<Chain, Read> READ = new ConcurrentHashMap<>();
 
     private static Read read(int calls) {
-        return READ.computeIfAbsent(calls, ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest::readAnew);
+        return read(calls, MOST);
     }
 
-    private static Read readAnew(int calls) {
-        Compilation compilation = ACompiledModel.answered(model(calls));
-        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
-        assertNotNull(checked, "the chain under test compiles");
-        AnalysisBody analysis = checked.analysisBodies().get("draw");
-        RuleReadingSource rules = RuleReadings.of(compilation, "demo");
-        InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("demo")).value().get("draw");
-        InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
-                inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
-                inputs.dependencies());
-        MeaningsOfABody meanings = MeaningsOfABodyReading.of(analysis,
-                () -> inputs.reading(rules), reads, rules.symbols(), rules.newtypes());
-        return new Read(compilation, meanings.stated().values().stream()
-                .map(each -> each.states()).toList());
+    private static Read read(int calls, int most) {
+        return READ.computeIfAbsent(new Chain(calls, most),
+                ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest::readAnew);
     }
 
-    private static List<WhyUnread> whysIn(Proposition stated) {
-        return Proposition.stopsIn(stated);
+    private static Read readAnew(Chain chain) {
+        Allowances held = held(chain.most());
+        Compilation compilation = Compilation.ofSource(model(chain.calls()), "Main")
+                .allowing(held);
+        ACompiledModel.compiles(compilation);
+        return held.over(() -> {
+            Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
+            assertNotNull(checked, "the chain under test compiles");
+            AnalysisBody analysis = checked.analysisBodies().get("draw");
+            RuleReadingSource rules = RuleReadings.of(compilation, "demo");
+            InputDomain inputs =
+                    compilation.db().ask(new Adequacy.Inputs("demo")).value().get("draw");
+            InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
+                    inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
+                    inputs.dependencies());
+            MeaningsOfABody meanings = MeaningsOfABodyReading.of(analysis,
+                    () -> inputs.reading(rules), reads, rules.symbols(), rules.newtypes());
+            return new Read(compilation, meanings.stated().values().stream()
+                    .map(each -> each.states()).toList());
+        });
     }
 
     /** The parts {@code stated} comes to written out, each as many times as it is held. */
@@ -130,29 +159,56 @@ class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
                 .max().orElseThrow();
     }
 
-    @Test
-    void withinTheFigureNoConditionIsGivenUpForIt() {
-        Read within = read(WITHIN);
-
-        for (Proposition stated : within.stated()) {
-            assertFalse(whysIn(stated).contains(PAST_THE_TOTAL), stated::spelledOut);
-        }
-    }
-
+    /** The figure itself is asked at the declared one, here and nowhere else: the first chain past
+     *  it. The claims about a figure are held at a narrower one, below. */
     @Test
     void oneCallMoreGivesTheLastConditionsUpAtTheFigure() {
         Read past = read(WITHIN + 1);
 
-        assertTrue(past.stated().stream().anyMatch(each -> whysIn(each).contains(PAST_THE_TOTAL)),
+        assertTrue(past.stated().stream()
+                        .anyMatch(ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest::givenUpAtTheTotal),
                 "the conditions of the last call are read more times in all than are made");
+    }
+
+    /** The same claims at a figure of {@value #NARROW}, held for a compilation. */
+    @Test
+    void withinANarrowerFigureNoConditionIsGivenUpForIt() {
+        for (Proposition stated : read(WITHIN_NARROW, NARROW).stated()) {
+            assertFalse(givenUpAtTheTotal(stated), stated::spelledOut);
+        }
+    }
+
+    @Test
+    void oneCallMoreGivesTheLastConditionsUpAtANarrowerFigure() {
+        Read past = read(WITHIN_NARROW + 1, NARROW);
+
+        assertTrue(past.stated().stream()
+                        .anyMatch(ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest::givenUpAtTheTotal),
+                "the conditions of the last call are read more times in all than are made");
+        for (Proposition stated : past.stated()) {
+            for (var why : Proposition.stopsIn(stated)) {
+                if (WhyUnread.PAST_THE_TOTAL_READINGS.isTheKindOf(why)) {
+                    assertEquals(Optional.of(new Figure.Budget(
+                                    CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION, NARROW)),
+                            why.figure(), "the figure it was held to");
+                }
+            }
+        }
+    }
+
+    private static Map<String, PathReachability.Answers> pathReached(Compilation compilation,
+                                                                     Allowances held) {
+        return held.over(() -> compilation.db().ask(new Adequacy.PathReached("demo")).value());
     }
 
     /** No arm of the chain's forks is one nothing arrives at, on conditions given up at the
      *  figure. The question reads the conditions for itself, apart from the reading above. */
     @Test
     void whatWasGivenUpProvesNoArmUnreached() {
-        Map<String, PathReachability.Answers> byBehavior = read(WITHIN + 1).compilation().db()
-                .ask(new Adequacy.PathReached("demo")).value();
+        Compilation compilation =
+                ACompiledModel.compiles(read(WITHIN_NARROW + 1, NARROW).compilation());
+        Map<String, PathReachability.Answers> byBehavior =
+                pathReached(compilation, held(NARROW));
 
         byBehavior.get("draw").found().forEach((place, reached) ->
                 assertFalse(reached instanceof souther.compiler.reach.Reachability.Unreachable,
@@ -165,8 +221,8 @@ class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
      */
     @Test
     void aLongerChainStatesNoMoreOfAnyCondition() {
-        Read first = read(WITHIN + 1);
-        Read longer = read(WITHIN + 2);
+        Read first = read(WITHIN_NARROW + 1, NARROW);
+        Read longer = read(WITHIN_NARROW + 2, NARROW);
 
         assertTrue(largest(longer) <= largest(first),
                 () -> largest(longer) + " parts past " + largest(first));

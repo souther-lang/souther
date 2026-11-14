@@ -302,7 +302,7 @@ public sealed interface BlockReason {
                 case LineAtANumberNoRatioHolds _ -> 13;
                 case LineSideNotWorkedOut _ -> 14;
                 case SeveralLinesInOneRule _ -> 15;
-                case WhatItStatesIsNoLine(WhatItStatesIsNoLine.Why why) -> switch (why) {
+                case WhatItStatesIsNoLine(WhatItStatesIsNoLine.Why why, var _) -> switch (why) {
                     case MORE_READINGS_THAN_ARE_MADE -> 16;
                     case MORE_TOTAL_READINGS_THAN_ARE_MADE -> 17;
                     case MORE_PARTS_THAN_ARE_CONCLUDED -> 18;
@@ -418,8 +418,11 @@ public sealed interface BlockReason {
                     int byRuns = WhereARunStopped.compare(stopped, them.runsStopped());
                     yield byRuns != 0 ? byRuns : Figure.compare(figures, them.stoppedAt());
                 }
-                // The rank says which statement it is.
-                case WhatItStatesIsNoLine _ -> 0;
+                // The rank says which word it is, and the figure it stopped at is what is left.
+                case WhatItStatesIsNoLine(var _, var stoppedAt) -> Figure.compare(
+                        stoppedAt.map(List::of).orElseGet(List::of),
+                        ((WhatItStatesIsNoLine) other).stoppedAt()
+                                .map(List::of).orElseGet(List::of));
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                      RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
                      ValueRuleRelatingTwoPositions _, ValueRuleRelatingElements _,
@@ -517,7 +520,7 @@ public sealed interface BlockReason {
                         ? RunSensitivity.UNAFFECTED : RunSensitivity.MAY_CHANGE;
                 // And the readings of what a statement means, which stop at a figure only where
                 // the part they declined stopped at one.
-                case WhatItStatesIsNoLine(var why) -> why.figure().isPresent()
+                case WhatItStatesIsNoLine(var _, var stoppedAt) -> stoppedAt.isPresent()
                         ? RunSensitivity.MAY_CHANGE : RunSensitivity.UNAFFECTED;
                 // And every other, where nothing was compared against anything. A form nothing
                 // takes apart, values no line can be drawn on, a rule about a value made from this
@@ -563,7 +566,8 @@ public sealed interface BlockReason {
                 // The figures the search for a row getting to the relation stopped at.
                 case RelationNotShownReachedAtEveryValue it -> it.stoppedAt();
                 // The figure the part it declined stopped at, which that part's reason says.
-                case WhatItStatesIsNoLine(var why) -> why.figure().map(List::of).orElseGet(List::of);
+                case WhatItStatesIsNoLine(var _, var stoppedAt) ->
+                        stoppedAt.map(List::of).orElseGet(List::of);
                 case UnreadComparisonForm _, UnreadComparisonDomain _, RuleAboutADerivedValue _,
                      RuleAboutAnElementOfSeveralContainers _, UnreadValueRule _,
                      NonAffineArithmetic _, OrderedExtentEndIsNoValue _,
@@ -1731,10 +1735,26 @@ public sealed interface BlockReason {
      * words it, as {@link UnreadComparisonForm}, {@link UnreadComparisonDomain} or
      * {@link RuleAboutADerivedValue}.
      */
-    record WhatItStatesIsNoLine(Why why) implements RuleReadingStopped {
+    record WhatItStatesIsNoLine(Why why, Optional<Figure> stoppedAt)
+            implements RuleReadingStopped {
 
         public WhatItStatesIsNoLine {
             Objects.requireNonNull(why, "a statement is no line for some reason");
+            Objects.requireNonNull(stoppedAt, "a figure stopped at, or none");
+            if (stoppedAt.isPresent() != (why.says() != null)) {
+                throw new IllegalArgumentException(why + " says a stop at a figure exactly where"
+                        + " a figure is held: " + stoppedAt);
+            }
+        }
+
+        /** What stopped at the figure {@code unread} stopped at, which is the figure held. */
+        public WhatItStatesIsNoLine(Why why, WhyUnread unread) {
+            this(why, unread.figure());
+        }
+
+        /** The word {@code why}, for a part that stopped at the figure declared, or at none. */
+        public WhatItStatesIsNoLine(Why why) {
+            this(why, why.declaredFigure());
         }
 
         /** Why what a rule states is no line on the input's numbers. */
@@ -1789,18 +1809,26 @@ public sealed interface BlockReason {
                 this.says = says;
             }
 
-            /** The reason that stopped at a figure this word says, or null where it says none. */
+            /** The reason that stopped at a figure this word says, at the figure declared, or null
+             *  where it says none. Which reason a stop was is asked of this, and the figure it
+             *  stopped at of the stop. */
             public WhyUnread says() {
                 return says;
             }
 
-            /** The word that says {@code why}, or none where no word does. */
-            public static Optional<Why> saying(WhyUnread why) {
-                return Arrays.stream(values()).filter(each -> why.equals(each.says)).findFirst();
+            /** Whether this word says a stop for the reason {@code why}, at whatever figure. */
+            public boolean saysTheKindOf(WhyUnread why) {
+                return says != null && says.isTheKindOf(why);
             }
 
-            /** The figure the part was declined at, or none. */
-            public Optional<Figure> figure() {
+            /** The word that says {@code why}, or none where no word does. */
+            public static Optional<Why> saying(WhyUnread why) {
+                return Arrays.stream(values()).filter(each -> each.saysTheKindOf(why)).findFirst();
+            }
+
+            /** The figure a stop this word says would be at where the compilation held every
+             *  budget to the figure declared, or none. */
+            public Optional<Figure> declaredFigure() {
                 return says == null ? Optional.empty() : says.figure();
             }
         }

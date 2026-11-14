@@ -58,7 +58,30 @@ class AStopAtAFigureACompilationMaySetIsToldAtThatFigureTest {
                         let p = Positive { n = n }
                         if n < 3 then p.n else 0
                     } else 1
-                    """, 9));
+                    """, 9),
+            // One value more than a condition is read for along one way: five values, past four.
+            CompositionBudget.READINGS_OF_ONE_CONDITION, new Stopping("""
+                    module demo
+
+                    data Window = { n: Int }
+
+                    behavior g : (w: Window) -> Int
+                    let g (w) = if List.any(x -> w.n == x, [0, 1, 2, 3, 4]) then 1 else 0
+                    """, 4),
+            // The last condition of a chain of five calls is read once for each way the calls
+            // before it went, thirty in all, which is more than a figure of fourteen readings.
+            CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION, new Stopping(
+                    ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest.model(5), 14),
+            // The same statement, with one step to work out where each line decides in: it is
+            // read in more than that, so every line is cut off.
+            CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN, new Stopping("""
+                    module demo exposing (g)
+
+                    behavior g : (x: Int, y: Int) -> Bool
+                    let g (x, y) =
+                        Option.withDefault(0, List.find(t -> x > t && y > t && x + y > t,
+                            [1, 2, 3, 4, 5, 6, 7])) > 3
+                    """, 1));
 
     @Test
     void everyBudgetACompilationMaySetIsHeldByAModelStoppingAtIt() {

@@ -10,6 +10,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.partition.Allowances;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.types.TypeKey;
 import souther.compiler.types.TypeSymbol;
@@ -142,15 +143,27 @@ class WhereALineInsideAQuantifierDecidesTest {
      */
     @Test
     void aQuantifierPastTheStepsLeavesEveryLineNotTakenApart() {
+        assertEveryLineIsNotTakenApart(17, Allowances.DECLARED);
+    }
+
+    /** The same at a figure of sixteen steps, which five relations pass. */
+    @Test
+    void aQuantifierPastANarrowerFigureOfStepsLeavesEveryLineNotTakenApart() {
+        assertEveryLineIsNotTakenApart(5,
+                Allowances.DECLARED.with(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN, 16));
+    }
+
+    private static void assertEveryLineIsNotTakenApart(int relations, Allowances held) {
         List<Proposition> each = new ArrayList<>();
-        for (int i = 0; i < 17; i++) {
+        for (int i = 0; i < relations; i++) {
             each.add(Proposition.any(List.of(compared(TermPath.of("r" + i), 0, Rel.GT),
                     compared(XS.element().then("n" + i), 0, Rel.GT))));
         }
         Proposition stated = new Proposition.Some(CONTAINER, Proposition.all(each), true);
-        List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated, term -> false);
+        List<WhereEachLineDecides.Decides> lines =
+                held.over(() -> WhereEachLineDecides.in(stated, term -> false));
 
-        assertEquals(34, lines.size(), lines::toString);
+        assertEquals(2 * relations, lines.size(), lines::toString);
         for (WhereEachLineDecides.Decides line : lines) {
             assertEquals(Set.of(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN),
                     stoppedAt(line.cases()), () -> "nothing taken apart: " + line);

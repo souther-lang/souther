@@ -259,7 +259,7 @@ public final class ReportedReason {
             // not, which is told apart by the sensitivity beside the word — and for a statement
             // that is no relation of numbers the word for values that carry no order to draw a
             // line on.
-            case BlockReason.WhatItStatesIsNoLine(var why) -> switch (why) {
+            case BlockReason.WhatItStatesIsNoLine(var why, var _) -> switch (why) {
                 case MORE_READINGS_THAN_ARE_MADE, MORE_TOTAL_READINGS_THAN_ARE_MADE,
                      MORE_PARTS_THAN_ARE_CONCLUDED, MORE_WAYS_THAN_ARE_WRITTEN_OUT,
                      MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT,

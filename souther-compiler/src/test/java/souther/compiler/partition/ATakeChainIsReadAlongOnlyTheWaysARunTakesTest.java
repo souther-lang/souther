@@ -247,18 +247,27 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
 
     /** What the body states of each condition it reads, as the reading of its meanings has it. */
     private static List<Proposition> stated(String source) {
-        Compilation compilation = ACompiledModel.answered(source);
-        Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
-        assertNotNull(checked, "the model under test compiles");
-        AnalysisBody analysis = checked.analysisBodies().get("draw");
-        RuleReadingSource rules = RuleReadings.of(compilation, "demo");
-        InputDomain inputs = compilation.db().ask(new Adequacy.Inputs("demo")).value().get("draw");
-        InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
-                inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
-                inputs.dependencies());
-        MeaningsOfABody meanings = MeaningsOfABodyReading.of(analysis,
-                () -> inputs.reading(rules), reads, rules.symbols(), rules.newtypes());
-        return meanings.stated().values().stream().map(each -> each.states()).toList();
+        return stated(source, Allowances.DECLARED);
+    }
+
+    /** What the body states of each condition it reads, in a compilation held to {@code held}. */
+    private static List<Proposition> stated(String source, Allowances held) {
+        Compilation compilation = ACompiledModel.compiles(
+                Compilation.ofSource(source, "Main").allowing(held));
+        return held.over(() -> {
+            Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked("demo")).value();
+            assertNotNull(checked, "the model under test compiles");
+            AnalysisBody analysis = checked.analysisBodies().get("draw");
+            RuleReadingSource rules = RuleReadings.of(compilation, "demo");
+            InputDomain inputs =
+                    compilation.db().ask(new Adequacy.Inputs("demo")).value().get("draw");
+            InputReads reads = InputReads.ofParametersWhereCallsStand(inputs.parameterReads(),
+                    inputs.declared(rules), ElementBindings.of(analysis, rules.newtypes()),
+                    inputs.dependencies());
+            MeaningsOfABody meanings = MeaningsOfABodyReading.of(analysis,
+                    () -> inputs.reading(rules), reads, rules.symbols(), rules.newtypes());
+            return meanings.stated().values().stream().map(each -> each.states()).toList();
+        });
     }
 
     private static DecisionReading decided(String source) {
@@ -322,16 +331,21 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
      * are made: the last condition of {@code n} calls is read {@code 2^n - 2} times
      * ({@link ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest}).
      */
-    private static final int PAST_THE_FIGURE = 32 - Integer.numberOfLeadingZeros(
-            CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.maximum() + 2);
+    private static final int NARROW = 128;
+
+    private static final int PAST_THE_FIGURE = 32 - Integer.numberOfLeadingZeros(NARROW + 2);
 
     /** As long as a chain nothing is left out of is when the figure stops it, and read to the end
-     *  ({@link ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest}). */
+     *  ({@link ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest}). Held at a figure of
+     *  {@value #NARROW} readings in all, which a chain of {@value #PAST_THE_FIGURE} is past if
+     *  nothing is left out. */
     @Test
     void aLongChainOfAmountsNoughtOrMoreReadsEveryConditionToTheEnd() {
+        Allowances narrow = Allowances.DECLARED.with(
+                CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION, NARROW);
         for (String source : List.of(chain(PAST_THE_FIGURE, true),
                 lets(PAST_THE_FIGURE, true))) {
-            List<Proposition> stated = stated(source);
+            List<Proposition> stated = stated(source, narrow);
 
             assertFalse(stated.isEmpty());
             for (Proposition each : stated) {

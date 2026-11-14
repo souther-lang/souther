@@ -119,10 +119,10 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
                 "as many applications as are read are read one by one");
         Proposition.Unread past = assertInstanceOf(Proposition.Unread.class,
                 stated("List.any(x -> w.n == x, " + values(most + 1) + ")"));
-        assertEquals(new WhyUnread.MoreReadingsThanAreMade(), past.why());
+        assertEquals(WhyUnread.PAST_THE_READINGS, past.why());
         Proposition.Unread inside = assertInstanceOf(Proposition.Unread.class,
                 theOneConditionIn("List.any(x -> w.n == x, " + values(most + 1) + ")"));
-        assertEquals(new WhyUnread.MoreReadingsThanAreMade(), inside.why(),
+        assertEquals(WhyUnread.PAST_THE_READINGS, inside.why(),
                 "and a condition in the body is filed as declined, not read on fewer of them");
     }
 
@@ -153,7 +153,7 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
         assertFalse(unreadIn(within), () -> "within the figure: " + within);
         Proposition past = stated(choices("w.n", side + 1) + " > "
                 + choices("w.first.days", side + 1));
-        assertEquals(List.of(new WhyUnread.MoreTotalReadingsThanAreMade()), whysIn(past));
+        assertEquals(List.of(WhyUnread.PAST_THE_TOTAL_READINGS), whysIn(past));
     }
 
     /**
@@ -165,7 +165,7 @@ class AConditionOverValuesWrittenOutIsReadOnEachApplicationTest {
         int most = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
         Proposition past = stated("(match " + cases(0, most + 1) + " with\n    | Lo -> true\n"
                 + "    | Hi -> false)");
-        assertEquals(List.of(new WhyUnread.MoreReadingsThanAreMade()), whysIn(past),
+        assertEquals(List.of(WhyUnread.PAST_THE_READINGS), whysIn(past),
                 () -> "one case more than the figure: " + past);
     }
 

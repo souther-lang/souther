@@ -4,6 +4,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.observe.Figure;
 import souther.compiler.partition.CompositionBudget;
 
 import java.util.ArrayList;
@@ -143,7 +144,7 @@ final class WhichOfThemHold {
      * @param parts     how many parts {@code choices} come to written out, and nought where there
      *                  are none — what a reader walking them is charged
      */
-    record Written(Proposition choices, CompositionBudget stoppedAt, long parts) {}
+    record Written(Proposition choices, Figure.Budget stoppedAt, long parts) {}
 
     /**
      * What {@link Written} says of the choices, held to {@code choicesFigure} by how many they are
@@ -158,8 +159,8 @@ final class WhichOfThemHold {
         Within within = within(choicesFigure.maximum(), partsFigure.maximum(), partsFigure);
         return switch (within) {
             case Within.Choices(var choices, var parts) -> new Written(choices, null, parts);
-            case Within.PastTheChoices _ -> new Written(null, choicesFigure, 0);
-            case Within.PastTheParts _ -> new Written(null, partsFigure, 0);
+            case Within.PastTheChoices _ -> new Written(null, choicesFigure.reached(), 0);
+            case Within.PastTheParts _ -> new Written(null, partsFigure.reached(), 0);
         };
     }
 

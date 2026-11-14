@@ -636,7 +636,8 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
     /** The row a reason is written under: its kind, and which of its whys where it carries one. */
     private static String rowOf(BlockReason.RuleWithoutLineReason reason) {
         return switch (reason) {
-            case BlockReason.WhatItStatesIsNoLine(var why) -> "WhatItStatesIsNoLine:" + why;
+            case BlockReason.WhatItStatesIsNoLine(var why, var _) ->
+                    "WhatItStatesIsNoLine:" + why;
             case BlockReason.NonAffineArithmetic(var operation) ->
                     "NonAffineArithmetic:" + operation;
             default -> reason.getClass().getSimpleName();

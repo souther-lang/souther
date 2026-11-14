@@ -7,6 +7,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.report.InEnglish;
+import souther.compiler.partition.Allowances;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -56,7 +57,15 @@ class AReadingStoppedAtAFigureSaysWhichFigureTest {
     void moreValuesThanOneConditionIsReadForNameThatFigure() {
         int most = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
         assertNamed(FORKING_ON.formatted("List.any(x -> w.n == x, " + values(most + 1) + ")"),
-                CompositionBudget.READINGS_OF_ONE_CONDITION);
+                CompositionBudget.READINGS_OF_ONE_CONDITION, Allowances.DECLARED);
+    }
+
+    /** The same at a figure of four, which five values are past. */
+    @Test
+    void moreValuesThanANarrowerFigureIsReadForNameThatFigure() {
+        assertNamed(FORKING_ON.formatted("List.any(x -> w.n == x, " + values(5) + ")"),
+                CompositionBudget.READINGS_OF_ONE_CONDITION,
+                Allowances.DECLARED.with(CompositionBudget.READINGS_OF_ONE_CONDITION, 4));
     }
 
     /**
@@ -65,11 +74,12 @@ class AReadingStoppedAtAFigureSaysWhichFigureTest {
      */
     @Test
     void moreReadingsInAllThanOneConditionMakesNameThatFigure() {
-        int side = (int) Math.sqrt(
-                CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.maximum() / 2 + 1) + 1;
+        int most = 32;
+        int side = (int) Math.sqrt(most / 2 + 1) + 1;
         assertNamed(FORKING_ON.formatted(choices("w.n", side) + " > "
                         + choices("w.first.days", side)),
-                CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION);
+                CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION,
+                Allowances.DECLARED.with(CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION, most));
     }
 
     /**
@@ -77,16 +87,16 @@ class AReadingStoppedAtAFigureSaysWhichFigureTest {
      * nothing else: on the report's line, on the document's {@code notRead} entry, and on the
      * {@code stopped} entry of the question it leaves standing.
      */
-    private static void assertNamed(String model, CompositionBudget figure) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
+    private static void assertNamed(String model, CompositionBudget figure, Allowances held) {
+        Compilation compilation = Compilation.ofSource(model, "Main").allowing(held);
         compilation.measure(Adequacy.Asked.fullReport());
         ACompiledModel.compiles(compilation);
         AdequacyReport report = AdequacyReport.of(compilation);
         SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
 
         String human = report.humanInEnglish(rendering);
-        String said = ", stopped at " + InEnglish.said(figure.countsSaid()) +" (" + figure.name() + ", "
-                + figure.maximum() + ")";
+        String said = ", stopped at " + InEnglish.said(figure.countsSaid()) + " ("
+                + figure.name() + ", " + held.of(figure) + ")";
         List<String> lines = human.lines()
                 .filter(line -> line.contains(": " + THE_WORD)
                         || line.contains("— " + THE_WORD))
