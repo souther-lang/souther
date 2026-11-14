@@ -2,15 +2,12 @@ package souther.compiler.cst;
 
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -29,28 +26,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class TheScanMovesOnEveryCharacterTest {
 
-    /** Long enough that a scan which is merely slow is not called stuck, short enough that a stuck
-     *  one does not take the build with it. */
-    private static final Duration BEFORE_IT_IS_STUCK = Duration.ofSeconds(5);
-
     /**
-     * Every text read under one watch rather than one each. A watch is a thread of its own, and one
-     * per text costs more than the reading it watches; what a stuck scan needs is to be stopped and
-     * named, and the text it is on when the watch runs out is the one it is stuck on.
+     * A scan that does not move makes empty tokens until the heap is gone, and the heap running out
+     * is how it ends. No clock decides anything: the text it was on is named when that happens, and
+     * a scan that moves finishes every text however long that takes.
      */
     @Test
     void andEveryCharacterOfWhatItReadIsInATokenOfIt() {
-        AtomicReference<String> reading = new AtomicReference<>();
-        assertTimeoutPreemptively(BEFORE_IT_IS_STUCK, () -> readEach(reading),
-                () -> "the scan did not finish on " + shown(reading.get()));
-    }
-
-    private static void readEach(AtomicReference<String> reading) {
         List<String> stuck = new ArrayList<>();
         List<String> empty = new ArrayList<>();
         for (String written : written()) {
-            reading.set(written);
-            CstLexer.Result lexed = CstLexer.lex(written);
+            CstLexer.Result lexed;
+            try {
+                lexed = CstLexer.lex(written);
+            } catch (OutOfMemoryError exhausted) {
+                throw new AssertionError("the scan did not finish on " + shown(written), exhausted);
+            }
             StringBuilder back = new StringBuilder();
             for (GreenToken token : lexed.tokens()) {
                 back.append(token.text());

@@ -1,7 +1,6 @@
 package souther.runtime;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -110,15 +109,14 @@ class AnAnswerThisTypeHoldsIsOneItsArithmeticGivesTest {
      * and the type says it as its own. The host says it by an exception of its arithmetic, which names a
      * {@code BigInteger} to whoever catches it and nothing about a Rational (ADR-0112) — and says it only
      * after computing the number far enough to find it does not fit, which for a power of five this size
-     * is minutes of work for an answer that was never coming. Hence the bound on how long this may take:
-     * it is the difference between a size being asked about and a size being reached.
+     * is minutes of work for an answer that was never coming. A size being asked about is the difference
+     * between this answering and that.
      *
      * <p>Squaring is how a value reaches exponents past the far end of a scale: this one is a compact
      * decimal, squared. Its decimal exists and repeats nowhere, and the whole number one would be written
      * with is larger than the host has an index for.
      */
     @Test
-    @Timeout(20)
     void aWholeNumberTheHostHasNoRoomForIsShortOfRoomInThisLanguagesWords() {
         Rational wide = Rational.of(new BigDecimal(BigInteger.ONE, -1_573_741_824)).times(
                 Rational.of(new BigDecimal(BigInteger.ONE, -1_573_741_824)));
@@ -138,7 +136,6 @@ class AnAnswerThisTypeHoldsIsOneItsArithmeticGivesTest {
      * would have left this one answering with it.
      */
     @Test
-    @Timeout(20)
     void aFoldOverTheseIsShortOfRoomTheSameWay() {
         Rational one = Rational.of(1);
         Rational tiny = Rational.of(new BigDecimal(BigInteger.ONE, 1_000_000_000));

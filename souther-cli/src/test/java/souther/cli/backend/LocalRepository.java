@@ -13,7 +13,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -56,10 +59,18 @@ public final class LocalRepository implements AutoCloseable {
     private final HttpServer server;
     private final Map<String, byte[]> files = new ConcurrentHashMap<>();
     private final Map<String, Serving> serving = new ConcurrentHashMap<>();
-    private final Map<String, Long> heldBack = new ConcurrentHashMap<>();
+    private final Set<String> heldBack = ConcurrentHashMap.newKeySet();
     private final List<String> asked = new CopyOnWriteArrayList<>();
     private final CountDownLatch closed = new CountDownLatch(1);
-    private volatile long pomDelay;
+
+    /** What a client that asks for poms one at a time costs the build, where it is not going to ask
+     *  for them together. Nothing that is answered waits on it. */
+    private static final long HUNG_MILLIS = 20_000;
+
+    private volatile CountDownLatch pomsTogether;
+    private volatile int pomsHeld;
+    private final AtomicInteger pomsArrived = new AtomicInteger();
+    private final AtomicInteger pomsReleasedTogether = new AtomicInteger();
 
     private LocalRepository(HttpServer server) {
         this.server = server;
@@ -192,14 +203,25 @@ public final class LocalRepository implements AutoCloseable {
         serving.put(path, new Serving.Redirect(location, length));
     }
 
-    /** Begins the answer for {@code path}, however it is served, only after {@code millis}. */
-    public void holdBack(String path, long millis) {
-        heldBack.put(path, millis);
+    /** Begins no answer for {@code path} until the repository is closed. */
+    public void holdBack(String path) {
+        heldBack.add(path);
     }
 
-    /** Begins the answer for every pom only after {@code millis}, as a repository far away does. */
-    public void slowPoms(long millis) {
-        pomDelay = millis;
+    /**
+     * Begins the answer for no pom until {@code together} poms have been asked for and are waiting,
+     * as a repository far away leaves a client that asks one at a time waiting for each. A client
+     * that asks one at a time never has {@code together} waiting, and the first pom is then given
+     * up on after {@link #HUNG_MILLIS}.
+     */
+    public void holdPomsUntilTogether(int together) {
+        pomsHeld = together;
+        pomsTogether = new CountDownLatch(together);
+    }
+
+    /** Whether the poms held by {@link #holdPomsUntilTogether} were all waiting at once. */
+    public boolean pomsWereAskedTogether() {
+        return pomsReleasedTogether.get() == pomsHeld;
     }
 
     public void put(String path, String content) {
@@ -216,7 +238,20 @@ public final class LocalRepository implements AutoCloseable {
         String path = exchange.getRequestURI().getPath();
         asked.add(path);
         String file = path.startsWith(ROOT) ? path.substring(ROOT.length()) : path;
-        pause(heldBack.getOrDefault(file, file.endsWith(".pom") ? pomDelay : 0));
+        if (heldBack.contains(file)) {
+            awaitClose();
+        }
+        CountDownLatch together = pomsTogether;
+        if (file.endsWith(".pom") && together != null && pomsArrived.incrementAndGet() <= pomsHeld) {
+            together.countDown();
+            try {
+                if (together.await(HUNG_MILLIS, TimeUnit.MILLISECONDS)) {
+                    pomsReleasedTogether.incrementAndGet();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
         byte[] content = files.get(file);
         try (exchange) {
             switch (serving.getOrDefault(file, new Serving.Whole())) {

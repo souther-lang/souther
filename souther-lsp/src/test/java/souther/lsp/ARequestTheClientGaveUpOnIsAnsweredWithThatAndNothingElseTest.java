@@ -88,7 +88,7 @@ class ARequestTheClientGaveUpOnIsAnsweredWithThatAndNothingElseTest {
                 "a client that gave up is not sent the answer it stopped waiting for");
         assertEquals(REQUEST_CANCELLED, reply.get("error").get("code").asInt(),
                 "it is sent what the protocol says a cancelled request is answered with");
-        session.awaitQuiet();
+        session.awaitCarriedOut();
         assertEquals(1, session.count(replyTo(id)), "and is sent it once");
     }
 
