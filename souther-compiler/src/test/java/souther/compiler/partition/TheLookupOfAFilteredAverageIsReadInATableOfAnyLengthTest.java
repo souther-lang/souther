@@ -10,6 +10,8 @@ import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -93,7 +95,15 @@ class TheLookupOfAFilteredAverageIsReadInATableOfAnyLengthTest {
         return unread(table(rows), lookup);
     }
 
+    /** What was already read, by table and lookup: the thirteen-row report is asked by two tests
+     *  and read once. */
+    private static final Map<List<String>, List<Unread>> READ = new ConcurrentHashMap<>();
+
     private static List<Unread> unread(String table, String lookup) {
+        return READ.computeIfAbsent(List.of(table, lookup), _ -> read(table, lookup));
+    }
+
+    private static List<Unread> read(String table, String lookup) {
         Compilation compilation = Compilation.ofSource(HEAD + table + lookup + TAIL, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         ACompiledModel.compiles(compilation);
