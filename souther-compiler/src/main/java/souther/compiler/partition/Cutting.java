@@ -2313,14 +2313,16 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * a comparison read here and a statement read as lines are told apart by the same walk.
      */
     static Read ofALawComparison(String behavior, StatedComparison comparison,
-                                         InputReading read, InputReads reads,
-                                         Arrivals answering, WhatConditionsState conditions,
-                                         Optional<ExpansionLineage> writtenIn) {
+                                 InputReading read, InputReads reads,
+                                 Arrivals answering, WhatConditionsState conditions,
+                                 Optional<ExpansionLineage> writtenIn) {
+        // Nothing is claimed of every element a closure is handed: that is only ever what lets a
+        // comparison of a remainder be read on the elements a list starts with.
         Read drawn = readOnce(behavior, comparison, read, reads, answering,
                 conditions.comparison(comparison, reads, read), false, writtenIn);
-        // What an application's statement comes to is lines, the values it relates, or a stop
-        // ({@link ComparisonAssessment#ofAnApplication}); anything else a comparison reads to is
-        // not what the application states and is a fork's to say.
+        // An application states lines, the values it relates, or a stop
+        // ({@link ComparisonAssessment#ofAnApplication}), and takes no other reading of a
+        // comparison as its own.
         return switch (drawn) {
             case Read.Stopped _, Read.Several _, Read.AgainstAnotherValue _ -> drawn;
             default -> null;

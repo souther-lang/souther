@@ -1692,8 +1692,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
 
         /**
          * What {@code application}, whose statement {@code stated} has a part nothing read, says
-         * at the places its law's comparison is of — or nothing where its law holds no comparison
-         * of an element or a key with a value, and what stopped is something else.
+         * as the comparison its law holds of an element or a key with a value, read as a
+         * comparison the source writes is — or nothing where its law holds no such comparison,
+         * and what stopped is something else.
          */
         private Optional<Cutting.AppliedOn> unreadAsItsLawComparison(
                 Core.PreservedCall application, Pullback.Pulled stated,

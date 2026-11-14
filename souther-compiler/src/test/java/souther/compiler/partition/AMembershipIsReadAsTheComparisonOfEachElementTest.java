@@ -215,8 +215,8 @@ class AMembershipIsReadAsTheComparisonOfEachElementTest {
     }
 
     /**
-     * The form the issue was filed with: the candidates and the container held against are two
-     * lists, and the predicate of the {@code find} reads the second.
+     * The candidates and the container held against are two lists, and the predicate of the
+     * {@code find} reads the second.
      */
     @Test
     void aValueAFindOverAnotherListAnswersIsReadAsTheComparisonOfEachElementWithIt() {
