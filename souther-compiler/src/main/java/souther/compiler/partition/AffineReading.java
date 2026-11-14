@@ -71,6 +71,8 @@ import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.IntSupplier;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 import java.util.function.Predicate;
 import java.util.stream.IntStream;
@@ -295,8 +297,36 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                                                   InputReads reads,
                                                                   InputReading read,
                                                                   ElementsMet met) {
+        return outcomeOf(expression, reads, read, met, null);
+    }
+
+    /**
+     * The same, with what each name came to kept by {@code kept} where it is given, for another
+     * reading of the same kind to take.
+     *
+     * <p>Only here, where nothing of what is told is asked for afterwards: what a name comes to is
+     * then the form or the stop and the elements it asked of, and not what the walk inside it told.
+     */
+    static AffineForms.Outcome<NumericTerm, InputReads> outcomeOf(Core expression,
+                                                                  InputReads reads,
+                                                                  InputReading read,
+                                                                  ElementsMet met,
+                                                                  NamesKept kept) {
         return AffineForms.outcome(expression, reads,
-                reading(read, new LinkedHashSet<>(), met, new WhatWasTold()));
+                reading(read, new LinkedHashSet<>(), met, new WhatWasTold(), null, kept));
+    }
+
+    /** Where what a name came to is kept to be taken by another reading. */
+    interface NamesKept {
+
+        /**
+         * What {@code question} of the value a name was given comes to read at {@code at}, held
+         * to {@code elements}: taken where it was read before, and otherwise {@code fresh}.
+         * {@code figureAsked} says how many times the figure counting the readings has been asked
+         * of, and an answer made while it was asked of is the answer of the figure's state then.
+         */
+        <T> T answerOf(ValueStanding.NameQuestion question, Core value, InputReads at,
+                       ElementsMet elements, Supplier<T> fresh, IntSupplier figureAsked);
     }
 
     /**
@@ -533,6 +563,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     private static Arithmetic reading(
             InputReading ofTheInput, Set<NumericTerm> named, ElementsMet met, WhatWasTold told,
             StoppedValues stoppedAt) {
+        return reading(ofTheInput, named, met, told, stoppedAt, null);
+    }
+
+    private static Arithmetic reading(
+            InputReading ofTheInput, Set<NumericTerm> named, ElementsMet met, WhatWasTold told,
+            StoppedValues stoppedAt, NamesKept namesKept) {
         InputDomain inputs = ofTheInput.domain();
         RuleReadingSource ruleSource = ofTheInput.rules();
         ReadMeaning.WhereKept kept = KeptTruths.readIn(ofTheInput);
@@ -545,6 +581,19 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             /** What a run works out to reach a value, asked once for each value this reading
              *  asks it of. */
             private final WorkedOutToReachIt reached = WorkedOutToReachIt.of(ofTheInput);
+
+            // What a name comes to is a function of the value, the environment, the elements it
+            // asks of and what is left of the figure counting elements; the rest this reading
+            // holds is told, which the reading made by outcomeOf drops. Given only to that
+            // reading: one made to try a part apart, which carries an accumulator or holds a
+            // value aside, is made without it.
+            @Override
+            public <T> T answerOfAName(ValueStanding.NameQuestion question, Core value,
+                                       InputReads at, Supplier<T> fresh) {
+                return namesKept == null ? fresh.get()
+                        : namesKept.answerOf(question, value, at, met, fresh,
+                                told::askedOfTheFigure);
+            }
 
             /**
              * An operation of whole numbers the walk composed, told with the number it comes to:
@@ -2002,7 +2051,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
     /** What a reading of a comparison was told as it went: the operations of whole numbers, and
      *  whether nothing it read could stop a run without telling. */
-    private static final class WhatWasTold {
+    static final class WhatWasTold {
 
         private final List<UndividedByARelation.IntOperation> operations = new ArrayList<>();
         /** Each of {@link #operations} once, for asking whether one was told: a list written out
@@ -2025,7 +2074,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          *  was asked with the node ({@link NumbersOnTheWayToATotal}). */
         private final Set<BindingId> readByATerm = new HashSet<>();
         /** How many elements the reading of the comparison has read a closure applied to one by
-         *  one, shared with every reading tried apart from it ({@link #apart}). */
+         *  one, and how many times the figure that bounds them has been asked of, shared with
+         *  every reading tried apart from it ({@link #apart}). */
         private final int[] elementsRead;
         private boolean exact = true;
         /** Whether a product of two non-constant numbers is a stop and not a number of its own. */
@@ -2041,11 +2091,24 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private final List<WhatWasTold> besideTheRows = new ArrayList<>();
 
         WhatWasTold() {
-            this(new int[1]);
+            this(new int[2]);
         }
 
         private WhatWasTold(int[] elementsRead) {
             this.elementsRead = elementsRead;
+        }
+
+        /**
+         * How many times the figure that bounds the elements read one by one has been asked of,
+         * whether it answered or declined.
+         *
+         * <p>What a reading reads depends on what is left of the figure, so a reading that asked it
+         * anything is a reading of what was left then. A declined ask adds nothing to
+         * {@link #elementsRead}, which is why the count of what was read does not say whether the
+         * figure was asked.
+         */
+        int askedOfTheFigure() {
+            return elementsRead[1];
         }
 
         /** Nothing told yet, for a part of the comparison read apart: what it reads element by
@@ -2068,6 +2131,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * of the answer has the figure with the refusal.
          */
         Optional<WhyUnread> declinedAtCounting(int elements) {
+            elementsRead[1]++;
             if (elements > CompositionBudget.READINGS_OF_ONE_CONDITION.maximum()) {
                 return Optional.of(WhyUnread.PAST_THE_READINGS);
             }

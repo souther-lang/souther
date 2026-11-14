@@ -1050,9 +1050,13 @@ public final class AffineForms {
             // question — so the walk holds the answer rather than composing the value again.
             case ValueStanding.Named.One<E, Reading<A, E>>(
                     ValueStanding.Standing<E, Reading<A, E>> one) ->
-                    following.readingOf(r.binding(), one.value(),
-                            readAs(r, at, one.at(), reading),
-                            () -> of(one.value(), one.at(), one.names(), following));
+                    ValueStanding.answered(one.names(), ValueStanding.NameQuestion.FORM,
+                            one.value(), one.at(),
+                            () -> following.readingOf(r.binding(), one.value(),
+                                    readAs(r, at, one.at(), reading), () -> {
+                                        countANameRead();
+                                        return of(one.value(), one.at(), one.names(), following);
+                                    }));
             case ValueStanding.Named.OneOf<E, Reading<A, E>>(
                     List<ValueStanding.Standing<E, Reading<A, E>>> members) -> {
                 // Several values the name may stand for, each read apart from the operations the
@@ -1065,6 +1069,17 @@ public final class AffineForms {
         };
         following.leave(r.binding());
         return read;
+    }
+
+    /** Where a test counts the values of names this reads afresh rather than finds kept, and null
+     *  everywhere else. What a chain of names costs is not something an answer says. */
+    static long[] NAMES_READ;
+
+    private static void countANameRead() {
+        long[] counting = NAMES_READ;
+        if (counting != null) {
+            counting[0]++;
+        }
     }
 
     /**
