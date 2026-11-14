@@ -613,9 +613,13 @@ public sealed interface ReportMessage extends Message {
 
     record ItRelatesTheElements() implements ReportMessage, Prose {}
 
+    record ItRelatesTwoElementsOfOneContainer() implements ReportMessage, Prose {}
+
     record ItIsAboutWhatTheValuesComeTo() implements ReportMessage, Prose {}
 
     record ItIsAboutARemainder() implements ReportMessage, Prose {}
+
+    record ItIsAboutARemainderNoPositionHolds() implements ReportMessage, Prose {}
 
     record ItComparesWhatARunWorksOut() implements ReportMessage, Prose {}
 
