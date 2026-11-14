@@ -59,6 +59,15 @@ class AStopAtAFigureACompilationMaySetIsToldAtThatFigureTest {
                         if n < 3 then p.n else 0
                     } else 1
                     """, 9),
+            // One value more than a condition is read for along one way: five values, past four.
+            CompositionBudget.READINGS_OF_ONE_CONDITION, new Stopping("""
+                    module demo
+
+                    data Window = { n: Int }
+
+                    behavior g : (w: Window) -> Int
+                    let g (w) = if List.any(x -> w.n == x, [0, 1, 2, 3, 4]) then 1 else 0
+                    """, 4),
             // The last condition of a chain of five calls is read once for each way the calls
             // before it went, thirty in all, which is more than a figure of fourteen readings.
             CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION, new Stopping(

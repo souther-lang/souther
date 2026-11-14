@@ -1096,12 +1096,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static BlockReason.WhereALineDecidesNotWorkedOut linesOnOneQuantityPastTheFigure(
             Set<ALineRead> lines) {
-        CompositionBudget figure = CompositionBudget.READINGS_OF_ONE_CONDITION;
         Map<BorderQuantity, Integer> onOne = new HashMap<>();
         for (ALineRead each : lines) {
             if (each.read() instanceof Read.Cuts cuts
-                    && onOne.merge(cuts.cutting().of(), 1, Integer::sum) > figure.maximum()) {
-                return new BlockReason.WhereALineDecidesNotWorkedOut(figure.figure());
+                    && onOne.merge(cuts.cutting().of(), 1, Integer::sum)
+                            > CompositionBudget.READINGS_OF_ONE_CONDITION.maximum()) {
+                return new BlockReason.WhereALineDecidesNotWorkedOut(
+                        CompositionBudget.READINGS_OF_ONE_CONDITION.reached());
             }
         }
         return null;
@@ -1680,7 +1681,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         return switch (TheWholeNumbersAListStartsWith.of(stated)) {
             case TheWholeNumbersAListStartsWith.Read.NotOfThatKind _ -> null;
             case TheWholeNumbersAListStartsWith.Read.PastTheReadings _ ->
-                    noLine(comparison, stated, List.of(WhyUnread.PAST_THE_READINGS), Set.of(),
+                    noLine(comparison, stated, List.of(WhyUnread.pastTheReadings()), Set.of(),
                             onTheInput.arithmetic(), read, reads, answering);
             case TheWholeNumbersAListStartsWith.Read.OnEach(var each) -> {
                 Map<ALineRead, List<WhereAnApplicationIsMade.OnOne>> lines =
@@ -2153,10 +2154,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                                 InputReading read, InputReads reads, Arrivals answering,
                                 Optional<AuthorsLines> authors) {
         return switch (CountsWrittenOut.outsideElementsOf(stated)) {
-            case CountsWrittenOut.PastAFigure(CompositionBudget figure) ->
+            case CountsWrittenOut.PastAFigure(var stoppedAt) ->
                     new Read.Stopped(ComparisonAssessment.atEachOf(
                             GuardThresholds.filedAt(comparison, read, reads, answering),
-                            new BlockReason.WhereALineDecidesNotWorkedOut(figure.figure())),
+                            new BlockReason.WhereALineDecidesNotWorkedOut(stoppedAt)),
                             WhereAReadingStopped.ELSEWHERE);
             case CountsWrittenOut.Written(Proposition written) ->
                     switch (several(behavior, comparison.left(), written, read, reads, authors,

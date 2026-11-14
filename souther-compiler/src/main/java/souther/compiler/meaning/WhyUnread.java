@@ -37,13 +37,17 @@ import java.util.Optional;
  */
 public sealed interface WhyUnread {
 
-    /** A part read more times than the reading of one condition makes along one way down. */
-    WhyUnread PAST_THE_READINGS = new MoreReadingsThanAreMade();
+    /** A part read more times than the reading of one condition makes along one way down, at the
+     *  figure declared: what a word for the reason says, which is the kind of a stop and not one
+     *  that was made. A stop made is {@link #pastTheReadings}. */
+    WhyUnread PAST_THE_READINGS = new MoreReadingsThanAreMade(
+            CompositionBudget.READINGS_OF_ONE_CONDITION.atDeclared());
 
     /** A part read once more where the reading had made as many readings in all as it makes, at
      *  the figure declared: what a word for the reason says, which is the kind of a stop and not
      *  one that was made. A stop made is {@link #pastTheTotalReadings}. */
-    WhyUnread PAST_THE_TOTAL_READINGS = pastTheTotalReadings();
+    WhyUnread PAST_THE_TOTAL_READINGS = new MoreTotalReadingsThanAreMade(
+            CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.atDeclared());
 
     /** A part whose step states more parts, written out, than a step is concluded with. */
     WhyUnread PAST_THE_PARTS = new MorePartsThanAreConcluded();
@@ -75,8 +79,7 @@ public sealed interface WhyUnread {
      */
     default Optional<Figure> figure() {
         return switch (this) {
-            case MoreReadingsThanAreMade _ ->
-                    Optional.of(CompositionBudget.READINGS_OF_ONE_CONDITION.figure());
+            case MoreReadingsThanAreMade(var stoppedAt) -> Optional.of(stoppedAt);
             case MoreTotalReadingsThanAreMade(var stoppedAt) -> Optional.of(stoppedAt);
             case MorePartsThanAreConcluded _ ->
                     Optional.of(CompositionBudget.PARTS_A_DERIVATION_CONCLUDES.figure());
@@ -342,7 +345,19 @@ public sealed interface WhyUnread {
      * value the reading has to go into is not past it for being one: whether going in is past it
      * is the count's answer, made where the reading goes in.
      */
-    record MoreReadingsThanAreMade() implements WhyUnread {}
+    record MoreReadingsThanAreMade(Figure.Budget stoppedAt) implements WhyUnread {
+
+        public MoreReadingsThanAreMade {
+            Objects.requireNonNull(stoppedAt, "a stop at a figure holds the figure");
+        }
+    }
+
+    /** A part read more times than the reading of one condition makes along one way down, made
+     *  where that is reached: it holds the figure the compilation held the readings to. */
+    static WhyUnread pastTheReadings() {
+        return new MoreReadingsThanAreMade(
+                CompositionBudget.READINGS_OF_ONE_CONDITION.reached());
+    }
 
     /**
      * A part that would be read once more where the reading of what its condition means had made

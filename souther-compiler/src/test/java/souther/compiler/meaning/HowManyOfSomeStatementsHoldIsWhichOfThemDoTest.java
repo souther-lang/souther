@@ -153,16 +153,17 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
      */
     @Test
     void choicesPastWhatAReaderIsHandedAreHandedToNone() {
-        assertEquals(new CountsWrittenOut.PastAFigure(CompositionBudget.READINGS_OF_ONE_CONDITION),
+        assertEquals(new CountsWrittenOut.PastAFigure(
+                        CompositionBudget.READINGS_OF_ONE_CONDITION.reached()),
                 CountsWrittenOut.of(howMany(distinct(18), Rel.EQ, 9)));
 
         int most = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
         assertEquals(new CountsWrittenOut.PastAFigure(
-                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO),
+                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.reached()),
                 CountsWrittenOut.of(howMany(distinct(most), Rel.EQ, 1)));
         assertEquals(CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.figure(),
                 new WhyNotTaken.MoreChoicesThanAreWrittenOut(
-                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO).figure()
+                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.reached()).figure()
                         .orElseThrow());
     }
 
@@ -177,7 +178,7 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
         Proposition half = howMany(distinct(18), Rel.EQ, 9);
 
         assertEquals(new AnswerAsAnInput.Remade.PastAFigure(
-                        CompositionBudget.READINGS_OF_ONE_CONDITION),
+                        CompositionBudget.READINGS_OF_ONE_CONDITION.reached()),
                 AnswerAsAnInput.of(half, "$answer", null, null, Map.of()));
         assertEquals(Set.of(), AnswerAsAnInput.inputNumbersIn(half),
                 "about the input's truths, and so about none of its numbers");
@@ -194,7 +195,7 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
     @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void exactlyOneOfAThousandIsRefusedBeforeItsChoicesAreWrittenOut() {
         assertEquals(new CountsWrittenOut.PastAFigure(
-                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO),
+                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.reached()),
                 CountsWrittenOut.of(howMany(distinct("t", 1000), Rel.EQ, 1)));
     }
 
@@ -213,7 +214,7 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
                 .partsWrittenOut(written.choices()), written.parts());
 
         assertEquals(new CountsWrittenOut.PastAFigure(
-                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO),
+                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.reached()),
                 CountsWrittenOut.of(howMany(ofThirtyParts(100), Rel.EQ, 1)));
     }
 
@@ -240,7 +241,7 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
         assertInstanceOf(CountsWrittenOut.Written.class, CountsWrittenOut.of(other));
 
         assertEquals(new CountsWrittenOut.PastAFigure(
-                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO),
+                        CompositionBudget.PARTS_THE_CHOICES_OF_A_COUNT_COME_TO.reached()),
                 CountsWrittenOut.of(Proposition.all(List.of(one, other))));
     }
 
@@ -421,10 +422,10 @@ class HowManyOfSomeStatementsHoldIsWhichOfThemDoTest {
         WhichOfThemHold four = WhichOfThemHold.of(relation(eight, Rel.EQ, 4));
         CompositionBudget sixteen = CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG;
 
-        assertEquals(new WhichOfThemHold.Written(null, sixteen, 0),
+        assertEquals(new WhichOfThemHold.Written(null, sixteen.reached(), 0),
                 four.written(sixteen, CompositionBudget.PARTS_A_DERIVATION_CONCLUDES),
                 "past the choices");
-        assertEquals(new WhichOfThemHold.Written(null, sixteen, 0),
+        assertEquals(new WhichOfThemHold.Written(null, sixteen.reached(), 0),
                 four.written(CompositionBudget.READINGS_OF_ONE_CONDITION, sixteen),
                 "past the parts");
     }

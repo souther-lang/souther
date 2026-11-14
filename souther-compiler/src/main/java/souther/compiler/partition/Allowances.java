@@ -51,7 +51,8 @@ public final class Allowances {
             EnumSet.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
                     CompositionBudget.CONDITIONS_A_DECISION_TAKES_IN_TO_PROVE,
                     CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN,
-                    CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION));
+                    CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION,
+                    CompositionBudget.READINGS_OF_ONE_CONDITION));
 
     private static final ScopedValue<Allowances> IN_FORCE = ScopedValue.newInstance();
 

@@ -3682,9 +3682,12 @@ final class Pullback {
 
     /**
      * How many readings of one condition are made
-     * ({@link CompositionBudget#READINGS_OF_ONE_CONDITION}), read here and nowhere else.
+     * ({@link CompositionBudget#READINGS_OF_ONE_CONDITION}), read here and nowhere else, at the
+     * figure the compilation asking holds it to.
      */
-    private static final CompositionBudget READINGS = CompositionBudget.READINGS_OF_ONE_CONDITION;
+    private static int readings() {
+        return CompositionBudget.READINGS_OF_ONE_CONDITION.maximum();
+    }
 
 
     /**
@@ -3696,7 +3699,7 @@ final class Pullback {
      * kept, which were made all the same.
      *
      * <p>Two figures, each of its own. How many readings one way down comes to is
-     * {@link #READINGS}: a reading of {@code reads} split into {@code more} is that many times as
+     * {@link #readings}: a reading of {@code reads} split into {@code more} is that many times as
      * many. How many are made in all, along every way, is the other: a value chosen by cases holds
      * the conditions that chose it, so ways that each stay under the first can come to more than
      * any figure in all.
@@ -3736,8 +3739,8 @@ final class Pullback {
 
     /** The same, of a reading that is one of {@code readingsAlready} readings. */
     private WhyUnread splitInto(long readingsAlready, long more) {
-        if (more > 0 && readingsAlready > READINGS.maximum() / more) {
-            return new WhyUnread.MoreReadingsThanAreMade();
+        if (more > 0 && readingsAlready > readings() / more) {
+            return WhyUnread.pastTheReadings();
         }
         return made(more);
     }
@@ -3756,7 +3759,7 @@ final class Pullback {
      *              are that many or more
      */
     private WhyUnread splitInto(long readingsAlready, LongUnaryOperator count) {
-        long mostAsked = Math.max(READINGS.maximum() / readingsAlready, readingsLeft) + 1;
+        long mostAsked = Math.max(readings() / readingsAlready, readingsLeft) + 1;
         return splitInto(readingsAlready, count.applyAsLong(mostAsked));
     }
 
@@ -3805,7 +3808,7 @@ final class Pullback {
     static InputReads.Applications applicationsOf(Core.Block block, InputReads at,
                                                   InputReading read) {
         return at.applicationsOf(block, read.rules().symbols(), read.rules().newtypes(),
-                READINGS.maximum(), KeptTruths.readIn(read));
+                readings(), KeptTruths.readIn(read));
     }
 
     /**
@@ -4010,7 +4013,7 @@ final class Pullback {
     private WhichCase answered(Denotation value, WhyUnread.AtNoPosition.Place nowhere) {
         Denotation chosen = chosenAt(value);
         if (chosen != null) {
-            WhyUnread past = splitInto(value.at(), readingsOf(value, READINGS.maximum(), false),
+            WhyUnread past = splitInto(value.at(), readingsOf(value, readings(), false),
                     value);
             if (past != null) {
                 return new WhichCase.Unread(past);
@@ -7917,8 +7920,8 @@ final class Pullback {
             }
             DeclaredArgument named = closureIn(law);
             if (named == null) {
-                WhyUnread past = occurrences.size() > READINGS.maximum()
-                        ? new WhyUnread.MoreReadingsThanAreMade() : made(occurrences.size());
+                WhyUnread past = occurrences.size() > readings()
+                        ? WhyUnread.pastTheReadings() : made(occurrences.size());
                 if (past != null) {
                     return new WrittenOutRead.Stops(past);
                 }
@@ -7954,7 +7957,7 @@ final class Pullback {
                 // Applied to nothing, so nothing it states is part of what is read.
                 case InputReads.Applications.NoneMade _ -> applications = List.of();
                 case InputReads.Applications.MoreThanAreRead _ -> {
-                    return new WrittenOutRead.Stops(new WhyUnread.MoreReadingsThanAreMade());
+                    return new WrittenOutRead.Stops(WhyUnread.pastTheReadings());
                 }
                 case InputReads.Applications.PastWhatIsWrittenOut _ -> {
                     return new WrittenOutRead.Stops(
@@ -16103,7 +16106,7 @@ final class Pullback {
         }
         // Each case of one side is compared with each of the other's, on every application this
         // reading is one of: counted before any is made.
-        long most = READINGS.maximum();
+        long most = readings();
         WhyUnread past = splitInto(reads,
                 readingsOf(left, most, true) * readingsOf(right, most, true), left, right);
         if (past != null) {
@@ -16298,7 +16301,7 @@ final class Pullback {
         Rel states = numbered.claim().statedRelation();
         // The seed and the value are each compared with the other side, once for each end an
         // equality or a difference is read as.
-        long most = READINGS.maximum();
+        long most = readings();
         long readAs = states == Rel.EQ || states == Rel.NE ? 2 : 1;
         WhyUnread past = splitInto(reads, readAs * (readingsOf(seed, most, true)
                 + readingsOf(value, most, true)) * readingsOf(other, most, true),

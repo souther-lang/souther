@@ -2129,7 +2129,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         Optional<WhyUnread> declinedAtCounting(int elements) {
             elementsRead[1]++;
             if (elements > CompositionBudget.READINGS_OF_ONE_CONDITION.maximum()) {
-                return Optional.of(WhyUnread.PAST_THE_READINGS);
+                return Optional.of(WhyUnread.pastTheReadings());
             }
             if (elementsRead[0] + elements
                     > CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.maximum()) {

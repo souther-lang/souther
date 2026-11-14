@@ -8,7 +8,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
-import souther.compiler.partition.CompositionBudget;
+import souther.compiler.observe.Figure;
 import souther.compiler.values.Operand;
 
 import java.util.ArrayList;
@@ -71,8 +71,8 @@ public final class AnswerAsAnInput {
         // a count made of the same statements. So every count is written out first, all of them
         // held to one figure.
         return switch (CountsWrittenOut.of(stated)) {
-            case CountsWrittenOut.PastAFigure(CompositionBudget figure) ->
-                    new Remade.PastAFigure(figure);
+            case CountsWrittenOut.PastAFigure(var stoppedAt) ->
+                    new Remade.PastAFigure(stoppedAt);
             case CountsWrittenOut.Written(Proposition written) -> {
                 Proposition remade = reading.proposition(written);
                 yield remade == null ? new Remade.NotAboutTheAnswer() : new Remade.Stated(remade);
@@ -252,7 +252,7 @@ public final class AnswerAsAnInput {
          * are past {@code figure} ({@link CountsWrittenOut}); what the rest of it is about was not
          * looked at past it.
          */
-        record PastAFigure(CompositionBudget figure) implements Remade {
+        record PastAFigure(Figure.Budget figure) implements Remade {
 
             public PastAFigure {
                 Objects.requireNonNull(figure, "a statement not remade stopped at some figure");

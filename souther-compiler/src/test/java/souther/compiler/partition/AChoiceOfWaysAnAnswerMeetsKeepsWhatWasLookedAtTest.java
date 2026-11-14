@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class AChoiceOfWaysAnAnswerMeetsKeepsWhatWasLookedAtTest {
 
     private static final DemandReading.Read STOPPED =
-            new DemandReading.Read.Unread(new WhyNotTaken.MoreWaysThanAreRead());
+            new DemandReading.Read.Unread(WhyNotTaken.pastTheWaysRead());
 
     private static final DemandReading.Read NO_WORDS = new DemandReading.Read.Unread(
             new WhyNotTaken.OutsideDomain(WhyNotTaken.DomainLimit.A_QUANTITY_ON_NO_ORDER));
@@ -78,7 +78,7 @@ class AChoiceOfWaysAnAnswerMeetsKeepsWhatWasLookedAtTest {
     @Test
     void aPartGivenUpAtAFigureIsStoppedAtThatFigure() {
         Map<WhyUnread, CompositionBudget> figures = Map.of(
-                new WhyUnread.MoreReadingsThanAreMade(),
+                WhyUnread.PAST_THE_READINGS,
                 CompositionBudget.READINGS_OF_ONE_CONDITION,
                 WhyUnread.PAST_THE_TOTAL_READINGS,
                 CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION,

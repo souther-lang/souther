@@ -60,7 +60,7 @@ class AFigureACompilationSetsIsReadWhereItIsUsedTest {
      * place among the budgets, which is what a switch over them compiles to.
      */
     private static final Set<String> READ_OFF = Set.of("reached", "maximum", "declared",
-            "ordinal");
+            "atDeclared", "ordinal");
 
     /**
      * The places that name a budget a compilation may set and hand on the budget itself, and why
@@ -71,7 +71,11 @@ class AFigureACompilationSetsIsReadWhereItIsUsedTest {
             "souther.compiler.partition.Allowances#<clinit>()V",
             "the budgets a compilation may set, which this rule is about",
             "souther.compiler.publish.PublicationOrders#<clinit>()V",
-            "the order the budgets are written out in");
+            "the order the budgets are written out in",
+            "souther.compiler.meaning.Proposition$SoManyHold#writtenOutForAReader()"
+                    + "Lsouther/compiler/meaning/WhichOfThemHold$Written;",
+            "hands the budget to the writing out of a count, which reads the figure and the"
+                    + " figure a stop was at off it where it uses it");
 
     /**
      * A budget a compilation may set is read off where it is named: the figure it stopped at

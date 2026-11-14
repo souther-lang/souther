@@ -6383,8 +6383,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case WhyNotTaken.MoreAlternativesThanAreTried(Figure stoppedAt) ->
                     new ReportMessage.MoreAlternativesThanAreTried(stoppedAt.countsSaid());
             // The same kind: read, and taken apart into choices past a figure.
-            case WhyNotTaken.MoreChoicesThanAreWrittenOut(CompositionBudget figure) ->
-                    new ReportMessage.MoreChoicesThanAreWrittenOut(figure.countsSaid());
+            case WhyNotTaken.MoreChoicesThanAreWrittenOut(Figure.Budget stoppedAt) ->
+                    new ReportMessage.MoreChoicesThanAreWrittenOut(stoppedAt.countsSaid());
         };
     }
 

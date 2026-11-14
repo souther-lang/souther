@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.partition.Allowances;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -42,10 +43,18 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
     /** The ways four months are each kept or dropped in. */
     private static final int WAYS = 16;
 
+    /** The readings of one condition the compilations here are held to, a quarter of the figure
+     *  declared, and in all twice that as the figure declared has them. The claims are about the
+     *  ways a total is split, which the declared figure is asked of elsewhere. */
+    private static final int MOST = 64;
+
+    private static final Allowances HELD = Allowances.DECLARED
+            .with(CompositionBudget.READINGS_OF_ONE_CONDITION, MOST)
+            .with(CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION, 2 * MOST);
+
     /** How many constants walked against the total are more readings than one condition is read
      *  in, once for each way. */
-    private static final int PAST_THE_READINGS =
-            CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / WAYS + 1;
+    private static final int PAST_THE_READINGS = MOST / WAYS + 1;
 
     /**
      * How the report names the figure a split stops at. The figure of the readings in all is named
@@ -71,7 +80,8 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
      */
     private static String report(String body) {
         return REPORTS.computeIfAbsent(body, each -> {
-            Compilation compilation = Compilation.ofSource(PREAMBLE + each, "Main");
+            Compilation compilation = Compilation.ofSource(PREAMBLE + each, "Main")
+                    .allowing(HELD);
             compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
             ACompiledModel.compiles(compilation);
             return AdequacyReport.of(compilation)
@@ -156,7 +166,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
      */
     @Test
     void aLibraryOperationOverTheApplicationsValueIsSplitWithAllOfThem() {
-        int rows = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / 2 + 1;
+        int rows = MOST / 2 + 1;
         String report = reachedBy("Int.max(w.first.pay, t)", rows);
         assertTrue(report.contains("READINGS_OF_ONE_CONDITION"), report);
     }
@@ -169,7 +179,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
      */
     @Test
     void manyLinesOnOneQuantityAreNotWorkedOutHoweverTheyCameBy() {
-        int rows = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / 2 + 1;
+        int rows = MOST / 2 + 1;
         String report = reachedBy("Int.abs(w.first.pay)", rows);
         assertTrue(report.contains("READINGS_OF_ONE_CONDITION"), report);
     }
@@ -205,7 +215,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
     @Test
     void aValueTurningOnTheOuterParameterAloneIsNotSplitWithTheInnerApplications() {
         int outer = 8;
-        int inner = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / outer;
+        int inner = MOST / outer;
         String report = report("""
                 behavior g : (w: Window) -> Ok | No
                 let g (w) = {
@@ -247,7 +257,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
      */
     @Test
     void aNameGivenTheParametersFieldIsSplitWithTheParametersApplicationsAsTheFieldIs() {
-        int months = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / 2 + 1;
+        int months = MOST / 2 + 1;
         String direct = readingTheParameter("", "t.pay", months);
         assertTrue(direct.contains("READINGS_OF_ONE_CONDITION"), direct);
         String named = readingTheParameter("let x = t.pay", "x", months);
@@ -261,7 +271,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
      */
     @Test
     void aHelperHandedTheParametersFieldIsSplitWithTheParametersApplications() {
-        int months = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / 2 + 1;
+        int months = MOST / 2 + 1;
         String report = report("""
                 behavior cap : (x: Int) -> Int
                 let cap (x) = Int.max(x, 0)
@@ -276,7 +286,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
 
     /** A split of a value read off the inner closure's parameter, over {@code inner} elements. */
     private static String innerParameterSplit(String inner) {
-        int outer = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / 4 + 1;
+        int outer = MOST / 4 + 1;
         return report("""
                 behavior g : (w: Window) -> Ok | No
                 let g (w) = {
@@ -308,7 +318,7 @@ class AComparisonInAClosureIsReadOnceForTheWaysOfATotalThatDoesNotTurnOnTheEleme
      */
     @Test
     void aValueTurnsOnTheOuterParameterHoweverItWasReachedFrom() {
-        int months = CompositionBudget.READINGS_OF_ONE_CONDITION.maximum() / 2 + 1;
+        int months = MOST / 2 + 1;
         Map<String, String> reached = new LinkedHashMap<>();
         reached.put("read off it", "1 <= Int.max(t.pay, 0)");
         reached.put("given a name", "{ let x = t.pay\n 1 <= Int.max(x, 0) }");
