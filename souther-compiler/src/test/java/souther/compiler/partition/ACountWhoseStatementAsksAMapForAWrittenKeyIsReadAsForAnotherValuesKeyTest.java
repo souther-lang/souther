@@ -91,10 +91,16 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
                     + " && Map.containsKey(\"EUR\", l.rates), lines)) == k", true),
             new Case("List.length(List.filter(l -> Map.containsKey(\"USD\", l.rates)"
                     + " && Bool.not(Map.containsKey(\"EUR\", l.rates)), lines)) == k", true),
+            // A list or a set asked to hold several values written is built holding each of them.
+            new Case("List.length(List.filter(l -> List.contains(\"K\", l.tags)"
+                    + " && List.contains(\"L\", l.tags), lines)) == k", true),
             // The same collection asked to hold a value and to hold so many: the one value is
             // among the three.
             new Case("List.length(List.filter(l -> List.length(l.tags) == 3"
                     + " && List.contains(\"USD\", l.tags), lines)) == k", true),
+            // A set is filled to that many with elements that differ, where a list repeats one.
+            new Case("List.length(List.filter(l -> Set.size(l.nums) == 2"
+                    + " && Set.contains(7, l.nums), lines)) == k", true),
             // A map that must not hold the key is the other class of the same place.
             new Case("List.length(List.filter(l -> Bool.not(Map.containsKey(\"USD\", l.rates)),"
                     + " lines)) == k", true),
