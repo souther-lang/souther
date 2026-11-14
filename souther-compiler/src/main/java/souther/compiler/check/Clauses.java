@@ -357,13 +357,24 @@ final class Clauses {
      * <p>The identity comes from the split that wrote the parts down and is carried rather than
      * worked out here: which part of a clause a tree is is not something a reader of the tree can
      * answer, and a reader that counted them would be a second walk deciding which parts there are.
+     *
+     * <p>{@code statements} is the number each statement of the part is to have, where the part
+     * was handed with them ({@link ClauseMeaning.Parts.One}); none where it is numbered as it is
+     * read ({@link ConjunctStatements}).
      */
-    record StatedPart(PartId<RuleRef.Invariant> id, ClauseExpr of) {
+    record StatedPart(PartId<RuleRef.Invariant> id, ClauseExpr of,
+                      List<StatementNumber> statements) {
 
         public StatedPart {
-            if (id == null || of == null) {
+            if (id == null || of == null || statements == null) {
                 throw new IllegalArgumentException("a part read here is some rule's part and a form");
             }
+            statements = List.copyOf(statements);
+        }
+
+        /** A part whose statements are numbered as it is read. */
+        StatedPart(PartId<RuleRef.Invariant> id, ClauseExpr of) {
+            this(id, of, List.of());
         }
 
         /** The part as the tree holds it, which is the outermost node its shape was spelled as. */

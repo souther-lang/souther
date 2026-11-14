@@ -4,7 +4,7 @@ import souther.compiler.check.BehaviorContract;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.DeclaredLine;
-import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.AStatementOfAConjunct;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
 import souther.compiler.types.SourceConstruct;
@@ -60,7 +60,7 @@ class ALineSaysWhatCountsItAndCannotSayBothTest {
     @Test
     void aLineOfADeclarationIsNamedByItsPart() {
         assertEquals(aClause(),
-                new WhichLine.OfADeclarationsLine(new DeclaredLine.OfAStatement(new InvariantStatementId(
+                new WhichLine.OfADeclarationsLine(new DeclaredLine.OfAStatement(AStatementOfAConjunct.numbered(
                         new PartId<>(aClause(), 0), 0))).rule(),
                 "the clause the part is a part of, which is what such a line is of");
     }
