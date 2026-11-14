@@ -15,6 +15,8 @@ import souther.compiler.query.Output;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -101,7 +103,7 @@ class ARowIsHeldToStepsAndNotToTheClockTest {
     @Test
     void aRowThatSpendsItsStepsFailsTheBuild() {
         CompileException raised = assertThrows(CompileException.class,
-                () -> Compiler.compiled(LOOPS, "Main", new java.util.ArrayList<>(),
+                () -> Compiler.compiled(LOOPS, "Main", new ArrayList<>(),
                         souther.compiler.query.Adequacy.Asked.NOTHING, holdingTo(10_000L)));
 
         assertEquals("E1910", raised.code());
@@ -169,7 +171,7 @@ class ARowIsHeldToStepsAndNotToTheClockTest {
      * there only so that a worker that never stops fails the test and does not hold the build.
      */
     private static boolean noWorkerRemainsBeyond(Set<Thread> before) {
-        Set<Thread> started = new java.util.HashSet<>(evaluationWorkers());
+        Set<Thread> started = new HashSet<>(evaluationWorkers());
         started.removeAll(before);
         for (Thread worker : started) {
             try {
@@ -186,7 +188,7 @@ class ARowIsHeldToStepsAndNotToTheClockTest {
     }
 
     private static Set<Thread> evaluationWorkers() {
-        Set<Thread> running = new java.util.HashSet<>();
+        Set<Thread> running = new HashSet<>();
         for (Thread t : Thread.getAllStackTraces().keySet()) {
             if (t.getName().startsWith("souther-reading") && t.isAlive()) {
                 running.add(t);
