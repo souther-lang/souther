@@ -608,14 +608,37 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         // declaration that came to no line is already above, said by the reader that gave up on it;
         // a comparison has no such finding, so the question is what a reader asking what went
         // unread is told about it.
+        List<StandingQuestion.NothingClassifiesIt> unclassified = new ArrayList<>();
         unanswered.forEach(each -> {
-            if (each.asked() instanceof StandingQuestion
-                    .NothingClassifiesIt it) {
-                out.add(new NotRead.AnUnclassifiedRule(it));
+            if (each.asked() instanceof StandingQuestion.NothingClassifiesIt it) {
+                unclassified.add(it);
+            }
+        });
+        unclassified.forEach(each -> {
+            if (!saidByItsElements(each, unclassified)) {
+                out.add(new NotRead.AnUnclassifiedRule(each));
             }
         });
         blocked.forEach(each -> out.add(new NotRead.APosition(each)));
         return List.copyOf(out);
+    }
+
+    /**
+     * Whether {@code finding} is left at a container as a position for a stop that says nothing of
+     * the container, and an element of it is left for the same rule and the same reason: what
+     * stopped is said at the element, and the container beside it is not a second place unread.
+     *
+     * <p>Only what is said. The question at the container stays among {@link #unanswered} and
+     * holds the measure of the container open, as it did before this was left out of the list.
+     */
+    private static boolean saidByItsElements(
+            StandingQuestion.NothingClassifiesIt finding,
+            List<StandingQuestion.NothingClassifiesIt> all) {
+        return finding.at() instanceof FilingCoordinate.AtPosition container
+                && BlockReason.saysNothingOfTheContainerOfItsElements(finding.why())
+                && all.stream().anyMatch(other -> other.filed().rule().equals(finding.filed().rule())
+                        && other.why().equals(finding.why())
+                        && other.at().path().containersHoldingIt().contains(container.path()));
     }
 
     /**
