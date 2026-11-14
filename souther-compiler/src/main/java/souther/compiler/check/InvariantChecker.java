@@ -957,7 +957,7 @@ public final class InvariantChecker {
             ElementStatements.CarriedOver carried = ElementStatements.carry(
                     inherited.guarantees(),
                     new ElementStatements.Frame(atTheValue, inherited.type(), fields, bindings),
-                    readAsItsOwn);
+                    c.clauses, readAsItsOwn);
             carried.clauses().forEach((rule, clause) -> toRead.add(new ClauseToRead(rule, clause)));
             if (carried.someLeftOut()) {
                 read = false;

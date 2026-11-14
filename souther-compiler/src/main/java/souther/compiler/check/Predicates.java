@@ -206,7 +206,7 @@ final class Predicates {
      */
     void quantifiedBy(Clauses.StatedPart part, Denotations at, boolean positive,
                       List<Quantified> out) {
-        out.addAll(new Quantifiers(this, Optional.of(part), new int[1])
+        out.addAll(new Quantifiers(this, Optional.of(ConjunctStatements.of(part)), new int[1])
                 .read(part.expr(), positive, at, terms::inside));
     }
 
@@ -219,7 +219,7 @@ final class Predicates {
      * of what the clause owes and unknown to this one, which is a guarantee assembled from a clause
      * read to two depths.
      */
-    private record Quantifiers(Predicates of, Optional<Clauses.StatedPart> conjunct,
+    private record Quantifiers(Predicates of, Optional<List<ConjunctStatements.Reached>> conjunct,
                               int[] counted)
             implements ClauseReading<List<Quantified>, Denotations> {
 
@@ -245,8 +245,7 @@ final class Predicates {
             int statement = counted[0]++;
             return of.quantifierStatedBy(Conditions.asSizeComparison(part.of()), part.positive(),
                     at).stream().map(each -> conjunct
-                            .map(stated -> each.statedBy(
-                                    ConjunctStatements.numberedAs(stated, statement)))
+                            .map(reached -> each.statedBy(reached.get(statement).statement()))
                             .orElse(each)).toList();
         }
 

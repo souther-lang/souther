@@ -47,11 +47,6 @@ public record InvariantStatementId(PartId<RuleRef.Invariant> part, StatementNumb
         }
     }
 
-    /** The statement {@code ordinal} of {@code part}, as an author wrote it. */
-    public InvariantStatementId(PartId<RuleRef.Invariant> part, int ordinal) {
-        this(part, StatementNumber.of(ordinal));
-    }
-
     /** Which clause of which declaration this is a statement of. */
     public RuleRef.Invariant rule() {
         return part.rule();

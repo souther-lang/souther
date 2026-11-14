@@ -64,8 +64,9 @@ final class ElementStatements {
      */
     record CarriedOver(Map<RuleRef.Invariant, Clauses.AsStated> clauses, boolean someLeftOut) {}
 
-    /** The statements of {@code guarantees} as clauses of the value {@code frame} says. */
-    static CarriedOver carry(List<ElementGuarantee> guarantees, Frame frame,
+    /** The statements of {@code guarantees} as clauses of the value {@code frame} says, shaped as
+     *  {@code shapes} shapes every clause. */
+    static CarriedOver carry(List<ElementGuarantee> guarantees, Frame frame, Clauses shapes,
                              Set<RuleRef.Invariant> readAsItsOwn) {
         // What a part states first, as the part: one part an author wrote can state several things
         // of every element — a helper it calls states two — and it is still the one part, which a
@@ -78,7 +79,7 @@ final class ElementStatements {
                 someLeftOut = true;
                 continue;
             }
-            ofAPart.merge(each.part(), new OfAPart(stated, statementsOf(each, stated)),
+            ofAPart.merge(each.part(), new OfAPart(stated, statementsOf(each, stated, shapes)),
                     OfAPart::and);
         }
         // And then the rule, whose parts are joined as its author joined them.
@@ -102,16 +103,14 @@ final class ElementStatements {
 
     /**
      * The number of each statement {@code stated} comes to, which the statement of the container
-     * that says it issues, once. Counted by the shape's walk, as the reading that reads it will
-     * count them, so that the two agree about how many there are.
+     * that says it issues, once. Counted by the walk that numbers, over the shape every reader of a
+     * clause is given, so that the two agree about how many there are.
      */
-    private static List<StatementNumber> statementsOf(ElementGuarantee guarantee, Core stated) {
-        int count = ConjunctStatements.statedBy(ClauseExpr.of(stated, true)).size();
-        List<StatementNumber> out = new ArrayList<>();
-        for (int each = 0; each < count; each++) {
-            out.add(guarantee.statedBy().number().stating(each));
-        }
-        return out;
+    private static List<StatementNumber> statementsOf(ElementGuarantee guarantee, Core stated,
+                                                      Clauses shapes) {
+        List<Clauses.StatedPart> parts = shapes.partsOf(new Clauses.AsStated(stated,
+                new ClauseMeaning.Parts.One(guarantee.part(), Set.of())));
+        return ConjunctStatements.numbersWithin(guarantee.statedBy(), parts.getFirst().of());
     }
 
     /** What {@code guarantee} states with the value put where its predicate names the element, or

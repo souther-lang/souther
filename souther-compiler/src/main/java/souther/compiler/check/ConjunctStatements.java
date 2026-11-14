@@ -84,24 +84,31 @@ final class ConjunctStatements {
                     + " statements here and was handed the numbers of " + part.statements().size());
         }
         for (int each = 0; each < stated.size(); each++) {
-            out.add(new Reached(numberedAs(part, each), stated.get(each).said(),
-                    stated.get(each).crossed()));
+            // The number the part was handed for it, or the next number of its conjunct. The one
+            // place a statement is given its identity, for the reading that reads a part and for
+            // the one that finds what it states of every element: two places each choosing between
+            // the number handed and the next one are two answers to which statement this is.
+            out.add(new Reached(new InvariantStatementId(part.id(), part.statements().isEmpty()
+                    ? StatementNumber.of(each) : part.statements().get(each)),
+                    stated.get(each).said(), stated.get(each).crossed()));
         }
         return List.copyOf(out);
     }
 
     /**
-     * The identity of statement {@code index} of {@code part}: the number the part was handed for
-     * it, or the next number of its conjunct.
+     * The numbers of the statements a statement of a container comes to when it is said of every
+     * element, within it: as many as the walk finds in {@code shape}, which is what the reading of
+     * that part will number by.
      *
-     * <p>The one place a statement is given its identity, for the reading that reads a part and for
-     * the one that finds what it states of every element. Two places each choosing between the
-     * number handed and the next one are two answers to which statement this is, and the second of
-     * them is the one a statement inside a statement inside a conjunct is asked of.
+     * <p>Counted here, by the walk that numbers, so that how many there are is not a second answer.
      */
-    static InvariantStatementId numberedAs(Clauses.StatedPart part, int index) {
-        return new InvariantStatementId(part.id(), part.statements().isEmpty()
-                ? StatementNumber.of(index) : part.statements().get(index));
+    static List<StatementNumber> numbersWithin(InvariantStatementId statement, ClauseExpr shape) {
+        int count = statedBy(shape).size();
+        List<StatementNumber> out = new ArrayList<>();
+        for (int each = 0; each < count; each++) {
+            out.add(statement.number().stating(each));
+        }
+        return List.copyOf(out);
     }
 
     /**
