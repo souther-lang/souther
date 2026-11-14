@@ -33,7 +33,9 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.BiFunction;
+import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * Reading an expression as {@code const + Σ coef·atom}, over whatever a caller counts as an atom.
@@ -608,6 +610,38 @@ public final class AffineForms {
         public LinearForm<A> form(Core raw, E at) {
             return outcome(raw, at) instanceof Outcome.Composed<A, E> composed
                     ? composed.form() : null;
+        }
+    }
+
+    /**
+     * The roots one asking starts, read through one reading for as long as what it was made in
+     * stands.
+     *
+     * <p>What a name came to is the answer of the reading and of the state it read in, so the
+     * answers are shared by the roots that follow only where that state is what it was: whoever
+     * makes the reading says, in {@code stillStands}, whether it is. Where it is not, the next
+     * root is read through a reading made for it, as a root read alone would be, and what the
+     * earlier roots' names came to is left behind.
+     */
+    public static final class Roots<A, E> {
+        private final Supplier<Reading<A, E>> readings;
+        private final BooleanSupplier stillStands;
+        private OfOneReading<A, E> current;
+
+        /**
+         * @param readings    makes the reading a root is read through, in the state it is then in
+         * @param stillStands whether the state the reading last made was made in is the state now
+         */
+        public Roots(Supplier<Reading<A, E>> readings, BooleanSupplier stillStands) {
+            this.readings = Objects.requireNonNull(readings);
+            this.stillStands = Objects.requireNonNull(stillStands);
+        }
+
+        public Outcome<A, E> outcome(Core raw, E at) {
+            if (current == null || !stillStands.getAsBoolean()) {
+                current = new OfOneReading<>(readings.get());
+            }
+            return current.outcome(raw, at);
         }
     }
 

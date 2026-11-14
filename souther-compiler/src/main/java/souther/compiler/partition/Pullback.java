@@ -2797,17 +2797,19 @@ final class Pullback {
      *
      * <p>Each root is a form of its own: one that names an element of a container is held to that
      * element, and a form read after it on the same elements is refused the other elements of the
-     * container. The roots share the reading, and what its names came to, only while no root has
-     * met an element — where each of them reads as it would on a reading of its own, and what a
-     * name came to is what it comes to for the next. A root that met one is the last read through
-     * the reading it met it on, and so is a root read where the elements of the comparison being
-     * read are not those the reading was made for.
+     * container. The roots share the reading, and what its names came to, only while the state it
+     * was made in stands: no root has met an element, the comparison being read is the one it was
+     * made for, and what a reading may ask after ({@link #READING_STATE}) is what it was and no
+     * search is in progress. A root read otherwise is read through a reading of its own, and the
+     * ranges worked out so far are left behind with the reading they were worked out through.
      */
     private final class RangesKnown {
         private final Map<BindingId, RangeOfAName> ranges = new HashMap<>();
+        private final AffineForms.Roots<Quantity, InputReads> roots =
+                new AffineForms.Roots<>(this::reading, this::stillStands);
         private ElementsMet comparisonOf;
         private ElementsMet held;
-        private AffineForms.OfOneReading<Quantity, InputReads> names;
+        private ReadingState.Inputs inputs;
 
         RangeOfAName get(BindingId name) {
             return ranges.get(name);
@@ -2818,14 +2820,22 @@ final class Pullback {
         }
 
         AffineForms.Outcome<Quantity, InputReads> outcome(Core e, InputReads reads) {
-            if (names == null || comparisonOf != elementsMet || !held.untouched()) {
-                // What a name came to is the answer of the reading, and of what it had met.
-                ranges.clear();
-                comparisonOf = elementsMet;
-                held = elementsOfAForm();
-                names = new AffineForms.OfOneReading<>(quantities(null, null, held));
-            }
-            return names.outcome(e, reads);
+            return roots.outcome(e, reads);
+        }
+
+        private AffineForms.Reading<Quantity, InputReads> reading() {
+            ranges.clear();
+            comparisonOf = elementsMet;
+            held = elementsOfAForm();
+            inputs = READING_STATE.inputsOf(Pullback.this);
+            return quantities(null, null, held);
+        }
+
+        private boolean stillStands() {
+            return comparisonOf == elementsMet && held.untouched()
+                    && READING_STATE.holdsNothing(Pullback.this)
+                    && READING_STATE.sameInputs(inputs, READING_STATE.inputsOf(Pullback.this),
+                            true);
         }
     }
 
