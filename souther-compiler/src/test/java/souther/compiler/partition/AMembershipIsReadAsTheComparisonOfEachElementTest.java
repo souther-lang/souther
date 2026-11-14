@@ -14,6 +14,8 @@ import souther.compiler.report.AdequacyReport;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -46,9 +48,19 @@ class AMembershipIsReadAsTheComparisonOfEachElementTest {
                 %s
             """;
 
+    private static final Map<String, String> REPORTS = new ConcurrentHashMap<>();
+
     /** What the report of {@code body} says of the partition, with what is not an answer — the
-     *  rules' names and their order — left out. */
+     *  rules' names and their order — left out.
+     *
+     *  <p>Made once for each body: it is a function of the body alone, and one body is the
+     *  reference of several cases and the subject of an assertion beside them. */
     private static String reportOf(String body) {
+        return REPORTS.computeIfAbsent(body,
+                AMembershipIsReadAsTheComparisonOfEachElementTest::reportMadeOf);
+    }
+
+    private static String reportMadeOf(String body) {
         Compilation model = Compilation.ofSource(SOURCE.formatted(body), "Main");
         model.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         ACompiledModel.compiles(model);
