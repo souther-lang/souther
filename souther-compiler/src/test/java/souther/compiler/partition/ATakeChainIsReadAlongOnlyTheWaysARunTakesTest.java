@@ -342,8 +342,8 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
 
     @Test
     void eachConditionReadIsTheConditionTheHelperTests() {
-        for (Model model : List.of(chainModel(4, true), chainModel(4, false), letsModel(4, true),
-                letsModel(4, false))) {
+        for (Model model : List.of(chainModel(3, true), chainModel(3, false), letsModel(3, true),
+                letsModel(3, false))) {
             List<Map<String, Long>> grid = model.grid();
             List<List<Boolean>> runs = grid.stream().map(model.run()).toList();
             int calls = runs.getFirst().size();
@@ -369,7 +369,7 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
 
     @Test
     void amountsNoughtOrMoreLeaveARuleForEachWayARunTakes() {
-        DecisionReading read = rulesAgainstTheRun(chainModel(4, true), 5);
+        DecisionReading read = rulesAgainstTheRun(chainModel(3, true), 4);
 
         assertFalse(read.impossible().isEmpty(), "the ways no run takes are proved closed");
     }
@@ -384,21 +384,21 @@ class ATakeChainIsReadAlongOnlyTheWaysARunTakesTest {
     /** The chain written out answers nought or the excess past every cap, which is two ways. */
     @Test
     void theChainWrittenOutOfAmountsNoughtOrMoreLeavesARuleForEachWayItsAnswerIsComeTo() {
-        DecisionReading read = rulesAgainstTheRun(letsModel(4, true), 2);
+        DecisionReading read = rulesAgainstTheRun(letsModel(3, true), 2);
 
         assertFalse(read.impossible().isEmpty(), "the ways no run takes are proved closed");
     }
 
     @Test
     void theChainWrittenOutOfAmountsThatMayBeNegativeLeavesEveryWay() {
-        DecisionReading read = rulesAgainstTheRun(letsModel(4, false), 5);
+        DecisionReading read = rulesAgainstTheRun(letsModel(3, false), 4);
 
         assertEquals(List.of(), read.impossible(), "every way is some input's");
     }
 
     @Test
     void conditionsOnPositionsOfTheirOwnLeaveEveryWay() {
-        DecisionReading read = rulesAgainstTheRun(apartModel(4), 16);
+        DecisionReading read = rulesAgainstTheRun(apartModel(3), 8);
 
         assertEquals(List.of(), read.impossible(), "every way is some input's");
     }
