@@ -32,7 +32,7 @@ class ChainBoundsAnswerAsDifferenceBoundsDoTest {
         List<AffineConstraint<Integer>> rules = new ArrayList<>();
         int count = random.nextInt(size * 3) + 1;
         for (int each = 0; each < count; each++) {
-            long bound = random.nextInt(21) - 6;
+            long bound = random.nextInt(21) - 6L;
             boolean inclusive = random.nextInt(4) != 0;
             int at = random.nextInt(size);
             switch (random.nextInt(4)) {
