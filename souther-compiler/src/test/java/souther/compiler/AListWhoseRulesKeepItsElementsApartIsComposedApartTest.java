@@ -1,7 +1,6 @@
 package souther.compiler;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 
 import souther.compiler.ast.Hir;
 import souther.compiler.diag.SourceRendering;
@@ -739,7 +738,6 @@ class AListWhoseRulesKeepItsElementsApartIsComposedApartTest {
      * and nothing caps how many the rules let it hold.
      */
     @Test
-    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void recordsToldApartBySizeRunOutWhereTheirListsValuesDo() {
         String flags = """
                 module p

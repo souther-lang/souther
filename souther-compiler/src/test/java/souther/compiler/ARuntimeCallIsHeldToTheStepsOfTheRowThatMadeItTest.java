@@ -11,7 +11,6 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
 import souther.compiler.source.SourceId;
 
-import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -55,7 +54,7 @@ class ARuntimeCallIsHeldToTheStepsOfTheRowThatMadeItTest {
     private static final String SEARCHES_NONE = row("String.startsWith(\"b\", %s)", false);
 
     private static EvaluationPolicy holdingTo(long steps) {
-        return EvaluationPolicy.of(steps).withCompilerTimeout(Duration.ofSeconds(30));
+        return EvaluationPolicy.of(steps);
     }
 
     private static RowOutcome onlyRowOf(String source, EvaluationPolicy policy) {

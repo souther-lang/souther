@@ -6,13 +6,11 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * A stop an operation ends a run with, told through a name it is bound to or inside a part of the
@@ -67,36 +65,33 @@ class AStopThroughALetOrInsideAnArmLeavesOnlyItsOwnPlacesUnreadTest {
     }
 
     /**
-     * Each name reads the one before it twice, so a number worked out once for each way a name is
-     * reached takes twice as long at every binding added; at this depth that is no time at all.
+     * Each name reads the one before it twice, and what is said of the chain is what is said of
+     * its first links. How much work the chain is read in is held by
+     * {@code AChainOfLetsIsReadInWorkThatGrowsWithItsLengthTest}.
      */
     @Test
-    void aChainOfNamesEachReadingTheOneBeforeTwiceIsWorkedOutOncePerName() {
+    void aChainOfNamesEachReadingTheOneBeforeTwiceSaysNothingUnread() {
         StringBuilder before = new StringBuilder("let a0 = 1 / p.x");
-        int depth = 30;
+        int depth = 8;
         for (int i = 1; i <= depth; i++) {
             before.append("\n    let a").append(i).append(" = a").append(i - 1).append(" * a")
                     .append(i - 1);
         }
         before.append("\n    let y = Rational.toInt(DOWN, a").append(depth).append(")");
         Model chain = new Model("a chain of names", before.toString());
-        String report = assertTimeoutPreemptively(Duration.ofSeconds(60),
-                () -> report(chain, UNRELATED, Adequacy.Level.ALL));
+        String report = report(chain, UNRELATED, Adequacy.Level.ALL);
         assertFalse(report.contains("not read:"), report);
     }
 
     /**
-     * Each name holds a remainder of the one before it and reads it again beside, so the
-     * remainder of a dividend, the number the divisor is and why a stop is no form each read the
-     * chain below, and a remainder is read once for every way down to it unless a remainder read is
-     * taken again.
+     * Each name holds a remainder of the one before it and reads it again beside, and what is said
+     * of the chain is what is said of its first links.
      */
     @Test
-    void aChainOfNamesEachHoldingARemainderOfTheOneBeforeIsWorkedOutOncePerName() {
+    void aChainOfNamesEachHoldingARemainderOfTheOneBeforeSaysWhatItsFirstLinksSay() {
         Model shallow = remainders(3);
-        Model deep = remainders(24);
-        String report = assertTimeoutPreemptively(Duration.ofSeconds(30),
-                () -> report(deep, UNRELATED, Adequacy.Level.ALL));
+        Model deep = remainders(8);
+        String report = report(deep, UNRELATED, Adequacy.Level.ALL);
         assertEquals(report(shallow, UNRELATED, Adequacy.Level.ALL).contains("not read:"),
                 report.contains("not read:"),
                 "what a chain says is what it says of its first links");

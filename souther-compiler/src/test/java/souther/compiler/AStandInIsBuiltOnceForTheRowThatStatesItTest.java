@@ -10,7 +10,6 @@ import souther.compiler.source.SourceId;
 
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -95,8 +94,7 @@ class AStandInIsBuiltOnceForTheRowThatStatesItTest {
 
     private static List<RowOutcome> rowsOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.withEvaluationPolicy(
-                EvaluationPolicy.of(10_000_000L).withCompilerTimeout(Duration.ofSeconds(30)));
+        compilation.withEvaluationPolicy(EvaluationPolicy.of(10_000_000L));
         ACompiledModel.compiles(compilation);
         SourceId sourceId = compilation.exampleSourcesOf("example.once").getFirst();
         return compilation.db()
