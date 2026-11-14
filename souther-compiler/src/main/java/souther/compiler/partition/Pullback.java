@@ -191,6 +191,7 @@ import java.util.function.BiFunction;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.IntSupplier;
 import java.util.function.LongUnaryOperator;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -12114,6 +12115,54 @@ final class Pullback {
             sharedForms = new SharedReads<>(new TheScene(true));
 
 
+    /**
+     * What the value a name was given came to, for each question asked of it, kept
+     * ({@link ValueStanding.Names#answerOfAName}). One for each family of readings: what a name
+     * comes to as a form of the quantities is not what it comes to as a form of the input's
+     * numbers.
+     *
+     * <p>Held by a class of its own: an answer that stopped carries the environment it stopped in,
+     * and a field of that type would make this class one that keeps an environment and walks it.
+     */
+    private final class KeptNames implements AffineReading.NamesKept {
+
+        /** The question, and the environment as that object and not one like it: what a name
+         *  stands for in an environment the elements of a list written out alike in everything
+         *  but the element is the element's. */
+        private record OfAName(ValueStanding.NameQuestion question, Object at) {
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof OfAName same && same.question == question
+                        && same.at == at;
+            }
+
+            @Override
+            public int hashCode() {
+                return 31 * question.hashCode() + System.identityHashCode(at);
+            }
+        }
+
+        private final SharedReads<ReadingState.Inputs, Guards, Met, Spendless<Object>> shared =
+                new SharedReads<>(new TheScene(true));
+
+        @Override
+        public <T> T answerOf(ValueStanding.NameQuestion question, Core value, InputReads at,
+                              ElementsMet elements, Supplier<T> fresh, IntSupplier figureAsked) {
+            int askedBefore = figureAsked.getAsInt();
+            @SuppressWarnings("unchecked")
+            T answer = (T) shared.shared(value, at, new OfAName(question, at), elements,
+                    () -> spendingNothing(fresh::get),
+                    kept -> KeptAnswers.keepable(kept.spentNothing(), askedBefore,
+                            figureAsked.getAsInt(), kept.value())).value();
+            return answer;
+        }
+    }
+
+    private final KeptNames sharedNames = new KeptNames();
+
+    private final KeptNames sharedFactorNames = new KeptNames();
+
     /** How the value a name stands for answered each side, kept ({@link #observe}), by the side. */
     private final SharedReads<ReadingState.Inputs, Guards, Met, Derivation> sharedObservations =
             new SharedReads<>(new TheScene(true));
@@ -12723,6 +12772,16 @@ final class Pullback {
                 if (asked != null && Core.withoutStanding(call) == asked) {
                     composedAs.accept(form);
                 }
+            }
+
+            // A reading handed a node to tell of is told the operations the walk inside a name
+            // composed, which an answer kept would not tell. What a name folds to tells nothing.
+            @Override
+            public <T> T answerOfAName(ValueStanding.NameQuestion question, Core value,
+                                       InputReads at, Supplier<T> fresh) {
+                return asked != null && question == ValueStanding.NameQuestion.FORM
+                        ? fresh.get()
+                        : sharedNames.answerOf(question, value, at, held, fresh, () -> 0);
             }
 
             @Override
@@ -15683,7 +15742,7 @@ final class Pullback {
                 ? through.denotes() : new Denotation(factor, at);
         return sharedForms.shared(read.value(), read.at(), null, met,
                 () -> spendingNothing(() -> FormRead.of(AffineReading.outcomeOf(read.value(),
-                        read.at(), this.read, met))),
+                        read.at(), this.read, met, sharedFactorNames))),
                 answer -> answer.spentNothing() && !answer.value().reachedAFigure())
                 .value().form().orElse(null);
     }

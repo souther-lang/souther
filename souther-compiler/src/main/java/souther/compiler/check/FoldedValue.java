@@ -158,18 +158,24 @@ public final class FoldedValue<E, N extends ValueStanding.Names<E, N>> {
         if (already != null) {
             return already;
         }
-        long[] counting = FOLDED;
-        if (counting != null) {
-            counting[0]++;
-        }
         // Put before the fold as "not a constant", so a name that reaches itself answers rather
         // than going round.
         here.put(read.binding(), Optional.empty());
         Optional<Object> answer = ValueStanding.named(read, at, names)
                 instanceof ValueStanding.Named.One<E, N>(ValueStanding.Standing<E, N> one)
-                ? eval(one.value(), one.at()) : Optional.empty();
+                ? ValueStanding.answered(one.names(), ValueStanding.NameQuestion.FOLD,
+                        one.value(), one.at(), () -> foldedAfresh(one))
+                : Optional.empty();
         here.put(read.binding(), answer);
         return answer;
+    }
+
+    private Optional<Object> foldedAfresh(ValueStanding.Standing<E, N> one) {
+        long[] counting = FOLDED;
+        if (counting != null) {
+            counting[0]++;
+        }
+        return eval(one.value(), one.at());
     }
 
     private Optional<Object> binary(Core.Binary b, E at) {
