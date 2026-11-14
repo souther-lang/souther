@@ -36,7 +36,7 @@ final class Session implements AutoCloseable {
      * decides nothing about a server that is slow, because a wait ends when the message is written
      * and this only bounds the case where it is not going to be.
      */
-    private static final Duration HUNG = Duration.ofSeconds(120);
+    private static final Duration HUNG = Duration.ofMinutes(2);
 
     private final PipedOutputStream toServer = new PipedOutputStream();
 

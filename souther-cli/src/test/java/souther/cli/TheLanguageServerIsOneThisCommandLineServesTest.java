@@ -131,7 +131,7 @@ class TheLanguageServerIsOneThisCommandLineServesTest {
      * What a hung server costs the build. A wait ends when what it waits for is written, so this
      * decides nothing about a server that is slow; it bounds the case where nothing is coming.
      */
-    private static final Duration HUNG = Duration.ofSeconds(120);
+    private static final Duration HUNG = Duration.ofMinutes(2);
 
     /** What a test says to a session, and what it waits to hear back. */
     private record Said(PipedOutputStream toServer, WrittenOutput wrote) {
