@@ -319,6 +319,6 @@ class APositionIsUnderivableOnlyWhereSomethingStandsAtItTest {
      *  refused with. */
     private static Compilation analysed(ConformanceCorpus corpus) {
         return SHARED.refusedWith(corpus.refusedWith(), "corpus " + corpus.name(),
-                () -> corpus.analyse().compilation());
+                () -> corpus.analyse().answered());
     }
 }

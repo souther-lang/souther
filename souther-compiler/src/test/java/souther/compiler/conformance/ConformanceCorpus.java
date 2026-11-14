@@ -212,8 +212,12 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
      * <p>For a reader that asks a few questions of a model and does not want the compilation
      * {@code RepositoryModels} shares among the readers of every model, or to set what it measures
      * on that one. What the caller measures is the caller's to say.
+     *
+     * <p>Not handed outside this package: a compilation given without what it is written to be
+     * refused with leaves the reader to choose what to hold it to. {@code RepositoryModels} holds
+     * it to {@link #refusedWith()}.
      */
-    public Compilation compilation() {
+    Compilation compilation() {
         return Compilation.ofSources(sources, ModulePath.EMPTY).writtenOn(TestDay.DATE);
     }
 
@@ -279,13 +283,59 @@ public record ConformanceCorpus(String name, List<String> files, List<String> so
      * this settles is not which document but that there is one: the questions are put where the
      * analysis happens, and no caller can have the analysis without them.
      */
-    public record Analysed(ConformanceCorpus corpus, Compilation compilation,
-                           List<Located> errors, List<Located> warnings, AdequacyReport report) {
+    public static final class Analysed {
 
-        /** The compilation, held to be refused with what its corpus is meant to be refused with
-         *  and nothing else, for a reader that takes the model out of this record. */
+        private final ConformanceCorpus corpus;
+
+        private final Compilation compilation;
+
+        private final List<Located> errors;
+
+        private final List<Located> warnings;
+
+        private final AdequacyReport report;
+
+        private Analysed(ConformanceCorpus corpus, Compilation compilation, List<Located> errors,
+                         List<Located> warnings, AdequacyReport report) {
+            this.corpus = corpus;
+            this.compilation = compilation;
+            this.errors = errors;
+            this.warnings = warnings;
+            this.report = report;
+        }
+
+        public ConformanceCorpus corpus() {
+            return corpus;
+        }
+
+        public List<Located> errors() {
+            return errors;
+        }
+
+        public List<Located> warnings() {
+            return warnings;
+        }
+
+        public AdequacyReport report() {
+            return report;
+        }
+
+        /**
+         * The compilation, held to be refused with what its corpus is written to be refused with
+         * and nothing else.
+         *
+         * <p>The only way to it from outside this package. A compilation handed out as it is leaves
+         * the reader to choose what to hold it to, and holding a corpus written to be refused to
+         * compile is the choice that failed twenty-five tests.
+         */
         public Compilation answered() {
             return ACompiledModel.refusedWith(corpus.refusedWith(), compilation);
+        }
+
+        /** The compilation as it is, for the readers of this package that take what it says of
+         *  itself — its texts and its rows — and hold nothing to compile. */
+        Compilation compilation() {
+            return compilation;
         }
 
         /** Everything said about this corpus, errors before warnings, as the report writes them. */

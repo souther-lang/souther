@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.classfile.Attributes;
 import java.lang.classfile.ClassModel;
+import java.lang.classfile.FieldModel;
 import java.lang.classfile.MethodModel;
 import java.lang.reflect.AccessFlag;
 import java.nio.file.Files;
@@ -59,6 +60,22 @@ class TheRepositorysModelsAreHandedOutOnlyHeldToWhatTheyAreWrittenToBeTest {
     }
 
     /**
+     * And so does a corpus and its analysis, which are the other ways to a model of the
+     * repository: what they hand out is the compilation held to what the corpus is written to be,
+     * and no compilation as it is.
+     */
+    @Test
+    void aCorpusAndItsAnalysisHandOutTheirCompilationOnlyHeldToWhatItIsWrittenToBe() {
+        assertEquals(List.of(),
+                handingOutACompilation(COMPILED.read("souther/compiler/conformance/ConformanceCorpus")),
+                "a corpus gives a compilation as it is");
+        assertEquals(List.of("answered"),
+                handingOutACompilation(
+                        COMPILED.read("souther/compiler/conformance/ConformanceCorpus$Analysed")),
+                "an analysis gives a compilation by a way other than answered()");
+    }
+
+    /**
      * What a corpus is written to be refused with is said by its checked-in diagnostics, and no test
      * says it again.
      *
@@ -104,12 +121,14 @@ class TheRepositorysModelsAreHandedOutOnlyHeldToWhatTheyAreWrittenToBeTest {
     void andTheCheckSeesACompilationHandedOutAsItIsOrInACollection() {
         assertFalse(handingOutACompilation(COMPILED.read("souther/compiler/ACompiledModel")).isEmpty(),
                 "ACompiledModel hands compilations out, so a check that finds none reads nothing");
-        assertEquals(List.of("collected", "single"),
+        assertEquals(List.of("HELD", "array", "collected", "single"),
                 handingOutACompilation(COMPILED.read(Sample.class.getName().replace('.', '/'))));
     }
 
     /** What a check of this shape has to find. */
     static final class Sample {
+
+        public static final List<Compilation> HELD = List.of();
 
         private Sample() { }
 
@@ -120,9 +139,34 @@ class TheRepositorysModelsAreHandedOutOnlyHeldToWhatTheyAreWrittenToBeTest {
         public static Compilation single() {
             return null;
         }
+
+        public static Compilation[] array() {
+            return new Compilation[0];
+        }
     }
 
-    /** The public methods of the class that return a compilation, or a type holding one, by name. */
+    /**
+     * And a type is told by the whole of its name, which ends where the descriptor says it does: an
+     * array of compilations holds one, and a type whose name only begins like it does not.
+     */
+    @Test
+    void andATypeIsToldByTheWholeOfItsName() {
+        assertTrue(mentionsACompilation("[Lsouther/compiler/query/Compilation;"));
+        assertTrue(mentionsACompilation("Ljava/util/Map<Ljava/lang/String;"
+                + "Lsouther/compiler/query/Compilation;>;"));
+        assertFalse(mentionsACompilation("Ljava/util/List<Lsouther/compiler/query/CompilationDetails;>;"));
+        assertFalse(mentionsACompilation("Lsouther/compiler/query/Compilations;"));
+    }
+
+    /** Whether a descriptor, or a generic signature, names the compilation type anywhere in it. */
+    private static boolean mentionsACompilation(String typeText) {
+        return typeText.contains(COMPILATION);
+    }
+
+    /**
+     * The public methods of the class that return a compilation, or a type holding one, and the
+     * public fields that hold one, by name.
+     */
     private static List<String> handingOutACompilation(ClassModel model) {
         TreeSet<String> found = new TreeSet<>();
         for (MethodModel method : model.methods()) {
@@ -134,9 +178,20 @@ class TheRepositorysModelsAreHandedOutOnlyHeldToWhatTheyAreWrittenToBeTest {
                     .map(signature -> signature.signature().stringValue())
                     .map(whole -> whole.substring(whole.lastIndexOf(')') + 1))
                     .orElse("");
-            if (descriptor.equals(COMPILATION) || generic.contains(COMPILATION.substring(0,
-                    COMPILATION.length() - 1))) {
+            if (mentionsACompilation(descriptor) || mentionsACompilation(generic)) {
                 found.add(method.methodName().stringValue());
+            }
+        }
+        for (FieldModel field : model.fields()) {
+            if (!field.flags().has(AccessFlag.PUBLIC)) {
+                continue;
+            }
+            String generic = field.findAttribute(Attributes.signature())
+                    .map(signature -> signature.signature().stringValue())
+                    .orElse("");
+            if (mentionsACompilation(field.fieldTypeSymbol().descriptorString())
+                    || mentionsACompilation(generic)) {
+                found.add(field.fieldName().stringValue());
             }
         }
         return List.copyOf(found);
