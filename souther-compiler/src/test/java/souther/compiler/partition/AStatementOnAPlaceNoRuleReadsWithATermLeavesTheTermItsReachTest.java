@@ -31,13 +31,6 @@ class AStatementOnAPlaceNoRuleReadsWithATermLeavesTheTermItsReachTest {
             %s
             data Ok
             data No
-            data Row = { grade: Int, lowerBound: Int }
-            let table: List<Row> = [ Row { grade = 1, lowerBound = 0 },
-                                     Row { grade = 2, lowerBound = 100 },
-                                     Row { grade = 3, lowerBound = 300 } ]
-            let gradeRowFor (m: Int): Row =
-                List.fold((acc, r) -> if r.lowerBound <= m then r else acc,
-                          Row { grade = 0, lowerBound = 0 }, table)
 
             behavior f : (a: Pay, b: Pay, c: Pay) -> Ok | No
             let f (a, b, c) = {
@@ -46,12 +39,23 @@ class AStatementOnAPlaceNoRuleReadsWithATermLeavesTheTermItsReachTest {
             }
             """;
 
+    /** The grade of a total is the last row whose lower bound the total reaches. */
+    private static final String GRADES = """
+            data Row = { grade: Int, lowerBound: Int }
+            let table: List<Row> = [ Row { grade = 1, lowerBound = 0 },
+                                     Row { grade = 2, lowerBound = 100 },
+                                     Row { grade = 3, lowerBound = 300 } ]
+            let gradeRowFor (m: Int): Row =
+                List.fold((acc, r) -> if r.lowerBound <= m then r else acc,
+                          Row { grade = 0, lowerBound = 0 }, table)
+            """;
+
     private static final String KEPT = "List.filter(r -> r.days >= 17, [a, b, c])";
 
     /** The places the report says nothing is read of. */
     private static List<String> unread(String data, String body) {
         Compilation compilation = Compilation.ofSource(PREAMBLE.formatted(data, body), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
@@ -85,7 +89,7 @@ class AStatementOnAPlaceNoRuleReadsWithATermLeavesTheTermItsReachTest {
     /** The shape of a grade looked up for the average of the months kept. */
     @Test
     void anAverageOverTheMonthsKeptHeldAgainstATableIsRead() {
-        assertEquals(List.of(), unread(PAY, "let p = " + KEPT + """
+        assertEquals(List.of(), unread(PAY + GRADES, "let p = " + KEPT + """
 
                 guard List.length(p) >= 1 else No
                 guard gradeRowFor(Rational.toInt(DOWN, List.sum(List.map(r -> r.amount, p))
