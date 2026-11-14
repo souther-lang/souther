@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -20,7 +21,7 @@ class ChainBoundsAnswerAsDifferenceBoundsDoTest {
 
     private static AffineConstraint<Integer> rule(Map<Integer, Long> weights, long bound,
                                                   boolean inclusive) {
-        Map<Integer, ExactRatio> coefs = new java.util.LinkedHashMap<>();
+        Map<Integer, ExactRatio> coefs = new LinkedHashMap<>();
         weights.forEach((at, weight) -> coefs.put(at, ExactRatio.of(weight)));
         CanonicalForm.Scaled<Integer> scaled = (CanonicalForm.Scaled<Integer>) CanonicalForm.of(coefs);
         return new AffineConstraint.HalfSpace<>(scaled.form(),
@@ -40,7 +41,7 @@ class ChainBoundsAnswerAsDifferenceBoundsDoTest {
                 default -> {
                     if (size > 1) {
                         int next = at + 1 < size ? at + 1 : at - 1;
-                        Map<Integer, Long> weights = new java.util.LinkedHashMap<>();
+                        Map<Integer, Long> weights = new LinkedHashMap<>();
                         weights.put(at, 1L);
                         weights.put(next, -1L);
                         rules.add(rule(weights, bound, inclusive));
@@ -83,7 +84,7 @@ class ChainBoundsAnswerAsDifferenceBoundsDoTest {
 
     @Test
     void aRuleBetweenCoordinatesThatAreNotNeighboursIsLeftToTheDifferenceClosure() {
-        Map<Integer, Long> weights = new java.util.LinkedHashMap<>();
+        Map<Integer, Long> weights = new LinkedHashMap<>();
         weights.put(0, 1L);
         weights.put(2, -1L);
         assertNull(ChainBounds.over(List.of(rule(weights, 3, true))));

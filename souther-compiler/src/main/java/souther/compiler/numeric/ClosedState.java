@@ -139,6 +139,12 @@ public final class ClosedState<A> {
         return FormReach.premisesWorked();
     }
 
+    /** How many positions of a rule the bases made so far have read, for the same test as
+     *  {@link #premisesWorked}. See {@link PrefixBasis#termsRead}. */
+    public static long basisTermsRead() {
+        return PrefixBasis.termsRead();
+    }
+
     /** Whether the rounds ran out before the box stopped moving. */
     public enum Status {
 

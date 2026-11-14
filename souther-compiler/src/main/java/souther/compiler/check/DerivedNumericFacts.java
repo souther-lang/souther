@@ -25,6 +25,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.function.UnaryOperator;
 
 /**
@@ -567,8 +568,22 @@ final class DerivedNumericFacts {
 
         /** This with {@code said} taken in next. */
         Taken then(Says said, Terms terms) {
-            return next.computeIfAbsent(said, each -> new Taken(state.taking(each.facts(), terms)));
+            return next.computeIfAbsent(said, each -> {
+                FACTS_TAKEN.add(each.facts().size());
+                return new Taken(state.taking(each.facts(), terms));
+            });
         }
+    }
+
+    private static final LongAdder FACTS_TAKEN = new LongAdder();
+
+    /**
+     * How many facts have been taken into a reading, for a test holding what a path costs to how
+     * many values it names and not how many pairs of them: that is a shape and not a speed. A run
+     * of answers is taken in once for the reading, whichever form asks for it.
+     */
+    static long factsTaken() {
+        return FACTS_TAKEN.sum();
     }
 
     /**

@@ -11,8 +11,8 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableSet;
 import java.util.Set;
-import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
@@ -677,7 +677,7 @@ public final class ClosedStates {
             int numbered = had;
             for (int at = 0; at < added; at++) {
                 AffineConstraint<A> later = more.get(rules.size() + at);
-                SortedSet<Integer> reached = new TreeSet<>();
+                NavigableSet<Integer> reached = new TreeSet<>();
                 reachedBy(later, partOf, namedBy, joinedTo, reached);
                 int root = reached.isEmpty() ? numbered++ : reached.first();
                 for (int other : reached.tailSet(root + 1)) {
@@ -803,7 +803,7 @@ public final class ClosedStates {
          */
         private static <A> void reachedBy(AffineConstraint<A> rule, Map<A, Integer> partOf,
                                           Map<A, Integer> namedBy, int[] joinedTo,
-                                          SortedSet<Integer> reached) {
+                                          NavigableSet<Integer> reached) {
             for (A position : rule.form().coefs().keySet()) {
                 Integer found = partOf.containsKey(position) ? partOf.get(position)
                         : namedBy.get(position);

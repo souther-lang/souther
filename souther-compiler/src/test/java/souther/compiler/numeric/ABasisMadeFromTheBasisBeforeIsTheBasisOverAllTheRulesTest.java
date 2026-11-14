@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static souther.compiler.numeric.RulesAsWritten.rule;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -83,7 +84,7 @@ class ABasisMadeFromTheBasisBeforeIsTheBasisOverAllTheRulesTest {
             return out;
         }
         for (int length = 1; length <= ATOMS.size(); length++) {
-            Map<String, ExactRatio> sum = new java.util.LinkedHashMap<>();
+            Map<String, ExactRatio> sum = new LinkedHashMap<>();
             ATOMS.subList(0, length).forEach(atom -> sum.put(atom, ExactRatio.ONE));
             out.add(parted.state().highestInBasis(sum, ExactRatio.ZERO));
         }

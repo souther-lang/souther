@@ -10,6 +10,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Function;
 
 /**
@@ -168,6 +169,17 @@ final class PrefixBasis<A> {
 
     private static final int FORMS_KEPT = 1 << 16;
 
+    private static final LongAdder TERMS_READ = new LongAdder();
+
+    /**
+     * How many positions of a rule the bases made so far have read, for a test holding what a path
+     * costs to how many rules it says and not how many pairs of them: that is a shape and not a
+     * speed. A basis made from the one before reads the rules added and no others.
+     */
+    static long termsRead() {
+        return TERMS_READ.sum();
+    }
+
     private final Line<A> line;
 
     private PrefixBasis(Map<A, Integer> places, Closed closed, List<AffineConstraint<A>> rules,
@@ -230,6 +242,7 @@ final class PrefixBasis<A> {
                 return null;
             }
             List<Map.Entry<A, ExactRatio>> entries = half.form().entriesIn(order);
+            TERMS_READ.add(entries.size());
             Set<A> support = new HashSet<>();
             for (Map.Entry<A, ExactRatio> each : entries) {
                 if (spacing.apply(each.getKey()) != Granularity.DISCRETE) {
@@ -315,6 +328,7 @@ final class PrefixBasis<A> {
                 return null;
             }
             List<Map.Entry<A, ExactRatio>> entries = half.form().entriesIn(order);
+            TERMS_READ.add(entries.size());
             for (Map.Entry<A, ExactRatio> each : entries) {
                 if (spacing.apply(each.getKey()) != Granularity.DISCRETE) {
                     return null;
