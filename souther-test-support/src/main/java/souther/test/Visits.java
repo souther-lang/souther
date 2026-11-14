@@ -141,17 +141,20 @@ public final class Visits implements AutoCloseable {
     private long entriesSoFar() {
         try (Recording snapshot = FlightRecorder.getFlightRecorder().takeSnapshot()) {
             Path dump = Files.createTempFile("visits", ".jfr");
-            snapshot.dump(dump);
-            Map<String, Long> byMethod = new HashMap<>();
-            for (RecordedEvent event : RecordingFile.readAllEvents(dump)) {
-                if (event.getEventType().getName().equals("jdk.MethodTiming")) {
-                    RecordedMethod method = event.getValue("method");
-                    byMethod.merge(method.getType().getName() + "." + method.getName()
-                            + method.getDescriptor(), event.getLong("invocations"), Math::max);
+            try {
+                snapshot.dump(dump);
+                Map<String, Long> byMethod = new HashMap<>();
+                for (RecordedEvent event : RecordingFile.readAllEvents(dump)) {
+                    if (event.getEventType().getName().equals("jdk.MethodTiming")) {
+                        RecordedMethod method = event.getValue("method");
+                        byMethod.merge(method.getType().getName() + "." + method.getName()
+                                + method.getDescriptor(), event.getLong("invocations"), Math::max);
+                    }
                 }
+                return byMethod.values().stream().mapToLong(Long::longValue).sum();
+            } finally {
+                Files.deleteIfExists(dump);
             }
-            Files.delete(dump);
-            return byMethod.values().stream().mapToLong(Long::longValue).sum();
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
