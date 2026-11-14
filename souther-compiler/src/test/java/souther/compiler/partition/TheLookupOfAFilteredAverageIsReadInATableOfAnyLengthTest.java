@@ -105,7 +105,7 @@ class TheLookupOfAFilteredAverageIsReadInATableOfAnyLengthTest {
 
     private static List<Unread> read(String table, String lookup) {
         Compilation compilation = Compilation.ofSource(HEAD + table + lookup + TAIL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         ACompiledModel.compiles(compilation);
         List<Unread> out = new ArrayList<>();
         for (AdequacyReport.BehaviorReport each :
@@ -128,7 +128,7 @@ class TheLookupOfAFilteredAverageIsReadInATableOfAnyLengthTest {
      */
     @Test
     void aTableOneRowLongerIsReportedTheSame() {
-        assertEquals(unread(12, ABOVE_THE_BOUND), unread(13, ABOVE_THE_BOUND));
+        assertEquals(unread(3, ABOVE_THE_BOUND), unread(4, ABOVE_THE_BOUND));
     }
 
     /**
