@@ -31,7 +31,7 @@ import java.util.function.IntFunction;
  */
 class AnOperatorReadsEachOperandOnceTest {
 
-    private static final int[] LINKS = {3, 6, 12};
+    private static final int[] LINKS = {4, 8, 16};
 
     @Test
     void aChainOfArithmeticCostsWhatItsLengthSays() {
@@ -75,8 +75,9 @@ class AnOperatorReadsEachOperandOnceTest {
     }
 
     /** Compiles the source {@code of} makes at each size and asks that doubling the chain at most
-     *  at most quintuples the binary expressions elaborated: a polynomial cost is allowed, and a
-     *  second reading of an operand multiplies the count by two to the power of the links added. */
+     *  multiplies by sixteen how often the compile goes into the elaborated expressions: a
+     *  polynomial cost is allowed, and a second reading of an operand multiplies the count by two to
+     *  the power of the links added, which from eight to sixteen links is far past sixteen. */
     private static void assertLinear(IntFunction<String> of) {
         SequencedMap<Integer, Long> elaborated = new LinkedHashMap<>();
         try (Visits visits = Visits.into(List.of(Core.class))) {
@@ -85,6 +86,6 @@ class AnOperatorReadsEachOperandOnceTest {
                 elaborated.put(links, visits.during(() -> Compiler.compile(source)));
             }
         }
-        Growth.eachAtMost(elaborated, 5, 1);
+        Growth.eachAtMost(elaborated, 16, 1);
     }
 }
