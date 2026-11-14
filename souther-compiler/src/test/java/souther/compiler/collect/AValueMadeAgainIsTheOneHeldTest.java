@@ -53,13 +53,12 @@ class AValueMadeAgainIsTheOneHeldTest {
      * shares across its compiles would otherwise keep whatever such a value refers to.
      */
     @Test
-    void aValueNothingElseHoldsIsNotKeptAliveByTheTable() throws InterruptedException {
+    void aValueNothingElseHoldsIsNotKeptAliveByTheTable() {
         HeldOnce<Hashed> held = new HeldOnce<>(4);
         WeakReference<Hashed> watched = new WeakReference<>(held.held(new Hashed("gone", 3)));
 
         for (int asked = 0; asked < 20 && watched.get() != null; asked++) {
             System.gc();
-            Thread.sleep(10);
         }
 
         assertNull(watched.get(), "the table still holds a value nothing else does");
@@ -100,14 +99,13 @@ class AValueMadeAgainIsTheOneHeldTest {
 
     /** A value made through its key is held as weakly as one handed in made. */
     @Test
-    void aValueMadeByItsKeyIsNotKeptAliveByTheTable() throws InterruptedException {
+    void aValueMadeByItsKeyIsNotKeptAliveByTheTable() {
         HeldOnce<Hashed> held = new HeldOnce<>(4);
         WeakReference<Hashed> watched = new WeakReference<>(
                 held.held(new Hashed("gone", 3), value -> value, key -> new Hashed(key.name(), 3)));
 
         for (int asked = 0; asked < 20 && watched.get() != null; asked++) {
             System.gc();
-            Thread.sleep(10);
         }
 
         assertNull(watched.get(), "the table still holds a value nothing else does");

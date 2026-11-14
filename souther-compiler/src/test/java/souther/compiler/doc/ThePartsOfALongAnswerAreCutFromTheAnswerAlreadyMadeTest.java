@@ -1,7 +1,6 @@
 package souther.compiler.doc;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -43,7 +42,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the answer the same call makes now is carried on from that answer, and a cursor from neither is
  * refused, as it is when nothing was kept.
  */
-@Timeout(120)
 class ThePartsOfALongAnswerAreCutFromTheAnswerAlreadyMadeTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();

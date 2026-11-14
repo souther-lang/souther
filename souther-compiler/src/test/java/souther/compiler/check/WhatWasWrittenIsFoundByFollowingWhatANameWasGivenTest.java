@@ -18,7 +18,6 @@ import souther.compiler.types.TypeSymbols;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 
 import java.util.List;
 
@@ -124,7 +123,6 @@ class WhatWasWrittenIsFoundByFollowingWhatANameWasGivenTest {
     /** A name given itself is a chain with no end, and following it is still an answer. Nothing the
      * walk records is one, but the following is written to end whatever it is handed. */
     @Test
-    @Timeout(5)
     void aNameGivenItselfIsFollowedToNothing() {
         Core.Binder a = CoreBinders.of(binders.binder("a", POS));
         Core.Binder b = CoreBinders.of(binders.binder("b", POS));

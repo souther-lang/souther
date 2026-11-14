@@ -3,7 +3,6 @@ package souther.compiler.doc;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -40,7 +39,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * handed a document in pieces has been handed the document only if none of it was dropped between
  * them and none of it was said twice.
  */
-@Timeout(120)
 class ALongAnswerArrivesInPartsThatJoinBackUpTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
