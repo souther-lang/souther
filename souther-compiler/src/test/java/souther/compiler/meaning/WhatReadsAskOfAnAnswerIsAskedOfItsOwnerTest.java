@@ -10,6 +10,7 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.types.ValueName;
 import souther.test.Allocated;
 import souther.test.Growth;
+import souther.test.Visits;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -57,19 +58,23 @@ class WhatReadsAskOfAnAnswerIsAskedOfItsOwnerTest {
                 Map.of(quantity, ExactRatio.ONE)), Rel.GT), true);
     }
 
+    /** What a reader of an answer goes into: the answers, what each holds, and the statements. */
+    private static final List<Class<?>> THE_VALUES_READ = List.of(Quantity.class,
+            Derivation.class, Proposition.class);
+
     /**
-     * That what {@code asked} allocates at {@link #DEEP} is no more than eight times what it
-     * allocates at {@link #HALF}. A reader that goes down the calls once each allocates twice as
-     * much, and one that goes down every way allocates sixty-four times as much. Each depth is
-     * asked of a chain made beforehand, and one is asked first to leave what the first ask loads out
-     * of the count.
+     * That how many times {@code asked} goes into the values at {@link #DEEP} is no more than eight
+     * times what it is at {@link #HALF}. A reader that goes down the calls once each goes into
+     * twice as many, and one that goes down every way goes into sixty-four times as many. Each
+     * depth is asked of a chain made beforehand.
      */
     private static void assertCostIsOfTheCallsAndNotTheWaysDown(IntFunction<Runnable> asked) {
-        asked.apply(HALF).run();
-        SequencedMap<Integer, Long> bySize = new LinkedHashMap<>();
-        bySize.put(HALF, Allocated.by(asked.apply(HALF)));
-        bySize.put(DEEP, Allocated.by(asked.apply(DEEP)));
-        Growth.eachAtMost(bySize, 8, 1);
+        try (Visits visits = Visits.into(THE_VALUES_READ)) {
+            SequencedMap<Integer, Long> bySize = new LinkedHashMap<>();
+            bySize.put(HALF, visits.during(asked.apply(HALF)));
+            bySize.put(DEEP, visits.during(asked.apply(DEEP)));
+            Growth.eachAtMost(bySize, 8, 1);
+        }
     }
 
     @Test
@@ -130,9 +135,13 @@ class WhatReadsAskOfAnAnswerIsAskedOfItsOwnerTest {
         assertFalse(carried.isIn(chain(DEEP)));
 
         // Nothing a walk carries is in an answer, so the answer is not read at all: asked of a
-        // chain, it allocates nothing, where a reader going down every way would allocate for each.
+        // chain, it goes into no more than it does of an answer of one call.
         Quantity answer = chain(DEEP);
-        assertTrue(Allocated.byWhichMayBeNothing(() -> carried.isIn(answer)) < 1_000);
+        Quantity single = chain(1);
+        try (Visits visits = Visits.into(THE_VALUES_READ)) {
+            assertEquals(visits.during(() -> carried.isIn(single)),
+                    visits.during(() -> carried.isIn(answer)));
+        }
     }
 
     /**

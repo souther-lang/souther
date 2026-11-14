@@ -6,8 +6,8 @@ import souther.compiler.hash.ValueHash;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.ValueName;
-import souther.test.Allocated;
 import souther.test.Growth;
+import souther.test.Visits;
 
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -68,18 +68,18 @@ class AnAnswerHandedTheSameAnswerTwiceIsOneValueAtEveryDepthTest {
     }
 
     /**
-     * That what {@code asked} allocates at {@link #DEEP} is no more than eight times what it
-     * allocates at half of it. A reader that goes down the calls once each allocates twice as much,
-     * and one that goes down every way allocates sixty-four times as much. Each depth is asked of
-     * a chain made beforehand, and one is asked first to leave what the first ask loads out of the
-     * count.
+     * That how many times {@code asked} goes into the answers at {@link #DEEP} is no more than
+     * eight times what it is at half of it. A reader that goes down the calls once each goes into
+     * twice as many, and one that goes down every way goes into sixty-four times as many. Each
+     * depth is asked of a chain made beforehand.
      */
     private static void assertCostIsOfTheCallsAndNotTheWays(IntFunction<Runnable> asked) {
-        asked.apply(DEEP / 2).run();
-        SequencedMap<Integer, Long> bySize = new LinkedHashMap<>();
-        bySize.put(DEEP / 2, Allocated.by(asked.apply(DEEP / 2)));
-        bySize.put(DEEP, Allocated.by(asked.apply(DEEP)));
-        Growth.eachAtMost(bySize, 8, 1);
+        try (Visits visits = Visits.into(List.of(Quantity.class, Derivation.class))) {
+            SequencedMap<Integer, Long> bySize = new LinkedHashMap<>();
+            bySize.put(DEEP / 2, visits.during(asked.apply(DEEP / 2)));
+            bySize.put(DEEP, visits.during(asked.apply(DEEP)));
+            Growth.eachAtMost(bySize, 8, 1);
+        }
     }
 
     @Test

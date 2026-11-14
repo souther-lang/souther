@@ -1,6 +1,6 @@
 package souther.compiler;
 
-import souther.test.Allocated;
+import souther.test.Visits;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -15,7 +15,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.IntFunction;
@@ -28,10 +27,11 @@ import java.util.stream.Stream;
  *
  * <p>A value used twice is one object held in two places, so the values made of it are a graph, and
  * the ways down a chain of values each holding the one before it twice are two to its length. A
- * reader of the values allocates about as much on a chain of {@link #LONG} as on one of
- * {@link #SHORT}; one that goes down every way allocates two to the difference as much, which is
- * what it is told by. What it allocates is counted and time is not, so this does not turn on how
- * fast a machine is. A reader that allocates nothing is not told by this.
+ * reader of the values goes into each of them a few times; one that goes down every way goes into a
+ * chain of {@link #LONG} two to that many times, which is what it is told by ({@link Visits}). What
+ * it goes into is counted and time is not, so this does not turn on how fast a machine is, and a
+ * reader that allocates nothing is told as one that does. A chain of {@link #SHORT} is asked first
+ * and without counting, for whether the reader answers or refuses.
  *
  * <p>Asked of every static method of the compiler whose first parameter is the value, and of the
  * methods the value (or what wraps it) has. A method that refuses — throws — is said of apart ({@link Findings}): what it
@@ -49,8 +49,15 @@ public final class ReadersOfAGraph {
     /** Two to {@code LONG - SHORT} is 256; a reader of the values is nowhere near this. */
     private static final long GROWTH_THAT_IS_THE_WAYS = 16;
 
-    /** Under this a reader on the shorter chain allocates too little for the ratio to say anything. */
-    private static final long BYTES_TOO_FEW_TO_TELL = 1024;
+    /** Under this a reader on the shorter chain goes into too few values for the ratio to say anything. */
+    private static final long VISITS_TOO_FEW_TO_TELL = 64;
+
+    /** Readers that go into the longer chain this often are the ones whose growth is asked: the
+     *  ways down it are two to {@link #LONG}, sixty-four times this. */
+    private static final long VISITS_THAT_ARE_THE_WAYS = 1L << 16;
+
+    /** How many readers are counted together, before the ones past the figure are told apart. */
+    private static final int ASKED_TOGETHER = 64;
 
     /** What a piece of a reading takes: the reading it is a piece of. */
     private static final Set<String> IN_A_READING = Set.of("StatementReading", "EachOnce",
@@ -164,57 +171,84 @@ public final class ReadersOfAGraph {
     }
 
     /**
-     * What the reader allocates on a chain of {@code length}; none where it refuses.
+     * What the reader answers on a chain of {@code length}, or nothing where it refuses.
      *
-     * <p>The chain and the arguments are made for this asking and are not what is counted: a reader
-     * that gathers into the collection it is handed, or that the compiler keeps something of by what
-     * a statement is equal to, is asked of nothing a previous asking left.
+     * <p>The chain and the arguments are made for this asking: a reader that gathers into the
+     * collection it is handed, or that the compiler keeps something of by what a statement is equal
+     * to, is asked of nothing a previous asking left. What it answers is wrapped, so that an answer
+     * of nothing is told from a refusal.
      */
-    private static OptionalLong allocatedBy(Method method, boolean aMethodOfIt,
-                                            Supplier<Object[]> others, Chain of, int length) {
+    private static Optional<Optional<Object>> answerOn(Method method, boolean aMethodOfIt,
+                                                       Supplier<Object[]> others, Chain of,
+                                                       int length) {
         Object chain = of.ofLength().apply(length);
         Object[] args = others.get();
         if (!aMethodOfIt) {
             args[0] = chain;
         }
-        Object receiver = aMethodOfIt ? chain : null;
-        boolean[] refused = {false};
-        long allocated = Allocated.byWhichMayBeNothing(() -> {
-            try {
-                method.invoke(receiver, args);
-            } catch (InvocationTargetException refusing) {
-                refused[0] = true;
-            } catch (IllegalAccessException notAllowed) {
-                throw new IllegalStateException(method.toString(), notAllowed);
-            }
-        });
-        return refused[0] ? OptionalLong.empty() : OptionalLong.of(allocated);
-    }
-
-    /** Whether {@code onLong} is the ways down to what {@code onShort} is the values of. */
-    private static boolean goesDownEveryWay(long onShort, long onLong) {
-        return onLong > GROWTH_THAT_IS_THE_WAYS * Math.max(onShort, BYTES_TOO_FEW_TO_TELL);
+        try {
+            return Optional.of(Optional.ofNullable(method.invoke(aMethodOfIt ? chain : null, args)));
+        } catch (InvocationTargetException refusing) {
+            return Optional.empty();
+        } catch (IllegalAccessException notAllowed) {
+            throw new IllegalStateException(method.toString(), notAllowed);
+        }
     }
 
     /**
-     * Whether the reader goes down every way, by what it allocates on the longer chain against the
-     * shorter; none where it refuses.
+     * What of {@code asks} goes into the values more than {@link #VISITS_THAT_ARE_THE_WAYS} times.
      *
-     * <p>A reader that refuses the shorter chain refuses the longer, and the message it refuses
-     * with names the whole chain, so the longer is asked only of a reader that answered the shorter.
+     * <p>The asks are counted together and told apart only where the count says one of them is past
+     * the figure, by halves, so that what is counted is the few readings it takes to name the slow
+     * ones and not one for each reader.
      */
-    private static Optional<Boolean> goesDownEveryWay(Method method, boolean aMethodOfIt,
-                                                      Supplier<Object[]> others, Chain chain) {
-        OptionalLong onShort = allocatedBy(method, aMethodOfIt, others, chain, SHORT);
-        if (onShort.isEmpty()) {
-            return Optional.empty();
+    private static Set<String> past(Visits visits, List<Map.Entry<String, Ask>> asks) {
+        if (asks.isEmpty()) {
+            return Set.of();
         }
-        OptionalLong onLong = allocatedBy(method, aMethodOfIt, others, chain, LONG);
-        if (onLong.isEmpty()) {
-            return Optional.empty();
+        Visits.Counted<List<Object>> asked = visits.count(() -> {
+            List<Object> answers = new ArrayList<>();
+            for (Map.Entry<String, Ask> ask : asks) {
+                answers.add(ask.getValue().onLong().get());
+            }
+            return answers;
+        });
+        if (asked.visits() <= VISITS_THAT_ARE_THE_WAYS) {
+            return Set.of();
         }
-        return Optional.of(goesDownEveryWay(onShort.getAsLong(), onLong.getAsLong()));
+        if (asks.size() == 1) {
+            return goesDownEveryWay(visits, asks.getFirst().getValue())
+                    ? Set.of(asks.getFirst().getKey()) : Set.of();
+        }
+        Set<String> slow = new TreeSet<>();
+        int half = asks.size() / 2;
+        slow.addAll(past(visits, asks.subList(0, half)));
+        slow.addAll(past(visits, asks.subList(half, asks.size())));
+        return slow;
     }
+
+    /**
+     * Whether a reader that goes into the values often is going down every way: it goes into the
+     * longer chain more than the ways down it is longer by as often as into the shorter. A reader
+     * that goes into each value many times goes into twice the values twice as often.
+     */
+    private static boolean goesDownEveryWay(Visits visits, Ask ask) {
+        long onShort = visits.count(ask.onShort()).visits();
+        long onLong = visits.count(ask.onLong()).visits();
+        return onLong > GROWTH_THAT_IS_THE_WAYS * Math.max(onShort, VISITS_TOO_FEW_TO_TELL);
+    }
+
+    private static Set<String> past(Visits visits, Map<String, Ask> asks) {
+        Set<String> slow = new TreeSet<>();
+        List<Map.Entry<String, Ask>> all = new ArrayList<>(asks.entrySet());
+        for (int from = 0; from < all.size(); from += ASKED_TOGETHER) {
+            slow.addAll(past(visits, all.subList(from, Math.min(all.size(), from + ASKED_TOGETHER))));
+        }
+        return slow;
+    }
+
+    /** One reading asked on the shorter chain and on the longer. */
+    private record Ask(Supplier<Object> onShort, Supplier<Object> onLong) {}
 
     /**
      * Every reader of {@code chains} that goes down every way, by the name of the class and the
@@ -225,13 +259,17 @@ public final class ReadersOfAGraph {
      */
     public static Findings askEach(List<Chain> chains, Map<String, String> byTheirNature)
             throws IOException {
-        Set<String> slow = new TreeSet<>();
+        try (Visits visits = Visits.into(chains.stream().<Class<?>>map(Chain::type).toList())) {
+            return askEach(visits, chains, byTheirNature);
+        }
+    }
+
+    private static Findings askEach(Visits visits, List<Chain> chains,
+                                    Map<String, String> byTheirNature) throws IOException {
+        Map<String, Ask> asks = new LinkedHashMap<>();
         for (Chain chain : chains) {
-            long onShort = Allocated.by(() -> chain.ofLength().apply(SHORT));
-            long onLong = Allocated.by(() -> chain.ofLength().apply(LONG));
-            if (goesDownEveryWay(onShort, onLong)) {
-                slow.add("making " + chain.label());
-            }
+            asks.put("making " + chain.label(), new Ask(() -> chain.ofLength().apply(SHORT),
+                    () -> chain.ofLength().apply(LONG)));
         }
         Set<String> answered = new TreeSet<>();
         Set<String> refused = new TreeSet<>();
@@ -269,14 +307,17 @@ public final class ReadersOfAGraph {
                         continue;
                     }
                     method.setAccessible(true);
-                    Optional<Boolean> goesDown = goesDownEveryWay(method, aMethodOfIt, others, chain);
-                    (goesDown.isPresent() ? answered : refused).add(told);
-                    if (goesDown.orElse(false)) {
-                        slow.add(told);
+                    if (answerOn(method, aMethodOfIt, others, chain, SHORT).isPresent()) {
+                        answered.add(told);
+                        asks.put(told, new Ask(
+                                () -> answerOn(method, aMethodOfIt, others, chain, SHORT),
+                                () -> answerOn(method, aMethodOfIt, others, chain, LONG)));
+                    } else {
+                        refused.add(told);
                     }
                 }
             }
         }
-        return new Findings(answered, refused, notAsked, slow);
+        return new Findings(answered, refused, notAsked, past(visits, asks));
     }
 }

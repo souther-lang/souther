@@ -55,16 +55,7 @@ public final class BinaryElaborator {
         return read;
     }
 
-    /** Where a test in this package counts the binary expressions elaborated, and null everywhere
-     *  else. An operand read twice elaborates the operators inside it twice, and what a compile
-     *  answers does not say so. */
-    static long[] COUNTING_ELABORATED;
-
     static Core elaborateBinary(Hir.Binary bin, Scope env, CheckContext ctx) {
-        long[] counting = COUNTING_ELABORATED;
-        if (counting != null) {
-            counting[0]++;
-        }
         // Left to right, and the first operand that failed is the one reported: an operand that says
         // what is wrong with it has said it, and what stands beside it is not read at all where this
         // one left nothing to check against.

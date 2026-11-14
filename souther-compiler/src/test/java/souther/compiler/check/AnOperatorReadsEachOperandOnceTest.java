@@ -1,11 +1,14 @@
 package souther.compiler.check;
 
 import souther.compiler.Compiler;
+import souther.compiler.core.Core;
 import souther.test.Growth;
+import souther.test.Visits;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.SequencedMap;
 import java.util.function.IntFunction;
 
@@ -18,29 +21,17 @@ import java.util.function.IntFunction;
  * so — the operand check that read them is the same check that reports, and it reports nothing until
  * it comes back.
  *
- * <p>What is counted is the binary expressions elaborated over a compile, at three sizes each
- * double the last. One reading of each operand doubles the count with the chain, and a second
- * reading squares it. The reading is one place for every operator, so a chain of any one of them
- * measures it.
+ * <p>What is counted is how many times a compile goes into the elaborated expressions, at three
+ * sizes each double the last. One reading of each operand doubles the count with the chain, and a
+ * second reading squares it. The reading is one place for every operator, so a chain of any one of
+ * them measures it. A chain of named values is not one of them: a name of constants is folded
+ * before an operator is elaborated, so the count of such a chain does not move when an operand is
+ * read twice. What a chain of names costs is held by
+ * {@link FollowingWhatANameWasGivenCostsTheChainOnceTest}.
  */
 class AnOperatorReadsEachOperandOnceTest {
 
     private static final int[] LINKS = {3, 6, 12};
-
-    /** A chain of values, each written from the one before it — the shape the nesting ceiling
-     *  (E2104) tells an author to break a deep expression into. A value is substituted where it is
-     *  named (ADR-0072), so the last one's body is as deep as the chain is long. */
-    @Test
-    void aChainOfNamedValuesCostsWhatItsLengthSays() {
-        assertLinear(links -> {
-            StringBuilder source = new StringBuilder("module m\n\nlet v0 = 1\n");
-            for (int i = 1; i <= links; i++) {
-                source.append("let v").append(i).append(" = v").append(i - 1).append(" + 1\n");
-            }
-            return source.append("\nbehavior f : (x: Int) -> Int\nlet f (x) = x + v")
-                    .append(links).append('\n').toString();
-        });
-    }
 
     @Test
     void aChainOfArithmeticCostsWhatItsLengthSays() {
@@ -88,15 +79,11 @@ class AnOperatorReadsEachOperandOnceTest {
      *  second reading of an operand multiplies the count by two to the power of the links added. */
     private static void assertLinear(IntFunction<String> of) {
         SequencedMap<Integer, Long> elaborated = new LinkedHashMap<>();
-        for (int links : LINKS) {
-            long[] counting = {0};
-            BinaryElaborator.COUNTING_ELABORATED = counting;
-            try {
-                Compiler.compile(of.apply(links));
-            } finally {
-                BinaryElaborator.COUNTING_ELABORATED = null;
+        try (Visits visits = Visits.into(List.of(Core.class))) {
+            for (int links : LINKS) {
+                String source = of.apply(links);
+                elaborated.put(links, visits.during(() -> Compiler.compile(source)));
             }
-            elaborated.put(links, counting[0]);
         }
         Growth.eachAtMost(elaborated, 5, 1);
     }

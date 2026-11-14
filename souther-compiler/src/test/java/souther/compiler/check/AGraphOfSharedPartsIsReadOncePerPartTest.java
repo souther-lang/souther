@@ -5,13 +5,14 @@ import souther.compiler.inputs.BlockReason;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.ValueName;
 import souther.test.Growth;
+import souther.test.Visits;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.SequencedMap;
+import java.util.function.IntFunction;
 import java.util.function.IntToLongFunction;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -70,24 +71,11 @@ class AGraphOfSharedPartsIsReadOncePerPartTest {
         });
     }
 
-    /** A position that counts how often it is asked whether it is another, or hashed. */
-    private static final class Counted {
-        private final AtomicLong asked;
-
-        Counted(AtomicLong asked) {
-            this.asked = asked;
-        }
-
-        @Override
-        public int hashCode() {
-            asked.incrementAndGet();
-            return 1;
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            asked.incrementAndGet();
-            return other instanceof Counted;
+    /** How often what {@code askedAt} asks of an origin of that many links goes into the origins,
+     *  which doubles at most for twice the links. */
+    private static void assertAskedOncePerPart(IntFunction<Runnable> askedAt) {
+        try (Visits visits = Visits.into(List.of(ValueOrigin.class))) {
+            assertDoublesAtMost(links -> visits.during(askedAt.apply(links)));
         }
     }
 
@@ -102,18 +90,14 @@ class AGraphOfSharedPartsIsReadOncePerPartTest {
 
     @Test
     void anOriginNamesItsPositionsOncePerPart() {
-        assertDoublesAtMost(links -> {
-            AtomicLong asked = new AtomicLong();
-            ValueOrigin<Counted> named = doubled(
-                    new ValueOrigin.IsAPosition<>(new Counted(asked)), links);
-
-            assertEquals(1, named.positions().size());
-            return asked.get();
+        assertAskedOncePerPart(links -> {
+            ValueOrigin<String> named = doubled(new ValueOrigin.IsAPosition<>("x"), links);
+            return named::positions;
         });
     }
 
     /** What an origin is made from, and why a comparison of it is not read, answered over a graph
-     *  whose parts are shared. Not counted: nothing in these answers asks a position anything. */
+     *  whose parts are shared. */
     @Test
     void anOriginMadeFromAPositionAnswersWhatItIsMadeFrom() {
         ValueOrigin<String> named = doubled(new ValueOrigin.IsAPosition<>("x"), 3);
@@ -128,5 +112,20 @@ class AGraphOfSharedPartsIsReadOncePerPartTest {
                 UnreadComparison.notAboutOwnValues(made));
         assertEquals(new BlockReason.UnreadComparisonForm(),
                 UnreadComparison.notAboutOwnValues(applied));
+
+        assertAskedOncePerPart(links -> {
+            ValueOrigin<String> deepMade = doubled(new ValueOrigin.MadeFromAPosition<>("y"), links);
+            return deepMade::madeFrom;
+        });
+        assertAskedOncePerPart(links -> {
+            ValueOrigin<String> deepMade = doubled(new ValueOrigin.MadeFromAPosition<>("y"), links);
+            return () -> UnreadComparison.notAboutOwnValues(deepMade);
+        });
+        assertAskedOncePerPart(links -> {
+            ValueOrigin<String> deepApplied = doubled(new ValueOrigin.Applied<>(
+                    new ValueName.Helper("m", "f"),
+                    List.of(new ValueOrigin.IsAPosition<>("z"))), links);
+            return () -> UnreadComparison.notAboutOwnValues(deepApplied);
+        });
     }
 }
