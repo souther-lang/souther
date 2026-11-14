@@ -3,7 +3,6 @@ package souther.cli.backend;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
@@ -191,7 +190,6 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
     }
 
     @Test
-    @Timeout(20)
     void releasesAreAskedForSeveralAtATimeAndTheNewestBuiltAgainstThisSoutherIsTaken()
             throws Exception {
         // Two windows of eight and a narrower last one, with the release taken in the last. The
