@@ -31,8 +31,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * names no budget can still hold what turns on one; the one place left to say it is here, once for
  * each table. A table added arrives as a failure naming it, with the question to answer.
  *
- * <p>Tables only: a field holding a map that nothing changes after the class is loaded is no table
- * of answers, and is not asked about.
+ * <p>What this asks and what it does not. It asks that every table a compilation can put an answer
+ * in is on the list with what it turns on: a map nothing can change is no table of answers, and a
+ * map not made yet is one. It does not say that what is listed is true, which is read by whoever
+ * lists it, nor that a value held in a map nothing can change was not made under a figure: a stop
+ * made when the class is loaded and held in {@code Map.of} is asked by
+ * {@code AFigureACompilationSetsIsReadWhereItIsUsedTest}, which follows what a class runs when it is
+ * loaded. This is a list that makes a table's author say, and no proof of what they said.
  *
  * <p>Both ways round: a table in the list that no class holds any more is a rule about code that
  * has gone.
@@ -123,7 +128,9 @@ class EveryTableThatOutlivesACompilationSaysWhatItTurnsOnTest {
                         && Map.class.isAssignableFrom(each.getType())) {
                     each.setAccessible(true);
                     Object value = each.get(null);
-                    if (value != null && !unchangeable(value)) {
+                    // A map not made yet is one made when it is first used, which is to say a
+                    // table: nothing else is left null in a field of that type.
+                    if (value == null || !unchangeable(value)) {
                         found.add(name + "#" + each.getName());
                     }
                 }
