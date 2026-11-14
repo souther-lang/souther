@@ -157,6 +157,33 @@ class WhatAWatchPassesOnIsPaidForByWhatChangedAndNotByWhatIsHeldTest {
         assertEquals(once, twice, "the second was the first again");
     }
 
+    @Test
+    void aReadingTakenAgainFromTwoEnvironmentsInTurnAddsNothingAfterTheFirstOfEach() {
+        long once = counting(() -> takenAgainInTurn(1))[0];
+        long twice = counting(() -> takenAgainInTurn(2))[0];
+
+        assertEquals(once, twice, "the second round was the first again");
+    }
+
+    /** A reading that asked {@code Y} and {@code Z}, taken again from two environments that hand
+     *  {@code Y} what the watch began with, one and then the other, {@code rounds} times. */
+    private static void takenAgainInTurn(int rounds) {
+        BindingEnvironment on = nothingHanded().handing(Y, written(1));
+        BindingEnvironment one = on.handing(Y, written(1));
+        BindingEnvironment other = on.handing(Y, written(1));
+        HandedAnswers asked = BindingEnvironment.Watch.over(on, () -> {
+            on.roleOf(Z);
+            return on.roleOf(Y);
+        }).asked();
+        BindingEnvironment.Watch.over(on, () -> {
+            for (int i = 0; i < rounds; i++) {
+                BindingEnvironment.Watch.replay(one, asked);
+                BindingEnvironment.Watch.replay(other, asked);
+            }
+            return 0;
+        });
+    }
+
     /** A reading read on {@code since}, taken again {@code times} times inside a watch on
      *  {@code on}. Made afresh for each call: what a set holds is worked out once and kept. */
     private static void takenAgain(BindingEnvironment on, BindingEnvironment since, int times) {

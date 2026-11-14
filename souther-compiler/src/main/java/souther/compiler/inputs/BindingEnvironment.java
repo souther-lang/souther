@@ -316,12 +316,12 @@ final class BindingEnvironment {
         /** The names this reading read itself, which were answered as {@link #started} has them. */
         private final Set<BindingId> asked = new HashSet<>();
         /** The sets of the readings taken in, each as it stands to {@link #started}. */
-        private final List<AskedNames> taken = new ArrayList<>();
-        /** The sets in {@link #taken}, by what object they are. */
-        private final Set<AskedNames> takenSets = Collections.newSetFromMap(new IdentityHashMap<>());
-        /** Each set taken in, and the environment it was taken in from: the same set taken in
-         *  again from the same one, as a reading kept is, adds nothing. */
-        private final Map<AskedNames, Handed> takenFrom = new IdentityHashMap<>();
+        private List<AskedNames> taken = List.of();
+        /** The sets in {@link #taken}, by what object they are: a set taken in again, as a
+         *  reading kept is, from any environment that hands the same names again, is the same
+         *  object ({@link AskedNames#without}) and adds nothing. Made with the first set taken
+         *  in: most watches take in none. */
+        private Set<AskedNames> takenSets;
         private boolean unsure;
 
         private Watch(Handed started) {
@@ -383,9 +383,6 @@ final class BindingEnvironment {
             if (!names.hasNames()) {
                 return;
             }
-            if (takenFrom.put(names, in) == in) {
-                return;
-            }
             AskedNames.counted(2, 1);
             Set<BindingId> since = in.stepsSince(started);
             if (since == null) {
@@ -393,7 +390,14 @@ final class BindingEnvironment {
                 return;
             }
             AskedNames passed = names.without(since);
-            if (passed.hasNames() && takenSets.add(passed)) {
+            if (!passed.hasNames()) {
+                return;
+            }
+            if (takenSets == null) {
+                takenSets = Collections.newSetFromMap(new IdentityHashMap<>());
+                taken = new ArrayList<>();
+            }
+            if (takenSets.add(passed)) {
                 taken.add(passed);
             }
         }
