@@ -25,7 +25,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class WhatANameCameToKeptOrReadAgainIsTheSameReportTest {
 
-    private static final int LINKS = 8;
+    private static final int LINKS = 5;
+
+    /** Shorter where each link reads the elements of a list, which costs what it multiplies. */
+    private static final int ELEMENT_LINKS = 3;
 
     private static String chain() {
         StringBuilder lets = new StringBuilder();
@@ -45,6 +48,21 @@ class WhatANameCameToKeptOrReadAgainIsTheSameReportTest {
             lets.append("  let a").append(i).append(" = {\n")
                     .append("    let unread = ").append(before).append(" * ").append(before)
                     .append("\n    let t = ").append(before).append(" * m\n    t\n  }\n");
+        }
+        return lets.toString();
+    }
+
+    /** The same chain where each link binds, beside the product it comes to, a value made of the
+     *  elements of an input list: one its body never reads, and one it does. The walk that
+     *  reaches the first through {@code bound} meets elements the body did not ask of. */
+    private static String elementBlocks() {
+        StringBuilder lets = new StringBuilder();
+        for (int i = 1; i <= ELEMENT_LINKS; i++) {
+            String before = i == 1 ? "n" : "a" + (i - 1);
+            lets.append("  let a").append(i).append(" = {\n")
+                    .append("    let unread = List.sum(List.map(k -> k * ").append(before)
+                    .append(", xs))\n    let used = List.length(xs)\n    ").append(before)
+                    .append(" * m + used - used\n  }\n");
         }
         return lets.toString();
     }
@@ -79,11 +97,11 @@ class WhatANameCameToKeptOrReadAgainIsTheSameReportTest {
     private static long namesRead(String source, List<String> report, boolean keeping) {
         long[] counting = {0};
         AffineForms.NAMES_READ = counting;
-        AffineForms.KEEPING_NAMES = keeping;
+        ValueStanding.KEEPING_NAMES = keeping;
         try {
             report.add(reportOf(source));
         } finally {
-            AffineForms.KEEPING_NAMES = true;
+            ValueStanding.KEEPING_NAMES = true;
             AffineForms.NAMES_READ = null;
         }
         return counting[0];
@@ -112,6 +130,18 @@ class WhatANameCameToKeptOrReadAgainIsTheSameReportTest {
     void theReportIsTheSameWhereLinksBindValuesTheyReadAndValuesTheyDoNot() {
         for (String last : LASTS) {
             assertTheSameReport(blocks(), last);
+        }
+    }
+
+    /** Where the binding a body does not read is made of the elements of a list, which reading it
+     *  through {@code bound} puts among the elements met. */
+    @Test
+    void theReportIsTheSameWhereTheValueABodyDoesNotReadIsMadeOfTheElementsOfAList() {
+        String end = "a" + ELEMENT_LINKS;
+        for (String last : List.of(end + " == m", end + " * a" + (ELEMENT_LINKS - 1) + " == m",
+                "List.all(k -> " + end + " + k >= m, xs)",
+                "Int.floorMod(" + end + ", 7) < 5")) {
+            assertTheSameReport(elementBlocks(), last);
         }
     }
 

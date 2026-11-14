@@ -191,6 +191,7 @@ import java.util.function.BiFunction;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.IntSupplier;
 import java.util.function.LongUnaryOperator;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -12115,37 +12116,52 @@ final class Pullback {
 
 
     /**
-     * What the value a name was given came to as a form of the input's numbers, kept
-     * ({@link #quantities}).
+     * What the value a name was given came to, for each question asked of it, kept
+     * ({@link ValueStanding.Names#answerOfAName}). One for each family of readings: what a name
+     * comes to as a form of the quantities is not what it comes to as a form of the input's
+     * numbers.
      *
      * <p>Held by a class of its own: an answer that stopped carries the environment it stopped in,
      * and a field of that type would make this class one that keeps an environment and walks it.
      */
-    private final class KeptNames {
+    private final class KeptNames implements AffineReading.NamesKept {
 
-        private final SharedReads<ReadingState.Inputs, Guards, Met,
-                Spendless<AffineForms.Outcome<Quantity, InputReads>>> shared =
+        /** The question, and the environment as that object and not one like it: what a name
+         *  stands for in an environment the elements of a list written out alike in everything
+         *  but the element is the element's. */
+        private record OfAName(ValueStanding.NameQuestion question, Object at) {
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof OfAName same && same.question == question
+                        && same.at == at;
+            }
+
+            @Override
+            public int hashCode() {
+                return 31 * question.hashCode() + System.identityHashCode(at);
+            }
+        }
+
+        private final SharedReads<ReadingState.Inputs, Guards, Met, Spendless<Object>> shared =
                 new SharedReads<>(new TheScene(true));
 
-        /** What {@code value} comes to read at {@code at}, taken from a reading made at that
-         *  very environment where there is one, and otherwise made by {@code fresh}. */
-        AffineForms.Outcome<Quantity, InputReads> answerOf(
-                Core value, InputReads at, ElementsMet elements,
-                Supplier<AffineForms.Outcome<Quantity, InputReads>> fresh) {
-            return shared.shared(value, at, new SameObject(at), elements,
-                    () -> spendingNothing(fresh),
-                    answer -> answer.spentNothing() && !(answer.value()
-                            instanceof AffineForms.Outcome.StoppedAt<Quantity, InputReads> stop
-                            && stop.why().declinedFigure().isPresent())).value();
+        @Override
+        public <T> T answerOf(ValueStanding.NameQuestion question, Core value, InputReads at,
+                              ElementsMet elements, Supplier<T> fresh, IntSupplier figureAsked) {
+            int askedBefore = figureAsked.getAsInt();
+            @SuppressWarnings("unchecked")
+            T answer = (T) shared.shared(value, at, new OfAName(question, at), elements,
+                    () -> spendingNothing(fresh::get),
+                    kept -> KeptAnswers.keepable(kept.spentNothing(), askedBefore,
+                            figureAsked.getAsInt(), kept.value())).value();
+            return answer;
         }
     }
 
     private final KeptNames sharedNames = new KeptNames();
 
-    /** What the value a name was given came to in the reading of a factor, kept
-     *  ({@link #namesOfAFactor}). */
-    private final SharedReads<ReadingState.Inputs, Guards, Met, Spendless<AffineReading.Kept>>
-            sharedFactorNames = new SharedReads<>(new TheScene(true));
+    private final KeptNames sharedFactorNames = new KeptNames();
 
     /** How the value a name stands for answered each side, kept ({@link #observe}), by the side. */
     private final SharedReads<ReadingState.Inputs, Guards, Met, Derivation> sharedObservations =
@@ -12758,17 +12774,14 @@ final class Pullback {
                 }
             }
 
-            // A reading handed no node to tell of tells nothing of what it reads, so what a name
-            // came to is the same wherever it is taken again at an equal reading. One that is
-            // handed a node is told the operations the walk inside the name composed.
+            // A reading handed a node to tell of is told the operations the walk inside a name
+            // composed, which an answer kept would not tell. What a name folds to tells nothing.
             @Override
-            public AffineForms.Outcome<Quantity, InputReads> answerOfAName(
-                    Core value, InputReads at,
-                    Supplier<AffineForms.Outcome<Quantity, InputReads>> fresh) {
-                if (asked != null) {
-                    return fresh.get();
-                }
-                return sharedNames.answerOf(value, at, held, fresh);
+            public <T> T answerOfAName(ValueStanding.NameQuestion question, Core value,
+                                       InputReads at, Supplier<T> fresh) {
+                return asked != null && question == ValueStanding.NameQuestion.FORM
+                        ? fresh.get()
+                        : sharedNames.answerOf(question, value, at, held, fresh, () -> 0);
             }
 
             @Override
@@ -15729,37 +15742,9 @@ final class Pullback {
                 ? through.denotes() : new Denotation(factor, at);
         return sharedForms.shared(read.value(), read.at(), null, met,
                 () -> spendingNothing(() -> FormRead.of(AffineReading.outcomeOf(read.value(),
-                        read.at(), this.read, met, namesOfAFactor(met)))),
+                        read.at(), this.read, met, sharedFactorNames))),
                 answer -> answer.spentNothing() && !answer.value().reachedAFigure())
                 .value().form().orElse(null);
-    }
-
-    /** An object as the key of a reading kept: itself and not one equal to it. */
-    private record SameObject(Object of) {
-        @Override
-        public boolean equals(Object other) {
-            return other instanceof SameObject same && same.of == of;
-        }
-
-        @Override
-        public int hashCode() {
-            return System.identityHashCode(of);
-        }
-    }
-
-    /**
-     * Where the names under a factor are kept, held to the elements {@code met} has met: what a
-     * name came to in the reading of one factor is what it comes to in the reading of another that
-     * reaches it at an equal reading, a chain of names each read through the one before being a
-     * walk of the whole chain for every link otherwise.
-     */
-    private AffineReading.NamesKept namesOfAFactor(ElementsMet met) {
-        return (value, at, fresh) -> sharedFactorNames.shared(value, at, new SameObject(at), met,
-                () -> spendingNothing(fresh),
-                answer -> answer.spentNothing() && answer.value().leftTheFigureAlone()
-                        && !(answer.value().outcome()
-                        instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stop
-                        && stop.why().declinedFigure().isPresent())).value().outcome();
     }
 
     /**

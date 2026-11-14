@@ -34,7 +34,6 @@ import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 
 /**
  * Reading an expression as {@code const + Σ coef·atom}, over whatever a caller counts as an atom.
@@ -131,29 +130,6 @@ public final class AffineForms {
         @Override
         default Reading<A, E> oneAtATime() {
             return new OneAtATime<>(this);
-        }
-
-        /**
-         * What the value a name was given comes to read at {@code at}, which is {@code fresh}
-         * unless this reading holds an answer it may give for it in place of reading the value
-         * again.
-         *
-         * <p>Asked of the reading the value is read with, so a reading that tells what it reads
-         * of a node ({@link #composed}, {@link #unobserved}) keeps the default: a kept answer
-         * would not tell what the walk inside it told. A reading that tells nothing and keeps
-         * answers where taking one again is the same reading overrides it.
-         *
-         * <p>What an override may keep is the answer and nothing the walk did on the way to it.
-         * The walk records the names it read ({@link BindingWalk}) and tells {@link #bound} where
-         * a binding's body did not read what it binds; a kept answer replays neither, so the
-         * tellings of the walk that took it are the tellings of a walk that read fewer names, and
-         * only a reading that does not consume them may keep. The answer is then a function of
-         * {@code value}, of {@code at} as the very environment, of this reading's own policy and
-         * of whatever state the override guards. The name is not among them: it only decides
-         * whether to go round, which is decided before this is asked.
-         */
-        default Outcome<A, E> answerOfAName(Core value, E at, Supplier<Outcome<A, E>> fresh) {
-            return fresh.get();
         }
 
         /**
@@ -1007,11 +983,13 @@ public final class AffineForms {
             // question — so the walk holds the answer rather than composing the value again.
             case ValueStanding.Named.One<E, Reading<A, E>>(
                     ValueStanding.Standing<E, Reading<A, E>> one) ->
-                    answerOfTheName(one, () -> following.readingOf(r.binding(), one.value(),
-                            readAs(r, at, one.at(), reading), () -> {
-                                countANameRead();
-                                return of(one.value(), one.at(), one.names(), following);
-                            }));
+                    ValueStanding.answered(one.names(), ValueStanding.NameQuestion.FORM,
+                            one.value(), one.at(),
+                            () -> following.readingOf(r.binding(), one.value(),
+                                    readAs(r, at, one.at(), reading), () -> {
+                                        countANameRead();
+                                        return of(one.value(), one.at(), one.names(), following);
+                                    }));
             case ValueStanding.Named.OneOf<E, Reading<A, E>>(
                     List<ValueStanding.Standing<E, Reading<A, E>>> members) -> {
                 // Several values the name may stand for, each read apart from the operations the
@@ -1024,16 +1002,6 @@ public final class AffineForms {
         };
         following.leave(r.binding());
         return read;
-    }
-
-    /** Whether what a name came to is asked of the reading it is read with before the value is
-     *  read. A test turns it off to hold the answers kept to the ones read afresh. */
-    static boolean KEEPING_NAMES = true;
-
-    private static <A, E> Outcome<A, E> answerOfTheName(
-            ValueStanding.Standing<E, Reading<A, E>> one, Supplier<Outcome<A, E>> fresh) {
-        return KEEPING_NAMES ? one.names().answerOfAName(one.value(), one.at(), fresh)
-                : fresh.get();
     }
 
     /** Where a test counts the values of names this reads afresh rather than finds kept, and null

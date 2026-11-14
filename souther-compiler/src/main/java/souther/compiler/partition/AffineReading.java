@@ -71,6 +71,7 @@ import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 import java.util.function.Predicate;
@@ -317,18 +318,17 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 reading(read, new LinkedHashSet<>(), met, new WhatWasTold(), null, kept));
     }
 
-    /** What the reading of a name came to, and whether it left alone the figure that counts the
-     *  readings of one comparison: neither spent it nor was refused by it. */
-    record Kept(AffineForms.Outcome<NumericTerm, InputReads> outcome,
-                boolean leftTheFigureAlone) {}
-
     /** Where what a name came to is kept to be taken by another reading. */
     interface NamesKept {
 
-        /** What the value a name was given comes to read at {@code at}: taken where it was read
-         *  before, and otherwise {@code fresh}. */
-        AffineForms.Outcome<NumericTerm, InputReads> answerOf(Core value, InputReads at,
-                                                             Supplier<Kept> fresh);
+        /**
+         * What {@code question} of the value a name was given comes to read at {@code at}, held
+         * to {@code elements}: taken where it was read before, and otherwise {@code fresh}.
+         * {@code figureAsked} says how many times the figure counting the readings has been asked
+         * of, and an answer made while it was asked of is the answer of the figure's state then.
+         */
+        <T> T answerOf(ValueStanding.NameQuestion question, Core value, InputReads at,
+                       ElementsMet elements, Supplier<T> fresh, IntSupplier figureAsked);
     }
 
     /**
@@ -591,18 +591,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             // could depend on: no accumulator carried, no stopped value held aside, and the
             // figure not asked of, which an answer that declined would be a function of.
             @Override
-            public AffineForms.Outcome<NumericTerm, InputReads> answerOfAName(
-                    Core value, InputReads at,
-                    Supplier<AffineForms.Outcome<NumericTerm, InputReads>> fresh) {
+            public <T> T answerOfAName(ValueStanding.NameQuestion question, Core value,
+                                       InputReads at, Supplier<T> fresh) {
                 if (namesKept == null || stoppedAt != null || told.productsStop
                         || !carried.isEmpty()) {
                     return fresh.get();
                 }
-                return namesKept.answerOf(value, at, () -> {
-                    int before = told.askedOfTheFigure();
-                    AffineForms.Outcome<NumericTerm, InputReads> came = fresh.get();
-                    return new Kept(came, told.askedOfTheFigure() == before);
-                });
+                return namesKept.answerOf(question, value, at, met, fresh,
+                        told::askedOfTheFigure);
             }
 
             /**
@@ -2052,7 +2048,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
     /** What a reading of a comparison was told as it went: the operations of whole numbers, and
      *  whether nothing it read could stop a run without telling. */
-    private static final class WhatWasTold {
+    static final class WhatWasTold {
 
         private final List<UndividedByARelation.IntOperation> operations = new ArrayList<>();
         /** Each of {@link #operations} once, for asking whether one was told: a list written out
