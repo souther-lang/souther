@@ -11,8 +11,9 @@ import java.lang.classfile.ClassFile;
 import java.lang.classfile.ClassModel;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -71,27 +72,36 @@ class AFigureACompilationSetsIsReadWhereItIsUsedTest {
         Set<String> settable = new TreeSet<>();
         Allowances.SETTABLE.forEach(each -> settable.add(each.name()));
         Set<String> asking = new TreeSet<>();
-        Set<Compiled.Site> askedOfANamedOne = new HashSet<>();
+        // A site is the call a method makes, and two calls of the same method alike are one site:
+        // so what is told of one call — that the budget it asked was named just before — is
+        // counted against how many such calls the method makes, and not looked up by the site.
+        Map<Compiled.Site, Integer> askedOfANamedOne = new HashMap<>();
         for (Compiled.StaticRead each : reading.staticReads()) {
             Compiled.Site taken = each.takenBy();
             if (each.read().owner().equals(BUDGET) && taken != null
                     && taken.owner().equals(BUDGET)
                     && ASKS_THE_FIGURE_IN_FORCE.contains(taken.member())) {
-                askedOfANamedOne.add(taken);
+                askedOfANamedOne.merge(taken, 1, Integer::sum);
                 if (settable.contains(each.read().member())
                         && !each.read().from().equals(BUDGET)) {
                     asking.add(each.read().at());
                 }
             }
         }
-        Set<String> askingOfOneHandedIn = new TreeSet<>();
+        Map<Compiled.Site, Integer> asked = new HashMap<>();
         for (Compiled.Site site : reading.sites()) {
             if (site.how() == Compiled.How.CALLS && site.owner().equals(BUDGET)
                     && ASKS_THE_FIGURE_IN_FORCE.contains(site.member())
-                    && !site.from().equals(BUDGET) && !askedOfANamedOne.contains(site)) {
-                askingOfOneHandedIn.add(site.at());
+                    && !site.from().equals(BUDGET)) {
+                asked.merge(site, 1, Integer::sum);
             }
         }
+        Set<String> askingOfOneHandedIn = new TreeSet<>();
+        asked.forEach((site, calls) -> {
+            if (calls > askedOfANamedOne.getOrDefault(site, 0)) {
+                askingOfOneHandedIn.add(site.at());
+            }
+        });
         assertFalse(asking.isEmpty(), "some place asks for a figure, or this reads no call of it");
         asking.addAll(askingOfOneHandedIn);
 
@@ -124,6 +134,27 @@ class AFigureACompilationSetsIsReadWhereItIsUsedTest {
         assertEquals(List.of(), List.copyOf(gone), "these run nothing of the kind any more");
     }
 
+    /** What an entry says it asks is no budget a compilation may set, or it is no exception. */
+    @Test
+    void noClassLoadedMayAskABudgetACompilationMaySet() {
+        Set<String> nowSettable = new TreeSet<>();
+        Set<String> sayingNothing = new TreeSet<>();
+        LOADING_MAY_ASK.forEach((loaded, entry) -> {
+            if (entry.asks().isEmpty()) {
+                sayingNothing.add(loaded);
+            }
+            if (!Collections.disjoint(entry.asks(), Allowances.SETTABLE)) {
+                nowSettable.add(loaded);
+            }
+        });
+        assertEquals(List.of(), List.copyOf(sayingNothing),
+                "an exception says which budget it asks, or it says nothing that can be held");
+        assertEquals(List.of(), List.copyOf(nowSettable),
+                "these ask a budget a compilation may set now, and would hold the figure in force"
+                        + " for whichever compilation loaded them first: the exception no longer"
+                        + " holds");
+    }
+
     /**
      * What this finds is asked of two classes written for it, which hold a figure the two ways a
      * class can: a stop made when it is loaded, by a helper of another class that reads the figure
@@ -133,7 +164,9 @@ class AFigureACompilationSetsIsReadWhereItIsUsedTest {
     @Test
     void whatAClassHoldsOfTheFigureInForceIsFoundWhereverItIsRead() throws Exception {
         List<ClassModel> held = new ArrayList<>();
-        for (Class<?> each : List.of(AStopMadeWhenLoaded.class, AFigureReadByAHelper.class)) {
+        List<Class<?>> fixtureClasses = List.of(AStopMadeWhenLoaded.class,
+                AFigureReadByAHelper.class, AFigureReadBesideOneNamed.class);
+        for (Class<?> each : fixtureClasses) {
             String file = each.getName().substring(each.getPackageName().length() + 1) + ".class";
             try (InputStream bytes = each.getResourceAsStream(file)) {
                 held.add(ClassFile.of().parse(bytes.readAllBytes()));
@@ -150,6 +183,8 @@ class AFigureACompilationSetsIsReadWhereItIsUsedTest {
 
         assertTrue(reaching.containsKey(AStopMadeWhenLoaded.class.getName()), () -> reaching.toString());
         assertTrue(reaching.containsKey(AFigureReadByAHelper.class.getName()), () -> reaching.toString());
+        assertTrue(reaching.containsKey(AFigureReadBesideOneNamed.class.getName()),
+                () -> reaching.toString());
     }
 
     /** A stop made when the class is loaded, which holds the figure in force then. */
@@ -169,26 +204,46 @@ class AFigureACompilationSetsIsReadWhereItIsUsedTest {
     }
 
     /**
+     * A settable budget handed to a helper that asks one budget it names and then the one it is
+     * handed: two calls of one method that compile to the same call, and differ in what they ask.
+     */
+    static final class AFigureReadBesideOneNamed {
+
+        static final int HELD = compute(CompositionBudget.READINGS_OF_ONE_CONDITION);
+
+        private static int compute(CompositionBudget budget) {
+            CompositionBudget.PARTS_A_DERIVATION_CONCLUDES.maximum();
+            return budget.maximum();
+        }
+    }
+
+    /**
      * What a class run when it is loaded may ask the figure in force of, and why it holds none of
      * what it is told.
      *
      * <p>Where a budget is handed to what asks it, this cannot tell which budget, and takes it to be
-     * any; so these are read by what each says, and a settable budget handed where they ask would
-     * not be seen here. A settable budget named where it is handed is.
+     * any; so each says which it asks, and that is held: an entry whose budget a compilation may
+     * now set is refused, since what it says is no longer so. A settable budget handed where they
+     * ask would not be seen here; a settable budget named where it is handed is.
+     *
+     * @param asks   the budgets the class asks for the figure when it is loaded
+     * @param why    what the class does with it
      */
-    private static final Map<String, String> LOADING_MAY_ASK = Map.of(
+    private record Asks(Set<CompositionBudget> asks, String why) {}
+
+    private static final Map<String, Asks> LOADING_MAY_ASK = Map.of(
             "souther.compiler.partition.Generator$TellingArmsApart",
-            "copies the rows a walk hands the choice of a row among"
-                    + " (ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW), which no compilation may set",
+            new Asks(Set.of(CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW),
+                    "copies the rows a walk hands the choice of a row among"),
             "souther.compiler.partition.Generator$ReachingWhatIsJudged",
-            "copies the rows a walk hands the choice of a row among"
-                    + " (ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW), which no compilation may set",
+            new Asks(Set.of(CompositionBudget.ROWS_A_WALK_HANDS_THE_CHOICE_OF_A_ROW),
+                    "copies the rows a walk hands the choice of a row among"),
             "souther.compiler.check.FieldDomains",
-            "makes a concluding, which counts to the parts a derivation concludes with"
-                    + " (PARTS_A_DERIVATION_CONCLUDES), which no compilation may set",
+            new Asks(Set.of(CompositionBudget.PARTS_A_DERIVATION_CONCLUDES),
+                    "makes a concluding, which counts to the parts a derivation concludes with"),
             "souther.compiler.check.StringPredicates",
-            "makes a concluding, which counts to the parts a derivation concludes with"
-                    + " (PARTS_A_DERIVATION_CONCLUDES), which no compilation may set");
+            new Asks(Set.of(CompositionBudget.PARTS_A_DERIVATION_CONCLUDES),
+                    "makes a concluding, which counts to the parts a derivation concludes with"));
 
     /** The first method asking for a figure that {@code start} runs, or null where it runs none. */
     private static String firstAsking(String start, Map<String, List<Compiled.Site>> doing,

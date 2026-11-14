@@ -3,6 +3,7 @@ package souther.bench;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.partition.Allowances;
+import souther.compiler.partition.CompositionBudget;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -18,6 +19,7 @@ import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A table held in a static field outlives every compilation, and what it holds is handed to each
@@ -80,8 +82,8 @@ class EveryTableThatOutlivesACompilationSaysWhatItTurnsOnTest {
                     FOR_THE_FIGURE),
             Map.entry("souther.compiler.meaning.SharedPropositions#CHOICES", FOR_THE_FIGURE),
             Map.entry("souther.compiler.meaning.SharedPropositions#WRITTEN",
-                    "turns on how many parts a step concludes and how many ways a statement is"
-                            + " written out over, which no compilation may hold to another figure"),
+                    "turns on budgets none of which a compilation may set, named in"
+                            + " WHILE_NOT_SET and refused where one is"),
             Map.entry("souther.compiler.meaning.SharedPropositions#KEPT", SHARES),
             Map.entry("souther.compiler.partition.OnTheWay$OneOf#MADE", SHARES),
             Map.entry("souther.compiler.inputs.TermPath#FILED", SHARES),
@@ -105,6 +107,36 @@ class EveryTableThatOutlivesACompilationSaysWhatItTurnsOnTest {
                     "the fields of a class, which is no answer of a compilation's"),
             Map.entry("souther.compiler.revision.RevisionWorkDone#DONE",
                     "a count of the work done, which no answer is worked out of"));
+
+    /**
+     * The budgets a table turns on where it is kept for no figure, which are safe only while no
+     * compilation may hold them to another: the cases written out of a statement over the ways turn
+     * on how many parts a step concludes with and how many ways a statement is written out over.
+     */
+    private static final Map<String, Set<CompositionBudget>> WHILE_NOT_SET = Map.of(
+            "souther.compiler.meaning.SharedPropositions#WRITTEN",
+            Set.of(CompositionBudget.PARTS_A_DERIVATION_CONCLUDES,
+                    CompositionBudget.WAYS_A_STATEMENT_IS_WRITTEN_OUT_OVER));
+
+    /** What a table is listed as turning on only while a budget is not set is no longer so once it
+     *  is: it is then kept for every compilation, and turns on the figure of one. */
+    @Test
+    void noTableListedAsTurningOnABudgetIsOneACompilationMayNowSet() {
+        assertTrue(TURNS_ON.keySet().containsAll(WHILE_NOT_SET.keySet()),
+                "a table is said to turn on a budget, and is not listed");
+        Map<String, Set<CompositionBudget>> nowSettable = new TreeMap<>();
+        WHILE_NOT_SET.forEach((table, budgets) -> {
+            Set<CompositionBudget> met = new TreeSet<>(budgets);
+            met.retainAll(Allowances.SETTABLE);
+            if (!met.isEmpty() || budgets.isEmpty()) {
+                nowSettable.put(table, met);
+            }
+        });
+        assertEquals(Map.of(), nowSettable,
+                "these turn on a budget a compilation may set now, or on none, and are kept for"
+                        + " the figure of whichever compilation filled them: key them by it, as"
+                        + " CountsWrittenOut is, and list them for the figure");
+    }
 
     @Test
     void everyTableAStaticFieldHoldsSaysWhatItTurnsOn() throws Exception {
