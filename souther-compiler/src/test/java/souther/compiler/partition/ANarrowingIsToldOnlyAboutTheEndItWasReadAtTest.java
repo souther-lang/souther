@@ -6,7 +6,7 @@ import souther.compiler.check.AReadingOfAPosition;
 import souther.compiler.check.Carrier;
 import souther.compiler.check.Clause;
 import souther.compiler.check.DeclaredLine;
-import souther.compiler.check.InvariantStatementId;
+import souther.compiler.check.AStatementOfAConjunct;
 import souther.compiler.check.PartId;
 import souther.compiler.check.ClauseName;
 import souther.compiler.check.MatchedEndAttribution;
@@ -151,7 +151,7 @@ class ANarrowingIsToldOnlyAboutTheEndItWasReadAtTest {
     /** The clause the bound is written in, which is only an identity here. */
     private static LineOrigin.InvariantOrigin aMinimum() {
         return new LineOrigin.InvariantOrigin(
-                new DeclaredLine.OfAStatement(new InvariantStatementId(
+                new DeclaredLine.OfAStatement(AStatementOfAConjunct.numbered(
                         new PartId<>(new RuleRef.Invariant(new Clause.Ref(
                                 new Clause.Id(TypeSymbols.declared(
                                         new TypeKey("example.weigh", "Amount")), 0),

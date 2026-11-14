@@ -129,6 +129,57 @@ public final class DifferenceBounds<A> {
     }
 
     /**
+     * What {@link #over} comes to for the rules these were made from followed by {@code added}, or
+     * null where that is not worked out from these alone.
+     *
+     * <p>Only where no rule so far relates two positions and none of {@code added} does: then there
+     * is no path through any position, and what each bound comes to is the tightest of the rules
+     * that state it. A rule that relates two positions makes a path of the rules before it and the
+     * ones after, and is closed by {@link #over}.
+     */
+    DifferenceBounds<A> followedBy(List<AffineConstraint<A>> added, CanonicalOrder<A> order) {
+        if (holdsNothing || !related.isEmpty()) {
+            return null;
+        }
+        Map<A, ExactCut> aboveNow = new LinkedHashMap<>(above);
+        Map<A, ExactCut> belowNow = new LinkedHashMap<>(below);
+        Set<A> positionsNow = new LinkedHashSet<>(positions);
+        Set<A> touched = new LinkedHashSet<>();
+        for (AffineConstraint<A> each : added) {
+            for (Edge<A> edge : edgesOf(each, order)) {
+                switch (edge) {
+                    case Edge.Above<A> up -> {
+                        positionsNow.add(up.position());
+                        touched.add(up.position());
+                        aboveNow.merge(up.position(), up.at(), ExactCut::tighterUpper);
+                    }
+                    case Edge.Below<A> down -> {
+                        positionsNow.add(down.position());
+                        touched.add(down.position());
+                        belowNow.merge(down.position(), down.at(), ExactCut::tighterUpper);
+                    }
+                    case Edge.Between<A> _ -> {
+                        return null;
+                    }
+                }
+            }
+        }
+        boolean nothing = false;
+        for (A position : touched) {
+            if (crossed(belowNow.get(position), aboveNow.get(position))) {
+                nothing = true;
+                break;
+            }
+        }
+        if (nothing) {
+            return new DifferenceBounds<>(Map.of(), Map.of(), Map.of(), positionsNow, true,
+                    everyHopWasComposed);
+        }
+        return new DifferenceBounds<>(Map.of(), aboveNow, belowNow, positionsNow, false,
+                everyHopWasComposed);
+    }
+
+    /**
      * Closures over positions no two of them share, as the one closure of all their rules.
      *
      * <p>No edge runs from one of them into another, so no path does either, and closing their

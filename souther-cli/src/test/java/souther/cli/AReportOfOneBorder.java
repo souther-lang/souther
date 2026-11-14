@@ -22,6 +22,7 @@ import souther.compiler.check.DeclaredLine;
 import souther.compiler.check.InvariantStatementId;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
+import souther.compiler.check.StatementNumber;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Count;
@@ -112,7 +113,7 @@ final class AReportOfOneBorder {
                                 new Clause.Id(TypeSymbols.declared(
                                         new TypeKey("example.rate", "Amount")), 0),
                                 java.util.Optional.of(new ClauseName("cap")))), 0),
-                        0)),
+                        StatementNumber.of(0))),
                 souther.compiler.numeric.EndSide.LOWER, true);
         return Border.at(
                 BoundaryTarget.at(
@@ -168,7 +169,7 @@ final class AReportOfOneBorder {
                                 new Clause.Id(TypeSymbols.declared(
                                         new TypeKey("example.rate", "Amount")), 0),
                                 java.util.Optional.of(new ClauseName("cap")))), 0),
-                        0)),
+                        StatementNumber.of(0))),
                 souther.compiler.numeric.EndSide.LOWER, true);
         return Border.at(
                 BoundaryTarget.at(

@@ -49,12 +49,6 @@ class WhoMayCarryTheNumberOfAStatementIsWrittenDownTest {
                     "the pair itself, made where a part is read for what it states and carried from"
                             + " there. This is the name everything downstream holds instead of a"
                             + " number, so it is the one place the two stand together"),
-            new Licence("souther.compiler.check.InvariantStatementId.ordinal",
-                    "the same pair for a declaration's clause, which is decomposed twice as a"
-                            + " behavior's is. Two of them and not one, because the number means"
-                            + " which statement of the part its own reading arrived at: the readings"
-                            + " are separate and a number issued by either would be a place in the"
-                            + " other's list"),
             new Licence("souther.compiler.partition.UndividedByARelation.TiedOnTheWay.Rule.clause",
                     "which of the clauses a declaration publishes the rule is of, as a place in"
                             + " that list. The part's name says which rule of a clause it is and"

@@ -3,9 +3,11 @@ package souther.compiler.core;
 import souther.compiler.types.BindingId;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -112,6 +114,45 @@ public final class WhatABodyReads {
             return;
         }
         Core.forEachChild(e, child -> madeOf(child, out));
+    }
+
+    /**
+     * The bindings {@code e} reads that nothing inside it makes: the names it takes from where it
+     * stands, and none a closure's parameter or a {@code let} inside it brings. A name bound inside
+     * is a different value on each application of what binds it, so it is no one value of the
+     * place the expression is read at.
+     *
+     * <p>A binder this does not know of leaves the name it makes read and not made, which says the
+     * value names something — the answer that hands nothing, and never a wrong one.
+     */
+    public static Set<BindingId> freeIn(Core e) {
+        Set<BindingId> made = new HashSet<>();
+        List<Core.Read> reads = new ArrayList<>();
+        namesIn(e, made, reads);
+        Set<BindingId> free = new LinkedHashSet<>();
+        reads.forEach(each -> free.add(each.binding()));
+        free.removeAll(made);
+        return free;
+    }
+
+    /** Every read inside {@code e}, and the bindings its binders make, as {@link #freeIn} takes
+     *  them. */
+    public static void namesIn(Core e, Set<BindingId> made, List<Core.Read> reads) {
+        switch (e) {
+            case Core.Read r -> reads.add(r);
+            case Core.LetIn let -> madeBy(let.binder(), made);
+            case Core.Block block -> block.params().forEach(each -> madeBy(each, made));
+            case Core.Match match -> match.cases().forEach(arm -> madeBy(arm.binder(), made));
+            case Core.IfConstructed fork -> madeBy(fork.binder(), made);
+            default -> { }
+        }
+        Core.forEachChild(e, child -> namesIn(child, made, reads));
+    }
+
+    private static void madeBy(Core.Binder binder, Set<BindingId> made) {
+        if (binder != null && binder.binding() != null) {
+            made.add(binder.binding());
+        }
     }
 
     /** Whether {@code e} reads any binding anywhere inside it: a value that reads none is made of

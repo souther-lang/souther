@@ -13,13 +13,21 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 
 import java.math.BigDecimal;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.function.UnaryOperator;
 
 /**
@@ -311,7 +319,7 @@ final class DerivedNumericFacts {
             return domain.isBottom();
         }
 
-        Bounds boundsOf(LinearForm<FactSubject> form) {
+        Bounds boundsOf(NumericDomain.Prepared<FactSubject> form) {
             return domain.boundsOf(form);
         }
 
@@ -438,15 +446,22 @@ final class DerivedNumericFacts {
      * into — which is a cost that compounds with nesting where the recipes' own reading does not
      * ({@link ContextMultiplicity}). What only a relation names has no such second route, which is
      * why it is this reaching that belongs here.
+     *
+     * <p>In the order the atoms were recorded in ({@link Terms#recordedAt}), which is one order
+     * whichever form asks and however the forms were written: a recipe is recorded after the atoms
+     * it is over, so the operands of a recipe come before it. What an atom answers is settled by the
+     * atoms read before it, and an order that came from how a map happened to hand them over would
+     * answer one way in one run and another in the next.
      */
     private static Set<FactSubject> toDerive(Terms terms, Collection<FactSubject> asked) {
-        Set<FactSubject> out = new LinkedHashSet<>();
+        List<FactSubject> reached = new ArrayList<>();
         for (FactSubject atom : terms.carriedReachFrom(asked)) {
             if (recorded(terms, atom)) {
-                out.add(atom);
+                reached.add(atom);
             }
         }
-        return out;
+        reached.sort(Comparator.comparingInt(terms::recordedAt));
+        return new LinkedHashSet<>(reached);
     }
 
     /**
@@ -475,8 +490,17 @@ final class DerivedNumericFacts {
          *  whichever was asked first. */
         private final Map<FactSubject, Says> answeredInPlace = new LinkedHashMap<>();
 
+        /** Each reading a recipe is read against, and what has been taken into it. */
+        private final Map<ReadingDomain, Taken> takenOn = new IdentityHashMap<>();
+
         Memo(Question asked) {
             this.asked = asked;
+        }
+
+        /** What has been taken into {@code base}, which is nothing yet where it has not been
+         *  asked. */
+        Taken takenOn(ReadingDomain base) {
+            return takenOn.computeIfAbsent(base, Taken::new);
         }
 
         /** What was answered of a value read with {@code copies}. */
@@ -508,6 +532,67 @@ final class DerivedNumericFacts {
                 WATCHING.add(new Reading(asked, List.copyOf(evaluated)));
             }
         }
+    }
+
+    /**
+     * A reading with what an ordered run of answers says taken into it, and the readings that run
+     * is the beginning of.
+     *
+     * <p>What is taken into a reading is settled by the reading and the answers taken, in the order
+     * they were taken: the same answers in the same order are the same reading. A form that asks
+     * for the answers one before it asked for, and some more, is read from where that one stopped
+     * and is not read again from the start — every form of a chain of sums names the positions of
+     * the form before it. Held by the memo, so it lasts as long as the answers it is made of.
+     */
+    private static final class Taken {
+
+        private final ReadingDomain state;
+        private final Map<Says, Taken> next = new IdentityHashMap<>();
+
+        /** The reading each run of answers comes to, for the runs asked of the reading this is
+         *  the beginning of, by whether the splits of what was derived are opened. */
+        private Map<Need, Taken> keptOpen;
+        private Map<Need, Taken> keptInPlace;
+
+        private Taken(ReadingDomain state) {
+            this.state = state;
+        }
+
+        Map<Need, Taken> keptFor(boolean opensSplits) {
+            if (opensSplits) {
+                if (keptOpen == null) {
+                    keptOpen = new IdentityHashMap<>();
+                }
+                return keptOpen;
+            }
+            if (keptInPlace == null) {
+                keptInPlace = new IdentityHashMap<>();
+            }
+            return keptInPlace;
+        }
+
+        ReadingDomain state() {
+            return state;
+        }
+
+        /** This with {@code said} taken in next. */
+        Taken then(Says said, Terms terms) {
+            return next.computeIfAbsent(said, each -> {
+                FACTS_TAKEN.add(each.facts().size());
+                return new Taken(state.taking(each.facts(), terms));
+            });
+        }
+    }
+
+    private static final LongAdder FACTS_TAKEN = new LongAdder();
+
+    /**
+     * How many facts have been taken into a reading, for a test holding what a path costs to how
+     * many values it names and not how many pairs of them: that is a shape and not a speed. A run
+     * of answers is taken in once for the reading, whichever form asks for it.
+     */
+    static long factsTaken() {
+        return FACTS_TAKEN.sum();
     }
 
     /**
@@ -1307,7 +1392,15 @@ final class DerivedNumericFacts {
      */
     private static Bounds boundsOf(LinearForm<FactSubject> form, ReadingDomain base, Terms terms,
                                    Memo done, Deriving deriving, ContextMultiplicity copies) {
-        ReadingDomain with = base;
+        Plan plan = terms.derivationPlans.of(form, terms);
+        if (terms.derivationPlans.keeps()) {
+            Taken planned = plan.run() == null ? done.takenOn(base)
+                    : takenAfter(plan.run(), base, terms, done, deriving, copies);
+            if (planned != null) {
+                return planned.state().boundsOf(plan.asks());
+            }
+        }
+        Taken with = done.takenOn(base);
         for (FactSubject atom : toDerive(terms, form.coefs().keySet())) {
             // Which of the two edges this atom was reached by is the whole of what the refusal below
             // turns on, and it is known here and nowhere else: an atom the form names is what this
@@ -1317,11 +1410,161 @@ final class DerivedNumericFacts {
             // of values it is related to again for each one (ContextMultiplicity.inPlace).
             boolean named = form.coefs().containsKey(atom);
             Deriving how = named ? deriving : deriving.throughWhatAValueCarries();
-            with = with.taking(derive(atom, base, terms, done, how,
-                    named ? copies : copies.inPlace()).facts(), terms);
+            with = with.then(derive(atom, base, terms, done, how,
+                    named ? copies : copies.inPlace()), terms);
         }
-        return with.boundsOf(form);
+        return with.state().boundsOf(plan.asks());
     }
+
+    /**
+     * What {@code need} says taken into the reading a recipe is read against, where every answer it
+     * takes was settled — and null where one was not, which is an atom met again while it is being
+     * derived, and whose answer is not the answer it has once it is. A reading made of an answer
+     * that was not settled is not kept, and the form is read as it was before there were plans.
+     *
+     * <p>Each run of answers is taken in once for the memo, whichever of the forms that need it is
+     * asked first: a form asks for the answers of the form before it and one more, so the readings
+     * it is made of are the ones already made.
+     */
+    private static Taken takenAfter(Need need, ReadingDomain base, Terms terms, Memo done,
+                                    Deriving deriving, ContextMultiplicity copies) {
+        Taken root = done.takenOn(base);
+        Map<Need, Taken> kept = root.keptFor(copies.opensSplits());
+        Deque<Need> pending = new ArrayDeque<>();
+        Taken before = root;
+        for (Need at = need; at != null; at = at.before()) {
+            Taken had = kept.get(at);
+            if (had != null) {
+                before = had;
+                break;
+            }
+            pending.push(at);
+        }
+        while (!pending.isEmpty()) {
+            Need at = pending.pop();
+            ContextMultiplicity in = at.named() ? copies : copies.inPlace();
+            Says said = derive(at.atom(), base, terms, done,
+                    at.named() ? deriving : deriving.throughWhatAValueCarries(), in);
+            if (done.answeredWith(in).get(at.atom()) != said) {
+                return null;
+            }
+            before = before.then(said, terms);
+            kept.put(at, before);
+        }
+        return before;
+    }
+
+    /** An atom a form is read through, and whether the form names it. */
+    private record Reached(FactSubject atom, boolean named) {}
+
+    /**
+     * The answers a form takes into a reading, one atom after the ones before it, as the run it is.
+     * Runs share what they begin with, in the order they begin with it: a run is the very sequence
+     * the form is read in ({@link #toDerive}), and one that follows another is that sequence and
+     * more.
+     *
+     * @param before the run this one follows, or null at the first
+     */
+    private record Need(Need before, FactSubject atom, boolean named) {}
+
+    /**
+     * The run each form takes, made once for the form however many readings ask it and kept for as
+     * long as what it was made from stands.
+     *
+     * <p>A run is the order {@link #toDerive} puts the atoms of the form in, and two forms share the
+     * steps their orders have in common from the first — a form that reads the atoms of another and
+     * one more, in the order they were recorded, begins with that other's run. Never by which atoms
+     * they are: what one atom answers is settled by the atoms read before it (an atom met again
+     * while it is being derived answers nothing, and that is not kept), so two forms that read the
+     * same atoms in another order are two runs.
+     *
+     * <p>What a run is made from is what the naming recorded about the atoms the form reaches, and
+     * that is only ever added to: so the runs are let go when something is recorded about an atom
+     * one of them was made from, and about no other.
+     */
+    static final class Plans {
+
+        /** The runs that begin with each run, by the next step. */
+        private static final class Branch {
+
+            private final Need run;
+            private final Map<Reached, Branch> next = new HashMap<>();
+
+            private Branch(Need run) {
+                this.run = run;
+            }
+        }
+
+        private Branch root = new Branch(null);
+        private final Map<LinearForm<FactSubject>, Plan> byForm = new IdentityHashMap<>();
+        private final Set<FactSubject> examined = new HashSet<>();
+        private volatile boolean keeping = true;
+
+        /**
+         * Keeps no run from here on, so that every form is read from its first atom, which is how
+         * a form is read where a run cannot be kept ({@link #takenAfter}). Of the one naming and not
+         * of the process, for a test holding that the two come to one answer.
+         */
+        void keepNone() {
+            keeping = false;
+        }
+
+        boolean keeps() {
+            return keeping;
+        }
+
+        /** That something was recorded about {@code atom}. */
+        synchronized void knowledgeChanged(FactSubject atom) {
+            if (examined.contains(atom)) {
+                root = new Branch(null);
+                byForm.clear();
+                examined.clear();
+            }
+        }
+
+        /** The run {@code form} takes, and what it asks of a domain, worked out once. */
+        private synchronized Plan of(LinearForm<FactSubject> form, Terms terms) {
+            Plan had = byForm.get(form);
+            if (had != null) {
+                return had;
+            }
+            examined.addAll(terms.carriedReachFrom(form.coefs().keySet()));
+            Branch at = root;
+            for (FactSubject atom : toDerive(terms, form.coefs().keySet())) {
+                Need before = at.run;
+                boolean named = form.coefs().containsKey(atom);
+                at = at.next.computeIfAbsent(new Reached(atom, named),
+                        step -> new Branch(new Need(before, step.atom(), step.named())));
+            }
+            Plan made = new Plan(at.run, NumericDomain.prepare(form));
+            byForm.put(form, made);
+            return made;
+        }
+    }
+
+    /**
+     * What a form is read with: the run of answers it takes into a reading, or null where it takes
+     * none, and what it asks of the reading once they are taken in. Both are the form's, and the form
+     * is read again by every reading that reaches it.
+     */
+    private record Plan(Need run, NumericDomain.Prepared<FactSubject> asks) {}
+
+    /** The atoms {@code form} is read through, in the order they are taken into a reading, for the
+     *  test holding that a run is that order. */
+    static List<FactSubject> runOf(LinearForm<FactSubject> form, Terms terms) {
+        ArrayList<FactSubject> run = new ArrayList<>();
+        for (Need at = terms.derivationPlans.of(form, terms).run(); at != null; at = at.before()) {
+            run.add(at.atom());
+        }
+        Collections.reverse(run);
+        return run;
+    }
+
+    /** The atoms {@code form} is read through, in the order {@link #toDerive} puts them in. */
+    static List<FactSubject> readingOrderOf(LinearForm<FactSubject> form, Terms terms) {
+        return new ArrayList<>(toDerive(terms, form.coefs().keySet()));
+    }
+
 
     /**
      * An atom recorded as arithmetic over itself.
