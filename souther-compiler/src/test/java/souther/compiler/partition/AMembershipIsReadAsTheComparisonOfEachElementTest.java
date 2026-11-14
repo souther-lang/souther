@@ -192,6 +192,28 @@ class AMembershipIsReadAsTheComparisonOfEachElementTest {
                         + " && List.any(own -> own == email, Set.toList(sset))");
     }
 
+    /**
+     * A value a {@code find} over the container answers, where the predicate reads the container
+     * again, is compared with each element as any other value is.
+     */
+    @Test
+    void aValueAFindOverTheSameContainerAnswersIsReadAsTheComparisonOfEachElementWithIt() {
+        String found = "ns |> List.find(x -> Bool.not(Set.contains(x, ds)))"
+                + " |> Option.withDefault(n)";
+        sameAs("Set.contains(" + found + ", ds)",
+                "List.any(own -> own == (" + found + "), Set.toList(ds))");
+        String foundInIt = "ns |> List.find(x -> Set.contains(x, ds)) |> Option.withDefault(n)";
+        sameAs("Set.contains(" + foundInIt + ", ds)",
+                "List.any(own -> own == (" + foundInIt + "), Set.toList(ds))");
+        String inAList = "ns |> List.find(x -> Bool.not(List.contains(x, ns)))"
+                + " |> Option.withDefault(n)";
+        sameAs("List.contains(" + inAList + ", ns)",
+                "List.any(own -> own == (" + inAList + "), ns)");
+        String byAnother = "ns |> List.find(x -> Set.contains(x, ds)) |> Option.withDefault(n)";
+        sameAs("List.contains(" + byAnother + ", ns)",
+                "List.any(own -> own == (" + byAnother + "), ns)");
+    }
+
     /** What an element is compared with is told of the places that stand in the comparison, so a
      *  comparison of the elements is never reported as dividing no place. */
     @Test

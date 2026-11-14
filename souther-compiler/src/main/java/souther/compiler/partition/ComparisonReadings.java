@@ -1684,9 +1684,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             if (applying instanceof ClosureApplications.Each(var made)
                     && made.stream().anyMatch(ClosureApplications.Application::isMadeOnSomeRow)) {
                 return Cutting.ofAnApplicationOnEach(made, one -> appliedOn(application,
-                        WhatNamesStandFor.in(one.reads(), standing.read())));
+                        WhatNamesStandFor.in(one.reads(), standing.read()),
+                        new ClosureApplications.Each(List.of(one))));
             }
-            Cutting.AppliedOn applied = appliedOn(application, standing);
+            Cutting.AppliedOn applied = appliedOn(application, standing, applying);
             return applied == null ? null : applied.read();
         }
 
@@ -1697,15 +1698,21 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
          */
         private Optional<Cutting.AppliedOn> unreadAsItsLawComparison(
                 Core.PreservedCall application, Pullback.Pulled stated,
-                WhatNamesStandFor standing) {
+                WhatNamesStandFor standing, ClosureApplications applying) {
             Pullback.LawComparison law = Pullback.lawComparisonOf(application, standing.reads(),
                     standing.read());
             if (law == null) {
                 return Optional.empty();
             }
-            Cutting.Read read = Cutting.ofAComparisonThatStopped(law.comparison(),
-                    stated.proposition(), Pullback.arithmeticOf(law.comparison(), law.reads(),
-                            standing.read()), standing.read(), law.reads(), answering);
+            // The element the law names is a name of the reading it was made in, which each
+            // application of a closure around the call is read under in place of its own.
+            ClosureApplications underTheLaw = applying instanceof ClosureApplications.Each(var made)
+                    ? new ClosureApplications.Each(made.stream()
+                            .map(one -> one.readIn(law.reads())).toList())
+                    : applying;
+            Cutting.Read read = Cutting.drawn(behavior, law.comparison(), standing.read(),
+                    law.reads(), underTheLaw, answering, WhatConditionsState.of(standing.read()),
+                    Optional.of(application.occurrence().lineage().expansionProjection())).read();
             return read == null ? Optional.empty()
                     : Optional.of(new Cutting.AppliedOn(read, stated.meaning().how(),
                             stated.proposition()));
@@ -1714,7 +1721,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         /** What {@code application} reads as under the names {@code standing} holds, or null where
          *  it states nothing of its own. */
         private Cutting.AppliedOn appliedOn(Core.PreservedCall application,
-                                            WhatNamesStandFor standing) {
+                                            WhatNamesStandFor standing,
+                                            ClosureApplications applying) {
             return applications.computeIfAbsent(new Asked(application, standing.reads()), _ -> {
                 // Whether an optional holds a value is what it states, as a truth is what it
                 // answers.
@@ -1730,7 +1738,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     // holds against the value it was handed, that comparison is the application's
                     // own and says why at the places it compares. What stopped elsewhere in what
                     // the application states is a fork's to say.
-                    return itsOwn ? unreadAsItsLawComparison(application, stated, standing)
+                    return itsOwn ? unreadAsItsLawComparison(application, stated, standing,
+                            applying)
                             : Optional.empty();
                 }
                 if (!itsOwn) {
