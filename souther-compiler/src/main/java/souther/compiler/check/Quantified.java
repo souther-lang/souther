@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.core.Core;
 
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -17,18 +18,24 @@ import java.util.Set;
  * every name in it means there what it meant there.
  *
  * <p>{@code origin} is the part of a declaration's rule that states it, where it was read off a
- * declaration's rules, and null where it was read off a guard or a body. What a reading of an
- * element takes from it is attributed to that part.
+ * declaration's rules. A relation read off a guard or a body, or an operation's guarantee, is no
+ * part of a rule and has none. What a reading of an element takes from a rule is attributed to
+ * that part.
  */
 record Quantified(FactSubject container, Set<ElementShape> through, Core.Block predicate,
-                  PartId<RuleRef.Invariant> origin) implements ElementRelation {
+                  Optional<PartId<RuleRef.Invariant>> origin) implements ElementRelation {
 
     Quantified(FactSubject container, Set<ElementShape> through, Core.Block predicate) {
-        this(container, through, predicate, null);
+        this(container, through, predicate, Optional.empty());
     }
 
     /** The same relation, stated by {@code part} of a rule. */
     Quantified statedBy(PartId<RuleRef.Invariant> part) {
-        return new Quantified(container, through, predicate, part);
+        return new Quantified(container, through, predicate, Optional.of(part));
+    }
+
+    /** What a rule of the container states of each element, where this is one. */
+    Optional<ElementGuarantee> asGuarantee() {
+        return origin.map(part -> new ElementGuarantee(part, predicate));
     }
 }
