@@ -42,6 +42,7 @@ class AQuestionThatFollowsAnotherIsPlacedAsItIsPlacedAloneTest {
     void everyPositionIsWhereItIsPlacedAloneWhateverIsAddedAfterWhatOrder() {
         Random dice = new Random(316704);
         int followed = 0;
+        long placedFromBefore = ClosureQuestion.placedFromBefore();
         for (int sequence = 0; sequence < 300; sequence++) {
             CanonicalOrder<String> order = ORDERS.get(sequence % ORDERS.size());
             List<AffineConstraint<String>> rules = new ArrayList<>();
@@ -74,5 +75,7 @@ class AQuestionThatFollowsAnotherIsPlacedAsItIsPlacedAloneTest {
             }
         }
         assertTrue(followed > 500, "too few questions followed another: " + followed);
+        assertEquals(followed, ClosureQuestion.placedFromBefore() - placedFromBefore,
+                "every question that followed another, by an order it was placed by, was placed from it");
     }
 }

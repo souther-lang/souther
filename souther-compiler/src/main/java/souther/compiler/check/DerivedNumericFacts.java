@@ -319,7 +319,7 @@ final class DerivedNumericFacts {
             return domain.isBottom();
         }
 
-        Bounds boundsOf(LinearForm<FactSubject> form) {
+        Bounds boundsOf(NumericDomain.Prepared<FactSubject> form) {
             return domain.boundsOf(form);
         }
 
@@ -1392,12 +1392,12 @@ final class DerivedNumericFacts {
      */
     private static Bounds boundsOf(LinearForm<FactSubject> form, ReadingDomain base, Terms terms,
                                    Memo done, Deriving deriving, ContextMultiplicity copies) {
-        if (!withoutRuns) {
-            Need need = terms.derivationPlans.of(form, terms);
-            Taken planned = need == null ? done.takenOn(base)
-                    : takenAfter(need, base, terms, done, deriving, copies);
+        Plan plan = terms.derivationPlans.of(form, terms);
+        if (terms.derivationPlans.keeps()) {
+            Taken planned = plan.run() == null ? done.takenOn(base)
+                    : takenAfter(plan.run(), base, terms, done, deriving, copies);
             if (planned != null) {
-                return planned.state().boundsOf(form);
+                return planned.state().boundsOf(plan.asks());
             }
         }
         Taken with = done.takenOn(base);
@@ -1413,7 +1413,7 @@ final class DerivedNumericFacts {
             with = with.then(derive(atom, base, terms, done, how,
                     named ? copies : copies.inPlace()), terms);
         }
-        return with.state().boundsOf(form);
+        return with.state().boundsOf(plan.asks());
     }
 
     /**
@@ -1496,8 +1496,22 @@ final class DerivedNumericFacts {
         }
 
         private Branch root = new Branch(null);
-        private final Map<LinearForm<FactSubject>, Need> byForm = new IdentityHashMap<>();
+        private final Map<LinearForm<FactSubject>, Plan> byForm = new IdentityHashMap<>();
         private final Set<FactSubject> examined = new HashSet<>();
+        private volatile boolean keeping = true;
+
+        /**
+         * Keeps no run from here on, so that every form is read from its first atom, which is how
+         * a form is read where a run cannot be kept ({@link #takenAfter}). Of the one naming and not
+         * of the process, for a test holding that the two come to one answer.
+         */
+        void keepNone() {
+            keeping = false;
+        }
+
+        boolean keeps() {
+            return keeping;
+        }
 
         /** That something was recorded about {@code atom}. */
         synchronized void knowledgeChanged(FactSubject atom) {
@@ -1508,10 +1522,11 @@ final class DerivedNumericFacts {
             }
         }
 
-        /** The run {@code form} takes, or null where it takes none. */
-        synchronized Need of(LinearForm<FactSubject> form, Terms terms) {
-            if (byForm.containsKey(form)) {
-                return byForm.get(form);
+        /** The run {@code form} takes, and what it asks of a domain, worked out once. */
+        synchronized Plan of(LinearForm<FactSubject> form, Terms terms) {
+            Plan had = byForm.get(form);
+            if (had != null) {
+                return had;
             }
             examined.addAll(terms.carriedReachFrom(form.coefs().keySet()));
             Branch at = root;
@@ -1521,16 +1536,24 @@ final class DerivedNumericFacts {
                 at = at.next.computeIfAbsent(new Reached(atom, named),
                         step -> new Branch(new Need(before, step.atom(), step.named())));
             }
-            byForm.put(form, at.run);
-            return at.run;
+            Plan made = new Plan(at.run, NumericDomain.prepare(form));
+            byForm.put(form, made);
+            return made;
         }
     }
+
+    /**
+     * What a form is read with: the run of answers it takes into a reading, or null where it takes
+     * none, and what it asks of the reading once they are taken in. Both are the form's, and the form
+     * is read again by every reading that reaches it.
+     */
+    private record Plan(Need run, NumericDomain.Prepared<FactSubject> asks) {}
 
     /** The atoms {@code form} is read through, in the order they are taken into a reading, for the
      *  test holding that a run is that order. */
     static List<FactSubject> runOf(LinearForm<FactSubject> form, Terms terms) {
         ArrayList<FactSubject> run = new ArrayList<>();
-        for (Need at = terms.derivationPlans.of(form, terms); at != null; at = at.before()) {
+        for (Need at = terms.derivationPlans.of(form, terms).run(); at != null; at = at.before()) {
             run.add(at.atom());
         }
         Collections.reverse(run);
@@ -1542,11 +1565,6 @@ final class DerivedNumericFacts {
         return new ArrayList<>(toDerive(terms, form.coefs().keySet()));
     }
 
-    /**
-     * Whether the forms are read without their runs, each from the first atom, which is how they
-     * are read where a run cannot be kept. For a test holding that the two come to one thing.
-     */
-    static volatile boolean withoutRuns;
 
     /**
      * An atom recorded as arithmetic over itself.

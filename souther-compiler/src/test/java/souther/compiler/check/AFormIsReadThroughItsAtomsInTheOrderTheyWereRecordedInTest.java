@@ -152,14 +152,9 @@ class AFormIsReadThroughItsAtomsInTheOrderTheyWereRecordedInTest {
     }
 
     private static List<DerivedNumericFacts.Says> readWithRunsAndWithout(Named kept, Named apart) {
-        DerivedNumericFacts.withoutRuns = false;
+        apart.terms().derivationPlans.keepNone();
         List<DerivedNumericFacts.Says> with = saysOfEach(kept);
-        DerivedNumericFacts.withoutRuns = true;
-        try {
-            assertEquals(with, saysOfEach(apart), "read with the runs kept and without them");
-        } finally {
-            DerivedNumericFacts.withoutRuns = false;
-        }
+        assertEquals(with, saysOfEach(apart), "read with the runs kept and without them");
         return with;
     }
 

@@ -167,42 +167,6 @@ public final class ClosedStates {
      */
     static final int ORDERS_KEPT = 16;
 
-    /**
-     * What was worked out of an object, by that very object: the question a form asks, which is the
-     * form's and is asked of one domain after another.
-     *
-     * <p>By identity, since a form is as long as the rules it comes from and finding it by what it
-     * says is the walk this exists to save. Bounded, and let go whole where it is full: what is let
-     * go is worked out again by whoever asks next. Null for a table that keeps nothing.
-     */
-    private final Map<Object, Object> prepared = new IdentityHashMap<>();
-
-    private static final int PREPARED_KEPT = 1 << 14;
-
-    /** {@code made} of {@code key}, worked out once for as long as this keeps it. */
-    @SuppressWarnings("unchecked")
-    <K, V> V prepared(K key, Function<K, V> made) {
-        if (answers == null) {
-            return made.apply(key);
-        }
-        synchronized (prepared) {
-            Object had = prepared.get(key);
-            if (had != null) {
-                return (V) had;
-            }
-        }
-        V now = made.apply(key);
-        if (now != null) {
-            synchronized (prepared) {
-                if (prepared.size() >= PREPARED_KEPT) {
-                    prepared.clear();
-                }
-                prepared.put(key, now);
-            }
-        }
-        return now;
-    }
-
     private final AtomicLong workedOut = new AtomicLong();
 
     private final AtomicLong walkedOut = new AtomicLong();
@@ -376,7 +340,8 @@ public final class ClosedStates {
         if (everyPartLent && lent.complete) {
             return lent;
         }
-        return new Parted<>(this, rules, lent.parts, questions, closed, lent.partOf, null, true);
+        return new Parted<>(this, rules, lent.parts, questions, closed, lent.partOf, null, true,
+                Map.of());
     }
 
     /**
@@ -412,10 +377,14 @@ public final class ClosedStates {
         /** Whether every part has its closure, which is what a closure of all the rules is. */
         private final boolean complete;
 
+        /** The question each part that these rules grew was asked as before they did, by the part. */
+        private final Map<Integer, ClosureQuestion<A>> grownFrom;
+
         private Parted(ClosedStates owner, List<AffineConstraint<A>> rules,
                        List<List<AffineConstraint<A>>> parts, List<ClosureQuestion<A>> questions,
                        List<ClosedState<A>> closed, Map<A, Integer> partOf,
-                       ClosedState<A> state, boolean complete) {
+                       ClosedState<A> state, boolean complete,
+                       Map<Integer, ClosureQuestion<A>> grownFrom) {
             this.owner = owner;
             this.rules = rules;
             this.parts = parts;
@@ -424,12 +393,13 @@ public final class ClosedStates {
             this.partOf = Map.copyOf(partOf);
             this.state = state;
             this.complete = complete;
+            this.grownFrom = grownFrom;
         }
 
         /** A closure worked out in one piece, with no parts to lend. */
         private static <A> Parted<A> whole(ClosedState<A> state) {
             return new Parted<>(null, List.of(), List.of(), List.of(), List.of(), Map.of(), state,
-                    true);
+                    true, Map.of());
         }
 
         /** {@code parts} of {@code rules}, none of them asked yet. */
@@ -445,7 +415,8 @@ public final class ClosedStates {
                 unasked.add(null);
                 unclosed.add(null);
             }
-            return new Parted<>(owner, rules, parts, unasked, unclosed, partOf, null, false);
+            return new Parted<>(owner, rules, parts, unasked, unclosed, partOf, null, false,
+                    Map.of());
         }
 
         /** The parts the rules fall into, which is none where they were closed in one piece. */
@@ -757,9 +728,7 @@ public final class ClosedStates {
             }
             List<List<AffineConstraint<A>>> parted = new ArrayList<>(grown.size());
             grown.forEach(each -> parted.add(List.copyOf(each)));
-            Parted<A> out = new Parted<>(owner, more, parted, asked, kept, into, null, false);
-            out.grownFrom = was;
-            return out;
+            return new Parted<>(owner, more, parted, asked, kept, into, null, false, was);
         }
 
         /** The part at {@code part} given a list of its own to be added to, and asked as it was
@@ -793,9 +762,6 @@ public final class ClosedStates {
             }
             return true;
         }
-
-        /** The question each part that these rules grew was asked as before they did. */
-        private Map<Integer, ClosureQuestion<A>> grownFrom = Map.of();
 
         /**
          * The parts {@code rule} reaches, each as the part it has been joined to: a set, since

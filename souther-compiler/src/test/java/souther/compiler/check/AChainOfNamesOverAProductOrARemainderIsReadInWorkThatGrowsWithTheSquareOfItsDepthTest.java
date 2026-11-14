@@ -26,7 +26,12 @@ class AChainOfNamesOverAProductOrARemainderIsReadInWorkThatGrowsWithTheSquareOfI
     private static final int SHALLOW = 12;
     private static final int TWICE_AS_DEEP = 24;
 
-    /** More than the square allows for what a path adds beside the chain, and well under the cube. */
+    /**
+     * More than the square allows for what a path adds beside the chain, and well under the cube.
+     * Twice the depth from {@value #SHALLOW} reads 3.0 times as many positions over products and 3.5
+     * over remainders, and takes 4.2 times as many facts; from 48 to 96 the ratios are 3.7 and 4.0,
+     * which is the square. Reading every place from the start is 8.
+     */
     private static final double BOUND = 5.5;
 
     private static String chain(int depth, boolean remainder) {

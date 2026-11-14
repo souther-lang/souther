@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
@@ -185,7 +186,19 @@ final class ClosureQuestion<A> {
             }
             place.put(here, number);
         }
+        PLACED_FROM_BEFORE.increment();
         return new Placed<>(Map.copyOf(place), merged);
+    }
+
+    private static final LongAdder PLACED_FROM_BEFORE = new LongAdder();
+
+    /**
+     * How many questions have been placed from the question before them, for a test holding that a
+     * question made from another is placed by where the positions it adds go and not by sorting all
+     * of them again: that is a shape, and the question is the same either way.
+     */
+    static long placedFromBefore() {
+        return PLACED_FROM_BEFORE.sum();
     }
 
     /** The positions in the order, the ones it cannot tell apart next to one another. */

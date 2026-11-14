@@ -1243,7 +1243,7 @@ public final class NumericDomain<A> {
 
     /** A form's weights with the positions it does not actually weigh left out. A form composed by
      *  the arithmetic drops those as it goes; one built by naming its coefficients need not have. */
-    private Map<A, ExactRatio> weighed(LinearForm<A> f) {
+    private static <A> Map<A, ExactRatio> weighed(LinearForm<A> f) {
         Map<A, ExactRatio> coefs = new LinkedHashMap<>();
         f.coefs().forEach((atom, coef) -> {
             if (!coef.isZero()) {
@@ -1300,7 +1300,7 @@ public final class NumericDomain<A> {
      * <p>Divided through by what the weights share, which is a positive number and so leaves which
      * side of nought the question is about.
      */
-    private Asked<A> goalOf(LinearForm<A> f) {
+    private static <A> Asked<A> goalOf(LinearForm<A> f) {
         Map<A, ExactRatio> coefs = weighed(f);
         ExactRatio constant = f.constant();
         // Canonicalised by the one thing that canonicalises, so a question and a rule that say the
@@ -1623,12 +1623,39 @@ public final class NumericDomain<A> {
      * caller looking for somewhere to put a value asks.
      */
     public Bounds boundsOf(LinearForm<A> f) {
+        return boundsOf(prepare(f));
+    }
+
+    /**
+     * What a form asks, worked out: the form divided through by what its weights share, and the
+     * same negated, for whoever asks the one form of one domain after another and would otherwise
+     * have each of them work it out again. Of the form and of no domain, so it is made once and kept
+     * by whoever knows the form is asked again — and not by a table of every form asked, which a
+     * form asked once would fill.
+     *
+     * @param <A> what a position is
+     */
+    public static final class Prepared<A> {
+
+        /** Null where the form's lowest terms have no representation. */
+        private final Asked<A> asked;
+
+        private Prepared(Asked<A> asked) {
+            this.asked = asked;
+        }
+    }
+
+    /** {@code f} worked out for being asked of a domain ({@link #boundsOf(Prepared)}). */
+    public static <A> Prepared<A> prepare(LinearForm<A> f) {
+        return new Prepared<>(goalOf(f));
+    }
+
+    /** The same as {@link #boundsOf(LinearForm)}, of a form already prepared. */
+    public Bounds boundsOf(Prepared<A> form) {
         if (isBottom()) {
             return new Bounds(null, null);
         }
-        // What a form asks is the form's and no domain's: the one form is asked of one domain after
-        // another, and each reads it again if it is not kept.
-        Asked<A> asked = closedStates.prepared(f, this::goalOf);
+        Asked<A> asked = form.asked;
         if (asked == null) {
             // A form whose lowest terms have no representation is one nothing here can bound.
             return new Bounds(null, null);
