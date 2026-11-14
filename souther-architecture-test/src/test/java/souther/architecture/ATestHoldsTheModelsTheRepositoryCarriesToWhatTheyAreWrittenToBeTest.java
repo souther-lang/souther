@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.classfile.ClassModel;
 import java.lang.classfile.MethodModel;
+import java.lang.classfile.constantpool.ClassEntry;
+import java.lang.classfile.constantpool.PoolEntry;
 import java.lang.classfile.instruction.InvokeInstruction;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -49,6 +51,9 @@ class ATestHoldsTheModelsTheRepositoryCarriesToWhatTheyAreWrittenToBeTest {
         Set<String> holding = new TreeSet<>();
         int reaching = 0;
         for (ClassModel each : population()) {
+            if (!names(each, POPULATION)) {
+                continue;
+            }
             List<MethodModel> methods = each.methods();
             for (MethodModel method : methods) {
                 String name = method.methodName().stringValue();
@@ -71,6 +76,19 @@ class ATestHoldsTheModelsTheRepositoryCarriesToWhatTheyAreWrittenToBeTest {
                 "a method that takes a model from " + POPULATION + " holds a compilation to"
                         + " compile, which a corpus written to be refused does not: hold it to"
                         + " refusedWith(RepositoryModels.refusedWith(model), model)");
+    }
+
+    /**
+     * Whether the class names {@code target} in its constant pool, which is read without decoding
+     * a method. A class that does not name the population calls none of it.
+     */
+    private static boolean names(ClassModel candidate, String target) {
+        for (PoolEntry entry : candidate.constantPool()) {
+            if (entry instanceof ClassEntry it && it.asInternalName().equals(target)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The method itself, or a lambda javac made of what is written in it. */
