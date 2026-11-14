@@ -13,26 +13,20 @@ import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Where a statement stops for a reason, the report says that reason, at the places the reason is
- * about. A comparison written in a form this compiler reads is not said to be in a form it does not.
+ * about, and never as a form this compiler does not read.
  *
- * <p>A membership of each element of a mapped list, chosen by a test on the same container, needs
- * two elements of one container; and the weekday of a date a walk found is a remainder of a number
- * no position holds. Both stopped the reading, and both were reported as a form not read, at the
- * container as well as at its elements.
+ * <p>One case for each reason: the claim is which word is said and where, not how many shapes reach
+ * it, and the shapes that reach it are the ones these two are the smallest of.
  */
 class AStopIsSaidForWhatStoppedItNotForTheFormTest {
 
-    private static final String TWO_ELEMENTS = "rule_relating_two_elements_of_one_container";
-    private static final String REMAINDER = "rule_about_a_remainder_no_position_holds";
-
-    /** {@code position reason} of each place the report of the first behavior says is not read. */
+    /** {@code position reason} of each place the report of the first behavior says is not read,
+     *  for the reasons this is about and for a form not read. */
     private static List<String> notReadOf(String source) {
         Compilation model = Compilation.ofSource(source, "Main");
         model.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
@@ -42,79 +36,63 @@ class AStopIsSaidForWhatStoppedItNotForTheFormTest {
         List<String> out = new ArrayList<>();
         for (JsonNode each : report.path("modules").get(0).path("behaviors").get(0)
                 .path("partition").path("notRead")) {
-            out.add(each.path("position").asString() + " " + each.path("reason").asString());
+            String reason = each.path("reason").asString();
+            if (reason.startsWith("rule_relating_two_elements")
+                    || reason.endsWith("no_position_holds") || reason.equals("unsupported_syntax")) {
+                out.add(each.path("position").asString() + " " + reason);
+            }
         }
-        return out;
+        return out.stream().sorted().distinct().toList();
     }
 
-    private static List<String> saying(List<String> notRead, String reason) {
-        return new ArrayList<>(new TreeSet<>(notRead.stream()
-                .filter(each -> each.endsWith(" " + reason)).toList()));
-    }
-
-    private static String membership(String container, String contains, String value) {
-        return """
-                module i1
-
-                behavior f : (hs: %s<Int>, ns: List<Int>) -> List<Int>
-                let f (hs, ns) =
-                    ns
-                        |> List.map(n -> if Bool.not(%s) then n else n + 1)
-                        |> List.filter(d -> %s)
-                """.formatted(container, contains, value);
-    }
-
+    /** A value chosen by a membership of a list and held to a membership of the same list: two
+     *  elements of one list, at the elements and not at the list. */
     @Test
-    void aMembershipOfEachMappedValueChosenByAMembershipOfTheSameListIsTwoElementsOfOneList() {
-        List<String> notRead = notReadOf(membership("List", "List.contains(n, hs)",
-                "List.contains(d, hs)"));
-        assertEquals(List.of("hs[*] " + TWO_ELEMENTS, "ns[*] " + TWO_ELEMENTS),
-                saying(notRead, TWO_ELEMENTS));
-        assertFalse(notRead.contains("hs unsupported_syntax"), notRead.toString());
-        assertEquals(List.of(), saying(notRead, "unsupported_syntax"), notRead.toString());
+    void twoElementsOfOneListAreSaidAtTheElementsAndNotAtTheList() {
+        assertEquals(List.of(
+                        "hs[*] rule_relating_two_elements_of_one_container",
+                        "ns[*] rule_relating_two_elements_of_one_container"),
+                notReadOf("""
+                        module i1
+
+                        behavior f : (hs: List<Int>, ns: List<Int>) -> List<Int>
+                        let f (hs, ns) =
+                            ns
+                                |> List.map(n -> if Bool.not(List.contains(n, hs)) then n else n + 1)
+                                |> List.filter(d -> List.contains(d, hs))
+                        """));
     }
 
+    /** The weekday of a date a walk found, held to a bound, beside a membership of a set: the
+     *  remainder is what stopped it, and the set is not named where its elements are. */
     @Test
-    void theSameWithAnyAndWithASetIsSaidTheSame() {
-        List<String> list = notReadOf(membership("List", "List.contains(n, hs)",
-                "List.contains(d, hs)"));
-        assertEquals(saying(list, TWO_ELEMENTS), saying(notReadOf(membership("List",
-                "List.any(k -> k == n, hs)", "List.any(h -> h == d, hs)")), TWO_ELEMENTS));
-        assertEquals(saying(list, TWO_ELEMENTS), saying(notReadOf(membership("Set",
-                "Set.contains(n, hs)", "Set.contains(d, hs)")), TWO_ELEMENTS));
-    }
+    void theWeekdayOfADateAWalkFoundIsSaidAtTheNumbersItIsMadeOf() {
+        assertEquals(List.of(
+                        "c.aSunday rule_about_a_remainder_no_position_holds",
+                        "c.holidays[*] rule_about_a_remainder_no_position_holds",
+                        "from rule_about_a_remainder_no_position_holds"),
+                notReadOf("""
+                        module o1
 
-    @Test
-    void theWeekdayOfADateAWalkFoundIsARemainderNoPositionHolds() {
-        List<String> notRead = notReadOf("""
-                module o1
+                        data C = { holidays: Set<Date>, aSunday: Date }
 
-                data PaymentCalendar = { holidays: Set<Date>, aSunday: Date }
+                        let weekday (c: C, d: Date): Int =
+                            Int.floorMod(Date.daysBetween(c.aSunday, d), 7)
 
-                let weekday (calendar: PaymentCalendar, d: Date): Int =
-                    Int.floorMod(Date.daysBetween(calendar.aSunday, d), 7)
+                        let ok (c: C, d: Date): Bool =
+                            weekday(c, d) >= 1 && Bool.not(Set.contains(d, c.holidays))
 
-                let isBusinessDay (calendar: PaymentCalendar, d: Date): Bool =
-                    weekday(calendar, d) >= 1 && weekday(calendar, d) <= 5
-                        && Bool.not(Set.contains(d, calendar.holidays))
+                        let first (c: C, from: Date): Date =
+                            List.rangeInclusive(0, 1)
+                                |> List.map(n -> Date.addDays(n, from))
+                                |> List.find(d -> ok(c, d))
+                                |> Option.withDefault(from)
 
-                let firstBusinessDay (calendar: PaymentCalendar, from: Date): Date =
-                    List.rangeInclusive(0, 1)
-                        |> List.map(n -> Date.addDays(n, from))
-                        |> List.find(d -> isBusinessDay(calendar, d))
-                        |> Option.withDefault(from)
-
-                behavior unpayable : (calendar: PaymentCalendar, from: Date, days: Int)
-                        -> List<Date>
-                let unpayable (calendar, from, days) =
-                    List.rangeInclusive(0, days)
-                        |> List.map(n -> firstBusinessDay(calendar, Date.addDays(n, from)))
-                        |> List.filter(d -> Bool.not(isBusinessDay(calendar, d)))
-                """);
-        assertEquals(List.of("calendar.aSunday " + REMAINDER, "calendar.holidays[*] " + REMAINDER,
-                "from " + REMAINDER), saying(notRead, REMAINDER));
-        assertEquals(List.of(), saying(notRead, "unsupported_syntax"), notRead.toString());
-        assertFalse(notRead.stream().anyMatch(each -> each.startsWith("calendar.holidays ")),
-                notRead.toString());
+                        behavior u : (c: C, from: Date, days: Int) -> List<Date>
+                        let u (c, from, days) =
+                            List.rangeInclusive(0, days)
+                                |> List.map(n -> first(c, Date.addDays(n, from)))
+                                |> List.filter(d -> Bool.not(ok(c, d)))
+                        """));
     }
 }

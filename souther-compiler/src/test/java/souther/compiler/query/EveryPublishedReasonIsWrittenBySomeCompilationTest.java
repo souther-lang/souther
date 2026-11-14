@@ -490,27 +490,25 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
         out.put(UndividedPosition.Reason.RULE_ABOUT_A_REMAINDER_NO_POSITION_HOLDS, of("""
                 module m
 
-                data PaymentCalendar = { holidays: Set<Date>, aSunday: Date }
+                data C = { holidays: Set<Date>, aSunday: Date }
 
-                let weekday (calendar: PaymentCalendar, d: Date): Int =
-                    Int.floorMod(Date.daysBetween(calendar.aSunday, d), 7)
+                let weekday (c: C, d: Date): Int =
+                    Int.floorMod(Date.daysBetween(c.aSunday, d), 7)
 
-                let isBusinessDay (calendar: PaymentCalendar, d: Date): Bool =
-                    weekday(calendar, d) >= 1 && weekday(calendar, d) <= 5
-                        && Bool.not(Set.contains(d, calendar.holidays))
+                let ok (c: C, d: Date): Bool =
+                    weekday(c, d) >= 1 && Bool.not(Set.contains(d, c.holidays))
 
-                let firstBusinessDay (calendar: PaymentCalendar, from: Date): Date =
+                let first (c: C, from: Date): Date =
                     List.rangeInclusive(0, 1)
                         |> List.map(n -> Date.addDays(n, from))
-                        |> List.find(d -> isBusinessDay(calendar, d))
+                        |> List.find(d -> ok(c, d))
                         |> Option.withDefault(from)
 
-                behavior unpayable : (calendar: PaymentCalendar, from: Date, days: Int)
-                        -> List<Date>
-                let unpayable (calendar, from, days) =
+                behavior u : (c: C, from: Date, days: Int) -> List<Date>
+                let u (c, from, days) =
                     List.rangeInclusive(0, days)
-                        |> List.map(n -> firstBusinessDay(calendar, Date.addDays(n, from)))
-                        |> List.filter(d -> Bool.not(isBusinessDay(calendar, d)))
+                        |> List.map(n -> first(c, Date.addDays(n, from)))
+                        |> List.filter(d -> Bool.not(ok(c, d)))
                 """));
         // Read to the end, and the positions cancel: the rule is about the position and the
         // quantity it cuts is nothing.
