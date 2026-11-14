@@ -214,6 +214,26 @@ final class Terms {
      */
     private final Map<FactSubject, AtomKnowledge> knowledge = new HashMap<>();
 
+    /** Where each atom a computation was recorded for stands among them, in the order they were
+     *  recorded in. */
+    private final Map<FactSubject, Integer> recordedAt = new HashMap<>();
+
+    /**
+     * Where {@code atom} stands among the atoms a computation was recorded for, in the order they
+     * were recorded in. A recipe is recorded after the atoms it is over, so this is an order the
+     * operands of a recipe come before it in, and one that does not depend on how any map hands its
+     * keys over.
+     *
+     * @throws IllegalStateException where no computation was recorded for {@code atom}
+     */
+    int recordedAt(FactSubject atom) {
+        Integer at = recordedAt.get(atom);
+        if (at == null) {
+            throw new IllegalStateException("no computation was recorded for `" + atom.rendered() + "`");
+        }
+        return at;
+    }
+
     /** The runs of answers the forms read against this take into a reading, which are let go where
      *  something is recorded about an atom they were made from. */
     final DerivedNumericFacts.Plans derivationPlans = new DerivedNumericFacts.Plans();
@@ -259,6 +279,9 @@ final class Terms {
                 && !sameComputation(had.computation(), how)) {
             throw new OneTermTwoDerivations("atom `" + atom.rendered() + "` was reached as "
                     + had.computation() + " and as " + how);
+        }
+        if (had.computation() instanceof AtomKnowledge.Computation.None) {
+            recordedAt.put(atom, recordedAt.size());
         }
         knowledge.put(atom, had.computedBy(how));
         derivationPlans.knowledgeChanged(atom);

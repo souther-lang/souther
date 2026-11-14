@@ -998,7 +998,7 @@ public final class NumericDomain<A> {
      * each reduction of the rules of the part it is of; null where none of them bounds it above.
      */
     private ExactCut tightestBound(Split<A> split, int part, Map<A, ExactRatio> piece) {
-        ExactCut best = highestProven(new Goal<>(piece, ExactRatio.ZERO), true);
+        ExactCut best = highestProven(Goal.of(piece, ExactRatio.ZERO), true);
         if (part == NO_PART) {
             return best;
         }
@@ -1007,7 +1007,7 @@ public final class NumericDomain<A> {
                     reduced.rules().put(new ReducedRules.Goal<>(piece, ExactRatio.ZERO));
             if (freed != null && freed.coefs().keySet().stream().allMatch(spaces::contains)) {
                 ExactCut bound = reduced.over().highestProven(
-                        new Goal<>(freed.coefs(), freed.constant()), true);
+                        Goal.of(freed.coefs(), freed.constant()), true);
                 best = tighter(best, bound);
             }
         }
@@ -1227,7 +1227,7 @@ public final class NumericDomain<A> {
 
     /** {@code form - at}, which is what is bounded to decide whether {@code form <= at}. */
     private Goal<A> below(CanonicalForm<A> form, ExactRatio at) {
-        return new Goal<>(form.coefs(), at.negated());
+        return Goal.of(form.coefs(), at.negated());
     }
 
     /**
@@ -1254,12 +1254,20 @@ public final class NumericDomain<A> {
     }
 
     /** A goal as a weighted sum and a constant, which is what a comparison against nought is. */
-    private record Goal<A>(Map<A, ExactRatio> coefs, ExactRatio constant) {
+    private record Goal<A>(Weighed<A> weighed, ExactRatio constant) {
+
+        static <A> Goal<A> of(Map<A, ExactRatio> coefs, ExactRatio constant) {
+            return new Goal<>(Weighed.of(coefs), constant);
+        }
+
+        Map<A, ExactRatio> coefs() {
+            return weighed.coefs();
+        }
 
         Goal<A> negated() {
             Map<A, ExactRatio> out = new LinkedHashMap<>();
-            coefs.forEach((atom, coef) -> out.put(atom, coef.negated()));
-            return new Goal<>(out, constant.negated());
+            coefs().forEach((atom, coef) -> out.put(atom, coef.negated()));
+            return of(out, constant.negated());
         }
     }
 
@@ -1300,11 +1308,11 @@ public final class NumericDomain<A> {
         // would be a second account of what one rule is — which is the thing being removed.
         return switch (CanonicalForm.of(coefs)) {
             case CanonicalForm.NoTerms<A> _ ->
-                    Asked.of(new Goal<>(Map.of(), constant), ExactRatio.ONE);
+                    Asked.of(Goal.of(Map.of(), constant), ExactRatio.ONE);
             case CanonicalForm.Unheld<A> _ -> null;
             case CanonicalForm.Scaled<A> scaled -> switch (constant.dividedBy(scaled.by())) {
                 case ExactAnswer.Held<ExactRatio> held ->
-                        Asked.of(new Goal<>(scaled.form().coefs(), held.value()), scaled.by());
+                        Asked.of(Goal.of(scaled.form().coefs(), held.value()), scaled.by());
                 case ExactAnswer.Unheld<ExactRatio> _ -> null;
             };
         };
@@ -1320,17 +1328,7 @@ public final class NumericDomain<A> {
      * relations had been added to it.
      */
     private boolean proves(Goal<A> goal, boolean strict, boolean withRules) {
-        ExactCut highest;
-        if (withRules) {
-            PrefixBasis.Highest byTheParts = highestAcrossTheParts(goal);
-            if (byTheParts instanceof PrefixBasis.Highest.Unbounded) {
-                return false;
-            }
-            highest = byTheParts instanceof PrefixBasis.Highest.Within within ? within.at()
-                    : highestProven(goal, true);
-        } else {
-            highest = highestProven(goal, false);
-        }
+        ExactCut highest = highestProven(goal, withRules);
         if (highest == null) {
             return false;
         }
@@ -1368,6 +1366,13 @@ public final class NumericDomain<A> {
             if (exact instanceof PrefixBasis.Highest.Unbounded) {
                 return null;
             }
+            PrefixBasis.Highest byTheParts = highestAcrossTheParts(goal);
+            if (byTheParts instanceof PrefixBasis.Highest.Within within) {
+                return within.at();
+            }
+            if (byTheParts instanceof PrefixBasis.Highest.Unbounded) {
+                return null;
+            }
         }
         FormReach<A> reading = readingFor(goal.coefs());
         return withRules
@@ -1384,8 +1389,10 @@ public final class NumericDomain<A> {
      * parts' shares are, added. A part says its share exactly where it was closed in a basis that
      * answers the share ({@link PrefixBasis#highest}), or where every one of its rules bounds one
      * position and its positions are left their ends and nothing more. What the reading of all
-     * the rules ({@link FormReach}) comes to is never lower than this, so a goal this does not
-     * prove is one that reading does not, and is not read; the rules are not read for it at all.
+     * the rules ({@link FormReach}) comes to is never lower than this, so where a part says its
+     * share exactly the rules are not read for it at all. Asked in {@link #highestProven}, with the
+     * basis, so that {@link #boundsOf(LinearForm)}, {@link #entails} and {@link #refutes} read one
+     * statement of how high a form comes to.
      */
     private PrefixBasis.Highest highestAcrossTheParts(Goal<A> goal) {
         if (isBottom()) {
@@ -1418,7 +1425,8 @@ public final class NumericDomain<A> {
         if (closure.holdsNothing()) {
             return PrefixBasis.Highest.NOT_ANSWERED;
         }
-        PrefixBasis.Highest answered = closure.highestInBasis(share.coefs(), ExactRatio.ZERO);
+        PrefixBasis.Highest answered =
+                closure.highestInBasis(Weighed.of(share.coefs()), ExactRatio.ZERO);
         if (!(answered instanceof PrefixBasis.Highest.NotAnswered)) {
             return answered;
         }
@@ -1460,7 +1468,7 @@ public final class NumericDomain<A> {
         List<ClosedState<A>> based = parted().closuresInABasis();
         if (based != null) {
             for (ClosedState<A> each : based) {
-                PrefixBasis.Highest answer = each.highestInBasis(goal.coefs(), goal.constant());
+                PrefixBasis.Highest answer = each.highestInBasis(goal.weighed(), goal.constant());
                 if (!(answer instanceof PrefixBasis.Highest.NotAnswered)) {
                     return answer;
                 }
@@ -1469,7 +1477,7 @@ public final class NumericDomain<A> {
         }
         ClosedState<A> closure = parted().closureWeighing(goal.coefs().keySet());
         return closure == null ? PrefixBasis.Highest.NOT_ANSWERED
-                : closure.highestInBasis(goal.coefs(), goal.constant());
+                : closure.highestInBasis(goal.weighed(), goal.constant());
     }
 
     /**

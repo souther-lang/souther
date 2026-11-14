@@ -605,7 +605,7 @@ public final class ClosedStates {
             }
             List<Share<A>> out = new ArrayList<>(byPart.size());
             byPart.forEach((at, weights) -> out.add(new Share<>(closed.get(at), parts.get(at),
-                    weights)));
+                    Map.copyOf(weights))));
             return out;
         }
 

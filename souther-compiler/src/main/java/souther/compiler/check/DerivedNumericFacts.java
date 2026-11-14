@@ -16,6 +16,8 @@ import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -444,15 +446,22 @@ final class DerivedNumericFacts {
      * into — which is a cost that compounds with nesting where the recipes' own reading does not
      * ({@link ContextMultiplicity}). What only a relation names has no such second route, which is
      * why it is this reaching that belongs here.
+     *
+     * <p>In the order the atoms were recorded in ({@link Terms#recordedAt}), which is one order
+     * whichever form asks and however the forms were written: a recipe is recorded after the atoms
+     * it is over, so the operands of a recipe come before it. What an atom answers is settled by the
+     * atoms read before it, and an order that came from how a map happened to hand them over would
+     * answer one way in one run and another in the next.
      */
     private static Set<FactSubject> toDerive(Terms terms, Collection<FactSubject> asked) {
-        Set<FactSubject> out = new LinkedHashSet<>();
+        List<FactSubject> reached = new ArrayList<>();
         for (FactSubject atom : terms.carriedReachFrom(asked)) {
             if (recorded(terms, atom)) {
-                out.add(atom);
+                reached.add(atom);
             }
         }
-        return out;
+        reached.sort(Comparator.comparingInt(terms::recordedAt));
+        return new LinkedHashSet<>(reached);
     }
 
     /**
@@ -1383,11 +1392,13 @@ final class DerivedNumericFacts {
      */
     private static Bounds boundsOf(LinearForm<FactSubject> form, ReadingDomain base, Terms terms,
                                    Memo done, Deriving deriving, ContextMultiplicity copies) {
-        Need need = terms.derivationPlans.of(form, terms);
-        Taken planned = need == null ? done.takenOn(base)
-                : takenAfter(need, base, terms, done, deriving, copies);
-        if (planned != null) {
-            return planned.state().boundsOf(form);
+        if (!withoutRuns) {
+            Need need = terms.derivationPlans.of(form, terms);
+            Taken planned = need == null ? done.takenOn(base)
+                    : takenAfter(need, base, terms, done, deriving, copies);
+            if (planned != null) {
+                return planned.state().boundsOf(form);
+            }
         }
         Taken with = done.takenOn(base);
         for (FactSubject atom : toDerive(terms, form.coefs().keySet())) {
@@ -1444,123 +1455,98 @@ final class DerivedNumericFacts {
     }
 
     /** An atom a form is read through, and whether the form names it. */
-    private record Reached(FactSubject atom, boolean named) {
-
-        long mixed() {
-            long hashed = atom.hashCode() * 0x9E3779B97F4A7C15L + (named ? 17 : 5);
-            return hashed ^ (hashed >>> 29);
-        }
-    }
+    private record Reached(FactSubject atom, boolean named) {}
 
     /**
      * The answers a form takes into a reading, one atom after the ones before it, as the run it is.
-     * Runs share what they begin with, so a form that asks for the answers of another and one more
-     * is one more step from it.
+     * Runs share what they begin with, in the order they begin with it: a run is the very sequence
+     * the form is read in ({@link #toDerive}), and one that follows another is that sequence and
+     * more.
      *
      * @param before the run this one follows, or null at the first
-     * @param length how many atoms the run holds
-     * @param mixed  the atoms of the run put together, in no order
      */
-    private record Need(Need before, FactSubject atom, boolean named, int length, long mixed) {}
+    private record Need(Need before, FactSubject atom, boolean named) {}
 
     /**
      * The run each form takes, made once for the form however many readings ask it and kept for as
      * long as what it was made from stands.
      *
-     * <p>What a run is made from is what the naming recorded about the atoms the form reaches
-     * ({@link #toDerive}), and that is only ever added to: so a run is let go when something is
-     * recorded about an atom one of them was made from, and about no other.
+     * <p>A run is the order {@link #toDerive} puts the atoms of the form in, and two forms share the
+     * steps their orders have in common from the first — a form that reads the atoms of another and
+     * one more, in the order they were recorded, begins with that other's run. Never by which atoms
+     * they are: what one atom answers is settled by the atoms read before it (an atom met again
+     * while it is being derived answers nothing, and that is not kept), so two forms that read the
+     * same atoms in another order are two runs.
+     *
+     * <p>What a run is made from is what the naming recorded about the atoms the form reaches, and
+     * that is only ever added to: so the runs are let go when something is recorded about an atom
+     * one of them was made from, and about no other.
      */
     static final class Plans {
 
-        private static final Need NONE = new Need(null, null, false, 0, 0);
+        /** The runs that begin with each run, by the next step. */
+        private static final class Branch {
 
+            private final Need run;
+            private final Map<Reached, Branch> next = new HashMap<>();
+
+            private Branch(Need run) {
+                this.run = run;
+            }
+        }
+
+        private Branch root = new Branch(null);
         private final Map<LinearForm<FactSubject>, Need> byForm = new IdentityHashMap<>();
-        private final Map<Long, List<Need>> bySet = new HashMap<>();
         private final Set<FactSubject> examined = new HashSet<>();
 
         /** That something was recorded about {@code atom}. */
         synchronized void knowledgeChanged(FactSubject atom) {
             if (examined.contains(atom)) {
+                root = new Branch(null);
                 byForm.clear();
-                bySet.clear();
                 examined.clear();
             }
         }
 
         /** The run {@code form} takes, or null where it takes none. */
         synchronized Need of(LinearForm<FactSubject> form, Terms terms) {
-            Need had = byForm.get(form);
-            if (had != null) {
-                return had == NONE ? null : had;
+            if (byForm.containsKey(form)) {
+                return byForm.get(form);
             }
-            Set<FactSubject> reach = terms.carriedReachFrom(form.coefs().keySet());
-            examined.addAll(reach);
-            List<Reached> atoms = new ArrayList<>();
-            long total = 0;
-            for (FactSubject atom : reach) {
-                if (recorded(terms, atom)) {
-                    Reached each = new Reached(atom, form.coefs().containsKey(atom));
-                    atoms.add(each);
-                    total += each.mixed();
-                }
+            examined.addAll(terms.carriedReachFrom(form.coefs().keySet()));
+            Branch at = root;
+            for (FactSubject atom : toDerive(terms, form.coefs().keySet())) {
+                Need before = at.run;
+                boolean named = form.coefs().containsKey(atom);
+                at = at.next.computeIfAbsent(new Reached(atom, named),
+                        step -> new Branch(new Need(before, step.atom(), step.named())));
             }
-            if (atoms.isEmpty()) {
-                byForm.put(form, NONE);
-                return null;
-            }
-            Need made = null;
-            for (Reached left : atoms) {
-                Need parent = followedFrom(total - left.mixed(), atoms, left);
-                if (parent != null) {
-                    made = new Need(parent, left.atom(), left.named(), atoms.size(), total);
-                    bySet.computeIfAbsent(total, _ -> new ArrayList<>()).add(made);
-                    break;
-                }
-            }
-            if (made == null) {
-                long run = 0;
-                for (Reached each : atoms) {
-                    run += each.mixed();
-                    made = new Need(made, each.atom(), each.named(), made == null ? 1 : made.length() + 1,
-                            run);
-                    bySet.computeIfAbsent(run, _ -> new ArrayList<>()).add(made);
-                }
-            }
-            byForm.put(form, made);
-            return made;
-        }
-
-        /** The run made of the atoms but {@code left}, if there is one. */
-        private Need followedFrom(long mixed, List<Reached> atoms, Reached left) {
-            List<Need> candidates = bySet.get(mixed);
-            if (candidates == null) {
-                return null;
-            }
-            for (Need candidate : candidates) {
-                if (candidate.length() == atoms.size() - 1 && isMadeOfAllBut(candidate, atoms, left)) {
-                    return candidate;
-                }
-            }
-            return null;
-        }
-
-        private static boolean isMadeOfAllBut(Need run, List<Reached> atoms, Reached left) {
-            Set<Reached> held = new HashSet<>();
-            for (Need at = run; at != null; at = at.before()) {
-                held.add(new Reached(at.atom(), at.named()));
-            }
-            if (held.size() != atoms.size() - 1) {
-                return false;
-            }
-            for (Reached each : atoms) {
-                if (!each.equals(left) && !held.contains(each)) {
-                    return false;
-                }
-            }
-            return true;
+            byForm.put(form, at.run);
+            return at.run;
         }
     }
+
+    /** The atoms {@code form} is read through, in the order they are taken into a reading, for the
+     *  test holding that a run is that order. */
+    static List<FactSubject> runOf(LinearForm<FactSubject> form, Terms terms) {
+        ArrayList<FactSubject> run = new ArrayList<>();
+        for (Need at = terms.derivationPlans.of(form, terms); at != null; at = at.before()) {
+            run.add(at.atom());
+        }
+        Collections.reverse(run);
+        return run;
+    }
+
+    /** The atoms {@code form} is read through, in the order {@link #toDerive} puts them in. */
+    static List<FactSubject> readingOrderOf(LinearForm<FactSubject> form, Terms terms) {
+        return new ArrayList<>(toDerive(terms, form.coefs().keySet()));
+    }
+
+    /**
+     * Whether the forms are read without their runs, each from the first atom, which is how they
+     * are read where a run cannot be kept. For a test holding that the two come to one thing.
+     */
+    static volatile boolean withoutRuns;
 
     /**
      * An atom recorded as arithmetic over itself.

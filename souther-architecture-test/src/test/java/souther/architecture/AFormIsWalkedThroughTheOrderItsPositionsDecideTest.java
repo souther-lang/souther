@@ -86,15 +86,7 @@ class AFormIsWalkedThroughTheOrderItsPositionsDecideTest {
                     + "Lsouther/compiler/numeric/ExactCut;",
             "every caller hands the coefficients over in the one order the positions decide, and"
                     + " they go no further than FormReach#fromTheEndsWithout, which takes them in"
-                    + " that order; what comes back is the lowest of what every premise leaves",
-            "souther/compiler/numeric/PrefixBasis#highest"
-                    + "(Ljava/util/Map;Lsouther/compiler/numeric/ExactRatio;)"
-                    + "Lsouther/compiler/numeric/PrefixBasis$Highest;",
-            "the weights are put over the coordinates and the answer is read off the terms there: a"
-                    + " form of one term has no other to come before it, two terms are told apart by"
-                    + " the sign of their weights and not by which came first, and a form of any"
-                    + " other number of terms is not answered, so the order they arrive in is not in"
-                    + " what it answers");
+                    + " that order; what comes back is the lowest of what every premise leaves");
 
     private static final CompiledOutputs COMPILED = CompiledOutputs.ofWhatThisRepositoryPublishes();
 

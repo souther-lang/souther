@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.function.LongSupplier;
@@ -70,6 +71,22 @@ class AChainOfNamesOverAProductOrARemainderIsReadInWorkThatGrowsWithTheSquareOfI
     void thePositionsOfARuleABasisIsMadeFromAreReadOnceForEachRuleSaid() {
         assertGrowsNoFasterThanTheSquareAndABit(ClosedState::basisTermsRead,
                 "positions of a rule", false, true);
+    }
+
+    /**
+     * A basis made for a chain of names is closed along the chain, which an {@code Int} with its ends
+     * in every rule is bounds for. Closed by every pair of coordinates it is the same answer at the
+     * square of the length of the chain for each closure, which is the cube between them.
+     */
+    @Test
+    void aBasisMadeForAChainOfNamesIsClosedAlongTheChain() {
+        for (boolean remainder : new boolean[] {false, true}) {
+            long before = ClosedState.basesClosedByEveryPair();
+            counted(ClosedState::basisTermsRead, chain(TWICE_AS_DEEP, remainder));
+            assertEquals(0, ClosedState.basesClosedByEveryPair() - before,
+                    "a chain" + (remainder ? " over remainders" : " over products")
+                            + " had a basis closed by every pair");
+        }
     }
 
     /** Only a chain over products has values nothing bounds outside the affine fragment to derive

@@ -145,6 +145,12 @@ public final class ClosedState<A> {
         return PrefixBasis.termsRead();
     }
 
+    /** How many bases have been closed by the difference of every pair of coordinates, for the same
+     *  test as {@link #premisesWorked}. See {@link PrefixBasis#closedByEveryPair()}. */
+    public static long basesClosedByEveryPair() {
+        return PrefixBasis.closedByEveryPair();
+    }
+
     /** Whether the rounds ran out before the box stopped moving. */
     public enum Status {
 
@@ -204,11 +210,16 @@ public final class ClosedState<A> {
      * or not one it answers, or the exact arithmetic could not hold what it comes to.
      */
     PrefixBasis.Highest highestInBasis(Map<A, ExactRatio> coefs, ExactRatio constant) {
+        return highestInBasis(Weighed.of(coefs), constant);
+    }
+
+    /** The same, of a form whose weights are held apart and whose answers over a basis are kept. */
+    PrefixBasis.Highest highestInBasis(Weighed<A> form, ExactRatio constant) {
         if (holdsNothing) {
             return PrefixBasis.Highest.NOT_ANSWERED;
         }
         for (PrefixBasis<A> each : bases) {
-            PrefixBasis.Highest answer = each.highest(coefs, constant);
+            PrefixBasis.Highest answer = each.highest(form, constant);
             if (!(answer instanceof PrefixBasis.Highest.NotAnswered)) {
                 return answer;
             }

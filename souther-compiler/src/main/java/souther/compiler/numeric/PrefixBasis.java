@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -154,8 +153,6 @@ final class PrefixBasis<A> {
      */
     private static final class Line<A> {
 
-        /** What a form's weights come to, by the very map of weights it was asked as. */
-        private final Map<Map<A, ExactRatio>, Prepared> weighed = new IdentityHashMap<>();
         private int written;
 
         private Line(int written) {
@@ -163,13 +160,32 @@ final class PrefixBasis<A> {
         }
     }
 
-    /** A form's weights over the coordinates, and how many places the basis that worked them out
-     *  held. */
-    private record Prepared(int placed, Map<Integer, ExactRatio> weights) {}
-
-    private static final int FORMS_KEPT = 1 << 16;
+    /**
+     * A form's weights over the coordinates, the line of bases they were worked out on, and how many
+     * places the basis that worked them out held. Kept by the form ({@link Weighed}), and read by a
+     * basis of the same line that holds as many places and not by one that holds fewer.
+     */
+    record Prepared<A>(Object line, int placed, Map<Integer, ExactRatio> weights) {}
 
     private static final LongAdder TERMS_READ = new LongAdder();
+
+    private static final LongAdder CLOSED_BY_EVERY_PAIR = new LongAdder();
+
+    /**
+     * How many bases have been closed by {@link DifferenceBounds}, the difference of every pair of
+     * coordinates, and not along the chain ({@link ChainBounds}), for the same test as
+     * {@link #termsRead}. A chain of prefix sums is closed along the chain, and a basis closed by
+     * every pair is the whole of what made it cost the square of its length.
+     */
+    static long closedByEveryPair() {
+        return CLOSED_BY_EVERY_PAIR.sum();
+    }
+
+    /** The closure of {@code moved} where they are not bounds along a chain. */
+    private static Closed closedByEveryPair(List<AffineConstraint<Integer>> moved) {
+        CLOSED_BY_EVERY_PAIR.increment();
+        return new Differences(DifferenceBounds.over(moved, BY_PLACE));
+    }
 
     /**
      * How many positions of a rule the bases made so far have read, for a test holding what a path
@@ -284,7 +300,7 @@ final class PrefixBasis<A> {
         }
         Closed closed = ChainBounds.over(moved);
         if (closed == null) {
-            closed = new Differences(DifferenceBounds.over(moved, BY_PLACE));
+            closed = closedByEveryPair(moved);
         }
         if (!closed.everyHopWasComposed()) {
             return null;
@@ -376,7 +392,7 @@ final class PrefixBasis<A> {
         }
         Closed closed = ChainBounds.over(moved);
         if (closed == null) {
-            closed = new Differences(DifferenceBounds.over(moved, BY_PLACE));
+            closed = closedByEveryPair(moved);
         }
         if (!closed.everyHopWasComposed()) {
             return null;
@@ -499,30 +515,20 @@ final class PrefixBasis<A> {
     }
 
     /**
-     * What {@code coefs} weigh over the coordinates, or null where a position is in no prefix or a
-     * number is not one the exact arithmetic holds. Kept for the very map asked: a form read again,
-     * by this basis or by one made from it, is not weighed again. What is null is not kept, since a
+     * What {@code form} weighs over the coordinates, or null where a position is in no prefix or a
+     * number is not one the exact arithmetic holds. Kept with the form: it is read again, by this
+     * basis or by one of the line it is on, and not weighed again. What is null is not kept, since a
      * position that is in no prefix here may be in one of the next.
      */
-    private Map<Integer, ExactRatio> weighedOver(Map<A, ExactRatio> coefs) {
-        if (coefs.size() > 2) {
-            synchronized (line) {
-                Prepared kept = line.weighed.get(coefs);
-                if (kept != null && kept.placed() <= places.size()) {
-                    return kept.weights();
-                }
-            }
+    private Map<Integer, ExactRatio> weighedOver(Weighed<A> form) {
+        Prepared<A> kept = form.prepared();
+        if (kept != null && kept.line() == line && kept.placed() <= places.size()) {
+            return kept.weights();
         }
-        Map<Integer, ExactRatio> weights = weighed(coefs.entrySet(), places);
-        // A form of one position or two is weighed as fast as it is looked up, and is most often a
-        // map made for the one question.
-        if (weights != null && coefs.size() > 2) {
-            synchronized (line) {
-                if (line.weighed.size() >= FORMS_KEPT) {
-                    line.weighed.clear();
-                }
-                line.weighed.put(coefs, new Prepared(places.size(), weights));
-            }
+        Map<Integer, ExactRatio> weights = weighed(form.coefs().entrySet(), places);
+        // A form of one position or two is weighed as fast as it is looked up.
+        if (weights != null && form.coefs().size() > 2) {
+            form.prepared(new Prepared<>(line, places.size(), weights));
         }
         return weights;
     }
@@ -532,8 +538,9 @@ final class PrefixBasis<A> {
         Map<A, ExactCut> least = new LinkedHashMap<>();
         Map<A, ExactCut> most = new LinkedHashMap<>();
         for (A position : positions) {
-            Highest above = highest(Map.of(position, ExactRatio.ONE), ExactRatio.ZERO);
-            Highest below = highest(Map.of(position, ExactRatio.ONE.negated()), ExactRatio.ZERO);
+            Highest above = highest(Weighed.of(Map.of(position, ExactRatio.ONE)), ExactRatio.ZERO);
+            Highest below = highest(Weighed.of(Map.of(position, ExactRatio.ONE.negated())),
+                    ExactRatio.ZERO);
             if (above instanceof Highest.Within within) {
                 most.put(position, within.at());
             } else if (!(above instanceof Highest.Unbounded)) {
@@ -550,7 +557,7 @@ final class PrefixBasis<A> {
     }
 
     /**
-     * How high {@code coefs} weighs, plus {@code constant}, comes to: exactly, for a form that comes
+     * How high {@code form} weighs, plus {@code constant}, comes to: exactly, for a form that comes
      * to one coordinate or to the difference of two in the basis, such as a position or a prefix
      * sum, and not answered for anything else.
      *
@@ -560,8 +567,8 @@ final class PrefixBasis<A> {
      * form is bounded by nothing and that the exact arithmetic could not hold what it comes to are
      * different answers, and are told apart. Asked only where the rules leave something.
      */
-    Highest highest(Map<A, ExactRatio> coefs, ExactRatio constant) {
-        Map<Integer, ExactRatio> weights = weighedOver(coefs);
+    Highest highest(Weighed<A> form, ExactRatio constant) {
+        Map<Integer, ExactRatio> weights = weighedOver(form);
         if (weights == null) {
             return Highest.NOT_ANSWERED;
         }
