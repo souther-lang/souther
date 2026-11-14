@@ -13,6 +13,7 @@ import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -68,10 +69,22 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
         return Central.at(repository.uri(), Central.Patience.USUAL);
     }
 
-    private Central.Failure failedWaiting(Duration answer, Duration stall) throws Exception {
-        return assertInstanceOf(BackendFetch.Failed.class, BackendFetch.whereAbsent(backends,
-                Central.at(repository.uri(), new Central.Patience(answer, stall)), "wasm", HERE,
-                release -> { })).failure();
+    /** The repository, but for what a test scripts, whose time passes only where Central waits. */
+    private ScriptedWire wire() {
+        return new ScriptedWire(Central.Wire.over(Repository.at(repository.uri())));
+    }
+
+    private BackendFetch.Supplied fetchWaiting(ScriptedWire wire, Duration answer, Duration stall)
+            throws Exception {
+        return BackendFetch.whereAbsent(backends,
+                Central.at(repository.uri(), new Central.Patience(answer, stall), wire), "wasm",
+                HERE, release -> { });
+    }
+
+    private Central.Failure failedWaiting(ScriptedWire wire, Duration answer, Duration stall)
+            throws Exception {
+        return assertInstanceOf(BackendFetch.Failed.class, fetchWaiting(wire, answer, stall))
+                .failure();
     }
 
     private BackendFetch.Supplied fetch(String target) throws Exception {
@@ -290,14 +303,22 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
         Path old = FakeBackend.write(home.resolve("wasm-old.jar"), "wasm", OTHER, "old");
         repository.metadata(WASM, "0.1.0");
         repository.release(WASM, "0.1.0", "cli", HERE, jar("a", "wasm", HERE));
-        repository.cut(WASM, "0.1.0", "cli");
+        ScriptedWire wire = wire();
+        wire.script(LocalRepository.path(WASM, "0.1.0", "cli", "jar"), jar -> {
+            jar.begin();
+            for (int second : List.of(3, 6, 9)) {
+                jar.after(Duration.ofSeconds(second), () -> jar.bytes(new byte[10]));
+            }
+        });
 
-        // A tenth of a second is short of what a download would be given, and long enough here:
-        // this one has stopped, so taking it to have stopped sooner changes nothing about it.
-        Central.Failure failure = failedWaiting(Duration.ofSeconds(60), Duration.ofMillis(100));
+        Central.Failure failure = failedWaiting(wire, Duration.ofSeconds(60), Duration.ofSeconds(10));
 
         assertTrue(assertInstanceOf(Central.Failure.Unreachable.class, failure).reason()
                 .startsWith("nothing arrived"), failure.toString());
+        // A stall after the last thing that arrived, and not two: it is looked at every two
+        // seconds, so it is given up on by the first look a stall after the last bytes.
+        assertTrue(wire.elapsed().compareTo(Duration.ofSeconds(19)) >= 0
+                && wire.elapsed().compareTo(Duration.ofSeconds(21)) <= 0, wire.elapsed().toString());
         assertEquals(List.of(old.getFileName().toString()), held());
         assertInstanceOf(Backends.Absent.class, backends.find("wasm", HERE));
     }
@@ -433,27 +454,42 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
     @Test
     void aJarThatKeepsArrivingIsWaitedForPastTheTimeASmallFileHas() throws Exception {
         repository.metadata(WASM, "0.1.0");
+        byte[] slow = Files.readAllBytes(jar("slow", "wasm", HERE));
         repository.release(WASM, "0.1.0", "cli", HERE, jar("slow", "wasm", HERE));
-        repository.trickle(LocalRepository.path(WASM, "0.1.0", "cli", "jar"), 6, 60);
+        ScriptedWire wire = wire();
+        wire.script(LocalRepository.path(WASM, "0.1.0", "cli", "jar"), jar -> {
+            jar.begin();
+            int piece = (slow.length + 5) / 6;
+            for (int i = 0; i < 6; i++) {
+                int from = i * piece;
+                jar.after(Duration.ofSeconds(4 * (i + 1)), () -> jar.bytes(Arrays.copyOfRange(
+                        slow, from, Math.min(from + piece, slow.length))));
+            }
+            jar.after(Duration.ofSeconds(24), jar::end);
+        });
 
+        // Twenty-four seconds in all, against an answer given two and a stall of ten.
         BackendFetch.Fetched fetched = assertInstanceOf(BackendFetch.Fetched.class,
-                BackendFetch.whereAbsent(backends, Central.at(repository.uri(),
-                        new Central.Patience(Duration.ofMillis(100), Duration.ofMillis(400))),
-                        "wasm", HERE, release -> { }));
+                fetchWaiting(wire, Duration.ofSeconds(2), Duration.ofSeconds(10)));
 
         assertEquals(home.resolve("wasm-" + HERE + ".jar"), fetched.backend().jar());
+        assertEquals(Duration.ofSeconds(24), wire.elapsed());
     }
 
     @Test
     void aJarWhoseAnswerNeverBeginsIsGivenUpOnceAnAnswerShouldHaveBegun() throws Exception {
         repository.metadata(WASM, "0.1.0");
         repository.release(WASM, "0.1.0", "cli", HERE, jar("late", "wasm", HERE));
-        repository.holdBack(LocalRepository.path(WASM, "0.1.0", "cli", "jar"));
+        ScriptedWire wire = wire();
+        wire.script(LocalRepository.path(WASM, "0.1.0", "cli", "jar"), jar -> { });
 
-        Central.Failure failure = failedWaiting(Duration.ofMillis(300), Duration.ofSeconds(60));
+        // It is looked at every second, and the answer is given two and a half: given up on at
+        // the deadline and not at the look after it.
+        Central.Failure failure = failedWaiting(wire, Duration.ofMillis(2500), Duration.ofSeconds(60));
 
         assertTrue(assertInstanceOf(Central.Failure.Unreachable.class, failure).reason()
                 .startsWith("no answer began"), failure.toString());
+        assertEquals(Duration.ofMillis(2500), wire.elapsed());
         assertEquals(List.of(), held());
     }
 
@@ -461,23 +497,28 @@ class ABackendIsFetchedAsTheNewestReleaseBuiltAgainstThisSoutherTest {
     void aJarThatBeginsAndSendsNothingIsGivenUpOnceItHasStalled() throws Exception {
         repository.metadata(WASM, "0.1.0");
         repository.release(WASM, "0.1.0", "cli", HERE, jar("silent", "wasm", HERE));
-        repository.silence(LocalRepository.path(WASM, "0.1.0", "cli", "jar"));
+        ScriptedWire wire = wire();
+        wire.script(LocalRepository.path(WASM, "0.1.0", "cli", "jar"), jar -> jar.begin());
 
-        Central.Failure failure = failedWaiting(Duration.ofSeconds(60), Duration.ofMillis(400));
+        Central.Failure failure = failedWaiting(wire, Duration.ofSeconds(60), Duration.ofSeconds(10));
 
         assertTrue(assertInstanceOf(Central.Failure.Unreachable.class, failure).reason()
                 .startsWith("nothing arrived"), failure.toString());
+        assertTrue(wire.elapsed().compareTo(Duration.ofSeconds(10)) >= 0
+                && wire.elapsed().compareTo(Duration.ofSeconds(12)) <= 0, wire.elapsed().toString());
     }
 
     @Test
     void metadataWhoseBodyStopsAfterItBeganIsGivenUpAtTheDeadlineOnEveryJdk() throws Exception {
         repository.metadata(WASM, "0.1.0");
-        repository.silence("org/souther-lang/" + WASM + "/maven-metadata.xml");
+        ScriptedWire wire = wire();
+        wire.script("/maven-metadata.xml", metadata -> metadata.begin());
 
-        Central.Failure failure = failedWaiting(Duration.ofMillis(400), Duration.ofSeconds(60));
+        Central.Failure failure = failedWaiting(wire, Duration.ofMillis(2500), Duration.ofSeconds(60));
 
         assertTrue(assertInstanceOf(Central.Failure.Unreachable.class, failure).reason()
                 .startsWith("it did not arrive"), failure.toString());
+        assertEquals(Duration.ofMillis(2500), wire.elapsed());
     }
 
     @Test

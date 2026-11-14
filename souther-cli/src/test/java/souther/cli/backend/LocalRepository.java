@@ -13,7 +13,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -46,22 +45,12 @@ public final class LocalRepository implements AutoCloseable {
         /** The request sent on to {@code location}, with a body of {@code length} bytes. */
         record Redirect(String location, int length) implements Serving {}
 
-        /** The file, a {@code pieces}th at a time, {@code millis} apart. */
-        record Trickle(int pieces, long millis) implements Serving {}
-
-        /** Half the file under its full length, then nothing until the repository is closed. */
-        record Cut() implements Serving {}
-
-        /** The answer begun, and nothing of the file until the repository is closed. */
-        record Silent() implements Serving {}
     }
 
     private final HttpServer server;
     private final Map<String, byte[]> files = new ConcurrentHashMap<>();
     private final Map<String, Serving> serving = new ConcurrentHashMap<>();
-    private final Set<String> heldBack = ConcurrentHashMap.newKeySet();
     private final List<String> asked = new CopyOnWriteArrayList<>();
-    private final CountDownLatch closed = new CountDownLatch(1);
 
     /** What a client that asks for poms one at a time costs the build, where it is not going to ask
      *  for them together. Nothing that is answered waits on it. */
@@ -175,24 +164,6 @@ public final class LocalRepository implements AutoCloseable {
         serving.put(path(artifactId, version, classifier, "jar"), new Serving.Status(status));
     }
 
-    /**
-     * Serves half the release's jar under its full length, and then nothing more until the
-     * repository is closed: a connection that has stopped.
-     */
-    public void cut(String artifactId, String version, String classifier) {
-        serving.put(path(artifactId, version, classifier, "jar"), new Serving.Cut());
-    }
-
-    /** Begins the answer for {@code path} and sends nothing of it until the repository is closed. */
-    public void silence(String path) {
-        serving.put(path, new Serving.Silent());
-    }
-
-    /** Serves {@code path} a {@code pieces}th at a time, {@code millis} apart, all of it in the end. */
-    public void trickle(String path, int pieces, long millis) {
-        serving.put(path, new Serving.Trickle(pieces, millis));
-    }
-
     /** Answers {@code path} by sending the request on to {@code location}. */
     public void redirect(String path, String location) {
         redirect(path, location, 0);
@@ -201,11 +172,6 @@ public final class LocalRepository implements AutoCloseable {
     /** As {@link #redirect(String, String)}, with a body of {@code length} bytes as well. */
     public void redirect(String path, String location, int length) {
         serving.put(path, new Serving.Redirect(location, length));
-    }
-
-    /** Begins no answer for {@code path} until the repository is closed. */
-    public void holdBack(String path) {
-        heldBack.add(path);
     }
 
     /**
@@ -238,9 +204,6 @@ public final class LocalRepository implements AutoCloseable {
         String path = exchange.getRequestURI().getPath();
         asked.add(path);
         String file = path.startsWith(ROOT) ? path.substring(ROOT.length()) : path;
-        if (heldBack.contains(file)) {
-            awaitClose();
-        }
         CountDownLatch together = pomsTogether;
         if (file.endsWith(".pom") && together != null && pomsArrived.incrementAndGet() <= pomsHeld) {
             together.countDown();
@@ -277,55 +240,12 @@ public final class LocalRepository implements AutoCloseable {
                         }
                     }
                 }
-                case Serving.Trickle trickle -> {
-                    exchange.sendResponseHeaders(200, content.length);
-                    try (OutputStream body = exchange.getResponseBody()) {
-                        int piece = (int) Math.ceil(content.length / (double) trickle.pieces());
-                        for (int from = 0; from < content.length; from += piece) {
-                            body.write(content, from, Math.min(piece, content.length - from));
-                            body.flush();
-                            pause(trickle.millis());
-                        }
-                    }
-                }
-                case Serving.Cut _ -> {
-                    exchange.sendResponseHeaders(200, content.length);
-                    OutputStream body = exchange.getResponseBody();
-                    body.write(content, 0, content.length / 2);
-                    body.flush();
-                    awaitClose();
-                }
-                case Serving.Silent _ -> {
-                    exchange.sendResponseHeaders(200, content.length);
-                    exchange.getResponseBody().flush();
-                    awaitClose();
-                }
             }
-        }
-    }
-
-    private void awaitClose() {
-        try {
-            closed.await();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    }
-
-    private static void pause(long millis) {
-        if (millis <= 0) {
-            return;
-        }
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
         }
     }
 
     @Override
     public void close() {
-        closed.countDown();
         server.stop(0);
     }
 }
