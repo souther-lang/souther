@@ -31,6 +31,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -193,7 +194,20 @@ final class Predicates {
      * container, added to {@code out}. Read over the clause's shape as {@link #obligations} is, so
      * the two agree about which parts a clause has by having been given the same answer. */
     void quantifiedBy(Core raw, Denotations at, boolean positive, List<Quantified> out) {
-        out.addAll(new Quantifiers(this).read(raw, positive, at, terms::inside));
+        out.addAll(new Quantifiers(this, Optional.empty(), new int[1])
+                .read(raw, positive, at, terms::inside));
+    }
+
+    /**
+     * What the rule {@code part} is of states of every element of a container, each with the
+     * statement of the part that states it. The statements are counted as
+     * {@link ConjunctStatements} counts them, which is the shape's walk and so the same one, and
+     * are given the identity it gives them.
+     */
+    void quantifiedBy(Clauses.StatedPart part, Denotations at, boolean positive,
+                      List<Quantified> out) {
+        out.addAll(new Quantifiers(this, Optional.of(ConjunctStatements.of(part)), new int[1])
+                .read(part.expr(), positive, at, terms::inside));
     }
 
     /**
@@ -205,7 +219,8 @@ final class Predicates {
      * of what the clause owes and unknown to this one, which is a guarantee assembled from a clause
      * read to two depths.
      */
-    private record Quantifiers(Predicates of)
+    private record Quantifiers(Predicates of, Optional<List<ConjunctStatements.Reached>> conjunct,
+                              int[] counted)
             implements ClauseReading<List<Quantified>, Denotations> {
 
         /**
@@ -225,8 +240,13 @@ final class Predicates {
 
         @Override
         public List<Quantified> whole(ClauseExpr.Part part, Denotations at) {
+            // Counted at every statement the walk arrives at, whether or not it states a
+            // quantifier: which of the conjunct's statements this is is its place among all.
+            int statement = counted[0]++;
             return of.quantifierStatedBy(Conditions.asSizeComparison(part.of()), part.positive(),
-                    at);
+                    at).stream().map(each -> conjunct
+                            .map(reached -> each.statedBy(reached.get(statement).statement()))
+                            .orElse(each)).toList();
         }
 
         private static List<Quantified> together(List<Quantified> left, List<Quantified> right) {

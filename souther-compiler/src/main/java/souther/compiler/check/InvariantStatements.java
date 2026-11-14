@@ -100,7 +100,7 @@ public final class InvariantStatements {
 
     private List<InvariantStatement> statementsOf(Clauses.StatedPart part, Denotations at) {
         List<InvariantStatement> out = new ArrayList<>();
-        for (ConjunctStatements.Reached each : ConjunctStatements.of(part.of(), part.id())) {
+        for (ConjunctStatements.Reached each : ConjunctStatements.of(part)) {
             out.add(states(each, at));
         }
         return List.copyOf(out);

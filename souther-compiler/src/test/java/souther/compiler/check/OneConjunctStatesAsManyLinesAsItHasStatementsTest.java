@@ -17,8 +17,10 @@ import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeSymbols;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -137,13 +139,13 @@ class OneConjunctStatesAsManyLinesAsItHasStatementsTest {
         PartId<RuleRef.Invariant> apart = new PartId<>(holes, 0);
         PartId<RuleRef.Invariant> floor = new PartId<>(holes, 1);
 
-        assertEquals(java.util.Set.of(
-                        new DeclaredLine.OfAConjunct(java.util.Set.of(
-                                new InvariantStatementId(apart, 0),
-                                new InvariantStatementId(apart, 1))),
+        assertEquals(Set.of(
+                        new DeclaredLine.OfAConjunct(Set.of(
+                                AStatementOfAConjunct.numbered(apart, 0),
+                                AStatementOfAConjunct.numbered(apart, 1))),
                         new DeclaredLine.OfAConjunct(
-                                java.util.Set.of(new InvariantStatementId(floor, 0)))),
-                java.util.Set.copyOf(drawn),
+                                Set.of(AStatementOfAConjunct.numbered(floor, 0)))),
+                Set.copyOf(drawn),
                 "each is the line of the conjunct taking it away moved, and neither is a statement's"
                         + " — including the conjunct that states one thing about this number");
     }
@@ -163,7 +165,7 @@ class OneConjunctStatesAsManyLinesAsItHasStatementsTest {
         RuleRef.Invariant bounded = drawn.get(0).part().rule();
 
         assertEquals(List.of(new DeclaredLine.OfAStatement(
-                        new InvariantStatementId(new PartId<>(bounded, 0), 0))),
+                        AStatementOfAConjunct.numbered(new PartId<>(bounded, 0), 0))),
                 drawn,
                 "the end is the one `n >= 0` places, and taking the conjunct away shows nothing"
                         + " beside it");
@@ -181,8 +183,8 @@ class OneConjunctStatesAsManyLinesAsItHasStatementsTest {
         List<DeclaredLine> drawn = drawnAt(MOVED, "m.v = 1");
         PartId<RuleRef.Invariant> part = new PartId<>(drawn.get(0).part().rule(), 0);
 
-        assertEquals(List.of(new DeclaredLine.OfAConjunct(java.util.Set.of(
-                        new InvariantStatementId(part, 0), new InvariantStatementId(part, 1)))),
+        assertEquals(List.of(new DeclaredLine.OfAConjunct(Set.of(
+                        AStatementOfAConjunct.numbered(part, 0), AStatementOfAConjunct.numbered(part, 1)))),
                 drawn,
                 "where the values start is the conjunct's, which no statement of it placed");
     }
@@ -203,7 +205,7 @@ class OneConjunctStatesAsManyLinesAsItHasStatementsTest {
                 .replaceAll("\\s+", "");
         java.util.regex.Matcher found = java.util.regex.Pattern
                 .compile("\"which\":\\{.{0,240}?\\},\"facts\"").matcher(json);
-        java.util.Set<String> which = new java.util.LinkedHashSet<>();
+        Set<String> which = new LinkedHashSet<>();
         while (found.find()) {
             which.add(found.group());
         }
@@ -235,8 +237,8 @@ class OneConjunctStatesAsManyLinesAsItHasStatementsTest {
     void andWherePairedWithOneStatementItIsStillTheConjunctsLine() {
         List<DeclaredLine> drawn = drawnAt(COUPLED, "p.a = 1");
 
-        assertEquals(List.of(new DeclaredLine.OfAConjunct(java.util.Set.of(
-                        new InvariantStatementId(
+        assertEquals(List.of(new DeclaredLine.OfAConjunct(Set.of(
+                        AStatementOfAConjunct.numbered(
                                 new PartId<>(drawn.get(0).part().rule(), 0), 0)))),
                 drawn,
                 "the conjunct moved the end, and which of its statements is on this number is what"

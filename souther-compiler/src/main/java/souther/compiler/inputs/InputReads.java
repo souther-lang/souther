@@ -23,6 +23,7 @@ import souther.compiler.check.FoldedValue;
 import souther.compiler.check.WhatAnOptionHolds;
 import souther.compiler.core.Core;
 import souther.compiler.core.EnteredArm;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.inputs.OnePerElement.ReadOff;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.BuiltFrom;
@@ -600,7 +601,7 @@ public final class InputReads {
                             applied.picked(), applied.entered(), applied.widths(),
                             applied.turnsOn()));
         }
-        if (namesSomething(value.value())) {
+        if (!WhatABodyReads.freeIn(value.value()).isEmpty()) {
             Map<BindingId, Denotation> given = new LinkedHashMap<>(applied.given());
             given.put(binding, value);
             return new InputReads(names, narrower, declared, dependencies, new Applied(handed,
@@ -1355,32 +1356,6 @@ public final class InputReads {
          * and a reader told which is told the one that was reached.
          */
         record PastWhatIsWrittenOut() implements Applications {}
-    }
-
-    /** Whether {@code e} reads a binding it does not make itself. */
-    private static boolean namesSomething(Core e) {
-        Set<BindingId> made = new HashSet<>();
-        Set<BindingId> read = new HashSet<>();
-        namesReadIn(e, made, read);
-        read.removeAll(made);
-        return !read.isEmpty();
-    }
-
-    /**
-     * The bindings {@code e} reads and the ones it makes. A binder this does not know of leaves the
-     * name it makes read and not made, which says the value names something — the answer that hands
-     * nothing, and never a wrong one.
-     */
-    private static void namesReadIn(Core e, Set<BindingId> made, Set<BindingId> read) {
-        List<Core.Read> reads = new ArrayList<>();
-        walkNames(e, made, reads);
-        reads.forEach(each -> read.add(each.binding()));
-    }
-
-    private static void madeBy(Core.Binder binder, Set<BindingId> made) {
-        if (binder != null && binder.binding() != null) {
-            made.add(binder.binding());
-        }
     }
 
     /** Whether a call to {@code behavior} is a value a row stands in for, read here. */
@@ -2459,7 +2434,7 @@ public final class InputReads {
         Set<ElementsNamed.Slot> unnamed = new LinkedHashSet<>();
         Set<BindingId> made = new HashSet<>();
         List<Core.Read> reads = new ArrayList<>();
-        walkNames(e, made, reads);
+        WhatABodyReads.namesIn(e, made, reads);
         for (Core.Read read : reads) {
             // A name bound inside the expression is a different value on each application of
             // what binds it, as a closure's parameter is on each element it is handed, and so no
@@ -2508,29 +2483,12 @@ public final class InputReads {
                 .toList());
     }
 
-    /** Every read of a name in {@code e}, in the order written, and the names {@code e} binds. */
-    private static void walkNames(Core e, Set<BindingId> made, List<Core.Read> reads) {
-        switch (e) {
-            case Core.Read r -> reads.add(r);
-            case Core.LetIn let -> madeBy(let.binder(), made);
-            case Core.Block block -> block.params().forEach(each -> madeBy(each, made));
-            case Core.Match match -> match.cases().forEach(arm -> madeBy(arm.binder(), made));
-            case Core.IfConstructed fork -> madeBy(fork.binder(), made);
-            default -> { }
-        }
-        Core.forEachChild(e, child -> walkNames(child, made, reads));
-    }
-
     private void stoodForIn(Core e, DeclarationNewtypes newtypes, Set<BindingId> followed,
                             Set<ElementStood> into) {
-        Set<BindingId> made = new HashSet<>();
-        Set<BindingId> read = new LinkedHashSet<>();
-        namesReadIn(e, made, read);
         // A name bound inside the expression is a different value on each application of what
         // binds it, as a closure's parameter is on each element it is handed, and so no one
         // element the comparison is read of.
-        read.removeAll(made);
-        for (BindingId each : read) {
+        for (BindingId each : WhatABodyReads.freeIn(e)) {
             stoodBy(each, newtypes, followed, into);
         }
     }
@@ -4783,11 +4741,8 @@ public final class InputReads {
                                          InputReads at) {
         boolean keyIsTheElement = Core.withoutStanding(key) instanceof Core.Read read
                 && read.binding().equals(element);
-        Set<BindingId> made = new HashSet<>();
-        Set<BindingId> read = new HashSet<>();
-        namesReadIn(value, made, read);
-        read.removeAll(made);
-        return read.stream().allMatch(binding -> (keyIsTheElement && binding.equals(element))
+        return WhatABodyReads.freeIn(value).stream()
+                .allMatch(binding -> (keyIsTheElement && binding.equals(element))
                 || at.names.roleOf(binding) instanceof BindingRole.Root);
     }
 

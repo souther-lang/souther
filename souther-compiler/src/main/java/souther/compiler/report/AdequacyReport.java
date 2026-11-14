@@ -8189,16 +8189,34 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case souther.compiler.check.DeclaredLine.OfAStatement it -> {
                 into.put("kind", "statement");
                 into.put("statement", it.statement().ordinal());
+                if (!it.statement().inside().isEmpty()) {
+                    insideStatements(into.putArray("inside"), it.statement());
+                }
             }
             case souther.compiler.check.DeclaredLine.OfAConjunct it -> {
                 into.put("kind", "conjunct");
                 ArrayNode paired = into.putArray("pairedWith");
                 it.pairedWith().stream()
-                        .map(souther.compiler.check.InvariantStatementId::ordinal)
-                        .sorted()
-                        .forEach(paired::add);
+                        .sorted(Comparator
+                                .comparingInt(souther.compiler.check.InvariantStatementId::ordinal)
+                                .thenComparing(each -> each.inside().toString()))
+                        .forEach(each -> {
+                            if (each.inside().isEmpty()) {
+                                paired.add(each.ordinal());
+                            } else {
+                                ObjectNode inner = paired.addObject();
+                                inner.put("statement", each.ordinal());
+                                insideStatements(inner.putArray("inside"), each);
+                            }
+                        });
             }
         }
+    }
+
+    /** The statements {@code statement} is within, the outermost first. */
+    private static void insideStatements(ArrayNode into,
+                                         souther.compiler.check.InvariantStatementId statement) {
+        statement.inside().forEach(into::add);
     }
 
     /** A level, as the thing it is a level of writes it: a place on a carrier, or a number. */

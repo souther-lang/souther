@@ -38,6 +38,18 @@ public interface DeclarationReadings {
     StringMachineAnswers of(TypeKey declaration);
 
     /**
+     * The answers for a reading of a value no declaration stands under, which is what a container
+     * holds.
+     *
+     * <p>A reading's own, keeping what it works out: with nothing to borrow it is
+     * {@link StringMachineAnswers#unborrowed}, and never {@link StringMachineAnswers#NONE}, which
+     * keeps nothing and so leaves its counterfactual to build it all again.
+     */
+    default StringMachineAnswers ofAValueWithNoDeclaration() {
+        return StringMachineAnswers.unborrowed(revision());
+    }
+
+    /**
      * What the revision this lends under has worked out.
      *
      * <p>Beside the two above and on a lifetime of its own, because it is about neither a
@@ -233,6 +245,14 @@ public interface DeclarationReadings {
             public StringMachineAnswers of(TypeKey declaration) {
                 return declaration.equals(named)
                         ? StringMachineAnswers.borrowing(machines, revision)
+                        : StringMachineAnswers.unborrowed(revision);
+            }
+
+            /** The reading that is of no declaration, which is the one {@code machines} came
+             *  from where {@code named} names none. */
+            @Override
+            public StringMachineAnswers ofAValueWithNoDeclaration() {
+                return named == null ? StringMachineAnswers.borrowing(machines, revision)
                         : StringMachineAnswers.unborrowed(revision);
             }
 

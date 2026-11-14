@@ -12,6 +12,7 @@ import souther.compiler.check.DeclarationKind;
 import souther.compiler.check.Shape;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.DeclaredCoordinates;
+import souther.compiler.check.ElementGuarantee;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleKey;
 import souther.compiler.check.FieldDomains;
@@ -1297,7 +1298,8 @@ public final class InputDomain {
             case StructuralInspection.Continuation.None _,
                  StructuralInspection.Continuation.Blocked _ -> { }
             case StructuralInspection.Continuation.Elements elements ->
-                    inside(List.of(new Held(path.element(), elements.element())), path, ancestry,
+                    inside(List.of(new Held(path.element(), elements.element(),
+                                    placed.guaranteedOfEveryElementAt(path))), path, ancestry,
                             reading, counted, placed, found, roots, handoffs, observed, account,
                             reach, stopped);
             // The keys first, which is the order a map is written in: a row writes each entry as
@@ -1458,8 +1460,19 @@ public final class InputDomain {
         return element.prefix(element.steps().size() - 1);
     }
 
-    /** One position inside a container: where it is, and what stands there. */
-    private record Held(TermPath at, Type type) {}
+    /**
+     * One position inside a container: where it is, what stands there, and what the container
+     * states of every element it holds.
+     *
+     * @param inherited what the rules of the value the container is in say of each element, which
+     *                  is empty for a part that is no element of a sequence
+     */
+    private record Held(TermPath at, Type type, List<ElementGuarantee> inherited) {
+
+        Held(TermPath at, Type type) {
+            this(at, type, List.of());
+        }
+    }
 
     /**
      * The positions inside the container at {@code container}, opened.
@@ -1494,12 +1507,15 @@ public final class InputDomain {
         if (!stopped) {
             handoffs.passesTo(placed.root(), container, entered.stream().map(Held::at).toList());
         }
-        // Nothing crosses into what a container holds: what a clause of the value out here says is
+        // No clause crosses into what a container holds: what a clause of the value out here says is
         // written about the container, and what it holds is a value with a declaration of its own.
+        // What does arrive is what such a clause states of every element, which is a fact about each
+        // of them and is read as a rule of the element it holds of.
         for (int i = 0; i < entered.size(); i++) {
             takeTheRulesOver(placed.root(), container, entered.get(i).at(), entered.get(i).type(),
                     ancestry, reading, counted, found, roots, Set.of(), handoffs, observed, null,
-                    new RootOpening.Inside(placed.root(), container), account, ons.get(i));
+                    new RootOpening.Inside(placed.root(), container), account, ons.get(i),
+                    entered.get(i).inherited());
         }
     }
 
@@ -1583,7 +1599,8 @@ public final class InputDomain {
                                          java.util.Set<Type> visited, RuleHandoffs handoffs,
                                          NameReach.Observed observed,
                                          PlacedRules.Reaching crossing, RootOpening opening,
-                                         Gathered account, Reach reach) {
+                                         Gathered account, Reach reach,
+                                         List<ElementGuarantee> inherited) {
         roots.add(new RuleRoot(opened, type, opening));
         // Said where a reading is actually opened, so that a case recorded as opened is one there
         // is somewhere to ask about. Said where the branch was chosen instead, a descent that turns
@@ -1595,7 +1612,7 @@ public final class InputDomain {
         if (reach.handedOn()) {
             handoffs.accepts(by, at, opened);
         }
-        PlacedRules rules = PlacedRules.of(opened, type, reading, crossing);
+        PlacedRules rules = PlacedRules.of(opened, type, reading, crossing, inherited);
         // Said as the reading of this value is opened, so that what a build has to account for is
         // what the rules of the values it read actually placed.
         account.from(rules, reach);
@@ -1648,7 +1665,7 @@ public final class InputDomain {
         deeper.add(branch.under());
         takeTheRulesOver(by, path, path.refine(branch.refinement()), branch.under(), ancestry,
                 reading, counted, found, roots, deeper, handoffs, observed, crossing, opening,
-                account, reach);
+                account, reach, List.of());
     }
 
     /**
