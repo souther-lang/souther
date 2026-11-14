@@ -10,8 +10,11 @@ import souther.compiler.observe.WaitShown;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.Condition;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -157,19 +160,53 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
         assertInstanceOf(Deadline.Outcome.Overran.class, came).abandon().run();
     }
 
+    /**
+     * Time that passes only where the servicing thread is waiting.
+     *
+     * <p>What it takes for the wait to be spent is the row passing time, which a row does by working
+     * and which this lets a test say outright. A wait returns when the other side moves, and what
+     * is left of it is what the time passed inside it took.
+     */
+    private static final class VirtualTime implements Handoff.Spending {
+
+        private final AtomicLong now = new AtomicLong();
+
+        void pass(Duration length) {
+            now.addAndGet(length.toNanos());
+        }
+
+        @Override
+        public long awaiting(Condition moved, long nanos) throws InterruptedException {
+            long began = now.get();
+            moved.await();
+            return nanos - (now.get() - began);
+        }
+    }
+
+    /** Runs {@code row} as the row of {@code handoff}, on a worker of its own. */
+    private static void startRow(Handoff handoff, Callable<Object> row) {
+        Thread worker = new Thread(() -> {
+            try {
+                handoff.installedFor(row);
+            } catch (Exception _) {
+                // Given up on, which is how a test ends a row that has stopped.
+            }
+        });
+        worker.setDaemon(true);
+        worker.start();
+    }
+
     /** An application taking three times the wait spends none of it. */
     @Test
-    void whatTheApplicationTakesIsNotTheCompilesToSpend() {
-        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(100));
+    void whatTheApplicationTakesIsNotTheCompilesToSpend() throws Exception {
+        VirtualTime time = new VirtualTime();
+        Handoff handoff = new Handoff(time);
+        startRow(handoff, () -> Handoff.onTheThreadThatAsked().call(() -> {
+            time.pass(Duration.ofMillis(300));
+            return "answered";
+        }));
 
-        Deadline.Outcome<Object> came = deadline.given(WORK,
-                () -> Handoff.onTheThreadThatAsked().call(() -> {
-                    slept(300);
-                    return "answered";
-                }));
-
-        assertEquals("answered",
-                assertInstanceOf(Deadline.Outcome.Finished.class, came).value());
+        assertEquals(Handoff.Serviced.ROW_LEFT, handoff.serviceUntilDone(Duration.ofMillis(100)));
     }
 
     /**
@@ -182,21 +219,26 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
      * against.
      */
     @Test
-    void whatTheCompileSpendsAroundCrossingsIsOneWait() {
-        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(100));
-
-        Deadline.Outcome<Object> came = deadline.given(WORK, () -> {
+    void whatTheCompileSpendsAroundCrossingsIsOneWait() throws Exception {
+        VirtualTime time = new VirtualTime();
+        Handoff handoff = new Handoff(time);
+        startRow(handoff, () -> {
             for (int each = 0; each < 5; each++) {
-                Thread.sleep(30);
+                time.pass(Duration.ofMillis(30));
                 Handoff.onTheThreadThatAsked().call(() -> {
-                    slept(40);
+                    time.pass(Duration.ofMillis(40));
                     return null;
                 });
             }
             return "answered";
         });
 
-        assertInstanceOf(Deadline.Outcome.Overran.class, came).abandon().run();
+        try {
+            assertEquals(Handoff.Serviced.WAIT_SPENT,
+                    handoff.serviceUntilDone(Duration.ofMillis(100)));
+        } finally {
+            handoff.abandon();
+        }
     }
 
     /**
@@ -217,14 +259,5 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
 
         assertInstanceOf(IllegalStateException.class,
                 assertInstanceOf(Deadline.Outcome.Threw.class, came).cause());
-    }
-
-    /** {@code ms} spent where an application is applied, which may not throw what a sleep does. */
-    private static void slept(long ms) {
-        try {
-            Thread.sleep(ms);
-        } catch (InterruptedException _) {
-            Thread.currentThread().interrupt();
-        }
     }
 }
