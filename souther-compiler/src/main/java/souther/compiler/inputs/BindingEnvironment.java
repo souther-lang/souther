@@ -315,13 +315,8 @@ final class BindingEnvironment {
         private final Handed started;
         /** The names this reading read itself, which were answered as {@link #started} has them. */
         private final Set<BindingId> asked = new HashSet<>();
-        /** The sets of the readings taken in, each as it stands to {@link #started}. */
-        private List<AskedNames> taken = List.of();
-        /** The sets in {@link #taken}, by what object they are: a set taken in again, as a
-         *  reading kept is, from any environment that hands the same names again, is the same
-         *  object ({@link AskedNames#without}) and adds nothing. Made with the first set taken
-         *  in: most watches take in none. */
-        private Set<AskedNames> takenSets;
+        /** What the readings taken in asked, or null where none was: most watches take in none. */
+        private Takings takings;
         private boolean unsure;
 
         private Watch(Handed started) {
@@ -340,7 +335,8 @@ final class BindingEnvironment {
             try {
                 T result = reading.get();
                 AskedNames names = watch.unsure ? AskedNames.NONE
-                        : AskedNames.of(watch.asked, watch.taken);
+                        : AskedNames.of(watch.asked,
+                                watch.takings == null ? List.of() : watch.takings.sets);
                 if (outer != null) {
                     outer.note(on.handed, names, watch.unsure);
                 }
@@ -383,23 +379,19 @@ final class BindingEnvironment {
             if (!names.hasNames()) {
                 return;
             }
+            if (takings == null) {
+                takings = new Takings();
+            }
+            if (!takings.firstFrom(names, in)) {
+                return;
+            }
             AskedNames.counted(2, 1);
             Set<BindingId> since = in.stepsSince(started);
             if (since == null) {
                 unsure = true;
                 return;
             }
-            AskedNames passed = names.without(since);
-            if (!passed.hasNames()) {
-                return;
-            }
-            if (takenSets == null) {
-                takenSets = Collections.newSetFromMap(new IdentityHashMap<>());
-                taken = new ArrayList<>();
-            }
-            if (takenSets.add(passed)) {
-                taken.add(passed);
-            }
+            takings.add(takings.projection(names, since));
         }
 
         static boolean running() {
@@ -432,6 +424,75 @@ final class BindingEnvironment {
                 }
             }
             return answer;
+        }
+    }
+
+    /** A set of names asked and the application it was taken in from, each by what object it is. */
+    private record FromWhere(AskedNames names, Handed in) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof FromWhere that && names == that.names && in == that.in;
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * System.identityHashCode(names) + System.identityHashCode(in);
+        }
+    }
+
+    /** A set of names asked, by what object it is, and the names left out of it, by what they are. */
+    private record Without(AskedNames names, Set<BindingId> out) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Without that && names == that.names && out.equals(that.out);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * System.identityHashCode(names) + out.hashCode();
+        }
+    }
+
+    /**
+     * What one watch took in, and how each came to be.
+     *
+     * <p>Kept for the watch and for as long as it runs, so that what is kept is what the watch met
+     * and not a number chosen beforehand. A set taken in again from the application it was taken
+     * in from is known before the applications between are walked, one taken in from another that
+     * hands the same names again is known by the names left out, and a set left out of the same
+     * names, whichever applications they came from, is the one set.
+     */
+    private static final class Takings {
+
+        /** The sets taken in, as each stands to where the watch began, each once. */
+        final List<AskedNames> sets = new ArrayList<>();
+        private final Set<AskedNames> distinct = Collections.newSetFromMap(new IdentityHashMap<>());
+        private final Set<FromWhere> from = new HashSet<>();
+        private Map<Without, AskedNames> projected;
+
+        /** Whether {@code names} was not taken in from {@code in} before. */
+        boolean firstFrom(AskedNames names, Handed in) {
+            return from.add(new FromWhere(names, in));
+        }
+
+        /** {@code names} as it stands to where the watch began, which is without the names handed
+         *  again on the way ({@code since}). */
+        AskedNames projection(AskedNames names, Set<BindingId> since) {
+            if (since.isEmpty()) {
+                return names;
+            }
+            if (projected == null) {
+                projected = new HashMap<>();
+            }
+            return projected.computeIfAbsent(new Without(names, since), _ -> names.without(since));
+        }
+
+        void add(AskedNames passed) {
+            if (passed.hasNames() && distinct.add(passed)) {
+                sets.add(passed);
+            }
         }
     }
 

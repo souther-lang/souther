@@ -10,7 +10,9 @@ import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
 import souther.test.Growth;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.SequencedMap;
 
@@ -149,25 +151,68 @@ class WhatAWatchPassesOnIsPaidForByWhatChangedAndNotByWhatIsHeldTest {
     @Test
     void aReadingTakenAgainFromTheSameEnvironmentAddsNothingTheSecondTime() {
         BindingEnvironment on = nothingHanded();
-        BindingEnvironment since = on.handing(Z, written(1));
+        BindingEnvironment since = on.handing(Z, written(1)).handing(SPARE, written(2));
 
-        long once = counting(() -> takenAgain(on, since, 1))[0];
-        long twice = counting(() -> takenAgain(on, since, 2))[0];
+        long[] once = counting(() -> takenAgain(on, since, 1));
+        long[] twice = counting(() -> takenAgain(on, since, 2));
 
-        assertEquals(once, twice, "the second was the first again");
+        assertEquals(once[0], twice[0], "names handled: the second was the first again");
+        assertEquals(once[3], twice[3], "steps walked: the second was the first again");
+    }
+
+    @Test
+    void aReadingTakenAgainFromMoreEnvironmentsThanAnythingIsKeptForAddsNothingTheSecondRound() {
+        long[] once = counting(() -> takenAgainFromEach(1));
+        long[] twice = counting(() -> takenAgainFromEach(2));
+
+        assertEquals(once[0], twice[0], "names handled: the second round was the first again");
+        assertEquals(once[3], twice[3], "steps walked: the second round was the first again");
+    }
+
+    /** A reading that asked 20 names, taken again from 20 environments that each hand one of
+     *  them what the watch began with, one after the other, {@code rounds} times. */
+    private static void takenAgainFromEach(int rounds) {
+        BindingEnvironment on = holding(20);
+        List<BindingEnvironment> each = new ArrayList<>();
+        for (int i = 0; i < 20; i++) {
+            each.add(on.handing(new BindingId(OWNER, 1000 + i), written(i)));
+        }
+        HandedAnswers asked = BindingEnvironment.Watch.over(on, () -> {
+            for (int i = 0; i < 20; i++) {
+                on.roleOf(new BindingId(OWNER, 1000 + i));
+            }
+            return 0;
+        }).asked();
+        BindingEnvironment.Watch.over(on, () -> {
+            for (int round = 0; round < rounds; round++) {
+                for (BindingEnvironment at : each) {
+                    BindingEnvironment.Watch.replay(at, asked);
+                }
+            }
+            return 0;
+        });
     }
 
     @Test
     void aReadingTakenAgainFromTwoEnvironmentsInTurnAddsNothingAfterTheFirstOfEach() {
-        long once = counting(() -> takenAgainInTurn(1))[0];
-        long twice = counting(() -> takenAgainInTurn(2))[0];
+        long once = counting(() -> takenAgainInTurn(1, 2))[0];
+        long twice = counting(() -> takenAgainInTurn(2, 2))[0];
 
         assertEquals(once, twice, "the second round was the first again");
     }
 
+    @Test
+    void aSetLeftOutOfTheSameNamesIsTheSameSetWhicheverEnvironmentItIsTakenInFrom() {
+        long fromOne = counting(() -> takenAgainInTurn(1, 1))[0];
+        long fromTwo = counting(() -> takenAgainInTurn(1, 2))[0];
+
+        assertEquals(fromOne, fromTwo, "the second environment hands the same names again");
+    }
+
     /** A reading that asked {@code Y} and {@code Z}, taken again from two environments that hand
-     *  {@code Y} what the watch began with, one and then the other, {@code rounds} times. */
-    private static void takenAgainInTurn(int rounds) {
+     *  {@code Y} what the watch began with, one and then the other (or the one only), {@code
+     *  rounds} times. */
+    private static void takenAgainInTurn(int rounds, int environments) {
         BindingEnvironment on = nothingHanded().handing(Y, written(1));
         BindingEnvironment one = on.handing(Y, written(1));
         BindingEnvironment other = on.handing(Y, written(1));
@@ -178,7 +223,9 @@ class WhatAWatchPassesOnIsPaidForByWhatChangedAndNotByWhatIsHeldTest {
         BindingEnvironment.Watch.over(on, () -> {
             for (int i = 0; i < rounds; i++) {
                 BindingEnvironment.Watch.replay(one, asked);
-                BindingEnvironment.Watch.replay(other, asked);
+                if (environments > 1) {
+                    BindingEnvironment.Watch.replay(other, asked);
+                }
             }
             return 0;
         });

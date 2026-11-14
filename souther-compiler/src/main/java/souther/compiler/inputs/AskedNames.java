@@ -93,21 +93,10 @@ final class AskedNames {
         if (out.isEmpty() || !named) {
             return this;
         }
-        // What is left is settled by the set and the names left out and by nothing else, so a
-        // set taken in again from any environment that hands the same names again is the very
-        // one taken in before, which a watch taking it in knows by what object it is.
-        for (Derived each : derived) {
-            if (each.out().equals(out)) {
-                return each.result();
-            }
-        }
-        AskedNames made = withoutWorkedOut(out);
-        remember(out, made);
-        return made;
-    }
-
-    /** What {@link #without} comes to, which has not been asked before. */
-    private AskedNames withoutWorkedOut(Set<BindingId> out) {
+        // Made again each time it is asked. What is left is settled by the set and the names left
+        // out, and a watch that meets the same pair again knows it by that pair ({@code
+        // Watch.Takings}); a set that held what it came to would hold it for as long as the set
+        // is held, by every watch that ever left names out of it.
         Set<BindingId> names = all();
         boolean asked = false;
         if (out.size() <= names.size()) {
@@ -134,27 +123,6 @@ final class AskedNames {
         counted(0, names.size());
         narrower.removeAll(out);
         return ofAll(narrower);
-    }
-
-    /** A set of names left out, and what this is without them. */
-    private record Derived(Set<BindingId> out, AskedNames result) {}
-
-    /** How many of them are kept: the sets of names a set is taken in without are few, one for
-     *  each way the applications between where it was asked and where it is taken in differ. */
-    private static final int KEPT_DERIVED = 16;
-
-    private static final Derived[] NO_DERIVED = {};
-
-    /** The newest first; replaced whole, so that readers on other threads see one or the other. */
-    private volatile Derived[] derived = NO_DERIVED;
-
-    private void remember(Set<BindingId> out, AskedNames result) {
-        Derived[] was = derived;
-        int kept = Math.min(was.length, KEPT_DERIVED - 1);
-        Derived[] now = new Derived[kept + 1];
-        now[0] = new Derived(out, result);
-        System.arraycopy(was, 0, now, 1, kept);
-        derived = now;
     }
 
     /** All of the names, worked out the first time they are asked for, and the sets under this
