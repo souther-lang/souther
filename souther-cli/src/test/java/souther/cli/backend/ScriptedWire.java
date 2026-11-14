@@ -7,15 +7,12 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.time.Duration;
-import java.util.Collections;
 import java.util.Comparator;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.PriorityQueue;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Flow;
@@ -83,6 +80,9 @@ final class ScriptedWire implements Central.Wire {
 
     private record Event(long at, long order, Runnable run) {}
 
+    /** An answer this wire scripts, which is what tells it from one that went to the real wire. */
+    private static final class Scripted<T> extends CompletableFuture<HttpResponse<T>> {}
+
     private record Info() implements HttpResponse.ResponseInfo {
         @Override
         public int statusCode() {
@@ -141,7 +141,6 @@ final class ScriptedWire implements Central.Wire {
     private final Map<String, Consumer<Delivery<?>>> scripts = new LinkedHashMap<>();
     private final PriorityQueue<Event> events = new PriorityQueue<>(
             Comparator.comparingLong(Event::at).thenComparingLong(Event::order));
-    private final Set<Object> scripted = Collections.newSetFromMap(new IdentityHashMap<>());
     private volatile long now;
     private long order;
 
@@ -164,8 +163,7 @@ final class ScriptedWire implements Central.Wire {
                                                        HttpResponse.BodyHandler<T> body) {
         for (Map.Entry<String, Consumer<Delivery<?>>> script : scripts.entrySet()) {
             if (request.uri().getPath().endsWith(script.getKey())) {
-                CompletableFuture<HttpResponse<T>> answer = new CompletableFuture<>();
-                scripted.add(answer);
+                CompletableFuture<HttpResponse<T>> answer = new Scripted<>();
                 script.getValue().accept(new Delivery<>(body, answer));
                 return answer;
             }
@@ -181,7 +179,7 @@ final class ScriptedWire implements Central.Wire {
     @Override
     public <T> T get(Future<T> answer, long nanos)
             throws ExecutionException, TimeoutException, InterruptedException {
-        if (!scripted.contains(answer)) {
+        if (!(answer instanceof Scripted<?>)) {
             return real.get(answer, nanos);
         }
         long until = now + nanos;
