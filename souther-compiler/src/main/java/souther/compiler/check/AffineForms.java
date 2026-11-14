@@ -33,9 +33,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.BiFunction;
-import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 
 /**
  * Reading an expression as {@code const + Σ coef·atom}, over whatever a caller counts as an atom.
@@ -575,84 +573,19 @@ public final class AffineForms {
     }
 
     /**
-     * One reading, and what the names read through it came to, for every walk made through it.
+     * {@link #of(Core, Object, Reading)}, holding what each name came to in {@code answered}, which
+     * the caller keeps for as long as it reads with {@code reading}.
      *
-     * <p>What a name came to is the answer of the reading that read it: a reading decides what a
-     * leaf is and which elements it may be read beside, so the same name read through another
-     * reading, or through this one in another state, can come to something else. The answers are
-     * keyed by the value and the environment ({@link BindingWalk}) and not by the reading, so they
-     * are held with the one reading they are of, and a walk made through this is made with it and
-     * no other.
-     *
-     * <p>Held by whoever reads several expressions with one reading in one state, for as long as
-     * the reading and its state are the same: a name the roots share is then read once for all of
-     * them and not once for each root. It is also what a reading that asks itself something while
-     * it reads is made through — the fact an operation states of its arguments, what a condition
-     * compares — so that a value it is part way through reading is read once and not once per
-     * question.
+     * <p>For a reading that asks itself something while it reads — the fact an operation states of
+     * its arguments, what a condition compares — so that a value it is part way through reading is
+     * read once and not once per question. What is held is keyed by the value and the environment
+     * it is read in ({@link BindingWalk}), so an answer is taken again only for the same question.
      */
-    public static final class OfOneReading<A, E> {
-        private final Reading<A, E> reading;
-        private final BindingWalk.Answers<Outcome<A, E>> answered = new BindingWalk.Answers<>();
-        private final FoldedValue.Kept folds = new FoldedValue.Kept();
-
-        public OfOneReading(Reading<A, E> reading) {
-            this.reading = Objects.requireNonNull(reading, "the answers are of a reading");
-        }
-
-        /** What reading {@code raw} in {@code at} came to ({@link #outcome(Core, Object,
-         *  Reading)}), the names it reads held with this reading's. */
-        public Outcome<A, E> outcome(Core raw, E at) {
-            return of(raw, at, reading, new Walk<>(answered, folds));
-        }
-
-        /** {@code raw} as a form, or null where {@link #outcome} is a stop. */
-        public LinearForm<A> form(Core raw, E at) {
-            return outcome(raw, at) instanceof Outcome.Composed<A, E> composed
-                    ? composed.form() : null;
-        }
-    }
-
-    /**
-     * The roots one asking starts, read through one reading for as long as what it was made in
-     * stands.
-     *
-     * <p>What a name came to is the answer of the reading and of the state it read in, so the
-     * answers are shared by the roots that follow only where that state is what it was: whoever
-     * makes the reading says, in {@code stillStands}, whether it is. Where it is not, the next
-     * root is read through a reading made for it, as a root read alone would be, and what the
-     * earlier roots' names came to is left behind.
-     */
-    public static final class Roots<A, E> {
-        private final Supplier<Reading<A, E>> readings;
-        private final BooleanSupplier stillStands;
-        private OfOneReading<A, E> current;
-
-        /**
-         * @param readings    makes the reading a root is read through, in the state it is then in
-         * @param stillStands whether the state the reading last made was made in is the state now
-         */
-        public Roots(Supplier<Reading<A, E>> readings, BooleanSupplier stillStands) {
-            this.readings = Objects.requireNonNull(readings);
-            this.stillStands = Objects.requireNonNull(stillStands);
-        }
-
-        public Outcome<A, E> outcome(Core raw, E at) {
-            if (current == null || !stillStands.getAsBoolean()) {
-                current = new OfOneReading<>(readings.get());
-            }
-            return current.outcome(raw, at);
-        }
-
-        /** The reading the roots read through now: the one the last root was read through, or
-         *  one made where none has been. What is asked of the state it stands in is asked of
-         *  the next root. */
-        public OfOneReading<A, E> current() {
-            if (current == null) {
-                current = new OfOneReading<>(readings.get());
-            }
-            return current;
-        }
+    static <A, E> LinearForm<A> of(Core raw, E at, Reading<A, E> reading,
+                                   BindingWalk.Answers<Outcome<A, E>> answered,
+                                   FoldedValue.Kept folds) {
+        return of(raw, at, reading, new Walk<>(answered, folds))
+                instanceof Outcome.Composed<A, E> composed ? composed.form() : null;
     }
 
     /** One walk of one expression, reading each name it meets once ({@link BindingWalk}). */

@@ -254,15 +254,6 @@ public final class ElementsMet {
         return true;
     }
 
-    /**
-     * Whether nothing has been met of any element: no name stands for one, and no number was
-     * refused for naming another. What is read beside this reads as it would beside a comparison
-     * of its own that nothing was read of yet, and leaves it so where it names no element.
-     */
-    public boolean untouched() {
-        return !holding || (standingFor.isEmpty() && !crowded);
-    }
-
     /** Whether a number was refused because it named another element of a container this
      *  comparison was already read of. */
     public boolean crowded() {
