@@ -199,6 +199,10 @@ final class FormReach<A> {
 
     /** The ends this was handed, for a reader that needs them as well and must not derive a second
      *  set of its own. */
+    DifferenceBounds<A> differences() {
+        return differences;
+    }
+
     Box<A> ends() {
         return ends;
     }
@@ -709,6 +713,125 @@ final class FormReach<A> {
         ExactCut flipped = highestKept(asking, 1, negated(ordered));
         return new Reach(flipped == null ? null
                 : new ExactCut(flipped.at().negated(), flipped.inclusive()), most);
+    }
+
+    /**
+     * The premises of this reading held in an index over their two positions, so that many forms
+     * can be asked of them without each reading every premise ({@link #reachWith}).
+     *
+     * @param x one of the two positions every premise is over
+     * @param j the other
+     */
+    record Indexed<A>(ReachIndex index, A x, A j) {
+
+        /** Whether the form weighs no position but the two. */
+        boolean covers(Map<A, ExactRatio> coefs) {
+            for (A position : coefs.keySet()) {
+                if (!position.equals(x) && !position.equals(j)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    /** How many premises a reading holds before it is worth indexing them: below it, reading each
+     *  premise for each form costs less than making the index. */
+    private static final int FEWEST_INDEXED = 16;
+
+    /**
+     * The premises indexed, or null where they are too few to be worth it, are over any other
+     * than two positions, or the exact arithmetic could not hold what the index is made of.
+     */
+    Indexed<A> indexedPremises() {
+        Premises<A> held = premises();
+        if (held.each().size() < FEWEST_INDEXED || held.naming().size() != 2) {
+            return null;
+        }
+        // The two positions in the order the positions decide, so that which is which is not a
+        // hash table's to say.
+        A x = null;
+        A j = null;
+        for (A position : held.naming().keySet()) {
+            if (x == null) {
+                x = position;
+            } else {
+                j = position;
+            }
+        }
+        if (order.compare(x, j) > 0) {
+            A swapped = x;
+            x = j;
+            j = swapped;
+        }
+        ReachIndex.Premise[] each = new ReachIndex.Premise[held.each().size()];
+        int at = 0;
+        for (Premise<A> premise : held.each()) {
+            Map<A, ExactRatio> weights = premise.half().form().coefs();
+            each[at++] = new ReachIndex.Premise(weights.getOrDefault(x, ExactRatio.ZERO),
+                    weights.getOrDefault(j, ExactRatio.ZERO), premise.half().bound(),
+                    premise.place());
+        }
+        ReachIndex index = ReachIndex.over(each, ends, x, j, differences);
+        return index == null ? null : new Indexed<>(index, x, j);
+    }
+
+    /**
+     * What the form {@code coefs} runs between, as {@link #ofKept} gives it, read from {@code
+     * indexed} — or null where it is not read that way and the premises are read.
+     *
+     * <p>Not read that way where the form is over a position the index is not, and where the
+     * premise the index names as the highest bound does not leave the form what the index says it
+     * does when it is read as every premise is ({@link #fromTheEndsWithout}): a premise that is not
+     * the lowest only by the order the exact arithmetic added its terms in, or that it could not add
+     * at all, is left to the reading that decides it.
+     */
+    Reach reachWith(Indexed<A> indexed, Map<A, ExactRatio> coefs) {
+        if (coefs.size() <= 1 || !indexed.covers(coefs)) {
+            return null;
+        }
+        Map<A, ExactRatio> ordered = inOrder(coefs);
+        Read most = highestWith(indexed, ordered);
+        Read flipped = most.read() ? highestWith(indexed, negated(ordered)) : most;
+        if (!flipped.read()) {
+            return null;
+        }
+        return new Reach(flipped.cut() == null ? null
+                : new ExactCut(flipped.cut().at().negated(), flipped.cut().inclusive()),
+                most.cut());
+    }
+
+    /** The half-space of the premise at {@code place}. */
+    private AffineConstraint.HalfSpace<A> premiseAt(int place) {
+        return premises().each().get(place).half();
+    }
+
+    /** A bound the index gave, or that it could not be read that way. */
+    private record Read(boolean read, ExactCut cut) {
+
+        static final Read UNREAD = new Read(false, null);
+    }
+
+    private Read highestWith(Indexed<A> indexed, Map<A, ExactRatio> coefs) {
+        ExactRatio constant = ExactRatio.ZERO;
+        ExactCut best = withTheDifference(difference(coefs), constant,
+                fromTheRanges(coefs, constant));
+        ReachIndex.Highest found = indexed.index().highest(
+                coefs.getOrDefault(indexed.x(), ExactRatio.ZERO),
+                coefs.getOrDefault(indexed.j(), ExactRatio.ZERO));
+        if (found.unread()) {
+            return Read.UNREAD;
+        }
+        if (found.cut() == null) {
+            return new Read(true, best);
+        }
+        AffineConstraint.HalfSpace<A> premise = premiseAt(found.place());
+        ExactCut residual = fromTheEndsWithout(premise, coefs, constant);
+        if (residual == null || residual.at().compareTo(found.cut().at()) != 0
+                || (residual.inclusive() && premise.bound().inclusive()) != found.cut().inclusive()) {
+            return Read.UNREAD;
+        }
+        return new Read(true, ExactCut.tighterUpper(best, found.cut()));
     }
 
     /** The highest {@code coefs} comes to, which is one end of the form of {@link #ofKept}. */

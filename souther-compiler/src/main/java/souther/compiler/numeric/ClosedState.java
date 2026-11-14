@@ -124,6 +124,11 @@ public final class ClosedState<A> {
      */
     static final int ROUNDS = 16;
 
+    /** The round whose start is asked whether the rules leave a form nothing even where it is not
+     *  asked of every round: a form the rules leave nothing is most often found there, by the
+     *  ends the first round left, and finding it then ends the rounds. */
+    private static final int EARLY_ASK = 1;
+
     /** How many closures of several parts have been put together, for a test holding a question
      *  about one part to being answered without them: that is a shape and not a speed. */
     private static final AtomicLong PRODUCTS_MADE = new AtomicLong();
@@ -332,6 +337,25 @@ public final class ClosedState<A> {
                                              Function<A, Granularity> spacing,
                                              CanonicalOrder<A> order, ClosureWork<A> parent,
                                              ClosureWork<A> into, ClosedState<A> before) {
+        return closedTogether(constraints, spacing, order, parent, into, before, false);
+    }
+
+    /**
+     * The closure of the rules with every round asked whether the rules leave a form nothing, which
+     * is what the closure asks of fewer rounds: the reference that is held to.
+     */
+    static <A> ClosedState<A> closedAskingEveryRound(List<AffineConstraint<A>> constraints,
+                                                     Function<A, Granularity> spacing,
+                                                     CanonicalOrder<A> order) {
+        return closedTogether(constraints, spacing, order, null, null, null, true);
+    }
+
+    private static <A> ClosedState<A> closedTogether(List<AffineConstraint<A>> constraints,
+                                                     Function<A, Granularity> spacing,
+                                                     CanonicalOrder<A> order,
+                                                     ClosureWork<A> parent, ClosureWork<A> into,
+                                                     ClosedState<A> before,
+                                                     boolean everyRoundIsAsked) {
         PrefixBasis<A> prefix = null;
         DifferenceBounds<A> differences = null;
         if (before != null && before.bases.size() == 1 && !before.holdsNothing) {
@@ -366,6 +390,14 @@ public final class ClosedState<A> {
         }
         Set<AffineConstraint.HalfSpace<A>> sided = Set.of();
         Set<AffineConstraint.HalfSpace<A>> folded = Set.of();
+        // Whether a form the rules leave nothing is asked of every round or of the last one alone.
+        // Every round's ends are inside the round before's, and a form left nothing by wider ends is
+        // left nothing by narrower ones, so what the last round to run finds is what any round of
+        // them finds. Where there are holes it is not so: the premises a round reads then include
+        // the holes the round before sided, which are not the ones the rounds before it read.
+        boolean askedOfEveryRound = everyRoundIsAsked || holesAmong(constraints);
+        FormReach<A> last = null;
+        boolean askedOfLast = false;
         ClosureWork<A> work = into;
         RoundWork<A> previous = null;
         for (int round = 0; round < ROUNDS; round++) {
@@ -390,7 +422,9 @@ public final class ClosedState<A> {
                 reading.working(from, here);
                 previous = here;
             }
-            if (theRulesLeaveAFormNothing(reading, constraints)) {
+            last = reading;
+            askedOfLast = askedOfEveryRound || round == EARLY_ASK;
+            if (askedOfLast && theRulesLeaveAFormNothing(reading, constraints)) {
                 return empty(differences);
             }
             AffineReduction.Reduction<A> found = AffineReduction.over(reading, spacing, order);
@@ -421,12 +455,28 @@ public final class ClosedState<A> {
                 return empty(differences);
             }
             if (next.equals(box) && tightened.sided().equals(sided)) {
+                if (!askedOfLast && theRulesLeaveAFormNothing(reading, constraints)) {
+                    return empty(differences);
+                }
                 return settled(box, differences, sided, Status.STABLE, everyBoundWasComposed);
             }
             box = next;
             sided = tightened.sided();
         }
+        if (!askedOfLast && theRulesLeaveAFormNothing(last, constraints)) {
+            return empty(differences);
+        }
         return settled(box, differences, sided, Status.BUDGET_EXHAUSTED, everyBoundWasComposed);
+    }
+
+    /** Whether any of the rules is a hole. */
+    private static <A> boolean holesAmong(List<AffineConstraint<A>> constraints) {
+        for (AffineConstraint<A> each : constraints) {
+            if (each instanceof AffineConstraint.Disequality<A>) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -525,11 +575,14 @@ public final class ClosedState<A> {
     private static <A> boolean theRulesLeaveAFormNothing(FormReach<A> reading,
                                                          List<AffineConstraint<A>> constraints) {
         Set<Map<A, ExactRatio>> asked = new LinkedHashSet<>();
+        FormReach.Indexed<A> indexed = reading.indexedPremises();
         for (AffineConstraint<A> each : constraints) {
             Map<A, ExactRatio> form = each.form().coefs();
-            if (form.size() > 1 && asked.add(form)
-                    && reading.ofKept(each, form).isEmpty()) {
-                return true;
+            if (form.size() > 1 && asked.add(form)) {
+                Reach reach = indexed == null ? null : reading.reachWith(indexed, form);
+                if ((reach == null ? reading.ofKept(each, form) : reach).isEmpty()) {
+                    return true;
+                }
             }
         }
         return false;
