@@ -2798,21 +2798,29 @@ final class Pullback {
      * <p>Each root is a form of its own: one that names an element of a container is held to that
      * element, and a form read after it on the same elements is refused the other elements of the
      * container. The roots share the reading, and what its names came to, only while the state it
-     * was made in stands: no root has met an element, the comparison being read is the one it was
-     * made for, and what a reading may ask after ({@link #READING_STATE}) is what it was and no
-     * search is in progress. A root read otherwise is read through a reading of its own, and the
-     * ranges worked out so far are left behind with the reading they were worked out through.
+     * was made in stands ({@link Standing}). A root read otherwise is read through a reading of
+     * its own, and the ranges worked out so far are left behind with the reading they were worked
+     * out through.
      */
     private final class RangesKnown {
         private final AffineForms.Roots<Quantity, InputReads> roots =
                 new AffineForms.Roots<>(this::reading, this::stillStands);
-        private ElementsMet comparisonOf;
-        private ElementsMet held;
-        private ReadingState.Inputs inputs;
+        private Standing standing;
+        private AffineForms.OfOneReading<Quantity, InputReads> rangesThrough;
+        private Map<BindingId, RangeOfAName> ranges;
 
-        /** The reading the roots are read through now, with what was worked out through it. */
-        AffineForms.OfOneReading<Quantity, InputReads> through() {
-            return roots.current();
+        /**
+         * What has been worked out of the names through the reading the roots are read through
+         * now. A reading that replaces it begins with none, and what was worked out while it was
+         * replaced is left with the table it began with.
+         */
+        Map<BindingId, RangeOfAName> ranges() {
+            AffineForms.OfOneReading<Quantity, InputReads> through = roots.current();
+            if (through != rangesThrough) {
+                rangesThrough = through;
+                ranges = new HashMap<>();
+            }
+            return ranges;
         }
 
         AffineForms.Outcome<Quantity, InputReads> outcome(Core e, InputReads reads) {
@@ -2820,17 +2828,41 @@ final class Pullback {
         }
 
         private AffineForms.Reading<Quantity, InputReads> reading() {
-            comparisonOf = elementsMet;
-            held = elementsOfAForm();
-            inputs = READING_STATE.inputsOf(Pullback.this);
-            return quantities(null, null, held);
+            standing = new Standing();
+            return quantities(null, null, standing.held);
         }
 
         private boolean stillStands() {
+            return standing.stands();
+        }
+    }
+
+    /**
+     * The state a reading is made in, which what it comes to is shared by the roots read after it
+     * only while it stands.
+     *
+     * <p>A name answered through the reading is answered again, for a later root, without reading
+     * it: what it asked after, what it added to and what it was charged are then not asked, added
+     * or charged. So it stands where the comparison being read is the one the reading was made
+     * for, no root has met an element, no search is in progress, what a reading may ask after and
+     * what it must leave as it found it are as they were ({@link #READING_STATE}), and no root
+     * has been charged a reading or added to the parts met.
+     */
+    private final class Standing {
+        private final ElementsMet comparisonOf = elementsMet;
+        private final ElementsMet held = elementsOfAForm();
+        private final ReadingState.Inputs inputs = READING_STATE.inputsOf(Pullback.this);
+        private final List<Object[]> guards = READING_STATE.guardsOf(Pullback.this);
+        private final long readingsLeftThen = readingsLeft;
+        private final int metThen = met.size();
+
+        boolean stands() {
             return comparisonOf == elementsMet && held.untouched()
                     && READING_STATE.holdsNothing(Pullback.this)
                     && READING_STATE.sameInputs(inputs, READING_STATE.inputsOf(Pullback.this),
-                            true);
+                            true)
+                    && READING_STATE.sameGuards(guards, READING_STATE.guardsOf(Pullback.this))
+                    && readingsLeft == readingsLeftThen && met.size() == metThen;
         }
     }
 
@@ -2855,12 +2887,12 @@ final class Pullback {
         // name a narrower run than the one that did not.
         // Kept with the reading it began through: where working it out replaces the reading, what
         // was worked out goes with the one it began in.
-        AffineForms.OfOneReading<Quantity, InputReads> through = known.through();
-        if (through.kept(name) instanceof RangeOfAName already && already.at() == bound.at()) {
+        Map<BindingId, RangeOfAName> ranges = known.ranges();
+        if (ranges.get(name) instanceof RangeOfAName already && already.at() == bound.at()) {
             return already.range();
         }
         FormRange range = exactRangeOf(bound.value(), bound.at(), known);
-        through.keep(name, new RangeOfAName(bound.at(), range));
+        ranges.put(name, new RangeOfAName(bound.at(), range));
         return range;
     }
 

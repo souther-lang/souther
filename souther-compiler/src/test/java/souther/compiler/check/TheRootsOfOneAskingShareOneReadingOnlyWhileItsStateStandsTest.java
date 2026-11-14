@@ -25,7 +25,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -152,43 +153,42 @@ class TheRootsOfOneAskingShareOneReadingOnlyWhileItsStateStandsTest {
         return roots;
     }
 
-    /** What a root came to, which is its form or that it stopped. */
-    private static String cameTo(AffineForms.Outcome<String, String> outcome) {
-        return outcome instanceof AffineForms.Outcome.Composed<String, String> composed
-                ? composed.form().toString() : "stopped";
-    }
-
     /** Every root read through a reading of its own. */
-    private static List<String> aloneEach(Map<BindingId, Core> given, List<Core> roots,
-                                          Set<String> told) {
-        List<String> came = new ArrayList<>();
+    private static List<AffineForms.Outcome<String, String>> aloneEach(
+            Map<BindingId, Core> given, List<Core> roots, Set<String> told) {
+        List<AffineForms.Outcome<String, String>> came = new ArrayList<>();
         for (Core root : roots) {
             Elemental reading = new Elemental(given, told, new HashMap<>());
-            came.add(cameTo(AffineForms.outcome(root, "env", reading)));
+            came.add(AffineForms.outcome(root, "env", reading));
         }
         return came;
     }
 
     /** Every root read through the roots of one asking, whose state stands while nothing is met. */
-    private static List<String> sharing(Map<BindingId, Core> given, List<Core> roots,
-                                        Set<String> told, AtomicInteger made,
-                                        Map<BindingId, Integer> followed) {
+    private static List<AffineForms.Outcome<String, String>> sharing(
+            Map<BindingId, Core> given, List<Core> roots, Set<String> told, AtomicInteger made,
+            Map<BindingId, Integer> followed) {
         Elemental[] current = new Elemental[1];
         AffineForms.Roots<String, String> asking = new AffineForms.Roots<>(() -> {
             made.incrementAndGet();
             current[0] = new Elemental(given, told, followed);
             return current[0];
         }, () -> current[0].met.untouched());
-        List<String> came = new ArrayList<>();
+        List<AffineForms.Outcome<String, String>> came = new ArrayList<>();
         for (Core root : roots) {
-            came.add(cameTo(asking.outcome(root, "env")));
+            came.add(asking.outcome(root, "env"));
         }
         return came;
     }
 
     /**
-     * Whatever the leaves of the chain are, each root comes to what it comes to alone, and the
-     * readings are told the same of what they read.
+     * Whatever the leaves of the chain are, each root comes to what it comes to alone — its form,
+     * or the expression it stopped at, where it was read and why — and the readings are told the
+     * same of what they read.
+     *
+     * <p>What a reading is told is a set: a leaf read again tells nothing the first reading of it
+     * did not, so a root that is answered without reading its leaves again leaves the told as
+     * they were, and what is compared is which were told and not how often.
      */
     @Test
     void everyRootComesToWhatItComesToAloneWhateverTheLeavesOfTheChainAre() {
@@ -208,9 +208,9 @@ class TheRootsOfOneAskingShareOneReadingOnlyWhileItsStateStandsTest {
             Set<String> toldAlone = new TreeSet<>();
             Set<String> toldSharing = new TreeSet<>();
 
-            List<String> alone = aloneEach(given, roots, toldAlone);
-            List<String> together = sharing(given, roots, toldSharing, new AtomicInteger(),
-                    new HashMap<>());
+            List<AffineForms.Outcome<String, String>> alone = aloneEach(given, roots, toldAlone);
+            List<AffineForms.Outcome<String, String>> together = sharing(given, roots,
+                    toldSharing, new AtomicInteger(), new HashMap<>());
 
             assertEquals(alone, together, "the leaves " + leaves);
             assertEquals(toldAlone, toldSharing, "the leaves " + leaves);
@@ -264,11 +264,11 @@ class TheRootsOfOneAskingShareOneReadingOnlyWhileItsStateStandsTest {
         Map<BindingId, Core> given = chain(leaves);
         AtomicInteger made = new AtomicInteger();
 
-        List<String> came = sharing(given, roots(leaves.size()), new TreeSet<>(), made,
-                new HashMap<>());
+        List<AffineForms.Outcome<String, String>> came = sharing(given, roots(leaves.size()),
+                new TreeSet<>(), made, new HashMap<>());
 
-        assertEquals(List.of("stopped", "stopped", "stopped"), came.stream()
-                .map(each -> each.equals("stopped") ? each : "composed").toList(),
+        assertTrue(came.stream().allMatch(
+                        each -> each instanceof AffineForms.Outcome.StoppedAt<String, String>),
                 "a number of two elements of one container is read beside the other");
         assertEquals(3, made.get(), "each root met an element, and the next was read afresh");
     }
@@ -287,15 +287,15 @@ class TheRootsOfOneAskingShareOneReadingOnlyWhileItsStateStandsTest {
         List<Core> roots = roots(leaves.size());
 
         assertNotNull(asking.outcome(roots.get(0), "env"));
-        asking.current().keep("a name", "what was worked out of it");
+        AffineForms.OfOneReading<String, String> first = asking.current();
         assertNotNull(asking.outcome(roots.get(1), "env"));
         assertEquals(1, made.get());
-        assertEquals("what was worked out of it", asking.current().kept("a name"));
+        assertSame(first, asking.current());
         stands[0] = false;
         assertNotNull(asking.outcome(roots.get(2), "env"));
         assertEquals(2, made.get());
-        assertNull(asking.current().kept("a name"),
-                "what was worked out through a reading goes with it");
+        assertNotSame(first, asking.current(),
+                "what was worked out through a reading is left with it");
         assertFalse(stands[0]);
     }
 }
