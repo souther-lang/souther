@@ -78,9 +78,16 @@ final class WhatConditionsState {
     private final Map<ANodeLeavingOut, Pullback.OperatorsAnswer> operatorsAnswerLeavingOut =
             new HashMap<>();
     private final Map<Proposition, Proposition> denials = new IdentityHashMap<>();
+    private final Pullback.KeptByTheInput readingsKept = new Pullback.KeptByTheInput();
 
     private WhatConditionsState(InputReading read) {
         this.read = read;
+    }
+
+    /** What the Pullbacks made over this reading kept of the readings they made, for each other
+     *  to take ({@link Pullback.KeptByTheInput}). */
+    Pullback.KeptByTheInput readingsKept() {
+        return readingsKept;
     }
 
     /** What the conditions met over {@code read} state, kept for that reading. */

@@ -66,6 +66,7 @@ import souther.compiler.inputs.CaseCompared;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ComparedNumber;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.HandedAnswers;
 import souther.compiler.inputs.HeldIn;
 import souther.compiler.inputs.ElementComputation;
 import souther.compiler.inputs.ElementKey;
@@ -87,6 +88,7 @@ import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.Watched;
 import souther.compiler.inputs.WhatAConstructionAsks;
 import souther.compiler.inputs.WrittenOutElements;
 import souther.compiler.meaning.Conclusion;
@@ -177,6 +179,7 @@ import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.IdentityHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -667,6 +670,7 @@ final class Pullback {
                      ElementsNamed freeInTheRoot, boolean theRelationReadsItsOwnDivisions) {
         this.theRelationReadsItsOwnDivisions = theRelationReadsItsOwnDivisions;
         this.read = read;
+        this.keptByTheInput = WhatConditionsState.of(read).readingsKept();
         this.where = where;
         this.freeInTheRoot = freeInTheRoot;
         this.freeInTheScope = freeInTheRoot;
@@ -5197,9 +5201,11 @@ final class Pullback {
         // elements together, apart from the comparison's own.
         ElementsMet ends = new ElementsMet();
         LinearForm<NumericTerm> from = AffineReading.formOf(
-                call.args().get(between.from().position()), container.at(), read, ends);
+                call.args().get(between.from().position()), container.at(), read, ends,
+                sharedFactorNames);
         LinearForm<NumericTerm> to = AffineReading.formOf(
-                call.args().get(between.to().position()), container.at(), read, ends);
+                call.args().get(between.to().position()), container.at(), read, ends,
+                sharedFactorNames);
         return from == null || to == null ? Optional.empty()
                 : Optional.of(new Quantity.AWholeNumberInTurn(from, to));
     }
@@ -11988,6 +11994,9 @@ final class Pullback {
         BitSet[] out = new BitSet[1 << InputAskedAfter.values().length];
         for (int consulted = 0; consulted < out.length; consulted++) {
             BitSet left = new BitSet();
+            // A reading kept here is made without the operators told so far ({@link #kept}), so
+            // what they hold is no part of what it comes to.
+            left.set(READING_STATE.placeOfTheInput("operated"));
             for (int each = 0; each < places.length; each++) {
                 if ((consulted & inputs[each].bit()) == 0) {
                     left.set(places[each]);
@@ -12219,13 +12228,36 @@ final class Pullback {
     private final SharedReads<ReadingState.Inputs, Guards, Met, WrittenOutRead>
             sharedApplications = new SharedReads<>(new TheScene());
 
-    /** The remainders read, at each node and the reading it was read at ({@link #remainderKept}). */
-    private final Map<Core, List<ReadingTaken<Quantity.RemainderOfADividend>>> keptRemainders =
-            new IdentityHashMap<>();
+    /**
+     * What each reader of one input kept to be taken again ({@link #kept}): the remainders read,
+     * at each node and the reading it was read at ({@link #remainderKept}), and why a node is no
+     * number of the input, at each reading it was asked at ({@link #noRuleFor}).
+     *
+     * <p>One for the input and not one for each reader. A reader is made for each truth the
+     * body states, and each of them reads the chain of names under its own: kept for itself, each
+     * works out the same reasons down to the bottom, and a chain of n names is read as many times
+     * as there are truths. A reading is taken by another reader where it finds the state it was
+     * made in ({@link #kept}), as it is by the one that made it.
+     *
+     * <p>Held by {@link WhatConditionsState}, which is kept with the input and is the reader that
+     * makes a Pullback, and by identity of the node; safe to ask from several readers at once.
+     * What is kept here is not what the input and a key settle: each reading is kept with the state
+     * it was made in, compared with it and told again where it is taken, as a reader's own is.
+     */
+    static final class KeptByTheInput {
 
-    /** Why a node is no number of the input, at each reading it was asked at
-     *  ({@link #noRuleFor}). */
-    private final Map<Core, List<ReadingTaken<WhyUnread>>> keptReasons = new IdentityHashMap<>();
+        private final Map<Core, List<ReadingTaken<Quantity.RemainderOfADividend>>> remainders =
+                Collections.synchronizedMap(new IdentityHashMap<>());
+
+        private final Map<Core, List<ReadingTaken<WhyUnread>>> reasons =
+                Collections.synchronizedMap(new IdentityHashMap<>());
+    }
+
+    private final KeptByTheInput keptByTheInput;
+
+    /** Where a test counts the remainders and reasons read afresh rather than taken ({@link
+     *  #kept}), and null everywhere else. What a chain costs is not something an answer says. */
+    static long[] READINGS_MADE;
 
     /** What the remainders read so far in the reading of one remainder told the candidate, where
      *  one is being read ({@link #remainderKept}). */
@@ -15449,7 +15481,7 @@ final class Pullback {
      * and to whoever is noting what the reading it is part of tells.
      */
     private Quantity.RemainderOfADividend remainderKept(Core node, InputReads at) {
-        return kept(keptRemainders, node, at, () -> remainderAtAfresh(node, at));
+        return kept(keptByTheInput.remainders, node, at, () -> remainderAtAfresh(node, at));
     }
 
     /**
@@ -15473,25 +15505,50 @@ final class Pullback {
      */
     private <R> R kept(Map<Core, List<ReadingTaken<R>>> table, Core node, InputReads at,
                        Supplier<R> fresh) {
-        if (InputReads.watching() || elementsMet.crowded()
-                || !READING_STATE.holdsNothing(this)) {
+        if (elementsMet.crowded() || !READING_STATE.holdsNothing(this)) {
             return fresh.get();
         }
+        // Inside a watch of what is handed, a reading kept is one that said what it asked of it,
+        // and taking it tells the watch that, as reading it again would have.
+        boolean watched = InputReads.watching();
+        // The operators told so far are no part of what a reading kept here comes to, and it is
+        // made without them: one that asked for them would stop, and not be taken by a reader
+        // whose operators were not the ones it was made with.
+        Supplier<R> reading = () -> {
+            Operators saved = operated;
+            operated = null;
+            try {
+                return fresh.get();
+            } finally {
+                operated = saved;
+            }
+        };
         Trial told = underTrial.peek();
         Object said = told == null ? null : told.markBesidesTheRemainders();
         ReadingState.Inputs inputs = READING_STATE.inputsOf(this);
-        List<ReadingTaken<R>> before = table.computeIfAbsent(node, _ -> new ArrayList<>());
+        Setting setting = new Setting(where, freeInTheRoot, theRelationReadsItsOwnDivisions);
+        List<ReadingTaken<R>> before =
+                table.computeIfAbsent(node, _ -> new CopyOnWriteArrayList<>());
         for (ReadingTaken<R> each : before) {
-            if (each.at() == at && READING_STATE.sameInputsBut(each.inputs(), inputs, false,
+            if (each.at() == at && (!watched || each.asked() != null)
+                    && each.setting().equals(setting)
+                    && READING_STATE.sameInputsBut(each.inputs(), inputs, false,
                             UNCONSULTED[each.consulted()], CONTENT_ASKED[each.consulted()])
                     && elementsMet.agrees(each.footprint())
                     && Objects.equals(each.said(), said)) {
+                if (each.asked() != null) {
+                    at.takingAgain(each.asked());
+                }
                 elementsMet.takes(each.footprint());
                 consulted |= each.consulted();
                 met.addAll(each.met());
                 each.told().forEach(this::tell);
                 return each.result();
             }
+        }
+        long[] counting = READINGS_MADE;
+        if (counting != null) {
+            counting[0]++;
         }
         List<Object[]> guards = READING_STATE.guardsOf(this);
         List<Map<Core, Core>> remainders = told == null ? null : told.remaindersRead();
@@ -15508,8 +15565,15 @@ final class Pullback {
         int consultedHere;
         R result;
         ElementsMet.Footprint footprint;
+        HandedAnswers handed = null;
         try {
-            result = fresh.get();
+            if (watched) {
+                Watched<R> read = at.watchingWhatIsHanded(reading);
+                result = read.result();
+                handed = read.asked();
+            } else {
+                result = reading.get();
+            }
         } finally {
             telling = outer;
             consultedHere = endConsultingInputs(consultedBefore);
@@ -15528,9 +15592,9 @@ final class Pullback {
                         guard -> guard instanceof Trial)
                 && (told == null || (Objects.equals(said, told.markBesidesTheRemainders())
                         && told.remaindersRead().equals(withTold(remainders, mine))))) {
-            before.add(new ReadingTaken<>(result, at, List.copyOf(mine), footprint, inputs, said,
-                    consultedHere & ~InputAskedAfter.TELLING.bit(),
-                    List.copyOf(met.subList(metFrom, met.size()))));
+            before.add(new ReadingTaken<>(result, at, setting, List.copyOf(mine), footprint, inputs,
+                    said, consultedHere & ~InputAskedAfter.TELLING.bit(),
+                    List.copyOf(met.subList(metFrom, met.size())), handed));
         }
         return result;
     }
@@ -15554,10 +15618,18 @@ final class Pullback {
         }
     }
 
-    /** A reading made, with what it told the candidate and left behind. */
-    private record ReadingTaken<R>(R result, InputReads at, List<Notice> told,
+    /** A reading made, with what it told the candidate and left behind, and what it asked of the
+     *  values handed where it was made inside a watch of them — null where it was not. */
+    private record ReadingTaken<R>(R result, InputReads at, Setting setting, List<Notice> told,
                                    ElementsMet.Footprint footprint, ReadingState.Inputs inputs,
-                                   Object said, int consulted, List<Met> met) {}
+                                   Object said, int consulted, List<Met> met,
+                                   HandedAnswers asked) {}
+
+    /** What a reader is set up with and does not change, which a reading it makes is taken by
+     *  another reader only where it is the same: where it reads, the elements the names free in
+     *  the expression stand for, and whether the relation reads its own divisions. */
+    private record Setting(Optional<ModelOccurrence> where, ElementsNamed freeInTheRoot,
+                           boolean theRelationReadsItsOwnDivisions) {}
 
     /** {@code remainders}, the two tables the candidate holds, with {@code notices} told. */
     private static List<Map<Core, Core>> withTold(List<Map<Core, Core>> remainders,
@@ -15593,7 +15665,7 @@ final class Pullback {
             return null;
         }
         LinearForm<NumericTerm> form = AffineReading.formOf(division.dividend(), division.at(),
-                read, new ElementsMet());
+                read, new ElementsMet(), sharedFactorNames);
         if (form == null) {
             return remainderOverABoundValue(division);
         }
@@ -16984,7 +17056,7 @@ final class Pullback {
      * input: what stands at the end of the accesses it is made of.
      */
     private WhyUnread noRuleFor(Core stopped, InputReads reads) {
-        return kept(keptReasons, stopped, reads, () -> noRuleForAfresh(stopped, reads));
+        return kept(keptByTheInput.reasons, stopped, reads, () -> noRuleForAfresh(stopped, reads));
     }
 
     private WhyUnread noRuleForAfresh(Core stopped, InputReads reads) {

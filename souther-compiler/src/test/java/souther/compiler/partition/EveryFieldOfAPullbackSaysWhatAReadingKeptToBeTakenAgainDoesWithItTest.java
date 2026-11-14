@@ -75,8 +75,7 @@ class EveryFieldOfAPullbackSaysWhatAReadingKeptToBeTakenAgainDoesWithItTest {
                 fieldsWith(ReadingRole.COUNTER));
         assertEquals(Set.of("sharedSums", "sharedApplications", "sharedConditions",
                 "sharedObservations", "sharedForms", "sharedWaysIn", "sharedNames",
-                "sharedFactorNames", "keptRemainders",
-                "keptReasons"),
+                "sharedFactorNames", "keptByTheInput"),
                 fieldsWith(ReadingRole.MEMO));
     }
 
