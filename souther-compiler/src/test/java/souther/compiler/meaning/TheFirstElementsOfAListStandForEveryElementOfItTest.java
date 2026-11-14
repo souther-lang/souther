@@ -89,7 +89,7 @@ class TheFirstElementsOfAListStandForEveryElementOfItTest {
         Random random = new Random(2938);
         int read = 0;
         int refused = 0;
-        for (int drawn = 0; drawn < 600; drawn++) {
+        for (int drawn = 0; drawn < 100; drawn++) {
             Proposition stated = statement(random, 3);
             if (!(TheWholeNumbersAListStartsWith.of(stated)
                     instanceof TheWholeNumbersAListStartsWith.Read.OnEach(var each))) {

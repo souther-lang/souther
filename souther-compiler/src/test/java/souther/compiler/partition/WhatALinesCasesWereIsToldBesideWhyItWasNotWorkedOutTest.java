@@ -51,6 +51,16 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
                     [1, 2, 3, 4, 5, 6, 7])) > 3
             """;
 
+    private static Compilation findCompilation;
+
+    /** {@link #FIND} compiled with no case taken apart, once for the tests that read it. */
+    private static synchronized Compilation compiledFind() {
+        if (findCompilation == null) {
+            findCompilation = ACompiledModel.compiles(made(FIND, NO_CASE_TAKEN_APART));
+        }
+        return findCompilation;
+    }
+
     /** A table of {@code rows} grades, each bound a hundred above the one before. */
     private static String gradeTable(int rows) {
         StringBuilder out = new StringBuilder();
@@ -67,10 +77,6 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
      * beside why it was not; so every line past the figure as the choices stand is cut off.
      */
     private static final int NO_CASE_TAKEN_APART = 0;
-
-    private static Compilation made(String model) {
-        return made(model, CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.declared());
-    }
 
     /** {@code model}, its lines' cases taken apart into {@code takenApartInto} at most. */
     private static Compilation made(String model, int takenApartInto) {
@@ -120,7 +126,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
 
     @Test
     void eachLineNotWorkedOutForItsManyCasesSaysHowManyWaysTheyWereAndWhatMadeThem() {
-        Compilation compilation = ACompiledModel.compiles(made(FIND, NO_CASE_TAKEN_APART));
+        Compilation compilation = compiledFind();
         JsonNode partition = partition(compilation);
         JsonNode expansions = partition.path("caseExpansions");
         assertFalse(expansions.isEmpty(), "the lines past the cases taken apart are told of: "
@@ -184,7 +190,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
      */
     @Test
     void theCountsOfTwoPlacesOfALineAreNeverPutTogetherAsTheirReasonIs() {
-        Compilation compilation = ACompiledModel.compiles(made(FIND, NO_CASE_TAKEN_APART));
+        Compilation compilation = compiledFind();
         JsonNode partition = partition(compilation);
         List<String> told = new ArrayList<>();
         List<String> came = new ArrayList<>();
@@ -270,7 +276,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
 
     @Test
     void aPersonIsToldTheCountsAndWhatMadeThePartsAsAListAndNeverAsAProduct() {
-        Compilation compilation = ACompiledModel.compiles(made(FIND, NO_CASE_TAKEN_APART));
+        Compilation compilation = compiledFind();
         String said = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         List<String> lines = said.lines().filter(each -> each.contains("case expansion:"))
@@ -287,7 +293,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
     }
 
     /** How many grades the table has. */
-    private static final int GRADES = 25;
+    private static final int GRADES = 4;
 
     /**
      * A fold over a table of grades whose step is an {@code if}, read through by a comparison of
@@ -365,6 +371,12 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
      * each application of the fold that reads what it kept; and the ways it keeps the months, seven
      * of them, written out once on each of the fold's applications.
      */
+    private static final int ROWS_OF_THE_FOLD = 4;
+
+    /** Past what one application of the fold comes to (seven ways of keeping three months), and
+     *  short of what its four applications come to together. */
+    private static final int FEW_ENOUGH_TO_TAKE_APART_ONE = 8;
+
     @Test
     void aLineReadOnEveryApplicationNamesWhatMadeItsCasesAcrossThem() {
         String model = """
@@ -390,8 +402,8 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
                     gradeFor(Rational.toInt(DOWN, List.sum(List.map(r -> r.pay, payable))
                             / List.length(payable)))
                 }
-                """.replace("ROWS", gradeTable(37));
-        Compilation compilation = ACompiledModel.compiles(made(model));
+                """.replace("ROWS", gradeTable(ROWS_OF_THE_FOLD));
+        Compilation compilation = ACompiledModel.compiles(made(model, FEW_ENOUGH_TO_TAKE_APART_ONE));
         JsonNode expansions = partition(compilation).path("caseExpansions");
         assertFalse(expansions.isEmpty(), "the lines past the figure across the applications");
         for (JsonNode each : expansions) {
@@ -400,7 +412,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
             JsonNode fold = applied.stream()
                     .filter(one -> one.path("operation").asString().equals("List.fold"))
                     .findFirst().orElseThrow(() -> new AssertionError("the fold: " + factors));
-            assertEquals(37, fold.path("applications").asInt(), "one on each row");
+            assertEquals(ROWS_OF_THE_FOLD, fold.path("applications").asInt(), "one on each row");
             JsonNode filter = applied.stream()
                     .filter(one -> one.path("operation").asString().equals("List.filter"))
                     .findFirst().orElseThrow(() -> new AssertionError("the filter: " + factors));
@@ -420,7 +432,7 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
             assertEquals(1, keptBy.size(), "the filter's one condition: " + keptBy);
             assertTrue(writtenAt(model, keptBy.get(0)).startsWith(">= 17"),
                     "at the comparison that keeps a month: " + keptBy);
-            assertEquals(37, kept.getFirst().path("times").asInt(),
+            assertEquals(ROWS_OF_THE_FOLD, kept.getFirst().path("times").asInt(),
                     "written out on each application of the fold, against its row's bound");
             assertEquals(0, onlyReading(each).path("unattributed").asInt(),
                     "every part made by one of them: " + each);

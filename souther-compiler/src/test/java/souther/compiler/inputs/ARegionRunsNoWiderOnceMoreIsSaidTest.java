@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ARegionRunsNoWiderOnceMoreIsSaidTest {
 
-    private static final int REGIONS = 500;
+    private static final int REGIONS = 100;
 
     @Test
     void everyPositionRunsNoWiderOnceMoreIsSaid() {

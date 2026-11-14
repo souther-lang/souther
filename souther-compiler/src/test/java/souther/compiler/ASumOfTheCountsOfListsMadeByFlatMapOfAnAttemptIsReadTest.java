@@ -77,6 +77,16 @@ class ASumOfTheCountsOfListsMadeByFlatMapOfAnAttemptIsReadTest {
         return report(guard, "Found", "Found", "Found");
     }
 
+    private static String ofTheGuard;
+
+    /** The report of the model with {@link #GUARD}, which two tests read. */
+    private static synchronized String reportOfTheGuard() {
+        if (ofTheGuard == null) {
+            ofTheGuard = report(GUARD);
+        }
+        return ofTheGuard;
+    }
+
     /** The model with {@code guard}, and what each of the three rows with a match comes to. */
     private static String report(String guard, String account, String contact, String both) {
         return reportOf("guard " + guard + " else Nobody", account, contact, both);
@@ -112,7 +122,7 @@ class ASumOfTheCountsOfListsMadeByFlatMapOfAnAttemptIsReadTest {
      */
     @Test
     void aSumOfCountsAtLeastOneIsSomeOneOfTheListsHoldingSomething() {
-        String report = report(GUARD);
+        String report = reportOfTheGuard();
         assertEquals(List.of(), aboutAValueMadeFromAnother(report), report);
         assertTrue(notRead(report).stream().noneMatch(line -> line.contains("fork@")), report);
     }
@@ -120,7 +130,7 @@ class ASumOfTheCountsOfListsMadeByFlatMapOfAnAttemptIsReadTest {
     /** No example is dropped, merged or left waiting for the reading. */
     @Test
     void theExamplesAreAllOwedAndMet() {
-        String report = report(GUARD);
+        String report = reportOfTheGuard();
         List<String> owed = report.lines().map(line -> line.strip().replaceAll("\\s+", " "))
                 .toList();
         assertTrue(owed.contains("screen implemented rows 6 pending 0"), report);

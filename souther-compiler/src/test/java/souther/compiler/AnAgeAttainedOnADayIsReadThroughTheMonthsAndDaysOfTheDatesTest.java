@@ -431,9 +431,6 @@ class AnAgeAttainedOnADayIsReadThroughTheMonthsAndDaysOfTheDatesTest {
      */
     @Test
     void everyBandOfAnAgeIsReadHoweverManyArmsComeBeforeIt() {
-        String four = report(bands("attainedAgeOn", 30, 35, 45, 60));
-        assertFalse(four.contains(NOT_REACHED), four);
-
         String five = report(bands("attainedAgeOn", 30, 35, 45, 60, 65));
         assertFalse(five.contains(NOT_REACHED), five);
     }

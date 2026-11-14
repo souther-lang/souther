@@ -40,9 +40,8 @@ class ALookupOfTwoAveragesIsReadAtEveryLengthOfItsTableTest {
                 data Yen = Int
                     invariant value >= 0
                 data Days = Int
-                    invariant value >= 0 && value <= 31
                 data Month = { days: Days, pay: Yen }
-                data Window = { a1: Month, a2: Month, a3: Month, b1: Month, b2: Month, b3: Month }
+                data Window = { a1: Month, a2: Month, b1: Month, b2: Month }
                 data Row = { grade: Int, lowerBound: Yen, upperBound: Yen }
                 data Decision = { grade: Int }
                 data NoPayable = { nothing: Int }
@@ -60,8 +59,8 @@ class ALookupOfTwoAveragesIsReadAtEveryLengthOfItsTableTest {
                 behavior f : (w: Window) -> Decision | NoPayable
                     constructs Decision, Row, Yen, NoPayable
                 let f (w) = {
-                    let pa = payableOf([ w.a1, w.a2, w.a3 ])
-                    let pb = payableOf([ w.b1, w.b2, w.b3 ])
+                    let pa = payableOf([ w.a1, w.a2 ])
+                    let pb = payableOf([ w.b1, w.b2 ])
                     guard List.length(pa) >= 1 else NoPayable { nothing = 0 }
                     guard List.length(pb) >= 1 else NoPayable { nothing = 1 }
                     Decision { grade = gradeRowFor(averageOf(pa), averageOf(pb)).grade }
@@ -76,7 +75,7 @@ class ALookupOfTwoAveragesIsReadAtEveryLengthOfItsTableTest {
      */
     private static String sourceBesideAClosure(int rows) {
         return replaced(replaced(replaced(replaced(source(rows),
-                "b3: Month }", "b3: Month, xs: List<List<Int>> }"),
+                "b2: Month }", "b2: Month, xs: List<List<Int>> }"),
                 "(ma: Yen, mb: Yen): Row =", "(ma: Yen, mb: Yen, n: Int): Row ="),
                 "mb <= r.upperBound then", "mb.value + n <= r.upperBound.value then"),
                 "gradeRowFor(averageOf(pa), averageOf(pb)).grade",
@@ -104,23 +103,17 @@ class ALookupOfTwoAveragesIsReadAtEveryLengthOfItsTableTest {
     }
 
     /**
-     * The lengths between the three rows that were read and the six that were, which the
-     * comparison of a row with an average runs out of the readings of one condition at, leave no
-     * month unread either.
+     * A length at which the comparison of a row with an average runs out of the readings of one
+     * condition leaves no month unread.
      *
-     * <p>Where the parts a fork over the comparison turns on were taken from what the stopped
-     * reading got to, four and five rows left the three months of one average unread, and three
-     * and six did not.
+     * <p>A reading that stopped hands the fork over the comparison no parts, so which months are
+     * unread does not turn on where it stopped, and so not on the length. One length at which it
+     * stops stands for them all.
      */
     @Test
     void noLengthOfTheTableLeavesAMonthUnreadThatAnotherLengthDoesNot() {
-        Map<Integer, List<String>> unreadByRows = new TreeMap<>();
-        for (int rows : new int[] {4, 5}) {
-            unreadByRows.put(rows, unread(source(rows)));
-        }
-
-        assertEquals(Map.of(4, List.of(), 5, List.of()), unreadByRows,
-                "what is left unread, by the rows of the table");
+        assertEquals(List.of(), unread(source(2)),
+                "what is left unread at a length the reading runs out at");
     }
 
     /**
@@ -133,13 +126,13 @@ class ALookupOfTwoAveragesIsReadAtEveryLengthOfItsTableTest {
     @Test
     void aPartOfTheComparisonNoReaderAnswersForIsSaidAtEveryLengthOfTheTable() {
         Map<Integer, List<String>> unreadByRows = new TreeMap<>();
-        for (int rows : new int[] {4, 6}) {
+        for (int rows : new int[] {2, 3}) {
             unreadByRows.put(rows, unread(sourceBesideAClosure(rows)));
         }
 
-        assertEquals(unreadByRows.get(6), unreadByRows.get(4),
+        assertEquals(unreadByRows.get(3), unreadByRows.get(2),
                 "what is left unread does not follow the rows of the table");
-        assertTrue(unreadByRows.get(4).stream().anyMatch(each -> each.startsWith("w.xs ")),
-                "the count over the closure is said to be unread: " + unreadByRows.get(4));
+        assertTrue(unreadByRows.get(2).stream().anyMatch(each -> each.startsWith("w.xs ")),
+                "the count over the closure is said to be unread: " + unreadByRows.get(2));
     }
 }

@@ -138,6 +138,21 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
         return findings;
     }
 
+    /** What every class of the repository, tests included, does to a model, worked out once. */
+    private static ModelEffects effects;
+
+    private static synchronized ModelEffects effectsOfEverything() {
+        if (effects == null) {
+            List<ClassModel> everything = new ArrayList<>();
+            for (Path module : COMPILED.modules()) {
+                everything.addAll(COMPILED.classesOf(module));
+                everything.addAll(COMPILED.testClassesOf(module));
+            }
+            effects = ModelEffects.of(everything);
+        }
+        return effects;
+    }
+
     @Test
     void noTestReadsTheReportOfAModelItWasNotHeldToCompiling() {
         assertEquals(List.of(), new ArrayList<>(findings().refused()),
@@ -270,12 +285,7 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
         assertEquals(HELPER_CALLS, had,
                 "a call of ACompiledModel that hands a model back is not one said in this test,"
                         + " with ACompiledModelHoldsAModelToCompilingTest saying what it does");
-        List<ClassModel> everything = new ArrayList<>();
-        for (Path module : COMPILED.modules()) {
-            everything.addAll(COMPILED.classesOf(module));
-            everything.addAll(COMPILED.testClassesOf(module));
-        }
-        ModelEffects effects = ModelEffects.of(everything);
+        ModelEffects effects = effectsOfEverything();
         Set<String> changing = new TreeSet<>();
         for (ClassModel each : List.of(helper, shared)) {
             each.methods().forEach(method -> {
@@ -353,11 +363,7 @@ class ATestThatReadsAModelsReportAsksThatTheModelCompilesTest {
      */
     @Test
     void theMethodsOfAModelThatReadAReportOrChangeItAreFoundFromTheClasses() {
-        List<ClassModel> everything = new ArrayList<>();
-        for (Path module : COMPILED.modules()) {
-            everything.addAll(COMPILED.classesOf(module));
-        }
-        ModelEffects effects = ModelEffects.of(everything);
+        ModelEffects effects = effectsOfEverything();
         String model = ModelVocabulary.COMPILATION;
         Set<String> reading = new TreeSet<>();
         Set<String> changing = new TreeSet<>();

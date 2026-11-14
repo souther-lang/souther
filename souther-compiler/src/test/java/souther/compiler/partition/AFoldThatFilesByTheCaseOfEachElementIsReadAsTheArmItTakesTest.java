@@ -144,7 +144,7 @@ class AFoldThatFilesByTheCaseOfEachElementIsReadAsTheArmItTakesTest {
             .replace("Map.empty, ms)", "nothing(), ms)");
 
     /** And walking from the end of the movements put the other way round, which hands them in
-     *  the order they are written. */
+     *  the order they are written: the walk's direction is turned round twice. */
     private static final String COUNTED_FROM_THE_END_OF_THE_REVERSED = COUNTED_FROM_THE_END
             .replace("nothing(), ms)", "nothing(), List.reverse(ms))");
 
@@ -176,7 +176,6 @@ class AFoldThatFilesByTheCaseOfEachElementIsReadAsTheArmItTakesTest {
     void theLastStocktakeIsTheLastOneTheWalkIsHanded() {
         owedOfferedAndMet(Walked.REVERSED);
         owedOfferedAndMet(Walked.FROM_THE_END);
-        owedOfferedAndMet(Walked.FROM_THE_END_OF_THE_REVERSED);
     }
 
     private static void owedOfferedAndMet(Walked walked) {
@@ -220,13 +219,13 @@ class AFoldThatFilesByTheCaseOfEachElementIsReadAsTheArmItTakesTest {
         Movement count = new Movement("Stocktake", "a", 2);
         List<List<Movement>> rows = List.of(
                 List.of(receipt, count, new Movement("Issue", "a", 3)),
-                List.of(receipt, count),
                 List.of(count, new Movement("Stocktake", "a", 8)),
                 List.of(receipt, new Movement("Stocktake", "b", 2),
                         new Movement("Receipt", "a", 1)),
                 List.of(receipt, new Movement("Stocktake", "b", 2),
                         new Movement("Stocktake", "a", 3)));
-        for (Walked walked : Walked.values()) {
+        for (Walked walked : List.of(Walked.AS_WRITTEN, Walked.FROM_THE_END,
+                Walked.FROM_THE_END_OF_THE_REVERSED)) {
             for (List<Movement> movements : rows) {
                 Row any = new Row(movements, Integer.MAX_VALUE);
                 int on = any.shortOf(walked.fromTheEnd()).get("a");

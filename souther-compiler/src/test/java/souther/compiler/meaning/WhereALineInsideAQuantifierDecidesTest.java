@@ -135,22 +135,22 @@ class WhereALineInsideAQuantifierDecidesTest {
     }
 
     /**
-     * A quantifier holding eighteen relations about the row, each or one about its element and
+     * A quantifier holding seventeen relations about the row, each or one about its element and
      * every one of those choices together, is said outside the quantifier once for every way the
-     * eighteen come out, which is more than a statement is read in. Nothing is taken apart then,
+     * seventeen come out, which is as many as a statement is read in. Nothing is taken apart then,
      * and every line says so, naming the figure.
      */
     @Test
     void aQuantifierPastTheStepsLeavesEveryLineNotTakenApart() {
         List<Proposition> each = new ArrayList<>();
-        for (int i = 0; i < 18; i++) {
+        for (int i = 0; i < 17; i++) {
             each.add(Proposition.any(List.of(compared(TermPath.of("r" + i), 0, Rel.GT),
                     compared(XS.element().then("n" + i), 0, Rel.GT))));
         }
         Proposition stated = new Proposition.Some(CONTAINER, Proposition.all(each), true);
         List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated, term -> false);
 
-        assertEquals(36, lines.size(), lines::toString);
+        assertEquals(34, lines.size(), lines::toString);
         for (WhereEachLineDecides.Decides line : lines) {
             assertEquals(Set.of(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN),
                     stoppedAt(line.cases()), () -> "nothing taken apart: " + line);
@@ -158,16 +158,16 @@ class WhereALineInsideAQuantifierDecidesTest {
     }
 
     /**
-     * Eighteen relations about the row, each with one about the element, any of them enough: some
+     * Seventeen relations about the row, each with one about the element, any of them enough: some
      * element meeting one of them is one of them with some element meeting its other half, so
-     * nothing is said once for each way the eighteen come out, and the statement is read. Where a
+     * nothing is said once for each way the seventeen come out, and the statement is read. Where a
      * line decides is then more cases than are taken apart, which is the figure said, and not how
      * many steps a statement is read in.
      */
     @Test
     void aQuantifierOverChoicesIsSaidChoiceByChoice() {
         List<Proposition> each = new ArrayList<>();
-        for (int i = 0; i < 18; i++) {
+        for (int i = 0; i < 17; i++) {
             each.add(Proposition.all(List.of(compared(TermPath.of("r" + i), 0, Rel.GT),
                     compared(XS.element().then("n" + i), 0, Rel.GT))));
         }

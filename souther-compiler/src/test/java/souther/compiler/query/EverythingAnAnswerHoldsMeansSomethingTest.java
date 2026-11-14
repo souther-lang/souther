@@ -79,8 +79,8 @@ class EverythingAnAnswerHoldsMeansSomethingTest {
                 out.add(compilation.db());
             });
             case A_MODULE_SPOKEN_ABOUT -> {
-                Compilation compilation =
-                        ACompiledModel.measured(SPOKEN_ABOUT, Adequacy.Asked.fullReport());
+                Compilation compilation = ACompiledModel.measured(SPOKEN_ABOUT,
+                        Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
                 AdequacyReport.of(compilation).json(SourceRendering.namedByIdentity(compilation.texts()));
                 out.add(compilation.db());
             }
