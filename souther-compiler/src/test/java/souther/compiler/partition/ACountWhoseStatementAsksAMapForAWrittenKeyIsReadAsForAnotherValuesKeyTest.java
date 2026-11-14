@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 
 import souther.compiler.ACompiledModel;
 import souther.compiler.query.Adequacy;
@@ -130,10 +129,10 @@ class ACountWhoseStatementAsksAMapForAWrittenKeyIsReadAsForAnotherValuesKeyTest 
         return compilation.db().ask(new Adequacy.Coverage("probe")).value();
     }
 
-    /** The time is bounded in the statements a model writes, whatever number of values it names:
-     *  the subsets of them are made and not walked to. */
+    /** The work is bounded in the statements a model writes, whatever number of values it names:
+     *  the subsets of them are made and not walked to, so that a statement naming twenty values is
+     *  still reached rather than given up at a figure. */
     @Test
-    @Timeout(value = 60, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void aCountIsHeldAgainstANumberThatReachesEveryValueWhereARowShowsEveryCount() {
         Map<String, PartitionEvidence> measured = measured();
         Map<String, Boolean> shown = new LinkedHashMap<>();

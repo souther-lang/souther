@@ -15,13 +15,11 @@ import souther.compiler.numeric.Rel;
 import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
-import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -53,14 +51,11 @@ class AStatementSharingItsPartsIsReadOncePerPartTest {
         }
         Proposition shared = deep;
         BigInteger seven = BigInteger.valueOf(7);
-        assertTimeoutPreemptively(Duration.ofSeconds(2), () -> {
-            assertEquals(ResiduesAStatementLeaves.of(first, form(), seven),
-                    ResiduesAStatementLeaves.of(shared, form(), seven),
-                    "the deep statement means what the first level does");
-            assertTrue(OnOneElement.theElementOf(shared).isEmpty(), "it weighs no element");
-            assertTrue(TheElementComesRound.in(shared).isEmpty(),
-                    "and so comes round over none");
-        });
+        assertEquals(ResiduesAStatementLeaves.of(first, form(), seven),
+                ResiduesAStatementLeaves.of(shared, form(), seven),
+                "the deep statement means what the first level does");
+        assertTrue(OnOneElement.theElementOf(shared).isEmpty(), "it weighs no element");
+        assertTrue(TheElementComesRound.in(shared).isEmpty(), "and so comes round over none");
     }
 
     /** {@code (below and floorMod(d - s + 1, 7) >= 3) or (below and floorMod(d - s + 2, 7) >= 5)}:

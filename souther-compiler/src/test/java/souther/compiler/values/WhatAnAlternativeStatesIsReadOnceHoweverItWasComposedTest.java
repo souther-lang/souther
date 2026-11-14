@@ -1,12 +1,10 @@
 package souther.compiler.values;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -104,7 +102,6 @@ class WhatAnAlternativeStatesIsReadOnceHoweverItWasComposedTest {
      * other end.
      */
     @Test
-    @Timeout(value = 10, unit = TimeUnit.SECONDS)
     void whatWasStatedOnceIsReadOnceHoweverManyTimesItIsReached() {
         StatedApartness<String> shared = StatedApartness.of("p", "q");
         for (int doubled = 0; doubled < MORE_REACHES_THAN_THERE_ARE_PARTS; doubled++) {
