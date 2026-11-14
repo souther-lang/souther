@@ -78,10 +78,6 @@ class WhatALinesCasesWereIsToldBesideWhyItWasNotWorkedOutTest {
      */
     private static final int NO_CASE_TAKEN_APART = 0;
 
-    private static Compilation made(String model) {
-        return made(model, CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.declared());
-    }
-
     /** {@code model}, its lines' cases taken apart into {@code takenApartInto} at most. */
     private static Compilation made(String model, int takenApartInto) {
         Compilation compilation = Compilation.ofSource(model, "Main").allowing(
