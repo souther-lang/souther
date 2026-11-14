@@ -409,7 +409,7 @@ public final class Conclusion {
                 if (!at.pastTheParts(joined)) {
                     return joined;
                 }
-                Proposition.Unread past = (Proposition.Unread) at.unread(new Derivation.Stopped(
+                Proposition.Unread past = at.unread(new Derivation.Stopped(
                         new WhyUnread.MorePartsThanAreConcluded(), false));
                 givenUp.add(past.ordinal());
                 if (first[0] == null) {
