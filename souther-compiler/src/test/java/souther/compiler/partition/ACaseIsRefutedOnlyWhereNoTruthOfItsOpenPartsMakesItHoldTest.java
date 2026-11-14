@@ -65,7 +65,7 @@ class ACaseIsRefutedOnlyWhereNoTruthOfItsOpenPartsMakesItHoldTest {
     }
 
     @Test
-    void theSearchTriesTheSameTruthsAndStopsWhereItDidWhenTheStatementIsWalkedItself() {
+    void theSearchAnswersAsItDidEvenWhereItStoppedAtTheTruthsTried() {
         Random random = new Random(3035);
         int capped = 0;
         int refuted = 0;
