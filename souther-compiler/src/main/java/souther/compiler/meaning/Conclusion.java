@@ -600,7 +600,7 @@ public final class Conclusion {
         return Proposition.Some.quantifiesOver(container, element) ? twoElementsAsOne() : element;
     }
 
-    private Proposition twoElementsAsOne() {
+    private Proposition.Unread twoElementsAsOne() {
         return unread(new Derivation.Stopped(new WhyUnread.TwoElementsOfOneContainer(), false));
     }
 
@@ -614,7 +614,7 @@ public final class Conclusion {
         return unread(new Derivation.Stopped(new WhyUnread.WhichElementARunStopsAt(), false));
     }
 
-    Proposition unread(Derivation.Stopped stopped) {
+    Proposition.Unread unread(Derivation.Stopped stopped) {
         return new Proposition.Unread(shared.where, shared.unread++, stopped.why(),
                 stopped.fixed(), true, stopped.couldBe());
     }

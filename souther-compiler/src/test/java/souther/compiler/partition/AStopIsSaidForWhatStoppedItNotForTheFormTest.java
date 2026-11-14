@@ -88,6 +88,33 @@ class AStopIsSaidForWhatStoppedItNotForTheFormTest {
                         """, THE_WORDS_THESE_ARE_ABOUT));
     }
 
+    /** A test of the value beside the membership that chose it, and the membership written as
+     *  {@code List.any} or as {@code Set.contains}, are the same two elements of one container
+     *  said the same: the report is made, with no place left to an internal error. */
+    @Test
+    void theFormTheMembershipIsWrittenInChangesWhatIsSaidNeitherInWordNorPlace() {
+        assertEquals(List.of("hs[*] " + TWO_ELEMENTS, "ns[*] " + TWO_ELEMENTS),
+                notReadOf("""
+                        module h7
+
+                        behavior f : (hs: List<Int>, ns: List<Int>) -> List<Int>
+                        let f (hs, ns) =
+                            ns
+                                |> List.map(n -> if n >= 1 && Bool.not(List.any(k -> k == n, hs)) then n else n + 1)
+                                |> List.filter(d -> List.any(h -> h == d, hs))
+                        """, THE_WORDS_THESE_ARE_ABOUT));
+        assertEquals(List.of("hs[*] " + TWO_ELEMENTS, "ns[*] " + TWO_ELEMENTS),
+                notReadOf("""
+                        module h7
+
+                        behavior f : (hs: Set<Int>, ns: List<Int>) -> List<Int>
+                        let f (hs, ns) =
+                            ns
+                                |> List.map(n -> if n >= 1 && Set.contains(n, hs) then n else n + 1)
+                                |> List.filter(d -> Set.contains(d, hs))
+                        """, THE_WORDS_THESE_ARE_ABOUT));
+    }
+
     /** What a part that stopped for something a place words for itself says is the place's: the
      *  product is named, and the two elements are not said beside it. */
     @Test

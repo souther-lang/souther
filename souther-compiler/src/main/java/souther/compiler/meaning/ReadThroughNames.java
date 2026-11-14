@@ -57,11 +57,11 @@ public final class ReadThroughNames {
      * What a telling puts where it tells two values to one, for a telling that gives every part
      * some value: it has no part to put, and says so if it is made to.
      *
-     * <p>A part is put where a part stood, and is never the statement it was told of. A statement
-     * put inside its own part is a quantifier over its own element, which {@link Proposition.Some}
-     * refuses, and the refusal says nothing of the telling that asked for it.
+     * <p>What stands where two values were told to one is a part nothing read, so it can be no
+     * statement that holds a quantifier: a statement put inside a part of its own is a quantifier
+     * over its own element, which {@link Proposition.Some} refuses.
      */
-    private static Proposition noPartIsToldAsTwo() {
+    private static Proposition.Unread noPartIsToldAsTwo() {
         throw new IllegalStateException("a telling that gives every part a value told one as two");
     }
 
@@ -79,7 +79,7 @@ public final class ReadThroughNames {
      * none: nothing. The telling stops there, so no statement is put together and no part is
      * chosen to stand in the place of the one that was refused.
      */
-    private static Proposition stopsAtAPartOfNoOneValue() {
+    private static Proposition.Unread stopsAtAPartOfNoOneValue() {
         throw new NoOneValue();
     }
 
@@ -89,7 +89,7 @@ public final class ReadThroughNames {
      * {@code twoAsOne}.
      */
     static Proposition readThrough(Proposition stated, ElementsNamed names,
-                                   Supplier<Proposition> twoAsOne) {
+                                   Supplier<Proposition.Unread> twoAsOne) {
         if (names.isEmpty()) {
             return stated;
         }
@@ -110,7 +110,7 @@ public final class ReadThroughNames {
      * handed every name.
      */
     static Proposition ownedBy(DecisionSubject container, Predicate<BindingId> given,
-                               Proposition element, Supplier<Proposition> twoAsOne) {
+                               Proposition element, Supplier<Proposition.Unread> twoAsOne) {
         if (!(container instanceof DecisionSubject.AnInput(TermPath at, var _))) {
             return element;
         }
@@ -224,7 +224,7 @@ public final class ReadThroughNames {
      * still told apart, so what two statements hold of two elements stays two.
      */
     public static Proposition oneValueAtEachElement(Proposition stated,
-                                                    Supplier<Proposition> twoAsOne) {
+                                                    Supplier<Proposition.Unread> twoAsOne) {
         Map<ElementsNamed.Slot, ValueIdentity> first = new HashMap<>();
         return told(stated, (position, had) -> {
             ElementsNamed.Slot slot = ElementsNamed.Slot.innermostOf(position);
@@ -431,7 +431,7 @@ public final class ReadThroughNames {
      * quantifiers it is inside of.
      */
     private static Proposition told(Proposition stated, Telling telling,
-                                    Supplier<Proposition> twoAsOne) {
+                                    Supplier<Proposition.Unread> twoAsOne) {
         Map<Proposition, Optional<List<TermPath>>> places = new IdentityHashMap<>();
         return StatementReading.InContext.<List<DecisionSubject>, Proposition>over(
                 (each, leftAlone, again) -> toldAt(each, leftAlone, telling, twoAsOne, again),
@@ -458,7 +458,7 @@ public final class ReadThroughNames {
     }
 
     private static Proposition toldAt(Proposition stated, List<DecisionSubject> leftAlone,
-                                      Telling outside, Supplier<Proposition> twoAsOne,
+                                      Telling outside, Supplier<Proposition.Unread> twoAsOne,
                                       StatementReading.InContext<List<DecisionSubject>,
                                               Proposition> again) {
         Telling telling = leavingAlone(leftAlone, outside);
