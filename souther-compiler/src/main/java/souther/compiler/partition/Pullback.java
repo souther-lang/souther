@@ -2804,19 +2804,15 @@ final class Pullback {
      * ranges worked out so far are left behind with the reading they were worked out through.
      */
     private final class RangesKnown {
-        private final Map<BindingId, RangeOfAName> ranges = new HashMap<>();
         private final AffineForms.Roots<Quantity, InputReads> roots =
                 new AffineForms.Roots<>(this::reading, this::stillStands);
         private ElementsMet comparisonOf;
         private ElementsMet held;
         private ReadingState.Inputs inputs;
 
-        RangeOfAName get(BindingId name) {
-            return ranges.get(name);
-        }
-
-        void put(BindingId name, RangeOfAName range) {
-            ranges.put(name, range);
+        /** The reading the roots are read through now, with what was worked out through it. */
+        AffineForms.OfOneReading<Quantity, InputReads> through() {
+            return roots.current();
         }
 
         AffineForms.Outcome<Quantity, InputReads> outcome(Core e, InputReads reads) {
@@ -2824,7 +2820,6 @@ final class Pullback {
         }
 
         private AffineForms.Reading<Quantity, InputReads> reading() {
-            ranges.clear();
             comparisonOf = elementsMet;
             held = elementsOfAForm();
             inputs = READING_STATE.inputsOf(Pullback.this);
@@ -2858,12 +2853,14 @@ final class Pullback {
         }
         // Held to the reading and not to the name alone: a reading that chose an arm may leave the
         // name a narrower run than the one that did not.
-        RangeOfAName already = known.get(name);
-        if (already != null && already.at() == bound.at()) {
+        // Kept with the reading it began through: where working it out replaces the reading, what
+        // was worked out goes with the one it began in.
+        AffineForms.OfOneReading<Quantity, InputReads> through = known.through();
+        if (through.kept(name) instanceof RangeOfAName already && already.at() == bound.at()) {
             return already.range();
         }
         FormRange range = exactRangeOf(bound.value(), bound.at(), known);
-        known.put(name, new RangeOfAName(bound.at(), range));
+        through.keep(name, new RangeOfAName(bound.at(), range));
         return range;
     }
 
@@ -5205,10 +5202,13 @@ final class Pullback {
         if (between == null) {
             return Optional.empty();
         }
+        // The two ends are subtracted where the element's numbers are read, so they are held to the
+        // elements together, apart from the comparison's own.
+        ElementsMet ends = new ElementsMet();
         LinearForm<NumericTerm> from = AffineReading.formOf(
-                call.args().get(between.from().position()), container.at(), read);
+                call.args().get(between.from().position()), container.at(), read, ends);
         LinearForm<NumericTerm> to = AffineReading.formOf(
-                call.args().get(between.to().position()), container.at(), read);
+                call.args().get(between.to().position()), container.at(), read, ends);
         return from == null || to == null ? Optional.empty()
                 : Optional.of(new Quantity.AWholeNumberInTurn(from, to));
     }
@@ -15544,7 +15544,7 @@ final class Pullback {
             return null;
         }
         LinearForm<NumericTerm> form = AffineReading.formOf(division.dividend(), division.at(),
-                read);
+                read, new ElementsMet());
         if (form == null) {
             return remainderOverABoundValue(division);
         }

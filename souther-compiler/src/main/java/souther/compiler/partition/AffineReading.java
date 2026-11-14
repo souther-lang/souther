@@ -273,17 +273,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     }
 
     /**
-     * One expression as a form of the input's numbers, or null where the arithmetic stops on it.
+     * One expression as a form of the input's numbers, or null where the arithmetic stops on it,
+     * held to the elements {@code met} has met.
      *
      * <p>The reading a side of a comparison gets ({@link #read}), asked of a part of one: a
      * dividend is read as a side is, so the same expression is the same form wherever it stands.
+     * Forms that are put beside one another are read with one {@code met}, since two names for two
+     * elements of one container are one position and what is put beside them would cancel or add
+     * them as one number; a form that stands alone is read with a {@code met} of its own.
      */
-    static LinearForm<NumericTerm> formOf(Core expression, InputReads reads, InputReading read) {
-        return formOf(expression, reads, read, new ElementsMet());
-    }
-
-    /** The same, held to the elements {@code met} has met: for a reader that puts this form
-     *  beside another, whose numbers are to be of the same elements. */
     static LinearForm<NumericTerm> formOf(Core expression, InputReads reads, InputReading read,
                                           ElementsMet met) {
         return outcomeOf(expression, reads, read, met)

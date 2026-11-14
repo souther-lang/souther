@@ -595,9 +595,20 @@ public final class AffineForms {
         private final Reading<A, E> reading;
         private final BindingWalk.Answers<Outcome<A, E>> answered = new BindingWalk.Answers<>();
         private final FoldedValue.Kept folds = new FoldedValue.Kept();
+        private final Map<Object, Object> kept = new HashMap<>();
 
         public OfOneReading(Reading<A, E> reading) {
             this.reading = Objects.requireNonNull(reading, "the answers are of a reading");
+        }
+
+        /** What the caller worked out of {@code key} through this reading, or null: kept here
+         *  and not beside it, so that it goes with the reading it was worked out through. */
+        public Object kept(Object key) {
+            return kept.get(key);
+        }
+
+        public void keep(Object key, Object worked) {
+            kept.put(key, worked);
         }
 
         /** What reading {@code raw} in {@code at} came to ({@link #outcome(Core, Object,
@@ -642,6 +653,16 @@ public final class AffineForms {
                 current = new OfOneReading<>(readings.get());
             }
             return current.outcome(raw, at);
+        }
+
+        /** The reading the roots read through now: the one the last root was read through, or
+         *  one made where none has been. What is asked of the state it stands in is asked of
+         *  the next root. */
+        public OfOneReading<A, E> current() {
+            if (current == null) {
+                current = new OfOneReading<>(readings.get());
+            }
+            return current;
         }
     }
 

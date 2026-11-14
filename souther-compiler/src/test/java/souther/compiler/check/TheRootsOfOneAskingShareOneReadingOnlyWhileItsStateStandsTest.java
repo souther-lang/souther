@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -286,11 +287,15 @@ class TheRootsOfOneAskingShareOneReadingOnlyWhileItsStateStandsTest {
         List<Core> roots = roots(leaves.size());
 
         assertNotNull(asking.outcome(roots.get(0), "env"));
+        asking.current().keep("a name", "what was worked out of it");
         assertNotNull(asking.outcome(roots.get(1), "env"));
         assertEquals(1, made.get());
+        assertEquals("what was worked out of it", asking.current().kept("a name"));
         stands[0] = false;
         assertNotNull(asking.outcome(roots.get(2), "env"));
         assertEquals(2, made.get());
+        assertNull(asking.current().kept("a name"),
+                "what was worked out through a reading goes with it");
         assertFalse(stands[0]);
     }
 }
