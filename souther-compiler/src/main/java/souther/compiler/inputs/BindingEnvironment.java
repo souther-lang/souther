@@ -176,7 +176,7 @@ final class BindingEnvironment {
 
         /** Where a read of {@code binding} here stands to the environment {@code began} a watch
          *  on. */
-        Placing placing(Handed began, BindingId binding) {
+        private Placing placing(Handed began, BindingId binding) {
             boolean handedSince = false;
             for (Handed each = this; each != null; each = each.parent) {
                 if (each == began) {
