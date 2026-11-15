@@ -7,11 +7,14 @@ import souther.compiler.partition.CompositionBudget;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -33,12 +36,12 @@ import java.util.function.Function;
  *
  * <p><b>What a line is taken apart by.</b> Where the ways as the choices stand are more than
  * {@link CompositionBudget#CASES_A_LINE_IS_TAKEN_APART_INTO}, {@link CasesOfALineAsked} takes the
- * line apart where the intervals' count is no more than that ({@link CasesOfALineAsked} says why
- * the intervals' and not the numbers'), and the walk it takes ends every way at the part a
- * {@link State} leaves nothing of, so it walks no way either count leaves out. Where the count is
- * given up the line is cut off by the ways as the choices stand. The numbers' count is what a
- * reader is told beside a line that stopped there; neither figure it meets is one the line stopped
- * at.
+ * line apart where the intervals' count is no more than that, and past it where the numbers'
+ * count is, walked from each remainder ({@link #startingAtEachRemainder}); the walk ends every way
+ * at the part a {@link State} leaves nothing of, so it walks no way either count leaves out. Where
+ * the count is given up the line is cut off by the ways as the choices stand. The numbers' count
+ * is what a reader is told beside a line that stopped there; neither figure it meets is one the
+ * line stopped at.
  *
  * <p><b>Counted by what is left, and not way by way.</b> What a way has chosen so far leaves each
  * form an interval and each dividend some of its remainders, and the ways past a case depend on
@@ -310,6 +313,87 @@ public final class NumericallyConsistentWays {
         return meeting.isEmpty() ? OptionalLong.empty()
                 : OptionalLong.of(meeting.get().allowed());
     }
+
+    /**
+     * The states a walk of {@code cases} starts from so that no comparison of a remainder is a
+     * choice the walk finds refuted later: one for each way of taking one remainder of each
+     * dividend that two comparisons of {@code cases} leave different remainders of, less those no
+     * way is consistent from, so none where no way is. Nothing said where there is no such
+     * dividend, or where the starts would be more than {@link #MOST_STARTS}, or where a count from
+     * one of them is given up.
+     *
+     * <p>From each start every comparison of those dividends is decided, so a way the walk takes
+     * past one is a way that start leaves, and is refuted at the comparison that refutes it rather
+     * than at one chosen later. A way no comparison refutes holds at some remainder of each, so
+     * some start leaves it; and from each start it holds at, the walk takes it again. So the starts
+     * take every way the numbers' count counts, and no other.
+     */
+    static Optional<List<State>> startingAtEachRemainder(DecidingCase.Cases cases) {
+        Map<Dividend, Set<Long>> compared = new LinkedHashMap<>();
+        cases.fold(new DecidingCase.Cases.Fold<Boolean>() {
+
+            @Override
+            public Boolean one(DecidingCase.Cases.One one) {
+                for (Proposition part : conjunctsOf(one.condition())) {
+                    Narrowing.of(part).flatMap(Narrowing::remainders).ifPresent(meeting ->
+                            compared.computeIfAbsent(meeting.of(), _ -> new HashSet<>())
+                                    .add(meeting.allowed()));
+                }
+                return true;
+            }
+
+            @Override
+            public Boolean eachOf(DecidingCase.Cases.EachOf node, List<Boolean> alternatives) {
+                return true;
+            }
+
+            @Override
+            public Boolean together(DecidingCase.Cases.Together node, List<Boolean> factors) {
+                return true;
+            }
+
+            @Override
+            public Boolean notTakenApart(DecidingCase.Cases.NotTakenApart notTakenApart) {
+                return true;
+            }
+        });
+        List<Map<Dividend, Long>> each = List.of(Map.of());
+        for (Map.Entry<Dividend, Set<Long>> one : compared.entrySet()) {
+            if (one.getValue().size() < 2) {
+                continue;
+            }
+            int divisor = one.getKey().divisor();
+            if ((long) each.size() * divisor > MOST_STARTS) {
+                return Optional.empty();
+            }
+            List<Map<Dividend, Long>> more = new ArrayList<>();
+            for (Map<Dividend, Long> before : each) {
+                for (int remainder = 0; remainder < divisor; remainder++) {
+                    Map<Dividend, Long> taken = new HashMap<>(before);
+                    taken.put(one.getKey(), 1L << remainder);
+                    more.add(taken);
+                }
+            }
+            each = more;
+        }
+        if (each.size() < 2) {
+            return Optional.empty();
+        }
+        Counting counting = new Counting(true);
+        Function<State, Map<State, BigInteger>> ways = cases.fold(counting);
+        List<State> out = new ArrayList<>();
+        for (Map<Dividend, Long> remainders : each) {
+            State start = new State(Map.of(), remainders);
+            if (!ways.apply(start).isEmpty()) {
+                out.add(start);
+            }
+        }
+        return counting.reached > STATES_A_COUNT_IS_TAKEN_IN ? Optional.empty()
+                : Optional.of(out);
+    }
+
+    /** How many states a walk of a line's cases starts from, at most: each walks the cases. */
+    static final int MOST_STARTS = MOST_REMAINDERS_TOLD_APART + 1;
 
     /** What a condition chosen states together: its parts, where it is a conjunction. */
     private static List<Proposition> conjunctsOf(Proposition condition) {
