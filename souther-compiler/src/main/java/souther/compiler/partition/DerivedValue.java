@@ -38,10 +38,18 @@ public record DerivedValue(AuthoredLine line, List<ModelOccurrence> copies) {
         }
     }
 
-    /** Whether the border is one the call that made {@code copy} reads the comparison cut by. */
+    /**
+     * Whether the border is one the call that made {@code copy} reads the comparison cut by.
+     *
+     * <p>A line cuts the computation only where it is drawn on a value derived from several
+     * positions, as {@link #cutsBy} says. A line the same comparison draws on one position, as when
+     * a call's value is a constant in one piece, is of the same comparison and the same call and
+     * weighs none of the computation's positions.
+     */
     public boolean isCutBy(Border border, ModelOccurrence copy) {
         return copies.contains(copy) && line.equals(border.origin().authoredLine())
-                && border.origin().readAt().inOrder().contains(copy);
+                && border.origin().readAt().inOrder().contains(copy)
+                && border.cut().of().derivedFromSeveralPositions().isPresent();
     }
 
     /** One comparison as one call of it reads it. */
