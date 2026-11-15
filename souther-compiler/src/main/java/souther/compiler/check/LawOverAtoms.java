@@ -746,7 +746,11 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
         Term closure = by == null ? null : partOfTheCall(by);
         boolean eachItself = of instanceof LawSubject.ElementOf<DeclaredArgument>(
                 DeclaredArgument element) && element.equals(named);
-        if (aspect != AnswerAspect.EMPTINESS || whole == null || !(eachItself || closure != null)) {
+        // A closure the call was not handed is no reason to count each element: what counts what
+        // the closure answers is read of the closure, and of nothing else.
+        boolean closureIsHanded = by == null || applied.argument(by) != null;
+        if (aspect != AnswerAspect.EMPTINESS || whole == null || !closureIsHanded
+                || !(eachItself || closure != null)) {
             return null;
         }
         return terms.howManyHoldSomething(whole, closure,

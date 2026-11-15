@@ -1401,6 +1401,11 @@ final class Terms {
      * and what its declaration states of the answer is stated of the arguments, which are read
      * where the call was written: the bindings are not in scope where the answer is used, and the
      * arguments are what they stand for.
+     *
+     * <p>Only the arguments the expansion binds, from the first on and without a gap, are the ones
+     * recovered: an argument it does not bind is not read off the body, so the application may hold
+     * fewer arguments than the declaration has, and a reader takes an argument it finds absent
+     * ({@link AnOperationApplied#argument}) as one it knows nothing of.
      */
     ExpandedApplication expandedApplicationOf(Core e, Denotations at) {
         return switch (e) {
@@ -2655,20 +2660,29 @@ final class Terms {
             boolean expansionIsTheCall = calledBy != null && expanded != null
                     && calledBy.equals(expanded.applied().operation())
                     && (direct == null || !calledBy.equals(direct.operation()));
-            AnOperationApplied applied = expansionIsTheCall ? expanded.applied() : direct;
             Denotations appliedAt = expansionIsTheCall ? expanded.at()
                     : peeled == null ? built.at() : peeled.at();
+            AnOperationApplied applied = overThePartsOf(counted,
+                    expansionIsTheCall ? expanded.applied() : direct, appliedAt);
             Term call = applied != null && applied.operation().equals(calledBy) ? counted : null;
             List<NumericConstraint> carried = new ArrayList<>(IntrinsicNumericFacts.ofSize(
                     size, applied, atom, appliedAt, this, counted));
-            carried.addAll(sizesRelatedAtACall(built.value(), built.at()));
+            carried.addAll(sizesRelatedAtACall(
+                    overThePartsOf(counted, AnOperationApplied.of(built.value()), built.at()),
+                    built.at()));
             carried.addAll(noMoreThanTheStepAddsForEach(atom, built.value(), built.at()));
             carried.addAll(howManyPiecesAreParted(atom, counted));
             // What the operation this container is the expansion of says of how many it holds,
             // said of the arguments the expansion was handed, where the term is a call of another.
-            boolean expansionSaysMore = expanded != null && !expansionIsTheCall;
+            // They are named as every reader names a value, by the term of the expression read
+            // where the call was written, and not as parts of this term: an argument is spelled
+            // by where it is read, and the same value read inside a helper and outside one is
+            // not always spelled alike, so a part-of test would refuse what is the same value.
+            AnOperationApplied expansion = expanded == null || expansionIsTheCall ? null
+                    : expanded.applied();
+            boolean expansionSaysMore = expansion != null;
             if (expansionSaysMore) {
-                carried.addAll(IntrinsicNumericFacts.ofTheSizeLaw(expanded.applied(), atom,
+                carried.addAll(IntrinsicNumericFacts.ofTheSizeLaw(expansion, atom,
                         expanded.at(), this, null));
             }
             // A relation of the atom to itself says nothing, and is what a law over a construction
@@ -2676,7 +2690,7 @@ final class Terms {
             carried.removeIf(each -> each.form().coefs().isEmpty());
             carrying(atom, carried);
             Derivation held = expansionSaysMore
-                    ? IntrinsicNumericFacts.heldWhereItsLawsSay(expanded.applied(), atom,
+                    ? IntrinsicNumericFacts.heldWhereItsLawsSay(expansion, atom,
                             expanded.at(), this, null)
                     : IntrinsicNumericFacts.heldWhereItsLawsSay(applied, atom, appliedAt, this,
                             call);
@@ -2685,6 +2699,30 @@ final class Terms {
             }
         }
         return atom;
+    }
+
+    /**
+     * {@code applied}, where what it says of the value {@code whole} names is said of what
+     * {@code whole} is built over, and null where it is not.
+     *
+     * <p>What an atom carries is a property of its term, so a law of an operation names the atoms
+     * of the arguments the term is made of: the call's own parts where the term is a call of that
+     * operation, and otherwise the arguments the expression was handed, each of which has to be a
+     * part of the term. One that is not is a value the term does not mention, and naming it would
+     * state a fact of this atom that another route to the same term has no way to state.
+     */
+    private AnOperationApplied overThePartsOf(Term whole, AnOperationApplied applied,
+                                              Denotations at) {
+        if (applied == null || applied.operation().equals(whole.calledOperation())) {
+            return applied;
+        }
+        for (Core each : applied.args()) {
+            Term argument = bodyKey(each, at);
+            if (argument != null && !whole.holds(argument)) {
+                return null;
+            }
+        }
+        return applied;
     }
 
     /**
@@ -2701,8 +2739,8 @@ final class Terms {
      * ({@link #sizeKeyOf}): the atom a clause reading that call names, which carries what it
      * carries where that clause names it.
      */
-    private List<NumericConstraint> sizesRelatedAtACall(Core container, Denotations at) {
-        AnOperationApplied applied = AnOperationApplied.of(container);
+    private List<NumericConstraint> sizesRelatedAtACall(AnOperationApplied applied,
+                                                        Denotations at) {
         if (applied == null) {
             return List.of();
         }
@@ -3123,15 +3161,17 @@ final class Terms {
 
     /**
      * The same, of a container and a closure already named, {@code measure} being what counts the
-     * container. What the atom carries is worked out from the two terms alone, so that every route
-     * that names it files the same.
+     * container. The two measures are part of which sum the atom is, and what it carries is worked
+     * out from its identity alone, so that every route that names it files the same and the check
+     * that it was filed is a memo and not a choice of the first route.
      *
      * <p>Never below nought. And where the closure answers lists written out, the sum is that many
      * of each element's, or no more than the most any of them writes out.
      */
     FactSubject sumOfSizesAtomOf(Term container, Term closure, ValueName measure,
                                  ValueName elementMeasure) {
-        FactSubject atom = named(interned.sumOfSizes(container, closure), Carrier.WHOLE);
+        FactSubject atom = named(interned.sumOfSizes(container, closure,
+                new Term.CountedBy(measure, elementMeasure)), Carrier.WHOLE);
         if (atom != null && knowledgeOf(atom).intrinsic().isEmpty()) {
             List<NumericConstraint> facts = new ArrayList<>();
             // No fewer than how many of the elements hold something, each of which holds at least
@@ -3150,8 +3190,7 @@ final class Terms {
                 sumsOfWhatEachHolds.putIfAbsent(atom, new SumOfWhatEachHolds(container, held));
             }
             FactSubject all = measure == null ? null : sizeKeyOf(measure, container);
-            Term answer = closure == null || closure.shape() != Term.Shape.CLOSURE
-                    || closure.parts().size() != 1 ? null : closure.parts().getFirst();
+            Term answer = closure == null ? null : closure.answerOfAClosureOfOneParameter();
             OptionalLong most = answer == null ? OptionalLong.empty() : mostWritten(answer);
             if (all != null && most.isPresent()) {
                 LinearForm<FactSubject> times = LinearForm.atom(all).times(
@@ -3179,12 +3218,12 @@ final class Terms {
     LinearForm<FactSubject> howManyHoldSomething(Term container, Term closure,
                                                  ValueName measure, ValueName elementMeasure) {
         WholeNumberRuns atLeastOne = WholeNumberRuns.standing(Rel.GE, ExactRatio.ONE);
-        if (elementMeasure == null || atLeastOne == null
-                || (closure != null && closure.parts().size() != 1)) {
+        Term answer = closure == null ? interned.bound(0, 0)
+                : closure.answerOfAClosureOfOneParameter();
+        if (elementMeasure == null || atLeastOne == null || answer == null) {
             return null;
         }
-        Term size = interned.called(elementMeasure, List.of(
-                closure == null ? interned.bound(0, 0) : closure.parts().getFirst()));
+        Term size = interned.called(elementMeasure, List.of(answer));
         Term by = interned.closureAnswering(size, atLeastOne);
         Term opposite = interned.normalClosure(interned.closureDenying(by));
         Term counting = interned.normalClosure(by);

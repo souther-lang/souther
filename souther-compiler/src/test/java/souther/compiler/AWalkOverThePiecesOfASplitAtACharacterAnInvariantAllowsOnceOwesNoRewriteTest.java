@@ -215,6 +215,56 @@ class AWalkOverThePiecesOfASplitAtACharacterAnInvariantAllowsOnceOwesNoRewriteTe
                         """)));
     }
 
+    @Test
+    void theSameValueReachedAsTheLibrarysDropAndAsItsBodyWrittenOutIsMeasured() {
+        measured("""
+                module repro.routes
+
+                behavior both : (xs: List<Int>) -> List<Int>
+                let both (xs) = {
+                    let a = List.drop(1, xs)
+                    let (_, b) = List.fold(
+                        (acc, x) -> {
+                            let (i, ys) = acc
+                            let next = i + 1
+                            if i >= 1 then (next, ys ++ [x]) else (next, ys)
+                        },
+                        (0, []),
+                        xs
+                    )
+                    List.map(s -> s + 1, a) ++ List.map(s -> s + 2, b)
+                }
+
+                example both
+                    | "one" : ([1, 2, 3]) -> [3, 4, 4, 5]
+                """);
+    }
+
+    @Test
+    void theSameValueReachedFirstAsItsBodyWrittenOutAndThenAsTheLibrarysDropIsMeasured() {
+        measured("""
+                module repro.routes
+
+                behavior both : (xs: List<Int>) -> List<Int>
+                let both (xs) = {
+                    let (_, b) = List.fold(
+                        (acc, x) -> {
+                            let (i, ys) = acc
+                            let next = i + 1
+                            if i >= 1 then (next, ys ++ [x]) else (next, ys)
+                        },
+                        (0, []),
+                        xs
+                    )
+                    let a = List.drop(1, xs)
+                    List.map(s -> s + 2, b) ++ List.map(s -> s + 1, a)
+                }
+
+                example both
+                    | "one" : ([1, 2, 3]) -> [4, 5, 3, 4]
+                """);
+    }
+
     /** The rewrites of the walk of {@code List.map} that are owed, as the obligation list says. */
     private static List<String> walkRewritesOwed(Compilation compilation) {
         return walkRewritesOwedOf("map", compilation);
