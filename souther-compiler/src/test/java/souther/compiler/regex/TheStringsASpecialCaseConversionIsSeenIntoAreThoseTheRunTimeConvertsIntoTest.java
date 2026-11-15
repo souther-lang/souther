@@ -2,7 +2,6 @@ package souther.compiler.regex;
 
 import org.junit.jupiter.api.Test;
 
-import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.Meter;
 import net.unit8.notation199x.pattern.PatternParser;
 import net.unit8.notation199x.pattern.PatternRead;
@@ -90,16 +89,6 @@ class TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTe
     private static void agreesWithTheRunTime(UnaryOperator<String> conversion) {
         ConversionAnswers answers = ConversionAnswers.of(CodeMap.of(conversion), conversion);
         List<String> values = everyValue();
-        // A value of none of the code points that may lengthen is converted into one no longer.
-        CodePoints lengthening = answers.mayLengthen();
-        for (String value : values) {
-            if (value.codePoints().noneMatch(lengthening::has)) {
-                String answer = conversion.apply(value);
-                assertTrue(answer.codePointCount(0, answer.length())
-                        <= value.codePointCount(0, value.length()), () -> "lengthens: "
-                        + describe(value));
-            }
-        }
         boolean[] seenSome = {false};
         for (String regex : LANGUAGES) {
             Language into = language(regex);

@@ -202,24 +202,14 @@ public final class BehaviorSetStatements {
                          NumericTerm.FromOnePosition term,
                          AdmittedPlan whenTrue, AdmittedPlan whenFalse,
                          AdmittedPlan notShown, Long trueUpTo, Long noneBeyond,
-                         CaseMaps.MayStop mayStop, LengthRuns heldTo, LengthRuns shownAt,
+                         LengthRuns heldTo, LengthRuns shownAt,
                          List<ValuesWithin> notReached,
                          BlockReason.OperationsNotShown operations, List<CountedOpen> notCounted) {
 
         Asked(PredicateOrigin by, PredicateStatement states, NumericTerm.FromOnePosition term,
               AdmittedPlan whenTrue, AdmittedPlan whenFalse) {
-            this(by, states, term, whenTrue, whenFalse, null, null, null, null, null, null,
+            this(by, states, term, whenTrue, whenFalse, null, null, null, null, null,
                     List.of(), BlockReason.OperationsNotShown.NONE, List.of());
-        }
-
-        /** The strings that may stop a run, as a set; null where none do. */
-        ValueSet stopping() {
-            return mayStop == null ? null : ValueSet.matching(mayStop.strings());
-        }
-
-        /** {@code side} but for the strings that may stop a run. */
-        AdmittedPlan unlessStopping(AdmittedPlan side) {
-            return AdmittedPlan.meeting(List.of(side, AdmittedPlan.without(stopping())));
         }
     }
 
@@ -333,7 +323,7 @@ public final class BehaviorSetStatements {
                 : AdmittedPlan.meeting(List.of(AdmittedPlan.of(mayBe),
                         canBe.isEmpty() ? AdmittedPlan.ANY : AdmittedPlan.without(canBe)));
         return new Asked(each.by(), each.states(), each.term(), shown,
-                AdmittedPlan.without(mayBe), notShown, null, null, null, null, null, List.of(),
+                AdmittedPlan.without(mayBe), notShown, null, null, null, null, List.of(),
                 BlockReason.OperationsNotShown.NONE, List.of());
     }
 
@@ -421,7 +411,7 @@ public final class BehaviorSetStatements {
             }
             asked.add(new Asked(each.by(), each.states(), each.term(),
                     shown, whenFalse, notShown.equals(AdmittedPlan.NONE) ? null : notShown,
-                    strings.upTo(), strings.noneBeyond(), strings.mayStop(), heldTo,
+                    strings.upTo(), strings.noneBeyond(), heldTo,
                     strings.shownAt(), notReached, strings.operations(), notCounted));
         }
         List<ClassingBlocker> blocked = new ArrayList<>();
@@ -454,11 +444,6 @@ public final class BehaviorSetStatements {
                     byTerm.computeIfAbsent(each.term(), _ -> new LinkedHashSet<>());
             plans.add(each.whenTrue());
             plans.add(each.whenFalse());
-            if (each.mayStop() != null) {
-                plans.add(each.unlessStopping(each.whenTrue()));
-                plans.add(each.unlessStopping(each.whenFalse()));
-                plans.add(each.unlessStopping(AdmittedPlan.ANY));
-            }
             if (each.notShown() != null) {
                 plans.add(each.notShown());
             }
@@ -766,18 +751,6 @@ public final class BehaviorSetStatements {
                         failing.add(run.over(ValueSet.ANY));
                     }
                 }
-                // And the strings that may end a run at a conversion before the relation are shown
-                // on neither side past the length they are gotten past at every string, and are
-                // open there, for the operation.
-                if (each.mayStop() != null) {
-                    long past = each.mayStop().past();
-                    trueRegions = unlessStopping(trueRegions,
-                            built.of(each.unlessStopping(each.whenTrue())), past);
-                    failing = unlessStopping(failing, whenFalse,
-                            built.of(each.unlessStopping(each.whenFalse())), past,
-                            built.of(each.unlessStopping(AdmittedPlan.ANY)));
-                    notShown.add(ValuesWithin.longerThan(each.stopping(), past));
-                }
                 statements.add(new RuleEvidence.BySet(new SetStatement(each.term(),
                         trueRegions.isEmpty()
                                 ? ValuesAtLengths.of(ValuesWithin.all(ValueSet.NONE))
@@ -790,43 +763,6 @@ public final class BehaviorSetStatements {
                                 built.of(open.strings()), open.why())).toList())));
             }
         }
-    }
-
-    /**
-     * {@code regions}, with the strings that may stop a run taken out of each past the length
-     * {@code past}: the region as it is up to it, and what the region's set is but for them
-     * ({@code without}) beyond.
-     */
-    private static List<ValuesWithin> unlessStopping(List<ValuesWithin> regions, ValueSet without,
-                                                     long past) {
-        List<ValuesWithin> out = new ArrayList<>();
-        for (ValuesWithin each : regions) {
-            if (each.longest() != null && each.longest() <= past) {
-                out.add(each);
-                continue;
-            }
-            if (each.shortest() <= past) {
-                out.add(new ValuesWithin(each.values(), each.shortest(), past));
-            }
-            out.add(new ValuesWithin(without, Math.max(each.shortest(), past + 1), each.longest()));
-        }
-        return out;
-    }
-
-    /**
-     * The same of the false side, whose regions are of the strings the rule does not hold
-     * ({@code falseSet}, which is {@code withoutFalse} but for the strings that may stop a run) and
-     * of every string ({@code everyString} but for them, {@code withoutAny}).
-     */
-    private static List<ValuesWithin> unlessStopping(List<ValuesWithin> regions, ValueSet falseSet,
-                                                     ValueSet withoutFalse, long past,
-                                                     ValueSet withoutAny) {
-        List<ValuesWithin> out = new ArrayList<>();
-        for (ValuesWithin each : regions) {
-            out.addAll(unlessStopping(List.of(each),
-                    each.values().equals(falseSet) ? withoutFalse : withoutAny, past));
-        }
-        return out;
     }
 
     /**

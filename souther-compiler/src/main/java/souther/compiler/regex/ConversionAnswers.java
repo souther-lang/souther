@@ -146,17 +146,6 @@ public final class ConversionAnswers {
         }
     }
 
-    /**
-     * The code points a string may hold and be converted into a longer one: every code point but
-     * those the map sends to one stable starter. A string of those is converted into as many stable
-     * starters, which the form leaves as they stand. The form put over any other answer may make it
-     * longer than its parts where they meet ({@link Normalization#seamGrowthBound}), so a code
-     * point is not cleared by what it is answered alone.
-     */
-    public CodePoints mayLengthen() {
-        return map.domain().not();
-    }
-
     /** What {@code conversion} answers of each code point, read off {@code map} made of it. */
     public static ConversionAnswers of(CodeMap map, UnaryOperator<String> conversion) {
         return new ConversionAnswers(map, conversion);

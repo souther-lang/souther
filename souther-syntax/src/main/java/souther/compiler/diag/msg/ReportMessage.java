@@ -494,6 +494,9 @@ public sealed interface ReportMessage extends Message {
 
     record DividedNoWay(String position) implements ReportMessage, Prose {}
 
+    record StopsOnlyPastWhatARepresentationHolds(String operations)
+            implements ReportMessage, Prose {}
+
     record RuleNotRead(String rule, Message why, Message stopped, Message runs, Message shown,
                        String at, String calls, Message sentTo) implements ReportMessage, Prose {}
 
@@ -556,8 +559,6 @@ public sealed interface ReportMessage extends Message {
     record AndTheAnswerAtItsPosition(Message why) implements ReportMessage, Prose {}
 
     record TheImageIsNotShown(String names) implements ReportMessage, Prose {}
-
-    record NotShownGottenPast(String names) implements ReportMessage, Prose {}
 
     record NoRowShownComputedIn(String numbers) implements ReportMessage, Prose {}
 

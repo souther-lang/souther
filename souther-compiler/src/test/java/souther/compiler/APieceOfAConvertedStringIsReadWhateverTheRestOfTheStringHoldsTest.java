@@ -2,14 +2,12 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.inputs.BlockReason;
-import souther.runtime.Strings;
+import souther.compiler.partition.StopPastTheRepresentation;
 
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A piece of a lowercased string is read by what the piece itself holds. The string is cut at a
@@ -73,22 +71,19 @@ class APieceOfAConvertedStringIsReadWhateverTheRestOfTheStringHoldsTest {
     }
 
     /**
-     * An address with no bound on its length is not read at the lowercase's stop: one so long that
-     * its answer is longer than a {@code String} holds ends the run before the equality, which is
-     * said, with the length it is gotten past at every string, and nothing else is open.
+     * An address with no bound on its length is read as well: one so long that its answer is
+     * longer than a {@code String} holds ends the run at the lowercase, which is where the
+     * representation stops and is said of the lowercase, and no value is open for it. The
+     * flatMaps, which may make more elements than a list holds, are said beside it.
      */
     @Test
-    void anAddressWithNoBoundIsOpenOnlyForTheStringsTheLowercaseMayStopOn() {
-        Map<String, List<BlockReason.RelationShownOverARegion>> open =
-                WhereAStringRelationIsLeftOpen.leftOpen(
-                        screen("[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", null, "253"), "screen");
+    void anAddressWithNoBoundIsReadAndTheLowercaseIsSaidToStop() {
+        String source = screen("[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", null, "253");
 
-        assertEquals(List.of("email"), List.copyOf(open.keySet()));
-        BlockReason.RelationShownOverARegion email = open.get("email").getFirst();
-        assertEquals(List.of("String.lowercase"), email.notShownGottenPast());
-        assertTrue(email.longerThan() > 0 && email.longerThan() < Strings.LONGEST_TEXT,
-                () -> "the stop is past the length every string is gotten past at, and within a"
-                        + " String: " + email.longerThan());
+        assertEquals(Map.of(), WhereAStringRelationIsLeftOpen.leftOpen(source, "screen"));
+        assertEquals(List.of("List.flatMap", "String.lowercase"), WhereAStringRelationIsLeftOpen
+                .evidenceOf(source, "screen").stopsPastTheRepresentation().stream()
+                .map(StopPastTheRepresentation::operation).distinct().toList());
     }
 
     /** The four address languages of the issue: whichever side of the {@code @} holds any code

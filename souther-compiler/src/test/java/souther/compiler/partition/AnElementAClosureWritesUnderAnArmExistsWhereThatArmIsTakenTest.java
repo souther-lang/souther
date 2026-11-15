@@ -152,14 +152,21 @@ class AnElementAClosureWritesUnderAnArmExistsWhereThatArmIsTakenTest {
         assertTrue(report.contains("rows 4    pending 0"), report);
     }
 
-    /** What the report says of how the values are divided, whatever the source positions. */
+    /**
+     * What the report says of how the values are divided, whatever the source positions. The
+     * operations a run stops at only past what the representation holds are left out: they are
+     * said of how the body is written, which two ways of writing one statement differ in, and not
+     * of how the values are divided.
+     */
     private static List<String> partitionOf(String report) {
         List<String> lines = report.lines().toList();
         int from = lines.indexOf(lines.stream().filter(line -> line.contains("partition"))
                 .findFirst().orElseThrow());
         int to = lines.indexOf(lines.stream().filter(line -> line.contains("border"))
                 .findFirst().orElseThrow());
-        return lines.subList(from, to).stream().map(line -> line.replaceAll("@\\d+:\\d+", "@"))
+        return lines.subList(from, to).stream()
+                .filter(line -> !line.contains("a run stops only where an answer is longer"))
+                .map(line -> line.replaceAll("@\\d+:\\d+", "@"))
                 .toList();
     }
 

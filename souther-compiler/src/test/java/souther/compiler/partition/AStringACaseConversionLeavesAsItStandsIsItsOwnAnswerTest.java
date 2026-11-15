@@ -134,24 +134,6 @@ class AStringACaseConversionLeavesAsItStandsIsItsOwnAnswerTest {
     }
 
     /**
-     * A conversion answers a string with more code points than it has only where the string holds a
-     * code point answered with several, so only a string that holds one may end a run; a string of
-     * code points it answers with one, or that it leaves as they stand, never does.
-     */
-    @Test
-    void onlyAStringHoldingACodePointAnsweredWithSeveralMayEndARun() {
-        Language stops = CaseMaps.mayStop(CaseMapping.LOWERCASE, METER).strings();
-        assertFalse(stops.has("abc"));
-        assertFalse(stops.has("́"));
-        assertTrue(stops.has("aİ"));
-        CaseMapping both = new CaseMapping.Lowercase(CaseMapping.UPPERCASE);
-        Language stopsBoth = CaseMaps.mayStop(both, METER).strings();
-        assertFalse(stopsBoth.has("abc"));
-        assertFalse(stopsBoth.has("́"));
-        assertTrue(stopsBoth.has("ß"));
-    }
-
-    /**
      * The strings a witness is chosen from are values, so a string is chosen from the strings the
      * conversion is exactly a map on, which hold no sequence that is no value.
      */

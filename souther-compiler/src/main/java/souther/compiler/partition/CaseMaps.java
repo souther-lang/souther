@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import java.math.BigInteger;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.IntPredicate;
@@ -14,7 +13,6 @@ import souther.compiler.regex.CodeMap;
 import souther.compiler.regex.ConversionAnswers;
 import souther.compiler.regex.Language;
 import souther.compiler.semantics.CaseMapping;
-import souther.compiler.values.TextExtents;
 
 /**
  * A case conversion as the map on code points it is exactly one for ({@link CodeMap}), worked out
@@ -80,43 +78,6 @@ final class CaseMaps {
     }
 
     /**
-     * The strings a run may stop on at {@code mapping}, and the length they are gotten past at
-     * every one of them up to.
-     *
-     * <p>A conversion ends a run where its answer is longer than a {@code String} holds. The answer
-     * is no longer than the string unless it holds a code point that is answered with several, so
-     * the strings that may stop a run are those that hold one of those, and of those only the ones
-     * longer than the conversions' growth leaves room for ({@link #gottenPastAtEveryStringUpTo}).
-     *
-     * @param strings every string that holds a code point answered with several; every string where
-     *                that is past what {@code meter} allows
-     * @param past    a string no longer than this is gotten past, whatever it holds
-     */
-    record MayStop(Language strings, long past) {
-
-        /** What may stop a run at either: the strings of both, and the shorter length. */
-        MayStop and(MayStop other, Meter meter) {
-            Language both = strings.or(other.strings, meter);
-            return new MayStop(both == null ? Language.EVERY_STRING : both,
-                    Math.min(past, other.past));
-        }
-    }
-
-    /** The strings a run may stop on at {@code mapping}, or null where it stops on none. */
-    static MayStop mayStop(CaseMapping mapping, Meter meter) {
-        if (mapping instanceof CaseMapping.None) {
-            return null;
-        }
-        CodePoints lengthening = answersOf(mapping).mayLengthen();
-        if (lengthening.isEmpty()) {
-            return null;
-        }
-        Language holding = CodeMap.stringsHolding(lengthening, meter);
-        return new MayStop(holding == null ? Language.EVERY_STRING : holding,
-                gottenPastAtEveryStringUpTo(mapping));
-    }
-
-    /**
      * The strings of {@code over} that {@code mapping} answers as they stand, which are therefore
      * among its answers when it is asked of them: the strings whose code points it leaves alone.
      *
@@ -178,51 +139,6 @@ final class CaseMaps {
         Language standing = converted == null ? null : answeredAsTheyStand(mapping, answers, meter);
         Language joined = standing == null ? null : converted.or(standing, meter);
         return joined == null ? converted : joined;
-    }
-
-    /**
-     * A length up to which a run is shown to get past {@code mapping} at every string, whatever
-     * code points it holds: at a string of no more code points than this, none of its conversions
-     * answers more than a {@code String} holds.
-     *
-     * <p>A bound and not the longest such length: a longer string may be gotten past as well, and
-     * nothing here says one is not. A conversion's answer, in every canonical form, holds no more
-     * code points than the text it is handed times what the run time's tables say one code point
-     * comes to at most ({@link CaseConversion.Growth}), as written or decomposed. So a text of no
-     * more than a {@code String} holds over that converts and is canonicalized within it, and of
-     * conversions done in turn the factors multiply: each is handed what the one before answered.
-     * The code points that come to the most in one conversion need not be the ones that do in the
-     * next, so the product is a bound on what the conversions in turn make of a code point and may
-     * be more than any comes to.
-     */
-    static long gottenPastAtEveryStringUpTo(CaseMapping mapping) {
-        return switch (mapping) {
-            case CaseMapping.None _ -> TextExtents.LONGEST_STRING;
-            case CaseMapping.Lowercase(CaseMapping of) ->
-                    gottenPastAtEveryStringUpTo(of) / most(CaseConversion.lowercaseGrowth());
-            case CaseMapping.Uppercase(CaseMapping of) ->
-                    gottenPastAtEveryStringUpTo(of) / most(CaseConversion.uppercaseGrowth());
-        };
-    }
-
-    /**
-     * A bound on the code points the conversions {@code mapping} is made of answer of a text of
-     * at most {@code codePoints}: that many times what each says one code point comes to at most,
-     * for the reason {@link #gottenPastAtEveryStringUpTo} gives.
-     */
-    static BigInteger answerBound(CaseMapping mapping, BigInteger codePoints) {
-        return switch (mapping) {
-            case CaseMapping.None _ -> codePoints;
-            case CaseMapping.Lowercase(CaseMapping of) -> answerBound(of, codePoints)
-                    .multiply(BigInteger.valueOf(most(CaseConversion.lowercaseGrowth())));
-            case CaseMapping.Uppercase(CaseMapping of) -> answerBound(of, codePoints)
-                    .multiply(BigInteger.valueOf(most(CaseConversion.uppercaseGrowth())));
-        };
-    }
-
-    /** The most code points one code point comes to in a conversion's answer, in any form. */
-    private static long most(CaseConversion.Growth growth) {
-        return Math.max(growth.mapped(), growth.decomposed());
     }
 
     /**

@@ -68,14 +68,16 @@ class ABusinessCaseIsReadPastTheGuardThatTrimsItTest {
 
     /** The relation is shown over a region at the needs and at the business case. */
     @Test
-    void theRelationIsShownOverARegionAtBothPlaces() {
+    void theRelationIsShownOverARegionOfTheBusinessCaseAndNotShownToReachEveryNeed() {
         String json = Measured.JSON;
-        for (String path : new String[] {"opp.needs[*]", "businessCase"}) {
-            assertTrue(Pattern.compile(SHOWN.formatted(Pattern.quote(path)), Pattern.DOTALL)
-                    .matcher(json).find(), () -> path + " is shown over a region");
-            assertFalse(Pattern.compile(NOT_SHOWN.formatted(Pattern.quote(path)), Pattern.DOTALL)
-                    .matcher(json).find(), () -> path + " is not named not shown");
-        }
+        assertTrue(Pattern.compile(SHOWN.formatted(Pattern.quote("businessCase")),
+                Pattern.DOTALL).matcher(json).find(), "the business case is shown over a region");
+        assertFalse(Pattern.compile(NOT_SHOWN.formatted(Pattern.quote("businessCase")),
+                Pattern.DOTALL).matcher(json).find(), "and is not named not shown");
+        // A need may be any string: written after with starters, each is inside some business
+        // case and outside another, and the empty one is inside every one, which no class says.
+        assertTrue(Pattern.compile(NOT_SHOWN.formatted(Pattern.quote("opp.needs[*]")),
+                Pattern.DOTALL).matcher(json).find(), "a need is not shown reached");
     }
 
     /** The business cases left open are those holding no code point that is not whitespace. */
@@ -89,14 +91,12 @@ class ABusinessCaseIsReadPastTheGuardThatTrimsItTest {
 
     /** A class is drawn at both places, over the strings the guard lets the run get to. */
     @Test
-    void aClassIsDrawnAtEachPlace() {
+    void aClassIsDrawnAtTheBusinessCase() {
         Compilation compilation = ACompiledModel.compiles(Measured.MODEL);
         var evidence = compilation.db().ask(new Adequacy.Coverage("cases")).value()
                 .get("propose");
-        for (String path : new String[] {"businessCase", "opp.needs[*]"}) {
-            assertTrue(evidence.axes().stream().anyMatch(axis ->
-                    axis.path().equals(path) && !axis.classes().isEmpty()),
-                    () -> path + " has a class: " + evidence.axes());
-        }
+        assertTrue(evidence.axes().stream().anyMatch(axis ->
+                axis.path().equals("businessCase") && !axis.classes().isEmpty()),
+                () -> "businessCase has a class: " + evidence.axes());
     }
 }

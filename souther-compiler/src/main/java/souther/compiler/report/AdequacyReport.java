@@ -37,6 +37,7 @@ import souther.compiler.check.RuleRef;
 import souther.compiler.numeric.Towards;
 import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.BorderObligationPoint;
+import souther.compiler.partition.StopPastTheRepresentation;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.AuthoredPlacement;
@@ -4328,6 +4329,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             .append(NEW_LINE);
                 }
             }
+            // And where a run stops only past what the representation holds: said once, of each
+            // operation, and of no relation it comes before.
+            if (!partition.stopsPastTheRepresentation().isEmpty()) {
+                noted(out, page, new ReportMessage.StopsOnlyPastWhatARepresentationHolds(
+                        String.join(", ", partition.stopsPastTheRepresentation().stream()
+                                .map(each -> each.operation() + "@"
+                                        + writtenAtSaid(each.at(), rendering, declaredIn))
+                                .toList())));
+            }
         }
         // And a position whose rules this reading never arrived at, which names no rule because
         // nothing observed one. Its own line, so that a reader is not left reading an absent rule
@@ -6769,6 +6779,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                  List<WhereARunStopped> runsStopped) {
     }
 
+    /** Where {@code at} is written, as a page says a place: the source and line and column a
+     *  reader is sent to, or where the layouts put it where it is out of sight. */
+    private static String writtenAtSaid(SourcePos at, SourceRendering rendering,
+                                        SourceId declaredIn) {
+        return PublishedAt.of(Citation.of(at))
+                .map(place -> PlaceProse.said(place, rendering, declaredIn))
+                .orElseGet(() -> String.valueOf(rendering.layouts().resolve(at)));
+    }
+
     /**
      * What each construction on the way to a rule asks of a run, as the human report says it after
      * the rule: where the construction is written and what the numbers it is made of have to be.
@@ -6782,9 +6801,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
         List<String> each = new ArrayList<>();
         for (WhatAConstructionAsks one : asks) {
-            String at = PublishedAt.of(Citation.of(one.at()))
-                    .map(place -> PlaceProse.said(place, rendering, declaredIn))
-                    .orElseGet(() -> String.valueOf(rendering.layouts().resolve(one.at())));
+            String at = writtenAtSaid(one.at(), rendering, declaredIn);
             each.add(page.say(one.asks() instanceof WhatAConstructionAsks.Never
                     ? new ReportMessage.ConstructionNeverPassed(one.construction(), at)
                     : new ReportMessage.ConstructionAsks(one.construction(), at,
@@ -6882,10 +6899,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         if (!open.imagesNotShown().isEmpty()) {
             ArrayNode names = left.putArray("imagesNotShown");
             open.imagesNotShown().forEach(names::add);
-        }
-        if (!open.notShownGottenPast().isEmpty()) {
-            ArrayNode names = left.putArray("notShownGottenPast");
-            open.notShownGottenPast().forEach(names::add);
         }
     }
 
@@ -9335,6 +9348,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             caseExpansionRow(expanded.addObject(), told.get(at), numbered.get(at), places,
                     parts, sources);
         }
+        // And where a run stops only past what the representation holds, once each, where there
+        // is any.
+        if (!partition.stopsPastTheRepresentation().isEmpty()) {
+            ArrayNode stops = out.putArray("stopsPastTheRepresentation");
+            for (StopPastTheRepresentation each : partition.stopsPastTheRepresentation()) {
+                ObjectNode one = stops.addObject();
+                one.put("operation", each.operation());
+                // Where a reader can be sent: a place the sources lay out at a line.
+                PublishedAt.of(Citation.of(each.at()))
+                        .filter(place -> sources.layouts().resolve(place.at()) != null)
+                        .ifPresent(place -> at(one, place, sources));
+            }
+        }
     }
 
     /** One rule's line and what one of its cases was, as a row of {@code caseExpansions}. */
@@ -11606,11 +11632,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return leftOpen.map(BlockReason.RelationShownOverARegion::imagesNotShown)
                 .filter(names -> !names.isEmpty())
                 .map(names -> page.say(new ReportMessage.TheImageIsNotShown(
-                        String.join(", ", names))))
-                .orElse("")
-                + leftOpen.map(BlockReason.RelationShownOverARegion::notShownGottenPast)
-                .filter(names -> !names.isEmpty())
-                .map(names -> page.say(new ReportMessage.NotShownGottenPast(
                         String.join(", ", names))))
                 .orElse("");
     }

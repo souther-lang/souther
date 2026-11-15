@@ -10,23 +10,20 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
-import souther.compiler.semantics.CaseMapping;
-import souther.runtime.Strings;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * An exact equality on the right of {@code ||} is reached only past the left, which lowercases the
- * same string inside a closure over another list. A row holding that list empty works out no
- * conversion, and the equality is reached at every string — so no string of either of its places
- * is left open for the conversion. Where a rule holds the list to an entry, the conversion is
- * worked out on every run that gets there, and the strings it is not exact on stay open.
+ * same string inside a closure over another list. The lowercase stops a run only where its answer
+ * is longer than a {@code String} holds, which parts no strings: so whether a row may hold that
+ * list empty and work out no conversion, or a rule holds the list to an entry and every run that
+ * gets there works it out, the equality is reached at every string, and no string of either of its
+ * places is left open for the conversion.
  */
 class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
 
@@ -103,21 +100,30 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
         return open;
     }
 
+    /**
+     * The equality is reached at every string whether the list the conversion is worked out over
+     * may be empty, is held to an entry, is one of two lists of a record no rule ties, or is tied
+     * by a rule to the list the equality reads: held as long as it, or held to an entry wherever
+     * that one holds one.
+     */
     @Test
-    void theEqualityIsReachedAtEveryStringWhereTheListMayBeEmpty() {
-        List<String> open = leftOpenIn(FREE);
-        assertTrue(!open.contains("email") && !open.contains("emails[*]"), open.toString());
-    }
-
-    @Test
-    void theStringsTheConversionIsNotExactOnStayOpenWhereTheListHoldsOne() {
-        List<String> open = leftOpenIn(HELD);
-        assertTrue(open.contains("email") && open.contains("emails[*]"), open.toString());
+    void theEqualityIsReachedAtEveryStringWhateverTheListTheConversionIsWorkedOverHolds() {
+        for (String source : List.of(FREE, HELD)) {
+            List<String> open = leftOpenIn(source);
+            assertTrue(!open.contains("email") && !open.contains("emails[*]"),
+                    () -> source + open);
+        }
+        for (String rule : List.of("",
+                "\n    invariant List.length(domains) == List.length(emails)",
+                "\n    invariant List.length(emails) == 0 || List.length(domains) >= 1")) {
+            List<String> open = leftOpenIn(paired(rule));
+            assertTrue(!open.contains("email") && !open.contains("pair.emails[*]"),
+                    () -> rule + " " + open);
+        }
     }
 
     /**
-     * What each place is left open for, by why: the place, then the functions whose image is not
-     * shown, then those a run is not shown to get past.
+     * What each place is left open for: the place, then the functions whose image is not shown.
      */
     private static List<String> leftOpenFor(String source) {
         Compilation model = ACompiledModel.measured(source,
@@ -132,22 +138,13 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
                         JsonNode open = stop.path("leftOpen");
                         if (!open.isMissingNode()) {
                             out.add(each.path("subject").path("path").asString() + " image "
-                                    + open.path("imagesNotShown") + " past "
-                                    + open.path("notShownGottenPast"));
+                                    + open.path("imagesNotShown"));
                         }
                     }
                 }
             }
         }
         return out;
-    }
-
-    /** The conversion is worked out on every run to the equality, and the strings it is not
-     *  exact on are open for whether it gets the run past, not for its image. */
-    @Test
-    void theStringsAreOpenForGettingPastTheConversionNotForItsImage() {
-        List<String> open = leftOpenFor(HELD);
-        assertTrue(open.contains("email image  past [\"String.lowercase\"]"), open.toString());
     }
 
     /**
@@ -185,12 +182,6 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
                 """);
         assertTrue(open.stream().anyMatch(each -> each.contains("image [\"String.lowercase\"")),
                 open.toString());
-    }
-
-    @Test
-    void listsOfOneRecordNoRuleTiesAreReadAsListsApart() {
-        List<String> open = leftOpenIn(paired(""));
-        assertTrue(!open.contains("email") && !open.contains("pair.emails[*]"), open.toString());
     }
 
     /**
@@ -281,35 +272,23 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
     }
 
     /**
-     * Whatever holds the email short, nothing is left open for getting past the conversion: a
-     * length rule is held as a number whatever length it names, where the strings it leaves are
-     * no language the reading writes out, and a format is held by the strings it admits, alone or
-     * beside a length rule.
-     *
-     * <p>And each held by one rule is read: the places left unanswered are the ones the email
-     * held to 254 leaves, so that a relation not read at all, which leaves nothing open for
-     * anything, is not taken for one that leaves nothing open for getting past. A format beside a
-     * length rule is no set of strings the relation is read over, and leaves both lists unread.
+     * Whatever holds the email short, the relation is read as where it is held to 254: a length
+     * rule is held as a number whatever length it names, where the strings it leaves are no
+     * language the reading writes out, and a format is held by the strings it admits, alone or
+     * beside a length rule. The places left unanswered are the ones the email held to 254 leaves,
+     * so that a relation not read at all, which leaves nothing open for anything, is not taken
+     * for one read.
      */
     @Test
-    void nothingIsOpenForGettingPastTheConversionWhereTheEmailIsHeldShort() {
+    void whateverHoldsTheEmailShortTheRelationIsReadAsWhereItIsHeldTo254() {
         List<String> read = unansweredIn(heldBy("String.length(value) <= 254",
                 "String.lowercase(%s)", "a.com"));
-        Map<String, Boolean> rules = new LinkedHashMap<>();
-        rules.put("String.length(value) <= 254", true);
-        rules.put("String.length(value) <= 100000", true);
-        rules.put("String.matches(\"[^\\\\s]{1,64}\", value)", true);
-        rules.put("String.matches(\"[^\\\\s]+\", value) && String.length(value) <= 254", false);
-        rules.put("value == \"a.com\" || value == \"x@b.com\" || value == \"İ\"", true);
-        rules.forEach((rule, isRead) -> {
-            String model = heldBy(rule, "String.lowercase(%s)", "a.com");
-            List<String> open = leftOpenFor(model);
-            assertTrue(open.stream().allMatch(each -> each.endsWith(" past ")),
-                    rule + " " + open);
-            if (isRead) {
-                assertEquals(read, unansweredIn(model), rule);
-            }
-        });
+        for (String rule : List.of("String.length(value) <= 100000",
+                "String.matches(\"[^\\\\s]{1,64}\", value)",
+                "String.matches(\"[^\\\\s]+\", value) && String.length(value) <= 254",
+                "value == \"a.com\" || value == \"x@b.com\" || value == \"İ\"")) {
+            assertEquals(read, unansweredIn(heldBy(rule, "String.lowercase(%s)", "a.com")), rule);
+        }
     }
 
     /**
@@ -434,7 +413,8 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
      * A digit and a combining acute are outside the map and left alone by both conversions, so a
      * string of them is its own answer through any of them done in turn: neither side is open,
      * the other side holding every answer there is. A sharp s is left alone by lowercase and not
-     * by uppercase, so through the two it is not shown its own answer.
+     * by uppercase, so through the two it is not shown its own answer, and the other side is open
+     * for the uppercase's image.
      */
     @Test
     void aStringEveryConversionDoneInTurnLeavesAloneIsItsOwnAnswer() {
@@ -460,63 +440,28 @@ class AnEqualityPastAConversionARowNeedNotWorkOutIsReadTest {
         }
         List<String> sharp = leftOpenFor(model.formatted("ß", "String.uppercase(String.lowercase(a))",
                 "ß", "SS", "ß"));
-        assertTrue(sharp.stream().anyMatch(each -> each.startsWith("a image [")), sharp.toString());
+        assertEquals(List.of("b image [\"String.uppercase\"]"), sharp);
     }
 
-    /** And where it may be any length, the strings the map is not exact on may stop the run. */
+    /** An email of any length is read as one held short: the strings the map is not exact on
+     *  stop the run only past what a {@code String} holds, and are open for nothing. */
     @Test
-    void anEmailOfAnyLengthIsOpenForGettingPastTheConversion() {
-        List<String> open = leftOpenFor(heldBy("String.matches(\"[^\\\\s]+\", value)",
-                "String.lowercase(%s)", "a.com"));
-        assertTrue(open.contains("email image  past [\"String.lowercase\"]"), open.toString());
+    void anEmailOfAnyLengthIsReadAsOneHeldShort() {
+        assertEquals(leftOpenFor(heldBy("String.length(value) <= 254", "String.lowercase(%s)",
+                        "a.com")),
+                leftOpenFor(heldBy("String.matches(\"[^\\\\s]+\", value)",
+                        "String.lowercase(%s)", "a.com")));
     }
 
-    /** Two conversions in turn, the second handed what the first answered. */
+    /** Two conversions in turn, the second handed what the first answered: an email held short
+     *  and one of any length are read alike, and the list read beside them is read whole. */
     @Test
     void anEmailHeldShortGetsPastTwoConversionsInTurn() {
         String twice = "String.uppercase(String.lowercase(%s))";
-        List<String> held = leftOpenFor(heldBy("String.length(value) <= 254", twice, "A.COM"));
-        assertTrue(held.stream().allMatch(each -> each.endsWith(" past ")), held.toString());
-        assertTrue(!unansweredIn(heldBy("String.length(value) <= 254", twice, "A.COM"))
-                .contains("emails[*]"));
-        List<String> free = leftOpenFor(heldBy("true", twice, "A.COM"));
-        assertTrue(free.contains("emails[*] image  past [\"String.lowercase\",\"String.uppercase\"]"),
-                free.toString());
-    }
-
-    /**
-     * The length up to which a conversion is shown gotten past at whatever a string holds: a
-     * {@code String}'s longest over the most one code point comes to in the answer, four for
-     * either conversion as written or decomposed, and over that again for each conversion done in
-     * turn.
-     */
-    @Test
-    void theLengthShownGottenPastIsAStringsLongestOverWhatEachConversionGrowsBy() {
-        long once = Strings.LONGEST_TEXT / 4;
-        assertEquals(Strings.LONGEST_TEXT,
-                CaseMaps.gottenPastAtEveryStringUpTo(CaseMapping.NONE));
-        assertEquals(once, CaseMaps.gottenPastAtEveryStringUpTo(CaseMapping.LOWERCASE));
-        assertEquals(once, CaseMaps.gottenPastAtEveryStringUpTo(CaseMapping.UPPERCASE));
-        assertEquals(once / 4, CaseMaps.gottenPastAtEveryStringUpTo(
-                new CaseMapping.Uppercase(CaseMapping.LOWERCASE)));
-    }
-
-    /** As long as each other: an entry for the equality is an entry to work the conversion over. */
-    @Test
-    void theStringsStayOpenWhereARuleHoldsTheListsToOneLength() {
-        List<String> open = leftOpenIn(paired(
-                "\n    invariant List.length(domains) == List.length(emails)"));
-        assertTrue(open.contains("email") && open.contains("pair.emails[*]"), open.toString());
-    }
-
-    /**
-     * The same said as a choice, which the region holds as no bound on either list alone: the tie
-     * is the rule's, and a row emptying the one beside the other's entry breaks it.
-     */
-    @Test
-    void theStringsStayOpenWhereARuleSaysTheOtherHoldsOneWhereThisDoes() {
-        List<String> open = leftOpenIn(paired(
-                "\n    invariant List.length(emails) == 0 || List.length(domains) >= 1"));
-        assertTrue(open.contains("email") && open.contains("pair.emails[*]"), open.toString());
+        String held = heldBy("String.length(value) <= 254", twice, "A.COM");
+        String free = heldBy("true", twice, "A.COM");
+        assertEquals(leftOpenFor(held), leftOpenFor(free));
+        assertTrue(!unansweredIn(held).contains("emails[*]"), () -> unansweredIn(held).toString());
+        assertTrue(!unansweredIn(free).contains("emails[*]"), () -> unansweredIn(free).toString());
     }
 }

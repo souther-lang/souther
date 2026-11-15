@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -81,18 +82,25 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
         return out;
     }
 
-    /** The relation is read whichever end of the length the rule places. */
+    /**
+     * The relation is read whichever end of the length the rule places: the text is shown over a
+     * region, what is left out of it being the strings the lowercase's image is not shown for, and
+     * no run is said to stop on the way to it, as the lowercase stops one only past what a
+     * {@code String} holds. The needs are read over the strings the rule leaves them, whichever
+     * those are. A rule leaving every length is no bound, and the relation is read as it is over a
+     * string no rule holds.
+     */
     @Test
     void theLengthBoundDoesNotDecideWhetherTheRelationIsRead() {
-        for (String rule : List.of("String.length(value) >= 0", "String.length(value) >= 1",
-                "String.length(value) >= 2", "String.length(value) > 0",
-                "String.length(value) >= 1 && String.length(value) <= 5",
+        TreeSet<String> textOverARegion = new TreeSet<>(List.of("relation_shown_over_a_region"));
+        for (String rule : List.of("String.length(value) >= 1", "String.length(value) > 0",
+                "String.length(value) >= 2", "String.length(value) >= 1 && String.length(value) <= 5",
                 "String.length(value) == 3", "String.length(value) < 8")) {
-            NavigableSet<String> reasons = aboutTheRelation(measuredNeed(rule, CONTAINS_LOWERED));
-            assertTrue(reasons.contains("relation_shown_over_a_region"), () -> rule + " " + reasons);
-            assertFalse(reasons.contains("relation_not_shown_to_reach_every_value"),
-                    () -> rule + " " + reasons);
+            assertEquals(textOverARegion, aboutTheRelation(measuredNeed(rule, CONTAINS_LOWERED)),
+                    rule);
         }
+        assertEquals(aboutTheRelation(measured("data Need = { value: String }", CONTAINS_LOWERED)),
+                aboutTheRelation(measuredNeed("String.length(value) >= 0", CONTAINS_LOWERED)));
     }
 
     /**
@@ -278,8 +286,12 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
         }
     }
 
-    /** The shape of the CRM's {@code answersANeed}: the needs are a list of values held only by a
-     *  length rule, the business case is any string, and both are lowercased. */
+    /**
+     * The shape of the CRM's {@code answersANeed}: the needs are a list of values held only by a
+     * length rule, the business case is any string, and both are lowercased. The business case is
+     * shown over a region; every need, of a code point or more, is inside some business case and
+     * outside another, so the relation tells none of them apart.
+     */
     @Test
     void aBusinessCaseIsReadAgainstNeedsHeldOnlyByALengthRule() {
         Compilation compilation = ACompiledModel.measured("""
@@ -296,8 +308,13 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
                 behavior f : (businessCase: String, needs: Needs) -> Bool
                 let f (businessCase, needs) = answersANeed(businessCase, needs)
                 """, Adequacy.Asked.fullReport());
-        String json = json(compilation);
-        assertFalse(json.contains("relation_not_shown_to_reach_every_value"), json);
-        assertTrue(json.contains("relation_shown_over_a_region"), json);
+        Map<String, List<UndividedPosition.Reason>> byPlace = new TreeMap<>();
+        compilation.db().ask(new Adequacy.Coverage("demo")).value().get("f").notRead()
+                .forEach(each -> byPlace.computeIfAbsent(each.at(), any -> new ArrayList<>())
+                        .add(each.reason()));
+        assertEquals(Map.of(
+                "businessCase", List.of(UndividedPosition.Reason.RELATION_SHOWN_OVER_A_REGION),
+                "needs[*]", List.of(UndividedPosition.Reason.RULE_TELLS_NOTHING_APART)),
+                byPlace);
     }
 }

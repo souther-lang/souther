@@ -40,16 +40,11 @@ class AStringHeldByBothSidesOfAContainmentIsItsOwnPartnerTest {
         assertEquals(Map.of(), open("Short", "String.lowercase(%s.value)", SHORT));
     }
 
+    /** However long the strings are: where the lowercase stops a run is where a {@code String}
+     *  stops, which no value is open for, as none is where neither string is converted. */
     @Test
-    void aContainmentOfTwoLowercasedStringsIsOpenOnlyWhereTheLowercaseMayStop() {
-        Map<String, List<BlockReason.RelationShownOverARegion>> open =
-                open("String", "String.lowercase(%s)", "");
-
-        assertEquals(List.of("bc", "p"), open.keySet().stream().sorted().toList());
-        open.values().forEach(reasons -> reasons.forEach(each -> {
-            assertEquals(List.of("String.lowercase"), each.notShownGottenPast());
-            assertEquals(List.of(), each.imagesNotShown());
-        }));
+    void aContainmentOfTwoLowercasedStringsOfAnyLengthLeavesNoStringOpen() {
+        assertEquals(Map.of(), open("String", "String.lowercase(%s)", ""));
     }
 
     /**
@@ -76,8 +71,8 @@ class AStringHeldByBothSidesOfAContainmentIsItsOwnPartnerTest {
 
     /**
      * The same where both are lowercased: the starters written after the string looked for are
-     * ones the lowercase cuts at, so its lowercase is inside the lowercase of what they make. What
-     * is open of it is the strings the lowercase may stop on, and nothing for the image.
+     * ones the lowercase cuts at, so its lowercase is inside the lowercase of what they make, and
+     * nothing of it is open: what is open is the short strings of the one looked in.
      */
     @Test
     void aLowercasedStringLookedForIsInsideWhatItMakesWithStartersTheLowercaseCutsAt() {
@@ -93,10 +88,7 @@ class AStringHeldByBothSidesOfAContainmentIsItsOwnPartnerTest {
                         }
                         """, "f");
 
-        open.get("b").forEach(each -> {
-            assertEquals(List.of(), each.imagesNotShown());
-            assertEquals(List.of("String.lowercase"), each.notShownGottenPast());
-        });
+        assertEquals(List.of("a"), List.copyOf(open.keySet()), open::toString);
         assertEquals(3L, open.get("a").getFirst().shorterThan());
     }
 

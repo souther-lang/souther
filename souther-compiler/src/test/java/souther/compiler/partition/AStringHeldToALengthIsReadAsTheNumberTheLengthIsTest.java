@@ -148,13 +148,13 @@ class AStringHeldToALengthIsReadAsTheNumberTheLengthIsTest {
      * of {@code b} with a number near the greatest {@code Int} gets a run to the equality only
      * with a {@code b} of two code points or fewer: the longer ones are open for that, and not for
      * the lowercase's image, while the strings of {@code a} the partner holds at those lengths are
-     * open for the image, and so are the strings of {@code a} so long that the lowercase may end
-     * the run before the equality.
+     * open for the image. A string of {@code a} so long that the lowercase's answer is longer than
+     * a {@code String} holds ends the run where the representation stops, and is open for nothing.
      */
     @Test
     void theOperationsAreSaidBesideTheValuesOpenForThemAndNoOthers() {
         assertEquals(List.of(
-                        "a {\"longerThan\":67108863,\"shorterThan\":3,\"atAnyLength\":false,"
+                        "a {\"shorterThan\":3,\"atAnyLength\":false,"
                                 + "\"imagesNotShown\":[\"String.lowercase\"]}",
                         "b {\"longerThan\":2,\"atAnyLength\":false}"),
                 leftOpenIn("""

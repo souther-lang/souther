@@ -8809,15 +8809,6 @@
                           },
                           "description": "The functions of the library the other value is derived through whose image over the strings of the position is not shown, so the values they take it to are not among those the classes hold. Present where some of the values open are open for them, at the lengths `longerThan`, `shorterThan` and `atAnyLength` say: a value of a length the other value is not held to may still be what such a function takes one of its values to, lengthened or shortened, and is open for that. Sorted."
                         },
-                        "notShownGottenPast": {
-                          "type": "array",
-                          "minItems": 1,
-                          "uniqueItems": true,
-                          "items": {
-                            "type": "string"
-                          },
-                          "description": "The functions of the library a run gets to the relation past, each ending a run where its answer has more code points than a String holds, that are not shown to answer within that for some strings of the position: those strings are not among those the classes hold. Present where some of the values open are open for them, at the lengths `longerThan`, `shorterThan` and `atAnyLength` say. Sorted."
-                        },
                         "codePoints": {
                           "type": "array",
                           "minItems": 1,
@@ -9092,6 +9083,28 @@
               "sentTo": {
                 "$ref": "#/$defs/at",
                 "description": "Where inside the rule a reader goes, for an entry about a part of it rather than about the whole. `rule` beside this sends them to the rule, which is the whole answer wherever what they lift is the rule; an end a choice left open is lifted at the `||`, and the clause `rule` names reads perfectly well; where the arithmetic stopped, it is the call the arithmetic failed to take apart, which is where lifting begins. Absent where the rule is the whole of it, and absent where the part is in a text this document cannot point at. Part of what tells two entries apart: two choices of one clause agree about the position, the rule and the reason, so without this the second was a repeat of the first."
+              }
+            }
+          }
+        },
+        "stopsPastTheRepresentation": {
+          "type": "array",
+          "minItems": 1,
+          "description": "The operations of the body that end a run only where an answer would be longer than a String holds or a collection would hold more elements than one holds, each once. Where the representation stops is no distinction a model made, so the classes of every position are drawn as though a run gets past these, and no value is open for them; this is where a reader is told that a run stops there. Absent where there is none.",
+          "items": {
+            "type": "object",
+            "required": [
+              "operation"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "operation": {
+                "type": "string",
+                "description": "The operation as the library names it, or the operator as it is written."
+              },
+              "at": {
+                "$ref": "#/$defs/at",
+                "description": "Where it is written, present where a reader can be sent there."
               }
             }
           }
