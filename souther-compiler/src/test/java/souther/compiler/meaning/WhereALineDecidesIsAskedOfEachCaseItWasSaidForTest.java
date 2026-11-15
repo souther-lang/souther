@@ -264,9 +264,9 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         assertEquals(1 << (choices - held), found.decidesIn().size(),
                 "a case for each way of choosing the three left open");
         assertEquals(Set.of(), found.notWorkedOut());
-        assertEquals(24, asking.asked().size(),
-                "some one holding, the three held, each of the three they settle both ways, and"
-                        + " the tree of the three left open");
+        assertEquals(22, asking.asked().size(),
+                "some one holding, the three held asked once together before the choices, each of"
+                        + " the three they settle both ways, and the tree of the three left open");
     }
 
     /** The parts {@code condition} is the conjunction of. */
@@ -418,20 +418,29 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
      * Where the steps run out, the cases kept are among the ones that hold and the figure the
      * asking stopped at is said: a case not reached is not taken for one that does not hold.
      *
-     * <p>Eight choices of two parts each, so that the walk is longer than it is allowed to be
-     * though every way of choosing is a case that can be taken apart.
+     * <p>As many choices of two as make as many ways as are taken apart, each alternative a truth
+     * of its own and one every case holds written again after it, so that the walk is longer than
+     * it is allowed to be though every way of choosing is a case that can be taken apart.
      */
     @Test
     void whereTheStepsRunOutWhatWasNotReachedIsSaidAndNotTakenForAnswered() {
-        int choices = 8;
+        int choices = Integer.numberOfTrailingZeros(Integer.highestOneBit(TAKEN_APART));
+        int prefixes = (1 << (choices + 1)) - 2;
+        int writtenAgain = CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum() / prefixes;
         Proposition common = truth("u");
         List<DecidingCase.Cases> factors = new ArrayList<>();
         Set<Proposition> holding = new LinkedHashSet<>();
         for (int at = 0; at < choices; at++) {
             Proposition yes = truth("c" + at);
+            List<DecidingCase.Cases> taken = new ArrayList<>(List.of(one(yes)));
+            List<DecidingCase.Cases> left = new ArrayList<>(List.of(one(yes.denied())));
+            for (int again = 0; again < writtenAgain; again++) {
+                taken.add(one(common));
+                left.add(one(common));
+            }
             factors.add(new DecidingCase.Cases.EachOf(List.of(
-                    new DecidingCase.Cases.Together(List.of(one(yes), one(common))),
-                    new DecidingCase.Cases.Together(List.of(one(yes.denied()), one(common))))));
+                    new DecidingCase.Cases.Together(taken),
+                    new DecidingCase.Cases.Together(left))));
         }
         for (int mask = 0; mask < 1 << choices; mask++) {
             List<Proposition> chosen = new ArrayList<>();
@@ -691,8 +700,9 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
     /**
      * Cases chosen through several parts each cost a step for each part and each alternative
      * taken; past the steps, what was asked is no proof either way, and the figure is the one
-     * counting the steps. As many cases as are taken apart, each chosen through four parts no two
-     * of them share, every part but the last leaving rows on both sides, are more steps than that.
+     * counting the steps. As many cases as are taken apart, each chosen through {@link #DEPTH}
+     * parts no two of them share, every part but the last leaving rows on both sides, are more
+     * steps than that.
      */
     @Test
     void pastTheStepsNothingIsProvedAndTheFigureIsSaid() {
@@ -756,8 +766,13 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         assertEquals(List.of(SAID), asking.asked(), "and asked nothing but the condition");
     }
 
-    /** How many parts each of {@link #deepCases} is chosen through. */
-    private static final int DEPTH = 4;
+    /**
+     * How many parts each of {@link #deepCases} is chosen through: as many steps as the figure
+     * lets each of as many cases as are taken apart take, so that those cases, each a step for its
+     * alternative and one for each part, are more steps than that.
+     */
+    private static final int DEPTH = CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum()
+            / CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
 
     /** {@code count} cases of one truth each. */
     private static DecidingCase.Cases manyCases(int count) {
