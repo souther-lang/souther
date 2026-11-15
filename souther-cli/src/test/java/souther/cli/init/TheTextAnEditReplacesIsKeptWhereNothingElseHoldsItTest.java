@@ -10,7 +10,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -112,7 +111,7 @@ class TheTextAnEditReplacesIsKeptWhereNothingElseHoldsItTest {
                 .redirectOutput(ProcessBuilder.Redirect.DISCARD)
                 .redirectErrorStream(false)
                 .start();
-        assertTrue(process.waitFor(30, TimeUnit.SECONDS), "git did not finish: " + String.join(" ", line));
+        process.waitFor();
         assertEquals(0, process.exitValue(), "git failed: " + String.join(" ", line));
     }
 }

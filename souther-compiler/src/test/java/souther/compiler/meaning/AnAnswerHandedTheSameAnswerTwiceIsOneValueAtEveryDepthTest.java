@@ -6,16 +6,19 @@ import souther.compiler.hash.ValueHash;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.types.ValueName;
+import souther.test.Growth;
+import souther.test.Visits;
 
-import java.time.Duration;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.SequencedMap;
 import java.util.Set;
+import java.util.function.IntFunction;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -24,6 +27,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * positions it is made of and what it spells are of the calls and not of the paths through them.
  */
 class AnAnswerHandedTheSameAnswerTwiceIsOneValueAtEveryDepthTest {
+
+    /** Deep enough that a visit to each way down is four thousand and ninety-six, which is well
+     *  past what a visit to each call comes to. */
+    private static final int DEEP = 12;
 
     private static final ValueName.Stdlib FLOOR_MOD = ValueName.Stdlib.operation("Int", "floorMod");
 
@@ -60,48 +67,83 @@ class AnAnswerHandedTheSameAnswerTwiceIsOneValueAtEveryDepthTest {
         return chain(depth, field);
     }
 
+    /**
+     * That how many times {@code asked} goes into the answers at {@link #DEEP} is no more than
+     * eight times what it is at half of it. A reader that goes down the calls once each goes into
+     * twice as many, and one that goes down every way goes into sixty-four times as many. Each
+     * depth is asked of a chain made beforehand.
+     */
+    private static void assertCostIsOfTheCallsAndNotTheWays(IntFunction<Runnable> asked) {
+        try (Visits visits = Visits.into(List.of(Quantity.class, Derivation.class))) {
+            SequencedMap<Integer, Long> bySize = new LinkedHashMap<>();
+            bySize.put(DEEP / 2, visits.during(asked.apply(DEEP / 2)));
+            bySize.put(DEEP, visits.during(asked.apply(DEEP)));
+            Growth.eachAtMost(bySize, 8, 1);
+        }
+    }
+
     @Test
     void twoChainsMadeSeparatelyAreOneValueWhateverIsSharedInThem() {
-        Quantity shared = chain(64, "x");
+        Quantity shared = chain(DEEP, "x");
         Quantity unsharedAtEveryCall = unshared(12, "x");
-        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
-            assertEquals(shared, chain(64, "x"));
-            assertEquals(shared.hashCode(), chain(64, "x").hashCode());
-            assertEquals(chain(12, "x"), unsharedAtEveryCall);
-            assertEquals(chain(12, "x").spelling(), unsharedAtEveryCall.spelling());
-            assertEquals(chain(12, "x").hashCode(), unsharedAtEveryCall.hashCode());
+        assertEquals(shared, chain(DEEP, "x"));
+        assertEquals(shared.hashCode(), chain(DEEP, "x").hashCode());
+        assertEquals(chain(12, "x"), unsharedAtEveryCall);
+        assertEquals(chain(12, "x").spelling(), unsharedAtEveryCall.spelling());
+        assertEquals(chain(12, "x").hashCode(), unsharedAtEveryCall.hashCode());
+
+        assertCostIsOfTheCallsAndNotTheWays(depth -> {
+            Quantity left = chain(depth, "x");
+            Quantity right = chain(depth, "x");
+            return () -> {
+                assertEquals(left, right);
+                assertEquals(left.hashCode(), right.hashCode());
+            };
         });
     }
 
     @Test
     void whatTheyAreMadeOfTellsTwoApart() {
-        assertNotEquals(chain(40, "x"), chain(40, "y"));
-        assertNotEquals(chain(40, "x"), chain(41, "x"));
-        assertNotEquals(chain(40, "x").spelling(), chain(40, "y").spelling());
-        assertNotEquals(chain(40, "x").spelling(), chain(41, "x").spelling());
-        Quantity a = new Quantity.WhatAnOperationAnswers(FLOOR_MOD, List.of(chain(30, "x"), input("y")));
-        Quantity b = new Quantity.WhatAnOperationAnswers(FLOOR_MOD, List.of(input("y"), chain(30, "x")));
+        assertNotEquals(chain(DEEP, "x"), chain(DEEP, "y"));
+        assertNotEquals(chain(DEEP, "x"), chain(DEEP + 1, "x"));
+        assertNotEquals(chain(DEEP, "x").spelling(), chain(DEEP, "y").spelling());
+        assertNotEquals(chain(DEEP, "x").spelling(), chain(DEEP + 1, "x").spelling());
+        Quantity a = new Quantity.WhatAnOperationAnswers(FLOOR_MOD, List.of(chain(DEEP, "x"), input("y")));
+        Quantity b = new Quantity.WhatAnOperationAnswers(FLOOR_MOD, List.of(input("y"), chain(DEEP, "x")));
         assertNotEquals(a, b);
-        Quantity negated = new Quantity.WhatAnOperationAnswers(NEGATE, List.of(chain(30, "x")));
-        Quantity floored = new Quantity.WhatAnOperationAnswers(FLOOR_MOD, List.of(chain(30, "x")));
+        Quantity negated = new Quantity.WhatAnOperationAnswers(NEGATE, List.of(chain(DEEP, "x")));
+        Quantity floored = new Quantity.WhatAnOperationAnswers(FLOOR_MOD, List.of(chain(DEEP, "x")));
         assertNotEquals(negated, floored);
         assertNotEquals(negated.spelling(), floored.spelling());
     }
 
     @Test
     void theInputsAnAnswerIsMadeOfAreEachOnceInTheOrderTheyAreHandedIn() {
-        Quantity.WhatAnOperationAnswers deep = (Quantity.WhatAnOperationAnswers) chain(64, "x");
+        Quantity.WhatAnOperationAnswers deep = (Quantity.WhatAnOperationAnswers) chain(DEEP, "x");
         assertEquals(1, deep.positionsItIsMadeOf().size());
         Quantity.WhatAnOperationAnswers mixed = new Quantity.WhatAnOperationAnswers(FLOOR_MOD,
-                List.of(chain(50, "y"), input("x"), chain(50, "z"), chain(50, "y"), input("x")));
+                List.of(chain(DEEP, "y"), input("x"), chain(DEEP, "z"), chain(DEEP, "y"),
+                        input("x")));
         assertEquals(List.of(input("y").term(), input("x").term(), input("z").term()),
                 mixed.positionsItIsMadeOf());
+
+        assertCostIsOfTheCallsAndNotTheWays(depth -> {
+            Quantity.WhatAnOperationAnswers answer = new Quantity.WhatAnOperationAnswers(FLOOR_MOD,
+                    List.of(chain(depth, "y"), input("x"), chain(depth, "z"), chain(depth, "y")));
+            return answer::positionsItIsMadeOf;
+        });
     }
 
     @Test
     void aDeepAnswerSpellsInWhatGrowsWithItsCallsAndNotWithTheWaysThroughThem() {
-        Spelling spelling = chain(200, "x").spelling();
-        assertTrue(spelling.length() < 20_000, "spelled in " + spelling.length());
+        assertCostIsOfTheCallsAndNotTheWays(depth -> {
+            Quantity answer = chain(depth, "x");
+            return answer::spelling;
+        });
+        int spelledAtHalf = chain(DEEP / 2, "x").spelling().length();
+        int spelled = chain(DEEP, "x").spelling().length();
+        assertTrue(spelled <= 3 * spelledAtHalf, "spelled in " + spelledAtHalf + " at "
+                + DEEP / 2 + " calls and " + spelled + " at " + DEEP);
     }
 
     /**

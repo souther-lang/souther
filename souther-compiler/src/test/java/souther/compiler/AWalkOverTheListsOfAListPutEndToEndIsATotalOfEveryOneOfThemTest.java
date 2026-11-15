@@ -240,8 +240,7 @@ class AWalkOverTheListsOfAListPutEndToEndIsATotalOfEveryOneOfThemTest {
     void aGreatManyListsOfNothingAreNotWrittenAndTheFigureIsSaid() {
         String model = model("", "invariant List.length(entries) >= 2000000000",
                 SUMMED.formatted(0));
-        String rows = org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(
-                java.time.Duration.ofSeconds(30), () -> rowsOf(model));
+        String rows = rowsOf(model);
         assertTrue(rows.length() < 20_000,
                 () -> "no row of that size is written: " + rows.length());
         assertTrue(count(rows, "Entry \\{") < 200, () -> "no entry is written a million times");

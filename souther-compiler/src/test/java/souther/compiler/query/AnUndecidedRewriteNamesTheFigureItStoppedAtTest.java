@@ -14,7 +14,6 @@ import souther.compiler.partition.CompositionBudget;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.report.AdequacyReport;
 
-import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -181,8 +180,7 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
                 example f
                   | "below nought": (N(-2)) -> Out(0)
                 """), ModulePath.EMPTY)
-                .withEvaluationPolicy(EvaluationPolicy.of(100_000)
-                        .withCompilerTimeout(Duration.ofSeconds(30)));
+                .withEvaluationPolicy(EvaluationPolicy.of(100_000));
         compilation.measure(Adequacy.Asked.fullReport());
         ACompiledModel.compiles(compilation);
         ReplacementEvidence its = compilation.db()

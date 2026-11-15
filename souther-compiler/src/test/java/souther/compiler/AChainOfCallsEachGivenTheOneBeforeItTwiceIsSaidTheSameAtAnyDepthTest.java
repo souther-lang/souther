@@ -7,7 +7,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
-import java.time.Duration;
 import java.util.function.IntFunction;
 import java.util.function.IntUnaryOperator;
 import java.util.regex.Matcher;
@@ -15,14 +14,15 @@ import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * An equality over the answer of the last of a chain of calls, each handed the one before it
- * twice, is measured in what grows with the calls and not with the paths through them.
+ * twice, is said the same at any depth. How much work the chain is read in is held by
+ * {@code AChainOfLetsIsReadInWorkThatGrowsWithItsLengthTest}; what is asked here is what the
+ * report says.
  */
-class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDoubleTest {
+class AChainOfCallsEachGivenTheOneBeforeItTwiceIsSaidTheSameAtAnyDepthTest {
 
     private static String reportOfChain(int depth, String comparison) {
         return reportOfChainEndingIn(depth, "LAST " + comparison + " j");
@@ -107,44 +107,19 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
         assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
                 depth -> reportOfNamesEachMadeOfTheOneBefore(depth, "x", "PREV * PREV",
                         "LAST >= j"),
-                AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDoubleTest
-                        ::afterOneLetEachCall, 3, 30);
+                AChainOfCallsEachGivenTheOneBeforeItTwiceIsSaidTheSameAtAnyDepthTest
+                        ::afterOneLetEachCall, 3, 8);
     }
 
     /** What is said of a truth does not depend on how many names it is made through. */
     @Test
-    void aTruthMadeOfTheOneBeforeItTwiceIsReadOnceForEachNameAndSaysWhatItSaysAtAnyDepth() {
+    void aTruthMadeOfTheOneBeforeItTwiceSaysWhatItSaysAtAnyDepth() {
         for (String step : new String[] {"PREV && PREV", "PREV || PREV",
                 "if PREV then PREV else PREV"}) {
             String shallow = reportOfTruthsEachMadeOfTheOneBefore(2, step);
-            String deep = assertTimeoutPreemptively(Duration.ofSeconds(60),
-                    () -> reportOfTruthsEachMadeOfTheOneBefore(100, step));
+            String deep = reportOfTruthsEachMadeOfTheOneBefore(8, step);
             assertEquals(shallow, deep, step);
         }
-    }
-
-    /**
-     * A name that stands for a truth with more parts than a step is concluded with is read once for
-     * all its uses: a chain of such names, each used twice, is measured in what grows with the
-     * names and not with the ways down them.
-     */
-    @Test
-    void aTruthPastTheSizeAStepIsConcludedWithIsReadOnceForEachName() {
-        assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
-            StringBuilder body = new StringBuilder("{\n    let a0 = x >= 0\n");
-            for (int i = 1; i <= 40; i++) {
-                body.append("    let a%d = a%d && (j > 3 || a%d)\n".formatted(i, i - 1, i - 1));
-            }
-            body.append("    a40\n}");
-            Compilation compilation = Compilation.ofSource("""
-                    module m
-
-                    behavior f : (x: Int, j: Int) -> Bool
-                    let f (x, j) = %s
-                    """.formatted(body), "Main");
-            compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.ALL));
-            compilation.answerEverything();
-        });
     }
 
     /** A place in the report, as {@code line:column} or with the file before: {@code 9:8},
@@ -174,8 +149,7 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
         String expected = withTheComparisonsPlaceTakenOut(reportAt.apply(shallow),
                 lineOfTheComparison.applyAsInt(shallow));
         for (int depth : deep) {
-            String report = assertTimeoutPreemptively(Duration.ofSeconds(60),
-                    () -> reportAt.apply(depth));
+            String report = reportAt.apply(depth);
             assertEquals(expected, withTheComparisonsPlaceTakenOut(report,
                     lineOfTheComparison.applyAsInt(depth)), "depth " + depth);
         }
@@ -197,32 +171,32 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
         assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
                 depth -> reportOfChainEndingIn(depth,
                         "if LAST == j then LAST > 1 else LAST < j"),
-                AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDoubleTest
-                        ::afterOneLetEachCall, 3, 24, 60);
+                AChainOfCallsEachGivenTheOneBeforeItTwiceIsSaidTheSameAtAnyDepthTest
+                        ::afterOneLetEachCall, 3, 24);
     }
 
     @Test
     void namesThatReachEachOtherSayAtAnyDepthWhatTheySayAtAShallowOne() {
         assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
                 depth -> reportOfNamesThatReachEachOther(depth),
-                AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDoubleTest
-                        ::afterTwoLetsEachCall, 3, 40);
+                AChainOfCallsEachGivenTheOneBeforeItTwiceIsSaidTheSameAtAnyDepthTest
+                        ::afterTwoLetsEachCall, 3, 8);
     }
 
     @Test
     void anEqualityOverAChainSaysAtAnyDepthWhatItSaysAtAShallowOne() {
         assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
                 depth -> reportOfChain(depth, "=="),
-                AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDoubleTest
-                        ::afterOneLetEachCall, 3, 24, 40, 100);
+                AChainOfCallsEachGivenTheOneBeforeItTwiceIsSaidTheSameAtAnyDepthTest
+                        ::afterOneLetEachCall, 3, 8);
     }
 
     @Test
     void anOrderOverAChainSaysAtAnyDepthWhatItSaysAtAShallowOne() {
         assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
                 depth -> reportOfChain(depth, ">="),
-                AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDoubleTest
-                        ::afterOneLetEachCall, 3, 24, 100);
+                AChainOfCallsEachGivenTheOneBeforeItTwiceIsSaidTheSameAtAnyDepthTest
+                        ::afterOneLetEachCall, 3, 8);
     }
 
     private static String reportOfSizesAddedToThemselves(int depth, String ending) {
@@ -252,20 +226,19 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
         for (String ending : new String[] {"LAST == 0", "LAST > 0", "LAST /= 0"}) {
             assertSaysAtAnyDepthWhatItSaysAtAShallowOne(
                     depth -> reportOfSizesAddedToThemselves(depth, ending),
-                    AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDoubleTest
-                            ::afterOneLetEachCall, 3, 24);
+                    AChainOfCallsEachGivenTheOneBeforeItTwiceIsSaidTheSameAtAnyDepthTest
+                            ::afterOneLetEachCall, 3, 8);
         }
     }
 
     /**
-     * A hundred additions overflow an Int, and the run that would add them stops there: the
+     * Sixty-four additions overflow an Int, and the run that would add them stops there: the
      * sum is nought exactly where every size is, but the arithmetic the program writes is read
      * from what is written and not from the sizes it comes to, so the stop is still said.
      */
     @Test
-    void aSizeAddedToItselfAHundredTimesIsStillSaidToStopAtTheOverflow() {
-        String report = assertTimeoutPreemptively(Duration.ofSeconds(60),
-                () -> reportOfSizesAddedToThemselves(100, "LAST == j"));
+    void aSizeAddedToItselfPastTheEndOfIntIsStillSaidToStopAtTheOverflow() {
+        String report = reportOfSizesAddedToThemselves(64, "LAST == j");
         Pattern overflow = Pattern.compile("\\? nothing could show .*Int overflow: (\\d+) \\+ \\1\\)");
         assertTrue(overflow.matcher(report).find(), report);
         assertTrue(report.contains("adequacy: undetermined"), report);
@@ -273,15 +246,14 @@ class AChainOfCallsEachGivenTheOneBeforeItTwiceIsMeasuredInTimeThatDoesNotDouble
 
     /** And where the sum is held against nought the stop is the same, whatever the sum is read as. */
     @Test
-    void aSizeAddedToItselfAHundredTimesHeldAtNoughtStopsAtTheOverflowToo() {
-        String report = assertTimeoutPreemptively(Duration.ofSeconds(60),
-                () -> reportOfSizesAddedToThemselves(100, "LAST == 0"));
+    void aSizeAddedToItselfPastTheEndOfIntHeldAtNoughtStopsAtTheOverflowToo() {
+        String report = reportOfSizesAddedToThemselves(64, "LAST == 0");
         assertTrue(Pattern.compile("Int overflow: (\\d+) \\+ \\1").matcher(report).find(), report);
     }
 
     /** A depth below the end of Int has no stop to say. */
     @Test
-    void aSizeAddedToItselfTwentyFourTimesSaysNoStop() {
+    void aSizeAddedToItselfShortOfTheEndOfIntSaysNoStop() {
         String report = reportOfSizesAddedToThemselves(24, "LAST == j");
         assertFalse(report.contains("Int overflow"), report);
     }

@@ -38,14 +38,14 @@ class WhatAClientAlreadyHoldsIsNotSentAgainTest {
             session.send(opened(A, A_TEXT), opened(B, B_TEXT));
             session.await(publishedFor(A), "the diagnostics of a");
             session.await(publishedFor(B), "the diagnostics of b");
-            session.awaitQuiet();
             long toA = session.count(publishedFor(A));
             long toB = session.count(publishedFor(B));
 
+            // A diagnose walks the open documents in the order they were opened, so b's set is
+            // written after whatever the same diagnose has to say to a.
             session.send(message(null, "textDocument/didChange",
                     changedTo(B, "module b\ndata N = { v: Int }\n")));
             session.awaitAtLeast(toB + 1, publishedFor(B), "b's set, which the edit cleared");
-            session.awaitQuiet();
 
             assertEquals(toA, session.count(publishedFor(A)),
                     "a says what it said before the edit, and the client holds that already");
@@ -58,7 +58,6 @@ class WhatAClientAlreadyHoldsIsNotSentAgainTest {
             session.send(handshake());
             session.send(opened(A, A_TEXT));
             session.await(publishedFor(A), "the diagnostics of a");
-            session.awaitQuiet();
             long before = session.count(publishedFor(A));
 
             // Closing it clears what the client shows, which is a publish of its own.

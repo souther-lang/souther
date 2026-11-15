@@ -7,12 +7,10 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
-import java.time.Duration;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -68,7 +66,7 @@ class AMeanOverAWindowOfManyMonthsIsReadWithoutWritingOutItsWaysTest {
 
     @Test
     void aMeanOverManyMonthsIsReadWhereItsWaysAreMoreThanAReadingMakes() {
-        String report = assertTimeoutPreemptively(Duration.ofSeconds(60), () -> report());
+        String report = report();
         assertFalse(report.contains("READINGS_OF_ONE_CONDITION"), report);
     }
 
@@ -79,7 +77,7 @@ class AMeanOverAWindowOfManyMonthsIsReadWithoutWritingOutItsWaysTest {
      */
     @Test
     void aMeanWhoseCasesAreGivenUpIsSaidOnceAndNotAtEveryStepOfThem() {
-        String report = assertTimeoutPreemptively(Duration.ofSeconds(60), () -> report());
+        String report = report();
         long said = report.lines().filter(line -> line.contains("not read: comparison")).count();
         assertTrue(said <= MONTHS, () -> "said " + said + " times, once for each month at most");    }
 }

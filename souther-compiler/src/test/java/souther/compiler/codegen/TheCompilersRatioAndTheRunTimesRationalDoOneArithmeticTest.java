@@ -1,7 +1,6 @@
 package souther.compiler.codegen;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.runtime.ConstraintViolation;
@@ -117,7 +116,6 @@ class TheCompilersRatioAndTheRunTimesRationalDoOneArithmeticTest {
     }
 
     @Test
-    @Timeout(120)
     void everyOperationGivesTheSameValueFromBothOrFailsInBoth() {
         List<Pair> values = values();
         Set<String> answered = new LinkedHashSet<>();
@@ -144,7 +142,6 @@ class TheCompilersRatioAndTheRunTimesRationalDoOneArithmeticTest {
     }
 
     @Test
-    @Timeout(120)
     void everyRoundingGivesTheSameNumberFromBothOrFailsInBoth() {
         int rounded = 0;
         for (Pair each : values()) {

@@ -1,7 +1,6 @@
 package souther.exact;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -145,7 +144,6 @@ class TheOrdersInstrumentsAnswerWhatTheyAreAskedTest {
      * it has been cut, and that the rising ends where the pair comes apart rather than where it is equal.
      */
     @Test
-    @Timeout(60)
     void theOrderTheRefinementAnswersIsTheOrderTheWholeNumbersDo() {
         List<ExactParts> values = new ArrayList<>();
         for (long n : new long[] {1, 3, 7, -3}) {
@@ -307,16 +305,22 @@ class TheOrdersInstrumentsAnswerWhatTheyAreAskedTest {
     /** Where no width the host holds is wide enough the search ends and the run has failed. The two widths
      *  close on one another, so it stops rather than going round for ever. */
     @Test
-    @Timeout(20)
     void whereNoWidthTheHostHoldsIsEnoughTheRunHasFailed() {
+        List<Integer> tried = new ArrayList<>();
         assertThrows(ExactRoomExceeded.class, () -> ExactOrder.asWideAsItTakes(
                 width -> {
+                    tried.add(width);
+                    if (tried.size() > 200) {
+                        throw new AssertionError("the search is still going round after " + tried.size()
+                                + " widths, the last of them " + width);
+                    }
                     if (width >= 6000) {
                         throw new ExactRoomExceeded("no room for a width of " + width);
                     }
                     return null;
                 },
                 () -> "answer this"));
+        assertTrue(tried.size() <= 200, "the two widths closed on one another: " + tried);
     }
 
     /**

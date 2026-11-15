@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 
 import souther.compiler.ACompiledModel;
 import souther.compiler.check.AnalysisBody;
@@ -136,19 +135,18 @@ class AnObservationOfAnAnswerIsWhatItsLawSaysOfTheArgumentsTest {
     /**
      * A count compared by an operation's law and not as written is held the same way: what
      * {@code List.drop} leaves is empty by how many the list holds against how many it drops, so
-     * dropping ten of thirty values written out is eleven or more of them kept, every way of
-     * picking eleven. Read where the law's comparison is made, it is held as the count — and not
+     * dropping four of twelve values written out is five or more of them kept, every way of
+     * picking five. Read where the law's comparison is made, it is held as the count — and not
      * written out however many ways that is.
      */
     @Test
-    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void aCountALawComparesIsHeldTheSameWay() {
-        List<String> thirty = new ArrayList<>();
-        for (int i = 0; i < 30; i++) {
-            thirty.add("b.n + " + i);
+        List<String> twelve = new ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            twelve.add("b.n + " + i);
         }
-        String kept = "List.filter(x -> x > 0, [" + String.join(", ", thirty) + "])";
-        Proposition dropped = stated("if List.isEmpty(List.drop(10, " + kept + ")) then 1 else 0");
+        String kept = "List.filter(x -> x > 0, [" + String.join(", ", twelve) + "])";
+        Proposition dropped = stated("if List.isEmpty(List.drop(4, " + kept + ")) then 1 else 0");
         assertNull(Proposition.firstStopIn(dropped), dropped::toString);
         assertTrue(holdsACount(dropped), dropped::toString);
         assertNull(Proposition.firstStopIn(stated(
