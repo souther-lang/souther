@@ -320,8 +320,12 @@ public final class ReplacementReading {
         }
         return ranStanding(replaced, rows,
                 row -> where.stream().anyMatch(wentThrough.apply(row)::contains), stoppedAt,
-                seenThrough -> new ReplacementOwed.OfAnArm(replaced.fork(), replaced.part(),
-                        replaced.with(), where, replacing, seenThrough, ranWith.get()));
+                decided -> new ReplacementOwed.OfAnArm(replaced.fork(), replaced.part(),
+                        replaced.with(), where, replacing, inputsOf(decided), ranWith.get()));
+    }
+
+    private static List<List<ObservedValue>> inputsOf(List<RowOutcome> rows) {
+        return rows.stream().map(RowOutcome::inputs).toList();
     }
 
     /**
@@ -346,8 +350,9 @@ public final class ReplacementReading {
         }
         return ranStanding(replaced, rows,
                 row -> where.stream().anyMatch(entered.apply(row)::contains), stoppedAt,
-                seenThrough -> new ReplacementOwed.OfAWalk(replaced.walk(), replaced.how(), where,
-                        replacing, seenThrough, ranWith.get(), separators, over));
+                decided -> new ReplacementOwed.OfAWalk(replaced.walk(), replaced.how(), where,
+                        replacing, inputsOf(decided),
+                        ValuesOfRareAnswersFirst.of(ranWith.get(), decided), separators, over));
     }
 
     /**
@@ -358,7 +363,7 @@ public final class ReplacementReading {
     private static Standing ranStanding(Replacement replaced, List<RowOutcome> rows,
                                         Predicate<RowOutcome> through,
                                         Function<RowOutcome, ReplacementDisposition.Met> stoppedAt,
-                                        Function<List<List<ObservedValue>>, ReplacementOwed>
+                                        Function<List<RowOutcome>, ReplacementOwed>
                                                 lookingFor) {
         RowOutcome shownBy = null;
         // How the rows left untold were stopped, each row one meeting: the figures, whatever no
@@ -366,7 +371,7 @@ public final class ReplacementReading {
         // host's stack — and whether one row was held by figures alone. One such is enough to
         // leave the rewrite to a wider run: a row that comes back there may be the row that tells.
         ReplacementDisposition.Met untold = null;
-        List<List<ObservedValue>> seenThrough = new ArrayList<>();
+        List<RowOutcome> decided = new ArrayList<>();
         for (RowOutcome row : rows) {
             if (!through.test(row)) {
                 continue;
@@ -377,7 +382,7 @@ public final class ReplacementReading {
                 untold = alsoUntold(untold, stoppedAt.apply(row));
                 continue;
             }
-            seenThrough.add(row.inputs());
+            decided.add(row);
             // Every rewrite of every arm a decided row went through and every walk it entered was
             // run, or is said to have run out, so one missing is this reading and the run
             // disagreeing about what was carried — not something to read a reason off.
@@ -404,7 +409,7 @@ public final class ReplacementReading {
             return new Standing.CannotBeAsked(new ReplacementEvidence.Undecided.Way(
                     ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK, untold));
         }
-        ReplacementOwed lookFor = lookingFor.apply(seenThrough);
+        ReplacementOwed lookFor = lookingFor.apply(decided);
         return shownBy != null
                 ? new Standing.Unnoticed(RowRef.of(shownBy), lookFor)
                 : new Standing.Open(lookFor);

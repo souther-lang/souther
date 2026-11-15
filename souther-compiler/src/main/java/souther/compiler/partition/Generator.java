@@ -2409,6 +2409,12 @@ public final class Generator {
                     Beside anElementChanged = (value, type, reading, _) ->
                             NearbyValues.withAnElementChanged(value, type, reading,
                                     walk.ranWith());
+                    // A row whose lists the walk goes over hold fewer than two elements between
+                    // them is one the walk takes no second step in, which is the only step a
+                    // rewrite of it changes anything from, so it is not made. Known only where the
+                    // lists are: a walk over a list no input holds is not told by the input.
+                    Predicate<List<ObservedValue>> takesASecondStep = row -> walk.over().isEmpty()
+                            || elementsWalked(row, walk.over(), axes.subject()) >= 2;
                     List<Iterator<GeneratedRow>> grownFromEach = new ArrayList<>();
                     List<Iterator<GeneratedRow>> grownFromTheRest = new ArrayList<>();
                     for (int at = 0; at < from.size(); at++) {
@@ -2416,12 +2422,12 @@ public final class Generator {
                         List<Iterator<GeneratedRow>> into =
                                 at < ROWS_GROWN_IN_TURN ? grownFromEach : grownFromTheRest;
                         into.add(candidatesBeside(each, axes, purposes, check, answers,
-                                growing, lists));
+                                growing, lists, takesASecondStep));
                         into.add(candidatesBeside(each, axes, purposes, check, answers,
-                                anElementChanged, changed));
+                                anElementChanged, changed, takesASecondStep));
                         if (!walk.separators().isEmpty()) {
                             into.add(candidatesBeside(each, axes, purposes, check,
-                                    answers, aPieceMore, parted));
+                                    answers, aPieceMore, parted, takesASecondStep));
                         }
                         into.add(piecesDemanded(each, axes, purposes, looking, check,
                                 answers, read.piecesAttempted(), pieces));
@@ -2447,7 +2453,8 @@ public final class Generator {
                             looking, check, answers)));
                     if (growingAny != null) {
                         last.add(inOrder(through, at -> candidatesBeside(from.get(at), axes,
-                                purposes, check, answers, growingAny, everyList)));
+                                purposes, check, answers, growingAny, everyList,
+                                takesASecondStep)));
                     }
                     yield seen != null ? seen : taking(looking, last);
                 }
@@ -3005,7 +3012,24 @@ public final class Generator {
                                                            CandidateCheck check,
                                                            List<StoodInAnswer> answers,
                                                            Beside how, Examining examining) {
-        return candidatesBeside(seen, axes.subject(), purposes, check, answers, how, examining);
+        return candidatesBeside(seen, axes.subject(), purposes, check, answers, how, examining,
+                _ -> true);
+    }
+
+    /**
+     * {@link #candidatesBeside}, the candidates that {@code worthRunning} refuses never made a
+     * candidate: they are not counted against {@code examining} and are never put to a run. What a
+     * caller refuses is a row it can show tells nothing, which a run would only find out.
+     */
+    private static Iterator<GeneratedRow> candidatesBeside(List<ObservedValue> seen,
+                                                           MeasuredInput.MeasuredAxes axes,
+                                                           List<Purpose> purposes,
+                                                           CandidateCheck check,
+                                                           List<StoodInAnswer> answers,
+                                                           Beside how, Examining examining,
+                                                           Predicate<List<ObservedValue>> worthRunning) {
+        return candidatesBeside(seen, axes.subject(), purposes, check, answers, how, examining,
+                worthRunning);
     }
 
     private static Iterator<GeneratedRow> candidatesBeside(List<ObservedValue> seen,
@@ -3014,6 +3038,17 @@ public final class Generator {
                                                            CandidateCheck check,
                                                            List<StoodInAnswer> answers,
                                                            Beside how, Examining examining) {
+        return candidatesBeside(seen, subject, purposes, check, answers, how, examining,
+                _ -> true);
+    }
+
+    private static Iterator<GeneratedRow> candidatesBeside(List<ObservedValue> seen,
+                                                           MeasuredInput subject,
+                                                           List<Purpose> purposes,
+                                                           CandidateCheck check,
+                                                           List<StoodInAnswer> answers,
+                                                           Beside how, Examining examining,
+                                                           Predicate<List<ObservedValue>> worthRunning) {
         // As the run had them, written once: a candidate moves one position and leaves the others
         // as they were.
         List<FixtureTemplate> kept = new ArrayList<>();
@@ -3049,11 +3084,16 @@ public final class Generator {
                         moved++;
                         continue;
                     }
+                    ObservedValue near = nearer.next();
+                    List<ObservedValue> row = new ArrayList<>(seen);
+                    row.set(moved, near);
+                    if (!worthRunning.test(row)) {
+                        continue;
+                    }
                     if (!examining.oneMore()) {
                         moved = seen.size();
                         break;
                     }
-                    ObservedValue near = nearer.next();
                     if (ObservedFixtures.of(near, subject.types().get(moved),
                             subject.ruleReading())
                             instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(

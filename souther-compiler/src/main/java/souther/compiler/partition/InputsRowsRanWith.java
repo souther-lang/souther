@@ -8,12 +8,14 @@ import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.ToIntFunction;
 
 /**
  * The inputs the rows of a module ran with, by the type of the position each stood at: the values
@@ -165,6 +167,21 @@ public final class InputsRowsRanWith {
                 }
             }
         }
+    }
+
+    /**
+     * The same values with each type's in the order {@code rank} puts them in: the lower first, and
+     * values of one rank in the order they were met. Every value is kept, so what a search may
+     * reach is the same and only what it reaches first changes.
+     */
+    public InputsRowsRanWith orderedBy(ToIntFunction<ObservedValue> rank) {
+        if (byType.isEmpty()) {
+            return this;
+        }
+        Map<Type, List<ObservedValue>> ordered = new LinkedHashMap<>();
+        byType.forEach((type, values) -> ordered.put(type,
+                values.stream().sorted(Comparator.comparingInt(rank)).toList()));
+        return new InputsRowsRanWith(Collections.unmodifiableMap(ordered));
     }
 
     /** The values a position of {@code type} was run with, in the order they were met. */
