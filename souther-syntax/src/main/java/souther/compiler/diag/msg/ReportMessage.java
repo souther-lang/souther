@@ -247,6 +247,20 @@ public sealed interface ReportMessage extends Message {
 
     record NoRowFixesTheWeight(String position, String into) implements ReportMessage, Prose {}
 
+    record TheWeightsAreNotDecided(String into) implements ReportMessage, Prose {}
+
+    record TheyAreNotDecidedBecause(Message why) implements ReportMessage, Prose {}
+
+    record NoBorderOfTheComputationWasRead() implements ReportMessage, Prose {}
+
+    record ABorderOfTheComputationWasNotReadInFull() implements ReportMessage, Prose {}
+
+    record ARowOfTheComputationWasNotWatched() implements ReportMessage, Prose {}
+
+    record TheArithmeticGaveOutOnAChangedWeight() implements ReportMessage, Prose {}
+
+    record TheBordersOfTheComputationWentWithout(String words) implements ReportMessage, Prose {}
+
     /** A point of a line some rule drew, by its role, which side of the line, and the rule. */
     record PointOfALine(String role, Message side, String rule) implements ReportMessage, Prose {}
 
@@ -808,6 +822,35 @@ public sealed interface ReportMessage extends Message {
     record NothingCouldShowARowAtADecisionRule(Message cameTo) implements ReportMessage, Prose {}
 
     record NotComposedAgainst(String what) implements ReportMessage, Prose {}
+
+    record NoRowIsInTheseCases(int number, Message of) implements ReportMessage, Prose {}
+
+    record NoRowCanBeAskedAbout(int number, Message of) implements ReportMessage, Prose {}
+
+    record NoRowCanBeAskedForTheOthers() implements ReportMessage, Prose {}
+
+    record OfASearch(String from, String through, Message at) implements ReportMessage, Prose {}
+
+    record AtAPlace(String place) implements ReportMessage, Prose {}
+
+    record OfASearchNoPlaceIsSaidOf() implements ReportMessage, Prose {}
+
+    record OfAnOrder(String container, String position, Message at)
+            implements ReportMessage, Prose {}
+
+    record OfAnOrderNoPlaceIsSaidOf() implements ReportMessage, Prose {}
+
+    record TheSearchFindsItAtTheNode() implements ReportMessage, Prose {}
+
+    record TheSearchFindsItBelowTheNode() implements ReportMessage, Prose {}
+
+    record TheSearchComesBackEmptyAtANodeWithNothingBelow() implements ReportMessage, Prose {}
+
+    record TheSearchComesBackEmptyFromEveryNodeBelow() implements ReportMessage, Prose {}
+
+    record TheStatementHoldsByTheLastElementOfAKey() implements ReportMessage, Prose {}
+
+    record TheStatementFailsByTheLastElementOfAKey() implements ReportMessage, Prose {}
 
     record NoInputTakesOneWay() implements ReportMessage, Prose {}
 

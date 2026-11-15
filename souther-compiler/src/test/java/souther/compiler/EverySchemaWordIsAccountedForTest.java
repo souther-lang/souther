@@ -38,6 +38,9 @@ import souther.compiler.query.UnaskedReasons;
 import souther.compiler.query.WritabilityKnowledge;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
+import souther.compiler.partition.CaseOfAStatement;
+import souther.compiler.partition.CasesTheRowsTook;
+import souther.compiler.query.Weakening;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
@@ -643,6 +646,22 @@ class EverySchemaWordIsAccountedForTest {
                             "properties", "undecidedBecause", "items"),
                     Set.of("step_not_expanded"),
                     ReplacementEvidence.Undecided.Why.class),
+            // Which kind of case a statement draws, and which side of it: the steps of a search and
+            // the ways round the order of a key, which one field says together.
+            new Vocabulary("decision.statementsNoRowIsIn[].kind",
+                    List.of("$defs", "decision", "properties", "statementsNoRowIsIn", "items",
+                            "properties", "kind"),
+                    CasesTheRowsTook.Kind.class),
+            new Vocabulary("decision.statementsNoRowIsIn[].cases[]",
+                    List.of("$defs", "decision", "properties", "statementsNoRowIsIn", "items",
+                            "properties", "cases", "items"),
+                    CaseOfAStatement.Step.class, CaseOfAStatement.Way.class),
+            // Why a weight of a derived value is undecided, as far as the weights' own reading
+            // says.
+            new Vocabulary("partition.weights[].undecidedBecause",
+                    List.of("$defs", "partition", "properties", "weights", "items",
+                            "properties", "undecidedBecause", "items"),
+                    Weakening.AWeightNotDecided.Why.class),
             // Whether a row is owed at one rule at all, which is a different question from whether
             // one took it. Spelled here and held against the answers a search may come to, so an
             // answer added to that vocabulary is one somebody gives a word rather than one a
@@ -1758,8 +1777,7 @@ class EverySchemaWordIsAccountedForTest {
         // What kept a combination, by kind. Written by a switch over the sealed reasons, so an arm
         // added there does not compile without its word, and held to the schema by the same
         // validation of the corpus documents.
-        held.add("/$defs/whyKept/properties/reason");
-        // And which use of a function fell short, by kind. Written by a switch over the sealed
+        held.add("/$defs/whyKept/properties/reason");        // And which use of a function fell short, by kind. Written by a switch over the sealed
         // shortfalls, for the reason the one above is.
         held.add("/$defs/whyKept/properties/shortfalls/items/properties/kind");
         // Which threshold a point of a computation cut at several places is owed at, by kind.
