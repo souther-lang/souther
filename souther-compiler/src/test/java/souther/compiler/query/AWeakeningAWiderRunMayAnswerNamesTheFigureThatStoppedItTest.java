@@ -323,7 +323,8 @@ class AWeakeningAWiderRunMayAnswerNamesTheFigureThatStoppedItTest {
                     ReplacementDisposition.Met.at(List.of(WorkFigure.EVALUATION_STEPS.at(100)))
                             .and(ReplacementDisposition.Met.AT_NO_FIGURE));
             case EVERY_ROW_ANSWERED_ALIKE, NOTHING_WAS_COMPOSED, ROWS_A_BLOCK_MAY_HOLD,
-                 NOTHING_RAN -> List.of(ReplacementDisposition.Met.AT_NO_FIGURE);
+                 A_RULE_REFUSED_A_CANDIDATE, NOTHING_RAN ->
+                    List.of(ReplacementDisposition.Met.AT_NO_FIGURE);
         };
     }
 

@@ -71,6 +71,8 @@ class APositionInsideASequenceInsideOneIsPlacedTooTest {
         assertNotNull(generated, "rows are offered");
 
         assertEquals(List.of("[[5]]"), generated.get("deep").composed().rows().stream()
+                        .filter(row -> row.purposes().stream().anyMatch(
+                                purpose -> !(purpose instanceof Generator.Purpose.ForAReplacement)))
                         .map(row -> row.inputs().get(0).text()).toList(),
                 () -> "a list holding a list holding a value at or over the line: "
                         + generated.get("deep").composed().reasons());

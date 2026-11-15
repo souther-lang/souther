@@ -382,6 +382,110 @@ public final class CoverageSites {
         }
     }
 
+    /** The value {@code side} writes out, or null where it writes none. */
+    private static NamedValue namedBy(Core side) {
+        return switch (Core.withoutStanding(side)) {
+            case Core.Int whole -> new NamedValue.Whole(whole.value());
+            case Core.Decimal fraction -> new NamedValue.Fractional(fraction.value());
+            case Core.Str characters -> new NamedValue.Characters(characters.value());
+            // A negative number is written as the negation of a literal. What a value cannot be
+            // named for is not named: the one whole number that has no negation.
+            case Core.Neg negated -> switch (namedBy(negated.operand())) {
+                case NamedValue.Whole whole when whole.value() != Long.MIN_VALUE ->
+                        new NamedValue.Whole(-whole.value());
+                case NamedValue.Fractional fraction ->
+                        new NamedValue.Fractional(fraction.value().negate());
+                case null, default -> null;
+            };
+            default -> null;
+        };
+    }
+
+    /** What {@code body} names: what it compares with, then what else it writes out. */
+    private static Set<NamedValue> ofTheBody(Walk walk, String body) {
+        Set<NamedValue> out = new LinkedHashSet<>(walk.named.getOrDefault(body, Set.of()));
+        out.addAll(walk.mentioned.getOrDefault(body, Set.of()));
+        return out;
+    }
+
+    /**
+     * What a walk's call compares something with, in the call and below it.
+     *
+     * <p>The walk's own first: it is the step and the list that the rewrite changes what is
+     * observed of, so what they compare with is where a row tells the rewrite apart, and what the
+     * rest of the body compares with comes after it.
+     */
+    private static List<NamedValue> namedAtAWalk(Core call, Set<NamedValue> ofTheBody,
+                                                 ComparisonCatalog comparisons) {
+        Set<NamedValue> out = new LinkedHashSet<>();
+        collectNamed(call, out, comparisons);
+        out.addAll(ofTheBody);
+        return List.copyOf(out);
+    }
+
+    /** The names of the fields {@code call} reads, in the call and below it: what the step of a
+     *  walk reads of an element is where two elements differ to it. */
+    private static List<String> fieldsReadAt(Core call) {
+        Set<String> out = new LinkedHashSet<>();
+        collectFieldsRead(call, out);
+        return List.copyOf(out);
+    }
+
+    private static void collectFieldsRead(Core node, Set<String> into) {
+        if (Core.withoutStanding(node) instanceof Core.FieldAccess access) {
+            into.add(access.field());
+        }
+        Core.forEachChild(node, child -> collectFieldsRead(child, into));
+    }
+
+    /**
+     * The cases a {@code match} tells from the others: the ones whose arm answers what the fewest
+     * arms answer, where the arms answer literals. A {@code match} whose arms all answer one
+     * literal tells nothing apart, and one whose arms answer what is not a literal tells each
+     * case by its own arm.
+     */
+    private static void nameCasesOf(Core.Match match, Set<NamedValue> into) {
+        Map<Object, Integer> answers = new LinkedHashMap<>();
+        Map<Core.Case, Object> keyOf = new IdentityHashMap<>();
+        for (Core.Case arm : match.cases()) {
+            Object key = switch (Core.withoutStanding(arm.body())) {
+                case Core.Bool bool -> bool.value();
+                case Core.Int whole -> whole.value();
+                case Core.Decimal fraction -> fraction.value();
+                case Core.Str characters -> characters.value();
+                default -> new Object();
+            };
+            keyOf.put(arm, key);
+            answers.merge(key, 1, Integer::sum);
+        }
+        if (answers.size() < 2 && match.cases().size() > 1) {
+            return;
+        }
+        int fewest = answers.values().stream().min(Integer::compare).orElse(0);
+        for (Core.Case arm : match.cases()) {
+            if (arm.pattern() != null && answers.get(keyOf.get(arm)) == fewest) {
+                arm.caseTypes().forEach(type -> into.add(new NamedValue.Case(type)));
+            }
+        }
+    }
+
+    private static void collectNamed(Core node, Set<NamedValue> into,
+                                     ComparisonCatalog comparisons) {
+        if (Core.withoutStanding(node) instanceof Core.Match match) {
+            nameCasesOf(match, into);
+        }
+        if (Core.withoutStanding(node) instanceof Core.Binary b
+                && comparisons.occurrenceAt(b).isPresent()) {
+            for (Core side : List.of(b.left(), b.right())) {
+                NamedValue value = namedBy(side);
+                if (value != null) {
+                    into.add(value);
+                }
+            }
+        }
+        Core.forEachChild(node, child -> collectNamed(child, into, comparisons));
+    }
+
     /**
      * Where a run entering one walk is recorded: a fold walked from the head of its list, or a build
      * growing a collection, as the tree that runs carries it.
@@ -400,13 +504,24 @@ public final class CoverageSites {
      * @param separators  what the body the walk stands in parts strings at, written as the body
      *                    writes them: a walk over the pieces of a string is handed more elements
      *                    only through the string, and these are where a piece more is put
+     * @param named       what the body writes out on one side of a comparison: where a row has to
+     *                    be taken to for a comparison to answer differently, whether or not any
+     *                    row written holds a value near it
+     * @param reads       the names of the fields the walk's call reads: what the step reads of an
+     *                    element is where two elements differ to it
+     * @param inputs      the names of the parameters of the body that the walk's call reads: what
+     *                    a row changes to change what the walk observes
+     * @param dependencies the behaviors the walk's call reaches: what a row stands in for them to
+     *                    change what the walk is handed
      * @param over        the list the walk goes over, as the name of the parameter of the body it
      *                    is read from and the fields taken from it, where it is a list the input
      *                    holds as it is: a parameter, a name bound to one, or a field of one.
      *                    Empty for a list the body made, or one a helper was handed
      */
     public record WalkSite(String body, SourceConstructOrigin walk, WalkProbe index,
-                           boolean writtenHere, List<String> separators,
+                           boolean writtenHere, List<String> separators, List<NamedValue> named,
+                           List<String> reads, List<String> inputs,
+                           List<ValueName.Behavior> dependencies,
                            Optional<List<String>> over) {
 
         public WalkSite {
@@ -415,6 +530,10 @@ public final class CoverageSites {
                         + " body, at one place, over a list the input holds or not");
             }
             separators = List.copyOf(separators);
+            named = List.copyOf(named);
+            reads = List.copyOf(reads);
+            inputs = List.copyOf(inputs);
+            dependencies = List.copyOf(dependencies);
             over = over.map(List::copyOf);
         }
     }
@@ -1194,6 +1313,8 @@ public final class CoverageSites {
             WalkProbe at = numbering.walk(draft.raw());
             walks.add(new WalkSite(draft.body(), draft.walk(), at, draft.writtenHere(),
                     List.copyOf(walk.separators.getOrDefault(draft.body(), Set.of())),
+                    namedAtAWalk(draft.call(), ofTheBody(walk, draft.body()), comparisons),
+                    fieldsReadAt(draft.call()), draft.inputsRead(), draft.dependenciesRead(),
                     draft.over()));
             walksByNode.put(draft.call(), new Plan.WalkedAt(at, draft.walk(),
                     draft.listArgument()));
@@ -1328,11 +1449,12 @@ public final class CoverageSites {
     private record DraftWalk(Core.Call call, int listArgument, String body,
                              SourceConstructOrigin walk, NodeAddress at, boolean writtenHere, Set<WalkRewrite> theSame,
                              boolean overAFixedList, Optional<NotCarriedReason> notCarried,
-                             Optional<List<String>> over, int raw) {
+                             Optional<List<String>> over, List<String> inputsRead,
+                             List<ValueName.Behavior> dependenciesRead, int raw) {
 
         DraftWalk numbered(int number) {
             return new DraftWalk(call, listArgument, body, walk, at, writtenHere, theSame,
-                    overAFixedList, notCarried, over, number);
+                    overAFixedList, notCarried, over, inputsRead, dependenciesRead, number);
         }
     }
 
@@ -1432,6 +1554,10 @@ public final class CoverageSites {
         private boolean walksAreRewritten = true;
         /** What each body parts strings at, where it writes the separator out, in the order met. */
         private final Map<String, Set<String>> separators = new LinkedHashMap<>();
+        /** What each body writes out on one side of a comparison, in the order met. */
+        private final Map<String, Set<NamedValue>> named = new LinkedHashMap<>();
+        /** What each body writes out anywhere, in the order met. */
+        private final Map<String, Set<NamedValue>> mentioned = new LinkedHashMap<>();
         /** What each name of the body being walked is bound to by a {@code let}, as the walk passes
          *  it, which is what says whether reading the name reads something a run is handed
          *  ({@link #closed}). */
@@ -1507,10 +1633,9 @@ public final class CoverageSites {
                 return;
             }
             Set<WalkRewrite> theSame = EnumSet.noneOf(WalkRewrite.class);
-            // A list written with one element or none is walked no further than its first: both
-            // rewrites leave such a walk as it is.
-            Core.ListLit written = listWrittenOut(walked);
-            if (written != null && written.elements().size() <= 1) {
+            // A list that holds one element or none on every run is walked no further than its
+            // first: both rewrites leave such a walk as it is.
+            if (AtMostOneElement.holds(walked, boundTo::get)) {
                 theSame.addAll(EnumSet.allOf(WalkRewrite.class));
             }
             // A step that never reads what it carries is handed the seed to no effect.
@@ -1520,7 +1645,49 @@ public final class CoverageSites {
             }
             walks.add(new DraftWalk(call, listArgument, behavior, call.origin(), places.of(call),
                     Citation.of(call.pos()) instanceof Citation.Written, theSame, closed(walked),
-                    Optional.empty(), listHeldAs(walked), -1));
+                    Optional.empty(), listHeldAs(walked), inputsRead(call), dependenciesRead(call), -1));
+        }
+
+        /**
+         * The names of the parameters of the body that {@code e} reads, through the names the body
+         * binds: what a walk's list and step are made of, and so what a row changes to change
+         * what the walk observes.
+         */
+        private List<String> inputsRead(Core e) {
+            Set<String> out = new LinkedHashSet<>();
+            collectInputsRead(e, out, new HashSet<>(), new LinkedHashSet<>());
+            return List.copyOf(out);
+        }
+
+        /**
+         * The behaviors that {@code e} reaches, through the names the body binds: what a walk
+         * goes over where it is what a dependency answers. Kept apart from the parameters, which
+         * are names of this body, as a behavior is named by its module and its name.
+         */
+        private List<ValueName.Behavior> dependenciesRead(Core e) {
+            Set<ValueName.Behavior> out = new LinkedHashSet<>();
+            collectInputsRead(e, new LinkedHashSet<>(), new HashSet<>(), out);
+            return List.copyOf(out);
+        }
+
+        private void collectInputsRead(Core e, Set<String> out, Set<BindingId> followed,
+                                       Set<ValueName.Behavior> behaviors) {
+            if (Core.withoutStanding(e) instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfDeclaration reached
+                    && reached.name().denotes() instanceof ValueName.Behavior behavior) {
+                behaviors.add(behavior);
+            }
+            if (Core.withoutStanding(e) instanceof Core.Read read) {
+                Core bound = boundTo.get(read.binding());
+                if (bound != null) {
+                    if (followed.add(read.binding())) {
+                        collectInputsRead(bound, out, followed, behaviors);
+                    }
+                } else if (!boundInTheBody.contains(read.binding())) {
+                    out.add(read.name());
+                }
+            }
+            Core.forEachChild(e, child -> collectInputsRead(child, out, followed, behaviors));
         }
 
         /**
@@ -1583,29 +1750,6 @@ public final class CoverageSites {
             boolean[] all = {true};
             Core.forEachChild(e, child -> all[0] = all[0] && closedUnder(child, inside));
             return all[0];
-        }
-
-        /**
-         * The list literal {@code e} is, or null where it is not one the source wrote out: the
-         * literal itself, a name bound to one, or one put in another order, which holds the elements
-         * it held. A list of the same elements walks as many steps whatever order it is in.
-         */
-        private Core.ListLit listWrittenOut(Core e) {
-            Core plain = Core.withoutStanding(e);
-            if (plain instanceof Core.Read read) {
-                Core bound = boundTo.get(read.binding());
-                return bound == null ? null : listWrittenOut(bound);
-            }
-            if (plain instanceof Core.ListLit literal) {
-                return literal;
-            }
-            if (plain instanceof Core.Call call
-                    && call.fn() instanceof Core.Reached.OfKernel(var _, Kernel kernel)
-                    && (kernel == Kernel.LIST_REVERSE || kernel == Kernel.LIST_SORT)
-                    && call.args().size() == 1) {
-                return listWrittenOut(call.args().getFirst());
-            }
-            return null;
         }
 
         /**
@@ -2412,8 +2556,14 @@ public final class CoverageSites {
             // answer to which slots there are.
             CoreStructure.Children structural = CoreStructure.Children.of(e);
             switch (e) {
-                case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
-                     Core.Read _, Core.UnitValue _, Core.OptionNone _ -> { }
+                // What the body writes out where it makes a value is named as what it compares
+                // with is, after it: a limit written where a record is made reaches the comparison
+                // through the data, and no comparison of the body writes it.
+                case Core.Int _, Core.Decimal _, Core.Str _ ->
+                        mentioned.computeIfAbsent(behavior, _ -> new LinkedHashSet<>())
+                                .add(namedBy(e));
+                case Core.Bool _, Core.Temporal _, Core.Read _, Core.UnitValue _,
+                     Core.OptionNone _ -> { }
                 // A leaf, and one holding no fork. Whether the arm it stands in is an arm to cover is
                 // decided where that arm is made, not here.
                 case Core.Unreachable _ -> { }
@@ -2432,6 +2582,10 @@ public final class CoverageSites {
                 // field an access at a time, so one arriving here is the wrong tree.
                 case Core.FieldProjection p -> throw p.unexpectedIn("coverage numbering");
                 case Core.Binary b -> {
+                    if (comparisons.occurrenceAt(b).isPresent()) {
+                        nameWhatIsComparedWith(b.left());
+                        nameWhatIsComparedWith(b.right());
+                    }
                     number(b, inside);
                     walk(structural.take(new CoreStructure.Edge.BinaryLeft(), b.left()), inside);
                     walk(structural.take(new CoreStructure.Edge.BinaryRight(), b.right()), inside);
@@ -2539,6 +2693,7 @@ public final class CoverageSites {
                     }
                 }
                 case Core.Match m -> {
+                    nameCasesOf(m, named.computeIfAbsent(behavior, _ -> new LinkedHashSet<>()));
                     walk(structural.take(new CoreStructure.Edge.MatchScrutinee(), m.scrutinee()),
                             inside);
                     // What a `match` decides by is its subject, as an `if` decides by its condition.
@@ -2611,6 +2766,14 @@ public final class CoverageSites {
             // the switch above from compiling; a case here that forgot to descend one stops nothing,
             // and what it leaves is a place the numbering never reaches and nothing to say so.
             structural.requireExhausted();
+        }
+
+        /** What a comparison writes out on {@code side}, kept for the body being walked. */
+        private void nameWhatIsComparedWith(Core side) {
+            NamedValue value = namedBy(side);
+            if (value != null) {
+                named.computeIfAbsent(behavior, _ -> new LinkedHashSet<>()).add(value);
+            }
         }
 
         /**
