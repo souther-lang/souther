@@ -391,11 +391,7 @@ public final class ClosedState<A> {
         Set<AffineConstraint.HalfSpace<A>> sided = Set.of();
         Set<AffineConstraint.HalfSpace<A>> folded = Set.of();
         // Whether a form the rules leave nothing is asked of every round or of the last one alone.
-        // Every round's ends are inside the round before's, and a form left nothing by wider ends is
-        // left nothing by narrower ones, so what the last round to run finds is what any round of
-        // them finds. Where there are holes it is not so: the premises a round reads then include
-        // the holes the round before sided, which are not the ones the rounds before it read.
-        boolean askedOfEveryRound = everyRoundIsAsked || holesAmong(constraints);
+        boolean askedOfEveryRound = everyRoundIsAsked || mustAskEveryRound(constraints);
         FormReach<A> last = null;
         boolean askedOfLast = false;
         ClosureWork<A> work = into;
@@ -469,10 +465,29 @@ public final class ClosedState<A> {
         return settled(box, differences, sided, Status.BUDGET_EXHAUSTED, everyBoundWasComposed);
     }
 
-    /** Whether any of the rules is a hole. */
-    private static <A> boolean holesAmong(List<AffineConstraint<A>> constraints) {
+    /**
+     * Whether the rules are ones a form they leave nothing may be missed in a round that is not asked.
+     *
+     * <p>Asking the last round and the second finds what asking every round finds where what one
+     * round finds is found by every round after it: the ends of a round are inside the ends of the
+     * round before, a form left nothing by wider ends is left nothing by narrower ones, and the
+     * rules the rounds read are the same rules. That is a fact about the numbers, and the reading
+     * of a form ({@link FormReach}) is a fact about what the arithmetic holds of them, which is
+     * the numbers only where it holds every sum and product it is asked for. Two things it is not
+     * so of, and the closure asks every round for each:
+     *
+     * <ul>
+     *   <li>A hole. The premises a round reads then include the holes the round before sided, which
+     *       are not the premises the rounds before it read.</li>
+     *   <li>A number too wide to be sure of ({@link ExactRatio#MODEST}). A sum of two numbers whose
+     *       exponents are far enough apart has no representation, so a bound found at one end of a
+     *       position can be lost at an end inside it: {@code M} is held beside nought where
+     *       {@code M - 1} is not.</li>
+     * </ul>
+     */
+    static <A> boolean mustAskEveryRound(List<AffineConstraint<A>> constraints) {
         for (AffineConstraint<A> each : constraints) {
-            if (each instanceof AffineConstraint.Disequality<A>) {
+            if (each instanceof AffineConstraint.Disequality<A> || !each.numbersAreModest()) {
                 return true;
             }
         }

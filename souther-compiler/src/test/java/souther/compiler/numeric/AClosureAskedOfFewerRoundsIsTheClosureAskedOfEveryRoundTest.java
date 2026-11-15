@@ -3,7 +3,9 @@ package souther.compiler.numeric;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -85,6 +87,98 @@ class AClosureAskedOfFewerRoundsIsTheClosureAskedOfEveryRoundTest {
     private static List<RulesAsWritten.Written> aCrossingThatNeedsThreeRounds(int bound) {
         return RulesAsWritten.rules("1a + 2b <= " + bound, "1a + 1b >= 1", "1e >= 3",
                 "1d - 2e >= 0", "1c - 2d >= 0", "1b - 2c >= 0");
+    }
+
+    /** A number of a scale a sum of it and a small one may have no representation at. */
+    private static ExactRatio ofAScale(Random random) {
+        int whole = random.nextInt(11) - 5;
+        int[] scales = {0, 0, 0, 0, 1, 6, 60, 600, 6000};
+        ExactRatio scaled = ExactRatio.of(whole).times(
+                ExactRatio.tenTo(scales[random.nextInt(scales.length)])).orNull();
+        return scaled == null ? ExactRatio.of(whole) : scaled;
+    }
+
+    @Test
+    void rulesOfEveryScaleLeaveWhatEveryRoundAskedLeaves() {
+        Random random = new Random(5);
+        int empty = 0;
+        int settled = 0;
+        for (int each = 0; each < 1500; each++) {
+            int positions = 2 + random.nextInt(2);
+            List<RulesAsWritten.Written> written = new ArrayList<>();
+            int count = 3 + random.nextInt(10);
+            for (int rule = 0; rule < count; rule++) {
+                Map<String, ExactRatio> coefs = new LinkedHashMap<>();
+                for (int at = 0; at < positions; at++) {
+                    int weight = random.nextInt(7) - 3;
+                    if (weight != 0 && (coefs.isEmpty() || random.nextInt(3) > 0)) {
+                        coefs.put("abc".substring(at, at + 1), ExactRatio.of(weight));
+                    }
+                }
+                if (coefs.isEmpty()) {
+                    coefs.put("a", ExactRatio.ONE);
+                }
+                written.add(new RulesAsWritten.Written(coefs, ofAScale(random),
+                        RULE_RELATIONS[random.nextInt(RULE_RELATIONS.length)]));
+            }
+            List<AffineConstraint<String>> rules = RulesAsWritten.statedOnly(written,
+                    RulesNamingNoPositionInCommonCloseApartTest::spacing);
+            ClosedState<String> reference = ClosedState.closedAskingEveryRound(rules,
+                    RulesNamingNoPositionInCommonCloseApartTest::spacing, ORDER);
+            ClosedState<String> closed = ClosedState.closedTogether(rules,
+                    RulesNamingNoPositionInCommonCloseApartTest::spacing, ORDER);
+            assertEquals(reference.holdsNothing(), closed.holdsNothing(),
+                    "whether the rules leave nothing, of " + written);
+            if (closed.holdsNothing()) {
+                empty++;
+                continue;
+            }
+            assertEquals(reference.box(), closed.box(), "what the rules leave, of " + written);
+            settled++;
+        }
+        assertTrue(empty > 100 && settled > 100, "the rules left nothing " + empty
+                + " times and something " + settled + " times");
+    }
+
+    private static final Rel[] RULE_RELATIONS = {Rel.LE, Rel.LT, Rel.GE, Rel.GT, Rel.EQ, Rel.LE,
+            Rel.GE};
+
+    /**
+     * The reading of a form is a partial function: a sum of two numbers whose exponents are far
+     * apart has no representation. Nought added to a number of that size is held and one taken from
+     * it is not, so what a form leaves is found at the ends a position has and lost at ends inside
+     * them. That is what the closure asks every round for.
+     */
+    @Test
+    void aSumOfNumbersFarApartInScaleIsNotHeldWhereTheSumWithNoughtIs() {
+        ExactRatio huge = ExactRatio.tenTo(3_000_000_000L);
+        assertTrue(huge.plus(ExactRatio.ZERO).orNull() != null, "nought is added to it");
+        assertEquals(null, huge.plus(ExactRatio.of(-1)).orNull(), "one is not taken from it");
+    }
+
+    @Test
+    void everyRoundIsAskedWhereARuleHasAHoleOrANumberTooWideToBeSureOf() {
+        assertEquals(false, ClosedState.mustAskEveryRound(RulesAsWritten.statedOnly(
+                RulesAsWritten.rules("1a + 2b <= 10", "1a >= 3"),
+                RulesNamingNoPositionInCommonCloseApartTest::spacing)), "rules of small numbers");
+        assertEquals(true, ClosedState.mustAskEveryRound(RulesAsWritten.statedOnly(
+                RulesAsWritten.rules("1a + 2b <= 10", "1a /= 3"),
+                RulesNamingNoPositionInCommonCloseApartTest::spacing)), "a hole");
+        Map<String, ExactRatio> coefs = new LinkedHashMap<>();
+        coefs.put("a", ExactRatio.of(2));
+        coefs.put("b", ExactRatio.ONE);
+        for (long scale : new long[] {ExactRatio.MODEST + 1, 3_000_000_000L}) {
+            assertEquals(true, ClosedState.mustAskEveryRound(RulesAsWritten.statedOnly(
+                    List.of(new RulesAsWritten.Written(coefs,
+                            ExactRatio.tenTo(scale).negated(), Rel.LE)),
+                    RulesNamingNoPositionInCommonCloseApartTest::spacing)),
+                    "a bound of a scale of " + scale);
+        }
+        assertEquals(false, ClosedState.mustAskEveryRound(RulesAsWritten.statedOnly(
+                List.of(new RulesAsWritten.Written(coefs,
+                        ExactRatio.tenTo(ExactRatio.MODEST).negated(), Rel.LE)),
+                RulesNamingNoPositionInCommonCloseApartTest::spacing)),
+                "a bound of the widest scale there is no doubt of");
     }
 
     @Test

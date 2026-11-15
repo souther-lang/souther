@@ -646,6 +646,25 @@ public final class ExactRatio implements Comparable<ExactRatio> {
     }
 
     /**
+     * How wide a number may be, in bits and in the exponents of two and of five, for a closure to
+     * be sure its arithmetic never refuses to hold what it forms.
+     *
+     * <p>The sum of two numbers is refused only where it would form a whole number past what the host
+     * holds, about two to the thirty-first bits, and that takes two terms whose exponents are that
+     * far apart. A round forms an end from the numbers of the rules and the ends before it, one
+     * product and a few sums at a time, so the exponents of its ends grow by no more than a few
+     * times the widest of the rules' in a round, and the rounds are sixteen. A rule number under
+     * this is nowhere near that.
+     */
+    static final long MODEST = 1L << 16;
+
+    /** Whether this is no wider than {@link #MODEST}. */
+    boolean isModest() {
+        return Math.abs(parts.twos()) <= MODEST && Math.abs(parts.fives()) <= MODEST
+                && parts.widestBits() <= MODEST;
+    }
+
+    /**
      * This as a {@code double}, off by no more than a few units of the last place, or not a number
      * where it is beyond what a {@code double} holds either way.
      *
@@ -666,7 +685,7 @@ public final class ExactRatio implements Comparable<ExactRatio> {
             value = Math.scalb(value, (int) twos);
         }
         if (fives != 0) {
-            value *= Math.pow(5.0, fives);
+            value *= Math.pow(5.0, (double) fives);
         }
         return Double.isInfinite(value) || (value == 0.0 && !isZero()) ? Double.NaN : value;
     }

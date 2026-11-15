@@ -162,7 +162,6 @@ final class PremiseTree {
      * @param pairs the pairs of positions a difference bounds a residual lower for
      */
     static PremiseTree over(Premise[] premises, ExactCut[] up, ExactCut[] down, Pair[] pairs) {
-        STEPS.add(premises.length);
         Point[] points = new Point[premises.length];
         for (int at = 0; at < points.length; at++) {
             Premise each = premises[at];
@@ -195,6 +194,7 @@ final class PremiseTree {
 
     private static Node build(Point[] points, int from, int to, int depth, int dimensions,
                               int pairCount) {
+        STEPS.add(to - from);
         Node node = new Node();
         node.least = new double[dimensions];
         node.most = new double[dimensions];
