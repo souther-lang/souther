@@ -1647,6 +1647,13 @@ public final class CoverageSites {
         }
 
         private void collectInputsRead(Core e, Set<String> out, Set<BindingId> followed) {
+            // A behavior the call reaches is read as a parameter is: what it answers is what the
+            // walk goes over.
+            if (Core.withoutStanding(e) instanceof Core.Call call
+                    && call.fn() instanceof Core.Reached.OfDeclaration reached
+                    && reached.name().denotes() instanceof ValueName.Behavior behavior) {
+                out.add(behavior.name());
+            }
             if (Core.withoutStanding(e) instanceof Core.Read read) {
                 Core bound = boundTo.get(read.binding());
                 if (bound != null) {

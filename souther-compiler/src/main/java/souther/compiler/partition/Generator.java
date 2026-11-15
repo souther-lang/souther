@@ -2398,12 +2398,17 @@ public final class Generator {
                     // search asks.
                     Growth growth = aListGrownAmong(walk.ranWith(), axes.subject(), check, looking,
                             NearbyValues.Put.BEFORE_AND_AFTER, borders, walk.reads());
-                    Beside growing = grownTwice(growth, walk.over());
+                    // Every way of changing a row below changes it at what the walk reads: what it
+                    // reads nothing of is not what it observes, and a candidate there takes the
+                    // runs of one that is.
+                    Beside growing = atWhatTheWalkReads(grownTwice(growth, walk.over()),
+                            walk.inputs());
                     // The lists the walk is not known to go over are grown last, since a step may
                     // read what another list holds, and no list grown there is one the walk is
                     // known to take a second step in.
                     Examining everyList = new Examining(looking);
-                    Beside growingAny = walk.over().isEmpty() ? null : grownTwice(growth, List.of());
+                    Beside growingAny = walk.over().isEmpty() ? null
+                            : atWhatTheWalkReads(grownTwice(growth, List.of()), walk.inputs());
                     // And beside each, a string the body parts with a piece more, and one put as
                     // pieces the body demands: a walk over the pieces is a walk over a list no
                     // input holds, and a string of more pieces is how it is handed more elements.
@@ -2416,17 +2421,17 @@ public final class Generator {
                     Examining everyBorder = new Examining(looking);
                     // The list holding every border the body compares with, at once.
                     Beside withEveryBorder = borders.isEmpty() ? null
-                            : withEachArrangement(arrangementsOf(
+                            : atWhatTheWalkReads(withEachArrangement(arrangementsOf(
                                             standingFor(axes.subject(), check, saidTo(looking),
                                                     MOST_REPAIRS),
                                             axes.subject().ruleReading(), borders, walk.reads()),
-                                    borders.size(), walk.over());
-                    Beside aPieceMore = (value, type, reading, parameter) ->
+                                    borders.size(), walk.over()), walk.inputs());
+                    Beside aPieceMore = atWhatTheWalkReads((value, type, reading, parameter) ->
                             NearbyValues.withAPieceMore(value, type, reading, parameter,
-                                    walk.separators());
-                    Beside anElementChanged = (value, type, reading, _) ->
-                            NearbyValues.withAnElementChanged(value, type, reading,
-                                    walk.ranWith());
+                                    walk.separators()), walk.inputs());
+                    Beside anElementChanged = atWhatTheWalkReads(
+                            (value, type, reading, _) -> NearbyValues.withAnElementChanged(value,
+                                    type, reading, walk.ranWith()), walk.inputs());
                     // A row whose lists the walk goes over hold fewer than two elements between
                     // them is one the walk takes no second step in, which is the only step a
                     // rewrite of it changes anything from, so it is not made. Known only where the
@@ -2447,7 +2452,7 @@ public final class Generator {
                                 at < ROWS_GROWN_IN_TURN ? grownFromEach : grownFromTheRest;
                         answeredLast.addAll(candidatesAnswering(each, axes.subject(), answering,
                                 purposes, check, answers, walk.ranWith(), borders,
-                                walk.reads(), looking, answered));
+                                walk.reads(), walk.inputs(), looking, answered));
                         into.add(candidatesBeside(each, axes, purposes, check, answers,
                                 growing, lists, takesASecondStep));
                         if (withEveryBorder != null) {
@@ -2496,22 +2501,24 @@ public final class Generator {
                                 from.get(at), axes, purposes, check, answers, growingAny,
                                 everyList, takesASecondStep)))));
                     }
-                    // A search of one class is not a candidate: it puts forward as many rows as it
-                    // composes before it comes back, so a turn of it is held to the share of the
-                    // runs left that a lane has ({@link #takingInTurn}).
+                    // A search of one class is not a candidate: it composes and runs rows before it
+                    // comes back, and cannot be taken up where it was left. So it is not one of
+                    // the lanes asked a turn at a time, where it could take what the others are
+                    // owed or be cut with its rows untried; it comes after them, and the
+                    // positions the walk reads come before the ones it does not.
                     Function<Pins, Searched> searching = pins -> search(axes, pins, purposes,
                             origins, (_, _) -> true, check, references, answers,
                             HeldTogether.Asked.NOTHING, row -> looking.of(row, null), true,
                             looking.scope(), goingOn.answersNothing());
-                    lanes.add(inEachClass(axes, looking, true, walk.inputs(), searching));
-                    List<Lane> carryingOn = List.of(
+                    List<Lane> afterwards = List.of(
+                            inEachClass(axes, looking, true, walk.inputs(), searching),
                             candidatesOf(List.of(inOrder(through, at -> movedFrom(from.get(at),
                                     axes, purposes, looking, check, answers,
                                     movable.apply(from.get(at),
                                             positionsNotRead(parameters, walk.inputs())))))),
                             inEachClass(axes, looking, false, walk.inputs(), searching));
                     GeneratedRow seen = takingInTurn(looking, lanes);
-                    yield seen != null ? seen : takingInTurn(looking, carryingOn);
+                    yield seen != null ? seen : takingInTurn(looking, afterwards);
                 }
                 case ReplacementOwed.ByOneAnswer one -> {
                     // Where the composition stands before anything is asked of it first: a body
@@ -3338,8 +3345,8 @@ public final class Generator {
             List<ObservedValue> seen, MeasuredInput subject,
             Map<ValueName.Behavior, MeasuredInput> answering, List<Purpose> purposes,
             CandidateCheck check, List<StoodInAnswer> answers, InputsRowsRanWith ranWith,
-            List<ObservedValue> borders, List<String> reads, ReplacementWitness looking,
-            Examining examining) {
+            List<ObservedValue> borders, List<String> reads, List<String> inputsRead,
+            ReplacementWitness looking, Examining examining) {
         List<FixtureTemplate> kept = new ArrayList<>();
         for (int p = 0; p < seen.size(); p++) {
             if (!(ObservedFixtures.of(seen.get(p), subject.types().get(p), subject.ruleReading())
@@ -3359,10 +3366,14 @@ public final class Generator {
         taken.forEach(each -> valuesHeld.add(each.value()));
         valuesHeld.addAll(borders);
         List<Iterator<GeneratedRow>> out = new ArrayList<>();
-        for (int at = 0; at < answers.size(); at++) {
+        // What the walk reads of the dependencies: the answers of the others are not what it
+        // observes. Where it is not known which it reads, every one is.
+        boolean theWalkReadsOne = answers.stream().anyMatch(each ->
+                inputsRead.contains(each.dependency().name()));        for (int at = 0; at < answers.size(); at++) {
             ValueName.Behavior dependency = answers.get(at).dependency();
             MeasuredInput answered = answering.get(dependency);
-            if (answered == null) {
+            if (answered == null
+                    || (theWalkReadsOne && !inputsRead.contains(dependency.name()))) {
                 continue;
             }
             Type type = answered.types().getFirst();
@@ -3469,15 +3480,8 @@ public final class Generator {
      */
     private interface Lane {
 
-        /**
-         * What this puts forward this turn, or null where it has nothing more.
-         *
-         * @param share the runs this turn may spend: what is left of the runs divided among the
-         *              lanes still asked. A lane that puts one candidate forward spends what a
-         *              candidate costs and needs none of it held; one that searches may spend a
-         *              great many, and is held to it
-         */
-        Turn turn(int share);
+        /** What this puts forward this turn, or null where it has nothing more. */
+        Turn turn();
     }
 
     /** What a lane puts forward on one turn. */
@@ -3491,6 +3495,18 @@ public final class Generator {
 
         /** Nothing this turn, with more to come. */
         enum Pass implements Turn { PASS }
+    }
+
+    /**
+     * {@code how}, at the parameters the walk reads, and where it is not known which it reads, at
+     * every one.
+     */
+    private static Beside atWhatTheWalkReads(Beside how, List<String> inputsRead) {
+        if (inputsRead.isEmpty()) {
+            return how;
+        }
+        return (value, type, reading, parameter) -> inputsRead.contains(parameter)
+                ? how.of(value, type, reading, parameter) : Collections.emptyIterator();
     }
 
     /** Every position of {@code parameters}, in order. */
@@ -3519,7 +3535,7 @@ public final class Generator {
     /** A lane of the candidates of {@code from}, one a turn, the iterators one after the other. */
     private static Lane candidatesOf(List<Iterator<GeneratedRow>> from) {
         Iterator<GeneratedRow> all = NearbyValues.flat(from.iterator(), Function.identity());
-        return _ -> all.hasNext() ? new Turn.Proposed(all.next()) : null;
+        return () -> all.hasNext() ? new Turn.Proposed(all.next()) : null;
     }
 
     /** The candidates of {@code each} one at a time from each in turn. */
@@ -3570,13 +3586,18 @@ public final class Generator {
         Iterator<Pins> each = NearbyValues.flat(positions.iterator(), at ->
                 IntStream.range(0, axes.get(at).classes().size())
                         .mapToObj(cls -> Pins.of(axes, Map.of(at, cls))).iterator());
-        return share -> {
+        return () -> {
             if (!each.hasNext()) {
                 return null;
             }
+            // A search composes and runs rows before it comes back, and cannot be taken up where
+            // it was left: it is not begun where there is no run to put its rows to.
+            if (looking.runsLeft() <= 0) {
+                looking.ranOutOfRuns();
+                return null;
+            }
             Pins pins = each.next();
-            GeneratedRow found = looking.within(share,
-                    () -> looking.tookFromSearching(() -> searching.apply(pins)));
+            GeneratedRow found = looking.tookFromSearching(() -> searching.apply(pins));
             return found != null ? new Turn.Found(found) : Turn.Pass.PASS;
         };
     }
@@ -3598,7 +3619,7 @@ public final class Generator {
                 }
             }
             int before = looking.runsSpent();
-            Turn turn = next.turn(looking.runsLeft() / live.size());
+            Turn turn = next.turn();
             GeneratedRow found = null;
             switch (turn) {
                 case null -> live.remove(next);
@@ -11228,8 +11249,6 @@ public final class Generator {
         private final ReplacementOwed asked;
         private final int mostRuns;
         private int runs;
-        /** The run this search may not go past while one stage of it is looked at ({@link #within}). */
-        private int stageEnd = Integer.MAX_VALUE;
         /** Whether any row was asked about and answered alike. */
         private boolean alike;
         /** How many times this stopped a search. */
@@ -11348,24 +11367,15 @@ public final class Generator {
             return mostRuns - runs;
         }
 
-        /**
-         * What {@code looking} comes to with no more than {@code share} further runs: a stage of a
-         * search that goes on to others. Where it is cut there with a candidate untried, that is
-         * said as the runs being spent, which it is — a wider run gives the stage more.
-         */
-        <T> T within(int share, Supplier<T> looking) {
-            int outside = stageEnd;
-            stageEnd = Math.min(outside, runs + share);
-            try {
-                return looking.get();
-            } finally {
-                stageEnd = outside;
-            }
+        /** Something was left untried where the runs were spent, as it is when a candidate is
+         *  asked for past them. */
+        void ranOutOfRuns() {
+            stop(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE, runsReached());
         }
 
         /** One more run of this search's own, where one is left. */
         private boolean spend() {
-            if (runs >= Math.min(mostRuns, stageEnd)) {
+            if (runs >= mostRuns) {
                 return false;
             }
             runs++;

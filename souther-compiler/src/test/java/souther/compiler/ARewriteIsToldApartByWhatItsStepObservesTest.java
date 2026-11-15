@@ -115,6 +115,87 @@ class ARewriteIsToldApartByWhatItsStepObservesTest {
         assertToldApart(measured(source), "any");
     }
 
+    /**
+     * Many dependencies answer lists, and the walk goes over what only the last of them answers:
+     * the answers of the others are not what it observes, and a candidate that changes them takes
+     * the runs of the one that does.
+     */
+    @Test
+    void theAnswerOfTheDependencyTheWalkReadsIsGrownAmongManyItDoesNot() {
+        StringBuilder behaviors = new StringBuilder();
+        StringBuilder depends = new StringBuilder();
+        StringBuilder names = new StringBuilder();
+        StringBuilder sums = new StringBuilder();
+        StringBuilder fakes = new StringBuilder();
+        for (int at = 1; at <= 10; at++) {
+            behaviors.append("behavior u").append(at).append(" : (k: String) -> List<Int>\n");
+            depends.append("    depends on u").append(at).append('\n');
+            names.append("u").append(at).append(", ");
+            sums.append(" + List.length(u").append(at).append("(sku))");
+            fakes.append("fake u").append(at).append("\n    | _ -> [ 1 ]\n\n");
+        }
+        String source = """
+                module repro.many
+
+                data Stock = { sku: String, qty: Int }
+
+                %sbehavior readStock : (sku: String) -> List<Stock>
+
+                behavior available : (sku: String, want: Int) -> Int
+                %s    depends on readStock
+
+                let available (sku, want, %sreadStock) = {
+                    let found = List.indexBy(.sku, readStock(sku))
+                        |> Map.get(sku)
+                        |> Option.map(s -> s.qty >= want)
+                        |> Option.withDefault(false)
+                    if found then 0%s else 99
+                }
+
+                %sfake readStock
+                    | _ -> [ Stock { sku = "apple", qty = 3 } ]
+
+                example available
+                    | "enough" : ("apple", 2) -> 10
+                    | "too many" : ("apple", 5) -> 99
+                    | "unknown" : ("pear", 1) -> 99
+                """.formatted(behaviors, depends, names, sums, fakes);
+
+        assertToldApart(measured(source), "indexBy");
+    }
+
+    /**
+     * Many lists are handed in, and the walk goes over the last: growing the others changes
+     * nothing it observes. Decided with or without the others left alone, so it holds the walk
+     * over the list it reads and does not say the others cost anything.
+     */
+    @Test
+    void theListTheWalkGoesOverIsGrownAmongManyItDoesNot() {
+        StringBuilder parameters = new StringBuilder();
+        StringBuilder names = new StringBuilder();
+        StringBuilder lengths = new StringBuilder("0");
+        StringBuilder others = new StringBuilder();
+        for (int at = 1; at <= 8; at++) {
+            parameters.append("l").append(at).append(": List<Int>, ");
+            names.append("l").append(at).append(", ");
+            lengths.append(" + List.length(l").append(at).append(")");
+            others.append("[ 1 ], ");
+        }
+        String source = """
+                module repro.lists
+
+                behavior check : (%sxs: List<Int>) -> Bool
+                let check (%sxs) = %s >= 0 && List.length(xs) >= 2 && List.any(x -> x > 1000, xs)
+
+                example check
+                    | "none" : (%s[ ]) -> false
+                    | "one" : (%s[ 1 ]) -> false
+                    | "two" : (%s[ 1, 2 ]) -> false
+                """.formatted(parameters, names, lengths, others, others, others);
+
+        assertToldApart(measured(source), "any");
+    }
+
     /** The side of a negative border the difference lies on is either: here it is the one below. */
     @Test
     void aNegativeBorderIsToldApartFromEitherSide() {
