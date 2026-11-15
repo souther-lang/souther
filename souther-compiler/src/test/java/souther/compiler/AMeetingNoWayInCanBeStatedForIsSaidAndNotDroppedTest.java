@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * combination of them is another. A meeting where no way in can be stated — under the arms of an
  * attempt, whose arm is taken by whether a value could be built — is a meeting still: its
  * combinations are asked of the rows by what the rows are seen doing at its decisions, and the
- * ones no row made are not known to be makeable, which the measure says.
+ * ones no row made are not stated to exist by anything of the input.
  */
 class AMeetingNoWayInCanBeStatedForIsSaidAndNotDroppedTest {
 
@@ -40,25 +40,26 @@ class AMeetingNoWayInCanBeStatedForIsSaidAndNotDroppedTest {
     }
 
     @Test
-    void aMeetingInTheArmOfAnAttemptIsOfferedAndItsUnmadeCombinationsAreUndetermined() {
+    void aMeetingInTheArmOfAnAttemptIsOfferedAndItsUnmadeCombinationsAreNotStatedToExist() {
         AdequacyReport.BehaviorReport behavior = measured("""
                 example f
                     | (0, 0, 1) -> 22
                     | (0, 0, -1) -> 0
                 """);
 
-        assertTrue(behavior.weakenedBy().causes().stream()
-                        .anyMatch(Weakening.MeetingsExistenceUndetermined.class::isInstance),
-                () -> "the combinations no row made are not known to exist: " + behavior.weakenedBy());
         assertFalse(behavior.weakenedBy().causes().stream()
                         .anyMatch(Weakening.MeetingsNotJoined.class::isInstance),
                 () -> "the meeting is offered, not left out: " + behavior.weakenedBy());
-        assertEquals(MeasurementStatus.PARTIAL, behavior.status(),
-                () -> "so the measure is not called whole: " + behavior.weakenedBy());
+        assertEquals(MeasurementStatus.COMPLETE, behavior.status(),
+                () -> "and read in full: " + behavior.weakenedBy());
+        assertTrue(behavior.evidence().interaction().counted() > 1,
+                "its combinations are counted");
+        assertFalse(behavior.evidence().interaction().notStatedToExist().isEmpty(),
+                "and the ones no row made are not stated to exist by anything of the input");
     }
 
     @Test
-    void rowsThatMakeEveryCombinationOfAMeetingInTheArmOfAnAttemptLeaveNothingUndetermined() {
+    void rowsThatMakeEveryCombinationOfAMeetingInTheArmOfAnAttemptLeaveNothingOwed() {
         AdequacyReport.BehaviorReport behavior = measured("""
                 example f
                     | (0, 0, 1) -> 22
@@ -68,9 +69,8 @@ class AMeetingNoWayInCanBeStatedForIsSaidAndNotDroppedTest {
                     | (0, 0, -1) -> 0
                 """);
 
-        assertFalse(behavior.weakenedBy().causes().stream()
-                        .anyMatch(Weakening.MeetingsExistenceUndetermined.class::isInstance),
-                () -> "every combination was made: " + behavior.weakenedBy());
+        assertTrue(behavior.evidence().interaction().notMadeByRows().isEmpty(),
+                "every combination was made, so none is owed");
         assertFalse(behavior.weakenedBy().causes().stream()
                         .anyMatch(Weakening.MeetingsNotJoined.class::isInstance),
                 () -> "the meeting is offered: " + behavior.weakenedBy());

@@ -213,16 +213,6 @@ public enum WeakeningWord {
     MEETINGS_NOT_WALKED,
 
     /**
-     * Combinations of a meeting of the body's decisions that no row made and that the classes of
-     * the input do not say exist.
-     *
-     * <p>Its own word beside the one above, because a consumer acts on them differently: a wider
-     * limit walks a meeting held back by one, and shows nothing more of these. What shows one is a
-     * written row that makes it.
-     */
-    MEETINGS_EXISTENCE_UNDETERMINED,
-
-    /**
      * A sum of the elements a comparison keeps was met, and its decisions were not joined to the
      * evaluations a run records, so none of its combinations was asked of the rows.
      *

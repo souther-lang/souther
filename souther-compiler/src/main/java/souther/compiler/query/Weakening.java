@@ -106,7 +106,7 @@ public sealed interface Weakening {
                  ProofContradicted _, ProofOfAWayContradicted _, ArmsUnsettled _,
                  DecisionOfRowUnreadable _, DecisionRunNotWatched _, DecisionRuleReadShort _,
                  KeyedOverwriteCasesUnmeasured _, ReachableNodeCasesUnmeasured _,
-                 MeetingsExistenceUndetermined _, MeetingsNotJoined _ -> List.of();
+                 MeetingsNotJoined _ -> List.of();
             case BorderValueUnreadable it -> it.why().figures();
             case BorderReadingsNotExhausted it -> it.limits();
             case ModelReadingIncomplete it -> it.cause().figures();
@@ -703,41 +703,6 @@ public sealed interface Weakening {
     }
 
     /**
-     * Combinations of a meeting of the body's decisions that no row made and that the classes of
-     * the input do not say exist.
-     *
-     * <p>What a combination is comes from the decisions it settles, and every one is asked of the
-     * rows. Where a decision is one no class of the input states — a relation between two
-     * positions, a number taken of something no position holds — the classes cannot say whether
-     * some input settles it together with the others. A combination nothing made is then owed, and
-     * is not shown to exist, nor shown not to. A row that makes it shows that it does; the
-     * combinations the rows made are not counted.
-     *
-     * <p>Beside {@link MeetingsNotWalked}, which a wider run walks: here the meeting is walked in
-     * full and what is missing is a row. Which combinations the written rows made, and which the
-     * classes state, are what this is of, and no allowance of this compiler changes either. A row
-     * a search proposes for one is not evidence until it is written.
-     *
-     * @param combinations how many combinations are not shown to exist
-     */
-    record MeetingsExistenceUndetermined(String behavior, int combinations) implements Weakening {
-
-        public MeetingsExistenceUndetermined {
-            Objects.requireNonNull(behavior, "a meeting is a meeting of some behavior");
-            if (combinations < 1) {
-                throw new IllegalArgumentException("a measure that showed every combination to"
-                        + " exist went without nothing here: " + combinations);
-            }
-        }
-
-        /** The written rows and the classes decide it, and no allowance widens either. */
-        @Override
-        public RunSensitivity runSensitivity() {
-            return RunSensitivity.UNAFFECTED;
-        }
-    }
-
-    /**
      * A sum of the elements a comparison keeps whose decisions this reading met and could not join
      * to the evaluations a run records.
      *
@@ -749,10 +714,9 @@ public sealed interface Weakening {
      * nothing established that a row is missing; and a behavior is not said to have had every
      * combination of its decisions made when some of them were never asked about.
      *
-     * <p>Beside {@link MeetingsExistenceUndetermined}, which is a group this reading did form and
-     * walked. Here there is no group: the decisions were not joined into one, or an operand has
-     * a way that cannot be held to a row. The reasons are {@code WhyNotJoined}'s, kept by the reading and not
-     * published.
+     * <p>There is no group here: the decisions were not joined into one, or an operand has a way
+     * that cannot be held to a row. The reasons are {@code WhyNotJoined}'s, kept by the reading and
+     * not published.
      */
     record MeetingsNotJoined(String behavior, int groups) implements Weakening {
 

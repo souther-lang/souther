@@ -11952,8 +11952,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case Weakening.InputNotRead _ -> WeakeningWord.BEHAVIOR_INPUT_NOT_READ;
             case Weakening.PairSpaceTruncated _ -> WeakeningWord.PAIR_SPACE_TRUNCATED;
             case Weakening.MeetingsNotWalked _ -> WeakeningWord.MEETINGS_NOT_WALKED;
-            case Weakening.MeetingsExistenceUndetermined _ ->
-                    WeakeningWord.MEETINGS_EXISTENCE_UNDETERMINED;
             case Weakening.MeetingsNotJoined _ -> WeakeningWord.MEETINGS_NOT_JOINED;
             case Weakening.ProofContradicted _, Weakening.ProofOfAWayContradicted _ ->
                     WeakeningWord.PROOF_CONTRADICTED;

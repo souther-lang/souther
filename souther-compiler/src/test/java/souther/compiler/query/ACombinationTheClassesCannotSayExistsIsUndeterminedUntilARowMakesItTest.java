@@ -2,7 +2,6 @@ package souther.compiler.query;
 
 import souther.compiler.ACompiledModel;
 import souther.compiler.observe.MeasurementStatus;
-import souther.compiler.observe.RunSensitivity;
 import souther.compiler.report.AdequacyReport;
 
 import org.junit.jupiter.api.Test;
@@ -15,12 +14,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A combination of a meeting whose decisions the classes of the input do not state is asked for, and
- * the classes cannot say it exists: it is owed and undetermined until a row makes it.
+ * the classes cannot say it exists. The measure is made in full over it, and what is open is the
+ * obligation: whether a row can be written, which a row a search composed and a run was seen making
+ * it with answers.
  *
  * <p>The first operand below is a relation between two positions, which no class of either states.
  * So its outcomes narrow no position, and no cell steers a row into one of the meeting's
- * combinations rather than another. A row is credited with a combination by what its run did, and a
- * combination nothing made is not shown to exist by the classes. What shows it is a written row.
+ * combinations rather than another. A row is credited with a combination by what its run did.
  */
 class ACombinationTheClassesCannotSayExistsIsUndeterminedUntilARowMakesItTest {
 
@@ -41,26 +41,24 @@ class ACombinationTheClassesCannotSayExistsIsUndeterminedUntilARowMakesItTest {
             "    | (3, 4, true) -> 21\n");
 
     /**
-     * The meeting is read and walked in full, and the behavior says how many of its combinations
-     * are owed without being shown to exist. A wider run does not change it: only a row does.
+     * The meeting is read and walked in full, so the measure went without nothing; and every
+     * combination the rows did not make is owed a finding, which says what is open about it
+     * until a run is seen making it.
      */
     @Test
-    void theCombinationsNothingMadeAreSaidAsUndeterminedAndNotAsDropped() {
+    void theCombinationsNothingMadeAreOwedAndTheMeasureIsWhole() {
         AdequacyReport.BehaviorReport behavior = behaviorOf(MODEL + ROWS.getFirst());
         InteractionEvidence meetings = behavior.evidence().interaction();
 
         assertInstanceOf(CombinationCriterion.Interactions.class,
                 behavior.evidence().combinations(),
                 "the body's decisions meet, whatever this run could place of them");
-        assertEquals(MeasurementStatus.PARTIAL, behavior.status(),
-                () -> "so the behavior is short of a measurement: " + behavior.weakenedBy());
-        Weakening.MeetingsExistenceUndetermined said = behavior.weakenedBy().causes().stream()
-                .filter(Weakening.MeetingsExistenceUndetermined.class::isInstance)
-                .map(Weakening.MeetingsExistenceUndetermined.class::cast).findFirst()
-                .orElseThrow(() -> new AssertionError("it says which: " + behavior.weakenedBy()));
-        assertEquals(meetings.counted() - 1, said.combinations(),
-                "and says how many: every combination but the one the row made");
-        assertEquals(RunSensitivity.UNAFFECTED, said.runSensitivity());
+        assertEquals(MeasurementStatus.COMPLETE, behavior.status(),
+                () -> "the measure is made in full: " + behavior.weakenedBy());
+        assertEquals(meetings.counted() - 1, meetings.notMadeByRows().size(),
+                "and every combination but the one the row made is owed");
+        assertTrue(meetings.notStatedToExist().size() > 0,
+                "the relation is one no class states, so the classes do not say they exist");
     }
 
     /**
@@ -83,12 +81,9 @@ class ACombinationTheClassesCannotSayExistsIsUndeterminedUntilARowMakesItTest {
         }
     }
 
-    /**
-     * What the classes could not say, a row says: with a row at every combination there is nothing
-     * left undetermined, and the measure is whole.
-     */
+    /** With a row at every combination there is nothing the classes leave open. */
     @Test
-    void aRowAtEveryCombinationLeavesNothingUndetermined() {
+    void aRowAtEveryCombinationLeavesNothingOwed() {
         AdequacyReport.BehaviorReport behavior = behaviorOf(MODEL
                 + "    | (1, 1, true) -> 11\n"
                 + "    | (1, 1, false) -> 12\n"
@@ -96,16 +91,15 @@ class ACombinationTheClassesCannotSayExistsIsUndeterminedUntilARowMakesItTest {
                 + "    | (1, 2, false) -> 22\n");
 
         assertEquals(MeasurementStatus.COMPLETE, behavior.status(),
-                () -> "every combination was made, so each is shown to exist: "
-                        + behavior.weakenedBy());
+                () -> "every combination was made: " + behavior.weakenedBy());
         assertTrue(behavior.evidence().interaction().notMadeByRows().isEmpty(),
                 "and none is owed");
     }
 
     /**
      * The else of a conjunction is placed. A run is seen at the arm whichever of the two ways it
-     * came, and the classes state both: it is a union of two cells and no combination is left
-     * undetermined.
+     * came, and the classes state both: it is a union of two cells and every combination is
+     * stated.
      */
     @Test
     void theElseOfAConjunctionIsPlacedAsTheWaysItCameBy() {
