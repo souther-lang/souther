@@ -348,6 +348,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                         + " and not among the names read off a value");
         row(out, c + "check/RecursionOverAList", "callsOf", "(" + core + "L" + c
                 + "types/ValueName$Helper;Ljava/util/List;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
+        row(out, c + "check/Terms", "grows", "(" + core + ")Z", Reading.STRUCTURE,
+                "finds the adds a walk's step makes to the builder it grows, which no name read is"
+                        + " and which stand at the step's own nodes");
         row(out, c + "check/Clauses$ReadsOfAClause", "walk", "(" + core + ")V",
                 Reading.STRUCTURE, "a chain read off one of the value's fields is one place, whose"
                         + " names Location.of reads; a projection read off anything else names"
@@ -454,8 +457,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/TermMeaning", "project", "(" + core + "Ljava/util/List;)V",
                 Reading.NAMES, "what a term says: a projection says what the accesses it"
                         + " stands for say, the last one first");
-        row(out, c + "check/Terms", "chainInto", "(" + core + "Ljava/util/List;)V",
-                Reading.NAMES, READS_THE_NAMES);
         row(out, c + "check/Terms", "keyOfNowhere", "(" + core + at + ")L" + c + "check/Term;",
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "check/Terms", "namedByRule", "(" + core + at + ")Z",

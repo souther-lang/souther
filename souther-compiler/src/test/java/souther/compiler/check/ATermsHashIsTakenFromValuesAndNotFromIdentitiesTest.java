@@ -148,7 +148,8 @@ class ATermsHashIsTakenFromValuesAndNotFromIdentitiesTest {
                 interned.howManyAreIn(evaluated, evaluated, AddsWhatItDoesNotHold.Of.KEYS),
                 interned.howManyMeet(evaluated, interned.closure(1, one), AnswerAspect.TRUTH),
                 interned.howManyDifferent(evaluated, null, AddsWhatItDoesNotHold.Of.ELEMENTS),
-                interned.sumOfSizes(evaluated, null),
+                interned.sumOfSizes(evaluated, null, new Term.CountedBy(
+                        new ValueName.Helper("m", "length"), null)),
                 interned.exactTotal(new ValueName.Helper("m", "f"), evaluated),
                 interned.codePoints(evaluated, new CodePointClass.NotWhitespace()))) {
             built.add(term.shape());

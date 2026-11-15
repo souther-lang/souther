@@ -2175,12 +2175,27 @@ final class Predicates {
      * first and leave the second saying nothing.
      */
     private Piecewise piecewiseOf(NumericConstraint owed) {
-        if (chosenIn(owed.form(), List.of(), Set.of()) == null) {
+        return piecewiseOf(owed, List.of());
+    }
+
+    /** The same, where {@code given} says of the values inside the clause what is known of them
+     *  besides, so that a value only those name is read case by case as well. */
+    private Piecewise piecewiseOf(NumericConstraint owed, List<NumericConstraint> given) {
+        if (chosenIn(owed.form(), given, Set.of()) == null) {
             return null;
         }
         List<Case> cases = new ArrayList<>();
-        return expand(owed, owed.form(), List.of(), Set.of(), cases)
+        return expand(owed, owed.form(), given, Set.of(), cases)
                 ? new Piecewise(List.copyOf(cases)) : null;
+    }
+
+    /**
+     * Whether {@code owed} holds in every case of the values inside it that are each one of
+     * several, under what {@code k} holds ({@link #piecewiseOf}); false where it makes no cases.
+     */
+    boolean entailedInEveryCase(NumericConstraint owed, Known k, List<NumericConstraint> given) {
+        Piecewise cases = piecewiseOf(owed, given);
+        return cases != null && cases.entailedBy(k.numbers());
     }
 
     /**

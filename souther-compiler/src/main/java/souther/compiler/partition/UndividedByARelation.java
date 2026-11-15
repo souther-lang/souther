@@ -4698,13 +4698,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * Whether separators counted in a string that {@code counted} was done to are at least as many
      * as the pieces of a string that {@code parted} was done to are parted at: the same
      * conversion, or none where the conversion makes no separator the string did not hold
-     * ({@link ConversionAnswers#keepsSeparator}).
+     * ({@link CaseMaps#makesNoOccurrenceOf}).
      */
     static boolean countsTheSeparatorsTheWayThePiecesAreParted(CaseMapping counted,
                                                               CaseMapping parted,
                                                               int separator) {
-        return counted.equals(parted)
-                || (counted.equals(CaseMapping.NONE) && CaseMaps.keepsSeparator(parted, separator));
+        if (counted.equals(parted)) {
+            return true;
+        }
+        if (!counted.equals(CaseMapping.NONE)) {
+            return false;
+        }
+        return CaseMaps.makesNoOccurrenceOf(parted, separator);
     }
 
     /**
