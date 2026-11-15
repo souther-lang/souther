@@ -65,6 +65,7 @@ class ABodyAnsweringOneValueIsToldApartByAThrowOfAnotherBehaviorTest {
      * A body that answers the constant whatever it is given is the rewrite under another
      * spelling: no row of throws answers otherwise, so it is left undecided — every candidate was
      * asked and none came back different, and no run was spent short of that — and is no gap.
+     * The invariant of a throw refuses the lists that repeat a pin, and says so.
      */
     @Test
     void aBodyThatAnswersTheConstantIsLeftUndecidedAndNoGap() {
@@ -75,7 +76,8 @@ class ABodyAnsweringOneValueIsToldApartByAThrowOfAnotherBehaviorTest {
         ReplacementEvidence.Undecided open = assertInstanceOf(ReplacementEvidence.Undecided.class,
                 oneAnswer.getFirst(), () -> "no row of throws tells it from the constant: "
                         + oneAnswer);
-        assertEquals(List.of(ReplacementEvidence.Undecided.Why.NO_ROW_ANSWERED_DIFFERENTLY),
+        assertEquals(List.of(ReplacementEvidence.Undecided.Why.A_RULE_REFUSED_A_CANDIDATE,
+                        ReplacementEvidence.Undecided.Why.NO_ROW_ANSWERED_DIFFERENTLY),
                 open.why().ways().stream().map(ReplacementEvidence.Undecided.Way::why).toList(),
                 () -> "asked of every candidate, and not stopped short: " + open);
     }

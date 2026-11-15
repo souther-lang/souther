@@ -9,8 +9,10 @@ import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.semantics.CaseMapping;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -69,6 +71,13 @@ final class NearbyValues {
          *  is not walked. */
         default boolean reaches(TermPath unusedAt) {
             return true;
+        }
+
+        /** What the case a sum is in becomes where another case of it is offered: nothing, unless
+         *  a step offers one. */
+        default Iterator<ObservedValue> otherCase(Shape.Sum unusedSum, ObservedValue unusedValue,
+                                                  TermPath unusedAt) {
+            return none();
         }
     }
 
@@ -244,6 +253,54 @@ final class NearbyValues {
                 Lists.HOLDING_NONE, Put.AFTER, null);
     }
 
+    /**
+     * The value {@code value} becomes where a list it holds, or is, has the first {@code count}
+     * values {@code stoodFor} offers for its elements put after the ones it holds, all at once;
+     * in the one list {@code within} names where one is.
+     *
+     * <p>For a walk whose step compares an element with something: a list holding the value
+     * itself and the ones either side of it is told from the list stopped at its first element on
+     * whichever side of the comparison the difference lies, which one element at a time would have
+     * to be tried for.
+     */
+    static Iterator<ObservedValue> withEach(
+            ObservedValue value, Type type, RuleReadingContext reading,
+            Function<Type, Iterator<ObservedValue>> stoodFor, int count, TermPath within) {
+        TermPath root = within == null ? null : TermPath.of(within.head());
+        return of(value, type, reading, root, List.of(), new Leaves() {
+
+            @Override
+            public Iterator<ObservedValue> beside(Type.Prim prim, ObservedValue leaf, TermPath at,
+                                                  List<Narrowing> along, TypeView view) {
+                return none();
+            }
+
+            @Override
+            public boolean reaches(TermPath at) {
+                return within == null || onTheWayTo(within, at);
+            }
+
+            @Override
+            public Iterator<ObservedValue> longer(ObservedValue.Sequence held,
+                                                  Shape.Sequence sequence, TermPath at) {
+                if (within != null && !within.equals(at)) {
+                    return none();
+                }
+                List<ObservedValue> after = new ArrayList<>(held.elements());
+                Iterator<ObservedValue> offered = stoodFor.apply(sequence.element());
+                Set<ObservedValue> distinct = new HashSet<>();
+                while (distinct.size() < count && offered.hasNext()) {
+                    ObservedValue next = offered.next();
+                    if (distinct.add(next)) {
+                        after.add(next);
+                    }
+                }
+                return after.size() == held.elements().size() ? none()
+                        : List.<ObservedValue>of(new ObservedValue.Sequence(after)).iterator();
+            }
+        });
+    }
+
     private static Iterator<ObservedValue> withAnElement(
             ObservedValue value, Type type, RuleReadingContext reading, InputsRowsRanWith ranWith,
             Function<Type, Iterator<ObservedValue>> stoodFor, Lists which, Put where,
@@ -331,6 +388,166 @@ final class NearbyValues {
                         }));
             }
         });
+    }
+
+    /**
+     * The values {@code value} becomes where its scalar leaves are put as values of {@code held} of
+     * the leaf's own kind: first every leaf put as the first of them, then the arrangements one
+     * leaf away from {@code value}, then those one more leaf away, and so on. A leaf none of them
+     * is of the kind of stays as it was.
+     *
+     * <p>For an element of what a dependency answers to a call: what is looked up by what the call
+     * was made with is found among the values the call holds, so an element made of them is the one
+     * a lookup goes on to find. Which of the held values stands at which leaf is not known, so the
+     * arrangements are handed over nearest first, each made when it is asked for, and the caller's
+     * budget is what ends them and says so.
+     */
+    static Iterator<ObservedValue> holding(ObservedValue value, Type type,
+                                           RuleReadingContext reading, List<ObservedValue> held,
+                                           List<String> reads) {
+        TermPath root = TermPath.of("element");
+        Leaves toTheFirst = (_, leaf, _, _, _) -> {
+            for (ObservedValue each : held) {
+                if (each.getClass() == leaf.getClass()) {
+                    return each.equals(leaf) ? none() : List.of(each).iterator();
+                }
+            }
+            return none();
+        };
+        Leaves toAnyRead = new Rearranging(held, reads, true);
+        Leaves toAnyOther = new Rearranging(held, reads, false);
+        ObservedValue allFirst = value;
+        Iterator<ObservedValue> next = of(allFirst, type, reading, root, List.of(), toTheFirst);
+        // One leaf at a time, and each is put as a value it then is, so the walk ends.
+        while (next.hasNext()) {
+            allFirst = next.next();
+            next = of(allFirst, type, reading, root, List.of(), toTheFirst);
+        }
+        Set<ObservedValue> reached = new LinkedHashSet<>();
+        reached.add(value);
+        ArrayDeque<ObservedValue> toWalk = new ArrayDeque<>();
+        toWalk.add(value);
+        ArrayDeque<ObservedValue> ready = new ArrayDeque<>();
+        ArrayDeque<ObservedValue> later = new ArrayDeque<>();
+        if (reached.add(allFirst)) {
+            ready.add(allFirst);
+            toWalk.add(allFirst);
+        }
+        return new Iterator<>() {
+
+            @Override
+            public boolean hasNext() {
+                while (ready.isEmpty() && !toWalk.isEmpty()) {
+                    ObservedValue from = toWalk.poll();
+                    Iterator<ObservedValue> read = of(from, type, reading, root, List.of(),
+                            toAnyRead);
+                    while (read.hasNext()) {
+                        ObservedValue arranged = read.next();
+                        if (reached.add(arranged)) {
+                            ready.add(arranged);
+                            toWalk.add(arranged);
+                        }
+                    }
+                    Iterator<ObservedValue> other = of(from, type, reading, root, List.of(),
+                            toAnyOther);
+                    while (other.hasNext()) {
+                        ObservedValue arranged = other.next();
+                        if (reached.add(arranged)) {
+                            later.add(arranged);
+                            toWalk.add(arranged);
+                        }
+                    }
+                    // Where nothing a step reads is left to change from here, what it does not
+                    // read is next, rather than every arrangement of what it reads first.
+                    if (ready.isEmpty() && !later.isEmpty()) {
+                        ready.add(later.poll());
+                    }
+                }
+                return !ready.isEmpty();
+            }
+
+            @Override
+            public ObservedValue next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                return ready.poll();
+            }
+        };
+    }
+
+    /**
+     * What a scalar leaf becomes where another of {@code held} of its kind is put there, and what
+     * the case a sum is in becomes where another case of the sum is among {@code held} — the
+     * leaves a step reads, or the ones it does not, as {@code ofWhatIsRead} says.
+     */
+    private static final class Rearranging implements Leaves {
+
+        private final List<ObservedValue> held;
+        private final List<String> reads;
+        private final boolean ofWhatIsRead;
+
+        private Rearranging(List<ObservedValue> held, List<String> reads, boolean ofWhatIsRead) {
+            this.held = held;
+            this.reads = reads;
+            this.ofWhatIsRead = ofWhatIsRead;
+        }
+
+        @Override
+        public Iterator<ObservedValue> beside(Type.Prim prim, ObservedValue leaf, TermPath at,
+                                              List<Narrowing> along, TypeView view) {
+            return readBy(at, reads) != ofWhatIsRead ? none()
+                    : filtered(held.iterator(),
+                            each -> each.getClass() == leaf.getClass() && !each.equals(leaf));
+        }
+
+        @Override
+        public Iterator<ObservedValue> otherCase(Shape.Sum sum, ObservedValue value,
+                                                 TermPath at) {
+            // A case inside what an element holds, and not the element itself: the cases an
+            // element is are what the rows and the type already offer, in the order they offer
+            // them, and what is not offered is a case nested in a record.
+            return !isNested(at) || readBy(at, reads) != ofWhatIsRead ? none()
+                    : filtered(held.iterator(), each -> caseOf(each) != null
+                            && sum.reaches().cases().contains(caseOf(each))
+                            && !each.equals(value));
+        }
+
+        /** Whether {@code at} is inside a field of what it is rooted at. */
+        private static boolean isNested(TermPath at) {
+            return at != null && at.steps().stream()
+                    .anyMatch(step -> step instanceof TermPath.Step.Field);
+        }
+
+        /** The case a value is, whether it holds anything or not; none for a value that is no
+         *  case. */
+        private static TypeSymbol caseOf(ObservedValue value) {
+            return switch (value) {
+                case ObservedValue.Unit unit -> unit.type();
+                case ObservedValue.Constructed made -> made.type();
+                default -> null;
+            };
+        }
+    }
+
+    /**
+     * Whether a leaf at {@code at} is one a step reads: where the step reads no field by name, or
+     * the leaf is the element itself, or one of the fields in the path is one it reads.
+     */
+    private static boolean readBy(TermPath at, List<String> reads) {
+        if (reads.isEmpty() || at == null) {
+            return true;
+        }
+        boolean named = false;
+        for (TermPath.Step step : at.steps()) {
+            if (step instanceof TermPath.Step.Field field) {
+                named = true;
+                if (reads.contains(field.name())) {
+                    return true;
+                }
+            }
+        }
+        return !named;
     }
 
     /**
@@ -608,10 +825,14 @@ final class NearbyValues {
                             leaves.longer(held, sequence, at)).iterator(), Function.identity())
                     : none();
             // The case the value is, as a fixture writes a sum.
-            case Shape.Sum sum -> value instanceof ObservedValue.Constructed made
-                    && sum.reaches().cases().contains(made.type())
-                    ? of(value, Type.ref(made.type()), reading, at, narrowed(along, at, value),
-                            leaves) : none();
+            case Shape.Sum sum -> {
+                Iterator<ObservedValue> theCaseItIs = value instanceof ObservedValue.Constructed made
+                        && sum.reaches().cases().contains(made.type())
+                        ? of(value, Type.ref(made.type()), reading, at,
+                                narrowed(along, at, value), leaves) : none();
+                yield flat(List.of(leaves.otherCase(sum, value, at), theCaseItIs).iterator(),
+                        Function.<Iterator<ObservedValue>>identity());
+            }
             case Shape.Optional optional -> value instanceof ObservedValue.Absent ? none()
                     : of(value, optional.element(), reading, at, along, leaves);
             // Nothing is beside these: a map's keys and a unit case are not a number, and a
@@ -620,6 +841,28 @@ final class NearbyValues {
                  Shape.Function _, Shape.Uninhabited _, Shape.Bottom _, Shape.Erroneous _,
                  Shape.Undecided _ -> none();
         };
+    }
+
+    /**
+     * The values a row is taken to for a comparison with each of {@code named} to answer
+     * differently: the value itself and the values one step either side, since a comparison tells
+     * apart the values on its two sides. A value with no step, a string among them, is itself
+     * alone.
+     */
+    static List<ObservedValue> bordersOf(List<ObservedValue> named) {
+        List<ObservedValue> out = new ArrayList<>();
+        for (ObservedValue each : named) {
+            Iterator<ObservedValue> beside = switch (each) {
+                case ObservedValue.Integer whole -> stepsOf(whole);
+                case ObservedValue.Decimal decimal -> unitsOf(decimal);
+                default -> none();
+            };
+            // The value itself, which an equality holds at and an order holds at or divides at,
+            // and then the values either side, which tell the two sides of an order apart.
+            out.add(each);
+            beside.forEachRemaining(out::add);
+        }
+        return out;
     }
 
     private static Iterator<ObservedValue> unitsOf(ObservedValue.Decimal decimal) {
@@ -785,7 +1028,7 @@ final class NearbyValues {
      * first; what is left of the longer one after the shorter is used up. {@code second} is made
      * the first time it is wanted.
      */
-    private static <A> Iterator<A> alternating(Iterator<A> first, Supplier<Iterator<A>> second) {
+    static <A> Iterator<A> alternating(Iterator<A> first, Supplier<Iterator<A>> second) {
         return new Iterator<>() {
             private Iterator<A> later;
 

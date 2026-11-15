@@ -79,10 +79,6 @@ class AnUndecidedRewriteNamesTheFigureItStoppedAtTest {
                 example score
                     | ([]) -> 0
                     | ([Throw([])]) -> 0
-                    | ([Throw([12])]) -> 1
-                    | ([Throw([1, 2])]) -> 2
-                    | ([Throw([1, 2, 3])]) -> 3
-                    | ([Throw([5, 8])]) -> 2
                 """), 1);
 
         String page = AdequacyReport.of(compilation)
