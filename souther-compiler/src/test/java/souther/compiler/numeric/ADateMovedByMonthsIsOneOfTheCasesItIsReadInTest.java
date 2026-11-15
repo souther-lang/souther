@@ -16,9 +16,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * numbers of the date it is moved from: for every date, whichever months it is moved by, the cases
  * that hold of it are one, and the number that case answers is the one the runtime's move gives.
  *
- * <p>Over every date of the years round the leap years the calendar tells apart: those either side
- * of year nought, of the centuries that are and are not leap, and of the four hundred years that
- * repeat.
+ * <p>Over the dates of the years round the ones that tell the leap years apart: year nought, a
+ * century that is not leap and one that is. The cases are built from what a year leaves by four,
+ * a hundred and four hundred, which these years take every value of that matters.
  */
 class ADateMovedByMonthsIsOneOfTheCasesItIsReadInTest {
 
@@ -55,14 +55,15 @@ class ADateMovedByMonthsIsOneOfTheCasesItIsReadInTest {
         return answer;
     }
 
-    /** The years round the turns of the calendar's four hundred: nought and four hundred before
-     *  it, a century that is leap and ones that are not, in the years either side of each. */
-    private static final int[] AROUND = {-400, -100, 0, 1900, 2000, 2100};
+    /** The years that tell the leap years apart: nought, where a year's remainders are taken of a
+     *  year that is not above nought, a century that is not leap and one that is. A move reaches
+     *  two years either side, so three each side leaves every year it lands in a neighbour. */
+    private static final int[] AROUND = {0, 1900, 2000};
 
     private static List<LocalDate> datesRoundTheLeapYears(boolean onlyTheFirst) {
         List<LocalDate> out = new ArrayList<>();
         for (int around : AROUND) {
-            for (int year = around - 5; year <= around + 5; year++) {
+            for (int year = around - 3; year <= around + 3; year++) {
                 addTheDatesOf(year, onlyTheFirst, out);
             }
         }
