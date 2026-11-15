@@ -61,6 +61,48 @@ class AWalkOverThePiecesOfASplitAtACharacterAnInvariantAllowsOnceOwesNoRewriteTe
                 """)));
     }
 
+    /** The pattern of an address as a customer model writes it, and a helper that is expanded
+     *  at two places. */
+    @Test
+    void aHelperExpandedAtSeveralPlacesIsProvedAtEveryWalkItReaches() {
+        assertEquals(List.of(), walkRewritesOwed(measured("""
+                module repro.helper
+
+                data Address = String
+                    invariant String.matches("[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", value)
+
+                let domainOf (a: Address): List<String> =
+                    List.drop(1, String.split("@", String.lowercase(a.value)))
+
+                behavior lengths : (a: Address, b: Address) -> List<Int>
+                let lengths (a, b) =
+                    List.append(List.map(s -> String.length(s), domainOf(a)),
+                                List.map(s -> String.length(s) + 1, domainOf(b)))
+
+                example lengths
+                    | "two" : (Address("a@b.c"), Address("d@e.f")) -> [ 3, 4 ]
+                """)));
+    }
+
+    @Test
+    void aHelperThatAnswersThePiecesIsReadThroughItsExpansion() {
+        assertEquals(List.of(), walkRewritesOwed(measured("""
+                module repro.helper
+
+                data Address = String
+                    invariant String.matches("[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", value)
+
+                let domainOf (a: Address): List<String> =
+                    List.drop(1, String.split("@", String.lowercase(a.value)))
+
+                behavior lengths : (a: Address) -> List<Int>
+                let lengths (a) = List.map(s -> String.length(s), domainOf(a))
+
+                example lengths
+                    | "two" : (Address("a@b.c")) -> [ 3 ]
+                """)));
+    }
+
     @Test
     void aPatternThatLetsTheSeparatorStandAsOftenAsItLikesLeavesBothRewritesOwed() {
         assertEquals(List.of("fold_after_one_step", "fold_from_the_seed"),

@@ -7,6 +7,7 @@ import souther.compiler.partition.CaseMaps;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
+import souther.compiler.semantics.OperationLaw;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
@@ -1280,6 +1281,14 @@ final class Terms {
                 yield given == null || given.value() == e ? null
                         : expandedApplicationOf(given.value(), given.at());
             }
+            // An expansion of a helper, or of an operation that says nothing of how many it holds,
+            // is what its body answers: read through its bindings, as the value is.
+            case Core.LetIn li when li.binder().binding().owner()
+                    instanceof BindingOwner.Expansion expansion
+                    && !(DefaultBoundOperationFacts.get().settled(expansion.expanded(),
+                            OperationLaw.Observed.SIZE)
+                            instanceof BoundOperationFacts.Settled.ByALaw) ->
+                    expandedApplicationOf(li.body(), inside(li, at));
             case Core.LetIn li when li.binder().binding().owner()
                     instanceof BindingOwner.Expansion expansion -> {
                 Map<Integer, Core> handed = new TreeMap<>();
