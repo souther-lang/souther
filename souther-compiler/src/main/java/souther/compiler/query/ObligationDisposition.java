@@ -419,8 +419,6 @@ public sealed interface ObligationDisposition {
                      // which is short of one criterion's universe and says nothing about where a
                      // value stands against a line.
                      Weakening.MeetingsNotWalked _,
-                     // And one the classes do not place, for the same reason.
-                     Weakening.MeetingsNotPlaced _,
                      // And a sum of kept elements whose decisions were not joined to evaluations.
                      Weakening.MeetingsNotJoined _,
                      // And a decision whose ways could not all be written down, which is about

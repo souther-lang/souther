@@ -2385,6 +2385,26 @@ public sealed interface Core {
         return atSlots(nd, onExprSlot);
     }
 
+    /** Adds to {@code out} the names {@code e} binds anywhere inside it. */
+    static void bindersIn(Core e, Set<BindingId> out) {
+        switch (e) {
+            case Block block -> block.params().forEach(each -> out.add(each.binding()));
+            case LetIn let -> out.add(let.binder().binding());
+            case IfConstructed attempt -> {
+                if (attempt.binder() != null) {
+                    out.add(attempt.binder().binding());
+                }
+            }
+            case Match match -> match.cases().forEach(each -> {
+                if (each.binding().binder() != null) {
+                    out.add(each.binding().binder().binding());
+                }
+            });
+            default -> { }
+        }
+        forEachChild(e, child -> bindersIn(child, out));
+    }
+
     /**
      * Applies {@code f} to each direct child of {@code e} — the read-only counterpart of
      * {@link #mapChildren}. Every slot is a child whatever kind it is, so a pass that asks what a

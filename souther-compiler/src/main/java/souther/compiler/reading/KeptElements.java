@@ -71,8 +71,15 @@ final class KeptElements {
     /** What was made of a call. */
     sealed interface Read {
 
-        /** The decisions that meet in the answer, one factor for each: this way, and the other. */
-        record Factors(List<Factor> each) implements Read { }
+        /**
+         * The decisions that meet in the answer, one factor for each: this way, and the other.
+         *
+         * @param weights how many elements the decision keeps, for each factor in the same order
+         * @param fixed   how many elements are kept whatever a row chooses, or empty where that is
+         *                not known ({@link ElementEvaluations.Joined})
+         */
+        record Factors(List<Factor> each, List<Integer> weights, OptionalInt fixed)
+                implements Read { }
 
         /** An answer of decided elements whose decisions this could not join to evaluations. */
         record NotJoined(WhyNotJoined why) implements Read { }
@@ -124,7 +131,7 @@ final class KeptElements {
         // Decisions that meet in code a run may come back to are met, and are not offered: the
         // visits a recording counts are of the whole run, so the evaluations of the comparison
         // are not the list's.
-        if (plan.mayRepeat(call) && read instanceof Read.Factors(var each) && each.size() > 1) {
+        if (plan.mayRepeat(call) && read instanceof Read.Factors found && found.each().size() > 1) {
             return new Read.NotJoined(WhyNotJoined.THE_MEETING_IS_IN_CODE_RUN_AGAIN);
         }
         return read;
@@ -151,6 +158,7 @@ final class KeptElements {
         return switch (ElementEvaluations.of(each.asWritten(), contributing(call, valueMatters),
                 valueMatters, !valueMatters && compared,
                 truth -> names.folded(new ElementsWrittenOut.Stood<>(truth.value(), truth.at())),
+                truth -> truth.at().madeOfWhatIsWritten(truth.value(), symbols, newtypes),
                 value -> ValueChoices.of(value, names, newtypes))) {
             case ElementEvaluations.Result.NothingToJoin _ -> null;
             case ElementEvaluations.Result.NotJoined(var why) -> new Read.NotJoined(why);
@@ -240,7 +248,7 @@ final class KeptElements {
             }
             factors.add(new Factor(List.of(holding, failing)));
         }
-        return new Read.Factors(factors);
+        return new Read.Factors(factors, joined.weights(), joined.fixed());
     }
 
     /** The call in the tree the language's operations stand in that {@code run} is the expansion

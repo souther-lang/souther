@@ -50,7 +50,8 @@ class AChoicesClassesClaimsAndDecisionsAreAllOfThatChoiceTest {
      *  recorded at, and the decision that is. One number for all three, so that a fixture naming
      *  it names one way. */
     private static InteractionCells.Placed placed(InteractionCells.Cell cell, int probe) {
-        return new InteractionCells.Placed(cell, List.of(at(probe)), settling(probe));
+        return new InteractionCells.Placed(InteractionCells.Steering.exactly(cell),
+                List.of(at(probe)), settling(probe));
     }
 
     /** What a run that passed the place at {@code probe} settled, in the model's words. Beside
@@ -106,7 +107,7 @@ class AChoicesClassesClaimsAndDecisionsAreAllOfThatChoiceTest {
                 List.of(0, 9, 10, 20), List.of(2, 9, 11, 20), List.of(3, 9, 12, 20),
                 List.of(1, 9, 10, 21), List.of(2, 9, 11, 21), List.of(3, 9, 12, 21));
         for (int index = 0; index < byIndex.size(); index++) {
-            CellSelection selection = group.at(index);
+            CellSelection selection = GenerationFixtures.firstWay(group, index);
             List<Integer> expected = byIndex.get(index);
             assertTrue(selection.cell().admits(0, expected.get(0)),
                     "combination " + index + " leaves the class its two ways share");
@@ -174,12 +175,14 @@ class AChoicesClassesClaimsAndDecisionsAreAllOfThatChoiceTest {
     @Test
     void aChoiceWithNothingLeftIsNotACombination() {
         InteractionCells.Group group = new InteractionCells.Group(
-                new InteractionCells.Placed(holding(0, 1, 2, 3), List.of(), List.of()),
+                new InteractionCells.Placed(InteractionCells.Steering.exactly(holding(0, 1, 2, 3)),
+                        List.of(), List.of()),
                 List.of(
                         List.of(placed(holding(0), 10), placed(holding(1), 11)),
                         List.of(placed(holding(0), 20), placed(holding(1), 21))));
 
-        assertEquals(2, group.left(0), "two of the four choices are combinations");
+        assertEquals(2, GenerationFixtures.combinationsOf(group),
+                "two of the four choices are combinations");
         assertNull(group.at(1), "the first way of one factor and the second of the other agree "
                 + "on nothing");
         assertNull(group.at(2), "nor the other way round");
@@ -199,7 +202,7 @@ class AChoicesClassesClaimsAndDecisionsAreAllOfThatChoiceTest {
         InteractionCells.Group group = new InteractionCells.Group(
                 placed(holding(0, 1, 2, 3), 9),
                 List.of(List.of(placed(holding(0, 1), 10), placed(holding(2, 3), 11))));
-        CellSelection selection = group.at(0);
+        CellSelection selection = GenerationFixtures.firstWay(group, 0);
 
         assertTrue(selection.certifying(new int[] {1}, lit(9, 10)).isPresent(),
                 "a row the combination leaves room for, seen doing what it names");
@@ -233,7 +236,7 @@ class AChoicesClassesClaimsAndDecisionsAreAllOfThatChoiceTest {
         InteractionCells.Group group = new InteractionCells.Group(
                 placed(holding(0, 1, 2, 3), 9),
                 List.of(List.of(placed(holding(0, 1), 10), placed(holding(2, 3), 11))));
-        CellSelection selection = group.at(0);
+        CellSelection selection = GenerationFixtures.firstWay(group, 0);
         int[] where = {0};
 
         assertTrue(selection.certifying(where, lit(9, 10)).isPresent(),
@@ -259,7 +262,7 @@ class AChoicesClassesClaimsAndDecisionsAreAllOfThatChoiceTest {
         InteractionCells.Group group = new InteractionCells.Group(
                 placed(holding(0, 1, 2, 3), 9),
                 List.of(List.of(placed(holding(0, 1), 10), placed(holding(2, 3), 11))));
-        CellSelection selection = group.at(0);
+        CellSelection selection = GenerationFixtures.firstWay(group, 0);
 
         assertTrue(selection.certifiedBy(lit(9, 10)), "a run that did both did this combination");
         assertEquals(List.of(at(10)), selection.missedBy(lit(9, 11)),

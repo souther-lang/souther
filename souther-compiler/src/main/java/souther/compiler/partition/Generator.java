@@ -2193,9 +2193,20 @@ public final class Generator {
             RowId made = null;
             CameToNothing came = null;
             for (CellSelection at : ways) {
-                Witness tried = witnessFor(axes, at, check, trial, claimed(at),
-                        List.of(new Purpose.ForACombinationOfDecisions(asked.settled())),
+                List<Purpose> purpose = List.of(new Purpose.ForACombinationOfDecisions(asked.settled()));
+                Witness tried = witnessFor(axes, at, check, trial, claimed(at), purpose,
                         origins, references, answers);
+                // Composed rows that ran and went elsewhere are not every row the cell holds: a cell
+                // says where a row is looked for, and a decision no class states (a relation between
+                // two positions) is not in it. Values chosen again within each candidate reach rows
+                // the classes cannot steer to, and a run is what says one was a witness.
+                if (tried instanceof Witness.Exhausted) {
+                    List<Purpose> composedFor = new ArrayList<>(claimed(at).stream()
+                            .map(Purpose.ForAnArm::new).map(Purpose.class::cast).toList());
+                    composedFor.addAll(purpose);
+                    tried = witnessFor(axes, at, check, trial, composedFor,
+                            (_, _) -> Acceptance.TAKEN, origins, references, answers);
+                }
                 switch (tried) {
                     case Witness.NoCombination none -> came = CameToNothing.metNothing(
                             new UnresolvedCombination(List.of(),
@@ -3171,13 +3182,13 @@ public final class Generator {
         Map<souther.compiler.reading.Condition, Integer> hashes = new IdentityHashMap<>();
         for (InteractionCells.Group group : offered.groups()) {
             for (int index = 0; index < group.size(); index++) {
-                CellSelection selection = group.at(index);
-                if (selection == null) {
+                InteractionCells.Choice choice = group.at(index);
+                if (choice == null) {
                     continue;
                 }
                 out.computeIfAbsent(new ObligationIdentity.OfACombinationOfDecisions(
                         behavior, DecisionSet.of(group.settlesAt(index), hashes)),
-                        _ -> new ArrayList<>()).add(selection);
+                        _ -> new ArrayList<>()).addAll(choice.ways());
             }
         }
         return out;
@@ -3278,15 +3289,17 @@ public final class Generator {
         List<WhereToLook>out = new ArrayList<>();
         for (InteractionCells.Group group : offered.groups()) {
             for (int index = 0; index < group.size(); index++) {
-                CellSelection selection = group.at(index);
+                InteractionCells.Choice choice = group.at(index);
                 // A choice whose factors leave a position nothing is no combination the body has a
                 // path to, and there is nothing to look in.
-                if (selection == null) {
+                if (choice == null) {
                     continue;
                 }
-                List<ArmProbe> claims = claimed(selection);
-                if (claims.stream().anyMatch(armsOwed::contains)) {
-                    out.add(new WhereToLook(selection, claims));
+                for (CellSelection selection : choice.ways()) {
+                    List<ArmProbe> claims = claimed(selection);
+                    if (claims.stream().anyMatch(armsOwed::contains)) {
+                        out.add(new WhereToLook(selection, claims));
+                    }
                 }
             }
         }

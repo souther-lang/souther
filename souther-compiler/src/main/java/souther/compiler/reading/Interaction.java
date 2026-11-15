@@ -16,14 +16,30 @@ import java.util.List;
  * Left out, a row offered for one of these combinations may never reach the operator, and a row
  * already written on the other side of the fork reads as one that covers it.
  *
- * @param reach   what holds on the way to the meeting, which every one of its combinations is under
- * @param factors what varies at it, one per value consumed there
+ * <p>A meeting where no way in can be stated, under a step nothing of the input states, is still a
+ * meeting and still asked for: its combinations are what its decisions are, and a run is seen
+ * making one by what it does at them. What is not stated is how a row gets there, so nothing of the
+ * way in holds a combination and nothing says where a row is looked for.
+ *
+ * @param reach       what holds on the way to the meeting, which every one of its combinations is
+ *                    under; none where that is not stated
+ * @param reachStated whether {@code reach} is the way in to the meeting. Where it is not, the
+ *                    meeting is reached some way that is not known, and {@code reach} is empty
+ * @param factors     what varies at it, one per value consumed there
  */
-public record Interaction(List<Decision> reach, List<Factor> factors) {
+public record Interaction(List<Decision> reach, boolean reachStated, List<Factor> factors) {
 
     public Interaction {
         reach = List.copyOf(reach);
         factors = List.copyOf(factors);
+        if (!reachStated && !reach.isEmpty()) {
+            throw new IllegalArgumentException("a way in that is not stated holds nothing: " + reach);
+        }
+    }
+
+    /** A meeting reached some way that cannot be stated. */
+    public static Interaction reachedSomeWay(List<Factor> factors) {
+        return new Interaction(List.of(), false, factors);
     }
 
     /** What a run that took the way to the meeting would be seen to have done. */

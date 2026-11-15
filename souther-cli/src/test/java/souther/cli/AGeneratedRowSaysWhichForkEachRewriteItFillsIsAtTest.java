@@ -110,7 +110,8 @@ class AGeneratedRowSaysWhichForkEachRewriteItFillsIsAtTest {
                         "// fills the body answering what spread #1 in spread.sou answers",
                         "// fills else answering as then (in a fork of `souther.int.min` this build"
                                 + " holds no source of)"),
-                generated.lines().filter(line -> line.startsWith("// fills")).toList(),
+                generated.lines().filter(line -> line.startsWith("// fills")
+                        && !line.startsWith("// fills a combination")).toList(),
                 generated);
         assertFalse(generated.contains("\"else answering as then\""),
                 "and neither row is named by words the other has too: " + generated);

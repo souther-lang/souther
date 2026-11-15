@@ -7499,7 +7499,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             // A fork the reading could not name a position for. There is nothing to name it by but
             // where it is, which is what the reading already decided rather than a second answer
             // here.
-            case Condition.Arm(var arm, var _) -> {
+            case Condition.Arm(var arm, var _, var _) -> {
                 out.put("kind", "arm");
                 constructId(out.putObject("construct"), arm.fork());
                 out.put("part", arm.part());
@@ -11973,7 +11973,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case Weakening.InputNotRead _ -> WeakeningWord.BEHAVIOR_INPUT_NOT_READ;
             case Weakening.PairSpaceTruncated _ -> WeakeningWord.PAIR_SPACE_TRUNCATED;
             case Weakening.MeetingsNotWalked _ -> WeakeningWord.MEETINGS_NOT_WALKED;
-            case Weakening.MeetingsNotPlaced _ -> WeakeningWord.MEETINGS_NOT_PLACED;
             case Weakening.MeetingsNotJoined _ -> WeakeningWord.MEETINGS_NOT_JOINED;
             case Weakening.ProofContradicted _, Weakening.ProofOfAWayContradicted _ ->
                     WeakeningWord.PROOF_CONTRADICTED;

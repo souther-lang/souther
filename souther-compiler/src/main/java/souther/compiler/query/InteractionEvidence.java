@@ -8,6 +8,7 @@ import souther.compiler.partition.InteractionRequirements;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.PublicationOrders;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -60,6 +61,18 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
         return asked.ways().keySet().stream().filter(each -> !met.contains(each)).toList();
     }
 
+    /**
+     * The combinations no row was seen making that the classes of the input do not say exist.
+     *
+     * <p>A decision the classes do not state — a relation between two positions, a number taken of
+     * something no position holds — leaves open whether some input settles it together with the
+     * others. The combination is asked for all the same, over a region wider than the rows that
+     * make it, so it is the one thing here a row has to be shown to exist for.
+     */
+    public List<ObligationIdentity.OfACombinationOfDecisions> notStatedToExist() {
+        return notMadeByRows().stream().filter(asked.unconfirmed()::contains).toList();
+    }
+
     /** How many combinations the body has, which is what the count beside it is out of. */
     public int counted() {
         return asked.ways().size();
@@ -85,9 +98,14 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
      * finding what another meeting's reading went without.
      *
      * <p>And what is open about the meeting itself beside it: whether every row making it, by any
-     * way the body has to it, reaches an {@code unreachable}.
+     * way the body has to it, reaches an {@code unreachable}, and whether the classes leave it
+     * open that any row makes it at all. That second is a question about writing a row and not
+     * about what the measure went without, so it is not one of the weakenings: a count made in
+     * full can be over a combination no row has been shown to make. It is closed by a row a
+     * search composed and a run was seen making it ({@code shownToExist}).
      */
-    public OfOneMeeting at(ObligationIdentity.OfACombinationOfDecisions meeting) {
+    public OfOneMeeting at(ObligationIdentity.OfACombinationOfDecisions meeting,
+                           Set<ObligationIdentity.OfACombinationOfDecisions> shownToExist) {
         WeakeningSet bearing = WeakeningSet.none();
         for (Weakening each : made.weakening().causes()) {
             if (each instanceof Weakening.MeetingsNotWalked
@@ -95,15 +113,17 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
                             held -> held.mightState(meeting.settled()))) {
                 continue;
             }
-            if (each instanceof Weakening.MeetingsNotPlaced
-                    && asked.notPlaced().stream().noneMatch(
-                            held -> held.mightState(meeting.settled()))) {
-                continue;
-            }
             bearing = bearing.union(WeakeningSet.of(each));
         }
-        return new OfOneMeeting(bearing, ObligationDisposition.openOn(
-                unanswered.everyRowIn(asked.rowsOf(meeting))));
+        CanonicalSelection<ObligationDisposition.Uncertainty> open =
+                ObligationDisposition.openOn(unanswered.everyRowIn(asked.rowsOf(meeting)));
+        if (open.isEmpty() && asked.unconfirmed().contains(meeting)
+                && !shownToExist.contains(meeting)) {
+            open = PublicationOrders.OPEN_QUESTIONS.keep(List.of(
+                    new ObligationDisposition.Uncertainty.WhetherARowCanBeWritten
+                            .NothingShowedIt()));
+        }
+        return new OfOneMeeting(bearing, open);
     }
 
     /**
@@ -235,12 +255,6 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
             }
             went = went.union(WeakeningSet.of(new Weakening.MeetingsNotWalked(
                     behavior, asked.notMeasured().size(), List.copyOf(limits))));
-        }
-        // And the groups the classes do not place, which no run walks. Said on the measure for the
-        // same reason: dropped without a word, they read as combinations nobody owes.
-        if (!asked.notPlaced().isEmpty()) {
-            went = went.union(WeakeningSet.of(new Weakening.MeetingsNotPlaced(
-                    behavior, asked.notPlaced().size())));
         }
         // And the sums whose decisions were met and not joined to what a run records. Nothing is
         // owed at them either, and the rows' having made every combination that was asked is no
