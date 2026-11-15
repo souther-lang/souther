@@ -2213,6 +2213,13 @@ public final class Generator {
                     tried = witnessFor(axes, at, check, trial, composedFor,
                             (_, _) -> Acceptance.TAKEN, origins, references, answers);
                 }
+                // And where that came to nothing, the relations the decisions state of the input's
+                // numbers are what a row is composed to meet: they are in no class, so no cell
+                // says where such a row is.
+                if (tried instanceof Witness.Exhausted exhausted) {
+                    tried = heldToTheDecisions(exhausted, axes, at, check, trial, purpose,
+                            holding, origins, references, answers);
+                }
                 switch (tried) {
                     case Witness.NoCombination none -> came = CameToNothing.metNothing(
                             new UnresolvedCombination(List.of(),
@@ -4630,7 +4637,19 @@ public final class Generator {
             }
             // A way that would write a stated value afresh is left, and the rest are what holds
             // the part.
-            PartsHeld together = partsHeld(each, one -> !writesAnyOf(one, against));
+            return holdingTogether(each, one -> !writesAnyOf(one, against));
+        }
+
+        /**
+         * What holds every one of {@code each}, a part of a way, at once: the ways of holding
+         * them together that {@code kept} keeps, or why nothing here can.
+         *
+         * <p>No more of the ways the parts can be held along than the figure lets be looked at,
+         * and the figure is handed on with them, which says they were cut short there.
+         */
+        private static WayPastTheGuard holdingTogether(List<HeldOutcome.Bringing> each,
+                                                       Predicate<HeldOutcome> kept) {
+            PartsHeld together = partsHeld(each, kept);
             if (together.noRowGoes()) {
                 return WayPastTheGuard.Unheld.because(
                         RepairShortfall.Barrier.NO_VALUE_CAN_GO_THAT_WAY);
@@ -11262,7 +11281,8 @@ public final class Generator {
                 takes.stream().map(Purpose.ForAnArm::new).map(Purpose.class::cast).toList());
         composedFor.addAll(alsoFor);
         return witnessing(new Reading(axes, selection, check, trial,
-                List.copyOf(composedFor), null, origins, references, answers));
+                List.copyOf(composedFor), null, HeldTogether.Asked.NOTHING, origins, references,
+                answers));
     }
 
     /**
@@ -11277,7 +11297,96 @@ public final class Generator {
                                       List<ResolvedOrigin> origins, FixtureReferences references,
                                       List<StoodInAnswer> answers) {
         return witnessing(new Reading(axes, selection, check, trial, composedFor,
-                furthermore, origins, references, answers));
+                furthermore, HeldTogether.Asked.NOTHING, origins, references, answers));
+    }
+
+    /**
+     * What a search of {@code selection} came to, looked for again with a row held to what each
+     * of the decisions the selection claims asks of it, along every way of holding them together.
+     *
+     * <p>{@code tried} stands where nothing held shows a row: a way no row takes, or one this
+     * compiler has no demand to hold a row to, says nothing of whether the combination is made.
+     * A row is only ever taken by a run seen making the combination, as everywhere else.
+     *
+     * <p>A figure that cut the looking short is a figure the answer carries. Ways of holding the
+     * decisions that were left unlooked at may be the ones that make the combination, so where no
+     * row was found the search is said to have stopped, and at which figure.
+     */
+    private static Witness heldToTheDecisions(Witness.Exhausted tried,
+                                              MeasuredInput.MeasuredAxes axes,
+                                              CellSelection selection, CandidateCheck check,
+                                              RunOnce trial, List<Purpose> purpose,
+                                              HeldOutcome.Of holding,
+                                              List<ResolvedOrigin> origins,
+                                              FixtureReferences references,
+                                              List<StoodInAnswer> answers) {
+        List<HeldOutcome.Bringing> each = new ArrayList<>();
+        for (ControlClaim claim : selection.claims()) {
+            each.add(holding.at(claim.at()));
+        }
+        if (each.isEmpty()) {
+            return tried;
+        }
+        Set<CompositionBudget> cutShort = EnumSet.noneOf(CompositionBudget.class);
+        Witness result = tried;
+        switch (GoingOn.holdingTogether(each, _ -> true)) {
+            // Nothing here holds a row to them. A figure that left a part unlooked at is what the
+            // answer says; a reason alone is this compiler having no demand, which is no more
+            // than what was already found.
+            case GoingOn.WayPastTheGuard.Unheld(var _, var figures) -> cutShort.addAll(figures);
+            case GoingOn.WayPastTheGuard.Holding ways -> {
+                cutShort.addAll(ways.cutShort());
+                List<Purpose> composedFor = new ArrayList<>(claimed(selection).stream()
+                        .map(Purpose.ForAnArm::new).map(Purpose.class::cast).toList());
+                composedFor.addAll(purpose);
+                for (List<HeldOutcome> choice : ways.choices()) {
+                    HeldTogether together = heldTogether(axes.subject(), choice, check);
+                    if (!(together instanceof HeldTogether.Asked)) {
+                        continue;
+                    }
+                    Witness found = witnessHeld(axes, selection, check, trial, composedFor,
+                            (_, _) -> Acceptance.TAKEN, together, origins, references, answers);
+                    if (found instanceof Witness.Certified
+                            || found instanceof Witness.Unconfirmed) {
+                        return found;
+                    }
+                    if (found instanceof Witness.Limited) {
+                        result = found;
+                    }
+                }
+            }
+        }
+        if (cutShort.isEmpty()) {
+            return result;
+        }
+        SearchShortfall stoppedAt = SearchShortfall.of(CompositionShortfall.of(cutShort));
+        return switch (result) {
+            case Witness.Limited limited -> new Witness.Limited(limited.classes(),
+                    limited.found().and(stoppedAt), limited.boundsReached(),
+                    limited.metARunNothingWatched());
+            case Witness.Exhausted exhausted -> new Witness.Limited(exhausted.classes(),
+                    exhausted.found().and(stoppedAt), List.of(), false);
+            case Witness.Certified _, Witness.Unconfirmed _, Witness.NoCombination _ -> result;
+        };
+    }
+
+    /**
+     * A row at {@code selection} that is {@code furthermore} besides, held to what the
+     * comparisons its decisions state ask of it.
+     *
+     * <p>Beside the cell and not instead of it. A cell says where a row is looked for by the
+     * classes of the input, and a decision that compares numbers taken of a value with each other
+     * is in no class, so the cell it is looked for in is every row. What such a decision states is
+     * a relation among the input's numbers, and a candidate is composed at values that meet it.
+     */
+    private static Witness witnessHeld(MeasuredInput.MeasuredAxes axes,
+                                       CellSelection selection, CandidateCheck check,
+                                       RunOnce trial, List<Purpose> composedFor,
+                                       Furthermore furthermore, HeldTogether held,
+                                       List<ResolvedOrigin> origins, FixtureReferences references,
+                                       List<StoodInAnswer> answers) {
+        return witnessing(new Reading(axes, selection, check, trial, composedFor,
+                furthermore, held, origins, references, answers));
     }
 
     /**
@@ -12094,6 +12203,13 @@ public final class Generator {
          */
         private final Furthermore furthermore;
 
+        /**
+         * What the comparisons the combination's decisions state ask of a row, beside its cell:
+         * the relations among the input's numbers no class of the cell says. Nothing where the
+         * cell is all there is to look by.
+         */
+        private final HeldTogether held;
+
         private final List<ResolvedOrigin> origins;
 
         /** Whether the combination offered anything at all, which tells a combination the model
@@ -12140,10 +12256,11 @@ public final class Generator {
         private Reading(MeasuredInput.MeasuredAxes axes, CellSelection selection,
                         CandidateCheck check, RunOnce trial,
                         List<Purpose> composedFor,
-                        Furthermore furthermore,
+                        Furthermore furthermore, HeldTogether held,
                         List<ResolvedOrigin> origins,
                         FixtureReferences references, List<StoodInAnswer> answers) {
             this.axes = axes;
+            this.held = held;
             this.scope = MoveScope.leavingStanding(trial.parametersTheBodyDoesNotRead());
             this.requires = new WhatEachClassRequires(axes.axes(), scope);
             this.selection = selection;
@@ -12307,8 +12424,7 @@ public final class Generator {
                 if (furthermore != null) {
                     return rechoosing(candidate, given);
                 }
-                last = build(axes, candidate.where(), HeldTogether.Asked.NOTHING, check, given,
-                        answers);
+                last = build(axes, candidate.where(), held, check, given, answers);
                 known.built(candidate, last);
                 foundOut = foundOut.and(last.found());
                 if (last.row() == null) {
@@ -12402,7 +12518,7 @@ public final class Generator {
              * refused.
              */
             private Taken rechoosing(Candidate candidate, Map<String, Written> given) {
-                RowComposed came = composed(axes, candidate.where(), HeldTogether.Asked.NOTHING,
+                RowComposed came = composed(axes, candidate.where(), held,
                         check, given, inputs -> {
                             GeneratedRow named = new GeneratedRow(composedFor, inputs, answers);
                             ObservedRun observed = ranAs(named);

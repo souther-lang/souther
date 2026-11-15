@@ -46,4 +46,34 @@ class ACombinationTheClassesCannotSayExistsIsOwedOnceARunIsSeenMakingItTest {
         assertTrue(findings.stream().allMatch(Adequacy.Finding::established),
                 () -> "and a run is seen making each of them, so each is owed a row: " + findings);
     }
+
+    /**
+     * Decisions that compare a number taken of two values with a written one are in no class of
+     * either, so the cell they are looked for in is every row. A row for them is composed at
+     * values that meet the relations the decisions state, and a run is seen making the
+     * combination.
+     */
+    @Test
+    void aCombinationOfDecisionsOnANumberTakenOfTwoValuesIsOfferedARowThatMeetsThem() {
+        List<Adequacy.Finding> findings = findingsOf("""
+                module example.age
+
+                behavior fee : (birthday: Date, on: Date) -> Int
+
+                let fee (birthday, on) =
+                    (if Date.year(on) - Date.year(birthday) >= 20 then 10 else 20)
+                    + (if Date.year(on) - Date.year(birthday) >= 65 then 1 else 2)
+
+                example fee
+                    | (Date("2000-01-01"), Date("2030-01-01")) -> 12
+                """, "example.age");
+
+        // Of the three the example's row did not make, two are an age under twenty and an age of
+        // sixty-five or over, each of which a row is composed for. The third is an age under
+        // twenty and of sixty-five or over, which no row is, and stays open.
+        assertEquals(2, findings.stream().filter(Adequacy.Finding::established).count(),
+                () -> "a run is seen making the two a value holds: " + findings);
+        assertEquals(1, findings.stream().filter(each -> !each.established()).count(),
+                () -> "and the one no value holds is not offered a row: " + findings);
+    }
 }
