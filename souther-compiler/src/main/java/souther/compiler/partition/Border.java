@@ -545,17 +545,23 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         if (point.side() == null) {
             return Optional.of(point);
         }
-        // Where the line is the comparison's own relation and this reading's quantity faces the
-        // sides it wrote a known way, a side is a side of the left against the right, whatever the
-        // reading drew it as: the rules can leave one value at an order's end, and the line is
-        // then a value singled out where the author wrote an order. A line something else in the
-        // definition draws has no two sides of the comparison's written for it, and its claim is
-        // what the comparison comes to across it.
-        Optional<Towards> faced = !proven.itsOwn() ? Optional.empty() : switch (proven.facing()) {
-            case AS_WRITTEN -> Optional.of(point.side());
-            case TURNED -> Optional.of(point.side().opposite());
-            case NOTHING_WRITTEN -> Optional.empty();
-        };
+        // Two orders tell their sides apart by where each holds, and that is the same on every
+        // line the comparison is drawn on: a quantity can face the line one way on one of the
+        // comparison's lines and the other way on another, and the facing is one answer for both.
+        // Where the line is the comparison's own relation and a side is not told that way, this
+        // reading's quantity faces the sides it wrote a known way, and a side is a side of the
+        // left against the right, whatever the reading drew it as: the rules can leave one value
+        // at an order's end, and the line is then a value singled out where the author wrote an
+        // order. A line something else in the definition draws has no two sides of the
+        // comparison's written for it, and its claim is what the comparison comes to across it.
+        boolean orders = proven.claims() instanceof ComparisonClaim.Cut
+                && origin.lineFacts().claim() instanceof ComparisonClaim.Cut;
+        Optional<Towards> faced = orders || !proven.itsOwn() ? Optional.empty()
+                : switch (proven.facing()) {
+                    case AS_WRITTEN -> Optional.of(point.side());
+                    case TURNED -> Optional.of(point.side().opposite());
+                    case NOTHING_WRITTEN -> Optional.empty();
+                };
         if (faced.isPresent()) {
             return faced.map(towards -> sideOf(point, towards));
         }
