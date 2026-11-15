@@ -2,6 +2,7 @@ package souther.compiler.meaning;
 
 import java.math.BigInteger;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * How many ways there were of choosing one of the cases a line was said for, counted where taking
@@ -16,9 +17,23 @@ import java.util.Objects;
  *                                  ({@link DecidingCase.Cases#structuralWays})
  * @param numericallyConsistentWays how many of them are not refuted as numbers, or that this was
  *                                  not counted ({@link NumericallyConsistentWays})
+ * @param walkedWaysAtMost          where the line was cut off though the consistent ways are no
+ *                                  more than are taken apart, the ways a walk would come to the end
+ *                                  of from every start of the remainders together, no more than
+ *                                  that: a way holding at several starts is walked from each, and
+ *                                  the consistent ways count it once. It is the cost the line was
+ *                                  cut off at, and a bound on it, since no question the walk would
+ *                                  ask ends a way sooner in it
  */
 public record CaseCount(Ways structuralWays,
-                        NumericallyConsistentWays.Counted numericallyConsistentWays) {
+                        NumericallyConsistentWays.Counted numericallyConsistentWays,
+                        Optional<BigInteger> walkedWaysAtMost) {
+
+    /** Counted where no walk from the starts of the remainders was costed. */
+    public CaseCount(Ways structuralWays,
+                     NumericallyConsistentWays.Counted numericallyConsistentWays) {
+        this(structuralWays, numericallyConsistentWays, Optional.empty());
+    }
 
     /**
      * Past how many ways a count is not written out: two to the power of a thousand and
@@ -29,6 +44,10 @@ public record CaseCount(Ways structuralWays,
     public CaseCount {
         Objects.requireNonNull(structuralWays, "cases are some number of ways");
         Objects.requireNonNull(numericallyConsistentWays, "the consistent ways were counted or not");
+        Objects.requireNonNull(walkedWaysAtMost, "a walk was costed or it was not");
+        if (walkedWaysAtMost.isPresent() && walkedWaysAtMost.get().signum() < 0) {
+            throw new IllegalArgumentException("a count of ways is some number of them");
+        }
     }
 
     /** How many ways, as far as a count is held. */
@@ -69,7 +88,15 @@ public record CaseCount(Ways structuralWays,
      *  them. */
     public static CaseCount of(DecidingCase.Cases cases,
                                NumericallyConsistentWays.Counted numericallyConsistentWays) {
+        return of(cases, numericallyConsistentWays, Optional.empty());
+    }
+
+    /** The same, beside the ways a walk from the starts of the remainders would come to the end
+     *  of ({@code walkedWaysAtMost}). */
+    public static CaseCount of(DecidingCase.Cases cases,
+                               NumericallyConsistentWays.Counted numericallyConsistentWays,
+                               Optional<BigInteger> walkedWaysAtMost) {
         return new CaseCount(Ways.held(cases.structuralWays(WAYS_A_COUNT_IS_HELD_TO)),
-                numericallyConsistentWays);
+                numericallyConsistentWays, walkedWaysAtMost);
     }
 }

@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -377,8 +378,10 @@ class ALineIsTakenApartByTheWaysItsNumbersLeaveTest {
                         Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached()),
                         Optional.of(new CaseCount(
                                 new CaseCount.Ways.Exactly(BigInteger.TWO.pow(13)),
-                                counted.ofTheNumbers())))),
-                asking.found(cases).notWorkedOutIn(), "cut off, told the numbers' count");
+                                counted.ofTheNumbers(),
+                                Optional.of(BigInteger.valueOf(14L << 6)))))),
+                asking.found(cases).notWorkedOutIn(),
+                "cut off, told the numbers' count and the ways walked, which are more");
         assertEquals(List.of(SAID), asking.asked(), "asked only as it was said");
     }
 
@@ -408,6 +411,81 @@ class ALineIsTakenApartByTheWaysItsNumbersLeaveTest {
         assertEquals(Set.of(), found.notWorkedOut(), "every case worked out");
         assertEquals(new HashSet<>(asking.asked()).size(), asking.asked().size(),
                 "no condition asked twice");
+    }
+
+    /**
+     * What the walk from each class of remainders, asking only where it branches, keeps is what
+     * every way of choosing the line, tried at every remainder and asked of its whole, keeps. The
+     * answer given is one a prefix cannot take back: the case is dropped where it holds two parts
+     * chosen alike, as a case is that rows are shown to stand on one side of, which every way
+     * past it is as well. Tried for each pair of the parts, and for the cases it drops.
+     */
+    @Test
+    void theWalkKeepsTheCasesEveryWayOfChoosingKeepsWhateverPairOfPartsDropsOne() {
+        int moved = 5;
+        int truths = 5;
+        List<Proposition> noughts = new ArrayList<>();
+        List<DecidingCase.Cases> choices = new ArrayList<>(remaindersMovedApart(X, moved, 7));
+        for (int by = 0; by < moved; by++) {
+            noughts.add(noughtLeft(X, by, 7));
+        }
+        List<Proposition> asked = new ArrayList<>(noughts);
+        for (int at = 0; at < truths; at++) {
+            Proposition truth = new Proposition.Truth(
+                    new DecisionSubject.AnInput(TermPath.of("t" + at)), true);
+            asked.add(truth);
+            choices.add(new DecidingCase.Cases.EachOf(List.of(new DecidingCase.Cases.One(truth),
+                    new DecidingCase.Cases.One(truth.denied()))));
+        }
+        DecidingCase.Cases cases = new DecidingCase.Cases.Together(choices);
+        assertTrue(cases.waysOfChoosing(TAKEN_APART) > TAKEN_APART, "taken apart by the numbers");
+
+        List<List<Proposition>> consistent = new ArrayList<>();
+        for (int way = 0; way < 1 << asked.size(); way++) {
+            List<Proposition> parts = new ArrayList<>();
+            for (int at = 0; at < asked.size(); at++) {
+                parts.add((way >> at & 1) == 0 ? asked.get(at) : asked.get(at).denied());
+            }
+            if (someRemainderMeets(Proposition.all(parts), 7)) {
+                consistent.add(parts);
+            }
+        }
+        List<Proposition> parts = new ArrayList<>();
+        asked.forEach(each -> {
+            parts.add(each);
+            parts.add(each.denied());
+        });
+        int tried = 0;
+        for (int one = 0; one < parts.size(); one++) {
+            for (int other = one + 1; other < parts.size(); other++) {
+                Proposition dropping = parts.get(one);
+                Proposition with = parts.get(other);
+                Set<Proposition> kept = new HashSet<>();
+                for (List<Proposition> way : consistent) {
+                    if (!(way.contains(dropping) && way.contains(with))) {
+                        kept.add(Proposition.all(way));
+                    }
+                }
+                if (kept.size() == consistent.size() || kept.isEmpty()) {
+                    continue;
+                }
+                tried++;
+                Asking asking = new Asking(condition -> {
+                    List<Proposition> holds = condition instanceof Proposition.All all
+                            ? all.parts() : List.of(condition);
+                    return holds.contains(dropping) && holds.contains(with)
+                            ? CasesOfALineAsked.Crossing.CANNOT_CROSS
+                            : CasesOfALineAsked.Crossing.MAY_CROSS;
+                });
+                CasesOfALineAsked.Found found = asking.found(cases);
+                assertEquals(Set.of(), found.notWorkedOut(), () -> "dropping " + dropping + " with "
+                        + with);
+                assertEquals(kept, found.decidesIn().stream().map(DecidingCase::condition)
+                                .collect(Collectors.toSet()),
+                        () -> "dropping " + dropping + " with " + with);
+            }
+        }
+        assertTrue(tried > 10, "pairs that drop some way and not every way: " + tried);
     }
 
     /**

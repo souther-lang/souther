@@ -382,7 +382,8 @@ public final class CasesOfALineAsked {
                 if (byTheRemainders.isEmpty()
                         || byTheRemainders.get().walked().compareTo(BigInteger.valueOf(most)) > 0) {
                     moreWaysThanAreTakenApart(said);
-                    counted = Optional.of(CaseCount.of(said.standsFor(), counts.ofTheNumbers()));
+                    counted = Optional.of(CaseCount.of(said.standsFor(), counts.ofTheNumbers(),
+                            byTheRemainders.map(NumericallyConsistentWays.Starts::walked)));
                     return new Found(List.of(), notWorkedOutIn(said));
                 }
                 starts = byTheRemainders.get().states();
@@ -626,7 +627,7 @@ public final class CasesOfALineAsked {
      * back as they are, after a reading of the whole part. And the conjunction is made once, when
      * it is first asked for: a case is asked as it is chosen and kept as it was asked.
      */
-    private static final class SoFar {
+    static final class SoFar {
 
         static final SoFar NOTHING = new SoFar(List.of());
 
