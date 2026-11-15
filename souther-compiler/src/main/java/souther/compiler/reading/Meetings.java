@@ -200,8 +200,10 @@ final class Meetings {
      * The outcomes of an operand, and what is not known of them.
      *
      * @param outcomes     the ways it is settled that a run is seen taking
-     * @param unseen       how many ways it is settled by that no run is seen taking, so that no
-     *                     combination with one can be held to a run
+     * @param unseen       how many ways the reading holds of it that no run is seen taking, so that
+     *                     no combination with one can be held to a run. At least that many, and a
+     *                     way that is one of them is not one this counts: the reading keeps ways
+     *                     that are alike as one, and two arms that nothing tells apart are alike
      * @param unenumerated whether the ways it is settled by are more than this reading holds apart
      */
     record Reached(List<Outcome> outcomes, int unseen, boolean unenumerated) {
@@ -218,9 +220,15 @@ final class Meetings {
             return unseen == 0 && !unenumerated;
         }
 
-        /** Whether the operand may be settled more than one way, which is a decision. */
+        /**
+         * Whether the operand may be settled more than one way, which is a decision.
+         *
+         * <p>Where a way is not seen, how many ways it stands for is not known: two that nothing
+         * tells apart are held as one. So one such way is as much a decision as many, and no count
+         * of them is taken for the number there are.
+         */
         boolean mayVary() {
-            return unenumerated || outcomes.size() + unseen > 1;
+            return unenumerated || unseen > 0 || outcomes.size() > 1;
         }
     }
 
@@ -284,7 +292,7 @@ final class Meetings {
             List<Arrival<Outcome>> reached = one.getValue();
             if (reached.stream().noneMatch(each -> each.isComplete()
                     || !each.provenance().isSeenWhole())) {
-                unseen++;
+                unseen += reached.size();
                 continue;
             }
             out.add(reached.stream().allMatch(Arrival::isComplete)
