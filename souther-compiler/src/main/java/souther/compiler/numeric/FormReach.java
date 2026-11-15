@@ -783,7 +783,7 @@ final class FormReach<A> {
         // The positions in the order the positions decide, so that which weight is which is not a
         // hash table's to say.
         List<A> positions = new ArrayList<>(held.naming().keySet());
-        positions.sort(order::compare);
+        positions.sort(order);
         Map<A, Integer> dimensions = HashMap.newHashMap(positions.size());
         ExactCut[] up = new ExactCut[positions.size()];
         ExactCut[] down = new ExactCut[positions.size()];
