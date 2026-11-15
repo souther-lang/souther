@@ -81,9 +81,7 @@ class APartialMeasureSaysWhatItWentWithoutOnThePageTest {
     private record Report(String human, String japanese, JsonNode document) {
 
         static Report of(String source) throws Exception {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
-            compilation.answerEverything();
+            Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
             SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
             AdequacyReport report = AdequacyReport.of(compilation);
             return new Report(report.humanInEnglish(rendering),
