@@ -28,7 +28,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 class TheWatchdogStopsWhatDoesNotComeBackTest {
 
     private static final int HALTED = 70;
-    private static final String LIMIT_SECONDS = "3";
+    /** Past what the long class takes in any one part by far, and under what it takes in all. */
+    private static final String LIMIT_SECONDS = "5";
     private static final String FIXTURES = "souther.test.WatchdogFixtures$";
 
     /** How a child JVM ended and what it said. */
