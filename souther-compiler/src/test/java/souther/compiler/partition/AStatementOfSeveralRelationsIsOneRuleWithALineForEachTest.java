@@ -88,17 +88,43 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
     }
 
     /**
-     * Where the two arms of an operation meet and its answer does not jump, the line between them
-     * decides nothing: {@code Int.max(0, a) <= b.v} states {@code a >= 0} once held and once
-     * denied, and on the line either arm gives nought. It decides where one arm is within
-     * {@code b.v} and the other is not, which is two cases — and on the line both arms are nought,
-     * so neither case has a row there.
+     * Where the two arms of an operation meet is no line of the author's: {@code Int.max(0, a) <=
+     * b.v} states {@code a >= 0} once held and once denied, and which arm answers is the library's
+     * to say. The relation selects a case and draws no line, so no row is owed at nought.
      */
     @Test
-    void theLineWhereTwoArmsMeetDecidesNothing() {
+    void theLineWhereTwoArmsMeetIsNoLineOfTheAuthors() {
         JsonNode report = reportOf("Int.max(0, a) <= b.v", "");
-        assertTrue(reasonsAt(report, "a").contains("rule_never_turns_on_this_line"),
-                () -> "the line between the arms decides nowhere: " + reasonsAt(report, "a"));
+        assertEquals(List.of(), reasonsAt(report, "a"),
+                "the relation that selects an arm is no line to be left undrawn");
+        assertFalse(pointsOfParts(report).contains("pick/a 0"),
+                () -> "and no row is owed where the arms meet: " + pointsOfParts(report));
+    }
+
+    /**
+     * What selects a case of the magnitude, {@code a >= 0}, is the library's and owes no point;
+     * the same relation written by the author beside it is the author's and does.
+     */
+    @Test
+    void theSignTestOfTheMagnitudeOwesNoPointUnlessTheAuthorWroteIt() {
+        Set<String> library = pointsOfParts(reportOf("Int.abs(a) > 3", ""));
+        assertFalse(library.isEmpty(), "the magnitude's own comparison is a line");
+        assertTrue(library.stream().noneMatch(each -> each.endsWith(" 0")),
+                () -> "nothing is owed at the sign test: " + library);
+        Set<String> written = new TreeSet<>();
+        pointsAnywhere(reportOf("Int.abs(a) < 7 && a >= 0", ""), written);
+        assertTrue(written.contains("pick/a 0"),
+                () -> "what the author wrote is owed: " + written);
+    }
+
+    /** The point every obligation of the report is owed at, whatever line it is on. */
+    private static void pointsAnywhere(JsonNode node, Set<String> out) {
+        if (node.isObject() && node.has("point") && node.has("readings")
+                && node.has("obligationId")) {
+            out.add(node.path("readings").get(0).path("axis").asString() + " "
+                    + node.path("readings").get(0).path("against").asString());
+        }
+        node.forEach(child -> pointsAnywhere(child, out));
     }
 
     /**
@@ -109,12 +135,13 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
      * whole number. Read part against part, the line on {@code 11 - a > 5} decides where
      * {@code a > 5} — and six is above five — but a row crossing that line goes from six to five,
      * taking {@code a > 5} across with it, and the statement is false on both sides. So neither
-     * line is one the statement turns on, and neither is owed a row.
+     * line is one the statement turns on, and neither is owed a row. Nothing could hold where
+     * either decides, which is what the reason says.
      */
     @Test
     void aLineTurnsTheStatementOnlyWhereBothItsSidesAreInOneCase() {
         JsonNode report = reportOf("Int.min(a, 11 - a) > 5", "");
-        assertEquals(List.of("rule_never_turns_on_this_line"),
+        assertEquals(List.of("several_lines_in_one_rule"),
                 reasonsAt(report, "a").stream().distinct().toList(),
                 () -> "neither line turns the statement: " + reasonsAt(report, "a"));
         assertTrue(obligationsOfParts(report).isEmpty(),
@@ -362,10 +389,9 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
      * A relation on what two numbers come to multiplied is a line among several as a relation on a
      * position is, and decides where the statement turns on it.
      *
-     * <p>{@code Int.max(0, a * b.v) <= 3} draws a line where the product is three and a line where
-     * it is nought. The first decides where the product is above nought, and a row on each side of
-     * three is there. The second decides only where the product is above three, where no row
-     * stands at nought: the two arms of max meet there and the answer does not jump.
+     * <p>{@code Int.max(0, a * b.v) <= 3} draws a line where the product is three. It decides
+     * where the product is above nought, and a row on each side of three is there. Where the
+     * product is nought the two arms of max meet, which selects a case and draws no line.
      */
     @Test
     void aLineOnAProductAmongSeveralIsDrawnWhereItDecides() {
@@ -373,8 +399,6 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
         assertTrue(reasonsAt(report, "a").stream()
                         .noneMatch("several_lines_in_one_rule"::equals),
                 () -> "the statement is drawn, not held back: " + reasonsAt(report, "a"));
-        assertTrue(reasonsAt(report, "a").contains("rule_never_turns_on_this_line"),
-                () -> "the line where the arms meet decides nowhere: " + reasonsAt(report, "a"));
         assertEquals(Set.of("pick/a * b.v 3", "pick/a * b.v 4"), pointsOfParts(report),
                 "a row is owed on each side of three and nowhere about nought");
     }
@@ -491,9 +515,6 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
                     if Int.max(2, n) <= 5 then High else Low
                 }
                 """);
-        assertTrue(reasonsAt(report, "xs[*]").contains("rule_never_turns_on_this_line"),
-                () -> "the line where the arms meet decides nowhere: "
-                        + reasonsAt(report, "xs[*]"));
         assertEquals(Set.of("pick/#xs [xs[*] > 0] 5", "pick/#xs [xs[*] > 0] 6"),
                 pointsOfParts(report),
                 "a row is owed on each side of five and nowhere about two");

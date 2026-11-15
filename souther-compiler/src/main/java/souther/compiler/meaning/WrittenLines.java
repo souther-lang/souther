@@ -1,7 +1,6 @@
 package souther.compiler.meaning;
 
 import souther.compiler.check.ComparisonClaim;
-import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ModelOccurrence;
@@ -61,12 +60,6 @@ public final class WrittenLines {
 
         Under inAnotherComparison() {
             return new Under(line, taken, decidedOutside, true, selectingACase);
-        }
-
-        /** Taken where {@code taking} holds as well, on the same line: no arm of the author's. */
-        Under takingOnly(Proposition taking) {
-            return new Under(line, Proposition.all(List.of(taken, taking)), decidedOutside,
-                    inAnother, selectingACase);
         }
 
         /** Inside what selects a case of the definition the library writes an operation in. */
@@ -203,10 +196,9 @@ public final class WrittenLines {
                 walk(otherwise, under.then(new WrittenLine.Arm(at, 1, false), holds.denied()));
             }
             case Derivation.MatchArms(var arms) -> arms(at, arms, under);
-            // The cases of a move by months are the calendar's, stated by what the date is and
-            // answering what the move comes to; no comparison its author wrote is one of them.
-            case Derivation.AnOperationsCases(var operation, var cases) -> arms(at, cases, under,
-                    DefaultBoundOperationFacts.get().movesADateByMonths(operation) != null);
+            // The cases of an operation are the library's, stated by what the arguments are and
+            // answering what the operation comes to; no comparison its author wrote is one of them.
+            case Derivation.AnOperationsCases(var _, var cases) -> arms(at, cases, under, true);
             case Derivation.ASizeInCases(var _, var cases) -> arms(at, cases, under, false);
             case Derivation.ByALaw(var _, var _, var law) -> ofTheLaw(at, law, under);
             default -> throw new IllegalArgumentException("a choice is an if, a match, the cases"
@@ -221,20 +213,23 @@ public final class WrittenLines {
     /**
      * @param ofTheLibrary whether the arms are the cases of a definition the library writes: what
      *                     selects one is no comparison its author wrote, so the relations it
-     *                     states are conditions and no lines, and no arm is a place of the
-     *                     author's line of its own: the line is the one however the operation is
-     *                     defined, taken where any case is
+     *                     states are conditions and no lines. The author wrote the operation and
+     *                     not its cases, so cases stating the same relations are one place of the
+     *                     author's line, told by the first of them
      */
     private void arms(WrittenChoice at, List<Derivation.MatchArms.Arm> arms, Under under,
                       boolean ofTheLibrary) {
         Proposition always = new Proposition.Always(true);
         List<Proposition> before = new ArrayList<>();
+        Map<Set<Spelling>, Integer> firstStating = new HashMap<>();
         for (int i = 0; i < arms.size(); i++) {
             Proposition selects = concluded.of(arms.get(i).selects());
             Proposition takes = Derivation.taken(before, selects);
             if (ofTheLibrary) {
+                int arm = firstStating.merge(relationsOf(arms.get(i).states()), i, Math::min);
                 walk(arms.get(i).selects(), under.selectingACaseOfTheLibrary());
-                walk(arms.get(i).states(), under.takingOnly(takes));
+                walk(arms.get(i).states(), under.then(new WrittenLine.Arm(at, arm, false),
+                        takes));
             } else {
                 walk(arms.get(i).selects(), under.then(new WrittenLine.Arm(at, i, true), always));
                 walk(arms.get(i).states(), under.then(new WrittenLine.Arm(at, i, false), takes));

@@ -101,10 +101,9 @@ class WhereALibraryLawIsReadTheMeasureAndTheDischargeAgreeTest {
             // magnitude of a number at or above nought is that number.
             new Row("c - Int.abs(c)", 0, Set.of(), true),
             new Row("c - Int.abs(c - 2)", 0, Set.of(), false),
-            // A case of the magnitude and the arithmetic over it state one relation at two scales,
-            // c >= 0 and 2c >= 0, which is one line; two relations whose numbers are not one
-            // multiple of the other are two.
-            new Row("c + 5 - Int.abs(c)", 0, Set.of("-1", "0"), true),
+            // What selects a case of the magnitude, c >= 0, is the library's and no line of the
+            // author's, so the arithmetic over it owes no point at it.
+            new Row("c + 5 - Int.abs(c)", 0, Set.of(), true),
             new Row("if c < 0 then c + c + 7 else 5", 0, Set.of("-2", "-1", "0"), true),
             // A sign moved and scaled by numbers is still compared with a number, and the library's
             // bounds on it settle the comparison either way. Where they leave it, it is a relation
