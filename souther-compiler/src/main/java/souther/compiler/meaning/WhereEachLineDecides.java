@@ -132,6 +132,11 @@ public final class WhereEachLineDecides {
      * say ({@link Quantity#wholeOnEveryRow}), and of a number of the input, {@code measuredWhole}'s:
      * whether the input measures it in whole numbers, which is the reading of the input's and no
      * statement's.
+     *
+     * <p>What is read of a count at the top is the other counts' statements left beside a line:
+     * the case a line decides in holds them as a count, and a count there is one part with no
+     * position, the way a quantifier is. It is about whichever elements its own statements chose,
+     * which are not the line's.
      */
     public static List<Decides> in(Proposition writtenAs, Predicate<NumericTerm> measuredWhole) {
         Map<Spelling, Proposition.Compared> lines = new TreeMap<>();
@@ -334,8 +339,8 @@ public final class WhereEachLineDecides {
                  Proposition.LastToHold _,
                  Proposition.All _, Proposition.Any _, Proposition.Some _, Proposition.Carried _,
                  Proposition.SomeReachable _, Proposition.Unread _,
-                 Proposition.OnAnApplication _, Proposition.WhereItAnswers _ -> { }
-            case Proposition.SoManyHold counted -> throw notWrittenOut(counted);
+                 Proposition.OnAnApplication _, Proposition.WhereItAnswers _,
+                 Proposition.SoManyHold _ -> { }
             case Proposition.OfTheWays ways -> out.addAll(positionsOf(ways.written()));
         }
         return out;
