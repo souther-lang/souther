@@ -1,12 +1,15 @@
 package souther.compiler.values;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 
+import souther.test.Growth;
+import souther.test.Visits;
+
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.SequencedMap;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -40,6 +43,10 @@ class WhatAnAlternativeStatesIsReadOnceHoweverItWasComposedTest {
     /** Doublings enough that a reader paying per reach rather than per part takes far longer than
      *  this test is given, and few enough that it still stops and says so. */
     private static final int MORE_REACHES_THAN_THERE_ARE_PARTS = 27;
+
+    /** Doublings at which the reaches are told from the parts by how often the reading goes into
+     *  itself: twice as many doublings are twice the parts and the square of the reaches. */
+    private static final int SHALLOW = 10;
 
     /** Doublings enough that how many reaches there are is past what a count of them holds. */
     private static final int PAST_WHAT_A_COUNT_HOLDS = 64;
@@ -104,13 +111,25 @@ class WhatAnAlternativeStatesIsReadOnceHoweverItWasComposedTest {
      * other end.
      */
     @Test
-    @Timeout(value = 10, unit = TimeUnit.SECONDS)
     void whatWasStatedOnceIsReadOnceHoweverManyTimesItIsReached() {
+        try (Visits visits = Visits.into(List.of(StatedApartness.class))) {
+            SequencedMap<Integer, Long> reached = new LinkedHashMap<>();
+            for (int doublings : new int[] {SHALLOW, SHALLOW * 2}) {
+                StatedApartness<String> reading = doubled(doublings);
+                reached.put(doublings, visits.during(reading::denials));
+            }
+            Growth.eachAtMost(reached, 3, 1);
+        }
+        assertEquals(Set.of(denial("p", "q")), doubled(MORE_REACHES_THAN_THERE_ARE_PARTS).denials());
+    }
+
+    /** One denial stated, and said together with itself that many times over. */
+    private static StatedApartness<String> doubled(int times) {
         StatedApartness<String> shared = StatedApartness.of("p", "q");
-        for (int doubled = 0; doubled < MORE_REACHES_THAN_THERE_ARE_PARTS; doubled++) {
+        for (int doubled = 0; doubled < times; doubled++) {
             shared = shared.and(shared);
         }
-        assertEquals(Set.of(denial("p", "q")), shared.denials());
+        return shared;
     }
 
     /**

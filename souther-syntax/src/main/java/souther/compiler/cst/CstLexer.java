@@ -186,8 +186,24 @@ public final class CstLexer {
             } else {
                 symbol(start);
             }
+            if (pos <= start) {
+                throw noProgress(start);
+            }
         }
         tokens.add(new GreenToken(SyntaxKind.EOF, ""));
+    }
+
+    /**
+     * Every pass of the scan that is not the end of the text moves {@code pos} forward. A pass that
+     * does not would meet the same character again and make empty tokens until the heap is gone,
+     * with no symptom but that; this makes it an immediate failure naming where it stopped.
+     */
+    private IllegalStateException noProgress(int start) {
+        int from = Math.max(0, start - 10);
+        int to = Math.min(src.length(), start + 10);
+        return new IllegalStateException("the scan did not advance at offset " + start
+                + " (U+%04X".formatted(src.codePointAt(start)) + "), around `"
+                + src.substring(from, to).replace("\n", "\\n") + "`");
     }
 
     private void whitespace(int start) {

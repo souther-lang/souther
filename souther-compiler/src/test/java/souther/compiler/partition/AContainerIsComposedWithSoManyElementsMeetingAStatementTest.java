@@ -24,7 +24,6 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -35,7 +34,6 @@ import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -277,11 +275,10 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
                 Endpoint.inclusive(Count.of(BigDecimal.ZERO)),
                 Endpoint.inclusive(Count.of(new BigDecimal("1E-1000000000"))));
         ExactRatio half = ExactRatio.of(new BigDecimal("5E-1000000001"));
-        List<ExactRatio> chosen = assertTimeoutPreemptively(Duration.ofSeconds(10), () ->
-                CardinalityComposer.valuesAlong(Carrier.DENSE, held,
-                        List.of(ExactRatio.of(-1), half), 1, UsualPlace.NONE,
-                        new LinkedHashSet<>(), new LinkedHashSet<>()).stream()
-                        .map(each -> Count.number(each).exactly()).toList());
+        List<ExactRatio> chosen = CardinalityComposer.valuesAlong(Carrier.DENSE, held,
+                List.of(ExactRatio.of(-1), half), 1, UsualPlace.NONE,
+                new LinkedHashSet<>(), new LinkedHashSet<>()).stream()
+                .map(each -> Count.number(each).exactly()).toList();
         assertTrue(chosen.contains(ExactRatio.ZERO), () -> "nought is chosen: " + chosen);
         assertTrue(chosen.contains(half), () -> "and the place it turns at inside: " + chosen);
     }
@@ -396,7 +393,7 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
      */
     @Test
     void aCountFarPastAnyContainerComposedIsAnsweredAtOnce() {
-        JsonNode y = assertTimeoutPreemptively(Duration.ofSeconds(30), () -> onlyLineOn(reportOf("""
+        JsonNode y = onlyLineOn(reportOf("""
                 module probe
 
                 behavior many : (xs: List<Int>, y: Int) -> Int
@@ -404,7 +401,7 @@ class AContainerIsComposedWithSoManyElementsMeetingAStatementTest {
                     if List.length(List.filter(x -> x > 0, xs)) >= 1000000000 then
                         if y > 0 then 1 else 0
                     else 2
-                """), "many/y"));
+                """), "many/y");
         for (JsonNode item : y.path("items")) {
             assertTrue(item.path("notOwed").isMissingNode(),
                     () -> "a count no container here holds is not one the rules refuse: " + item);

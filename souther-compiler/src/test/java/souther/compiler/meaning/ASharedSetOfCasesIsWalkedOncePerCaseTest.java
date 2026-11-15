@@ -5,23 +5,26 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.Figure;
 import souther.compiler.partition.CompositionBudget;
+import souther.test.Allocated;
+import souther.test.Growth;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.SequencedMap;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.Callable;
+import java.util.function.IntFunction;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -31,16 +34,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * visit to each case and not a visit to each way of choosing, and what it makes of a case does not
  * grow with the ways that lead to it.
  *
- * <p>Put to graphs that share in each way the cases allow, with a time to stop a walk that is one
- * way at a time or an answer that is written once for each: sharing a rest under one of several
- * alternatives, under one group of several held together, and both at once, at sixty-four steps
- * whose ways of choosing are past anything that can be walked, and to graphs drawn at random.
+ * <p>Put to graphs that share in each way the cases allow: sharing a rest under one of several
+ * alternatives, under one group of several held together, and both at once. What a question costs
+ * is the memory it allocates, which a walk makes of each visit and which does not depend on how
+ * fast the machine is. A graph of ten steps is asked for what it allocates against one of five:
+ * a visit to each case doubles it, a rendering that copies what it has written so far quadruples
+ * it, and a visit to each way of choosing makes it at least thirty-two times what it was.
  */
 class ASharedSetOfCasesIsWalkedOncePerCaseTest {
 
-    private static final int STEPS = 64;
+    private static final int STEPS = 10;
 
-    private static final Duration LONG_ENOUGH_FOR_A_VISIT_TO_EACH_CASE = Duration.ofSeconds(20);
+    /** The smaller of the two sizes a cost is compared at, and the larger is twice it. */
+    private static final int SMALLER = 5;
 
     private static Proposition truth(String at) {
         return new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of(at)), true);
@@ -50,10 +56,10 @@ class ASharedSetOfCasesIsWalkedOncePerCaseTest {
         return new DecidingCase.Cases.One(condition);
     }
 
-    /** At each of {@link #STEPS} parts the case holds or fails it and goes on to the same rest. */
-    private static DecidingCase.Cases sharingTheRest(DecidingCase.Cases end) {
+    /** At each of {@code steps} parts the case holds or fails it and goes on to the same rest. */
+    private static DecidingCase.Cases sharingTheRest(int steps, DecidingCase.Cases end) {
         DecidingCase.Cases rest = end;
-        for (int part = 0; part < STEPS; part++) {
+        for (int part = 0; part < steps; part++) {
             Proposition holds = truth("part" + part);
             rest = new DecidingCase.Cases.EachOf(List.of(
                     new DecidingCase.Cases.Together(List.of(one(holds), rest)),
@@ -62,10 +68,10 @@ class ASharedSetOfCasesIsWalkedOncePerCaseTest {
         return rest;
     }
 
-    /** At each of {@link #STEPS} steps the same case is held twice together. */
-    private static DecidingCase.Cases heldTwice(DecidingCase.Cases end) {
+    /** At each of {@code steps} steps the same case is held twice together. */
+    private static DecidingCase.Cases heldTwice(int steps, DecidingCase.Cases end) {
         DecidingCase.Cases rest = end;
-        for (int step = 0; step < STEPS; step++) {
+        for (int step = 0; step < steps; step++) {
             rest = new DecidingCase.Cases.Together(List.of(rest, rest));
         }
         return rest;
@@ -73,9 +79,10 @@ class ASharedSetOfCasesIsWalkedOncePerCaseTest {
 
     /** Both: a group of a part and a rest held together, under each of two alternatives, and the
      *  rest the same group twice. */
-    private static DecidingCase.Cases heldTwiceUnderAlternatives(DecidingCase.Cases end) {
+    private static DecidingCase.Cases heldTwiceUnderAlternatives(int steps,
+                                                                 DecidingCase.Cases end) {
         DecidingCase.Cases rest = end;
-        for (int step = 0; step < STEPS; step++) {
+        for (int step = 0; step < steps; step++) {
             DecidingCase.Cases twice = new DecidingCase.Cases.Together(List.of(rest, rest));
             rest = new DecidingCase.Cases.EachOf(List.of(
                     new DecidingCase.Cases.Together(List.of(one(truth("on" + step)), twice)),
@@ -144,6 +151,36 @@ class ASharedSetOfCasesIsWalkedOncePerCaseTest {
         return asked;
     }
 
+    /** What asking {@code ask} allocates on this thread. */
+    private static long allocatedBy(Callable<?> ask) {
+        return Allocated.by(() -> {
+            try {
+                assertTrue(ask.call() != null);
+            } catch (Exception failed) {
+                throw new IllegalStateException(failed);
+            }
+        });
+    }
+
+    /**
+     * That what {@code asked} allocates at {@link #STEPS} steps is no more than what it allocates at
+     * {@link #SMALLER} steps scaled up by the steps, with room for the part that does not scale.
+     * Each size is asked of a graph of its own made beforehand, and one is asked first to leave
+     * what the first ask loads out of the count.
+     */
+    private static void assertCostGrowsWithTheCasesAndNotTheWays(String what,
+                                                                IntFunction<Callable<?>> asked) {
+        allocatedBy(asked.apply(SMALLER));
+        SequencedMap<Integer, Long> bySize = new LinkedHashMap<>();
+        bySize.put(SMALLER, allocatedBy(asked.apply(SMALLER)));
+        bySize.put(STEPS, allocatedBy(asked.apply(STEPS)));
+        try {
+            Growth.eachAtMost(bySize, 8, 1);
+        } catch (AssertionError grew) {
+            throw new AssertionError(what + ": " + grew.getMessage(), grew);
+        }
+    }
+
     /** The questions the cases answer are these and no others, and each is asked of the shared
      *  cases below: a question added is put here with the way it is asked. */
     @Test
@@ -159,32 +196,32 @@ class ASharedSetOfCasesIsWalkedOncePerCaseTest {
                 "a question the cases answer is walked once per case, and asked here");
     }
 
-    private static Map<String, DecidingCase.Cases> sharing() {
+    private static Map<String, DecidingCase.Cases> sharing(int steps) {
         DecidingCase.Cases end = one(truth("end"));
         DecidingCase.Cases choice = new DecidingCase.Cases.EachOf(List.of(one(truth("a")),
                 one(truth("b"))));
         Map<String, DecidingCase.Cases> out = new TreeMap<>();
-        out.put("a rest under each of two alternatives", sharingTheRest(end));
-        out.put("the same case held twice together", heldTwice(end));
-        out.put("the same choice held twice together", heldTwice(choice));
+        out.put("a rest under each of two alternatives", sharingTheRest(steps, end));
+        out.put("the same case held twice together", heldTwice(steps, end));
+        out.put("the same choice held twice together", heldTwice(steps, choice));
         out.put("a rest held twice under each of two alternatives",
-                heldTwiceUnderAlternatives(end));
-        out.put("cases nobody took apart, held twice together", heldTwice(NOT_TAKEN_APART));
+                heldTwiceUnderAlternatives(steps, end));
+        out.put("cases nobody took apart, held twice together", heldTwice(steps, NOT_TAKEN_APART));
         return out;
     }
 
     @Test
     void everyQuestionCostsAVisitToEachCaseAndNotToEachWayOfChoosing() throws Exception {
-        for (Map.Entry<String, DecidingCase.Cases> shape : sharing().entrySet()) {
-            for (Map.Entry<String, Callable<?>> each : askedOf(shape.getValue()).entrySet()) {
-                Object answer = assertTimeoutPreemptively(LONG_ENOUGH_FOR_A_VISIT_TO_EACH_CASE,
-                        () -> each.getValue().call(), each.getKey() + " of " + shape.getKey());
-                assertTrue(answer != null, each.getKey());
+        for (String shape : sharing(STEPS).keySet()) {
+            for (String question : askedOf(one(truth("end"))).keySet()) {
+                assertCostGrowsWithTheCasesAndNotTheWays(question + " of " + shape,
+                        steps -> askedOf(sharing(steps).get(shape)).get(question));
             }
-            Object ordered = assertTimeoutPreemptively(LONG_ENOUGH_FOR_A_VISIT_TO_EACH_CASE,
-                    () -> CasesOfALineAsked.heldFirst(shape.getValue()),
-                    "putting what every case holds first, of " + shape.getKey());
-            assertTrue(ordered != null);
+            assertCostGrowsWithTheCasesAndNotTheWays(
+                    "putting what every case holds first, of " + shape, steps -> {
+                        DecidingCase.Cases cases = sharing(steps).get(shape);
+                        return () -> CasesOfALineAsked.heldFirst(cases);
+                    });
         }
     }
 
@@ -192,43 +229,39 @@ class ASharedSetOfCasesIsWalkedOncePerCaseTest {
      *  many ways lead to it. */
     @Test
     void whatIsMadeOfSharedCasesIsAsManyCasesAsThereAre() {
-        for (Map.Entry<String, DecidingCase.Cases> shape : sharing().entrySet()) {
+        for (Map.Entry<String, DecidingCase.Cases> shape : sharing(STEPS).entrySet()) {
             int cases = shape.getValue().references().size();
-            int ordered = assertTimeoutPreemptively(LONG_ENOUGH_FOR_A_VISIT_TO_EACH_CASE,
-                    () -> CasesOfALineAsked.heldFirst(shape.getValue()).references().size());
+            int ordered = CasesOfALineAsked.heldFirst(shape.getValue()).references().size();
             assertTrue(ordered <= 2 * cases + 2, shape.getKey() + ": " + cases + " cases are put "
                     + "in order as " + ordered);
         }
     }
 
+    /** Whatever the graph, every question is answered of it; that it is answered in what grows with
+     *  its cases is held by the shapes above, which are the ones that tell the two apart. */
     @Test
-    void graphsDrawnAtRandomAreAskedEveryQuestionInTimeBoundByTheirCases() throws Exception {
+    void graphsDrawnAtRandomAreAskedEveryQuestion() throws Exception {
         Random dice = new Random(2680);
         for (int round = 0; round < 200; round++) {
-            DecidingCase.Cases cases = drawn(dice, 12 + dice.nextInt(40), round % 3 == 0);
-            for (Map.Entry<String, Callable<?>> each : askedOf(cases).entrySet()) {
-                assertTimeoutPreemptively(Duration.ofSeconds(5), () -> each.getValue().call(),
-                        each.getKey() + " of the graph drawn at round " + round);
+            DecidingCase.Cases cases = drawn(dice, 6 + dice.nextInt(12), round % 3 == 0);
+            for (Callable<?> each : askedOf(cases).values()) {
+                each.call();
             }
-            assertTimeoutPreemptively(Duration.ofSeconds(5), () -> CasesOfALineAsked.heldFirst(cases),
-                    "putting what every case holds first, at round " + round);
-            assertTimeoutPreemptively(Duration.ofSeconds(5), () -> cases.toString(),
-                    "writing the graph drawn at round " + round);
+            CasesOfALineAsked.heldFirst(cases);
+            assertTrue(!cases.toString().isEmpty(), "writing the graph drawn at round " + round);
         }
     }
 
     @Test
     void theFiguresCasesWereNeverTakenApartAtAreFoundBeneathTheSharedRest() {
-        Set<Figure.Budget> figures = assertTimeoutPreemptively(
-                LONG_ENOUGH_FOR_A_VISIT_TO_EACH_CASE,
-                () -> sharingTheRest(NOT_TAKEN_APART).notTakenApartAt());
+        Set<Figure.Budget> figures = sharingTheRest(STEPS, NOT_TAKEN_APART).notTakenApartAt();
         assertEquals(Set.of(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached()), figures);
-        assertEquals(Set.of(), sharingTheRest(one(truth("end"))).notTakenApartAt());
+        assertEquals(Set.of(), sharingTheRest(STEPS, one(truth("end"))).notTakenApartAt());
     }
 
     @Test
     void whereTheWaysAreManyTheConditionIsNotWrittenAndWhereTheyAreFewItIs() {
-        DecidingCase.Cases shared = sharingTheRest(one(truth("end")));
+        DecidingCase.Cases shared = sharingTheRest(STEPS, one(truth("end")));
         assertEquals(1001L, shared.waysOfChoosing(1000));
         assertEquals(Optional.empty(), shared.holdingInSome(1000),
                 "as long as there are ways of choosing, and so not written");
@@ -244,58 +277,74 @@ class ASharedSetOfCasesIsWalkedOncePerCaseTest {
     }
 
     @Test
-    void twoGraphsOfTheSameCasesAreEqualAndTwoThatDifferAtTheEndAreNot() {
-        assertTimeoutPreemptively(LONG_ENOUGH_FOR_A_VISIT_TO_EACH_CASE, () -> {
-            DecidingCase.Cases one = sharingTheRest(one(truth("end")));
-            DecidingCase.Cases other = sharingTheRest(one(truth("end")));
-            assertTrue(one != other);
-            assertEquals(one, other);
-            assertEquals(one.hashCode(), other.hashCode());
-            assertNotEquals(one, sharingTheRest(one(truth("another end"))));
-            assertNotEquals(one, sharingTheRest(NOT_TAKEN_APART));
-            assertEquals(heldTwice(one(truth("end"))), heldTwice(one(truth("end"))));
-            assertEquals(DecidingCase.alone(truth("said")), DecidingCase.alone(truth("said")));
-            assertEquals(new DecidingCase(truth("said"), one),
-                    new DecidingCase(truth("said"), other));
+    void twoGraphsOfTheSameCasesAreEqualAndTwoThatDifferAtTheEndAreNot() throws Exception {
+        DecidingCase.Cases one = sharingTheRest(STEPS, one(truth("end")));
+        DecidingCase.Cases other = sharingTheRest(STEPS, one(truth("end")));
+        assertTrue(one != other);
+        assertEquals(one, other);
+        assertEquals(one.hashCode(), other.hashCode());
+        assertNotEquals(one, sharingTheRest(STEPS, one(truth("another end"))));
+        assertNotEquals(one, sharingTheRest(STEPS, NOT_TAKEN_APART));
+        assertEquals(heldTwice(STEPS, one(truth("end"))), heldTwice(STEPS, one(truth("end"))));
+        assertEquals(DecidingCase.alone(truth("said")), DecidingCase.alone(truth("said")));
+        assertEquals(new DecidingCase(truth("said"), one), new DecidingCase(truth("said"), other));
+
+        assertCostGrowsWithTheCasesAndNotTheWays("comparing graphs of the same cases", steps -> {
+            DecidingCase.Cases left = heldTwiceUnderAlternatives(steps, one(truth("end")));
+            DecidingCase.Cases right = heldTwiceUnderAlternatives(steps, one(truth("end")));
+            return () -> left.equals(right) && left.hashCode() == right.hashCode();
         });
     }
 
     @Test
-    void theCasesAreWrittenOutOncePerCase() {
-        String written = assertTimeoutPreemptively(LONG_ENOUGH_FOR_A_VISIT_TO_EACH_CASE,
-                () -> sharingTheRest(one(truth("end"))).toString());
-        assertTrue(written.length() < 100_000, "as long as the cases are many: " + written.length());
+    void theCasesAreWrittenOutOncePerCase() throws Exception {
+        String written = sharingTheRest(STEPS, one(truth("end"))).toString();
         assertTrue(written.contains("#"), "a case more than one holds is written by its number");
+
+        assertCostGrowsWithTheCasesAndNotTheWays("writing the cases out", steps -> {
+            DecidingCase.Cases cases = sharingTheRest(steps, one(truth("end")));
+            return cases::toString;
+        });
     }
 
     @Test
-    void theStepsRunningOutAskForTheFiguresOfTheCasesLeftOnceEach() {
-        for (DecidingCase.Cases cases : List.of(sharingTheRest(NOT_TAKEN_APART),
-                heldTwice(NOT_TAKEN_APART), heldTwiceUnderAlternatives(NOT_TAKEN_APART))) {
-            DecidingCase said = new DecidingCase(truth("said"), cases);
-            CasesOfALineAsked.Found found = assertTimeoutPreemptively(
-                    LONG_ENOUGH_FOR_A_VISIT_TO_EACH_CASE,
-                    () -> CasesOfALineAsked.casesOf(said,
-                            _ -> CasesOfALineAsked.Crossing.MAY_CROSS));
+    void theStepsRunningOutAskForTheFiguresOfTheCasesLeftOnceEach() throws Exception {
+        for (DecidingCase.Cases cases : List.of(sharingTheRest(STEPS, NOT_TAKEN_APART),
+                heldTwice(STEPS, NOT_TAKEN_APART),
+                heldTwiceUnderAlternatives(STEPS, NOT_TAKEN_APART))) {
+            CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(
+                    new DecidingCase(truth("said"), cases),
+                    _ -> CasesOfALineAsked.Crossing.MAY_CROSS);
             assertTrue(found.notWorkedOut()
                             .contains(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached()),
                     found.notWorkedOut().toString());
         }
+        assertCostGrowsWithTheCasesAndNotTheWays("asking the cases left for their figures",
+                steps -> {
+                    DecidingCase said = new DecidingCase(truth("said"),
+                            heldTwiceUnderAlternatives(steps, NOT_TAKEN_APART));
+                    return () -> CasesOfALineAsked.casesOf(said,
+                            _ -> CasesOfALineAsked.Crossing.MAY_CROSS);
+                });
     }
 
     @Test
-    void moreWaysOfChoosingThanAreTakenApartAskForTheFiguresOfTheCasesOnceEach() {
-        for (DecidingCase.Cases cases : List.of(sharingTheRest(NOT_TAKEN_APART),
-                heldTwiceUnderAlternatives(NOT_TAKEN_APART))) {
-            DecidingCase said = new DecidingCase(truth("said"), cases);
-            CasesOfALineAsked.Atoms<Boolean> found = assertTimeoutPreemptively(
-                    LONG_ENOUGH_FOR_A_VISIT_TO_EACH_CASE,
-                    () -> CasesOfALineAsked.atomsOf(said, _ -> true));
+    void moreWaysOfChoosingThanAreTakenApartAskForTheFiguresOfTheCasesOnceEach() throws Exception {
+        for (DecidingCase.Cases cases : List.of(sharingTheRest(STEPS, NOT_TAKEN_APART),
+                heldTwiceUnderAlternatives(STEPS, NOT_TAKEN_APART))) {
+            CasesOfALineAsked.Atoms<Boolean> found = CasesOfALineAsked.atomsOf(
+                    new DecidingCase(truth("said"), cases), _ -> true);
             assertTrue(found.each().isEmpty());
             assertTrue(found.notWorkedOut()
                     .contains(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached()));
             assertTrue(found.notWorkedOut()
                     .contains(CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached()));
         }
+        assertCostGrowsWithTheCasesAndNotTheWays("taking the cases apart for their figures",
+                steps -> {
+                    DecidingCase said = new DecidingCase(truth("said"),
+                            heldTwiceUnderAlternatives(steps, NOT_TAKEN_APART));
+                    return () -> CasesOfALineAsked.atomsOf(said, _ -> true);
+                });
     }
 }

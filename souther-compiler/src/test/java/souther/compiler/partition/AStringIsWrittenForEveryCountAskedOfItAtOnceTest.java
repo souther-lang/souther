@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import net.unit8.notation199x.pattern.CodePoints;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 
 import souther.compiler.DefaultStdlib;
 import souther.compiler.TestDay;
@@ -485,11 +484,9 @@ class AStringIsWrittenForEveryCountAskedOfItAtOnceTest {
      * The numbers tried are walked between the ends the demand and the rules leave together. A
      * demand open at both ends beside a region leaving fewer numbers than are tried is otherwise
      * walked from nought to the end of the window looking for one more: the most a long holds for
-     * a sum, the most an int holds for a length. Held to the region, what is said is where it is,
-     * and at once.
+     * a sum, the most an int holds for a length. Held to the region, what is said is where it is.
      */
     @Test
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void theNumbersTriedAreThoseTheRulesLeave() {
         long far = 1_000_000_000_000L;
         TermRealizations.Realization.Stopped stopped = assertInstanceOf(

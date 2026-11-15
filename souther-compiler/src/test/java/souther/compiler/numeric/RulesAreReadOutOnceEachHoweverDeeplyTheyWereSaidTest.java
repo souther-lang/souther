@@ -1,11 +1,14 @@
 package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 
+import souther.test.Allocated;
+import souther.test.Growth;
+
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import java.util.SequencedMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -32,10 +35,11 @@ class RulesAreReadOutOnceEachHoweverDeeplyTheyWereSaidTest {
     private static final int LONGER_THAN_A_STACK = 100_000;
 
     /**
-     * Doublings enough that a reader paying per reach rather than per part takes far longer than
-     * this test is given, and few enough that it still stops and says so.
+     * Doublings enough that a reader paying per reach rather than per part allocates a hundred and
+     * twenty-eight times as much at this many as at half of them, and few enough that it still stops
+     * and says so.
      */
-    private static final int MORE_REACHES_THAN_THERE_ARE_PARTS = 27;
+    private static final int MORE_REACHES_THAN_THERE_ARE_PARTS = 14;
 
     private static AffineConstraint<String> rule(String atom, long at) {
         return new AffineConstraint.Disequality<>(
@@ -109,17 +113,31 @@ class RulesAreReadOutOnceEachHoweverDeeplyTheyWereSaidTest {
      * reaches it twice. Read by what it reaches, a caller doubling what it says would be read a
      * number of times that doubles with it — which is the cost the rest of this is about, arrived
      * at from the other end.
+     *
+     * <p>What reading costs is what it allocates. Twice the doublings is twice the parts and so
+     * twice what a reader of the parts allocates, and a reader of the reaches allocates the square
+     * of what it did.
      */
     @Test
-    @Timeout(value = 10, unit = TimeUnit.SECONDS)
     void whatWasSaidOnceIsReadOnceHoweverManyTimesItIsReached() {
         AffineConstraint<String> a = rule("x", 1);
+        assertEquals(List.of(a), doubled(a, MORE_REACHES_THAN_THERE_ARE_PARTS).distinct());
 
-        StatedRules<String> shared = StatedRules.of(a);
-        for (int doubled = 0; doubled < MORE_REACHES_THAN_THERE_ARE_PARTS; doubled++) {
+        doubled(a, MORE_REACHES_THAN_THERE_ARE_PARTS / 2).distinct();
+        SequencedMap<Integer, Long> bySize = new LinkedHashMap<>();
+        for (int doublings : new int[] {MORE_REACHES_THAN_THERE_ARE_PARTS / 2,
+                MORE_REACHES_THAN_THERE_ARE_PARTS}) {
+            StatedRules<String> shared = doubled(a, doublings);
+            bySize.put(doublings, Allocated.by(shared::distinct));
+        }
+        Growth.eachAtMost(bySize, 8, 1);
+    }
+
+    private static StatedRules<String> doubled(AffineConstraint<String> rule, int times) {
+        StatedRules<String> shared = StatedRules.of(rule);
+        for (int doubled = 0; doubled < times; doubled++) {
             shared = shared.and(shared);
         }
-
-        assertEquals(List.of(a), shared.distinct());
+        return shared;
     }
 }

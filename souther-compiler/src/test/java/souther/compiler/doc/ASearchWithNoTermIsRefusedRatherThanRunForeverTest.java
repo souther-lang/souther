@@ -1,7 +1,6 @@
 package souther.compiler.doc;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -10,7 +9,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -20,20 +18,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * advances by the term's length never advances. Nothing downstream can recover from that: it is
  * not an exception a caller can catch, it is a session that stops answering.
  *
- * <p>Every test here is bounded in time, because the failure being guarded against is a hang.
+ * <p>Each test asks for the refusal and gets it as a returned answer, so a walk that never advances
+ * is a test that never returns.
  */
 class ASearchWithNoTermIsRefusedRatherThanRunForeverTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     @Test
-    @Timeout(value = 15, unit = TimeUnit.SECONDS)
     void theSpecificationAnswersAnEmptyTermAtOnce() {
         assertEquals(List.of(), SpecDocument.bundled().rank(""));
     }
 
     @Test
-    @Timeout(value = 15, unit = TimeUnit.SECONDS)
     void theCommandRefusesASearchWithNothingToSearchFor() {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ByteArrayOutputStream err = new ByteArrayOutputStream();
@@ -48,7 +45,6 @@ class ASearchWithNoTermIsRefusedRatherThanRunForeverTest {
     }
 
     @Test
-    @Timeout(value = 15, unit = TimeUnit.SECONDS)
     void theStdlibSearchRefusesTheSameWay() {
         ByteArrayOutputStream err = new ByteArrayOutputStream();
 
@@ -62,7 +58,6 @@ class ASearchWithNoTermIsRefusedRatherThanRunForeverTest {
     }
 
     @Test
-    @Timeout(value = 20, unit = TimeUnit.SECONDS)
     void aToolCallMissingItsRequiredArgumentIsRefusedAndTheSessionGoesOn() {
         List<JsonNode> answers = serve(
                 "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":"
@@ -76,7 +71,6 @@ class ASearchWithNoTermIsRefusedRatherThanRunForeverTest {
     }
 
     @Test
-    @Timeout(value = 20, unit = TimeUnit.SECONDS)
     void anArgumentPresentButEmptyIsRefusedTheSameWay() {
         List<JsonNode> answers = serve(
                 "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":"
@@ -89,7 +83,6 @@ class ASearchWithNoTermIsRefusedRatherThanRunForeverTest {
     }
 
     @Test
-    @Timeout(value = 20, unit = TimeUnit.SECONDS)
     void argumentsThatAreNotAnObjectAreRefusedEvenWhenTheToolRequiresNothing() {
         List<JsonNode> answers = serve(
                 "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":"
@@ -102,7 +95,6 @@ class ASearchWithNoTermIsRefusedRatherThanRunForeverTest {
     }
 
     @Test
-    @Timeout(value = 20, unit = TimeUnit.SECONDS)
     void anArgumentOfTheWrongShapeIsRefusedRatherThanCoerced() {
         List<JsonNode> answers = serve(
                 "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":"

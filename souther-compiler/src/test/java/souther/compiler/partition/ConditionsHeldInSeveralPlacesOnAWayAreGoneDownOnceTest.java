@@ -4,12 +4,10 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.meaning.WhyNotTaken;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * A condition of several ways whose every alternative holds the one before it is one object held
@@ -18,7 +16,9 @@ import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
  */
 class ConditionsHeldInSeveralPlacesOnAWayAreGoneDownOnceTest {
 
-    private static final int LENGTH = 40;
+    /** Long enough that a walk down every way states a condition more than once, short enough
+     *  that one still ends. */
+    private static final int LENGTH = 8;
 
     private static ConditionOccurrence condition(int which) {
         return new ConditionOccurrence("f", ConditionOccurrence.Reading.DECIDING, which);
@@ -47,7 +47,7 @@ class ConditionsHeldInSeveralPlacesOnAWayAreGoneDownOnceTest {
     void aWayStatesEachConditionOfAChainOnceHoweverManyWaysLeadToIt() {
         WayToTheBorder way = new WayToTheBorder(List.of(chainOf(LENGTH)));
 
-        List<OnTheWay> stated = assertTimeoutPreemptively(Duration.ofSeconds(10), way::stated);
+        List<OnTheWay> stated = way.stated();
 
         // The chain's conditions, and the one each adds beside the one before it, and the first.
         assertEquals(2 * LENGTH + 1, stated.size());

@@ -41,6 +41,13 @@
             <artifactId>souther-runtime</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- The test watchdog, which every module's tests carry. It is the only thing taken from
+             here. -->
+        <dependency>
+            <groupId>org.souther-lang</groupId>
+            <artifactId>souther-test-support</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

@@ -10,14 +10,12 @@ import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.OperationLaw;
 
 import java.math.BigInteger;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.function.IntFunction;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * A guard written in terms of a library operation settles, for the discharge of a rule, what the
@@ -585,19 +583,16 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
     /**
      * Every step of a chain holds the leaves of the step before it and one more, so what is held
      * for the steps comes to the square of the length. The source bounds the length (E2107), and
-     * at the longest it allows the relation is still read, in the time the rest of the check
-     * takes.
+     * at the longest it allows the relation is still read.
      */
     @Test
     void aListPutTogetherOfAsManyListsAsASourceMayWriteIsTakenApart() {
-        assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
-            assertEquals(false, owedBy(chained(300,
-                    last -> "Digit(List.sum(List.reverse(a" + last + ")) - List.sum(a" + last
-                            + "))")), "the same elements, the other way round");
-            assertEquals(true, owedBy(chained(300,
-                    last -> "Digit(List.sum(List.reverse(a" + last + ")) - List.sum(a" + (last - 1)
-                            + "))")), "one element fewer");
-        });
+        assertEquals(false, owedBy(chained(300,
+                last -> "Digit(List.sum(List.reverse(a" + last + ")) - List.sum(a" + last
+                        + "))")), "the same elements, the other way round");
+        assertEquals(true, owedBy(chained(300,
+                last -> "Digit(List.sum(List.reverse(a" + last + ")) - List.sum(a" + (last - 1)
+                        + "))")), "one element fewer");
     }
 
     /** The product of {@code xs} put together with itself {@code times} times over, less the
@@ -622,15 +617,13 @@ class AGuardOverALibraryOperationSettlesWhatItsLawSaysTest {
      */
     @Test
     void aListPutTogetherOfItselfIsTakenApartOncePerTerm() {
-        assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
-            assertEquals(false, owedBy(doubled(3)), "eight times, which a count says");
-            assertEquals(false, owedBy(doubled(40)), "a count a long holds");
-            assertEquals(true, owedBy(doubled(70)), "more than a count says, so nothing is said");
-            assertEquals(false, owedBy(doubledProduct(3)), "eight times, which a count says");
-            assertEquals(false, owedBy(doubledProduct(40)), "a count a long holds");
-            assertEquals(true, owedBy(doubledProduct(70)),
-                    "more than a count says, so nothing is said");
-        });
+        assertEquals(false, owedBy(doubled(3)), "eight times, which a count says");
+        assertEquals(false, owedBy(doubled(40)), "a count a long holds");
+        assertEquals(true, owedBy(doubled(70)), "more than a count says, so nothing is said");
+        assertEquals(false, owedBy(doubledProduct(3)), "eight times, which a count says");
+        assertEquals(false, owedBy(doubledProduct(40)), "a count a long holds");
+        assertEquals(true, owedBy(doubledProduct(70)),
+                "more than a count says, so nothing is said");
     }
 
     /**
