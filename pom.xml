@@ -336,14 +336,9 @@
                         <!-- The one place a test is held to a clock, and only to stop a build that
                              has hung: no test asserts on how long it took, so no test is wrong for
                              being slow. `souther.test.TestWatchdog`, from souther-test-support, is
-                             found by autodetection; it names a test that does not come back and
-                             halts the fork, which a JUnit timeout cannot do to a loop that ignores
-                             interrupts. -->
-                        <properties>
-                            <configurationParameters>
-                                junit.jupiter.extensions.autodetection.enabled = true
-                            </configurationParameters>
-                        </properties>
+                             a launcher listener the launcher finds through the service loader; it
+                             names what stops making progress and halts the fork, which a JUnit
+                             timeout cannot do to a loop that ignores interrupts. -->
                         <systemPropertyVariables>
                             <souther.example.step.limit>${test.example.step.limit}</souther.example.step.limit>
                         </systemPropertyVariables>

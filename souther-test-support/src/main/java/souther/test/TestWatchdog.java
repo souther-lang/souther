@@ -2,94 +2,157 @@ package souther.test;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
-import org.junit.jupiter.api.extension.AfterEachCallback;
-import org.junit.jupiter.api.extension.BeforeEachCallback;
-import org.junit.jupiter.api.extension.ExtensionContext;
+import org.junit.platform.engine.TestExecutionResult;
+import org.junit.platform.launcher.TestExecutionListener;
+import org.junit.platform.launcher.TestIdentifier;
 
 /**
- * Stops a fork whose test does not come back, and says which test it was.
+ * Stops a fork whose tests stop making progress, and says where.
  *
  * <p>No test asserts on how long it took: cost is held by counts, and a test is never wrong for
  * being slow. What a count cannot do is end code that never returns, and a JUnit timeout cannot
  * either: it interrupts the test's thread, and a loop that ignores interrupts goes on. So this runs
- * apart from the test. A daemon thread looks at every running test, and one that has run longer
- * than the limit gets its name and every thread's stack printed to stderr, after which the JVM is
- * halted. Surefire reports the fork as crashed, which is how a build that would have hung ends.
+ * apart from the test. A daemon thread looks at everything JUnit is executing, and when something
+ * has shown no activity for longer than the limit, the names of what is stuck and every thread's
+ * stack are printed to stderr and the JVM is halted. Surefire reports the fork as crashed, which is
+ * how a build that would have hung ends.
+ *
+ * <p>What is executing is what the JUnit Platform says is: every container and every test it
+ * announces through {@code executionStarted} and {@code executionFinished}, whatever the engine
+ * made it from. A class, a method, a dynamic test, a template's invocation, and the work of
+ * {@code @BeforeAll}, {@code @AfterAll} and a factory's stream, which belong to the class or the
+ * factory, are all inside one of those. A descriptor's activity is its own start, or the start or
+ * finish of anything beneath it. A test is therefore aged from its start; a class that is running
+ * many tests is never stuck while they come and go, and one whose {@code @BeforeAll} does not
+ * return is.
  *
  * <p>The limit is far past anything a test does on a loaded machine, so it never decides the result
  * of a test that passes. {@value #LIMIT_PROPERTY} sets it in seconds.
  *
- * <p>Registered through {@code META-INF/services} and switched on by surefire's
- * {@code junit.jupiter.extensions.autodetection.enabled}, so every module's tests carry it and no
- * test opts in. A test is running from the first callback before it to the last callback after it.
+ * <p>Registered through {@code META-INF/services}, so the launcher finds it in every module's tests
+ * and no test opts in. A hang in discovery is watched by {@link TestDiscoveryWatchdog}.
  */
-public final class TestWatchdog implements BeforeEachCallback, AfterEachCallback {
+public final class TestWatchdog implements TestExecutionListener {
 
     /** The limit in seconds; unset means ten minutes. */
     public static final String LIMIT_PROPERTY = "souther.test.watchdog.seconds";
 
     private static final Duration DEFAULT_LIMIT = Duration.ofMinutes(10);
-    private static final long LOOK_EVERY_MILLIS = 1_000;
+    private static final Duration LONGEST_LOOK_INTERVAL = Duration.ofSeconds(1);
     private static final int EXIT_STATUS = 70;
 
-    /** A test that ran past the limit, and for how long. */
-    record Expired(String test, Duration ran) {
+    /** Something that showed no activity for longer than the limit, and for how long. */
+    record Expired(String name, Duration idle) {
     }
 
-    /** The tests running now, by unique id, with the reading of the clock each began at. */
+    /** What is executing now, each with the reading of the clock at its latest activity. */
     static final class Running {
-        private final Map<String, Began> began = new ConcurrentHashMap<>();
+        private final Map<String, Watched> watched = new ConcurrentHashMap<>();
         private final LongSupplier nanos;
         private final Duration limit;
-        private final Consumer<Expired> onExpiry;
+        private final Consumer<List<Expired>> onExpiry;
 
-        /** The expiry action is what is done about a test past the limit; production halts. */
-        Running(LongSupplier nanos, Duration limit, Consumer<Expired> onExpiry) {
+        /**
+         * The expiry action is what is done about what is past the limit, deepest first;
+         * production halts.
+         */
+        Running(LongSupplier nanos, Duration limit, Consumer<List<Expired>> onExpiry) {
             this.nanos = nanos;
             this.limit = limit;
             this.onExpiry = onExpiry;
         }
 
-        void began(String uniqueId, String name) {
-            began.put(uniqueId, new Began(name, nanos.getAsLong()));
+        /** Starts watching {@code id}, which counts as activity of everything above it. */
+        void started(String id, Optional<String> parentId, String name) {
+            long now = nanos.getAsLong();
+            int depth = parentId.map(parent -> {
+                Watched above = watched.get(parent);
+                return above == null ? 1 : above.depth + 1;
+            }).orElse(0);
+            watched.put(id, new Watched(name, parentId, depth, now));
+            touchAbove(parentId, now);
         }
 
-        void ended(String uniqueId) {
-            began.remove(uniqueId);
+        /** Stops watching {@code id}; its finish is activity of everything above it. */
+        void finished(String id) {
+            Watched gone = watched.remove(id);
+            if (gone != null) {
+                touchAbove(gone.parent, nanos.getAsLong());
+            }
         }
 
-        /** Hands every test that has run longer than the limit to the expiry action. */
+        /** Something beneath {@code parentId} happened without being watched itself. */
+        void activityBeneath(Optional<String> parentId) {
+            touchAbove(parentId, nanos.getAsLong());
+        }
+
+        private void touchAbove(Optional<String> parentId, long now) {
+            Optional<String> next = parentId;
+            while (next.isPresent()) {
+                Watched above = watched.get(next.get());
+                if (above == null) {
+                    return;
+                }
+                above.lastActivity.set(now);
+                next = above.parent;
+            }
+        }
+
+        /** The names of everything being watched. */
+        List<String> names() {
+            return watched.values().stream().map(Watched::name).toList();
+        }
+
+        /** Hands everything past the limit, deepest first, to the expiry action. */
         void look() {
             long now = nanos.getAsLong();
+            List<Watched> stuck = new ArrayList<>();
             List<Expired> expired = new ArrayList<>();
-            for (Began test : began.values()) {
-                Duration ran = Duration.ofNanos(now - test.nanos());
-                if (ran.compareTo(limit) > 0) {
-                    expired.add(new Expired(test.name(), ran));
+            for (Watched candidate : watched.values()) {
+                Duration idle = Duration.ofNanos(now - candidate.lastActivity.get());
+                if (idle.compareTo(limit) > 0) {
+                    stuck.add(candidate);
                 }
             }
-            expired.forEach(onExpiry);
+            stuck.sort(Comparator.comparingInt((Watched w) -> w.depth).reversed());
+            for (Watched candidate : stuck) {
+                expired.add(new Expired(candidate.name,
+                        Duration.ofNanos(now - candidate.lastActivity.get())));
+            }
+            if (!expired.isEmpty()) {
+                onExpiry.accept(expired);
+            }
         }
 
-        private record Began(String name, long nanos) {
+        private record Watched(String name, Optional<String> parent, int depth,
+                AtomicLong lastActivity) {
+            Watched(String name, Optional<String> parent, int depth, long began) {
+                this(name, parent, depth, new AtomicLong(began));
+            }
         }
     }
 
-    /** The one watch of this JVM, started with its first test. */
+    /** The one watch of this JVM, started with its first use. */
     private static final class Shared {
         static final Running RUNNING = start();
 
         private static Running start() {
-            Running running = new Running(System::nanoTime, limit(), Shared::halt);
+            Duration limit = limit();
+            Duration lookEvery = limit.dividedBy(4).compareTo(LONGEST_LOOK_INTERVAL) < 0
+                    ? limit.dividedBy(4) : LONGEST_LOOK_INTERVAL;
+            Running running = new Running(System::nanoTime, limit, Shared::halt);
             Thread looker = new Thread(() -> {
                 while (true) {
                     try {
-                        Thread.sleep(LOOK_EVERY_MILLIS);
+                        Thread.sleep(lookEvery);
                     } catch (InterruptedException e) {
                         return;
                     }
@@ -106,9 +169,13 @@ public final class TestWatchdog implements BeforeEachCallback, AfterEachCallback
             return seconds == null ? DEFAULT_LIMIT : Duration.ofSeconds(Long.parseLong(seconds));
         }
 
-        private static void halt(Expired expired) {
-            System.err.println("TestWatchdog: " + expired.test() + " has run for "
-                    + expired.ran().toSeconds() + "s, past the limit; halting the JVM. Stacks:");
+        private static void halt(List<Expired> expired) {
+            System.err.println("TestWatchdog: no activity past the limit; halting the JVM. Stuck,"
+                    + " deepest first:");
+            for (Expired stuck : expired) {
+                System.err.println("  " + stuck.name() + " idle for " + stuck.idle().toSeconds() + "s");
+            }
+            System.err.println("Stacks:");
             for (Map.Entry<Thread, StackTraceElement[]> thread : Thread.getAllStackTraces().entrySet()) {
                 System.err.println("thread " + thread.getKey().getName() + " "
                         + thread.getKey().getState());
@@ -121,14 +188,29 @@ public final class TestWatchdog implements BeforeEachCallback, AfterEachCallback
         }
     }
 
-    @Override
-    public void beforeEach(ExtensionContext context) {
-        Shared.RUNNING.began(context.getUniqueId(), context.getDisplayName() + " of "
-                + context.getRequiredTestClass().getName());
+    /** The watch every listener and the discovery watch share. */
+    static Running running() {
+        return Shared.RUNNING;
+    }
+
+    /** The names of what is being watched now; a test finds itself among them in a real run. */
+    static List<String> runningNow() {
+        return running().names();
     }
 
     @Override
-    public void afterEach(ExtensionContext context) {
-        Shared.RUNNING.ended(context.getUniqueId());
+    public void executionStarted(TestIdentifier identifier) {
+        running().started(identifier.getUniqueId(), identifier.getParentId(),
+                identifier.getDisplayName() + " [" + identifier.getUniqueId() + "]");
+    }
+
+    @Override
+    public void executionSkipped(TestIdentifier identifier, String reason) {
+        running().activityBeneath(identifier.getParentId());
+    }
+
+    @Override
+    public void executionFinished(TestIdentifier identifier, TestExecutionResult result) {
+        running().finished(identifier.getUniqueId());
     }
 }
