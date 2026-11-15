@@ -1320,10 +1320,11 @@ final class Terms {
 
     /** Whether {@code e} adds to the list a walk grows, outside any walk inside it. */
     private static boolean grows(Core e) {
-        if (e instanceof Core.Block) {
+        Core here = Core.withoutStanding(e);
+        if (here instanceof Core.Block) {
             return false;
         }
-        boolean[] adds = {e instanceof Core.Call c && c.fn() == Core.Emitted.GROW_LIST};
+        boolean[] adds = {here instanceof Core.Call c && c.fn() == Core.Emitted.GROW_LIST};
         Core.forEachChild(e, child -> adds[0] |= grows(child));
         return adds[0];
     }
@@ -1402,7 +1403,7 @@ final class Terms {
                     instanceof BindingOwner.Expansion expansion -> {
                 Map<Integer, Core> handed = new TreeMap<>();
                 Core rest = li;
-                while (rest instanceof Core.LetIn each
+                while (Core.withoutStanding(rest) instanceof Core.LetIn each
                         && each.binder().binding().owner().equals(expansion)) {
                     handed.put(each.binder().binding().ordinal(), each.value());
                     rest = each.body();
