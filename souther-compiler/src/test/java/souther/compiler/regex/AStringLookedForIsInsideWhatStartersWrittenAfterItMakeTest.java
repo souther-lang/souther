@@ -36,6 +36,10 @@ class AStringLookedForIsInsideWhatStartersWrittenAfterItMakeTest {
     private static final UnaryOperator<String> LOWER =
             AStringLookedForIsInsideWhatStartersWrittenAfterItMakeTest::lowered;
 
+    /** What the lowercase answers of each code point, read once for every test here. */
+    private static final ConversionAnswers LOWER_ANSWERS =
+            ConversionAnswers.of(CodeMap.of(LOWER), LOWER);
+
     private static String lowered(String text) {
         return Normalizer.normalize(text.toLowerCase(Locale.ROOT), Normalizer.Form.NFC);
     }
@@ -83,7 +87,7 @@ class AStringLookedForIsInsideWhatStartersWrittenAfterItMakeTest {
     void whatIsSaidToBeInsideIsInsideWhatStartersWrittenAfterItMake() {
         List<String> strings = everyString(3);
         Language atLeastThree = language("[aB\\x{3A3}\\x{301}@1 ]{3,}");
-        ConversionAnswers lower = ConversionAnswers.of(CodeMap.of(LOWER), LOWER);
+        ConversionAnswers lower = LOWER_ANSWERS;
         for (ConversionAnswers through : new ConversionAnswers[] {null, lower}) {
             UnaryOperator<String> run = through == null ? UnaryOperator.identity() : LOWER;
             Language extended = StringsInsideStrings.extendedByStableStarters(atLeastThree,
@@ -104,7 +108,7 @@ class AStringLookedForIsInsideWhatStartersWrittenAfterItMakeTest {
     @Test
     void aConversionThatTurnsOnWhatFollowsIsWrittenOnlyWhatItCutsAt() {
         Language lettersOnly = language("[aB\\x{3A3}]{3,}");
-        ConversionAnswers lower = ConversionAnswers.of(CodeMap.of(LOWER), LOWER);
+        ConversionAnswers lower = LOWER_ANSWERS;
 
         assertTrue(StringsInsideStrings.extendedByStableStarters(lettersOnly, null, METER)
                 .has("Σ"));

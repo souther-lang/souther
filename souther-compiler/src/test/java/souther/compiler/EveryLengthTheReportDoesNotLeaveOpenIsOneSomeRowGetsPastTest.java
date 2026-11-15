@@ -214,7 +214,7 @@ class EveryLengthTheReportDoesNotLeaveOpenIsOneSomeRowGetsPastTest {
         assertTrue(openIn(json).isEmpty(), "a length is left open: " + openIn(json) + shape);
         // And no string of a length no row gets a run past is on a side of it: the sides are
         // asked of the strings it is reached with, and are made of no others.
-        SetStatement statement = SetStatementAt.of(shape.source(), "b");
+        SetStatement statement = SetStatementAt.of(compilation, "b");
         List<ValuesWithin> sides = new ArrayList<>(statement.whenTrue().pieces());
         sides.addAll(statement.whenFalse().pieces());
         for (String text : shape.texts()) {

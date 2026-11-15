@@ -31,7 +31,11 @@ public final class SetStatementAt {
 
     /** The one statement of what the other side of the relation can hold, about {@code place}. */
     public static SetStatement of(String source, String place) {
-        Compilation compilation = ACompiledModel.answered(source);
+        return of(ACompiledModel.answered(source), place);
+    }
+
+    /** The same, of a model already compiled and answered. */
+    public static SetStatement of(Compilation compilation, String place) {
         String module = compilation.modules().get(0);
         RuleReadingSource rules = RuleReadings.of(compilation, module);
         Bodies.Elaborated checked = compilation.db().ask(new Bodies.Checked(module)).value();

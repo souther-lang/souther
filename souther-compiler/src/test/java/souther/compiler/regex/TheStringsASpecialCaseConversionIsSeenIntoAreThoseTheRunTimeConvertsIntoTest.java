@@ -11,6 +11,8 @@ import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.UnaryOperator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -68,6 +70,19 @@ class TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTe
         return made;
     }
 
+    /** What each conversion answers of each code point, read once: a map is made by asking the
+     *  conversion of every code point there is. */
+    private static final Map<UnaryOperator<String>, ConversionAnswers> ANSWERS =
+            new ConcurrentHashMap<>();
+
+    private static ConversionAnswers answersOf(UnaryOperator<String> conversion) {
+        return ANSWERS.computeIfAbsent(conversion,
+                each -> ConversionAnswers.of(CodeMap.of(each), each));
+    }
+
+    /** Every value of up to the most code points, made once for the tests that ask of all. */
+    private static final List<String> EVERY_VALUE = everyValue();
+
     private static List<String> everyValue() {
         List<String> out = new ArrayList<>(List.of(""));
         List<String> last = List.of("");
@@ -87,8 +102,8 @@ class TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTe
     }
 
     private static void agreesWithTheRunTime(UnaryOperator<String> conversion) {
-        ConversionAnswers answers = ConversionAnswers.of(CodeMap.of(conversion), conversion);
-        List<String> values = everyValue();
+        ConversionAnswers answers = answersOf(conversion);
+        List<String> values = EVERY_VALUE;
         boolean[] seenSome = {false};
         for (String regex : LANGUAGES) {
             Language into = language(regex);
@@ -140,7 +155,7 @@ class TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTe
     /** A string with a code point answered with a combining mark is in no language of letters. */
     @Test
     void aCapitalDottedIHoldsNoStringOfLowercaseLetters() {
-        ConversionAnswers answers = ConversionAnswers.of(CodeMap.of(LOWER), LOWER);
+        ConversionAnswers answers = answersOf(LOWER);
 
         Seen seen = answers.stringsSeenInto(language("[a-z]+"), METER);
 
@@ -154,7 +169,7 @@ class TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTe
     /** A language that reads a combining mark is not read through the conversion. */
     @Test
     void aLanguageThatReadsAnUnstableCodePointIsNotSeenInto() {
-        ConversionAnswers answers = ConversionAnswers.of(CodeMap.of(LOWER), LOWER);
+        ConversionAnswers answers = answersOf(LOWER);
 
         assertEquals(null, answers.stringsSeenInto(language("[a-ż]+"), METER));
     }
@@ -162,7 +177,7 @@ class TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTe
     @Test
     void theSeparatorIsACutOnlyWhereNothingTheConversionDoesReachesAcrossIt() {
         for (UnaryOperator<String> conversion : List.of(LOWER, UPPER)) {
-            ConversionAnswers answers = ConversionAnswers.of(CodeMap.of(conversion), conversion);
+            ConversionAnswers answers = answersOf(conversion);
 
             assertTrue(answers.cutsAt('@'));
             assertTrue(answers.cutsAt(' '));
@@ -179,7 +194,7 @@ class TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTe
      */
     @Test
     void aFullStopIsACutOfTheUppercaseAndNotOfTheLowercase() {
-        assertFalse(ConversionAnswers.of(CodeMap.of(LOWER), LOWER).cutsAt('.'));
-        assertTrue(ConversionAnswers.of(CodeMap.of(UPPER), UPPER).cutsAt('.'));
+        assertFalse(answersOf(LOWER).cutsAt('.'));
+        assertTrue(answersOf(UPPER).cutsAt('.'));
     }
 }
