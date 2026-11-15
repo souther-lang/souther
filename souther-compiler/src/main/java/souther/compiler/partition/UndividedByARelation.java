@@ -84,6 +84,7 @@ import souther.compiler.numeric.WholeNumberSet;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.regex.CodeMap;
+import souther.compiler.regex.ConversionAnswers;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.regex.StringsHeldAsWritten;
@@ -4420,6 +4421,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return having.isEmpty() ? null
                     : StringsAPartnerCanHold.unreached(ValueSet.matching(having), called);
         }
+        StringsAPartnerCanHold seen = wholesWithAPieceSeenInto(piece, whole.through(), language,
+                called, meter);
+        if (seen != null) {
+            return seen.canBe().isEmpty() && seen.mayBe().isEmpty() ? null : seen;
+        }
         CodeMap map = CaseMaps.of(whole.through());
         Language exact = map.strings(meter);
         Language converted = exact == null ? null : map.stringsConvertedInto(having, meter);
@@ -4430,6 +4436,40 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         ValueSet.matching(mayBe), null, called)
                         .withTheImagesNotShownOf(operationsNotExactOver(whole.through(),
                                 languageOf(mineHolds)));
+    }
+
+    /**
+     * The strings that have a piece, of {@code piece}'s window, that {@code conversion} converts
+     * into a string of {@code partner}, and those that may: or null where the conversion is not
+     * seen into the language code point by code point ({@link ConversionAnswers}), or the string
+     * is not cut at a code point the conversion does not reach across.
+     *
+     * <p>The conversion of a string cut at that code point is the conversion of each piece, so
+     * the strings are those with a piece among the strings of the language that convert into it,
+     * and the code points of the rest of the string are no part of it.
+     */
+    private static StringsAPartnerCanHold wholesWithAPieceSeenInto(
+            PiecesOfAString piece, CaseMapping conversion, Language partner, String called,
+            Meter meter) {
+        ConversionAnswers answers = CaseMaps.answers(conversion);
+        if (answers == null || piece.separator() < 0 || !answers.cutsAt(piece.separator())) {
+            return null;
+        }
+        ConversionAnswers.Seen seen = answers.stringsSeenInto(partner, meter);
+        if (seen == null) {
+            return null;
+        }
+        Language canBe = StringsOfAPiece.wholesWithAPieceInWindow(seen.exactly(),
+                piece.separator(), piece.window().from(), piece.until(), meter);
+        Language mayBe = seen.perhaps().equals(seen.exactly()) ? canBe
+                : StringsOfAPiece.wholesWithAPieceInWindow(seen.perhaps(), piece.separator(),
+                        piece.window().from(), piece.until(), meter);
+        if (canBe == null || mayBe == null) {
+            return null;
+        }
+        StringsAPartnerCanHold out = StringsAPartnerCanHold.unreached(ValueSet.matching(canBe),
+                ValueSet.matching(mayBe), null, called);
+        return canBe.equals(mayBe) ? out : out.withTheImagesNotShownOf(conversion.operations());
     }
 
     /**

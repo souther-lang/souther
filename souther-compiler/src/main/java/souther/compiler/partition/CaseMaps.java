@@ -11,6 +11,7 @@ import net.unit8.notation199x.pattern.Meter;
 
 import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.regex.CodeMap;
+import souther.compiler.regex.ConversionAnswers;
 import souther.compiler.regex.Language;
 import souther.compiler.semantics.CaseMapping;
 import souther.compiler.values.TextExtents;
@@ -51,6 +52,22 @@ final class CaseMaps {
             }
         }
         return had;
+    }
+
+    private static final Map<CaseMapping, ConversionAnswers> ANSWERED = new ConcurrentHashMap<>();
+
+    /**
+     * What {@code mapping} answers of each code point, read against the language a question is
+     * about ({@link ConversionAnswers}), or null where it is made of more than one conversion: what
+     * the second is handed is an answer of the first, which holds code points a question's
+     * language does not, so its answers are not said code point by code point.
+     */
+    static ConversionAnswers answers(CaseMapping mapping) {
+        if (mapping instanceof CaseMapping.None || mapping.doneSoFar().size() != 1) {
+            return null;
+        }
+        return ANSWERED.computeIfAbsent(mapping, each -> ConversionAnswers.of(of(each),
+                text -> BoundUnderEvaluation.mapped(each, text)));
     }
 
     /**
