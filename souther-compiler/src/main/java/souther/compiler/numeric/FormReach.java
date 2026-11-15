@@ -212,12 +212,13 @@ final class FormReach<A> {
         return derived;
     }
 
-    /** The ends this was handed, for a reader that needs them as well and must not derive a second
-     *  set of its own. */
+    /** The closed differences this was handed. */
     DifferenceBounds<A> differences() {
         return differences;
     }
 
+    /** The ends this was handed, for a reader that needs them as well and must not derive a second
+     *  set of its own. */
     Box<A> ends() {
         return ends;
     }

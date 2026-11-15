@@ -666,7 +666,8 @@ public final class ExactRatio implements Comparable<ExactRatio> {
 
     /**
      * This as a {@code double}, off by no more than a few units of the last place, or not a number
-     * where it is beyond what a {@code double} holds either way.
+     * where it is beyond what a {@code double} holds either way, or so small that it would be held
+     * with fewer digits than that.
      *
      * <p>For a reader that only chooses what is worked out exactly and says nothing itself: a number
      * that is not a number is a question it does not answer. Never to be compared for equality, and
@@ -687,7 +688,9 @@ public final class ExactRatio implements Comparable<ExactRatio> {
         if (fives != 0) {
             value *= Math.pow(5.0, (double) fives);
         }
-        return Double.isInfinite(value) || (value == 0.0 && !isZero()) ? Double.NaN : value;
+        boolean outOfRange = Double.isInfinite(value) || (value == 0.0 && !isZero());
+        boolean subnormal = value != 0.0 && Math.abs(value) < Double.MIN_NORMAL;
+        return outOfRange || subnormal ? Double.NaN : value;
     }
 
     /** Whether this is a whole number, which is a fraction of one with no power below the line. */
