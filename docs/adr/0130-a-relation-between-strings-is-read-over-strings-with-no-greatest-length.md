@@ -41,10 +41,21 @@ class of a length, and no collection size ends a class of a size, since where th
 stops is no distinction a model made and a class of it only a value at the edge could fill is one no
 row is in. A set of strings is the same case, and is read the same way.
 
-What a class claims is therefore a claim about the strings without that edge. That a string has a
-partner is a claim about the strings a row can write, which are all short of it; a string within a
-few code points of the greatest length, whose partner would be longer than any value, is read as
-having one, and no row is ever written for either answer there.
+What a class claims is therefore a claim about the strings without that edge, and it is not a proof
+that a value is there. A string within a few code points of the greatest length, whose partner would
+be longer than any value, is read as having one, though no value does: a place a model holds to such
+lengths has values, and none of them is the piece of any value of the other.
+
+The error runs one way, and the reading is held to it. The sets say more strings can be a partner's
+than a value allows, never fewer, and they are used only to make an obligation: a class of a
+position, which a row is owed for. Nothing is met by a set. What meets an obligation is a row that
+ran, so a class the unlimited world has and the world with the edge does not is owed a row no value
+can be written for, and is said as a gap; it is never shown met. The classes the edge alone would add
+are the ones not drawn, which no row could meet.
+
+The one reader of what a statement says is the making of those classes, and an architecture test
+holds the readers to it: a new one has to say what it does with the sets, which is never to take
+them for a value there is.
 
 The edge has its own facts and they are said once, not as the open part of every relation past them.
 An operation that ends a run only where its answer would be longer than a `String` holds, or a
@@ -73,8 +84,9 @@ name, and opens a region at a length nobody declared.
   the classes a row can be in. Classes only the edge could fill are not drawn, as they were not for a
   length.
 - A model that holds a string to lengths within a few code points of the greatest is read as though
-  the greatest were not there. Nothing in the corpora does, and a bound a model declares is still a
-  distinction and still cuts.
+  the greatest were not there: the class it is owed is owed a row no value can be written for, and
+  is a gap and never a met obligation. Nothing in the corpora does, and a bound a model declares is
+  still a distinction and still cuts.
 - The partition of every length is held by a test: the true, the false, the open and the unreached
   strings of a rule are every length, so a value of the place is in a class at any length.
 - The partner of a string near the edge having none is the fact of no operation, so nothing lists
