@@ -1,11 +1,13 @@
 package souther.compiler.reading;
 
-import souther.compiler.check.ComparisonClaim;
 import souther.compiler.core.Core;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.coverage.ArmOccurrence;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.ResolvedCase;
@@ -134,33 +136,60 @@ public sealed interface Condition {
      *                 doing two things. Which application a visit is, is the reading's to have
      *                 shown and is not said here. Empty where the comparison is visited once
      * @param held     the way it came out
-     * @param line     what the comparison places on the number, where the other side is a value
-     *                 the number's order writes; empty where it is another position or a value
-     *                 this compiler does not place. Read off the same comparison as {@code at},
-     *                 so it says nothing {@code statedAt} does not already decide
+     * @param states   what coming out {@code held} states of the input's numbers, where the other
+     *                 side is a count on the number's order or another number of the input; empty
+     *                 where it is neither. Read off the same comparison as {@code at}, so it says
+     *                 nothing {@code statedAt} and {@code held} do not already decide
      */
     record Side(NumericTerm at, ConstructOccurrence statedAt, OptionalInt visit, boolean held,
-                Optional<Line> line) implements Condition {
+                Optional<Stated> states) implements Condition {
 
         public Side {
             Objects.requireNonNull(visit, "a comparison is decided on some visit, or on the one");
-            Objects.requireNonNull(line, "a comparison places a line or says it places none");
+            Objects.requireNonNull(states, "a comparison states a relation or says it states none");
         }
 
         /**
-         * Where a comparison's line falls on the number it compares, and what it claims there.
+         * What a comparison coming out one way states: the number stands in {@code rel} to what the
+         * other side names.
          *
-         * <p>What a reader needs to ask whether coming out one way is open to a value at all —
-         * under one case of a sum, a number the cases share may be held where the comparison
-         * never comes out the way a decision went.
+         * <p>What a reader needs to ask whether coming out one way is open to a value at all, and
+         * whether decisions can be made together. Two comparisons of two positions with each other
+         * are about no class of either, so the classes of the input cannot say that {@code x == y}
+         * and {@code x > y} leave nothing; the relations they state can.
          */
-        public record Line(Place at, ComparisonClaim claim) {
+        public record Stated(OtherSide other, Rel rel) {
 
-            /** The relation a value stands in to the line where the comparison comes out
-             *  {@code held}. */
-            public Rel holding(boolean held) {
-                return held ? claim.statedRelation() : claim.denied().statedRelation();
+            public Stated {
+                Objects.requireNonNull(other, "a relation is to something");
+                Objects.requireNonNull(rel, "a relation is some relation");
             }
+        }
+
+        /** What the other side of a comparison names: a place on the number's order, or another
+         *  number of the input. */
+        public sealed interface OtherSide {
+
+            /** A value the number's order writes. */
+            record OnTheOrder(Place at) implements OtherSide {}
+
+            /** Another number of the input: the second of two positions held against each other. */
+            record AnotherNumber(NumericTerm number) implements OtherSide {}
+        }
+
+        /**
+         * What this states as a sum of the input's numbers held against nought: the number less
+         * the other side. Empty where the other side is a place on an order that counts nothing,
+         * which no sum is written on, or where the comparison states nothing.
+         */
+        public Optional<LinearForm<NumericTerm>> form() {
+            return states.flatMap(stated -> switch (stated.other()) {
+                case OtherSide.AnotherNumber(NumericTerm number) ->
+                        Optional.of(LinearForm.difference(at, number));
+                case OtherSide.OnTheOrder(Count count) -> Optional.of(
+                        LinearForm.atomMinusConstant(at, ExactRatio.of(count.at())));
+                case OtherSide.OnTheOrder _ -> Optional.empty();
+            });
         }
 
         /**
@@ -175,7 +204,7 @@ public sealed interface Condition {
          */
         @Override
         public int hashCode() {
-            return mixed(Objects.hash(at, statedAt, visit, held, line));
+            return mixed(Objects.hash(at, statedAt, visit, held, states));
         }
 
         /** The same comparison coming out the other way. */

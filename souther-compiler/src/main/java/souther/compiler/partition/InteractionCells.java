@@ -5,6 +5,10 @@ import souther.compiler.types.ModelOccurrence;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumberSpace;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Towards;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.WorkFigure;
@@ -16,7 +20,9 @@ import souther.compiler.reading.Outcome;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -286,7 +292,9 @@ public final class InteractionCells {
          * factors it takes leave a position nothing.
          *
          * <p>Leaving a position nothing is not a combination the body refuses. There is no path
-         * through the body that takes both, so there is nothing there to ask for.
+         * through the body that takes both, so there is nothing there to ask for. Nor is a choice
+         * whose decisions state relations of the input's numbers that no value holds together:
+         * where the cells do not state the region, those relations are what says it is empty.
          */
         public Choice at(int index) {
             Steering steering = reach.steering();
@@ -301,6 +309,9 @@ public final class InteractionCells {
                 }
                 claims.addAll(taken.claims());
                 left /= factor.size();
+            }
+            if (!steering.exact() && !relationsLeaveAValue(settlesAt(index))) {
+                return null;
             }
             return new Choice(steering.cells().stream()
                     .map(cell -> new CellSelection(cell, claims)).toList(), steering.exact());
@@ -333,6 +344,29 @@ public final class InteractionCells {
                 left /= factor.size();
             }
             return out;
+        }
+
+        /**
+         * Whether the relations {@code settled} state of the input's numbers leave some value.
+         *
+         * <p>True is not a proof that one does: a relation of a shape no comparison states here
+         * is left out, which only leaves more. False is a proof, which is what lets a choice be
+         * dropped on it. Each number is taken as dense, so a gap whole numbers leave and decimals
+         * fill is not read as empty.
+         */
+        static boolean relationsLeaveAValue(List<souther.compiler.reading.Condition> settled) {
+            NumericDomain<NumericTerm> left = NumericDomain.top(NumericTerm.inOneOrder());
+            for (souther.compiler.reading.Condition each : settled) {
+                if (each instanceof souther.compiler.reading.Condition.Side side
+                        && side.form().isPresent()) {
+                    LinearForm<NumericTerm> form = side.form().get();
+                    Map<NumericTerm, NumberSpace> spaces = new HashMap<>();
+                    form.coefs().keySet().forEach(
+                            atom -> spaces.put(atom, NumberSpace.spacedOnly(Granularity.DENSE)));
+                    left = left.assume(form, side.states().orElseThrow().rel(), spaces);
+                }
+            }
+            return !left.isBottom();
         }
 
         /** Whether the group has a combination at all, which stops at the first. */

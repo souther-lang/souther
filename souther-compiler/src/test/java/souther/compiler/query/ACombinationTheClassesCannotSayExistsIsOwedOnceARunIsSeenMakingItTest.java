@@ -12,7 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Whether a combination the classes do not state is owed a row is answered by a row: one a search
  * composed and a run was seen making it with. Until then the combination is counted and a finding
- * says it is open, and nothing is refused over it.
+ * says it is open, and nothing is refused over it. One whose decisions state relations no value
+ * holds together is no combination at all.
  */
 class ACombinationTheClassesCannotSayExistsIsOwedOnceARunIsSeenMakingItTest {
 
@@ -26,7 +27,7 @@ class ACombinationTheClassesCannotSayExistsIsOwedOnceARunIsSeenMakingItTest {
 
     /** A relation two rows can each be written for, so a run is seen making each. */
     @Test
-    void aCombinationARunIsSeenMakingIsAGapAndOneNothingWasSeenMakingIsOpen() {
+    void aCombinationARunIsSeenMakingIsAGapAndOneNoValueHoldsIsNoCombination() {
         List<Adequacy.Finding> findings = findingsOf("""
                 module example.fee
 
@@ -39,13 +40,10 @@ class ACombinationTheClassesCannotSayExistsIsOwedOnceARunIsSeenMakingItTest {
                     | (1, 2) -> 22
                 """, "example.fee");
 
-        // x == y with x > y cannot happen: no run is ever seen making it, and it stays open.
-        assertEquals(3, findings.size(), () -> "the combinations the row did not make: " + findings);
-        assertEquals(2, findings.stream().filter(Adequacy.Finding::established).count(),
-                () -> "the two a run is seen making are owed a row: " + findings);
-        assertEquals(1, findings.stream().filter(each -> !each.open().isEmpty()).count(),
-                () -> "and the one no input makes stays open: " + findings);
-        assertTrue(findings.stream().allMatch(each -> each.weakenedBy().isEmpty()),
-                "the measure itself went without nothing");
+        // x == y with x > y is no combination: the relations the two decisions state leave no
+        // value, so it is not asked for. Of the three left, the row made one.
+        assertEquals(2, findings.size(), () -> "the combinations the row did not make: " + findings);
+        assertTrue(findings.stream().allMatch(Adequacy.Finding::established),
+                () -> "and a run is seen making each of them, so each is owed a row: " + findings);
     }
 }
