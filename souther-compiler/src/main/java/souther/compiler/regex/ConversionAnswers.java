@@ -1,5 +1,6 @@
 package souther.compiler.regex;
 
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -85,8 +86,10 @@ public final class ConversionAnswers {
      * @param perhaps the strings whose conversion may be in the language, which hold {@code exactly}:
      *                those and the strings with a code point answered in a way not said here, and
      *                no code point answered with what the language does not hold
+     * @param asLong  whether a string of {@code exactly} is converted into one as long as it is:
+     *                no code point it may hold is answered with several
      */
-    public record Seen(Language exactly, Language perhaps) {}
+    public record Seen(Language exactly, Language perhaps, boolean asLong) {}
 
     private final CodeMap map;
     private final UnaryOperator<String> conversion;
@@ -192,7 +195,7 @@ public final class ConversionAnswers {
         // here, and not answered with what the language does not hold in every way it may be.
         BitSet unsaid = new BitSet();
         for (Map.Entry<Integer, Answered> each : otherwise.entrySet()) {
-            if (!neverHolds(each.getValue(), read)) {
+            if (!neverHolds(each.getValue(), read) && holdsInSomeValue(each.getKey())) {
                 unsaid.set(each.getKey());
             }
         }
@@ -200,8 +203,9 @@ public final class ConversionAnswers {
         // answered with what it does not hold, and is no more said than those.
         CodePoints said = map.preimage(read).or(CodeMap.codePointsOf(sent));
         CodePoints unknown = CodeMap.codePointsOf(unsaid);
+        boolean asLong = through.isEmpty();
         if (unknown.isEmpty()) {
-            return new Seen(exactly, exactly);
+            return new Seen(exactly, exactly, asLong);
         }
         CodePoints either = said.or(unknown);
         List<List<Automaton.Step>> free = List.of(
@@ -211,7 +215,57 @@ public final class ConversionAnswers {
         stops.set(1);
         Language withOne = Language.canonical(Automaton.madeOf(free, stops), meter);
         Language perhaps = withOne == null ? null : exactly.or(withOne, meter);
-        return perhaps == null ? null : new Seen(exactly, perhaps);
+        return perhaps == null ? null : new Seen(exactly, perhaps, asLong);
+    }
+
+    /**
+     * What the conversion answers of the strings of {@code strings}, every code point of which is
+     * answered exactly ({@link Seen#exactly}), or null past what {@code meter} allows.
+     */
+    public Language answersTo(Language strings, Meter meter) {
+        Automaton machine = strings.machine();
+        List<List<Automaton.Step>> steps = new ArrayList<>();
+        BitSet accepting = new BitSet();
+        for (int state = 0; state < machine.size(); state++) {
+            steps.add(new ArrayList<>());
+            accepting.set(state, machine.stopsAt(state));
+        }
+        for (int state = 0; state < machine.size(); state++) {
+            for (Automaton.Step each : machine.stepsFrom(state)) {
+                CodePoints to = map.image(each.over());
+                if (!to.isEmpty()) {
+                    steps.get(state).add(new Automaton.Step(to, each.to()));
+                }
+                for (Map.Entry<Integer, int[]> point : several.entrySet()) {
+                    if (!each.over().has(point.getKey())) {
+                        continue;
+                    }
+                    // The answer is read through states of its own, one for each code point of it
+                    // but the last, which leads where the code point does.
+                    int[] answer = point.getValue();
+                    int from = state;
+                    for (int at = 0; at < answer.length; at++) {
+                        boolean last = at == answer.length - 1;
+                        int next = last ? each.to() : steps.size();
+                        if (!last) {
+                            steps.add(new ArrayList<>());
+                        }
+                        steps.get(from).add(new Automaton.Step(CodePoints.of(answer[at]), next));
+                        from = next;
+                    }
+                }
+            }
+        }
+        return Language.canonical(Automaton.madeOf(steps, accepting), meter);
+    }
+
+    /**
+     * Whether some value holds the code point: a value is held in Normalization Form C, so one
+     * that normalization turns into something else, as it does the Kelvin sign into a {@code K}, is
+     * the code point of no value, and what is said of the strings that hold it is said of no one.
+     */
+    private static boolean holdsInSomeValue(int codePoint) {
+        return Normalizer.isNormalized(Character.toString(codePoint), Normalizer.Form.NFC);
     }
 
     /**

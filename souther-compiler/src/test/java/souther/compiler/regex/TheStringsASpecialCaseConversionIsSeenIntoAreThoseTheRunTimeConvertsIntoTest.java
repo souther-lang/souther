@@ -84,11 +84,25 @@ class TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTe
                 continue;
             }
             int exact = 0;
+            Language image = answers.answersTo(seen.exactly(), METER);
+            assertNotNull(image, regex);
             for (String value : values) {
                 boolean converts = into.has(conversion.apply(value));
                 if (seen.exactly().has(value)) {
                     exact++;
                     assertTrue(converts, () -> regex + " exactly: " + describe(value));
+                    assertTrue(image.has(conversion.apply(value)),
+                            () -> regex + " image: " + describe(value));
+                }
+                // What is answered of strings that convert into the language is in it.
+                if (image.has(value)) {
+                    assertTrue(into.has(value), () -> regex + " image in: " + describe(value));
+                }
+                if (seen.asLong() && seen.exactly().has(value)) {
+                    assertEquals(value.codePointCount(0, value.length()),
+                            conversion.apply(value).codePointCount(0,
+                                    conversion.apply(value).length()),
+                            () -> regex + " as long: " + describe(value));
                 }
                 if (converts) {
                     assertTrue(seen.perhaps().has(value), () -> regex + " perhaps: "

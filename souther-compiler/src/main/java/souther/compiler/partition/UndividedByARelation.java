@@ -4540,6 +4540,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static StringsAPartnerCanHold piecesOfWhatAConversionAnswers(
             PiecesOfAString piece, CaseMapping conversion, Language whole, ValueSet mine,
             String called) {
+        StringsAPartnerCanHold seen = piecesAConversionAnswersSeenInto(piece, conversion, whole,
+                mine, called);
+        if (seen != null) {
+            return seen;
+        }
         // A function of the piece's separator and window, the conversion and the strings alone,
         // read against an allowance of its own: what a reading asked once it is handed back
         // ({@link OneReading#piecesAConversionAnswers}).
@@ -4561,6 +4566,67 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 ValueSet.matching(mayBe), lengthBoundOf(held) <= shown.upTo() ? null : shown.upTo(),
                 called)
                 .withTheImagesNotShownOf(notShown);
+    }
+
+    /**
+     * {@link #piecesOfWhatAConversionAnswers}, where the strings {@code mine} holds are seen
+     * through the conversion code point by code point ({@link ConversionAnswers}) and the string
+     * is cut at a code point the conversion does not reach across: a piece of what it answers is
+     * what it answers of a piece, so the pieces of the strings of {@code whole} that convert into
+     * what {@code mine} holds, converted, are what {@code mine} holds of them. Null where it is not
+     * so, which is where the other reading is asked.
+     *
+     * <p>What is converted is a piece, whatever stands elsewhere in the string, so no code point
+     * of the rest of it is a reason for a piece to be open. A piece converted is no shorter than
+     * the piece, so a string of {@code mine} that long is the piece of a value wherever the piece
+     * is; and where no code point it is converted from is answered with several, it is as long, so
+     * the pieces no string has with the room round them are the strings of that length of
+     * {@code mine}.
+     */
+    private static StringsAPartnerCanHold piecesAConversionAnswersSeenInto(
+            PiecesOfAString piece, CaseMapping conversion, Language whole, ValueSet mine,
+            String called) {
+        ConversionAnswers answers = CaseMaps.answers(conversion);
+        Language held = mine instanceof ValueSet.Matching(Language strings) ? strings : null;
+        if (answers == null || held == null || piece.separator() < 0
+                || !answers.cutsAt(piece.separator())) {
+            return null;
+        }
+        Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
+        ConversionAnswers.Seen seen = answers.stringsSeenInto(held, meter);
+        StringsOfAPiece.Shown shown = seen == null ? null
+                : StringsOfAPiece.piecesOfValuesIn(whole, piece.separator(),
+                        piece.window().from(), piece.until(), meter);
+        if (shown == null) {
+            return null;
+        }
+        Language ofTheValues = shown.ofTheValues().and(seen.exactly(), meter);
+        Language ofTheStrings = shown.ofTheStrings().and(seen.exactly(), meter);
+        Language unsaid = shown.ofTheStrings().and(seen.perhaps(), meter);
+        Language answeredOfTheValues = ofTheValues == null ? null
+                : answers.answersTo(ofTheValues, meter);
+        Language answeredOfTheStrings = ofTheStrings == null ? null
+                : answers.answersTo(ofTheStrings, meter);
+        Language canBe = answeredOfTheValues == null ? null : held.and(answeredOfTheValues, meter);
+        Language mayBe = answeredOfTheStrings == null ? null
+                : held.and(answeredOfTheStrings, meter);
+        boolean someUnsaid = unsaid == null || ofTheStrings == null
+                || !unsaid.equals(ofTheStrings);
+        if (canBe == null || mayBe == null || (someUnsaid && unsaid == null)) {
+            return null;
+        }
+        // A piece with a code point that is answered in a way not said may convert into any string
+        // of the language, so every one of them is one it may be.
+        Language mayBeAtAll = someUnsaid ? held : mayBe;
+        long bound = lengthBoundOf(held);
+        StringsAPartnerCanHold out = StringsAPartnerCanHold.unreached(ValueSet.matching(canBe),
+                ValueSet.matching(mayBeAtAll), bound <= shown.upTo() ? null : shown.upTo(),
+                called);
+        if (seen.asLong() && shown.noneBeyond() < bound) {
+            out = out.noneBeyond(shown.noneBeyond());
+        }
+        return canBe.equals(mayBeAtAll) ? out
+                : out.withTheImagesNotShownOf(conversion.operations());
     }
 
     /**
