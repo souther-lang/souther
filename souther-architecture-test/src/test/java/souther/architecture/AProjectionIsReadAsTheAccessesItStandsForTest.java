@@ -534,7 +534,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "coverage/CoverageSites$Walk", "readsABindingOf", "(" + core + "L" + c
                 + "types/BindingOwner;)Z", Reading.STRUCTURE, BINDINGS);
         row(out, c + "check/ValueStanding", "writtenUnder", "(" + core + "Ljava/lang/Object;L" + c
-                + "check/ValueStanding$Names;Ljava/util/Set;I)Z", Reading.STRUCTURE,
+                + "check/ValueStanding$Names;Ljava/util/Set;Ljava/util/Map;)Z", Reading.STRUCTURE,
                 "whether a value reads a name that stands for something of its own: a projection"
                         + " reads what its base reads");
         // Whether a walk reads nothing a run is handed: the names it reads that it does not bind.

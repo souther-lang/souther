@@ -334,6 +334,16 @@ public final class InteractionCells {
             return out;
         }
 
+        /** Whether the group has a combination at all, which stops at the first. */
+        public boolean hasACombination() {
+            for (int index = 0; index < size(); index++) {
+                if (at(index) != null) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         /** How many cells the group has from {@code from} on, which is what a stopped search left. */
         public int left(int from) {
             int left = 0;
@@ -596,7 +606,7 @@ public final class InteractionCells {
                 continue;
             }
             Group built = new Group(reach, placed);
-            if (built.left(0) > 0) {
+            if (built.hasACombination()) {
                 out.add(built);
                 if (!reach.steering().exact() || placed.stream().flatMap(List::stream)
                         .anyMatch(each -> !each.steering().exact())) {

@@ -7,9 +7,11 @@ import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.BiPredicate;
 import java.util.function.Supplier;
@@ -570,9 +572,6 @@ public final class ValueStanding {
         return true;
     }
 
-    /** How many names are followed one into another before a value is not called written whole. */
-    private static final int MOST_NAMES_FOLLOWED = 64;
-
     /**
      * Whether {@code e}, read in {@code at}, is made of what was written and of nothing a run is
      * handed: every name it reads is one the environment denotes a value for, and so on down, or
@@ -589,37 +588,51 @@ public final class ValueStanding {
      * follows its names in.
      */
     public static <E, N extends Names<E, N>> boolean madeOfWhatIsWritten(Core e, E at, N names) {
-        return writtenWhole(e, at, names, MOST_NAMES_FOLLOWED);
+        return writtenWhole(e, at, names, new IdentityHashMap<>());
     }
 
-    private static <E, N extends Names<E, N>> boolean writtenWhole(Core e, E at, N names,
-                                                                    int left) {
+    /**
+     * {@code e} read in {@code at}, with what each name came to held in {@code done} by what it
+     * stands for where it is read, as {@link FoldedValue} holds it: a name read more than once is
+     * walked once, so a chain of names each read twice costs a walk per link and not two to the
+     * power of its length. A name is put down as not written whole while it is walked, so one that
+     * reaches itself answers rather than going round.
+     */
+    private static <E, N extends Names<E, N>> boolean writtenWhole(
+            Core e, E at, N names, Map<Object, Map<BindingId, Boolean>> done) {
         Set<BindingId> bound = new HashSet<>();
         Core.bindersIn(e, bound);
-        return writtenUnder(e, at, names, bound, left);
+        return writtenUnder(e, at, names, bound, done);
     }
 
     private static <E, N extends Names<E, N>> boolean writtenUnder(
-            Core asPlaced, E at, N names, Set<BindingId> bound, int left) {
+            Core asPlaced, E at, N names, Set<BindingId> bound,
+            Map<Object, Map<BindingId, Boolean>> done) {
         Core e = Core.withoutStanding(asPlaced);
         if (e instanceof Core.Read read) {
             if (bound.contains(read.binding())) {
                 return true;
             }
-            if (left == 0) {
-                return false;
+            Map<BindingId, Boolean> here = done.computeIfAbsent(names.standingOf(read, at),
+                    _ -> new HashMap<>());
+            Boolean already = here.get(read.binding());
+            if (already != null) {
+                return already;
             }
-            return switch (named(read, at, names)) {
+            here.put(read.binding(), false);
+            boolean whole = switch (named(read, at, names)) {
                 case null -> false;
                 case Named.One<E, N>(Standing<E, N> one) ->
-                        writtenWhole(one.value(), one.at(), one.names(), left - 1);
+                        writtenWhole(one.value(), one.at(), one.names(), done);
                 case Named.OneOf<E, N>(List<Standing<E, N>> members) -> members.stream().allMatch(
-                        one -> writtenWhole(one.value(), one.at(), one.names(), left - 1));
+                        one -> writtenWhole(one.value(), one.at(), one.names(), done));
             };
+            here.put(read.binding(), whole);
+            return whole;
         }
         boolean[] whole = {true};
         Core.forEachChild(e, child -> whole[0] = whole[0]
-                && writtenUnder(child, at, names, bound, left));
+                && writtenUnder(child, at, names, bound, done));
         return whole[0];
     }
 
