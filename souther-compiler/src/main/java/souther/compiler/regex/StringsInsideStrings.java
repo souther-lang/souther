@@ -91,10 +91,21 @@ public final class StringsInsideStrings {
      * <p>A stable starter written after a string composes with nothing of it and is put in no
      * other order, so the string with it is in Normalization Form C exactly where the string is:
      * a value is inside some value of the language wherever it is among these.
+     *
+     * <p>Where {@code through} is a conversion done to the string and to what it is inside, only
+     * the starters it cuts at are written ({@link ConversionAnswers#cutsAt}): the conversion of
+     * the string with them is the conversion of the string with them after it, so the converted
+     * string is inside that as well.
+     *
+     * @param through the conversion done to both, or null where none is
      */
-    public static Language extendedByStableStarters(Language language, Meter meter) {
+    public static Language extendedByStableStarters(Language language, ConversionAnswers through,
+                                                    Meter meter) {
         Automaton machine = language.machine();
-        BitSet live = LiveStates.of(machine, StableStarters.all());
+        BitSet live = LiveStates.of(machine, over -> {
+            CodePoints starters = StableStarters.within(over);
+            return through == null ? !starters.isEmpty() : through.cutsAtOneOf(starters);
+        });
         List<List<Automaton.Step>> steps = new ArrayList<>();
         for (int state = 0; state < machine.size(); state++) {
             steps.add(machine.stepsFrom(state));

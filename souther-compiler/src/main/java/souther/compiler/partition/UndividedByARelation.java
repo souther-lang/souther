@@ -4121,14 +4121,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Language mineLanguage = languageOf(mineHolds);
         // A string both sides hold, with the same conversion done to both, is inside its own
         // answer, which starts with it and ends with it: it is its own partner. So it is shown
-        // wherever the partner holds it, whatever the conversion is exact on. With no conversion,
-        // a string looked for is as well inside what it makes with stable starters written after
-        // it, which are values where it is one, so it is shown wherever the partner holds that.
+        // wherever the partner holds it, whatever the conversion is exact on. A string looked for
+        // is as well inside what it makes with stable starters written after it, which are values
+        // where it is one, and whose conversion is its own with them after it where the conversion
+        // cuts at them: so it is shown wherever the partner holds that. Written after it, and not
+        // before, so a string looked for at the end is shown only as its own partner.
         if (standsInside && mineLanguage != null && mine.through().equals(theirs.through())) {
+            boolean none = mine.through().equals(CaseMapping.NONE);
+            ConversionAnswers cutting = none ? null : CaseMaps.answers(mine.through());
             boolean madeLonger = hereIsFirst && where != StringsInsideStrings.Where.AT_THE_END
-                    && mine.through().equals(CaseMapping.NONE);
+                    && (none || cutting != null);
             Language held = madeLonger
-                    ? StringsInsideStrings.extendedByStableStarters(partner, meter) : partner;
+                    ? StringsInsideStrings.extendedByStableStarters(partner, cutting, meter)
+                    : partner;
             Language ownPartner = held == null ? null : mineLanguage.and(held, meter);
             Language withThem = ownPartner == null ? null : canBe.or(ownPartner, meter);
             if (withThem == null) {

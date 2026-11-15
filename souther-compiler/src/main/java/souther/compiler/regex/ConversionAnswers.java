@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.UnaryOperator;
 
 import net.unit8.notation199x.Normalization;
@@ -344,6 +345,32 @@ public final class ConversionAnswers {
             }
         }
         return otherwise.values().stream().noneMatch(each -> each.mentions(separator));
+    }
+
+    /** The most code points of a set {@link #cutsAtOneOf} asks. */
+    private static final int TRIED_AT_MOST = 64;
+
+    /** What {@link #cutsAt} answered of each code point it was asked of. */
+    private final Map<Integer, Boolean> cuts = new ConcurrentHashMap<>();
+
+    /**
+     * Whether the conversion cuts at some code point of {@code some} ({@link #cutsAt}), asked of
+     * the code points of it up to the first few: false says only that none of those it asked is
+     * one.
+     */
+    public boolean cutsAtOneOf(CodePoints some) {
+        int tried = 0;
+        for (CodePoints.Range range : some.ranges()) {
+            for (int each = range.from(); each <= range.to(); each++) {
+                if (tried++ == TRIED_AT_MOST) {
+                    return false;
+                }
+                if (cuts.computeIfAbsent(each, this::cutsAt)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

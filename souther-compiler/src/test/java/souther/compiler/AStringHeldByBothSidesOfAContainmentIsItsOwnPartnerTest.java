@@ -74,6 +74,32 @@ class AStringHeldByBothSidesOfAContainmentIsItsOwnPartnerTest {
         assertEquals(3L, open.get("a").getFirst().shorterThan());
     }
 
+    /**
+     * The same where both are lowercased: the starters written after the string looked for are
+     * ones the lowercase cuts at, so its lowercase is inside the lowercase of what they make. What
+     * is open of it is the strings the lowercase may stop on, and nothing for the image.
+     */
+    @Test
+    void aLowercasedStringLookedForIsInsideWhatItMakesWithStartersTheLowercaseCutsAt() {
+        Map<String, List<BlockReason.RelationShownOverARegion>> open =
+                WhereAStringRelationIsLeftOpen.leftOpen("""
+                        module l3
+
+                        behavior f : (a: String, b: String) -> Int
+                        let f (a, b) = {
+                            guard String.length(a) >= 3 else 0
+                            if String.contains(String.lowercase(b), String.lowercase(a))
+                            then 1 else 2
+                        }
+                        """, "f");
+
+        open.get("b").forEach(each -> {
+            assertEquals(List.of(), each.imagesNotShown());
+            assertEquals(List.of("String.lowercase"), each.notShownGottenPast());
+        });
+        assertEquals(3L, open.get("a").getFirst().shorterThan());
+    }
+
     @Test
     void aContainmentOfTwoStringsWithNoConversionLeavesNoStringOpen() {
         assertEquals(Map.of(), open("String", "%s", ""));
