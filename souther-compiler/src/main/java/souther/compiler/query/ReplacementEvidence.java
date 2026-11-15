@@ -471,6 +471,10 @@ public record ReplacementEvidence(Measure<ReplacementEvidence.Summary> measured)
             /** Every row the search composed was answered alike by the rewrite and the body.
              *  Not that every input is: the search looked where it looked. */
             NO_ROW_ANSWERED_DIFFERENTLY,
+            /** A rule of a position, an invariant among them, refused a candidate the search made.
+             *  What the rule admits is not worked out to make others, so this says what was met,
+             *  not that it is why the rewrite is open. */
+            A_RULE_REFUSED_A_CANDIDATE,
             /** The search made as many runs as the measure lets one rewrite take, with rows left. */
             RUNS_SPENT,
             /** Composing the rows the search looked through stopped at a figure of its own. */

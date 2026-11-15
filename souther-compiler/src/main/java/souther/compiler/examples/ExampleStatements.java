@@ -223,9 +223,63 @@ public final class ExampleStatements {
      * <p>Off the same reading the dispatch falls through by, so the two cannot come apart: a reader
      * told a table answers everything and a dispatch that then refuses a call would be two answers
      * to one question, and the reader's is the one somebody acted on.
+     *
+     * <p>A table with no {@code _} row answers every call too where its rows state every value its
+     * parameters can take. That is shown by counting and not by listing: when the rows state as
+     * many different argument lists as the parameters' types have values at most, there is no
+     * argument list left for a call to ask about that a row does not state. A row counts only
+     * where each argument is written as a value that is only itself — a literal, or a unit data
+     * named — since two other expressions may be one value and be counted twice.
+     *
+     * @param mostValues how many values each parameter takes at most, in order, -1 where nothing
+     *                   bounds them
      */
-    public static boolean answersEveryCall(Hir.Fake table) {
-        return fallenThroughTo(table) != null;
+    public static boolean answersEveryCall(Hir.Fake table, List<Long> mostValues) {
+        if (fallenThroughTo(table) != null) {
+            return true;
+        }
+        long calls = 1;
+        for (long most : mostValues) {
+            if (most < 0) {
+                return false;
+            }
+            try {
+                calls = Math.multiplyExact(calls, most);
+            } catch (ArithmeticException tooMany) {
+                return false;
+            }
+        }
+        Set<List<Object>> stated = new LinkedHashSet<>();
+        for (Hir.FakeRow row : table.rows()) {
+            if (row.matched() instanceof Hir.Matched.Arguments(List<Hir.Expr> inputs)
+                    && inputs.size() == mostValues.size()) {
+                List<Object> values = new ArrayList<>(inputs.size());
+                for (Hir.Expr input : inputs) {
+                    Object only = onlyItself(input);
+                    if (only == null) {
+                        break;
+                    }
+                    values.add(only);
+                }
+                if (values.size() == inputs.size()) {
+                    stated.add(values);
+                }
+            }
+        }
+        return stated.size() >= calls;
+    }
+
+    /** What {@code written} is, where it is a value no other expression can be written as the same
+     *  of, and null where it may be one. */
+    private static Object onlyItself(Hir.Expr written) {
+        return switch (written) {
+            case Hir.IntLit lit -> lit.value();
+            case Hir.StringLit lit -> lit.value();
+            case Hir.BoolLit lit -> lit.value();
+            case Hir.Var.Denoting var when var.denotes() instanceof ValueName.OfType unit ->
+                    unit.type();
+            default -> null;
+        };
     }
 
     /** What the author wrote for a fake's target, for a message that quotes the source. */

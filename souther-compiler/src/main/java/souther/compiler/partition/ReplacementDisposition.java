@@ -139,6 +139,9 @@ public sealed interface ReplacementDisposition {
         /** A run the search asked for did not come back with an answer: it ran past what a run may
          *  spend, or the rewrite could not be run. */
         A_RUN_DID_NOT_COME_BACK,
+        /** A candidate was refused by the rule of the position it stands at, and the values the
+         *  rule admits are not read to find others. */
+        A_RULE_REFUSED_A_CANDIDATE,
         /** The block the row would have gone in held as many rows as a block may. Only ever of a
          *  search for the rows handed a person ({@link RewriteSearch.For#THE_BLOCK}). */
         ROWS_A_BLOCK_MAY_HOLD,
