@@ -178,6 +178,7 @@ import souther.compiler.partition.InputNumbersAnAnswerTurnsOn;
 import souther.compiler.partition.ObservedInputs;
 import souther.compiler.partition.BodyInputReading;
 import souther.compiler.partition.BodyReading;
+import souther.compiler.partition.ClassDisposition;
 import souther.compiler.partition.FillResult;
 import souther.compiler.partition.GenerationPlan;
 import souther.compiler.partition.GenerationReason;
@@ -6644,10 +6645,15 @@ public final class Adequacy {
                 // it is the account's to say; a class is gathered from what the partition measure
                 // established rather than from a finding, so it was searched for and the search's
                 // own word for what stopped it is the better answer.
-                if (none == null && !finding.weakenedBy().isEmpty()
-                        && finding.about() instanceof About.OfAnObligation
+                //
+                // A combination the classes do not say exist is the same: it is searched for before
+                // the findings are made, and where that came to no row it is not owed one.
+                if (none == null && finding.about() instanceof About.OfAnObligation
                         && !(finding.about() instanceof About.APointOfABorder)
-                        && !(finding.about() instanceof About.AClassNoRowIsIn)) {
+                        && !(finding.about() instanceof About.AClassNoRowIsIn)
+                        && (!finding.weakenedBy().isEmpty()
+                                || (finding.about() instanceof About.ACombinationNoRowMakes
+                                        && !finding.established()))) {
                     none = new GenerationOutcome.NotApplicable(
                             GenerationOutcome.NotApplicable.Reason.THE_MEASURE_DOES_NOT_ESTABLISH_THIS);
                 }
@@ -9496,6 +9502,51 @@ public final class Adequacy {
     }
 
     /**
+     * Which of the combinations no row made, and the classes of the input do not say exist, a run
+     * was seen making on a row the search composed.
+     *
+     * <p>Asked on the measure's behalf, as a rewrite no row tells apart is ({@link Replacements}):
+     * what is found here decides whether a combination is owed a row at all, so nothing the
+     * generation may spend stops it. A combination missing from the answer was not shown to exist,
+     * which says what this compiler composed and nothing about whether an input is there.
+     */
+    public record MeetingsShownToExist(String name, String behavior)
+            implements Key<Set<ObligationIdentity.OfACombinationOfDecisions>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Set<ObligationIdentity.OfACombinationOfDecisions>> compute(Db db) {
+            Map<String, InteractionEvidence> all = db.ask(new Interacts(name)).value();
+            InteractionEvidence evidence = all == null ? null : all.get(behavior);
+            if (evidence == null) {
+                return Answer.absent();
+            }
+            List<ObligationIdentity.OfACombinationOfDecisions> unshown =
+                    evidence.notStatedToExist();
+            if (unshown.isEmpty()) {
+                return Answer.of(Set.of());
+            }
+            Generated.Environment here = Generated.Environment.of(db, name, behavior);
+            if (here == null) {
+                return Answer.absent();
+            }
+            FillResult composed = here.searchedFor(GenerationPlan.of(here.subject(), List.of(),
+                    List.of(), List.of(), unshown));
+            Set<ObligationIdentity.OfACombinationOfDecisions> out = new LinkedHashSet<>();
+            for (ObligationIdentity.OfACombinationOfDecisions each : unshown) {
+                if (composed.discharge().at(each) instanceof ClassDisposition.Built) {
+                    out.add(each);
+                }
+            }
+            return Answer.of(Collections.unmodifiableSet(out));
+        }
+    }
+
+    /**
      * Everything the measures found, whatever each of them is about.
      *
      * <p>The one statement of what counts as a finding. A report prints these, a build is warned about
@@ -9581,9 +9632,11 @@ public final class Adequacy {
                 if (branch != null && branch.measured().made().isPresent()) {
                     out.addAll(armFindings(behavior.name(), branch.arms()));
                 }
+                Set<ObligationIdentity.OfACombinationOfDecisions> shownToExist =
+                        db.ask(new MeetingsShownToExist(name, behavior.name())).value();
                 combinationFindings(behavior.name(), CombinationCriterion.of(
                         meetings == null ? null : meetings.get(behavior.name()), divided),
-                        answersNothing, out);
+                        shownToExist == null ? Set.of() : shownToExist, answersNothing, out);
                 ReplacementEvidence rewrites =
                         replacements == null ? null : replacements.get(behavior.name());
                 if (rewrites != null) {
@@ -9623,13 +9676,17 @@ public final class Adequacy {
          * asked first: a measure with no value has not found a combination nothing meets, it has
          * found nothing — and a list of all of them would be read as a list of gaps.
          *
-         * <p>No search beside it. What a combination asks for is that the decisions were made
-         * together, and the measure that counts them is the whole of what says one is uncovered;
-         * whether anything could compose a row for it is a further question, and the answer to it
-         * is not part of whether the requirement stands.
+         * <p>A search is beside it only for a combination the classes of the input do not say
+         * exist. What a combination asks for is that the decisions were made together, and the
+         * measure that counts them is the whole of what says one is uncovered; whether anything
+         * could compose a row for it is a further question, and the answer to it is not part of
+         * whether the requirement stands. Where the classes do not say a combination exists the
+         * two are one question, and a row a run was seen making it with is what answers it.
          */
         private static void combinationFindings(String behavior,
                                                 CombinationCriterion criterion,
+                                                Set<ObligationIdentity.OfACombinationOfDecisions>
+                                                        shownToExist,
                                                 WhereNothingIsAnswered answersNothing,
                                                 List<Finding> out) {
             // Under the criterion the behavior is held to, which the one choice says for every
@@ -9649,7 +9706,8 @@ public final class Adequacy {
                         // a gap the rows established would be undecided because something else
                         // went unwalked.
                         out.add(Finding.by(new FindingSubject.OfABehavior(each.behavior()),
-                                meetings.at(each), new About.ACombinationNoRowMakes(each)));
+                                meetings.at(each, shownToExist),
+                                new About.ACombinationNoRowMakes(each)));
                     }
                 }
                 // The combinations of two classes nothing is in. Made where the count was made and

@@ -665,7 +665,7 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "whether the node a walk stands at reads a name, calls a behavior or applies a"
                         + " value: a Widen does none of them, and what it holds is met one step"
                         + " down");
-        row(out, c + "coverage/CoverageSites$Walk", "bindersIn",
+        row(out, c + "core/Core", "bindersIn",
                 "(" + core + "Ljava/util/Set;)V", 1,
                 "whether the node a walk stands at binds a name: a Widen binds none, and what it"
                         + " holds is met one step down");

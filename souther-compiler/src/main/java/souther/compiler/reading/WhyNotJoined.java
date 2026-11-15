@@ -20,6 +20,11 @@ public enum WhyNotJoined {
     /** An occurrence is kept by what is not a truth about it, such as the arm of a choice. */
     KEPT_BY_ANOTHER_KIND,
 
+    /** An occurrence is kept by a test that reads nothing of the input beside what a row chooses,
+     *  and which way that test comes out is not worked out, so whether the occurrence is there is
+     *  not known and a decision of it may be one nothing can make. */
+    KEPT_BY_A_TEST_NOT_WORKED_OUT,
+
     /** What keeps an occurrence is not a comparison this reading places: a truth read off a field,
      *  a conjunction, a call. It is a decision all the same, and no place of the tree that runs
      *  records which way it came out apart from the others. */
@@ -66,5 +71,14 @@ public enum WhyNotJoined {
     /** The decisions meet in code a run may come back to. A recording says which places a run
      *  passed and how each came out on each visit, not which decisions were made together on the
      *  same pass, so no row can be shown to make such a combination. */
-    THE_MEETING_IS_IN_CODE_RUN_AGAIN
+    THE_MEETING_IS_IN_CODE_RUN_AGAIN,
+
+    /** A way an operand of the meeting is settled by is one no run is seen taking: the arm it goes
+     *  down is recorded nowhere, so no row can be held to a combination that has it. The way is
+     *  there all the same, and the meeting is not offered over the others. */
+    AN_OUTCOME_NO_RUN_IS_SEEN_TAKING,
+
+    /** An operand of the meeting is settled by more ways than this reading holds apart, so which
+     *  ways it has is not known: it may be a decision, and no combination with it can be named. */
+    AN_OPERAND_HAS_MORE_WAYS_THAN_ARE_READ
 }

@@ -459,7 +459,9 @@ final class WhatABodyTellsApart {
      */
     private boolean neverHolds(souther.compiler.reading.Condition each, TermPath at) {
         if (!(each instanceof souther.compiler.reading.Condition.Side side)
-                || side.line().isEmpty()
+                || !(side.states().map(souther.compiler.reading.Condition.Side.Stated::other)
+                        .orElse(null) instanceof souther.compiler.reading.Condition.Side.OtherSide
+                        .OnTheOrder(Place line))
                 || !(side.at() instanceof NumericTerm.FromOnePosition named)) {
             return false;
         }
@@ -469,9 +471,8 @@ final class WhatABodyTellsApart {
         if (standing == null) {
             return false;
         }
-        souther.compiler.reading.Condition.Side.Line line = side.line().get();
-        SearchRegion closed = holding(quantities.region(), standing, line.at(),
-                line.holding(side.held()));
+        SearchRegion closed = holding(quantities.region(), standing, line,
+                side.states().orElseThrow().rel());
         return closed != null && closed.emptiness().isPresent();
     }
 
