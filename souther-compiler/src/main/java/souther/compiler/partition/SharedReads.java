@@ -8,6 +8,7 @@ import souther.compiler.inputs.Watched;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +64,15 @@ final class SharedReads<C, E, M, R> {
         boolean sameInputs(C then, C now, boolean askedAggregates, int consulted);
 
         /**
+         * A number that is the same for any two inputs {@link #sameInputs} calls the same, whatever
+         * {@code askedAggregates} and {@code consulted} are: it is taken of what every comparison
+         * asks, and of nothing a reading's having asked after it or not decides. Readings kept are
+         * told apart by it before any is compared, so one that two inputs the comparison calls the
+         * same differ in would lose a reading there is to be taken.
+         */
+        int requiredInputsHash(C inputs);
+
+        /**
          * Starts telling which of the inputs a reading asks after, and answers which were asked
          * after before it. A reading is kept for every state of the inputs, and taken again where
          * they are as they were; what it asked after is told to the reading it is taken in, which
@@ -100,7 +110,7 @@ final class SharedReads<C, E, M, R> {
     }
 
     /** A reading kept to be taken again, with what it asked of the reading it was made in. */
-    private record Held<C, M, R>(InputReads at, int hash, HandedAnswers asked,
+    private record Held<C, M, R>(InputReads at, HandedAnswers asked,
                                  ElementsMet.Footprint footprint, C inputs,
                                  boolean askedAggregates, int consulted, Object key, List<M> met,
                                  R result) {}
@@ -110,7 +120,22 @@ final class SharedReads<C, E, M, R> {
                        HandedAnswers asked, InputReads at, int consulted) {}
 
     private final Scene<C, E, M> scene;
-    private final Map<Core, List<Held<C, M, R>>> held = new IdentityHashMap<>();
+    /**
+     * What a reading kept can be told apart from another by before either is compared: the numbers
+     * of the inputs and of the key, which are the same for readings the comparisons call the same
+     * ({@link Scene#requiredInputsHash}, {@link Object#hashCode}).
+     */
+    private record Alike(int inputs, int key) {}
+
+    /**
+     * The readings kept at a node, by what the reading was handed
+     * ({@link InputReads#hashButForWhatIsHanded}) and then by {@link Alike}, each list in the order
+     * the readings were kept. A reading is taken from the first in the list its numbers name that
+     * the comparisons call the same, which is the first of all that they do: the others stand in
+     * lists the comparisons would have turned away at their numbers.
+     */
+    private final Map<Core, Map<Integer, Map<Alike, List<Held<C, M, R>>>>> held =
+            new IdentityHashMap<>();
 
     SharedReads(Scene<C, E, M> scene) {
         this.scene = scene;
@@ -121,7 +146,8 @@ final class SharedReads<C, E, M, R> {
      * there is one, and otherwise made by {@code fresh}.
      *
      * @param key      what else a reading of {@code node} depends on, compared with
-     *                 {@link Object#equals}
+     *                 {@link Object#equals}; its {@link Object#hashCode} is the same for keys that
+     *                 are equal, as the contract says, since readings are told apart by it first
      * @param complete whether what a reading came to was read to the end
      */
     R shared(Core node, InputReads reads, Object key, Supplier<R> fresh, Predicate<R> complete) {
@@ -149,22 +175,23 @@ final class SharedReads<C, E, M, R> {
         if (!scene.mayShare()) {
             return null;
         }
-        List<Held<C, M, R>> before = held.get(node);
+        Map<Integer, Map<Alike, List<Held<C, M, R>>>> atNode = held.get(node);
+        if (atNode == null) {
+            return null;
+        }
+        Map<Alike, List<Held<C, M, R>>> handedAlike = atNode.get(reads.hashButForWhatIsHanded());
+        if (handedAlike == null) {
+            return null;
+        }
+        C now = scene.inputs();
+        List<Held<C, M, R>> before = handedAlike.get(
+                new Alike(scene.requiredInputsHash(now), Objects.hashCode(key)));
         if (before == null) {
             return null;
         }
-        int hash = reads.hashButForWhatIsHanded();
-        C now = null;
         for (Held<C, M, R> one : before) {
-            if (one.hash() != hash) {
-                continue;
-            }
-            if (now == null) {
-                now = scene.inputs();
-            }
             // The key last: it is the dear comparison, a structural one of the program's own
-            // nodes, and the state of the reader tells most of the readings kept at a node apart
-            // before it is asked.
+            // nodes, and what is left at its number is nearly always the one it is asked of.
             if (scene.sameInputs(one.inputs(), now, one.askedAggregates(), one.consulted())
                     && elements.agrees(one.footprint()) && reads.handsAsAsked(one.asked())
                     && reads.sameButForWhatIsHanded(one.at())
@@ -237,10 +264,13 @@ final class SharedReads<C, E, M, R> {
         if (result != null && read.asked().toldApart() && footprint != null
                 && scene.metCount() >= metFrom && scene.sameGuards(guards, scene.guards())
                 && complete.test(result)) {
-            held.computeIfAbsent(node, _ -> new ArrayList<>()).add(new Held<>(reads,
-                    reads.hashButForWhatIsHanded(), read.asked(), footprint, inputs,
-                    scene.aggregatesAsked() != askedBefore, consulted, key,
-                    eachOnce(scene.metSince(metFrom)), result));
+            held.computeIfAbsent(node, _ -> new HashMap<>())
+                    .computeIfAbsent(reads.hashButForWhatIsHanded(), _ -> new HashMap<>())
+                    .computeIfAbsent(new Alike(scene.requiredInputsHash(inputs),
+                            Objects.hashCode(key)), _ -> new ArrayList<>())
+                    .add(new Held<>(reads, read.asked(), footprint, inputs,
+                            scene.aggregatesAsked() != askedBefore, consulted, key,
+                            eachOnce(scene.metSince(metFrom)), result));
         }
         return result;
     }
