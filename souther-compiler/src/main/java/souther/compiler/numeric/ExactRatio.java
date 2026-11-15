@@ -645,6 +645,61 @@ public final class ExactRatio implements Comparable<ExactRatio> {
         return parts.isZero();
     }
 
+    /** Whether {@code exponent} is no further from nought than {@code limit}: asked of the number
+     *  itself, since the longest negative has no absolute value. */
+    private static boolean within(long exponent, long limit) {
+        return -limit <= exponent && exponent <= limit;
+    }
+
+    /**
+     * This as a {@code double} within {@link #APPROXIMATELY_OFF} of its size, or not a number.
+     *
+     * <p>Zero, or a number from {@code 2^-200} to {@code 2^200} in size, and every step of working
+     * it out a normal {@code double} as well: each step is then off by at most half a unit in the
+     * last place of its result and that is all it can be off by, which is what a reader doing
+     * arithmetic on these needs. The window is wide enough that a few of them multiplied, added or
+     * taken from one another stay normal as well — a product is from {@code 2^-400} to {@code 2^400}
+     * and a difference of two is zero or no smaller than {@code 2^-253} — so no operation on them
+     * overflows, falls below the smallest normal number, or loses digits to either. Beyond the
+     * window it is a number a reader does not answer a question about.
+     *
+     * <p>For a reader that only chooses what is worked out exactly and says nothing itself. Never to
+     * be compared for equality, and never to decide anything.
+     */
+    double approximately() {
+        if (isZero()) {
+            return 0.0;
+        }
+        long twos = parts.twos();
+        long fives = parts.fives();
+        if (!within(twos, 1000) || !within(fives, 300)) {
+            return Double.NaN;
+        }
+        double value = normal(parts.inLongs()
+                ? (double) parts.numeratorInALong() / (double) parts.denominatorInALong()
+                : parts.numerator().doubleValue() / parts.denominator().doubleValue());
+        if (twos != 0) {
+            value = normal(Math.scalb(value, (int) twos));
+        }
+        if (fives != 0) {
+            value = normal(value * Math.pow(5.0, (double) fives));
+        }
+        return Math.abs(value) >= SMALLEST && Math.abs(value) <= LARGEST ? value : Double.NaN;
+    }
+
+    /** What {@link #approximately} is off by at most, as a share of the number. */
+    static final double APPROXIMATELY_OFF = 2e-15;
+
+    private static final double SMALLEST = 0x1p-200;
+    private static final double LARGEST = 0x1p200;
+
+    /** {@code value} where it is a normal {@code double}, and not a number where it is zero, not
+     *  finite or subnormal: a step of the working-out of a number that is not zero has no business
+     *  being any of them. */
+    private static double normal(double value) {
+        return Double.isFinite(value) && Math.abs(value) >= Double.MIN_NORMAL ? value : Double.NaN;
+    }
+
     /** Whether this is a whole number, which is a fraction of one with no power below the line. */
     public boolean isWhole() {
         return isZero() || (parts.overOne() && twos() >= 0 && fives() >= 0);
