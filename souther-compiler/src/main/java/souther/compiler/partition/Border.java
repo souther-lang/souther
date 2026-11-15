@@ -545,46 +545,60 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         if (point.side() == null) {
             return Optional.of(point);
         }
-        // Two orders tell their sides apart by where each holds, and that is the same on every
-        // line the comparison is drawn on: a quantity can face the line one way on one of the
-        // comparison's lines and the other way on another, and the facing is one answer for both.
-        // Where the line is the comparison's own relation and a side is not told that way, this
-        // reading's quantity faces the sides it wrote a known way, and a side is a side of the
-        // left against the right, whatever the reading drew it as: the rules can leave one value
-        // at an order's end, and the line is then a value singled out where the author wrote an
-        // order. A line something else in the definition draws has no two sides of the
-        // comparison's written for it, and its claim is what the comparison comes to across it.
-        boolean orders = proven.claims() instanceof ComparisonClaim.Cut
-                && origin.lineFacts().claim() instanceof ComparisonClaim.Cut;
-        Optional<Towards> faced = orders || !proven.itsOwn() ? Optional.empty()
-                : switch (proven.facing()) {
-                    case AS_WRITTEN -> Optional.of(point.side());
-                    case TURNED -> Optional.of(point.side().opposite());
-                    case NOTHING_WRITTEN -> Optional.empty();
-                };
-        if (faced.isPresent()) {
-            return faced.map(towards -> sideOf(point, towards));
+        Optional<Towards> side = whereTheOrdersHold(point, proven);
+        if (side.isEmpty()) {
+            side = sideByFacingOrByName(point, proven);
         }
-        Optional<Towards> side = switch (proven.claims()) {
-            case ComparisonClaim.Cut authoredCut
-                    when origin.lineFacts().claim() instanceof ComparisonClaim.Cut drawn -> {
-                Towards holds = drawn.holdsAtTheValue() ? drawn.valueBelongs()
-                        : drawn.valueBelongs().opposite();
-                Towards authorsHolds = authoredCut.holdsAtTheValue() ? authoredCut.valueBelongs()
-                        : authoredCut.valueBelongs().opposite();
-                boolean denied = drawn.holdsAtTheValue() != authoredCut.holdsAtTheValue();
-                Towards comparisonHolds = denied ? holds.opposite() : holds;
-                yield Optional.of(point.side() == comparisonHolds ? authorsHolds
-                        : authorsHolds.opposite());
-            }
-            // A line naming a value fails alike on its two sides, so each side is the author's
-            // side of that name.
-            case ComparisonClaim.Singled _
-                    when origin.lineFacts().claim() instanceof ComparisonClaim.Singled ->
-                    Optional.of(point.side());
-            default -> Optional.empty();
-        };
         return side.map(towards -> sideOf(point, towards));
+    }
+
+    /**
+     * The side of the author's order a side of this reading's order is, where both are orders: the
+     * side the comparison holds on stands for the side it holds on, and the side it fails on for
+     * the side it fails on.
+     *
+     * <p>Where each holds is the same on every line the comparison is drawn on. A quantity can face
+     * one of the comparison's lines one way and another of them the other way, as {@code Int.abs}
+     * makes it, so the facing is one answer for lines that have two. Where this reading drew the
+     * relation the comparison denies, the comparison holds where the relation fails.
+     */
+    private Optional<Towards> whereTheOrdersHold(DomainPoint point,
+                                                 AuthoredPointMapping.Proven proven) {
+        if (!(proven.claims() instanceof ComparisonClaim.Cut authored)
+                || !(origin.lineFacts().claim() instanceof ComparisonClaim.Cut drawn)) {
+            return Optional.empty();
+        }
+        boolean denied = drawn.holdsAtTheValue() != authored.holdsAtTheValue();
+        Towards comparisonHolds = denied ? drawn.satisfyingSide().opposite()
+                : drawn.satisfyingSide();
+        return Optional.of(point.side() == comparisonHolds ? authored.satisfyingSide()
+                : authored.satisfyingSide().opposite());
+    }
+
+    /**
+     * The side of the author's line a side of this reading's is, where the two are not orders.
+     *
+     * <p>Where the line is the comparison's own relation and this reading's quantity faces the
+     * sides it wrote a known way, a side is a side of the left against the right, whatever the
+     * reading drew it as: the rules can leave one value at an order's end, and the line is then a
+     * value singled out where the author wrote an order. A line something else in the definition
+     * draws has no two sides of the comparison's written for it, and its claim is what the
+     * comparison comes to across it. A line naming a value fails alike on its two sides, so each
+     * side is the author's side of that name.
+     */
+    private Optional<Towards> sideByFacingOrByName(DomainPoint point,
+                                                   AuthoredPointMapping.Proven proven) {
+        Optional<Towards> faced = !proven.itsOwn() ? Optional.empty() : switch (proven.facing()) {
+            case AS_WRITTEN -> Optional.of(point.side());
+            case TURNED -> Optional.of(point.side().opposite());
+            case NOTHING_WRITTEN -> Optional.empty();
+        };
+        if (faced.isPresent()) {
+            return faced;
+        }
+        return proven.claims() instanceof ComparisonClaim.Singled
+                && origin.lineFacts().claim() instanceof ComparisonClaim.Singled
+                ? Optional.of(point.side()) : Optional.empty();
     }
 
     /** {@code point}, on side {@code towards} of the line. */
