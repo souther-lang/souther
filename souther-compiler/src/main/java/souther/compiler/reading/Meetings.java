@@ -141,10 +141,10 @@ final class Meetings {
             if (plan.mayRepeat(node)) {
                 notJoined.add(WhyNotJoined.THE_MEETING_IS_IN_CODE_RUN_AGAIN);
             } else if (reaches.isEmpty()) {
-                notJoined.add(WhyNotJoined.THE_WAY_IN_CANNOT_BE_STATED);
+                found.add(Interaction.reachedSomeWay(apart));
             } else {
                 for (List<Decision> reach : reaches) {
-                    found.add(new Interaction(reach, apart));
+                    found.add(new Interaction(reach, true, apart));
                 }
             }
         }

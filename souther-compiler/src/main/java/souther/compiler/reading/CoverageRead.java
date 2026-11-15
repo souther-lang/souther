@@ -536,6 +536,11 @@ public final class CoverageRead {
      * in are named, so both are already settled here.
      */
     private void takesAt(Interaction group) {
+        // A meeting reached some way that is not stated has no way in to hold its decisions to, and
+        // says nothing of how a fork inside it is taken that the walk into the fork does not.
+        if (!group.reachStated()) {
+            return;
+        }
         taken.add(new WayIn(group.reach()));
         for (Factor factor : group.factors()) {
             for (Outcome outcome : factor.outcomes()) {

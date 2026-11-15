@@ -750,8 +750,8 @@ public sealed interface Weakening {
      * combination of its decisions made when some of them were never asked about.
      *
      * <p>Beside {@link MeetingsExistenceUndetermined}, which is a group this reading did form and
-     * walked. Here there is no group: the decisions were not joined into one, or were met where
-     * they cannot be offered. The reasons are {@code WhyNotJoined}'s, kept by the reading and not
+     * walked. Here there is no group: the decisions were not joined into one, or an operand has
+     * a way that cannot be held to a row. The reasons are {@code WhyNotJoined}'s, kept by the reading and not
      * published.
      */
     record MeetingsNotJoined(String behavior, int groups) implements Weakening {

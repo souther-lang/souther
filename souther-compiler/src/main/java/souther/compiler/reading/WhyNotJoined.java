@@ -80,10 +80,5 @@ public enum WhyNotJoined {
 
     /** An operand of the meeting is settled by more ways than this reading holds apart, so which
      *  ways it has is not known: it may be a decision, and no combination with it can be named. */
-    AN_OPERAND_HAS_MORE_WAYS_THAN_ARE_READ,
-
-    /** The decisions meet where no way in can be stated: under a step nothing of the input states,
-     *  such as the arms of an attempt or the body of a closure, so which decisions a run took to
-     *  get there is not known and no combination can be held to it. */
-    THE_WAY_IN_CANNOT_BE_STATED
+    AN_OPERAND_HAS_MORE_WAYS_THAN_ARE_READ
 }

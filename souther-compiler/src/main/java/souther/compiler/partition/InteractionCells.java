@@ -546,7 +546,8 @@ public final class InteractionCells {
         for (Interaction group : groups) {
             // A group with no cell is one whose decisions leave no row anywhere, which is no path
             // and nothing owed. One the classes cannot narrow is offered over a wider region.
-            Placed reach = placedBy(group.reach(), axes);
+            Placed reach = group.reachStated() ? placedBy(group.reach(), axes)
+                    : new Placed(Steering.unsaid(axes.axes()), List.of(), List.of());
             List<List<Placed>> placed = reach == null ? null : factorsOf(group, axes);
             if (placed == null) {
                 continue;
