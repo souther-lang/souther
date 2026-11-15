@@ -14,6 +14,64 @@ import souther.compiler.query.Compilation;
  */
 class ARewriteIsToldApartByWhatItsStepObservesTest {
 
+    /**
+     * The case the step tells is a field of a record the list holds, and no row writes an element
+     * of it: a leaf that is a case is made another case the body names, as a number is made another
+     * number.
+     */
+    @Test
+    void aCaseInsideAnElementIsMadeOfTheCasesTheBodyNames() {
+        String source = """
+                module repro.inside
+
+                data Burden = Own | Theirs
+
+                data Line = { burden: Burden, amount: Int }
+
+                let theirs (b: Burden): Bool =
+                    match b with
+                        | Own -> false
+                        | Theirs -> true
+
+                behavior check : (lines: List<Line>) -> Bool
+                let check (lines) = List.length(lines) >= 2
+                    && List.any(l -> theirs(l.burden), lines)
+
+                example check
+                    | "none" : ([ ]) -> false
+                    | "one" : ([ Line { burden = Own, amount = 1 } ]) -> false
+                    | "two" : ([ Line { burden = Own, amount = 1 }, Line { burden = Own, amount = 2 } ]) -> false
+                """;
+
+        assertToldApart(measured(source), "any");
+    }
+
+    /**
+     * The walk is in one helper and the case it tells is named in another it calls: what the walk's
+     * helper names is not all the run it is part of names.
+     */
+    @Test
+    void aCaseNamedInAnotherHelperIsReached() {
+        StringBuilder cases = new StringBuilder();
+        StringBuilder arms = new StringBuilder();
+        StringBuilder rows = new StringBuilder();
+        for (char each = 'A'; each <= 'Z'; each++) {
+            cases.append(each).append(each < 'Z' ? " | " : "");
+            arms.append("        | ").append(each).append(" -> ").append(each == 'Z').append('\n');
+            rows.append("    | \"").append(each).append("\" : ([ ").append(each)
+                    .append(" ]) -> false\n");
+        }
+        rows.append("    | \"AB\" : ([ A, B ]) -> false\n");
+        String source = "module repro.apart\n\ndata Payer = " + cases + "\n\n"
+                + "let isZ (p: Payer): Bool =\n    match p with\n" + arms + "\n"
+                + "let anyZ (ls: List<Payer>): Bool = List.any(p -> isZ(p), ls)\n\n"
+                + "behavior check : (ls: List<Payer>) -> Bool\n"
+                + "let check (ls) = List.length(ls) >= 2 && anyZ(ls)\n\n"
+                + "example check\n" + rows;
+
+        assertToldApart(measured(source), "any");
+    }
+
     /** Every row answers alike, so what the rows answered says nothing of where the step differs. */
     @Test
     void aValueTheStepComparesIsReachedWhenEveryRowAnsweredAlike() {
@@ -221,6 +279,31 @@ class ARewriteIsToldApartByWhatItsStepObservesTest {
                     | "one" : ([ 1 ]) -> false
                     | "two" : ([ 1, 2 ]) -> false
                     | "three" : ([ 5, 6, 7 ]) -> false
+                """;
+
+        assertToldApart(measured(source), "map");
+    }
+
+    /**
+     * Some of the values around what the body names are ones the element's own type refuses: a
+     * list holding one is no list, and the values that are admitted are the borders.
+     */
+    @Test
+    void theBordersAnElementTypeRefusesDoNotTakeTheListsOfTheOnesItAdmits() {
+        String source = """
+                module repro.admitted
+
+                data Amount = Int
+                    invariant value > 0
+
+                behavior check : (xs: List<Amount>) -> Bool
+                let check (xs) = List.length(xs) > 0
+                    && List.sum(List.map(a -> a.value, xs)) >= 100000
+
+                example check
+                    | "none" : ([ ]) -> false
+                    | "one" : ([ Amount(1) ]) -> false
+                    | "two" : ([ Amount(1), Amount(2) ]) -> false
                 """;
 
         assertToldApart(measured(source), "map");

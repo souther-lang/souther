@@ -9,6 +9,7 @@ import souther.compiler.observe.Figure;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.semantics.CaseMapping;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeSymbol;
 
 import java.math.BigDecimal;
 import java.util.ArrayDeque;
@@ -70,6 +71,13 @@ final class NearbyValues {
          *  is not walked. */
         default boolean reaches(TermPath unusedAt) {
             return true;
+        }
+
+        /** What the case a sum is in becomes where another case of it is offered: nothing, unless
+         *  a step offers one. */
+        default Iterator<ObservedValue> otherCase(Shape.Sum unusedSum, ObservedValue unusedValue,
+                                                  TermPath unusedAt) {
+            return none();
         }
     }
 
@@ -406,14 +414,8 @@ final class NearbyValues {
             }
             return none();
         };
-        Leaves toAnyRead = (_, leaf, at, _, _) -> readBy(at, reads)
-                ? filtered(held.iterator(),
-                        each -> each.getClass() == leaf.getClass() && !each.equals(leaf))
-                : none();
-        Leaves toAnyOther = (_, leaf, at, _, _) -> readBy(at, reads)
-                ? none()
-                : filtered(held.iterator(),
-                        each -> each.getClass() == leaf.getClass() && !each.equals(leaf));
+        Leaves toAnyRead = new Rearranging(held, reads, true);
+        Leaves toAnyOther = new Rearranging(held, reads, false);
         ObservedValue allFirst = value;
         Iterator<ObservedValue> next = of(allFirst, type, reading, root, List.of(), toTheFirst);
         // One leaf at a time, and each is put as a value it then is, so the walk ends.
@@ -472,6 +474,60 @@ final class NearbyValues {
                 return ready.poll();
             }
         };
+    }
+
+    /**
+     * What a scalar leaf becomes where another of {@code held} of its kind is put there, and what
+     * the case a sum is in becomes where another case of the sum is among {@code held} — the
+     * leaves a step reads, or the ones it does not, as {@code ofWhatIsRead} says.
+     */
+    private static final class Rearranging implements Leaves {
+
+        private final List<ObservedValue> held;
+        private final List<String> reads;
+        private final boolean ofWhatIsRead;
+
+        private Rearranging(List<ObservedValue> held, List<String> reads, boolean ofWhatIsRead) {
+            this.held = held;
+            this.reads = reads;
+            this.ofWhatIsRead = ofWhatIsRead;
+        }
+
+        @Override
+        public Iterator<ObservedValue> beside(Type.Prim prim, ObservedValue leaf, TermPath at,
+                                              List<Narrowing> along, TypeView view) {
+            return readBy(at, reads) != ofWhatIsRead ? none()
+                    : filtered(held.iterator(),
+                            each -> each.getClass() == leaf.getClass() && !each.equals(leaf));
+        }
+
+        @Override
+        public Iterator<ObservedValue> otherCase(Shape.Sum sum, ObservedValue value,
+                                                 TermPath at) {
+            // A case inside what an element holds, and not the element itself: the cases an
+            // element is are what the rows and the type already offer, in the order they offer
+            // them, and what is not offered is a case nested in a record.
+            return !isNested(at) || readBy(at, reads) != ofWhatIsRead ? none()
+                    : filtered(held.iterator(), each -> caseOf(each) != null
+                            && sum.reaches().cases().contains(caseOf(each))
+                            && !each.equals(value));
+        }
+
+        /** Whether {@code at} is inside a field of what it is rooted at. */
+        private static boolean isNested(TermPath at) {
+            return at != null && at.steps().stream()
+                    .anyMatch(step -> step instanceof TermPath.Step.Field);
+        }
+
+        /** The case a value is, whether it holds anything or not; none for a value that is no
+         *  case. */
+        private static TypeSymbol caseOf(ObservedValue value) {
+            return switch (value) {
+                case ObservedValue.Unit unit -> unit.type();
+                case ObservedValue.Constructed made -> made.type();
+                default -> null;
+            };
+        }
     }
 
     /**
@@ -769,10 +825,14 @@ final class NearbyValues {
                             leaves.longer(held, sequence, at)).iterator(), Function.identity())
                     : none();
             // The case the value is, as a fixture writes a sum.
-            case Shape.Sum sum -> value instanceof ObservedValue.Constructed made
-                    && sum.reaches().cases().contains(made.type())
-                    ? of(value, Type.ref(made.type()), reading, at, narrowed(along, at, value),
-                            leaves) : none();
+            case Shape.Sum sum -> {
+                Iterator<ObservedValue> theCaseItIs = value instanceof ObservedValue.Constructed made
+                        && sum.reaches().cases().contains(made.type())
+                        ? of(value, Type.ref(made.type()), reading, at,
+                                narrowed(along, at, value), leaves) : none();
+                yield flat(List.of(leaves.otherCase(sum, value, at), theCaseItIs).iterator(),
+                        Function.<Iterator<ObservedValue>>identity());
+            }
             case Shape.Optional optional -> value instanceof ObservedValue.Absent ? none()
                     : of(value, optional.element(), reading, at, along, leaves);
             // Nothing is beside these: a map's keys and a unit case are not a number, and a

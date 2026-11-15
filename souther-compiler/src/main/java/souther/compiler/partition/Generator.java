@@ -2424,7 +2424,8 @@ public final class Generator {
                             : atWhatTheWalkReads(withEachArrangement(arrangementsOf(
                                             standingFor(axes.subject(), check, saidTo(looking),
                                                     MOST_REPAIRS),
-                                            axes.subject().ruleReading(), borders, walk.reads()),
+                                            axes.subject().ruleReading(), borders, walk.reads(),
+                                            check),
                                     borders.size(), walk.over()), walk.inputs());
                     Beside aPieceMore = atWhatTheWalkReads((value, type, reading, parameter) ->
                             NearbyValues.withAPieceMore(value, type, reading, parameter,
@@ -2725,8 +2726,8 @@ public final class Generator {
                                           NearbyValues.Put where, List<ObservedValue> observed,
                                           List<String> reads) {
         ElementsOfAType elements = standingFor(subject, check, saidTo(looking), MOST_REPAIRS);
-        return grownAmong(madeOf(elements, subject.ruleReading(), observed, reads), ranWith,
-                where);
+        return grownAmong(madeOf(elements, subject.ruleReading(), observed, reads, check),
+                ranWith, where);
     }
 
     /** Where what stopped the making of a type's values is said: to the search that asked. */
@@ -2792,9 +2793,9 @@ public final class Generator {
      */
     private static Function<Type, Iterator<ObservedValue>> madeOf(
             ElementsOfAType elements, RuleReadingContext reading, List<ObservedValue> observed,
-            List<String> reads) {
+            List<String> reads, CandidateCheck check) {
         Function<Type, Iterator<ObservedValue>> arranged =
-                arrangementsOf(elements, reading, observed, reads);
+                arrangementsOf(elements, reading, observed, reads, check);
         return element -> {
             Iterator<ObservedValue> made = arranged.apply(element);
             if (!made.hasNext()) {
@@ -2812,11 +2813,21 @@ public final class Generator {
      */
     private static Function<Type, Iterator<ObservedValue>> arrangementsOf(
             ElementsOfAType elements, RuleReadingContext reading, List<ObservedValue> observed,
-            List<String> reads) {
+            List<String> reads, CandidateCheck check) {
         return element -> {
             Iterator<ObservedValue> own = elements.of(element);
-            return observed.isEmpty() || !own.hasNext() ? Collections.emptyIterator()
-                    : NearbyValues.holding(own.next(), element, reading, observed, reads);
+            if (observed.isEmpty() || !own.hasNext()) {
+                return Collections.emptyIterator();
+            }
+            // Only the ones the element's own type admits: an element it refuses is no element of
+            // a list, and one put among others takes the whole list with it.
+            return NearbyValues.filtered(
+                    NearbyValues.holding(own.next(), element, reading, observed, reads),
+                    arranged -> !(ObservedFixtures.of(arranged, element, reading)
+                            instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                                    FixtureTemplate template))
+                            || check.admissibility(element, template)
+                                    != CandidateCheck.Admissibility.REFUSED);
         };
     }
 
@@ -3363,7 +3374,16 @@ public final class Generator {
         }
         // What the call was made with, and what the body compares with.
         List<ObservedValue> valuesHeld = new ArrayList<>();
-        taken.forEach(each -> valuesHeld.add(each.value()));
+        // As held and as they stand at a leaf: a value a name is worn around is the one an element
+        // is made of where a leaf of its kind stands.
+        taken.forEach(each -> {
+            valuesHeld.add(each.value());
+            ObservedValue inside = InputsRowsRanWith.withoutTheNamesWorn(each.type(),
+                    each.value(), subject.ruleReading().source());
+            if (!inside.equals(each.value())) {
+                valuesHeld.add(inside);
+            }
+        });
         valuesHeld.addAll(borders);
         List<Iterator<GeneratedRow>> out = new ArrayList<>();
         // What the walk reads of the dependencies: the answers of the others are not what it
@@ -3381,8 +3401,8 @@ public final class Generator {
             ElementsOfAType elements = standingFor(answered, check, saidTo(looking), MOST_REPAIRS);
             // An answer is looked up by what the call was made with, which is the row's, and
             // compared with what the body writes out: an element is made of both first.
-            Growth growth = grownAmong(madeOf(elements, reading, valuesHeld, reads), ranWith,
-                    NearbyValues.Put.BEFORE_AND_AFTER);
+            Growth growth = grownAmong(madeOf(elements, reading, valuesHeld, reads, check),
+                    ranWith, NearbyValues.Put.BEFORE_AND_AFTER);
             Beside growing = grownTwice(growth, List.of());
             Iterator<ObservedValue> grown = NearbyValues.flat(theFirstOf(elements.of(type)),
                     start -> growing.of(start, type, reading, answered.parameters().getFirst()));

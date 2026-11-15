@@ -117,6 +117,22 @@ public final class InputsRowsRanWith {
         }
     }
 
+    /**
+     * {@code value}, at a position of {@code type}, as it stands inside the names the position
+     * wears: a newtype of a string held as the string. {@code value} itself where it wears none, or
+     * holds nothing that was read.
+     */
+    public static ObservedValue withoutTheNamesWorn(Type type, ObservedValue value,
+                                                    RuleReadingSource source) {
+        if (value.unread() != null) {
+            return value;
+        }
+        TypeView view = TypeView.of(type, source.inners(), source.symbols(), source.kinds(),
+                source.sums());
+        ObservedValue inside = ObservedValue.wearing(view.wrappers(), value);
+        return inside == null || inside.unread() != null ? value : inside;
+    }
+
     private final Map<Type, List<ObservedValue>> byType;
 
     private final int hash;

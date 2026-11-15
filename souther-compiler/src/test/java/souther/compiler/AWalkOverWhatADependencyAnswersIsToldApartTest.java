@@ -190,6 +190,48 @@ class AWalkOverWhatADependencyAnswersIsToldApartTest {
     }
 
     /**
+     * What a dependency answers keeps its rows apart by a key a newtype wraps: two rows of one key
+     * are refused, so an answer of two has two keys, and the values the row holds for them are the
+     * strings inside the newtype.
+     */
+    @Test
+    void aKeyWrappedInANewtypeIsMadeOfTheStringsTheRowHolds() {
+        String source = """
+                module repro.keyed
+
+                data Sku = String
+
+                data Line = { sku: Sku, quantity: Int }
+
+                data Snapshot = { rows: List<Line> }
+                    invariant List.allDistinctBy(.sku, rows)
+
+                data Order = { sku: Sku, want: Int }
+
+                behavior readStock : (order: Order) -> Snapshot
+
+                behavior available : (order: Order) -> Bool
+                    depends on readStock
+
+                let available (order, readStock) =
+                    List.indexBy(.sku, readStock(order).rows)
+                        |> Map.get(order.sku)
+                        |> Option.map(l -> l.quantity >= order.want)
+                        |> Option.withDefault(false)
+
+                fake readStock
+                    | _ -> Snapshot { rows = [ Line { sku = Sku("apple"), quantity = 3 } ] }
+
+                example available
+                    | "enough" : (Order { sku = Sku("apple"), want = 2 }) -> true
+                    | "too many" : (Order { sku = Sku("apple"), want = 5 }) -> false
+                    | "unknown" : (Order { sku = Sku("pear"), want = 1 }) -> false
+                """;
+
+        WalkRewritesOwed.assertToldApart(measured(source), "indexBy");
+    }
+
+    /**
      * What a dependency answers has an invariant of its own that a longer list breaks: no answer
      * of two is one the type admits, so none is stood in, and the rewrites are left open as the
      * search that met a refusal leaves them. A row stood in with an answer the type refuses is
