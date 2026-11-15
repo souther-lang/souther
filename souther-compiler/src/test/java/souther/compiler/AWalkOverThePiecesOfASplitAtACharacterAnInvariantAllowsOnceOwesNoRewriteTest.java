@@ -103,6 +103,80 @@ class AWalkOverThePiecesOfASplitAtACharacterAnInvariantAllowsOnceOwesNoRewriteTe
                 """)));
     }
 
+    /** What a customer model writes: a construction attempted on each piece, kept where it holds. */
+    @Test
+    void aWalkOverWhatAFlatMapAnswersOverThePiecesIsProvedToo() {
+        Compilation compilation = measured("""
+                module repro.flat
+
+                data Address = String
+                    invariant String.matches("[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", value)
+
+                data Domain = String
+                    invariant String.matches("[a-z0-9.]+", value)
+
+                let domainOf (a: Address): List<Domain> =
+                    List.flatMap(d -> if Domain(d) as name then [ name ] else [],
+                                 List.drop(1, String.split("@", String.lowercase(a.value))))
+
+                behavior lengths : (a: Address) -> List<Int>
+                let lengths (a) = List.map(s -> String.length(s.value), domainOf(a))
+
+                example lengths
+                    | "two" : (Address("a@b.c")) -> [ 3 ]
+                """);
+        assertEquals(List.of(), walkRewritesOwedOf("flatMap", compilation));
+        assertEquals(List.of(), walkRewritesOwedOf("map", compilation));
+    }
+
+    /**
+     * The address comes from the arms of a {@code match}, each binding it apart, and one walk reads
+     * it through all of them. What is known of the one value the arms stand for is the same whichever
+     * arm reached it, so measuring it is not refused for saying two things of it.
+     */
+    @Test
+    void anAddressBoundApartByEachArmOfAMatchIsOneValueToWhatIsKnownOfIt() {
+        Compilation compilation = measured("""
+                module repro.arms
+
+                data Address = String
+                    invariant String.matches("[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", value)
+
+                data Phone = String
+                    invariant String.length(value) >= 1
+
+                data DomainName = String
+                    invariant String.matches("[a-z0-9.]+", value)
+
+                data EmailOnly     = { email: Address }
+                data PhoneOnly     = { phone: Phone }
+                data EmailAndPhone = { email: Address, phone: Phone }
+                data ContactPoint  = EmailOnly | PhoneOnly | EmailAndPhone
+
+                let emailOf (reach: ContactPoint): List<Address> =
+                    match reach with
+                        | EmailOnly { email }     -> [ email ]
+                        | EmailAndPhone { email } -> [ email ]
+                        | PhoneOnly               -> []
+
+                let domainOf (a: Address): List<DomainName> =
+                    List.flatMap(d -> if DomainName(d) as name then [ name ] else [],
+                                 List.drop(1, String.split("@", String.lowercase(a.value))))
+
+                let domainsOf (reach: ContactPoint): List<DomainName> =
+                    List.flatMap(e -> domainOf(e), emailOf(reach))
+
+                behavior sizes : (reach: ContactPoint) -> List<Int>
+                let sizes (reach) = List.map(d -> String.length(d.value), domainsOf(reach))
+
+                example sizes
+                    | "both" : (EmailAndPhone { email = Address("a@b.c"), phone = Phone("1") }) -> [ 3 ]
+                """);
+        assertEquals(List.of(), walkRewritesOwedOf("flatMap", compilation).stream()
+                .filter(rewrite -> !List.of("fold_after_one_step", "fold_from_the_seed")
+                        .contains(rewrite)).toList());
+    }
+
     @Test
     void aPatternThatLetsTheSeparatorStandAsOftenAsItLikesLeavesBothRewritesOwed() {
         assertEquals(List.of("fold_after_one_step", "fold_from_the_seed"),
@@ -143,13 +217,18 @@ class AWalkOverThePiecesOfASplitAtACharacterAnInvariantAllowsOnceOwesNoRewriteTe
 
     /** The rewrites of the walk of {@code List.map} that are owed, as the obligation list says. */
     private static List<String> walkRewritesOwed(Compilation compilation) {
+        return walkRewritesOwedOf("map", compilation);
+    }
+
+    /** The same, of the walk of the library operation {@code definition} names. */
+    private static List<String> walkRewritesOwedOf(String definition, Compilation compilation) {
         JsonNode replacement = JSON.readTree(AdequacyReport.of(compilation)
                         .json(SourceRendering.namedByIdentity(compilation.texts())))
                 .get("modules").get(0).get("behaviors").get(0).get("replacement");
         List<String> owed = new ArrayList<>();
         for (JsonNode each : replacement.get("obligations")) {
             JsonNode id = each.get("obligationId");
-            if (id.has("definition") && id.get("definition").asString().equals("map")
+            if (id.has("definition") && id.get("definition").asString().equals(definition)
                     && id.get("rewrite").asString().startsWith("fold_")) {
                 owed.add(id.get("rewrite").asString());
             }

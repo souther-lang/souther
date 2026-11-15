@@ -79,7 +79,7 @@ final class IntrinsicNumericFacts {
      * about the atom it is filed against and not about a neighbour of it.
      */
     static List<NumericConstraint> ofSize(ValueName size, Core container, FactSubject atom,
-                                          Denotations at, Terms terms) {
+                                          Denotations at, Terms terms, Term named) {
         List<NumericConstraint> out = new ArrayList<>();
         // What the measure itself states of what it answers, which is that a count is at or above
         // nought. Read off the operation's rows and not written here: it is the same proposition as
@@ -89,20 +89,22 @@ final class IntrinsicNumericFacts {
         // A construction's result is no smaller than each source the rule names for it. A rule may
         // name more than one — `a ++ b` is as long as either half — so this is a loop where the
         // building below is one answer.
+        AnOperationApplied applied = AnOperationApplied.of(container);
         for (Core added : DischargeRules.noSmallerThan(container)) {
-            standing(atom, added, Rel.GE, at, terms, out);
+            standing(atom, added, partOf(named, applied, added), Rel.GE, at, terms, out);
         }
         if (Core.withoutStanding(container) instanceof Core.PreservedCall call) {
             DischargeRules.Source built = DischargeRules.builtFrom(call);
             Rel rel = built == null ? null : relationOf(built.size());
             if (rel != null) {
-                standing(atom, built.container(), rel, at, terms, out);
+                standing(atom, built.container(), partOf(named, applied, built.container()), rel,
+                        at, terms, out);
             }
         }
         // And exactly as many as the law of the operation that answered it says, where it says a
         // number of the arguments this names: `a ++ b` holds as many as both halves together, which
         // no number of bounds on it against either half says.
-        out.addAll(ofTheSizeLaw(AnOperationApplied.of(container), atom, at, terms));
+        out.addAll(ofTheSizeLaw(applied, atom, at, terms, named));
         // And as many as it was written out with, where it was, which is what a size of it read
         // as a number is and so what the atom a law names it by is.
         OptionalLong written = terms.writtenCount(container, at);
@@ -118,8 +120,8 @@ final class IntrinsicNumericFacts {
      * answer, where it says it as one number of its arguments.
      */
     static List<NumericConstraint> ofTheSizeLaw(AnOperationApplied applied, FactSubject atom,
-                                                Denotations at, Terms terms) {
-        LawOverAtoms.Sized lawSays = LawOverAtoms.sizeOf(applied, at, terms);
+                                                Denotations at, Terms terms, Term call) {
+        LawOverAtoms.Sized lawSays = LawOverAtoms.sizeOf(applied, at, terms, call);
         return lawSays == null ? List.of() : lawSays.carriedBy(atom);
     }
 
@@ -134,15 +136,16 @@ final class IntrinsicNumericFacts {
      * so a part of it left out would answer the second wrong.
      */
     static Derivation heldWhereItsLawsSay(Core container, FactSubject atom, Denotations at,
-                                          Terms terms) {
-        return heldWhereItsLawsSay(AnOperationApplied.of(container), atom, at, terms);
+                                          Terms terms, Term call) {
+        return heldWhereItsLawsSay(AnOperationApplied.of(container), atom, at, terms, call);
     }
 
-    /** The same, of an application of an operation however it was found. */
+    /** The same, of an application of an operation however it was found, and of the call named by
+     *  {@code call} where it is one ({@link LawOverAtoms}). */
     static Derivation heldWhereItsLawsSay(AnOperationApplied applied, FactSubject atom,
-                                          Denotations at, Terms terms) {
+                                          Denotations at, Terms terms, Term call) {
         Derivation.HoldsSomethingWhere.Holding holds =
-                LawOverAtoms.whereItHolds(applied, AnswerAspect.EMPTINESS, at, terms);
+                LawOverAtoms.whereItHolds(applied, AnswerAspect.EMPTINESS, at, terms, call);
         List<Derivation> recipes = new ArrayList<>();
         if (holds != null) {
             recipes.add(new Derivation.HoldsSomethingWhere(holds));
@@ -150,11 +153,11 @@ final class IntrinsicNumericFacts {
         // And how many case by case, where the law says it so: a size in cases is no relation the
         // atom carries whatever the path, since which case holds is the path's. Two cases of a
         // value held once are the path's too, and are what the count settles where it is settled.
-        Derivation sized = LawOverAtoms.sizeInCases(applied, at, terms);
+        Derivation sized = LawOverAtoms.sizeInCases(applied, at, terms, call);
         if (sized != null) {
             recipes.add(sized);
         }
-        LawOverAtoms.Sized byTheValue = LawOverAtoms.sizeOf(applied, at, terms);
+        LawOverAtoms.Sized byTheValue = LawOverAtoms.sizeOf(applied, at, terms, call);
         List<ConditionalConstraint> settled =
                 byTheValue == null ? List.of() : byTheValue.guaranteedOf(atom);
         if (!settled.isEmpty()) {
@@ -170,16 +173,43 @@ final class IntrinsicNumericFacts {
     /** States how {@code atom} stands to the size of {@code source}, where that size is one this can
      * name. A container nothing names is one nothing is stated about, which leaves the size bounded
      * by what else is known of it rather than by half a rule. */
-    private static void standing(FactSubject atom, Core source, Rel rel,
+    private static void standing(FactSubject atom, Core source, Term part, Rel rel,
                                  Denotations at, Terms terms, List<NumericConstraint> out) {
         // Counted the way the source is counted, which is not the way the answer is where a
         // construction answers a container of another kind: a map made of a list holds no more
         // than the list's length.
         ValueName counting = NumericMeasures.takenOf(source.type(), terms.newtypeInners());
-        FactSubject there = counting == null ? null : terms.sizeAtomFor(counting, source, at);
+        // Named by the part of the answer's own term it is, where the answer is named by one: the
+        // expression is only what the part is and how it was built.
+        FactSubject there = counting == null ? null
+                : part != null ? terms.sizeAtomOf(counting, part, source, at)
+                : terms.sizeAtomFor(counting, source, at);
         if (there != null && !there.equals(atom)) {
             out.add(new NumericConstraint(LinearForm.difference(atom, there), rel));
         }
+    }
+
+    /** What the measure {@code size} states of whatever it counts: that a count is at or above
+     *  nought. */
+    static List<NumericConstraint> ofAnythingCounted(ValueName size, FactSubject atom) {
+        List<NumericConstraint> out = new ArrayList<>();
+        bounding(DischargeRules.boundsOn(size, ConstantArguments.none()), atom, NO_ARGUMENTS, out);
+        return out;
+    }
+
+    /** The part of the term {@code named} that {@code argument} of {@code applied} stands at, or
+     *  null where the answer is not named as a call of that operation. */
+    private static Term partOf(Term named, AnOperationApplied applied, Core argument) {
+        if (named == null || applied == null
+                || !applied.operation().equals(named.calledOperation())) {
+            return null;
+        }
+        for (int at = 0; at < applied.args().size() && at < named.parts().size(); at++) {
+            if (applied.args().get(at) == argument) {
+                return named.parts().get(at);
+            }
+        }
+        return null;
     }
 
     /** How a size is stated of the two, or null where there is nothing to state: a construction of
