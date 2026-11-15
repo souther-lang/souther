@@ -36,16 +36,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * Counts are of one-time work as well as repeated work, so a test asks for growth between sizes,
  * with a floor under which a count says nothing, and not for a count of its own.
  *
+ * <p>Work is counted once, on the input it is given: a count is of the first run, and what the work
+ * keeps of what it did (a field it fills, a table it adds to) makes a second run of the same input
+ * a different and cheaper work, so a test that wants the cost of a walk makes a fresh input for
+ * each count and never takes the least of two runs of one.
+ *
  * <p>The entries are counted by the JVM's method timing, which is asked for the classes of the
  * values and the classes nested in them. The timing is the JVM's and has no thread in it, so a
  * count is of every thread: a worker another test left running the counted classes, or one this
  * test started, adds its entries to the count of whatever is being counted while it runs. A test
- * that counts leaves no worker running the counted classes (one already running when the counter
- * is opened fails its calibration, one that starts later is not seen), and one that fails on a count being
- * too high asks {@link #duringLeast} so that a stray thread in one counting cannot fail it. A count
- * of nothing is a state a test of a cost has to tell
- * from a counter that is not counting, so the counter is asked to count a visit of known number when
- * it is opened and refuses to be used if it did not.
+ * that counts therefore leaves no worker running the counted classes; one already running when the
+ * counter is opened fails its calibration. A count of nothing is a state a test of a cost has to
+ * tell from a counter that is not counting, so the counter is asked to count a visit of known
+ * number when it is opened and refuses to be used if it did not.
  */
 public final class Visits implements AutoCloseable {
 
@@ -148,18 +151,6 @@ public final class Visits implements AutoCloseable {
             work.run();
             return Boolean.TRUE;
         }).visits();
-    }
-
-    /**
-     * The smaller of two countings of {@code work}, which is done twice.
-     *
-     * <p>For a count a test fails on when it is high. What another thread adds to one counting is
-     * not there in the other unless that thread is running through both, so a count that is over
-     * only because of a stray thread is not over here. Work that keeps something of what it did
-     * counts less the second time, which can only lower the answer.
-     */
-    public long duringLeast(Runnable work) {
-        return Math.min(during(work), during(work));
     }
 
     private long entriesSoFar() {

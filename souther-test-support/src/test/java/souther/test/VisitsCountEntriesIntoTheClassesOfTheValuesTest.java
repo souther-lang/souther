@@ -87,28 +87,20 @@ class VisitsCountEntriesIntoTheClassesOfTheValuesTest {
         }
     }
 
-    /** A burst by another thread in one of two countings is not in the least of them. */
+    /**
+     * Work that keeps what it did is counted at its first run, and a run after it is another and
+     * cheaper work: so a count is taken once, on an input made for it, and the least of two runs of
+     * one input is not the cost of the walk.
+     */
     @Test
-    void theLeastOfTwoCountingsLeavesOutWhatAStrayThreadAddedToOne() {
+    void workThatKeepsWhatItDidCostsItsWalkOnlyTheFirstTime() {
+        Values.Remembering remembering = new Values.Remembering(sharedChain(LENGTH));
         try (Visits visits = Visits.into(List.of(Values.class))) {
-            assertTrue(visits.during(aBurstByAnotherThreadOnTheFirstRun()) >= 1000);
-            assertEquals(0, visits.duringLeast(aBurstByAnotherThreadOnTheFirstRun()));
+            long first = visits.during(remembering::settle);
+            long again = visits.during(remembering::settle);
+            assertTrue(first >= 1L << LENGTH, "the first run is the walk: " + first);
+            assertTrue(again < first / 100, "the next is what was kept: " + again);
         }
-    }
-
-    /** Work that does nothing itself, and on its first run has another thread go into the values. */
-    private static Runnable aBurstByAnotherThreadOnTheFirstRun() {
-        Values.Leaf leaf = new Values.Leaf(1);
-        AtomicBoolean first = new AtomicBoolean(true);
-        return () -> {
-            if (first.getAndSet(false)) {
-                Workers.ended(Workers.started("stray-burst", () -> {
-                    for (int at = 0; at < 1000; at++) {
-                        leaf.value();
-                    }
-                }), Duration.ofMinutes(1), "the burst ended");
-            }
-        };
     }
 
     @Test
@@ -129,4 +121,24 @@ final class Values {
     record Branch(Node left, Node right) implements Node {}
 
     record Leaf(int value) implements Node {}
+
+    /** Walks every way down once and keeps the answer. */
+    static final class Remembering {
+        private final Node chain;
+        private Long settled;
+
+        Remembering(Node chain) {
+            this.chain = chain;
+        }
+
+        void settle() {
+            if (settled == null) {
+                settled = everyWay(chain);
+            }
+        }
+
+        private static long everyWay(Node node) {
+            return node instanceof Branch branch ? everyWay(branch.left()) + everyWay(branch.right()) : 1;
+        }
+    }
 }

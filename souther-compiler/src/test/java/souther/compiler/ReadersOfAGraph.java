@@ -234,12 +234,6 @@ public final class ReadersOfAGraph {
      * that goes into each value many times goes into twice the values twice as often.
      */
     private static boolean goesDownEveryWay(Visits visits, Ask ask) {
-        return pastTheWays(visits, ask) && pastTheWays(visits, ask);
-    }
-
-    /** One counting of the ask on each chain. A reader past the figure is asked again, so that
-     *  another thread's entries in one counting do not name it. */
-    private static boolean pastTheWays(Visits visits, Ask ask) {
         long onShort = visits.count(ask.onShort()).visits();
         long onLong = visits.count(ask.onLong()).visits();
         return onLong > GROWTH_THAT_IS_THE_WAYS * Math.max(onShort, VISITS_TOO_FEW_TO_TELL);

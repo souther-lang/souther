@@ -76,8 +76,8 @@ class AnAnswerHandedTheSameAnswerTwiceIsOneValueAtEveryDepthTest {
     private static void assertCostIsOfTheCallsAndNotTheWays(IntFunction<Runnable> asked) {
         try (Visits visits = Visits.into(List.of(Quantity.class, Derivation.class))) {
             SequencedMap<Integer, Long> bySize = new LinkedHashMap<>();
-            bySize.put(DEEP / 2, visits.duringLeast(asked.apply(DEEP / 2)));
-            bySize.put(DEEP, visits.duringLeast(asked.apply(DEEP)));
+            bySize.put(DEEP / 2, visits.during(asked.apply(DEEP / 2)));
+            bySize.put(DEEP, visits.during(asked.apply(DEEP)));
             Growth.eachAtMost(bySize, 8, 1);
         }
     }

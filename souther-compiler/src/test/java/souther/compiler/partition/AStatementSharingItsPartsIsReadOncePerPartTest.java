@@ -71,7 +71,7 @@ class AStatementSharingItsPartsIsReadOncePerPartTest {
                 SequencedMap<Integer, Long> into = new LinkedHashMap<>();
                 for (int levels : new int[] {LEVELS / 2, LEVELS}) {
                     Proposition statement = sharing(levels);
-                    into.put(levels, visits.duringLeast(() -> read.accept(statement)));
+                    into.put(levels, visits.during(() -> read.accept(statement)));
                 }
                 Growth.eachAtMost(into, 4, 1);
             });
