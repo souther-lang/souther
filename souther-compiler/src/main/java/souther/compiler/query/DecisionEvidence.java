@@ -1,12 +1,10 @@
 package souther.compiler.query;
 
-import souther.compiler.meaning.Proposition;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.observe.Target;
 import souther.compiler.partition.CaseOfAStatement;
 import souther.compiler.partition.CasesTheRowsTook;
-import souther.compiler.partition.ConditionReportAnchor;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.Generator;
@@ -26,7 +24,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 
@@ -139,21 +136,21 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
      *                       placed was evidence of, in the order the reading met them. What a row
      *                       is to be looked for is told by these, and the kinds no row can be asked
      *                       about are not among them
-     * @param notAskable     the kinds of case a statement draws that no row can be asked about.
-     *                       They leave the decision partial all the same, and are said apart from
-     *                       {@code unseenCases}: what answers them is a wider reading, and no row
+     * @param lacking        what each statement of the decision still lacks, grouped as the reading
+     *                       that held the cases groups it ({@link CasesTheRowsTook#statementsShort}):
+     *                       the cases of each thing no row was seen in, and the cases no row can be
+     *                       asked for, which leave the decision partial all the same — what
+     *                       answers them is a wider reading, and no row
      */
     public record RowsPlaced(int rowsRead, Map<DecisionRule, RowWitnesses> taken, int rowsPlaced,
                              int rowsNotPlaced, int rowsNotWatched,
                              Map<DecisionRule, RowWitnesses> wentAgainst,
                              List<CaseOfAStatement> unseenCases,
-                             List<CasesTheRowsTook.NotAskable> notAskable,
-                             Map<CaseOfAStatement, ConditionReportAnchor> anchors) {
+                             List<CasesTheRowsTook.StatementShort> lacking) {
 
         public RowsPlaced {
             unseenCases = List.copyOf(unseenCases);
-            notAskable = List.copyOf(notAskable);
-            anchors = Map.copyOf(anchors);
+            lacking = List.copyOf(lacking);
             // Sealed and not only copied. What the account answers about a behavior is read off
             // this — which rules were covered, which were not — and a map a caller can add to is a
             // value whose answers change after it was made.
@@ -190,56 +187,6 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
             return rowsNotWatched == 0;
         }
 
-        /**
-         * What a statement of the decision still lacks: the cases of each thing no row was seen
-         * in, then each statement no row can be asked about. In the order the reading met them.
-         *
-         * <p>The one grouping a reader of the gap says, so that a page and a document number and
-         * order the same entries and neither works out which cases belong together.
-         */
-        public List<StatementShort> statementsShort() {
-            Map<String, List<CaseOfAStatement>> byWhat = new LinkedHashMap<>();
-            for (CaseOfAStatement each : unseenCases) {
-                byWhat.computeIfAbsent(each.ofWhat(), _ -> new ArrayList<>()).add(each);
-            }
-            List<StatementShort> out = new ArrayList<>();
-            byWhat.forEach((what, cases) -> out.add(
-                    new StatementShort(what, cases.getFirst().statement(),
-                            cases.getFirst().kind(), cases,
-                            cases.stream().map(anchors::get).filter(Objects::nonNull)
-                                    .findFirst())));
-            for (CasesTheRowsTook.NotAskable each : notAskable) {
-                out.add(new StatementShort(each.statement().spelling().toString(),
-                        each.statement(), each.kind(), List.of(), Optional.empty()));
-            }
-            return out;
-        }
-    }
-
-    /**
-     * One thing the decision draws cases of, and which of them no row was seen in.
-     *
-     * @param what      what the cases are cases of, by its key ({@link CaseOfAStatement#ofWhat})
-     * @param statement the statement it is of
-     * @param kind      the kind of case it draws
-     * @param unseen    the cases no row was seen in; none where no row can be asked about the
-     *                  statement at all, which a row written for it would not change
-     * @param at        which question places the condition the cases are drawn from, the one thing
-     *                  of it an author wrote; none for a statement no row can be asked about, which
-     *                  is a column of the decision and is written nowhere in particular
-     */
-    public record StatementShort(String what, Proposition statement, CasesTheRowsTook.Kind kind,
-                                 List<CaseOfAStatement> unseen,
-                                 Optional<ConditionReportAnchor> at) {
-
-        public StatementShort {
-            unseen = List.copyOf(unseen);
-        }
-
-        /** Whether a row could be written for it. */
-        public boolean askable() {
-            return !unseen.isEmpty();
-        }
     }
 
     /**
@@ -578,7 +525,7 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
         RowsPlaced made =
                 new RowsPlaced(rows.size(), RowWitnesses.Gathering.done(took), placed, notPlaced,
                         notWatched, RowWitnesses.Gathering.done(wentAgainst),
-                        List.copyOf(cases.unseenCases()), cases.notAskable(), cases.anchors());
+                        List.copyOf(cases.unseenCases()), cases.statementsShort());
         // A row this reading could not place says what stopped it, and a row nothing watched says
         // what the run went without. Where something is left either leaves the placement partial,
         // and neither may arrive as a complete reading of the rows.

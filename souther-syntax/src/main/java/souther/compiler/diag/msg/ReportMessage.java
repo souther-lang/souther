@@ -827,6 +827,8 @@ public sealed interface ReportMessage extends Message {
 
     record NoRowCanBeAskedAbout(int number, Message of) implements ReportMessage, Prose {}
 
+    record NoRowCanBeAskedForTheOthers() implements ReportMessage, Prose {}
+
     record OfASearch(String from, String through, Message at) implements ReportMessage, Prose {}
 
     record AtAPlace(String place) implements ReportMessage, Prose {}

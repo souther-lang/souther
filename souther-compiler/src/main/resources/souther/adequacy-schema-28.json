@@ -7206,15 +7206,15 @@
             "required": [
               "statement",
               "kind",
-              "askable"
+              "notAskable"
             ],
             "additionalProperties": false,
             "allOf": [
               {
                 "if": {
                   "properties": {
-                    "askable": {
-                      "const": true
+                    "notAskable": {
+                      "const": false
                     }
                   }
                 },
@@ -7236,15 +7236,15 @@
                   "the_order_of_a_repeated_key"
                 ]
               },
-              "askable": {
+              "notAskable": {
                 "type": "boolean",
-                "description": "Whether a row can be written for it. `false` leaves the decision partial all the same: what answers it is this compiler reading further, and no row."
+                "description": "Whether some case it draws is one no row can be asked for, which leaves the decision partial all the same: what answers it is this compiler reading further, and no row. One statement may have cases no row was seen in and cases no row can be asked for, which is one entry; with no `cases` it is so entirely."
               },
               "cases": {
                 "type": "array",
                 "minItems": 1,
                 "uniqueItems": true,
-                "description": "The cases no row was seen in. For a search the node meets what it asks (`at_the_node`), does not and one below does (`below_it`), does not and has nothing below (`nowhere_at_a_leaf`), or does not and every node below comes back empty (`nowhere_below`); for the order of a key the statement holds with the last element of a key and fails with an earlier one (`holds_by_the_last`), or the other way round (`fails_by_the_last`). Present exactly where `askable`.",
+                "description": "The cases no row was seen in. For a search the node meets what it asks (`at_the_node`), does not and one below does (`below_it`), does not and has nothing below (`nowhere_at_a_leaf`), or does not and every node below comes back empty (`nowhere_below`); for the order of a key the statement holds with the last element of a key and fails with an earlier one (`holds_by_the_last`), or the other way round (`fails_by_the_last`). Absent where every case it draws is one no row can be asked for.",
                 "items": {
                   "enum": [
                     "at_the_node",

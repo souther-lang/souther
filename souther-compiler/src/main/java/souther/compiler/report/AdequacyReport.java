@@ -40,6 +40,7 @@ import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.partition.CaseOfAStatement;
+import souther.compiler.partition.CasesTheRowsTook;
 import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.AuthoredPlacement;
 import souther.compiler.partition.BoundHeldIn;
@@ -2013,7 +2014,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // compiler and not by the author.
         if (decision != null) {
             decision.took().made().ifPresent(rows -> {
-                for (DecisionEvidence.StatementShort lacking : rows.statementsShort()) {
+                for (CasesTheRowsTook.StatementShort lacking : rows.lacking()) {
                     lacking.at().ifPresent(anchor -> {
                         Citation at = Sites.placeIfKnown(compilation.db(), anchor);
                         if (at != null) {
@@ -5215,15 +5216,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // well, in the order the reading met them and the document's array holds them, for the
         // statements there is no such place for.
         int number = 0;
-        for (DecisionEvidence.StatementShort each : made.get().statementsShort()) {
+        for (CasesTheRowsTook.StatementShort each : made.get().lacking()) {
             number++;
             Citation written = each.at().map(places.places()::get).orElse(null);
             Message at = written == null ? new ReportMessage.Nothing()
                     : new ReportMessage.AtAPlace(written.said(page.rendering(), declaredIn));
             Message of = ofWhat(each, at);
-            out.append("      ? ").append(page.say(each.askable()
-                    ? new ReportMessage.NoRowIsInTheseCases(number, of)
-                    : new ReportMessage.NoRowCanBeAskedAbout(number, of))).append(NEW_LINE);
+            out.append("      ? ").append(page.say(each.unseen().isEmpty()
+                    ? new ReportMessage.NoRowCanBeAskedAbout(number, of)
+                    : new ReportMessage.NoRowIsInTheseCases(number, of))).append(NEW_LINE);
             for (CaseOfAStatement unseen : each.unseen()) {
                 out.append("          · ").append(page.say(switch (unseen) {
                     case CaseOfAStatement.Search search -> switch (search.step()) {
@@ -5242,12 +5243,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     };
                 })).append(NEW_LINE);
             }
+            // The statement's other cases, which no row can be asked for: said under the cases
+            // that can, since it is one statement with both to act on.
+            if (each.notAskable() && !each.unseen().isEmpty()) {
+                out.append("          · ").append(page.say(
+                        new ReportMessage.NoRowCanBeAskedForTheOthers())).append(NEW_LINE);
+            }
         }
     }
 
     /** What a statement that lacks cases is, in the places an author wrote and nothing else. */
-    private static Message ofWhat(DecisionEvidence.StatementShort lacking, Message at) {
-        if (lacking.askable()) {
+    private static Message ofWhat(CasesTheRowsTook.StatementShort lacking, Message at) {
+        if (!lacking.unseen().isEmpty()) {
             return switch (lacking.unseen().getFirst()) {
                 case CaseOfAStatement.Search search -> ofASearch(search.statement(), at);
                 case CaseOfAStatement.KeyOrder order -> new ReportMessage.OfAnOrder(
@@ -10061,17 +10068,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * order the page numbers them. Absent where there are none.
      */
     private static void statementsNoRowIsIn(ObjectNode into, DecisionEvidence.RowsPlaced rows) {
-        List<DecisionEvidence.StatementShort> lacking = rows.statementsShort();
-        if (lacking.isEmpty()) {
+        if (rows.lacking().isEmpty()) {
             return;
         }
         ArrayNode all = into.putArray("statementsNoRowIsIn");
-        for (DecisionEvidence.StatementShort each : lacking) {
+        for (CasesTheRowsTook.StatementShort each : rows.lacking()) {
             ObjectNode one = all.addObject();
             one.put("statement", each.what());
             one.put("kind", word(each.kind()));
-            one.put("askable", each.askable());
-            if (each.askable()) {
+            one.put("notAskable", each.notAskable());
+            if (!each.unseen().isEmpty()) {
                 ArrayNode cases = one.putArray("cases");
                 each.unseen().forEach(unseen -> cases.add(word(unseen.side())));
             }

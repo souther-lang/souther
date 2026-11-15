@@ -191,7 +191,7 @@ class APartialMeasureSaysWhatItWentWithoutOnThePageTest {
         JsonNode statements = report.statements();
         assertEquals(1, statements.size());
         assertEquals("a_node_a_search_reaches", statements.get(0).get("kind").asString());
-        assertTrue(statements.get(0).get("askable").asBoolean());
+        assertFalse(statements.get(0).get("notAskable").asBoolean());
         assertEquals(List.of("below_it", "nowhere_below"), words(statements.get(0).get("cases")));
     }
 
