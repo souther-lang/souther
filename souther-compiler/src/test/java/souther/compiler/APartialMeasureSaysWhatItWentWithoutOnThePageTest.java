@@ -182,7 +182,8 @@ class APartialMeasureSaysWhatItWentWithoutOnThePageTest {
         assertTrue(report.weakeningWords().contains("reachable_node_cases_unmeasured"),
                 report.weakeningWords()::toString);
         assertTrue(report.human().contains("      ? no row is in these cases of statement 1,"
-                + " a search from t through below:\n"
+                + " a search from t through below, written at " + positionOf(SEARCH, "anyBig(t)")
+                + ":\n"
                 + "          · the node does not and one below it does\n"
                 + "          · the node does not and every node below it comes back empty\n"),
                 report.human());
@@ -194,6 +195,18 @@ class APartialMeasureSaysWhatItWentWithoutOnThePageTest {
         assertEquals(List.of("below_it", "nowhere_below"), words(statements.get(0).get("cases")));
     }
 
+    /** Where the first {@code text} is written in {@code source}, as the page says a place. */
+    private static String positionOf(String source, String text) {
+        String[] lines = source.split("\n");
+        for (int line = 0; line < lines.length; line++) {
+            int column = lines[line].indexOf(text);
+            if (column >= 0) {
+                return (line + 1) + ":" + (column + 1);
+            }
+        }
+        throw new IllegalArgumentException(text + " is not written in the source");
+    }
+
     private static List<String> words(JsonNode array) {
         List<String> out = new ArrayList<>();
         array.forEach(each -> out.add(each.asString()));
@@ -202,31 +215,36 @@ class APartialMeasureSaysWhatItWentWithoutOnThePageTest {
 
     /**
      * Two searches from one place through one field are two statements. Said by where they start
-     * and what they go through alone they read alike, and a reader could not tell which one to
-     * write rows for.
+     * and what they go through alone they read alike, so each is said by where its condition is
+     * written: the call of {@code anyBig} and the call of {@code anyHuge}.
      */
     @Test
-    void twoSearchesFromOnePlaceThroughOneFieldAreTwoStatementsOnThePageAndInTheDocument()
+    void twoSearchesFromOnePlaceThroughOneFieldAreToldApartByWhereTheyAreWritten()
             throws Exception {
         Report report = Report.of(TWO_SEARCHES);
 
         assertTrue(report.human().contains("? no row is in these cases of statement 1, a search"
-                + " from t through below:"), report.human());
+                + " from t through below, written at " + positionOf(TWO_SEARCHES, "anyBig(t)")
+                + ":"), report.human());
         assertTrue(report.human().contains("? no row is in these cases of statement 2, a search"
-                + " from t through below:"), report.human());
+                + " from t through below, written at " + positionOf(TWO_SEARCHES, "anyHuge(t)")
+                + ":"), report.human());
         assertTwoDifferentStatements(report);
     }
 
+    /** One statement resting on two maps: it is one place and two orders, told apart by the
+     *  container whose elements the order is of. */
     @Test
-    void twoOrdersOfTwoMapsAreTwoStatementsOnThePageAndInTheDocument() throws Exception {
+    void twoOrdersUnderOneStatementAreToldApartByTheirContainers() throws Exception {
         Report report = Report.of(TWO_MAPS);
+        String written = ", written at " + positionOf(TWO_MAPS, "List.all(") + ":\n";
 
         assertTrue(report.human().contains("statement 1, the order of the elements of a that share"
-                + " a a[*].sku:\n          · the statement holds with the last of them"),
-                report.human());
+                + " a a[*].sku" + written + "          · the statement holds with the last of"
+                + " them"), report.human());
         assertTrue(report.human().contains("statement 2, the order of the elements of b that share"
-                + " a b[*].sku:\n          · the statement holds with the last of them"),
-                report.human());
+                + " a b[*].sku" + written + "          · the statement holds with the last of"
+                + " them"), report.human());
         assertTwoDifferentStatements(report);
     }
 
@@ -246,7 +264,8 @@ class APartialMeasureSaysWhatItWentWithoutOnThePageTest {
         assertTrue(report.weakeningWords().contains("keyed_overwrite_cases_unmeasured"),
                 report.weakeningWords()::toString);
         assertTrue(report.human().contains("      ? no row is in these cases of statement 1, the"
-                + " order of the elements of rows that share a rows[*].sku:\n"
+                + " order of the elements of rows that share a rows[*].sku, written at "
+                + positionOf(KEYED, "List.all(") + ":\n"
                 + "          · the statement holds with the last of them and fails with an earlier"
                 + " one\n          · the statement fails with the last of them and holds with an"
                 + " earlier one\n"), report.human());
@@ -273,6 +292,16 @@ class APartialMeasureSaysWhatItWentWithoutOnThePageTest {
                 .forEach(each -> each.forEach(why -> reasons.add(why.asString())));
         assertEquals(List.of("a_border_was_not_read_in_full", "a_border_was_not_read_in_full"),
                 reasons);
+        // Whatever an undecided weight is undecided for, the document says it: its own reasons,
+        // what its borders went without, or both. Never neither.
+        for (JsonNode weights : report.fieldsNamed("weights")) {
+            weights.forEach(weight -> {
+                if (weight.get("standing").asString().equals("undecided")) {
+                    assertTrue(weight.has("undecidedBecause") || weight.has("weakening"),
+                            weight::toString);
+                }
+            });
+        }
     }
 
     /**

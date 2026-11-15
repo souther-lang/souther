@@ -4,8 +4,10 @@ import souther.compiler.inputs.Quantities;
 import souther.compiler.meaning.Proposition;
 
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -80,6 +82,8 @@ public final class CasesTheRowsTook {
     /** The statements that draw a case no row can be asked about. Not cases that are unseen: a
      *  candidate for one could not be told to have reached it either. */
     private final Set<NotAskable> unaskable = new LinkedHashSet<>();
+    /** Where each case's condition is written, for the cases a way states. */
+    private final Map<CaseOfAStatement, ConditionReportAnchor> anchors = new LinkedHashMap<>();
 
     /** Owed nothing, so nothing of the reading is ever asked. */
     private CasesTheRowsTook() {
@@ -93,6 +97,13 @@ public final class CasesTheRowsTook {
         this.inputs = inputs;
         this.quantities = quantities;
         for (DecisionReading.Ruled each : read.found()) {
+            // Where the condition a case is drawn from is written, which is the only thing a
+            // reader can be sent to: the statement is the compiler's own spelling.
+            for (RuleStep step : each.steps()) {
+                for (CaseWay way : step.cases()) {
+                    anchors.putIfAbsent(way.which(), way.puts().getFirst().anchor());
+                }
+            }
             each.rule().consulted().forEach((condition, decided) -> {
                 if (!(condition instanceof DecisionCondition.AStatement(Proposition stated))
                         || !(decided instanceof DecidedCondition.Held(var _, boolean held))) {
@@ -274,6 +285,14 @@ public final class CasesTheRowsTook {
         Set<CaseOfAStatement> out = new LinkedHashSet<>(owed);
         out.removeAll(seen);
         return out;
+    }
+
+    /**
+     * Which question places the condition each case is drawn from. An anchor and not a place, as
+     * {@link OnTheWay#anchor} is: the place is worked out where a sentence is written.
+     */
+    public Map<CaseOfAStatement, ConditionReportAnchor> anchors() {
+        return Map.copyOf(anchors);
     }
 
     /**

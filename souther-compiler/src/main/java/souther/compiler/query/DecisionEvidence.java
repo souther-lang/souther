@@ -6,6 +6,7 @@ import souther.compiler.observe.MeasureReason;
 import souther.compiler.observe.Target;
 import souther.compiler.partition.CaseOfAStatement;
 import souther.compiler.partition.CasesTheRowsTook;
+import souther.compiler.partition.ConditionReportAnchor;
 import souther.compiler.partition.DecisionReading;
 import souther.compiler.partition.DecisionRule;
 import souther.compiler.partition.Generator;
@@ -25,6 +26,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 
@@ -145,11 +147,13 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
                              int rowsNotPlaced, int rowsNotWatched,
                              Map<DecisionRule, RowWitnesses> wentAgainst,
                              List<CaseOfAStatement> unseenCases,
-                             List<CasesTheRowsTook.NotAskable> notAskable) {
+                             List<CasesTheRowsTook.NotAskable> notAskable,
+                             Map<CaseOfAStatement, ConditionReportAnchor> anchors) {
 
         public RowsPlaced {
             unseenCases = List.copyOf(unseenCases);
             notAskable = List.copyOf(notAskable);
+            anchors = Map.copyOf(anchors);
             // Sealed and not only copied. What the account answers about a behavior is read off
             // this — which rules were covered, which were not — and a map a caller can add to is a
             // value whose answers change after it was made.
@@ -201,10 +205,12 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
             List<StatementShort> out = new ArrayList<>();
             byWhat.forEach((what, cases) -> out.add(
                     new StatementShort(what, cases.getFirst().statement(),
-                            cases.getFirst().kind(), cases)));
+                            cases.getFirst().kind(), cases,
+                            cases.stream().map(anchors::get).filter(Objects::nonNull)
+                                    .findFirst())));
             for (CasesTheRowsTook.NotAskable each : notAskable) {
                 out.add(new StatementShort(each.statement().spelling().toString(),
-                        each.statement(), each.kind(), List.of()));
+                        each.statement(), each.kind(), List.of(), Optional.empty()));
             }
             return out;
         }
@@ -218,9 +224,13 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
      * @param kind      the kind of case it draws
      * @param unseen    the cases no row was seen in; none where no row can be asked about the
      *                  statement at all, which a row written for it would not change
+     * @param at        which question places the condition the cases are drawn from, the one thing
+     *                  of it an author wrote; none for a statement no row can be asked about, which
+     *                  is a column of the decision and is written nowhere in particular
      */
     public record StatementShort(String what, Proposition statement, CasesTheRowsTook.Kind kind,
-                                 List<CaseOfAStatement> unseen) {
+                                 List<CaseOfAStatement> unseen,
+                                 Optional<ConditionReportAnchor> at) {
 
         public StatementShort {
             unseen = List.copyOf(unseen);
@@ -568,7 +578,7 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
         RowsPlaced made =
                 new RowsPlaced(rows.size(), RowWitnesses.Gathering.done(took), placed, notPlaced,
                         notWatched, RowWitnesses.Gathering.done(wentAgainst),
-                        List.copyOf(cases.unseenCases()), cases.notAskable());
+                        List.copyOf(cases.unseenCases()), cases.notAskable(), cases.anchors());
         // A row this reading could not place says what stopped it, and a row nothing watched says
         // what the run went without. Where something is left either leaves the placement partial,
         // and neither may arrive as a complete reading of the rows.

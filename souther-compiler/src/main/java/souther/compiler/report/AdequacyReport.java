@@ -1164,7 +1164,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     reported,
                     armPlaces(compilation, branch),
                     conditionPlaces(compilation, name, linesOf(read), requirements, reported,
-                            partition == null ? List.of() : partition.caseExpansions()),
+                            partition == null ? List.of() : partition.caseExpansions(),
+                            decisions == null ? null : decisions.get(behavior.name())),
                     rulePlaces(compilation, citedBy(evidence, reported)),
                     partPlaces(compilation, partition, reported,
                             evidence.account() == null ? List.of()
@@ -1202,7 +1203,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // under are the debts' rather than any behavior's.
                 new DeclarationsShown(declared,
                         conditionPlaces(compilation, name, declaredLines(declared), Map.of(),
-                                List.of(), List.of()),
+                                List.of(), List.of(), null),
                         rulePlaces(compilation, citedByDeclarations(declared, owed)),
                         rowPlaces),
                 Adequacy.ToldApart.of(compilation.db(), name));
@@ -2005,8 +2006,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static ConditionsShown conditionPlaces(
             Compilation compilation, String module, List<BorderAssessment> lines,
             Map<DecisionRule, SettledAcross> settled, List<ReportedFinding> reported,
-            List<CasesExpandedAtARule> expanded) {
+            List<CasesExpandedAtARule> expanded, DecisionEvidence decision) {
         Map<ConditionReportAnchor, Citation> places = new LinkedHashMap<>();
+        // And where the conditions are written that a statement of the decision lacks cases of,
+        // which the decision's line says by where, since the statement itself is spelled by the
+        // compiler and not by the author.
+        if (decision != null) {
+            decision.took().made().ifPresent(rows -> {
+                for (DecisionEvidence.StatementShort lacking : rows.statementsShort()) {
+                    lacking.at().ifPresent(anchor -> {
+                        Citation at = Sites.placeIfKnown(compilation.db(), anchor);
+                        if (at != null) {
+                            places.putIfAbsent(anchor, at);
+                        }
+                    });
+                }
+            });
+        }
         // What a search for a rule of the decision was arrived at without, which is named on the
         // decision's own line and is about the same conditions the points below name. Every
         // search's, and not the ones a page prints: which of them is worth a sentence is decided
@@ -4156,9 +4172,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * reason at every one, and one entry per position would write it as many times. The reasons are
      * the weight's own and what the borders of the computation went without, which the weight
      * carries as the borders said it.
+     *
+     * <p>The form a position is said to weigh into is the widest of the forms it is in, which is
+     * the one {@link ReportMessage.NoRowFixesTheWeight} names for a weight no row shows, so the
+     * two lines about one position name one form. A position in two forms is one entry under that
+     * form and not one under each.
      */
-    private static void weightsNotDecided(StringBuilder out, List<TiltOfADerivedValue> weights,
-                                          Page page) {
+    static void weightsNotDecided(StringBuilder out, List<TiltOfADerivedValue> weights,
+                                  Page page) {
         for (TiltOfADerivedValue each : weights) {
             Map<UndecidedWeighing, List<NumericTerm>> together = new LinkedHashMap<>();
             each.positions().forEach((position, standing) -> {
@@ -5170,7 +5191,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         noInputTakes(out, behavior, decision, page, declaredIn);
         everyRunStops(out, behavior, decision, page, declaredIn);
         undecided(out, behavior, decision, page, declaredIn);
-        casesNoRowWasIn(out, took, page);
+        casesNoRowWasIn(out, behavior.conditionPlaces(), took, declaredIn, page);
     }
 
     /**
@@ -5183,19 +5204,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * first, and the second waits for this compiler to read further. The number is the entry's
      * place in the document's {@code statementsNoRowIsIn}.
      */
-    private static void casesNoRowWasIn(StringBuilder out,
-                                        Measure<DecisionEvidence.RowsPlaced> took, Page page) {
+    private static void casesNoRowWasIn(StringBuilder out, ConditionsShown places,
+                                        Measure<DecisionEvidence.RowsPlaced> took,
+                                        SourceId declaredIn, Page page) {
         Optional<DecisionEvidence.RowsPlaced> made = took.made();
         if (made.isEmpty()) {
             return;
         }
-        // Numbered in the order the reading met them, which is the order of the document's array:
-        // the compiler's spelling of a statement has no words an author wrote, and two searches
-        // from one place through one field are two things to act on.
+        // Said by where the condition is written, which is what an author can open. Numbered as
+        // well, in the order the reading met them and the document's array holds them, for the
+        // statements there is no such place for.
         int number = 0;
         for (DecisionEvidence.StatementShort each : made.get().statementsShort()) {
             number++;
-            Message of = ofWhat(each);
+            Citation written = each.at().map(places.places()::get).orElse(null);
+            Message at = written == null ? new ReportMessage.Nothing()
+                    : new ReportMessage.AtAPlace(written.said(page.rendering(), declaredIn));
+            Message of = ofWhat(each, at);
             out.append("      ? ").append(page.say(each.askable()
                     ? new ReportMessage.NoRowIsInTheseCases(number, of)
                     : new ReportMessage.NoRowCanBeAskedAbout(number, of))).append(NEW_LINE);
@@ -5221,25 +5246,25 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /** What a statement that lacks cases is, in the places an author wrote and nothing else. */
-    private static Message ofWhat(DecisionEvidence.StatementShort lacking) {
+    private static Message ofWhat(DecisionEvidence.StatementShort lacking, Message at) {
         if (lacking.askable()) {
             return switch (lacking.unseen().getFirst()) {
-                case CaseOfAStatement.Search search -> ofASearch(search.statement());
+                case CaseOfAStatement.Search search -> ofASearch(search.statement(), at);
                 case CaseOfAStatement.KeyOrder order -> new ReportMessage.OfAnOrder(
-                        order.container().toString(), order.position().toString());
+                        order.container().toString(), order.position().toString(), at);
             };
         }
         return switch (lacking.kind()) {
             case A_NODE_A_SEARCH_REACHES -> lacking.statement()
                     instanceof Proposition.SomeReachable search
-                    ? ofASearch(search) : new ReportMessage.OfASearchNoPlaceIsSaidOf();
+                    ? ofASearch(search, at) : new ReportMessage.OfASearchNoPlaceIsSaidOf();
             case THE_ORDER_OF_A_REPEATED_KEY -> new ReportMessage.OfAnOrderNoPlaceIsSaidOf();
         };
     }
 
-    private static Message ofASearch(Proposition.SomeReachable search) {
+    private static Message ofASearch(Proposition.SomeReachable search, Message at) {
         return new ReportMessage.OfASearch(search.writtenAt().toString(),
-                String.join(".", search.through()));
+                String.join(".", search.through()), at);
     }
 
     /**

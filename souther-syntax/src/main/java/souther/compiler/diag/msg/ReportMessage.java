@@ -827,11 +827,14 @@ public sealed interface ReportMessage extends Message {
 
     record NoRowCanBeAskedAbout(int number, Message of) implements ReportMessage, Prose {}
 
-    record OfASearch(String from, String through) implements ReportMessage, Prose {}
+    record OfASearch(String from, String through, Message at) implements ReportMessage, Prose {}
+
+    record AtAPlace(String place) implements ReportMessage, Prose {}
 
     record OfASearchNoPlaceIsSaidOf() implements ReportMessage, Prose {}
 
-    record OfAnOrder(String container, String position) implements ReportMessage, Prose {}
+    record OfAnOrder(String container, String position, Message at)
+            implements ReportMessage, Prose {}
 
     record OfAnOrderNoPlaceIsSaidOf() implements ReportMessage, Prose {}
 
