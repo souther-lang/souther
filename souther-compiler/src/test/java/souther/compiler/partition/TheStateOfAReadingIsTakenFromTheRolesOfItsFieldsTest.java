@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -113,6 +114,30 @@ class TheStateOfAReadingIsTakenFromTheRolesOfItsFieldsTest {
 
         assertTrue(state.sameInputs(before, state.inputsOf(owner), false));
         assertFalse(state.sameInputs(before, state.inputsOf(owner), true));
+    }
+
+    /**
+     * What readings kept are told apart by before any is compared
+     * ({@code SharedReads.Scene#requiredInputsHash}) is the hash of the values, so the values are
+     * what every comparison asks: whatever a reading asked after, and whichever contents it
+     * consulted, inputs that differ in their values are not the same, and inputs that differ in
+     * what was asked after only have the same values.
+     */
+    @Test
+    void inputsDifferingInTheirValuesAreTheSameForNoReading() {
+        ReadingState.Inputs before = state.inputsOf(owner);
+
+        owner.aggregates.add("an aggregate");
+        ReadingState.Inputs asked = state.inputsOf(owner);
+        assertTrue(state.sameInputs(before, asked, false));
+        assertEquals(state.requiredInputsHash(before), state.requiredInputsHash(asked));
+
+        owner.scoped.add("quantified");
+        ReadingState.Inputs other = state.inputsOf(owner);
+        for (boolean askedMatters : new boolean[] {false, true}) {
+            assertFalse(state.sameInputsBut(before, other, askedMatters, null, null));
+            assertFalse(state.sameInputsBut(before, other, askedMatters, null, new BitSet()));
+        }
     }
 
     @Test
