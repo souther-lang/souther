@@ -1,6 +1,7 @@
 package souther.compiler.numeric;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.HashMap;
@@ -75,6 +76,10 @@ final class FormReach<A> {
     /** Every half-space of every rule, stated once for the round, and which of them name each
      *  position — see {@link #premises}. Null until the first form of two or more positions asks. */
     private Premises<A> premises;
+
+    /** The premises in a tree, or empty where there is none — see {@link #treed}. Null until
+     *  asked for. */
+    private Optional<Treed<A>> treed;
 
     /** The places of the premises each rule gives, which a form read without one of the rules
      *  asks of it — see {@link #placesOf}. Null until such a form asks. Held as one immutable
@@ -181,6 +186,16 @@ final class FormReach<A> {
     }
 
     /**
+     * This reading with every premise read one by one, however many there are: what any form comes
+     * to is the same either way, and what a test holds the tree to.
+     */
+    FormReach<A> readingEveryPremise() {
+        FormReach<A> out = new FormReach<>(rules, derived, ends, differences, order);
+        out.treed = Optional.empty();
+        return out;
+    }
+
+    /**
      * This reading with {@code more} read as premises beside what it already reads.
      *
      * <p>A new value and not a change to this one: what a reading answers is a function of what it
@@ -195,6 +210,11 @@ final class FormReach<A> {
     /** The premises read beside the rules; see {@link #derived}. */
     Collection<AffineConstraint.HalfSpace<A>> derived() {
         return derived;
+    }
+
+    /** The closed differences this was handed. */
+    DifferenceBounds<A> differences() {
+        return differences;
     }
 
     /** The ends this was handed, for a reader that needs them as well and must not derive a second
@@ -295,7 +315,7 @@ final class FormReach<A> {
     ExactCut leastOfTheRestOf(AffineConstraint<A> asking, Map<A, ExactRatio> coefs,
                               ExactRatio constant) {
         Map<A, ExactRatio> ordered = inOrder(coefs);
-        return least(ordered, constant, asking, namingAnyOf(ordered));
+        return least(ordered, constant, asking);
     }
 
     /**
@@ -314,7 +334,7 @@ final class FormReach<A> {
             return null;
         }
         Map<A, ExactRatio> ordered = inOrder(coefs);
-        return highest(ordered, constant, null, namingAnyOf(ordered));
+        return highest(ordered, constant, null);
     }
 
     /**
@@ -340,11 +360,7 @@ final class FormReach<A> {
     }
 
     private Reach between(Map<A, ExactRatio> coefs, ExactRatio constant, AffineConstraint<A> without) {
-        // The form and its negation name the same positions, so which premises name one of them is
-        // asked once for the two.
-        BitSet naming = namingAnyOf(coefs);
-        return new Reach(least(coefs, constant, without, naming),
-                highest(coefs, constant, without, naming));
+        return new Reach(least(coefs, constant, without), highest(coefs, constant, without));
     }
 
     /**
@@ -353,8 +369,8 @@ final class FormReach<A> {
      * come apart.
      */
     private ExactCut least(Map<A, ExactRatio> coefs, ExactRatio constant,
-                           AffineConstraint<A> without, BitSet naming) {
-        ExactCut flipped = highest(negated(coefs), constant.negated(), without, naming);
+                           AffineConstraint<A> without) {
+        ExactCut flipped = highest(negated(coefs), constant.negated(), without);
         return flipped == null ? null : new ExactCut(flipped.at().negated(), flipped.inclusive());
     }
 
@@ -475,9 +491,14 @@ final class FormReach<A> {
             } else {
                 ExactCut ranges = fromTheRanges(coefs, constant);
                 best = withTheDifference(difference(coefs), constant, ranges);
-                List<Premise<A>> all = premises().each();
-                best = tightenedBy(best, ranges, candidatesOf(atom, coefs, all), all, coefs,
-                        constant);
+                Treed<A> treed = treeFor(coefs);
+                if (treed != null) {
+                    best = lowestIn(treed, coefs, constant, best, placesLeftOutWith(asking));
+                } else {
+                    List<Premise<A>> all = premises().each();
+                    best = tightenedBy(best, ranges, candidatesOf(atom, coefs, all), all, coefs,
+                            constant);
+                }
             }
             return best == null ? null : new ExactCut(best.at().negated(), best.inclusive());
         }
@@ -701,7 +722,7 @@ final class FormReach<A> {
      * ask, so each keeps its own questions in the work.
      */
     Reach ofKept(AffineConstraint<A> asking, Map<A, ExactRatio> coefs) {
-        if (workOut == null || coefs.size() <= 1) {
+        if (workOut == null || coefs.size() <= 1 || treeFor(coefs) != null) {
             return of(coefs, ExactRatio.ZERO);
         }
         Map<A, ExactRatio> ordered = inOrder(coefs);
@@ -709,6 +730,142 @@ final class FormReach<A> {
         ExactCut flipped = highestKept(asking, 1, negated(ordered));
         return new Reach(flipped == null ? null
                 : new ExactCut(flipped.at().negated(), flipped.inclusive()), most);
+    }
+
+    /**
+     * The premises of this reading in a tree over the positions they name, and which position of
+     * the tree each is.
+     *
+     * @param dimensions the position each premise weight of the tree is a weight of
+     */
+    private record Treed<P>(PremiseTree premiseTree, Map<P, Integer> dimensions) {
+
+        /** Whether the form weighs no position the premises do not. */
+        boolean covers(Map<P, ExactRatio> coefs) {
+            return dimensions.keySet().containsAll(coefs.keySet());
+        }
+    }
+
+    /** How many premises a reading holds before it is worth putting them in a tree: below it,
+     *  reading each premise for a form costs less than a tree does. */
+    private static final int FEWEST_TREED = 16;
+
+    /** How many positions the premises may name for a tree to tell them apart: a box is tested
+     *  against the form in each position, and past a few the boxes of any premises that are near it
+     *  in some are far in others, so a tree reads about as many premises as there are. */
+    private static final int MOST_DIMENSIONS = 8;
+
+    /**
+     * The premises in a tree, or null where they are too few to be worth it, name too many
+     * positions, or a weight or a bound of one is beyond what the tree holds.
+     *
+     * <p>Worked out on the first ask and kept, in one value so that no thread reads half of it; what
+     * is kept is a function of what this was handed.
+     */
+    private Treed<A> treed() {
+        Optional<Treed<A>> read = treed;
+        if (read == null) {
+            read = Optional.ofNullable(treeOfThePremises());
+            treed = read;
+        }
+        return read.orElse(null);
+    }
+
+    private Treed<A> treeOfThePremises() {
+        Premises<A> held = premises();
+        if (held.each().size() < FEWEST_TREED || held.naming().size() > MOST_DIMENSIONS) {
+            return null;
+        }
+        // The positions in the order the positions decide, so that which weight is which is not a
+        // hash table's to say.
+        List<A> positions = new ArrayList<>(held.naming().keySet());
+        positions.sort(order);
+        Map<A, Integer> dimensions = HashMap.newHashMap(positions.size());
+        ExactCut[] up = new ExactCut[positions.size()];
+        ExactCut[] down = new ExactCut[positions.size()];
+        for (int dimension = 0; dimension < positions.size(); dimension++) {
+            A position = positions.get(dimension);
+            dimensions.put(position, dimension);
+            up[dimension] = ends.endWeighedBy(position, 1, true);
+            down[dimension] = ends.endWeighedBy(position, -1, true);
+        }
+        List<PremiseTree.Pair> pairs = new ArrayList<>();
+        for (int above = 0; above < positions.size(); above++) {
+            for (int below = above + 1; below < positions.size(); below++) {
+                PremiseTree.Pair pair = differenceLowerThanTheEnds(positions.get(above),
+                        positions.get(below), above, below);
+                if (pair != null) {
+                    pairs.add(pair);
+                }
+            }
+        }
+        PremiseTree.Pair[] paired = pairs.toArray(new PremiseTree.Pair[0]);
+        PremiseTree.Premise[] each = new PremiseTree.Premise[held.each().size()];
+        int at = 0;
+        for (Premise<A> premise : held.each()) {
+            ExactRatio[] weights = new ExactRatio[positions.size()];
+            Arrays.fill(weights, ExactRatio.ZERO);
+            for (Map.Entry<A, ExactRatio> weighed : premise.half().form().entriesIn(order)) {
+                weights[dimensions.get(weighed.getKey())] = weighed.getValue();
+            }
+            each[at++] = new PremiseTree.Premise(weights, premise.half().bound(), premise.place());
+        }
+        PremiseTree tree = PremiseTree.over(each, up, down, paired);
+        return tree == null ? null : new Treed<>(tree, dimensions);
+    }
+
+    /**
+     * The closed differences of two positions, where either bounds the difference lower than the
+     * ends of the two do, and null where neither does and a premise leaving that difference is
+     * bounded by the ends as any other is.
+     */
+    private PremiseTree.Pair differenceLowerThanTheEnds(A above, A below, int aboveAt, int belowAt) {
+        ExactCut aboveOverBelow = differences.differenceBound(above, below);
+        ExactCut belowOverAbove = differences.differenceBound(below, above);
+        Map<A, ExactRatio> difference = new LinkedHashMap<>();
+        difference.put(above, ExactRatio.ONE);
+        difference.put(below, MINUS_ONE);
+        boolean lower = lowerThan(aboveOverBelow, fromTheRanges(difference, ExactRatio.ZERO));
+        difference.clear();
+        difference.put(below, ExactRatio.ONE);
+        difference.put(above, MINUS_ONE);
+        lower |= lowerThan(belowOverAbove, fromTheRanges(difference, ExactRatio.ZERO));
+        return lower ? new PremiseTree.Pair(aboveAt, belowAt, aboveOverBelow, belowOverAbove) : null;
+    }
+
+    /** Whether {@code held} is a bound and the ends' {@code ranges} are not as tight. */
+    private static boolean lowerThan(ExactCut held, ExactCut ranges) {
+        return held != null && ExactCut.tighterUpper(ranges, held) != ranges;
+    }
+
+    /** The tree of the premises where there is one and the form {@code coefs} is over positions of
+     *  it, and otherwise null: the premises are then read one by one. */
+    private Treed<A> treeFor(Map<A, ExactRatio> coefs) {
+        Treed<A> treed = treed();
+        return treed != null && treed.covers(coefs) ? treed : null;
+    }
+
+    /**
+     * {@code best} tightened by what the premises of {@code treed} leave the form {@code coefs}, the
+     * premises at {@code left} not read.
+     */
+    private ExactCut lowestIn(Treed<A> treed, Map<A, ExactRatio> coefs, ExactRatio constant,
+                              ExactCut best, int[] left) {
+        ExactRatio[] form = new ExactRatio[treed.dimensions().size()];
+        Arrays.fill(form, ExactRatio.ZERO);
+        for (Map.Entry<A, ExactRatio> weighed : coefs.entrySet()) {
+            form[treed.dimensions().get(weighed.getKey())] = weighed.getValue();
+        }
+        return treed.premiseTree().lowest(form, constant, best, left, place -> {
+            merged++;
+            PREMISES_WORKED.increment();
+            return fromTheEndsWithout(premiseAt(place), coefs, constant);
+        });
+    }
+
+    /** The half-space of the premise at {@code place}. */
+    private AffineConstraint.HalfSpace<A> premiseAt(int place) {
+        return premises().each().get(place).half();
     }
 
     /** The highest {@code coefs} comes to, which is one end of the form of {@link #ofKept}. */
@@ -895,13 +1052,8 @@ final class FormReach<A> {
         return out;
     }
 
-    /**
-     * @param naming which premises, by their place in {@link #premises}, name one of
-     *               {@code coefs}' positions ({@link #namingAnyOf}); null for a form of one
-     *               position or none, which asks no premise
-     */
     private ExactCut highest(Map<A, ExactRatio> coefs, ExactRatio constant,
-                                AffineConstraint<A> without, BitSet naming) {
+                             AffineConstraint<A> without) {
         if (coefs.size() <= 1) {
             // A form naming one position is answered by the ends and by nothing else, because the
             // ends *are* this step at one position, run until they stop moving or until the rounds
@@ -914,10 +1066,16 @@ final class FormReach<A> {
         }
         ExactCut ranges = fromTheRanges(coefs, constant);
         ExactCut best = withTheDifference(difference(coefs), constant, ranges);
+        Treed<A> treed = treeFor(coefs);
+        if (treed != null) {
+            return lowestIn(treed, coefs, constant, best,
+                    without == null ? NO_PLACES : placesLeftOutWith(without));
+        }
         // What a premise naming none of the form's positions leaves is the form and the premise
         // side by side. Where the form weighs two positions or more, that residual has three or
         // more, so the ranges are its only route — see passesOver for when they bound it no lower
         // than what is already held.
+        BitSet naming = namingAnyOf(coefs);
         int weighs = weighed(coefs);
         boolean residualsAreRangedOnly = weighs >= 2;
         int unbounded = residualsAreRangedOnly ? unboundedIn(coefs) : 0;
