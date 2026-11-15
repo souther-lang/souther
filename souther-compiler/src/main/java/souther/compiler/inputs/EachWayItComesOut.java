@@ -197,6 +197,14 @@ public record EachWayItComesOut(Granularity spacing, List<Stretch> stretches) {
                 each.holding() != Shown.NOT_SHOWN && each.failing() != Shown.NOT_SHOWN);
     }
 
+    /** Whether a row is shown for each way at every number: the stretches have no least and no
+     *  greatest, and both ways are reached at each. */
+    public boolean reachesEveryNumberBothWays() {
+        return !stretches.isEmpty() && stretches.getFirst().from() == null
+                && stretches.getLast().to() == null && stretches.stream().allMatch(each ->
+                        each.holding() == Shown.REACHED && each.failing() == Shown.REACHED);
+    }
+
     /**
      * Where what is shown changes, each as the start of the values above it: the start of each
      * stretch that shows the two ways otherwise than the one below it, which it follows on from.
