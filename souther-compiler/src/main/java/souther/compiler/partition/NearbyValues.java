@@ -245,6 +245,54 @@ final class NearbyValues {
                 Lists.HOLDING_NONE, Put.AFTER, null);
     }
 
+    /**
+     * The value {@code value} becomes where a list it holds, or is, has the first {@code count}
+     * values {@code stoodFor} offers for its elements put after the ones it holds, all at once;
+     * in the one list {@code within} names where one is.
+     *
+     * <p>For a walk whose step compares an element with something: a list holding the value
+     * itself and the ones either side of it is told from the list stopped at its first element on
+     * whichever side of the comparison the difference lies, which one element at a time would have
+     * to be tried for.
+     */
+    static Iterator<ObservedValue> withEach(
+            ObservedValue value, Type type, RuleReadingContext reading,
+            Function<Type, Iterator<ObservedValue>> stoodFor, int count, TermPath within) {
+        TermPath root = within == null ? null : TermPath.of(within.head());
+        return of(value, type, reading, root, List.of(), new Leaves() {
+
+            @Override
+            public Iterator<ObservedValue> beside(Type.Prim prim, ObservedValue leaf, TermPath at,
+                                                  List<Narrowing> along, TypeView view) {
+                return none();
+            }
+
+            @Override
+            public boolean reaches(TermPath at) {
+                return within == null || onTheWayTo(within, at);
+            }
+
+            @Override
+            public Iterator<ObservedValue> longer(ObservedValue.Sequence held,
+                                                  Shape.Sequence sequence, TermPath at) {
+                if (within != null && !within.equals(at)) {
+                    return none();
+                }
+                List<ObservedValue> after = new ArrayList<>(held.elements());
+                Iterator<ObservedValue> offered = stoodFor.apply(sequence.element());
+                Set<ObservedValue> distinct = new HashSet<>();
+                while (distinct.size() < count && offered.hasNext()) {
+                    ObservedValue next = offered.next();
+                    if (distinct.add(next)) {
+                        after.add(next);
+                    }
+                }
+                return after.size() == held.elements().size() ? none()
+                        : List.<ObservedValue>of(new ObservedValue.Sequence(after)).iterator();
+            }
+        });
+    }
+
     private static Iterator<ObservedValue> withAnElement(
             ObservedValue value, Type type, RuleReadingContext reading, InputsRowsRanWith ranWith,
             Function<Type, Iterator<ObservedValue>> stoodFor, Lists which, Put where,
@@ -737,9 +785,9 @@ final class NearbyValues {
 
     /**
      * The values a row is taken to for a comparison with each of {@code named} to answer
-     * differently: the value one step on, the value itself, and the value one step back, since a
-     * comparison tells apart the values on its two sides. A value with no step, a string among
-     * them, is itself alone.
+     * differently: the value itself and the values one step either side, since a comparison tells
+     * apart the values on its two sides. A value with no step, a string among them, is itself
+     * alone.
      */
     static List<ObservedValue> bordersOf(List<ObservedValue> named) {
         List<ObservedValue> out = new ArrayList<>();
@@ -749,13 +797,10 @@ final class NearbyValues {
                 case ObservedValue.Decimal decimal -> unitsOf(decimal);
                 default -> none();
             };
-            List<ObservedValue> steps = new ArrayList<>();
-            beside.forEachRemaining(steps::add);
-            if (!steps.isEmpty()) {
-                out.add(steps.getFirst());
-            }
+            // The value itself, which an equality holds at and an order holds at or divides at,
+            // and then the values either side, which tell the two sides of an order apart.
             out.add(each);
-            out.addAll(steps.stream().skip(1).toList());
+            beside.forEachRemaining(out::add);
         }
         return out;
     }

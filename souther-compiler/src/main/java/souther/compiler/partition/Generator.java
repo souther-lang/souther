@@ -2394,8 +2394,7 @@ public final class Generator {
                     int through = from.size();
                     Examining lists = new Examining(looking);
                     // What the body compares with, and the values either side of each.
-                    List<ObservedValue> borders = NearbyValues.bordersOf(walk.named());
-                    // One growth for the search: what stands for a type is made once, as far as the
+                    List<ObservedValue> borders = NearbyValues.bordersOf(walk.named());                    // One growth for the search: what stands for a type is made once, as far as the
                     // search asks.
                     Growth growth = aListGrownAmong(walk.ranWith(), axes.subject(), check, looking,
                             NearbyValues.Put.BEFORE_AND_AFTER, borders, walk.reads());
@@ -2414,6 +2413,14 @@ public final class Generator {
                     Examining pieces = new Examining(looking);
                     Examining parted = new Examining(looking);
                     Examining changed = new Examining(looking);
+                    Examining everyBorder = new Examining(looking);
+                    // The list holding every border the body compares with, at once.
+                    Beside withEveryBorder = borders.isEmpty() ? null
+                            : withEachArrangement(arrangementsOf(
+                                            standingFor(axes.subject(), check, saidTo(looking),
+                                                    MOST_REPAIRS),
+                                            axes.subject().ruleReading(), borders, walk.reads()),
+                                    borders.size(), walk.over());
                     Beside aPieceMore = (value, type, reading, parameter) ->
                             NearbyValues.withAPieceMore(value, type, reading, parameter,
                                     walk.separators());
@@ -2443,6 +2450,10 @@ public final class Generator {
                                 walk.reads(), looking, answered));
                         into.add(candidatesBeside(each, axes, purposes, check, answers,
                                 growing, lists, takesASecondStep));
+                        if (withEveryBorder != null) {
+                            into.add(candidatesBeside(each, axes, purposes, check, answers,
+                                    withEveryBorder, everyBorder, takesASecondStep));
+                        }
                         into.add(candidatesBeside(each, axes, purposes, check, answers,
                                 anElementChanged, changed, takesASecondStep));
                         if (!walk.separators().isEmpty()) {
@@ -2480,16 +2491,19 @@ public final class Generator {
                             movable.apply(from.get(at),
                                     positionsRead(parameters, walk.inputs())))))));
                     lanes.add(candidatesOf(List.of(inTurn(answeredLast))));
-                    Function<Pins, Searched> searching = pins -> search(axes, pins, purposes,
-                            origins, (_, _) -> true, check, references, answers,
-                            HeldTogether.Asked.NOTHING, row -> looking.of(row, null), true,
-                            looking.scope(), goingOn.answersNothing());
-                    lanes.add(inEachClass(axes, looking, true, walk.inputs(), searching));
                     if (growingAny != null) {
                         lanes.add(candidatesOf(List.of(inOrder(through, at -> candidatesBeside(
                                 from.get(at), axes, purposes, check, answers, growingAny,
                                 everyList, takesASecondStep)))));
                     }
+                    // A search of one class is not a candidate: it puts forward as many rows as it
+                    // composes before it comes back, so a turn of it is held to the share of the
+                    // runs left that a lane has ({@link #takingInTurn}).
+                    Function<Pins, Searched> searching = pins -> search(axes, pins, purposes,
+                            origins, (_, _) -> true, check, references, answers,
+                            HeldTogether.Asked.NOTHING, row -> looking.of(row, null), true,
+                            looking.scope(), goingOn.answersNothing());
+                    lanes.add(inEachClass(axes, looking, true, walk.inputs(), searching));
                     List<Lane> carryingOn = List.of(
                             candidatesOf(List.of(inOrder(through, at -> movedFrom(from.get(at),
                                     axes, purposes, looking, check, answers,
@@ -2772,16 +2786,54 @@ public final class Generator {
     private static Function<Type, Iterator<ObservedValue>> madeOf(
             ElementsOfAType elements, RuleReadingContext reading, List<ObservedValue> observed,
             List<String> reads) {
+        Function<Type, Iterator<ObservedValue>> arranged =
+                arrangementsOf(elements, reading, observed, reads);
         return element -> {
-            Iterator<ObservedValue> own = elements.of(element);
-            if (observed.isEmpty() || !own.hasNext()) {
-                return own;
+            Iterator<ObservedValue> made = arranged.apply(element);
+            if (!made.hasNext()) {
+                return elements.of(element);
             }
-            Iterator<ObservedValue> made =
-                    NearbyValues.holding(own.next(), element, reading, observed, reads);
             // One of each in turn, so that an element the type stands for is among the first, as
             // two elements that differ are what a walk over several is told apart by.
             return NearbyValues.alternating(made, () -> elements.of(element));
+        };
+    }
+
+    /**
+     * The type's own first value arranged from {@code observed}, nearest arrangement first, and
+     * nothing where there is nothing observed or no value of the type.
+     */
+    private static Function<Type, Iterator<ObservedValue>> arrangementsOf(
+            ElementsOfAType elements, RuleReadingContext reading, List<ObservedValue> observed,
+            List<String> reads) {
+        return element -> {
+            Iterator<ObservedValue> own = elements.of(element);
+            return observed.isEmpty() || !own.hasNext() ? Collections.emptyIterator()
+                    : NearbyValues.holding(own.next(), element, reading, observed, reads);
+        };
+    }
+
+    /**
+     * The lists a walk goes over with every one of the first {@code count} arrangements put after
+     * what they hold, all at once: the list holding what a comparison tells apart and the values
+     * either side of it, so that no side of the comparison is left for a later candidate.
+     */
+    private static Beside withEachArrangement(
+            Function<Type, Iterator<ObservedValue>> arrangements, int count,
+            List<TermPath> over) {
+        if (over.isEmpty()) {
+            return (value, type, reading, _) ->
+                    NearbyValues.withEach(value, type, reading, arrangements, count, null);
+        }
+        return (value, type, reading, parameter) -> {
+            List<Iterator<ObservedValue>> inEach = new ArrayList<>();
+            for (TermPath each : over) {
+                if (each.head().equals(parameter)) {
+                    inEach.add(NearbyValues.withEach(value, type, reading, arrangements, count,
+                            each));
+                }
+            }
+            return NearbyValues.flat(inEach.iterator(), Function.identity());
         };
     }
 
@@ -3417,8 +3469,15 @@ public final class Generator {
      */
     private interface Lane {
 
-        /** What this puts forward this turn, or null where it has nothing more. */
-        Turn turn();
+        /**
+         * What this puts forward this turn, or null where it has nothing more.
+         *
+         * @param share the runs this turn may spend: what is left of the runs divided among the
+         *              lanes still asked. A lane that puts one candidate forward spends what a
+         *              candidate costs and needs none of it held; one that searches may spend a
+         *              great many, and is held to it
+         */
+        Turn turn(int share);
     }
 
     /** What a lane puts forward on one turn. */
@@ -3460,7 +3519,7 @@ public final class Generator {
     /** A lane of the candidates of {@code from}, one a turn, the iterators one after the other. */
     private static Lane candidatesOf(List<Iterator<GeneratedRow>> from) {
         Iterator<GeneratedRow> all = NearbyValues.flat(from.iterator(), Function.identity());
-        return () -> all.hasNext() ? new Turn.Proposed(all.next()) : null;
+        return _ -> all.hasNext() ? new Turn.Proposed(all.next()) : null;
     }
 
     /** The candidates of {@code each} one at a time from each in turn. */
@@ -3499,27 +3558,25 @@ public final class Generator {
     private static Lane inEachClass(MeasuredInput.MeasuredAxes axes, ReplacementWitness looking,
                                     boolean ofWhatTheWalkReads, List<String> inputsRead,
                                     Function<Pins, Searched> searching) {
-        List<Pins> classes = new ArrayList<>();
         List<String> heads = new ArrayList<>();
         for (int at = 0; at < axes.size(); at++) {
             heads.add(axes.get(at).path().head());
         }
-        for (int at : ofWhatTheWalkReads ? positionsRead(heads, inputsRead)
-                : positionsNotRead(heads, inputsRead)) {
-            if (!looking.scope().moves(axes.get(at))) {
-                continue;
-            }
-            for (int cls = 0; cls < axes.get(at).classes().size(); cls++) {
-                classes.add(Pins.of(axes, Map.of(at, cls)));
-            }
-        }
-        Iterator<Pins> each = classes.iterator();
-        return () -> {
+        List<Integer> positions = (ofWhatTheWalkReads ? positionsRead(heads, inputsRead)
+                : positionsNotRead(heads, inputsRead)).stream()
+                .filter(at -> looking.scope().moves(axes.get(at))).toList();
+        // Made as each is reached: a search that finds its row in the first class has no use for
+        // the pins of the rest.
+        Iterator<Pins> each = NearbyValues.flat(positions.iterator(), at ->
+                IntStream.range(0, axes.get(at).classes().size())
+                        .mapToObj(cls -> Pins.of(axes, Map.of(at, cls))).iterator());
+        return share -> {
             if (!each.hasNext()) {
                 return null;
             }
             Pins pins = each.next();
-            GeneratedRow found = looking.tookFromSearching(() -> searching.apply(pins));
+            GeneratedRow found = looking.within(share,
+                    () -> looking.tookFromSearching(() -> searching.apply(pins)));
             return found != null ? new Turn.Found(found) : Turn.Pass.PASS;
         };
     }
@@ -3541,7 +3598,7 @@ public final class Generator {
                 }
             }
             int before = looking.runsSpent();
-            Turn turn = next.turn();
+            Turn turn = next.turn(looking.runsLeft() / live.size());
             GeneratedRow found = null;
             switch (turn) {
                 case null -> live.remove(next);
@@ -11171,6 +11228,8 @@ public final class Generator {
         private final ReplacementOwed asked;
         private final int mostRuns;
         private int runs;
+        /** The run this search may not go past while one stage of it is looked at ({@link #within}). */
+        private int stageEnd = Integer.MAX_VALUE;
         /** Whether any row was asked about and answered alike. */
         private boolean alike;
         /** How many times this stopped a search. */
@@ -11284,9 +11343,29 @@ public final class Generator {
             return runs;
         }
 
+        /** How many runs this search may still make. */
+        int runsLeft() {
+            return mostRuns - runs;
+        }
+
+        /**
+         * What {@code looking} comes to with no more than {@code share} further runs: a stage of a
+         * search that goes on to others. Where it is cut there with a candidate untried, that is
+         * said as the runs being spent, which it is — a wider run gives the stage more.
+         */
+        <T> T within(int share, Supplier<T> looking) {
+            int outside = stageEnd;
+            stageEnd = Math.min(outside, runs + share);
+            try {
+                return looking.get();
+            } finally {
+                stageEnd = outside;
+            }
+        }
+
         /** One more run of this search's own, where one is left. */
         private boolean spend() {
-            if (runs >= mostRuns) {
+            if (runs >= Math.min(mostRuns, stageEnd)) {
                 return false;
             }
             runs++;

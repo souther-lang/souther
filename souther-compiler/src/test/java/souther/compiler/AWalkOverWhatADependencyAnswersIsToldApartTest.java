@@ -2,14 +2,8 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.report.AdequacyReport;
-
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * A rewrite of a walk over a list that only a dependency's answer holds is decided where a row
@@ -48,7 +42,7 @@ class AWalkOverWhatADependencyAnswersIsToldApartTest {
 
     @Test
     void aTableAnsweringOneElementDoesNotLeaveTheRewritesOpen() {
-        assertEquals(List.of(), undecided(measured(STOCK)));
+        WalkRewritesOwed.assertToldApart(measured(STOCK), "indexBy");
     }
 
     /**
@@ -64,7 +58,7 @@ class AWalkOverWhatADependencyAnswersIsToldApartTest {
                 .replace("| \"unknown\" : (\"pear\", 1) -> false",
                         "| \"unknown\" : (\"plum\", 1) -> false");
 
-        assertEquals(List.of(), undecided(measured(source)));
+        WalkRewritesOwed.assertToldApart(measured(source), "indexBy");
     }
 
     /**
@@ -102,7 +96,7 @@ class AWalkOverWhatADependencyAnswersIsToldApartTest {
                     | "none" : (Reduced, [ ], 29) -> 0
                 """;
 
-        assertEquals(List.of(), undecided(measured(source)));
+        WalkRewritesOwed.assertToldApart(measured(source), "filter");
     }
 
     /**
@@ -126,7 +120,7 @@ class AWalkOverWhatADependencyAnswersIsToldApartTest {
                     | "one" : ([ Item { name = "a", qty = 2 } ], 5) -> 7
                 """;
 
-        assertEquals(List.of(), undecided(measured(source)));
+        WalkRewritesOwed.assertToldApart(measured(source), "map");
     }
 
     /**
@@ -156,7 +150,7 @@ class AWalkOverWhatADependencyAnswersIsToldApartTest {
                     | "one" : ([ Stock { sku = "a", qty = 2 } ], "a") -> 3
                 """;
 
-        assertEquals(List.of(), undecided(measured(source)));
+        WalkRewritesOwed.assertToldApart(measured(source), "map");
     }
 
     /**
@@ -188,18 +182,7 @@ class AWalkOverWhatADependencyAnswersIsToldApartTest {
                     | "absent" : ("a", "pear") -> false
                 """;
 
-        assertEquals(List.of(), undecided(measured(source)));
-    }
-
-    private static List<String> undecided(Compilation compilation) {
-        return page(compilation).lines().map(String::strip)
-                .filter(line -> line.startsWith("? not decided whether a row would come out"))
-                .toList();
-    }
-
-    private static String page(Compilation compilation) {
-        return AdequacyReport.of(compilation)
-                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+        WalkRewritesOwed.assertToldApart(measured(source), "indexBy");
     }
 
     private static Compilation measured(String source) {

@@ -114,9 +114,8 @@ example restockByRecursion
     | (Shelf { counts = [2] }) -> <?>
 
 example restockByFold
-// fills else answering as then (42:13)
 // fills each step of the fold handed the seed (41:17)
-    | (Shelf { counts = [5, 1, 0, 5] }) -> <?>
+    | "else answering as then" : (Shelf { counts = [5, 1, 0, 5] }) -> <?>
 
 example restockAnyZoneWithoutALeafRow
 // fills a search that finds nothing at a node with nothing below it

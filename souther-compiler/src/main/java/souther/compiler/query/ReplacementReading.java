@@ -28,6 +28,7 @@ import souther.compiler.partition.Replacement;
 import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
+import souther.compiler.types.TypeSymbol;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -135,6 +136,8 @@ public final class ReplacementReading {
                 case NamedValue.Whole(var value) -> new ObservedValue.Integer(value);
                 case NamedValue.Fractional(var value) -> new ObservedValue.Decimal(value);
                 case NamedValue.Characters(var value) -> new ObservedValue.Text(value);
+                // A case stands for every value of it, which carries what the case holds.
+                case NamedValue.Case(var type) -> new ObservedValue.Unit(type);
             });
         }
         return out;
@@ -379,8 +382,29 @@ public final class ReplacementReading {
                 row -> where.stream().anyMatch(entered.apply(row)::contains), stoppedAt,
                 decided -> new ReplacementOwed.OfAWalk(replaced.walk(), replaced.how(), where,
                         replacing, inputsOf(decided),
-                        ValuesOfRareAnswersFirst.of(ranWith.get(), decided), separators, named,
-                        reads, inputs, over));
+                        namedFirst(ValuesOfRareAnswersFirst.of(ranWith.get(), decided), named),
+                        separators, named, reads, inputs, over));
+    }
+
+    /**
+     * What the rows ran with, with the values the body names first: a value an element of the list
+     * may be made of that the body compares with or tells a case by is where a step is told apart,
+     * whatever the rows answered. Stable, so what was first among the rest is.
+     */
+    private static InputsRowsRanWith namedFirst(InputsRowsRanWith ranWith,
+                                                List<ObservedValue> named) {
+        return ranWith.orderedBy(value -> named.stream().anyMatch(each ->
+                each.equals(value) || (caseOf(each) != null
+                        && caseOf(each).equals(caseOf(value)))) ? 0 : 1);
+    }
+
+    /** The case a value is, whether it holds anything or not; none for a value that is no case. */
+    private static TypeSymbol caseOf(ObservedValue value) {
+        return switch (value) {
+            case ObservedValue.Unit unit -> unit.type();
+            case ObservedValue.Constructed made -> made.type();
+            default -> null;
+        };
     }
 
     /**

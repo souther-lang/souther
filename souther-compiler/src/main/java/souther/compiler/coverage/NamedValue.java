@@ -1,5 +1,7 @@
 package souther.compiler.coverage;
 
+import souther.compiler.types.TypeSymbol;
+
 import java.math.BigDecimal;
 import java.util.Objects;
 
@@ -29,6 +31,14 @@ public sealed interface NamedValue {
 
         public Characters {
             Objects.requireNonNull(value, "a string named is some string");
+        }
+    }
+
+    /** A case of a sum the body tells from the others, as an arm of a {@code match} does. */
+    record Case(TypeSymbol type) implements NamedValue {
+
+        public Case {
+            Objects.requireNonNull(type, "a case named is some case");
         }
     }
 }

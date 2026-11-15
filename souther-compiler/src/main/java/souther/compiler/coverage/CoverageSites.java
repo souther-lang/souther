@@ -388,6 +388,15 @@ public final class CoverageSites {
             case Core.Int whole -> new NamedValue.Whole(whole.value());
             case Core.Decimal fraction -> new NamedValue.Fractional(fraction.value());
             case Core.Str characters -> new NamedValue.Characters(characters.value());
+            // A negative number is written as the negation of a literal. What a value cannot be
+            // named for is not named: the one whole number that has no negation.
+            case Core.Neg negated -> switch (namedBy(negated.operand())) {
+                case NamedValue.Whole whole when whole.value() != Long.MIN_VALUE ->
+                        new NamedValue.Whole(-whole.value());
+                case NamedValue.Fractional fraction ->
+                        new NamedValue.Fractional(fraction.value().negate());
+                case null, default -> null;
+            };
             default -> null;
         };
     }
@@ -422,8 +431,42 @@ public final class CoverageSites {
         Core.forEachChild(node, child -> collectFieldsRead(child, into));
     }
 
+    /**
+     * The cases a {@code match} tells from the others: the ones whose arm answers what the fewest
+     * arms answer, where the arms answer literals. A {@code match} whose arms all answer one
+     * literal tells nothing apart, and one whose arms answer what is not a literal tells each
+     * case by its own arm.
+     */
+    private static void nameCasesOf(Core.Match match, Set<NamedValue> into) {
+        Map<Object, Integer> answers = new LinkedHashMap<>();
+        Map<Core.Case, Object> keyOf = new IdentityHashMap<>();
+        for (Core.Case arm : match.cases()) {
+            Object key = switch (Core.withoutStanding(arm.body())) {
+                case Core.Bool bool -> bool.value();
+                case Core.Int whole -> whole.value();
+                case Core.Decimal fraction -> fraction.value();
+                case Core.Str characters -> characters.value();
+                default -> new Object();
+            };
+            keyOf.put(arm, key);
+            answers.merge(key, 1, Integer::sum);
+        }
+        if (answers.size() < 2 && match.cases().size() > 1) {
+            return;
+        }
+        int fewest = answers.values().stream().min(Integer::compare).orElse(0);
+        for (Core.Case arm : match.cases()) {
+            if (arm.pattern() != null && answers.get(keyOf.get(arm)) == fewest) {
+                arm.caseTypes().forEach(type -> into.add(new NamedValue.Case(type)));
+            }
+        }
+    }
+
     private static void collectNamed(Core node, Set<NamedValue> into,
                                      ComparisonCatalog comparisons) {
+        if (Core.withoutStanding(node) instanceof Core.Match match) {
+            nameCasesOf(match, into);
+        }
         if (Core.withoutStanding(node) instanceof Core.Binary b
                 && comparisons.occurrenceAt(b).isPresent()) {
             for (Core side : List.of(b.left(), b.right())) {
@@ -2634,6 +2677,7 @@ public final class CoverageSites {
                     }
                 }
                 case Core.Match m -> {
+                    nameCasesOf(m, named.computeIfAbsent(behavior, _ -> new LinkedHashSet<>()));
                     walk(structural.take(new CoreStructure.Edge.MatchScrutinee(), m.scrutinee()),
                             inside);
                     // What a `match` decides by is its subject, as an `if` decides by its condition.

@@ -2,18 +2,15 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.report.AdequacyReport;
-
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * A rewrite is told apart within the runs it is given by a candidate that changes what the walk's
  * step observes, ahead of one that changes what no step observes.
+ *
+ * <p>Each reads what the model owes of the walk's rewrites ({@link WalkRewritesOwed}): a page with
+ * nothing undecided on it is also the page of a rewrite never owed.
  */
 class ARewriteIsToldApartByWhatItsStepObservesTest {
 
@@ -29,13 +26,15 @@ class ARewriteIsToldApartByWhatItsStepObservesTest {
             rows.append("    | \"").append(each).append("\" : ([ ").append(each)
                     .append(" ]) -> false\n");
         }
+        // One row of two payers, so that the walk is entered at all: a list of one is not walked.
+        rows.append("    | \"AB\" : ([ A, B ]) -> false\n");
         String source = "module repro.observed\n\ndata Payer = " + cases + "\n\n"
                 + "let isZ (p: Payer): Bool =\n    match p with\n" + arms + "\n"
                 + "behavior check : (ls: List<Payer>) -> Bool\n"
                 + "let check (ls) = List.length(ls) >= 2 && List.any(p -> isZ(p), ls)\n\n"
                 + "example check\n" + rows;
 
-        assertEquals(List.of(), undecided(measured(source)));
+        assertToldApart(measured(source), "any");
     }
 
     /**
@@ -57,7 +56,7 @@ class ARewriteIsToldApartByWhatItsStepObservesTest {
                     | "three" : ([ 5, 6, 7 ]) -> false
                 """;
 
-        assertEquals(List.of(), undecided(measured(source)));
+        assertToldApart(measured(source), "any");
     }
 
     private static final String STOCK_WITH_MANY_NUMBERS = """
@@ -91,7 +90,98 @@ class ARewriteIsToldApartByWhatItsStepObservesTest {
     /** Many comparisons of numbers the walk never reads must not use the runs the answer needs. */
     @Test
     void aDependencysAnswerIsGrownWhereTheInputsHaveManyClasses() {
-        assertEquals(List.of(), undecided(measured(STOCK_WITH_MANY_NUMBERS)));
+        assertToldApart(measured(STOCK_WITH_MANY_NUMBERS), "indexBy");
+    }
+
+    /**
+     * A number only the step compares an element with, on the negative side: written as a
+     * negation of a literal, which is a border all the same.
+     */
+    @Test
+    void aNegativeNumberOnlyTheStepComparesIsReached() {
+        String source = """
+                module repro.negative
+
+                behavior check : (xs: List<Int>) -> Bool
+                let check (xs) = List.length(xs) >= 2 && List.any(x -> x == -100000, xs)
+
+                example check
+                    | "none" : ([ ]) -> false
+                    | "one" : ([ 1 ]) -> false
+                    | "two" : ([ 1, 2 ]) -> false
+                    | "three" : ([ 5, 6, 7 ]) -> false
+                """;
+
+        assertToldApart(measured(source), "any");
+    }
+
+    /** The side of a negative border the difference lies on is either: here it is the one below. */
+    @Test
+    void aNegativeBorderIsToldApartFromEitherSide() {
+        String source = """
+                module repro.below
+
+                behavior check : (xs: List<Int>) -> Bool
+                let check (xs) = List.length(xs) >= 2 && List.any(x -> x < -100000, xs)
+
+                example check
+                    | "none" : ([ ]) -> false
+                    | "one" : ([ 1 ]) -> false
+                    | "two" : ([ 1, 2 ]) -> false
+                    | "three" : ([ 5, 6, 7 ]) -> false
+                """;
+
+        assertToldApart(measured(source), "any");
+    }
+
+    /**
+     * A number the walk reads, through what it asks a dependency for, is compared in many places,
+     * so its classes are many, and the rows that fill each of them tell the rewrite nothing: a
+     * search of those classes must not take the runs the answer a dependency gives needs.
+     */
+    @Test
+    void manyClassesThatTellNothingApartDoNotTakeTheRunsOfTheAnswer() {
+        StringBuilder forks = new StringBuilder();
+        for (int at = 1; at <= 12; at++) {
+            forks.append("    let f").append(at).append(" = if n > ").append(at * 10)
+                    .append(" then 1 else 0\n");
+        }
+        for (char other = 'a'; other <= 'f'; other++) {
+            forks.append("    let g").append(other).append(" = if ").append(other)
+                    .append(" > 10 then 1 else 0\n");
+        }
+        String source = """
+                module repro.hogging
+
+                data Stock = { sku: String, qty: Int }
+
+                behavior readStock : (sku: String, n: Int) -> List<Stock>
+
+                behavior available : (sku: String, want: Int, n: Int, a: Int, b: Int, c: Int, d: Int, e: Int, f: Int) -> Int
+                    depends on readStock
+
+                let available (sku, want, n, a, b, c, d, e, f, readStock) = {
+                %s    let found = List.indexBy(.sku, readStock(sku, n))
+                        |> Map.get(sku)
+                        |> Option.map(s -> s.qty >= want)
+                        |> Option.withDefault(false)
+                    if found then f1 + f2 + f3 + f4 + f5 + f6 + f7 + f8 + f9 + f10 + f11 + f12 + ga + gb + gc + gd + ge + gf else 99
+                }
+
+                fake readStock
+                    | _ -> [ Stock { sku = "apple", qty = 3 } ]
+
+                example available
+                    | "enough" : ("apple", 2, 0, 0, 0, 0, 0, 0, 0) -> 0
+                    | "too many" : ("apple", 5, 0, 0, 0, 0, 0, 0, 0) -> 99
+                    | "unknown" : ("pear", 1, 0, 0, 0, 0, 0, 0, 0) -> 99
+                """.formatted(forks);
+
+        assertToldApart(measured(source), "indexBy");
+    }
+
+    private static void assertToldApart(Compilation compilation, String walk) {
+        WalkRewritesOwed.assertToldApart(compilation, walk);
     }
 
     /** The walk itself reads many numbers, so the classes of those are many as well. */
@@ -122,18 +212,8 @@ class ARewriteIsToldApartByWhatItsStepObservesTest {
                     | "unknown" : ("pear", 1, 0, 0, 0, 0) -> false
                 """;
 
-        assertEquals(List.of(), undecided(measured(source)));
-    }
-
-    private static List<String> undecided(Compilation compilation) {
-        return page(compilation).lines().map(String::strip)
-                .filter(line -> line.startsWith("? not decided whether a row would come out"))
-                .toList();
-    }
-
-    private static String page(Compilation compilation) {
-        return AdequacyReport.of(compilation)
-                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+        assertToldApart(measured(source), "indexBy");
+        assertToldApart(measured(source), "filter");
     }
 
     private static Compilation measured(String source) {
