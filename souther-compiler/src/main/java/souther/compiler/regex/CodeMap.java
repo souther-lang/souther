@@ -357,6 +357,14 @@ public final class CodeMap {
     }
 
     /**
+     * Whether every string with a code point is answered with a string with one: no code point is
+     * answered with nothing, and the form put over the answers drops none.
+     */
+    public boolean answersEveryCodePointWithSome() {
+        return answeredElsewhere.values().stream().noneMatch(String::isEmpty);
+    }
+
+    /**
      * The code points of the domain sent to themselves. A string of only these converts to itself,
      * however many of each it holds and in whatever order.
      */
@@ -437,6 +445,18 @@ public final class CodeMap {
         List<Automaton.Step> loop = symbols.isEmpty() ? List.of()
                 : List.of(new Automaton.Step(symbols, 0));
         return Language.canonical(Automaton.madeOf(List.of(loop), accepting), meter);
+    }
+
+    /** Every string with at least one code point whose code points are all among {@code symbols},
+     *  or null past what {@code meter} allows. */
+    public static Language nonemptyStringsOf(CodePoints symbols, Meter meter) {
+        BitSet accepting = new BitSet();
+        accepting.set(1);
+        List<List<Automaton.Step>> steps = symbols.isEmpty()
+                ? List.of(List.of(), List.of())
+                : List.of(List.of(new Automaton.Step(symbols, 1)),
+                        List.of(new Automaton.Step(symbols, 1)));
+        return Language.canonical(Automaton.madeOf(steps, accepting), meter);
     }
 
     /** Every string that holds some code point of {@code some}, or null past what {@code meter}

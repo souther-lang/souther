@@ -83,18 +83,26 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
     }
 
     /**
-     * The relation is read whichever end of the length the rule places: the text is shown over a
-     * region, what is left out of it being the strings the lowercase's image is not shown for, and
-     * no run is said to stop on the way to it, as the lowercase stops one only past what a
-     * {@code String} holds. The needs are read over the strings the rule leaves them, whichever
-     * those are. A rule leaving every length is no bound, and the relation is read as it is over a
-     * string no rule holds.
+     * The relation is read whichever end of the length the rule places, and no run is said to stop
+     * on the way to it, as the lowercase stops one only past what a {@code String} holds. The needs
+     * are read over the strings the rule leaves them, whichever those are. Where the rule leaves
+     * every length from one, the text is shown on every side, since what the lowercase answers of a
+     * string with a code point is a string with one, and each text is its own need. A rule leaving
+     * every length is no bound, and the relation is read as it is over a string no rule holds.
      */
     @Test
     void theLengthBoundDoesNotDecideWhetherTheRelationIsRead() {
+        for (String rule : List.of("String.length(value) >= 1", "String.length(value) > 0")) {
+            assertEquals(new TreeSet<String>(),
+                    aboutTheRelation(measuredNeed(rule, CONTAINS_LOWERED)), rule);
+        }
+        // Where the rule keeps out some lengths, a text is its own need only at the lengths left, so
+        // the texts holding a code point the lowercase answers otherwise than by one stable starter
+        // are shown over a region: a text of one code point is a need's lowercase only where that
+        // code point lengthens, and no length rule says which does.
         TreeSet<String> textOverARegion = new TreeSet<>(List.of("relation_shown_over_a_region"));
-        for (String rule : List.of("String.length(value) >= 1", "String.length(value) > 0",
-                "String.length(value) >= 2", "String.length(value) >= 1 && String.length(value) <= 5",
+        for (String rule : List.of("String.length(value) >= 2",
+                "String.length(value) >= 1 && String.length(value) <= 5",
                 "String.length(value) == 3", "String.length(value) < 8")) {
             assertEquals(textOverARegion, aboutTheRelation(measuredNeed(rule, CONTAINS_LOWERED)),
                     rule);
@@ -289,8 +297,9 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
     /**
      * The shape of the CRM's {@code answersANeed}: the needs are a list of values held only by a
      * length rule, the business case is any string, and both are lowercased. The business case is
-     * shown over a region; every need, of a code point or more, is inside some business case and
-     * outside another, so the relation tells none of them apart.
+     * shown on every side, the empty string included, which has no need inside it; every need, of a
+     * code point or more, is inside some business case and outside another, so the relation tells
+     * none of them apart.
      */
     @Test
     void aBusinessCaseIsReadAgainstNeedsHeldOnlyByALengthRule() {
@@ -313,7 +322,6 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
                 .forEach(each -> byPlace.computeIfAbsent(each.at(), any -> new ArrayList<>())
                         .add(each.reason()));
         assertEquals(Map.of(
-                "businessCase", List.of(UndividedPosition.Reason.RELATION_SHOWN_OVER_A_REGION),
                 "needs[*]", List.of(UndividedPosition.Reason.RULE_TELLS_NOTHING_APART)),
                 byPlace);
     }

@@ -65,11 +65,15 @@ final class WhatAConversionAnswers {
         Language values = within == null ? null : map.answersTo(within, meter);
         // A string outside the map that is left as it stands is its own answer, which is among
         // the strings left standing. Only a string of neither kind is answered with what nothing
-        // here works out, and every code point of that is one the outermost conversion leaves.
+        // here works out, and every code point of that is one the outermost conversion leaves. The
+        // string is not the empty one, which is exact, and its answer has a code point where none
+        // is answered with nothing.
         Language answeredUnseen = outside == null || standing == null ? outside
                 : outside.and(standing.not(meter), meter);
         Language left = answeredUnseen == null || answeredUnseen.isEmpty() ? null
-                : CodeMap.stringsOf(map.leftAlone(), meter);
+                : map.answersEveryCodePointWithSome()
+                        ? CodeMap.nonemptyStringsOf(map.leftAlone(), meter)
+                        : CodeMap.stringsOf(map.leftAlone(), meter);
         Language shown = values == null || standing == null ? values : values.or(standing, meter);
         Language may = shown == null || outside == null ? null
                 : left == null ? shown : shown.or(left, meter);
