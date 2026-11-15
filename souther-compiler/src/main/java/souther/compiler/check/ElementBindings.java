@@ -717,9 +717,41 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         }
         ValueName operation = call.declared().operation();
         Combinators.Handed handed = Combinators.handedTo(operation, call.args(), blockOf);
-        return handed != null && answersOnePerElementOf(operation, handed.container(), call.args())
+        if (handed == null) {
+            return null;
+        }
+        return answersOnePerElementOf(operation, handed.container(), call.args())
                 ? new StepOnEachElement(handed.step(), handed.element(), handed.container())
-                : null;
+                : writesOneForEachElement(operation, handed, call.args());
+    }
+
+    /**
+     * The step of an operation that puts end to end the lists its closure answered of each element,
+     * where the closure answers a list of one element in every case: that element, one for each
+     * element of what it walks. {@code List.flatMap(x -> [f(x)], xs)} is {@code List.map(x -> f(x),
+     * xs)} in all but its name, and is read as it, by the one element written.
+     *
+     * <p>Only where the list is written with the one element in every case. One written under a
+     * choice ({@code if keep(x) then [x] else []}) is none for some elements, and answers fewer
+     * than it walked.
+     */
+    private static StepOnEachElement writesOneForEachElement(ValueName operation,
+                                                             Combinators.Handed handed,
+                                                             List<Core> args) {
+        BoundOperationFacts.Assembled assembled =
+                DefaultBoundOperationFacts.get().assembles(operation);
+        if (assembled == null || assembled.piece() != PieceOfAnElement.WHAT_THE_CLOSURE_ANSWERS) {
+            return null;
+        }
+        int source = CallArguments.positionOf(assembled.source(), operation);
+        if (source < 0 || source >= args.size() || args.get(source) != handed.container()
+                || !(Core.withoutStanding(handed.step().body()) instanceof Core.ListLit written)
+                || written.elements().size() != 1) {
+            return null;
+        }
+        Core.Block step = new Core.Block(handed.step().params(), handed.step().paramTypes(),
+                written.elements().getFirst(), handed.step().pos());
+        return new StepOnEachElement(step, handed.element(), handed.container());
     }
 
     /**
