@@ -2003,10 +2003,11 @@ final class Coverages {
                         // and not by the ones that happened to be read.
                         // What nothing was read against it is the border's own measurement to
                         // say, and it is carried as that measurement says it.
+                        // Every border of the call weighs the computation's positions, so one with
+                        // no reading of its weights is one nothing was read against.
                         ofOneCall.add(reading.tilt().map(tilt -> tilt.evidence().get())
                                 .orElseGet(() -> TiltOfADerivedValue.RowsOnABorder.unread(
-                                        reading.absent() == null ? WeakeningSet.none()
-                                                : reading.absent().weakening())));
+                                        reading.absent().weakening())));
                     }
                 }
                 byCall.put(copy, ofOneCall);
