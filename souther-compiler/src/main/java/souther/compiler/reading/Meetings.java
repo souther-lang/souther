@@ -102,7 +102,7 @@ final class Meetings {
                     notJoined.add(why);
                     return;
                 }
-                case KeptElements.Read.Factors(var each) -> factors.addAll(each);
+                case KeptElements.Read.Factors found -> factors.addAll(found.each());
             }
         } else {
             return;
@@ -172,17 +172,35 @@ final class Meetings {
      * would be seen meeting it.
      */
     private static List<Outcome> outcomesOf(Core e, ValueArrivals<Outcome> reading) {
-        // What a run is seen doing, and with it the ways that were written down for it: two ways
-        // a run is not seen to tell apart are one outcome, which a row settles by either.
-        Map<Outcome, List<List<Condition>>> ways = new LinkedHashMap<>();
-        for (Arrival<Outcome> each : reading.waysAt(e).orNone()) {
-            if (each.isComplete()) {
-                ways.computeIfAbsent(each.provenance().seen(), _ -> new ArrayList<>())
-                        .add(each.path().holds().stream().map(Decision::constrains).toList());
-            }
+        return outcomesFrom(reading.waysAt(e).orNone());
+    }
+
+    /**
+     * The outcomes {@code arrivals} reach, as what a run is seen doing: two ways a run is not seen
+     * to tell apart are one outcome, which a row settles by either.
+     *
+     * <p>An outcome is told the ways that reach it only where every one of them was written down
+     * whole. One the naming could not write is a part of the region the others do not state, and the
+     * union of the rest would be narrower than the outcome. Such an outcome is still offered, with
+     * the region left unsaid.
+     */
+    static List<Outcome> outcomesFrom(List<Arrival<Outcome>> arrivals) {
+        Map<Outcome, List<Arrival<Outcome>>> reaching = new LinkedHashMap<>();
+        for (Arrival<Outcome> each : arrivals) {
+            reaching.computeIfAbsent(each.provenance().seen(), _ -> new ArrayList<>()).add(each);
         }
         List<Outcome> out = new ArrayList<>();
-        ways.forEach((seen, written) -> out.add(seen.comingOutBy(written)));
+        reaching.forEach((seen, reached) -> {
+            if (reached.stream().noneMatch(Arrival::isComplete)) {
+                return;
+            }
+            out.add(reached.stream().allMatch(Arrival::isComplete)
+                    ? seen.comingOutBy(reached.stream()
+                            .map(each -> each.path().holds().stream()
+                                    .map(Decision::constrains).toList())
+                            .toList())
+                    : seen);
+        });
         return out;
     }
 

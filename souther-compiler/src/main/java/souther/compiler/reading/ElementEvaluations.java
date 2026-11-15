@@ -85,11 +85,38 @@ final class ElementEvaluations {
         }
     }
 
-    /** The joined decisions, each comparison's in the order a run makes them. */
-    record Joined(List<Decision> decisions) {
+    /**
+     * The joined decisions, each comparison's in the order a run makes them, and how many elements
+     * are kept, as a count of them is made of.
+     *
+     * <p>A total takes no part of an element nothing varies, and a count does: the number kept is
+     * what is kept whatever a row chooses, plus the weight of each decision that keeps. So a count
+     * is no function of the decisions alone, and a reader that took it for one would count a fixed
+     * element as none and several elements one decision keeps as one.
+     *
+     * @param weights how many occurrences each decision keeps, one for each, in the same order; none
+     *                for a decision that decides what an occurrence is worth
+     * @param fixed   how many occurrences are kept whatever a row chooses, or empty where that is not
+     *                known: a count of what a test that is the same on every run keeps is not worked
+     *                out here, since which way that test comes out is not
+     */
+    record Joined(List<Decision> decisions, List<Integer> weights, OptionalInt fixed) {
 
         Joined {
             decisions = List.copyOf(decisions);
+            weights = List.copyOf(weights);
+            Objects.requireNonNull(fixed, "a count has a base or none that is known");
+        }
+    }
+
+    /** What the occurrences nothing varies come to, as the base of a count. */
+    private static final class Fixed {
+
+        private int kept;
+        private boolean known = true;
+
+        OptionalInt asKnown() {
+            return known ? OptionalInt.of(kept) : OptionalInt.empty();
         }
     }
 
@@ -126,9 +153,11 @@ final class ElementEvaluations {
      *                     hold, and an element kept by what a quantifier states is one of them
      * @param folded       the constant a truth comes to on every run, where it comes to one
      * @param sameOnEveryRun whether a truth is made of what is written and nothing a run is handed,
-     *                     so that it comes out the same on every run whether or not it folds. An
-     *                     occurrence it keeps is taken to be there: what such a truth is is not
-     *                     worked out here, and nothing a row chooses varies it
+     *                     so that it comes out the same on every run whether or not it folds. Nothing
+     *                     a row chooses varies it, so it is no decision; which way it comes out is
+     *                     not worked out, so whether an occurrence it keeps is there is not known,
+     *                     which a count of them says ({@link Joined#fixed}) and a join of what else
+     *                     keeps that occurrence declines
      * @param choicesOf    what decides the value of an occurrence
      */
     static Result of(List<ReadMeaning.Occurrence> occurrences,
@@ -138,10 +167,11 @@ final class ElementEvaluations {
                      Predicate<Denotation> sameOnEveryRun,
                      Function<Denotation, ValueChoices.Of> choicesOf) {
         List<Deciding> deciding = new ArrayList<>();
+        Fixed base = new Fixed();
         for (ReadMeaning.Occurrence occurrence : occurrences) {
             if (contributes.test(occurrence)) {
                 Deciding each = decidingOf(occurrence, valueMatters, statementsCountIt, folded,
-                        sameOnEveryRun, choicesOf);
+                        sameOnEveryRun, choicesOf, base);
                 if (each != null) {
                     deciding.add(each);
                 }
@@ -159,11 +189,16 @@ final class ElementEvaluations {
         Core.Binary keeping = null;
         Core.Binary valuing = null;
         WhyNotJoined failed = null;
+        Map<Decision, Integer> weights = new IdentityHashMap<>();
         for (Deciding one : deciding) {
             ReadMeaning.Occurrence occurrence = one.occurrence();
             List<ReadMeaning.Occurrence.Kept> keptBy = one.keptBy();
             if (!keptBy.isEmpty()) {
-                WhyNotJoined why = keptBy.size() > 1 ? WhyNotJoined.KEPT_BY_SEVERAL : null;
+                // Kept by a test the same on every run beside what varies it: whether it is there
+                // at all is not worked out, and a decision of an element that may not be is no
+                // decision to ask a row for.
+                WhyNotJoined why = keptBy.size() > 1 || one.unsure()
+                        ? WhyNotJoined.KEPT_BY_SEVERAL : null;
                 if (why == null && keptBy.getFirst() instanceof ReadMeaning.Occurrence.Kept.ATruth(
                         Denotation truth, boolean holds, OptionalInt application)) {
                     // A conjunction is an operator and stands as a Binary, and is not one
@@ -175,10 +210,12 @@ final class ElementEvaluations {
                         why = WhyNotJoined.NOT_ONE_CLOSURE;
                     } else {
                         keeping = written;
-                        Decision already = put(byComparison, inTheOrderMet, new Decision(written,
+                        Decision filed = put(byComparison, inTheOrderMet, new Decision(written,
                                 application, truth, holds));
-                        if (already != null && already.holds() != holds) {
+                        if (filed.holds() != holds) {
                             why = WhyNotJoined.AN_APPLICATION_SAID_TWO_THINGS;
+                        } else {
+                            weights.merge(filed, 1, Integer::sum);
                         }
                     }
                 } else if (why == null) {
@@ -224,13 +261,17 @@ final class ElementEvaluations {
                     .forEach(decisions::add);
         }
         return decisions.isEmpty() ? new Result.NotJoined(WhyNotJoined.NOT_ONE_COMPARISON)
-                : new Result.Matched(new Joined(decisions));
+                : new Result.Matched(new Joined(decisions,
+                        decisions.stream().map(each -> weights.getOrDefault(each, 0)).toList(),
+                        base.asKnown()));
     }
 
     /** An occurrence that something varies: what keeps it, once what is settled is set aside, and
-     *  what decides its worth, where that matters. */
+     *  what decides its worth, where that matters. Whether it is there at all is not known where a
+     *  test that is the same on every run also keeps it ({@code unsure}). */
     private record Deciding(ReadMeaning.Occurrence occurrence,
-                            List<ReadMeaning.Occurrence.Kept> keptBy, ValueChoices.Of choice) { }
+                            List<ReadMeaning.Occurrence.Kept> keptBy, ValueChoices.Of choice,
+                            boolean unsure) { }
 
     /**
      * Which evaluation of {@code fork} decides {@code occurrence}, or null where that is not
@@ -281,8 +322,12 @@ final class ElementEvaluations {
                                        boolean statementsCountIt,
                                        Function<Denotation, Optional<Object>> folded,
                                        Predicate<Denotation> sameOnEveryRun,
-                                       Function<Denotation, ValueChoices.Of> choicesOf) {
+                                       Function<Denotation, ValueChoices.Of> choicesOf,
+                                       Fixed base) {
         List<ReadMeaning.Occurrence.Kept> keptBy = new ArrayList<>();
+        // Whether a test kept it by that is the same on every run, of which the answer is not worked
+        // out: it is kept on every run or on none, and which is not known.
+        boolean unsure = false;
         for (ReadMeaning.Occurrence.Kept kept : occurrence.keptWhere()) {
             if (kept instanceof ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean holds,
                                                                    OptionalInt _)) {
@@ -294,22 +339,26 @@ final class ElementEvaluations {
                 }
                 // The same on every run, so nothing a row chooses.
                 if (sameOnEveryRun.test(truth)) {
+                    unsure = true;
                     continue;
                 }
             }
             keptBy.add(kept);
         }
+        base.known &= !unsure;
         if (statementsCountIt && isKeptByAQuantifierHolding(keptBy)) {
             // How many are kept, where each is kept by what a quantifier states of a container
             // and the count is compared, is the count of statements that hold. That is read as
             // the statements are, and says itself when it cannot be.
+            base.known = false;
             return null;
         }
         ValueChoices.Of choice = valueMatters ? choicesOf.apply(occurrence.value()) : null;
         if (keptBy.isEmpty() && (choice == null || choice instanceof ValueChoices.Of.Fixed)) {
+            base.kept++;
             return null;
         }
-        return new Deciding(occurrence, keptBy, choice);
+        return new Deciding(occurrence, keptBy, choice, unsure);
     }
 
     /**
@@ -411,7 +460,8 @@ final class ElementEvaluations {
                         call.operation());
     }
 
-    /** {@code decision} filed under its comparison and application, or the one already there. */
+    /** The decision filed under {@code decision}'s comparison and application: it, or the one
+     *  already there. */
     private static Decision put(Map<Core.Binary, Map<Integer, Decision>> byComparison,
                                 List<Core.Binary> inTheOrderMet, Decision decision) {
         Map<Integer, Decision> filed = byComparison.get(decision.comparison());
@@ -420,6 +470,6 @@ final class ElementEvaluations {
             byComparison.put(decision.comparison(), filed);
             inTheOrderMet.add(decision.comparison());
         }
-        return filed.putIfAbsent(decision.evaluation().orElse(UNNUMBERED), decision);
+        return filed.computeIfAbsent(decision.evaluation().orElse(UNNUMBERED), _ -> decision);
     }
 }

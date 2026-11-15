@@ -13,7 +13,8 @@ import java.util.List;
  *
  * <p>{@code List.length(List.filter(p, [a, b])) >= 1} comes out true where {@code a} is kept, where
  * {@code b} is, or where both are, and false where neither is. Each element's keeping is a decision
- * {@link KeptElements} already reads; the comparison is a statement about how many of them hold, and
+ * {@link KeptElements} already reads; the comparison is a statement about how many elements are
+ * kept, which is those kept whatever a row chooses and the weight of each decision that keeps, and
  * its ways are the assignments of the decisions that make it come out as asked. A way is every
  * decision decided one way or the other, so the ways are apart: a row is in one of them and no
  * other.
@@ -61,13 +62,24 @@ final class WaysOfACount {
         if (!Meetings.consumesItsElements(call) || Meetings.combinesItsElements(call)) {
             return null;
         }
-        if (!(kept.of(call, naming, body, true) instanceof KeptElements.Read.Factors(var each))
-                || each.isEmpty() || each.size() > MOST_ELEMENTS) {
+        // Only where how many are kept whatever a row chooses is known: the ways are the
+        // assignments of the decisions that bring the count out as asked, and a count that rests on
+        // an element nobody worked out is one they would get wrong.
+        if (!(kept.of(call, naming, body, true) instanceof KeptElements.Read.Factors found)
+                || found.fixed().isEmpty() || found.each().isEmpty()
+                || found.each().size() > MOST_ELEMENTS) {
             return null;
         }
+        List<Factor> each = found.each();
         List<WayIn> ways = new ArrayList<>();
         for (int assignment = 0; assignment < 1 << each.size(); assignment++) {
-            if (relation.holds(Long.compare(Integer.bitCount(assignment), than)) != want) {
+            long count = found.fixed().getAsInt();
+            for (int element = 0; element < each.size(); element++) {
+                if ((assignment >> element & 1) == 1) {
+                    count += found.weights().get(element);
+                }
+            }
+            if (relation.holds(Long.compare(count, than)) != want) {
                 continue;
             }
             List<Decision> way = new ArrayList<>();

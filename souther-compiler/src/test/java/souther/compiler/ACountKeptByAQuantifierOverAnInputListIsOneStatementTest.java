@@ -1,11 +1,13 @@
 package souther.compiler;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Weakening;
 import souther.compiler.report.AdequacyReport;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
@@ -86,6 +88,8 @@ class ACountKeptByAQuantifierOverAnInputListIsOneStatementTest {
         assertFalse(behavior.weakenedBy().causes().stream()
                         .anyMatch(Weakening.MeetingsNotJoined.class::isInstance),
                 () -> "the count is read as the statement it is: " + behavior.weakenedBy());
+        assertEquals(MeasurementStatus.COMPLETE, behavior.status(),
+                () -> "and nothing is left unmeasured: " + behavior.weakenedBy());
     }
 
     private static AdequacyReport.BehaviorReport behaviorOf(String model) {

@@ -30,7 +30,10 @@ public record Outcome(List<Decision> holds) {
      * <p>Told only where there is one arm to tell it of. Ways of an outcome of several forks are not
      * the ways of any one of them.
      *
-     * @param ways the conjunctions that were written down as settling it, none where they were not
+     * @param ways every way the decision is settled this way, as the conjunctions they were written
+     *             down as; none where they were not all written down. Never some of them: a row is
+     *             looked for in the union of these and nowhere else, so a way left out is rows
+     *             the search is never offered
      */
     Outcome comingOutBy(List<List<Condition>> ways) {
         long arms = holds.stream().filter(each -> each.constrains() instanceof Condition.Arm).count();
