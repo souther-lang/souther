@@ -490,9 +490,8 @@ final class Classing {
 
     /**
      * The values of a position one rule shows on neither of its sides, which no class holds: the
-     * strings it shows nothing of for its operations, those longer than the other side is written
-     * round, and those of lengths no run gets to it at ({@link SetStatement#leftOpen}), each met
-     * with what the position holds.
+     * strings it shows nothing of for its operations, and those of lengths no run gets to it at
+     * ({@link SetStatement#leftOpen}), each met with what the position holds.
      *
      * @param statement the rule
      * @param open      the values left open, each as long as it is left open at; none of them
@@ -533,10 +532,8 @@ final class Classing {
             return Worked.refusedAt(forTheOperations.refused());
         }
         open.addAll(forTheOperations.answer());
-        List<ValuesWithin> otherwise = new ArrayList<>(statement.pastWhatIsWritten());
-        otherwise.addAll(statement.notReached());
         Worked<List<ValuesWithin>> forAnotherReason =
-                heldOf(term, admits, otherwise, allowance);
+                heldOf(term, admits, statement.notReached(), allowance);
         if (forAnotherReason.refused() != null) {
             return Worked.refusedAt(forAnotherReason.refused());
         }

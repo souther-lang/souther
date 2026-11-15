@@ -99,10 +99,8 @@ public final class ConversionAnswers {
      *                and every value whose conversion is in it: those and the strings with a code
      *                point not answered exactly, of code points each answered in some way that
      *                decomposes into what the language's code points do
-     * @param asLong  whether a string of {@code exactly} is converted into one as long as it is:
-     *                no code point it may hold is answered with several
      */
-    public record Seen(Language exactly, Language perhaps, boolean asLong) {}
+    public record Seen(Language exactly, Language perhaps) {}
 
     private final CodeMap map;
     private final UnaryOperator<String> conversion;
@@ -229,9 +227,8 @@ public final class ConversionAnswers {
             }
         }
         CodePoints unknown = CodeMap.codePointsOf(unsaid);
-        boolean asLong = through.isEmpty();
         if (unknown.isEmpty()) {
-            return new Seen(exactly, exactly, asLong);
+            return new Seen(exactly, exactly);
         }
         // Beside such a code point, one answered exactly is answered with a stable starter, which
         // a mark after it may be composed into: it stands where its answer decomposes into what
@@ -252,7 +249,7 @@ public final class ConversionAnswers {
         stops.set(1);
         Language withOne = Language.canonical(Automaton.madeOf(free, stops), meter);
         Language perhaps = withOne == null ? null : exactly.or(withOne, meter);
-        return perhaps == null ? null : new Seen(exactly, perhaps, asLong);
+        return perhaps == null ? null : new Seen(exactly, perhaps);
     }
 
     /**

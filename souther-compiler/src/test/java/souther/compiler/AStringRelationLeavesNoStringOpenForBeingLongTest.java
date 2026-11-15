@@ -10,11 +10,11 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * A string longer than any partner can be written round is shown on the false side of a relation,
- * and a string that needs nothing written round it is shown at every length: the longest strings
- * are left in no class only where the room round a string is not worked out.
+ * Where a {@code String} stops is no distinction a model made, so a relation between strings
+ * leaves no string open for being long: a string is on the side the languages put it at every
+ * length, however much stands round it in the other value.
  */
-class TheLongestStringsAreOnTheFalseSideOfARelationTest {
+class AStringRelationLeavesNoStringOpenForBeingLongTest {
 
     private static final String EMAIL = """
             data EmailAddress = String
@@ -46,24 +46,17 @@ class TheLongestStringsAreOnTheFalseSideOfARelationTest {
                                          domainOf(email)))
             """;
 
-    /**
-     * An address is at least two code points longer than its domain, so a domain longer than the
-     * longest string less two is the domain of no address: it is on the side no address is, and
-     * nothing of the domains is left open.
-     */
+    /** A domain is the domain of some address however long it is: nothing of the domains is left
+     *  open. */
     @Test
-    void aDomainLongerThanAnyAddressWrittenRoundItIsNoAddressesDomain() {
+    void aDomainOfAnyLengthIsOnASide() {
         assertEquals(Map.of(), WhereAStringRelationIsLeftOpen.leftOpen(
                 "module c2\n" + EMAIL + DOMAIN + SCREEN, "screen"));
     }
 
-    /**
-     * A string that is a value stands in a value with nothing written round it. A string looked
-     * for in values of {@code [a-z]+} is itself one, whatever its length, so it is shown at every
-     * length.
-     */
+    /** A string looked for in values of {@code [a-z]+} is shown at every length. */
     @Test
-    void aStringThatIsAValueNeedsNothingWrittenRoundItToStandInOne() {
+    void aStringLookedForInValuesOfNoBoundedLengthIsShownAtEveryLength() {
         assertEquals(Map.of(), WhereAStringRelationIsLeftOpen.leftOpen("""
                 module d3
 
@@ -75,13 +68,10 @@ class TheLongestStringsAreOnTheFalseSideOfARelationTest {
                 """, "f"));
     }
 
-    /**
-     * Where a string looked for is not itself a value, what is written round it is what the
-     * machine of the values needs: the open region stops at the longest string less that, and not
-     * at a guess from how many states the machine has.
-     */
+    /** A string looked for that is not itself a value is shown by the strings inside the values,
+     *  which the language of the values bounds: nothing is open past them. */
     @Test
-    void theRoomRoundAStringIsWhatTheMachineOfTheValuesNeeds() {
+    void aStringLookedForInBoundedValuesIsShownByTheStringsInsideThem() {
         Map<String, List<BlockReason.RelationShownOverARegion>> open =
                 WhereAStringRelationIsLeftOpen.leftOpen("""
                         module d4
@@ -94,7 +84,7 @@ class TheLongestStringsAreOnTheFalseSideOfARelationTest {
                         """, "f");
 
         // A string standing in "a??b" is one of up to four code points, so none longer is
-        // a value's string; the strings of the longest string less nothing are all on the false side.
+        // inside a value, and is on the false side.
         assertEquals(Map.of(), open);
     }
 }

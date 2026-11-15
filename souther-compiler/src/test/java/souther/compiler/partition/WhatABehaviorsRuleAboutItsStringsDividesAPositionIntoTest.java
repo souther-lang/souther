@@ -492,13 +492,14 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
     }
 
     /** {@code read}, its true side shown only as far as {@code longest}: the values of it longer
-     *  than that are shown on neither side, for no operation. */
+     *  than that are of lengths no run gets to the relation at, shown on neither side and for no
+     *  operation. */
     private static RuleEvidence shownUpTo(SetStatement read, long longest) {
         ValueSet holding = read.whenTrue().pieces().getFirst().values();
         return new RuleEvidence.BySet(new SetStatement(read.term(),
                 ValuesAtLengths.of(ValuesWithin.upTo(holding, longest)), read.whenFalse(),
                 read.statement(), read.origin(), List.of(),
-                List.of(ValuesWithin.longerThan(holding, longest)), List.of(),
+                List.of(ValuesWithin.longerThan(holding, longest)),
                 BlockReason.OperationsNotShown.NONE, List.of()));
     }
 

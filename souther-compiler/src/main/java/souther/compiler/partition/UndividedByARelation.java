@@ -1013,24 +1013,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * some row can have the equality come out true at, as far as each is shown.
      *
      * <p>Three regions of this side's strings, and none stands for another. A string of
-     * {@code canBe} no longer than {@code upTo} and of a length of {@code shownAt} is shown to be
-     * some value of the partner, so a row has the equality true there. A string outside
-     * {@code mayBe} is shown to be none, so the equality is false there whatever the partner
-     * holds. Every other string — of {@code mayBe} and not of {@code canBe}, or of {@code canBe}
-     * and longer or of another length — is shown neither, and no class of this side is drawn over
-     * it.
+     * {@code canBe} of a length of {@code shownAt} is shown to be some value of the partner, so a
+     * row has the equality true there. A string outside {@code mayBe} is shown to be none, so the
+     * equality is false there whatever the partner holds. Every other string — of {@code mayBe}
+     * and not of {@code canBe}, or of {@code canBe} and of another length — is shown neither, and
+     * no class of this side is drawn over it.
      *
-     * @param canBe   the strings shown to be some value of the partner, as far as {@code upTo}
-     *                goes; empty where none is
+     * <p>Each region is what the languages say at every length. Where a {@code String} stops is
+     * no distinction a model made, so no length of its own bounds a region: only the lengths a
+     * model states ({@code shownAt}, {@code reached}, {@code partnerHeldTo}) do.
+     *
+     * @param canBe   the strings shown to be some value of the partner; empty where none is
      * @param mayBe   the strings outside which no value of the partner is, which hold
      *                {@code canBe}
-     * @param upTo    the most code points a string of {@code canBe} is shown to be a value of the
-     *                partner at, for the longest string a value of the partner can be written
-     *                round it in; or null where every one of them is
-     * @param noneBeyond the most code points a string can have and be a value of the partner, for
-     *                the least a string the partner is a piece of has round it; a string of
-     *                {@code mayBe} longer than that is shown to be none of them, and is on the
-     *                false side. Null where there is no such length
      * @param shownAt the lengths a string of {@code canBe} is shown to be a value of the partner
      *                at, for the operations: the partner is held to them, and a string of another
      *                length is the answer for one of them only through what the operations'
@@ -1047,7 +1042,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                not of {@code canBe} are open at any length: whose image over the strings of
      *                a side is shown only where it is exact
      */
-    record StringsAPartnerCanHold(ValueSet canBe, ValueSet mayBe, Long upTo, Long noneBeyond,
+    record StringsAPartnerCanHold(ValueSet canBe, ValueSet mayBe,
                                   LengthRuns shownAt, StringsPastTheWay reached,
                                   StringsPastTheWay partnerHeldTo, String partner,
                                   BlockReason.OperationsNotShown operations)
@@ -1065,39 +1060,27 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * built again from one that has one does not read as a plain construction; that is
          * {@link #showing}, and the constructor above that names every component.
          */
-        static StringsAPartnerCanHold unreached(ValueSet canBe, ValueSet mayBe, Long upTo,
-                                                String partner) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, null, null, null, null,
+        static StringsAPartnerCanHold unreached(ValueSet canBe, ValueSet mayBe, String partner) {
+            return new StringsAPartnerCanHold(canBe, mayBe, null, null, null,
                     partner, BlockReason.OperationsNotShown.NONE);
-        }
-
-        /**
-         * The same strings, none of which longer than {@code longest} is any of the partner's
-         * values; null where there is no such length. The strings of {@code mayBe} that long are
-         * shown on the false side, which no plan of strings says: a plan for them would be a
-         * machine as long as the longest string.
-         */
-        StringsAPartnerCanHold noneBeyond(Long longest) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, longest, shownAt,
-                    reached, partnerHeldTo, partner, operations);
         }
 
         /** Strings shown to be the partner's values exactly where {@code canBe} holds them, and
          *  given no reach yet. */
         static StringsAPartnerCanHold unreached(ValueSet canBe, String partner) {
-            return unreached(canBe, canBe, null, partner);
+            return unreached(canBe, canBe, partner);
         }
 
         /** The same strings, with the operations whose image is not shown beyond them. */
         StringsAPartnerCanHold withTheImagesNotShownOf(List<String> named) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, shownAt,
+            return new StringsAPartnerCanHold(canBe, mayBe, shownAt,
                     reached, partnerHeldTo, partner, operations.andImagesOf(named));
         }
 
         /** The same strings, shown to be the partner's values only at {@code lengths}, the
          *  partner being held to them. */
         StringsAPartnerCanHold shownAt(LengthRuns lengths) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, lengths,
+            return new StringsAPartnerCanHold(canBe, mayBe, lengths,
                     reached, partnerHeldTo, partner, operations);
         }
 
@@ -1106,15 +1089,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * what is shown of a value that has been given its reach: a value built again from its
          * strings alone is shown at every length, and the reach it was given is gone.
          */
-        StringsAPartnerCanHold showing(ValueSet canBe, ValueSet mayBe, Long upTo) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, shownAt,
+        StringsAPartnerCanHold showing(ValueSet canBe, ValueSet mayBe) {
+            return new StringsAPartnerCanHold(canBe, mayBe, shownAt,
                     reached, partnerHeldTo, partner, operations);
         }
 
         /** These, shown only at the lengths {@code lengths}, which every other length is left
          *  open at. */
         StringsAPartnerCanHold reachedAt(StringsPastTheWay lengths) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, shownAt,
+            return new StringsAPartnerCanHold(canBe, mayBe, shownAt,
                     lengths, partnerHeldTo, partner, operations);
         }
 
@@ -1134,21 +1117,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 throw new IllegalArgumentException("the partner is held to " + partnerHeldTo
                         + ", and " + lengths + " is no lengths beside it");
             }
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, shownAt,
+            return new StringsAPartnerCanHold(canBe, mayBe, shownAt,
                     reached, both, partner, operations);
         }
 
         /** Whether every string is shown on one side or the other, so that none is open. */
         boolean leavesNoneOpen() {
-            return upTo == null && noneBeyond == null && shownAt == null
-                    && reached == null && partnerHeldTo == null && canBe.equals(mayBe);
+            return shownAt == null && reached == null && partnerHeldTo == null
+                    && canBe.equals(mayBe);
         }
 
         /** Whether the same strings are shown on each side, whatever the partner is called. */
         boolean showsTheStringsOf(StringsAPartnerCanHold other) {
             return other != null && canBe.equals(other.canBe) && mayBe.equals(other.mayBe)
-                    && Objects.equals(upTo, other.upTo)
-                    && Objects.equals(noneBeyond, other.noneBeyond)
                     && Objects.equals(shownAt, other.shownAt)
                     && Objects.equals(reached, other.reached)
                     && Objects.equals(partnerHeldTo, other.partnerHeldTo);
@@ -1158,12 +1139,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          *  partners' where it is shown to be either's. */
         StringsAPartnerCanHold orAnother(StringsAPartnerCanHold other) {
             StringsAPartnerCanHold named = partner.equals(other.partner) ? this
-                    : new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, shownAt,
+                    : new StringsAPartnerCanHold(canBe, mayBe, shownAt,
                             reached, partnerHeldTo, partner + " or " + other.partner, operations);
-            // A string is none of either partner's values only past the longer of the two.
-            Long beyond = noneBeyond == null || other.noneBeyond == null ? null
-                    : Math.max(noneBeyond, other.noneBeyond);
-            return new StringsAPartnerCanHold(named.canBe, named.mayBe, named.upTo, beyond,
+            return new StringsAPartnerCanHold(named.canBe, named.mayBe,
                     named.shownAt, named.reached, named.partnerHeldTo, named.partner,
                     operations.and(other.operations));
         }
@@ -4123,55 +4101,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             mayBe = mayBeValues.perhaps();
             canBe = shownValues;
         }
-        // A string shown by being its own partner, or with starters written after it, is shown at
-        // every length it has, with nothing written round it; and so is one looked for that is
-        // itself a value the other side comes to, where nothing is converted on this side. Only
-        // the rest are shown inside a value written round them, and need room: where none of them
-        // is as long as the room leaves there is nothing to bound.
-        long room = standsInside && hereIsFirst
-                ? StringsOfAPiece.mostAroundAStringInside(shownOther) : 0;
-        Language writtenRound = besides(besides(canBe, ownPartner, meter),
-                mineMap == null ? shownOther : null, meter);
-        boolean boundedByWhatSurroundsIt = standsInside && hereIsFirst
-                && !noneIsLongerThan(writtenRound, TextExtents.LONGEST_STRING - room);
-        long upTo = boundedByWhatSurroundsIt
-                ? TextExtents.LONGEST_STRING - room : TextExtents.LONGEST_STRING;
         List<String> operations = new ArrayList<>(
                 operationsNotExactOver(mine.through(), languageOf(mineHolds)));
         operations.addAll(operationsNotExactOver(theirs.through(), partner));
-        StringsAPartnerCanHold out = upTo < 0
-                ? StringsAPartnerCanHold.unreached(ValueSet.NONE, ValueSet.matching(mayBe), null,
-                        called)
-                : StringsAPartnerCanHold.unreached(ValueSet.matching(canBe),
-                        ValueSet.matching(mayBe), boundedByWhatSurroundsIt ? upTo : null, called);
-        // A string inside another is shown at every length its room leaves, so what is open of it
-        // is open for its image only where some of the strings that may be are not shown to be. An
-        // equality is shown at lengths said after this.
+        StringsAPartnerCanHold out = StringsAPartnerCanHold.unreached(ValueSet.matching(canBe),
+                ValueSet.matching(mayBe), called);
+        // A string inside another is shown at every length, so what is open of it is open for its
+        // image only where some of the strings that may be are not shown to be. An equality is
+        // shown at lengths said after this.
         boolean imageIsWhy = !standsInside || !canBe.equals(mayBe);
         return imageIsWhy ? out.withTheImagesNotShownOf(operations) : out;
-    }
-
-    /** Whether no string of {@code some} is longer than {@code longest}; false where {@code some}
-     *  is not worked out. */
-    private static boolean noneIsLongerThan(Language some, long longest) {
-        if (some == null) {
-            return false;
-        }
-        if (some.isEmpty()) {
-            return true;
-        }
-        Language.Ends lengths = some.lengths();
-        return lengths != null && lengths.most() != null && lengths.most() <= longest;
-    }
-
-    /** {@code some} but for the strings of {@code apart}, which may be none; null where that is
-     *  past what {@code meter} allows. */
-    private static Language besides(Language some, Language apart, Meter meter) {
-        if (some == null || apart == null) {
-            return apart == null ? some : null;
-        }
-        Language outside = apart.not(meter);
-        return outside == null ? null : some.and(outside, meter);
     }
 
     /**
@@ -4383,7 +4322,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Language mayBe = converted == null || inexact == null ? null : converted.or(inexact, meter);
         return mayBe == null || mayBe.isEmpty() ? null
                 : StringsAPartnerCanHold.unreached(ValueSet.matching(converted),
-                        ValueSet.matching(mayBe), null, called)
+                        ValueSet.matching(mayBe), called)
                         .withTheImagesNotShownOf(operationsNotExactOver(whole.through(),
                                 languageOf(mineHolds)));
     }
@@ -4418,7 +4357,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         StringsAPartnerCanHold out = StringsAPartnerCanHold.unreached(ValueSet.matching(canBe),
-                ValueSet.matching(mayBe), null, called);
+                ValueSet.matching(mayBe), called);
         return canBe.equals(mayBe) ? out : out.withTheImagesNotShownOf(conversion.operations());
     }
 
@@ -4428,11 +4367,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * the machines for them are more than a piece's allowance
      * ({@link StringsOfAPiece#piecesOfValuesIn}).
      *
-     * <p>Told exactly where every string {@code mine} holds is short enough, and its pieces of the
-     * strings are its pieces of the values. Otherwise what is shown is kept apart from what is not:
-     * the pieces of the strings held as written, up to the length a value is written round each,
-     * are values' pieces, and nothing outside the pieces of the strings is — and the strings
-     * between are told neither way.
+     * <p>Told exactly where its pieces of the strings are its pieces of the values. Otherwise what
+     * is shown is kept apart from what is not: the pieces of the strings held as written are
+     * values' pieces, and nothing outside the pieces of the strings is — and the strings between
+     * are told neither way.
      */
     private static StringsAPartnerCanHold stringsThatAreThePiece(PiecesOfAString piece,
                                                                  ValueSet whole, ValueSet mine,
@@ -4451,17 +4389,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (shown == null) {
             return null;
         }
-        Language held = mine instanceof ValueSet.Matching(Language strings) ? strings : null;
-        long bound = lengthBoundOf(held);
-        if (shown.allUpTo(bound)) {
+        if (shown.all()) {
             return StringsAPartnerCanHold.unreached(ValueSet.matching(shown.ofTheStrings()),
                     called);
         }
-        // No piece is shorter than what is written round it, so none is shown a value's piece.
-        if (shown.upTo() < 0) {
-            return StringsAPartnerCanHold.unreached(ValueSet.NONE,
-                    ValueSet.matching(shown.ofTheStrings()), null, called);
-        }
+        Language held = mine instanceof ValueSet.Matching(Language strings) ? strings : null;
         // Only what this side holds is asked about, so the pieces of strings no value is written
         // as are no gap where this side holds none of them.
         boolean alike = shown.ofTheStrings().equals(shown.ofTheValues());
@@ -4471,9 +4403,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             alike = heldBetween != null && heldBetween.isEmpty();
         }
         return StringsAPartnerCanHold.unreached(ValueSet.matching(shown.ofTheValues()),
-                ValueSet.matching(alike ? shown.ofTheValues() : shown.ofTheStrings()),
-                bound <= shown.upTo() ? null : shown.upTo(), called)
-                .noneBeyond(shown.noneBeyond() >= bound ? null : shown.noneBeyond());
+                ValueSet.matching(alike ? shown.ofTheValues() : shown.ofTheStrings()), called);
     }
 
     /**
@@ -4507,14 +4437,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         StringsOfAPiece.Shown shown = read.get().shown();
         Language mayBe = read.get().mayBe();
         List<String> notShown = operationsNotExactOver(conversion, whole);
-        if (shown.upTo() < 0) {
-            return StringsAPartnerCanHold.unreached(ValueSet.NONE, ValueSet.matching(mayBe), null,
-                    called).withTheImagesNotShownOf(notShown);
-        }
-        Language held = mine instanceof ValueSet.Matching(Language strings) ? strings : null;
         return StringsAPartnerCanHold.unreached(ValueSet.matching(shown.ofTheValues()),
-                ValueSet.matching(mayBe), lengthBoundOf(held) <= shown.upTo() ? null : shown.upTo(),
-                called)
+                ValueSet.matching(mayBe), called)
                 .withTheImagesNotShownOf(notShown);
     }
 
@@ -4527,11 +4451,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * so, which is where the other reading is asked.
      *
      * <p>What is converted is a piece, whatever stands elsewhere in the string, so no code point
-     * of the rest of it is a reason for a piece to be open. A piece converted is no shorter than
-     * the piece, so a string of {@code mine} that long is the piece of a value wherever the piece
-     * is; and where no code point it is converted from is answered with several, it is as long, so
-     * the pieces no string has with the room round them are the strings of that length of
-     * {@code mine}.
+     * of the rest of it is a reason for a piece to be open.
      */
     private static StringsAPartnerCanHold piecesAConversionAnswersSeenInto(
             PiecesOfAString piece, CaseMapping conversion, Language whole, ValueSet mine,
@@ -4568,13 +4488,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // A piece with a code point that is answered in a way not said may convert into any string
         // of the language, so every one of them is one it may be.
         Language mayBeAtAll = someUnsaid ? held : mayBe;
-        long bound = lengthBoundOf(held);
         StringsAPartnerCanHold out = StringsAPartnerCanHold.unreached(ValueSet.matching(canBe),
-                ValueSet.matching(mayBeAtAll), bound <= shown.upTo() ? null : shown.upTo(),
-                called);
-        if (seen.asLong() && shown.noneBeyond() < bound) {
-            out = out.noneBeyond(shown.noneBeyond());
-        }
+                ValueSet.matching(mayBeAtAll), called);
         return canBe.equals(mayBeAtAll) ? out
                 : out.withTheImagesNotShownOf(conversion.operations());
     }
@@ -4695,8 +4610,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Language canBeInIt = canBe == null ? null : canBe.and(onThePieces, meter);
             Language mayBeInIt = mayBe.and(onThePieces, meter);
             return canBeInIt == null || mayBeInIt == null ? null
-                    : strings.showing(ValueSet.matching(canBeInIt), ValueSet.matching(mayBeInIt),
-                            strings.upTo());
+                    : strings.showing(ValueSet.matching(canBeInIt), ValueSet.matching(mayBeInIt));
         }
         Language having = StringsOfAPiece.wholesWithAPieceInWindow(onThePieces,
                 pieces.separator(), pieces.window().from(), pieces.until(), meter);
@@ -4709,7 +4623,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Language reached = ofTheString == null ? null : ofTheString.not(meter);
         Language open = reached == null ? null : mayBe.or(reached, meter);
         return open == null ? null
-                : strings.showing(strings.canBe(), ValueSet.matching(open), strings.upTo());
+                : strings.showing(strings.canBe(), ValueSet.matching(open));
     }
 
     /**

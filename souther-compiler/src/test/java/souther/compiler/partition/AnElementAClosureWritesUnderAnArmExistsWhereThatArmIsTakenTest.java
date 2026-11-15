@@ -77,13 +77,16 @@ class AnElementAClosureWritesUnderAnArmExistsWhereThatArmIsTakenTest {
      * The count of the list is read: the strings the attempt builds a value of and the rows they
      * are compared with are told apart by the comparison, and no example is merged, left waiting
      * or reported met for it. The comparison states a relation over the strings it is shown for,
-     * which is all it is read as.
+     * which is all it is read as. Every domain a row holds is a piece of some lead, however long
+     * it is, so the comparison parts the leads and none of the domains.
      */
     @Test
     void theElementsAreThePiecesTheAttemptBuildsAValueOf() {
         String report = report(MODEL);
         assertTrue(report.contains("lead is divided by comparison@15:64"), report);
-        assertTrue(report.contains("rows[*].domain is divided by comparison@15:64"), report);
+        assertTrue(report.contains("no line: comparison@15:64 — it was read to the end and every"
+                + " value this position holds comes out one side of it, about `rows[*].domain`"),
+                report);
         assertTrue(report.contains("rows 4    pending 0"), report);
         assertTrue(report.contains("branch      6/6"), report);
         assertTrue(report.contains("rules 2   taken 2"), report);

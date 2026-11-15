@@ -210,15 +210,14 @@ class CodePointsPastTheWayTest {
         CodePointsPastTheWay reached = counted(NOT_WHITESPACE, 1, null);
         CodePointsPastTheWay held = counted(NOT_WHITESPACE, 2, null);
         UndividedByARelation.StringsAPartnerCanHold shown =
-                new UndividedByARelation.StringsAPartnerCanHold(ValueSet.ANY, ValueSet.ANY, null,
-                        null, null, reached, held, "b",
+                new UndividedByARelation.StringsAPartnerCanHold(ValueSet.ANY, ValueSet.ANY,
+                        null, reached, held, "b",
                         BlockReason.OperationsNotShown.ofImages(List.of("String.uppercase")));
 
         UndividedByARelation.StringsAPartnerCanHold other =
-                shown.showing(ValueSet.NONE, ValueSet.ANY, 3L);
+                shown.showing(ValueSet.NONE, ValueSet.ANY);
 
         assertEquals(ValueSet.NONE, other.canBe());
-        assertEquals(3L, other.upTo());
         assertEquals(reached, other.reached());
         assertEquals(held, other.partnerHeldTo());
         assertEquals("b", other.partner());
