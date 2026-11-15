@@ -20,6 +20,11 @@ public enum WhyNotJoined {
     /** An occurrence is kept by what is not a truth about it, such as the arm of a choice. */
     KEPT_BY_ANOTHER_KIND,
 
+    /** An occurrence is kept by a test that reads nothing of the input beside what a row chooses,
+     *  and which way that test comes out is not worked out, so whether the occurrence is there is
+     *  not known and a decision of it may be one nothing can make. */
+    KEPT_BY_A_TEST_NOT_WORKED_OUT,
+
     /** What keeps an occurrence is not a comparison this reading places: a truth read off a field,
      *  a conjunction, a call. It is a decision all the same, and no place of the tree that runs
      *  records which way it came out apart from the others. */

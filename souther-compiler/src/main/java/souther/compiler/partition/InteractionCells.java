@@ -8,6 +8,9 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.Towards;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.WorkFigure;
+import souther.compiler.inputs.Requirements;
+import souther.compiler.reading.Condition;
+import souther.compiler.reading.Decision;
 import souther.compiler.reading.Factor;
 import souther.compiler.reading.Interaction;
 import souther.compiler.reading.Outcome;
@@ -342,17 +345,6 @@ public final class InteractionCells {
             }
             return false;
         }
-
-        /** How many cells the group has from {@code from} on, which is what a stopped search left. */
-        public int left(int from) {
-            int left = 0;
-            for (int index = from; index < size(); index++) {
-                if (at(index) != null) {
-                    left++;
-                }
-            }
-            return left;
-        }
     }
 
     /**
@@ -537,18 +529,8 @@ public final class InteractionCells {
             }
             TermPath at = narrowed.position().narrowedFrom().position();
             List<Refinement> left = narrowed.position().narrowing().atoms();
-            for (int axis = 0; axis < measured.size(); axis++) {
-                if (!(measured.get(axis).term() instanceof NumericTerm.ValueOf)
-                        || !measured.get(axis).path().equals(at)) {
-                    continue;
-                }
-                Cell said = Cell.anything(measured);
-                List<PartitionClass> classes = measured.get(axis).classes();
-                for (int c = 0; c < classes.size(); c++) {
-                    Refinement selects = classes.get(c).selects();
-                    said.allowed()[axis][c] = selects == null || left.contains(selects);
-                }
-                cell = cell.and(said);
+            for (int axis : caseAxesAt(measured, at)) {
+                cell = cell.and(onlyTheCases(measured, axis, left));
                 if (cell == null) {
                     return RowRegion.NONE;
                 }
@@ -668,18 +650,16 @@ public final class InteractionCells {
      * reading that owns them. Which decisions are here is decided once, so the claims cannot end up
      * being of a different set of them than the classes are.
      */
-    private static Placed placedBy(List<souther.compiler.reading.Decision> made,
-                                   MeasuredInput.MeasuredAxes axes) {
+    private static Placed placedBy(List<Decision> made, MeasuredInput.MeasuredAxes axes) {
         Steering steering = Steering.exactly(Cell.anything(axes.axes()));
-        for (souther.compiler.reading.Decision each : made) {
+        for (Decision each : made) {
             steering = steering.and(steeringOf(each.constrains(), axes));
             if (steering.impossible()) {
                 return null;
             }
         }
-        return new Placed(steering,
-                made.stream().map(souther.compiler.reading.Decision::claims).toList(),
-                made.stream().map(souther.compiler.reading.Decision::constrains).toList());
+        return new Placed(steering, made.stream().map(Decision::claims).toList(),
+                made.stream().map(Decision::constrains).toList());
     }
 
     /**
@@ -690,16 +670,14 @@ public final class InteractionCells {
      * condition leaves of its position. Anything the classes do not state is every row, said not to
      * be exact: no position a class of this run divides is what it is about.
      */
-    static Steering steeringOf(souther.compiler.reading.Condition condition,
-                               MeasuredInput.MeasuredAxes axes) {
+    static Steering steeringOf(Condition condition, MeasuredInput.MeasuredAxes axes) {
         // An arm a run is seen at whichever way it came is the ways it came by: a union of what
         // each way needs, and exact where every way is.
-        if (condition instanceof souther.compiler.reading.Condition.Arm arm
-                && !arm.comesOutBy().isEmpty()) {
+        if (condition instanceof Condition.Arm arm && !arm.comesOutBy().isEmpty()) {
             List<Steering> ways = new ArrayList<>();
-            for (List<souther.compiler.reading.Condition> way : arm.comesOutBy()) {
+            for (List<Condition> way : arm.comesOutBy()) {
                 Steering both = Steering.exactly(Cell.anything(axes.axes()));
-                for (souther.compiler.reading.Condition each : way) {
+                for (Condition each : way) {
                     both = both.and(steeringOf(each, axes));
                 }
                 ways.add(both);
@@ -717,7 +695,7 @@ public final class InteractionCells {
         };
     }
 
-    private static Steering underTheCases(souther.compiler.reading.Condition condition,
+    private static Steering underTheCases(Condition condition,
                                           ConditionPlacement.UnderTheCases under,
                                           MeasuredInput.MeasuredAxes axes) {
         List<Steering> eachCase = new ArrayList<>();
@@ -735,34 +713,43 @@ public final class InteractionCells {
      * What a row has to be for a name to stand where a case puts it, as the cases of the sums it
      * turns on. Not exact where a requirement is of a position no axis measures the value of.
      */
-    private static Steering takenBy(souther.compiler.inputs.Requirements taken, List<Axis> axes) {
+    private static Steering takenBy(Requirements taken, List<Axis> axes) {
         Cell cell = Cell.anything(axes);
         boolean exact = taken.crossings().isEmpty();
         for (var each : taken.refinements().entrySet()) {
-            int axis = -1;
-            for (int i = 0; i < axes.size(); i++) {
-                if (axes.get(i).term() instanceof NumericTerm.ValueOf
-                        && axes.get(i).path().equals(each.getKey())) {
-                    axis = i;
+            List<Integer> measuring = caseAxesAt(axes, each.getKey());
+            exact &= !measuring.isEmpty();
+            for (int axis : measuring) {
+                cell = cell.and(onlyTheCases(axes, axis, each.getValue().atoms()));
+                if (cell == null) {
+                    return new Steering(List.of(), true);
                 }
-            }
-            if (axis < 0) {
-                exact = false;
-                continue;
-            }
-            Cell said = Cell.anything(axes);
-            List<PartitionClass> classes = axes.get(axis).classes();
-            for (int c = 0; c < classes.size(); c++) {
-                Refinement selects = classes.get(c).selects();
-                said.allowed()[axis][c] = selects == null
-                        || each.getValue().atoms().contains(selects);
-            }
-            cell = cell.and(said);
-            if (cell == null) {
-                return new Steering(List.of(), true);
             }
         }
         return new Steering(List.of(cell), exact);
+    }
+
+    /** The axes that measure which case of its sum the value at {@code at} is. */
+    private static List<Integer> caseAxesAt(List<Axis> axes, TermPath at) {
+        List<Integer> out = new ArrayList<>();
+        for (int i = 0; i < axes.size(); i++) {
+            if (axes.get(i).term() instanceof NumericTerm.ValueOf && axes.get(i).path().equals(at)) {
+                out.add(i);
+            }
+        }
+        return out;
+    }
+
+    /** Every position open, and the one {@code axis} measures the classes that select one of the
+     *  cases {@code left} or select none. */
+    private static Cell onlyTheCases(List<Axis> axes, int axis, List<Refinement> left) {
+        Cell cell = Cell.anything(axes);
+        List<PartitionClass> classes = axes.get(axis).classes();
+        for (int c = 0; c < classes.size(); c++) {
+            Refinement selects = classes.get(c).selects();
+            cell.allowed()[axis][c] = selects == null || left.contains(selects);
+        }
+        return cell;
     }
 
     /** What {@code holds} leaves open, or null where any of it narrows nothing or narrows it away. */

@@ -181,7 +181,8 @@ class AChoicesClassesClaimsAndDecisionsAreAllOfThatChoiceTest {
                         List.of(placed(holding(0), 10), placed(holding(1), 11)),
                         List.of(placed(holding(0), 20), placed(holding(1), 21))));
 
-        assertEquals(2, group.left(0), "two of the four choices are combinations");
+        assertEquals(2, GenerationFixtures.combinationsOf(group),
+                "two of the four choices are combinations");
         assertNull(group.at(1), "the first way of one factor and the second of the other agree "
                 + "on nothing");
         assertNull(group.at(2), "nor the other way round");

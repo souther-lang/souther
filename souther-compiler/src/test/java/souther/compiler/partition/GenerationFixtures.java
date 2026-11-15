@@ -10,6 +10,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.IntStream;
 
 /**
  * Ways a test with no measurement beside it stands a generation up on its own.
@@ -129,6 +130,12 @@ final class GenerationFixtures {
             }
         }
         return out;
+    }
+
+    /** How many of the choices of {@code group} are combinations. */
+    static long combinationsOf(InteractionCells.Group group) {
+        return IntStream.range(0, group.size())
+                .filter(index -> group.at(index) != null).count();
     }
 
     /** The first place a row for the {@code index}th choice is looked for, or null where the choice

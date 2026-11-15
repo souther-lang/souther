@@ -109,15 +109,22 @@ final class ElementEvaluations {
         }
     }
 
-    /** What the occurrences nothing varies come to, as the base of a count. */
-    private static final class Fixed {
+    /** What an occurrence comes to in the join and in a count of what is kept. */
+    private sealed interface Fate {
 
-        private int kept;
-        private boolean known = true;
+        /** Kept by a test that comes out against it on every run: it is not there. */
+        record Absent() implements Fate { }
 
-        OptionalInt asKnown() {
-            return known ? OptionalInt.of(kept) : OptionalInt.empty();
-        }
+        /** One of the statements a quantifier makes of its container, which the reading of
+         *  statements counts and this does not. */
+        record Statement() implements Fate { }
+
+        /** Nothing a row chooses varies it: there on every run, or, where {@code certain} is not
+         *  so, on every run or on none and which is not known. */
+        record Always(boolean certain) implements Fate { }
+
+        /** Something a row chooses varies it. */
+        record Varies(Deciding deciding) implements Fate { }
     }
 
     /** The join, or that there was nothing to join, or the reason there is none. */
@@ -167,13 +174,25 @@ final class ElementEvaluations {
                      Predicate<Denotation> sameOnEveryRun,
                      Function<Denotation, ValueChoices.Of> choicesOf) {
         List<Deciding> deciding = new ArrayList<>();
-        Fixed base = new Fixed();
+        // How many are kept whatever a row chooses, as the base of a count; not known where an
+        // occurrence may or may not be there.
+        int fixed = 0;
+        boolean fixedKnown = true;
         for (ReadMeaning.Occurrence occurrence : occurrences) {
-            if (contributes.test(occurrence)) {
-                Deciding each = decidingOf(occurrence, valueMatters, statementsCountIt, folded,
-                        sameOnEveryRun, choicesOf, base);
-                if (each != null) {
+            if (!contributes.test(occurrence)) {
+                continue;
+            }
+            switch (fateOf(occurrence, valueMatters, statementsCountIt, folded, sameOnEveryRun,
+                    choicesOf)) {
+                case Fate.Absent _ -> { }
+                case Fate.Statement _ -> fixedKnown = false;
+                case Fate.Always(boolean certain) -> {
+                    fixed += certain ? 1 : 0;
+                    fixedKnown &= certain;
+                }
+                case Fate.Varies(Deciding each) -> {
                     deciding.add(each);
+                    fixedKnown &= !each.unsure();
                 }
             }
         }
@@ -197,8 +216,8 @@ final class ElementEvaluations {
                 // Kept by a test the same on every run beside what varies it: whether it is there
                 // at all is not worked out, and a decision of an element that may not be is no
                 // decision to ask a row for.
-                WhyNotJoined why = keptBy.size() > 1 || one.unsure()
-                        ? WhyNotJoined.KEPT_BY_SEVERAL : null;
+                WhyNotJoined why = keptBy.size() > 1 ? WhyNotJoined.KEPT_BY_SEVERAL
+                        : one.unsure() ? WhyNotJoined.KEPT_BY_A_TEST_NOT_WORKED_OUT : null;
                 if (why == null && keptBy.getFirst() instanceof ReadMeaning.Occurrence.Kept.ATruth(
                         Denotation truth, boolean holds, OptionalInt application)) {
                     // A conjunction is an operator and stands as a Binary, and is not one
@@ -263,7 +282,7 @@ final class ElementEvaluations {
         return decisions.isEmpty() ? new Result.NotJoined(WhyNotJoined.NOT_ONE_COMPARISON)
                 : new Result.Matched(new Joined(decisions,
                         decisions.stream().map(each -> weights.getOrDefault(each, 0)).toList(),
-                        base.asKnown()));
+                        fixedKnown ? OptionalInt.of(fixed) : OptionalInt.empty()));
     }
 
     /** An occurrence that something varies: what keeps it, once what is settled is set aside, and
@@ -311,19 +330,19 @@ final class ElementEvaluations {
     }
 
     /**
-     * {@code occurrence} as what varies it, or null where nothing does.
+     * What {@code occurrence} comes to: not there, one of the statements a quantifier makes, there
+     * whatever a row chooses, or varied by something a row chooses.
      *
      * <p>Nothing varies an occurrence that a constant keeps in, or keeps out: an element a filter
      * keeps whatever the run is the same element written without the filter, and one it never
      * keeps is not in the list at all. Nor one the reading of statements takes up, or one whose
      * worth is fixed and that nothing else keeps out.
      */
-    private static Deciding decidingOf(ReadMeaning.Occurrence occurrence, boolean valueMatters,
-                                       boolean statementsCountIt,
-                                       Function<Denotation, Optional<Object>> folded,
-                                       Predicate<Denotation> sameOnEveryRun,
-                                       Function<Denotation, ValueChoices.Of> choicesOf,
-                                       Fixed base) {
+    private static Fate fateOf(ReadMeaning.Occurrence occurrence, boolean valueMatters,
+                               boolean statementsCountIt,
+                               Function<Denotation, Optional<Object>> folded,
+                               Predicate<Denotation> sameOnEveryRun,
+                               Function<Denotation, ValueChoices.Of> choicesOf) {
         List<ReadMeaning.Occurrence.Kept> keptBy = new ArrayList<>();
         // Whether a test kept it by that is the same on every run, of which the answer is not worked
         // out: it is kept on every run or on none, and which is not known.
@@ -333,7 +352,7 @@ final class ElementEvaluations {
                                                                    OptionalInt _)) {
                 if (folded.apply(truth).orElse(null) instanceof Boolean settled) {
                     if (settled != holds) {
-                        return null;
+                        return new Fate.Absent();
                     }
                     continue;
                 }
@@ -345,20 +364,17 @@ final class ElementEvaluations {
             }
             keptBy.add(kept);
         }
-        base.known &= !unsure;
         if (statementsCountIt && isKeptByAQuantifierHolding(keptBy)) {
             // How many are kept, where each is kept by what a quantifier states of a container
             // and the count is compared, is the count of statements that hold. That is read as
             // the statements are, and says itself when it cannot be.
-            base.known = false;
-            return null;
+            return new Fate.Statement();
         }
         ValueChoices.Of choice = valueMatters ? choicesOf.apply(occurrence.value()) : null;
         if (keptBy.isEmpty() && (choice == null || choice instanceof ValueChoices.Of.Fixed)) {
-            base.kept++;
-            return null;
+            return new Fate.Always(!unsure);
         }
-        return new Deciding(occurrence, keptBy, choice, unsure);
+        return new Fate.Varies(new Deciding(occurrence, keptBy, choice, unsure));
     }
 
     /**
