@@ -419,6 +419,24 @@ public final class CoverageRead {
     }
 
     /**
+     * Whether the meetings at a place reached by {@code reach} are read here.
+     *
+     * <p>A meeting where no way in can be stated is still one: it is read, and said where it cannot
+     * be offered, rather than dropped for want of a way in to name. Where no run arrives there is
+     * none. And inside the body of a function value there is one that is not this walk's: the
+     * operation the function is handed to reads what its body decides, as the elements it keeps and
+     * what each is worth, so reading it here too would be one meeting said twice.
+     */
+    private static boolean meetingsAreReadUnder(Reach reach) {
+        return switch (reach) {
+            case Reach.Nothing _ -> false;
+            case Reach.Unnameable it -> it.whys().stream().anyMatch(
+                    why -> why != PathAccess.Unsupported.Why.RUNS_WHERE_SOMETHING_CALLS_IT);
+            case Reach.Ways _, Reach.Coarse _ -> true;
+        };
+    }
+
+    /**
      * That each of {@code ways}, which a run reaching a place under {@code reach} is known to have
      * come by, was written without every step nothing states on the way there — the step into a
      * function value as the function's, where the way goes on to {@code fork} inside it.
@@ -561,7 +579,7 @@ public final class CoverageRead {
             walk(let.body(), naming.entering(new ScopeStep.Let(let)), reach, arrives);
             return;
         }
-        if (arrives && !reach.ways().isEmpty()) {
+        if (arrives && meetingsAreReadUnder(reach)) {
             meetings.at(node, naming, body, reach.ways().stream().map(WayIn::decisions).toList(),
                     reading);
         }

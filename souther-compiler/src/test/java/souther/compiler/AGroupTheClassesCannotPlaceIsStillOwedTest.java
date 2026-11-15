@@ -107,7 +107,7 @@ class AGroupTheClassesCannotPlaceIsStillOwedTest {
         assertTrue(behavior.evidence().interaction().counted() > 0,
                 "the combinations of the decisions are counted and not dropped");
         assertFalse(behavior.weakenedBy().causes().stream().anyMatch(
-                        each -> each instanceof Weakening.MeetingsNotPlaced
+                        each -> each instanceof Weakening.MeetingsExistenceUndetermined
                                 || each instanceof Weakening.MeetingsNotJoined
                                 || each instanceof Weakening.MeetingsNotWalked),
                 () -> "and the meeting is placed and joined: " + behavior.weakenedBy());

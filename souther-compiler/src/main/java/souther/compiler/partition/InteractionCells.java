@@ -16,7 +16,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * The combinations a group of decisions has, as the classes a row filling one may sit in.
@@ -408,40 +407,15 @@ public final class InteractionCells {
      * <p>Two answers because they are two facts and the second used to be neither returned nor
      * recorded. A group dropped for its width claims arms, and what was not walked at those arms is
      * something a caller says rather than something a reader has to notice going missing.
+     *
+     * <p>No third for the groups the classes cannot narrow: they are offered, over the region the
+     * classes leave them, and a group is held back only for what the limit allows.
      */
-    public record Offered(List<Group> groups, List<NotOffered> notOffered,
-                          List<NotPlaced> notPlaced) {
+    public record Offered(List<Group> groups, List<NotOffered> notOffered) {
 
         public Offered {
             groups = List.copyOf(groups);
             notOffered = List.copyOf(notOffered);
-            notPlaced = List.copyOf(notPlaced);
-        }
-    }
-
-    /**
-     * A group some of whose decisions the classes of the input do not state, which is offered over
-     * a wider region than the rows that make it.
-     *
-     * <p>Apart from {@link NotOffered}, which is a group the limit kept back and a wider run walks.
-     * Here a decision narrows no position — a relation between two positions, a number taken of
-     * something no axis measures — so no cell steers a row into one of the group's combinations
-     * rather than another. The combinations are asked for all the same; what the classes cannot say
-     * is whether one nothing made exists, and that is said where it is left undetermined.
-     *
-     * @param settles every condition a combination of this group could settle a value by, as
-     *                {@link NotOffered#settles} is
-     */
-    public record NotPlaced(Set<souther.compiler.reading.Condition> settles) {
-
-        public NotPlaced {
-            settles = Set.copyOf(settles);
-        }
-
-        /** Whether this group could have stated {@code settled}, as {@link NotOffered#mightState}
-         *  answers it. */
-        public boolean mightState(Set<souther.compiler.reading.Condition> settled) {
-            return settles.containsAll(settled);
         }
     }
 
@@ -588,7 +562,6 @@ public final class InteractionCells {
                              int mostCellsPerGroup) {
         List<Group> out = new ArrayList<>();
         List<NotOffered> held = new ArrayList<>();
-        List<NotPlaced> unplaced = new ArrayList<>();
         for (Interaction group : groups) {
             // A group with no cell is one whose decisions leave no row anywhere, which is no path
             // and nothing owed. One the classes cannot narrow is offered over a wider region.
@@ -608,25 +581,9 @@ public final class InteractionCells {
             Group built = new Group(reach, placed);
             if (built.hasACombination()) {
                 out.add(built);
-                if (!reach.steering().exact() || placed.stream().flatMap(List::stream)
-                        .anyMatch(each -> !each.steering().exact())) {
-                    unplaced.add(new NotPlaced(conditionsOf(group)));
-                }
             }
         }
-        return new Offered(out, held, unplaced);
-    }
-
-    /** Every condition on the way to {@code group} and on every way of settling its factors. */
-    private static Set<souther.compiler.reading.Condition> conditionsOf(Interaction group) {
-        Set<souther.compiler.reading.Condition> out = new java.util.LinkedHashSet<>();
-        group.reach().forEach(each -> out.add(each.constrains()));
-        for (Factor factor : group.factors()) {
-            for (Outcome outcome : factor.outcomes()) {
-                outcome.holds().forEach(each -> out.add(each.constrains()));
-            }
-        }
-        return out;
+        return new Offered(out, held);
     }
 
     /**

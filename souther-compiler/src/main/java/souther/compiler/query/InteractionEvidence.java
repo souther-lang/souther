@@ -95,9 +95,10 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
                             held -> held.mightState(meeting.settled()))) {
                 continue;
             }
-            if (each instanceof Weakening.MeetingsNotPlaced
-                    && asked.notPlaced().stream().noneMatch(
-                            held -> held.mightState(meeting.settled()))) {
+            // Whether a combination exists is about that combination: another's being undetermined
+            // says nothing of whether a row can be written for this one.
+            if (each instanceof Weakening.MeetingsExistenceUndetermined
+                    && !asked.unconfirmed().contains(meeting)) {
                 continue;
             }
             bearing = bearing.union(WeakeningSet.of(each));
@@ -238,14 +239,14 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
         }
         // And the combinations the classes do not state, which are asked for over a wider region
         // than the rows that make them. One a run made is shown to exist; one nothing made is not
-        // shown to, and no search of a wider region says it does not, so it stays undetermined.
-        // Said on the measure for the same reason: dropped without a word, they read as
-        // combinations nobody owes.
-        boolean someUndetermined = asked.unconfirmed().stream()
-                .anyMatch(each -> !making.containsKey(each));
-        if (someUndetermined) {
-            went = went.union(WeakeningSet.of(new Weakening.MeetingsNotPlaced(
-                    behavior, asked.notPlaced().size())));
+        // shown to, and not shown not to, so it is owed and undetermined. The rows are the written
+        // ones: a row proposed for it is no evidence until it is written. Said on the measure
+        // because a measure that says nothing reads as having shown every combination to exist.
+        long undetermined = asked.unconfirmed().stream()
+                .filter(each -> !making.containsKey(each)).count();
+        if (undetermined > 0) {
+            went = went.union(WeakeningSet.of(new Weakening.MeetingsExistenceUndetermined(
+                    behavior, (int) undetermined)));
         }
         // And the sums whose decisions were met and not joined to what a run records. Nothing is
         // owed at them either, and the rows' having made every combination that was asked is no

@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -40,34 +41,60 @@ class AnOutcomeIsToldItsWaysOnlyWhereEveryWayIsWrittenDownTest {
     void twoWaysWrittenWholeAreWhatARowHasToBe() {
         Fixture fixture = new Fixture();
 
-        List<Outcome> outcomes = Meetings.outcomesFrom(List.of(
+        Meetings.Reached reached = Meetings.outcomesFrom(List.of(
                 fixture.reaching(Completeness.COMPLETE, 0),
                 fixture.reaching(Completeness.COMPLETE, 1)));
 
-        assertEquals(1, outcomes.size(), "two ways a run is not seen to tell apart are one outcome");
-        assertEquals(2, waysOf(outcomes.getFirst()).size(), "and it is told both");
+        assertEquals(1, reached.outcomes().size(),
+                "two ways a run is not seen to tell apart are one outcome");
+        assertEquals(2, waysOf(reached.outcomes().getFirst()).size(), "and it is told both");
+        assertFalse(reached.unseen(), "and no way of it is one no run is seen taking");
     }
 
     @Test
     void aWayNotWrittenWholeLeavesTheOutcomeOfferedAndItsRegionUnsaid() {
         Fixture fixture = new Fixture();
 
-        List<Outcome> outcomes = Meetings.outcomesFrom(List.of(
+        Meetings.Reached reached = Meetings.outcomesFrom(List.of(
                 fixture.reaching(Completeness.COMPLETE, 0),
                 fixture.reaching(Completeness.PARTIAL, 1)));
 
-        assertEquals(1, outcomes.size(), "the outcome is reached whole by one way, so it is offered");
-        assertTrue(waysOf(outcomes.getFirst()).isEmpty(),
+        assertEquals(1, reached.outcomes().size(),
+                "the outcome is reached whole by one way, so it is offered");
+        assertTrue(waysOf(reached.outcomes().getFirst()).isEmpty(),
                 "but not told the one way: the other is rows it does not state");
     }
 
+    /**
+     * What identifies an outcome is what a run is seen doing, so an outcome the ways to which could
+     * not be written whole is still one where a run is seen at the arm.
+     */
     @Test
-    void anOutcomeOnlyWaysNotWrittenWholeReachAreNotOffered() {
+    void anOutcomeASeenArmIdentifiesIsOfferedWhateverCouldBeWrittenOfTheWaysToIt() {
         Fixture fixture = new Fixture();
 
-        assertTrue(Meetings.outcomesFrom(List.of(fixture.reaching(Completeness.PARTIAL, 0)))
-                        .isEmpty(),
-                "what no way written whole reaches is not an outcome a row is steered to");
+        Meetings.Reached reached = Meetings.outcomesFrom(List.of(
+                fixture.reaching(Completeness.PARTIAL, 0)));
+
+        assertEquals(1, reached.outcomes().size(), "the arm a run is seen at is the outcome");
+        assertTrue(waysOf(reached.outcomes().getFirst()).isEmpty(), "with its region unsaid");
+        assertFalse(reached.unseen(), "and it is no way that nobody is seen taking");
+    }
+
+    /**
+     * A way that is neither written whole nor seen at an arm is an outcome of the operand all the
+     * same, which no run is seen taking: it is said, and not dropped as if there were none.
+     */
+    @Test
+    void anOutcomeNothingASeenArmOrAWholeWayIdentifiesIsSaidAndNotDropped() {
+        Fixture fixture = new Fixture();
+
+        Meetings.Reached reached = Meetings.outcomesFrom(List.of(
+                fixture.reaching(Completeness.COMPLETE, 0),
+                fixture.unseen()));
+
+        assertEquals(1, reached.outcomes().size(), "the outcome that can be seen is offered");
+        assertTrue(reached.unseen(), "and the one that cannot is said");
     }
 
     private static List<List<Condition>> waysOf(Outcome outcome) {
@@ -92,6 +119,14 @@ class AnOutcomeIsToldItsWaysOnlyWhereEveryWayIsWrittenDownTest {
             Outcome seen = outcomeOf(0);
             Outcome path = outcomeOf(way);
             return new Arrival<>(Truth.FALSE, new Provenance<>(path, completeness, List.of(), seen));
+        }
+
+        /** An arrival written down in part and seen at no arm: a path of nothing named, which no run
+         *  is seen doing. */
+        Arrival<Outcome> unseen() {
+            Outcome nothing = new Outcome(List.of());
+            return new Arrival<>(Truth.FALSE,
+                    new Provenance<>(nothing, Completeness.PARTIAL, List.of(), null));
         }
 
         private Outcome outcomeOf(int arm) {

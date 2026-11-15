@@ -101,13 +101,13 @@ class TheSameTotalInAGuardIsAskedTheSameWhicheverWayItIsWrittenTest {
     }
 
     /** What is asked of the rows: how many combinations, and whether any went unread. */
-    private record Asked(int combinations, int read, int notPlaced, int notMeasured,
+    private record Asked(int combinations, int read, int unconfirmed, int notMeasured,
                          int notJoined, MeasurementStatus status) {
 
         static Asked of(AdequacyReport.BehaviorReport behavior) {
             InteractionEvidence evidence = behavior.evidence().interaction();
             return new Asked(evidence.counted(), evidence.asked().read(),
-                    evidence.asked().notPlaced().size(), evidence.asked().notMeasured().size(),
+                    evidence.asked().unconfirmed().size(), evidence.asked().notMeasured().size(),
                     evidence.asked().notJoined(), behavior.status());
         }
     }

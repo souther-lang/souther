@@ -66,5 +66,15 @@ public enum WhyNotJoined {
     /** The decisions meet in code a run may come back to. A recording says which places a run
      *  passed and how each came out on each visit, not which decisions were made together on the
      *  same pass, so no row can be shown to make such a combination. */
-    THE_MEETING_IS_IN_CODE_RUN_AGAIN
+    THE_MEETING_IS_IN_CODE_RUN_AGAIN,
+
+    /** A way an operand of the meeting is settled by is one no run is seen taking: the arm it goes
+     *  down is recorded nowhere, so no row can be held to a combination that has it. The way is
+     *  there all the same, and the meeting is not offered over the others. */
+    AN_OUTCOME_NO_RUN_IS_SEEN_TAKING,
+
+    /** The decisions meet where no way in can be stated: under a step nothing of the input states,
+     *  such as the arms of an attempt or the body of a closure, so which decisions a run took to
+     *  get there is not known and no combination can be held to it. */
+    THE_WAY_IN_CANNOT_BE_STATED
 }
