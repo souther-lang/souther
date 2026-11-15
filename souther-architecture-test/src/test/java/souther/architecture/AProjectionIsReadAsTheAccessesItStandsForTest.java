@@ -332,6 +332,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "finds the way down to one node by identity, which a projection's base is on");
         row(out, c + "partition/WhatARunWorksOutBeforeACount$Within", "letsThrough",
                 "(" + core + ")Z", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
+        row(out, c + "partition/StopPastTheRepresentation", "collect",
+                "(" + core + "Ljava/util/Set;)V", Reading.EACH_SUBEXPRESSION,
+                "asks each node whether it is an operation that ends a run only past what the"
+                        + " representation holds, which no field access is");
         row(out, c + "check/FieldDomains", "readOffAsItStands", "(" + core + ")Z",
                 Reading.STRUCTURE, "asks whether a value is a name or a run of fields read off"
                         + " one, which the base answers");

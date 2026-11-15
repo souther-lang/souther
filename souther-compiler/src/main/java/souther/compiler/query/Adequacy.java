@@ -2743,8 +2743,7 @@ public final class Adequacy {
             return Coverages.of(subject, seen,
                     db.ask(new Front.Adequacy()).value().measures(), body,
                     read == null ? InputUses.NOT_KNOWN : read.uses(),
-                    analysis == null ? List.of()
-                            : StopPastTheRepresentation.in(analysis.core()));
+                    analysis == null ? List.of() : StopPastTheRepresentation.in(analysis));
         }
     }
 

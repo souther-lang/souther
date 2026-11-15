@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.abort.GetsPast;
+import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
@@ -34,22 +35,29 @@ public record StopPastTheRepresentation(String operation, SourcePos at) {
         Objects.requireNonNull(at, "written somewhere");
     }
 
-    /** Every such operation in {@code body}, each once, in the order they are written. */
-    public static List<StopPastTheRepresentation> in(Core body) {
+    /**
+     * Every such operation {@code body} works out, each once, in the order they are written: in
+     * its root, and in the template of each value it builds, whose operations a run works out
+     * where the value is built.
+     */
+    public static List<StopPastTheRepresentation> in(AnalysisBody body) {
         Set<StopPastTheRepresentation> out = new LinkedHashSet<>();
-        collect(body, out);
+        collect(body.core(), out);
+        body.templatesAfterTheirBuilders().forEach(template -> collect(template, out));
         return List.copyOf(out);
     }
 
     private static void collect(Core e, Set<StopPastTheRepresentation> out) {
-        Core node = Core.withoutStanding(e);
-        String named = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(node)
-                .endsOnlyPastTheRepresentation() ? nameOf(node) : null;
-        if (named != null && node.pos() != null) {
-            out.add(new StopPastTheRepresentation(named, node.pos()));
+        Core bare = Core.withoutStanding(e);
+        for (Core each : Core.subexpressionsAt(bare)) {
+            String named = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(each)
+                    .endsOnlyPastTheRepresentation() ? nameOf(each) : null;
+            if (named != null && each.pos() != null) {
+                out.add(new StopPastTheRepresentation(named, each.pos()));
+            }
         }
         List<Core> children = new ArrayList<>();
-        Core.forEachChild(node, children::add);
+        Core.forEachChild(bare, children::add);
         children.forEach(child -> collect(child, out));
     }
 
@@ -59,8 +67,8 @@ public record StopPastTheRepresentation(String operation, SourcePos at) {
      * where an operation is worked out in the language, is the library's and stands nowhere the
      * model wrote; the operation it is part of is the one said.
      */
-    private static String nameOf(Core node) {
-        return switch (node) {
+    private static String nameOf(Core e) {
+        return switch (Core.withoutStanding(e)) {
             case Core.Binary binary -> binary.op() == BinOp.CONCAT ? "++" : null;
             case Core.PreservedCall kept ->
                     AnOperationApplied.of(kept) instanceof AnOperationApplied applied
