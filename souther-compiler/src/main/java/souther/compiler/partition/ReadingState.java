@@ -175,6 +175,16 @@ final class ReadingState {
         return false;
     }
 
+    /**
+     * A number that is the same for inputs {@link #sameInputsBut} calls the same, for any
+     * {@code unconsulted}, {@code contentAsked} and {@code askedMatters}: the values are what every
+     * comparison asks, and nothing a reading's having asked after something or not decides is
+     * taken into it.
+     */
+    int requiredInputsHash(Inputs inputs) {
+        return inputs.values().hashCode();
+    }
+
     /** Whether {@code now} are the inputs {@code then} were; those of the aggregates only where
      *  the reading {@code then} was of asked after them. */
     boolean sameInputs(Inputs then, Inputs now, boolean askedMatters) {
