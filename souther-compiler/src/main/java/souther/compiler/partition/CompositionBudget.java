@@ -595,8 +595,14 @@ public enum CompositionBudget {
      * statement's other parts come out, and finding them walks every way the parts can come out
      * once for each case found. And how many of them are asked: cases kept as choices rather than
      * written out are as many as the ways of choosing one that no comparison chosen leaves a form
-     * no value of, counted before any is asked, and past this figure none is. Where those are not
-     * counted, they are every way as the choices stand.
+     * no value of, or of those, that no comparison of a remainder leaves its dividend none of,
+     * counted before any is asked, and past this figure none is. Where those are not counted, they
+     * are every way as the choices stand.
+     *
+     * <p>Enough for a lookup in a table of fifty rows of grades taken through seven ways of keeping
+     * months, three hundred and fifty cases each a grade, and for the cases of two searches of
+     * eleven days for a business day, about five hundred: cases that are each what an author's
+     * statement means, and none of them a way no row takes.
      *
      * <p><b>Reaching it gives the cases up and says so.</b> The condition is kept, said for cases
      * nobody took apart ({@link souther.compiler.meaning.DecidingCase.Cases.NotTakenApart}).
@@ -608,29 +614,33 @@ public enum CompositionBudget {
      * ({@link ReadingGap.CasesNotWorkedOut}), since it may be in a case the statement turns
      * nothing in. An author writes the rows at them, and which case each is in is what is open.
      */
-    CASES_A_LINE_IS_TAKEN_APART_INTO(256),
+    CASES_A_LINE_IS_TAKEN_APART_INTO(512),
 
     /**
      * How many steps the cases one case of where a line of a statement of several decides was said
      * for are taken through, asking whether a row stands on each side of the line in them: each
-     * alternative chosen and each part asked.
+     * alternative chosen and each part chosen.
      *
      * <p>Every step counted, and not the questions alone. A question is the way to the line with
-     * what one case has chosen so far taken in, and a case chosen part by part is asked after each
-     * part, so that a part leaving no row on one side settles every case chosen past it. Choosing
-     * among alternatives asks nothing of its own, and alternatives below alternatives are as many as
-     * the product of them; counted by the questions, a choosing that asks nothing — of cases nobody
-     * took apart, or past the last question allowed — would run as far as that product. Counted for
-     * each case said as one on its own, so what one of them spent decides nothing about another.
+     * what one case has chosen so far taken in, and a case chosen part by part is asked before
+     * each choice it goes more than one way at, so that a part leaving no row on one side settles
+     * every case chosen past it. Choosing among alternatives asks nothing of its own, and
+     * alternatives below alternatives are as many as the product of them; counted by the
+     * questions, a choosing that asks nothing — of cases nobody took apart, or past the last
+     * question allowed — would run as far as that product. Counted for each case said as one on
+     * its own, so what one of them spent decides nothing about another.
      *
      * <p><b>What the asking costs, and not how many cases there are.</b> How many cases are asked
      * is {@link #CASES_A_LINE_IS_TAKEN_APART_INTO}'s, counted before any is. Which of them the line
      * decides in is asked, and not whether some one does, so where every case divides rows every
      * case is chosen to the end, and what that costs is a step for each alternative and each part
      * on the way to each case. Cases that share what they begin with, as the cases of a statement's
-     * parts do, take about four steps each, and this lets that many be asked of as many cases as
-     * are taken apart. Cases each chosen through more parts than that, sharing less, take more
-     * steps than that, and are where the line can come out not worked out at this figure.
+     * parts do, take about four steps each; cases of a search each chosen through some thirty
+     * parts, a candidate's comparisons and its membership one after another, take about eleven,
+     * and a choice whose other alternatives the numbers refute is a step for each of them as well.
+     * This lets sixteen be asked of each of as many cases as are taken apart. Cases each chosen
+     * through more parts than that, sharing less, take more steps than that, and are where the
+     * line can come out not worked out at this figure.
      *
      * <p><b>Reaching it gives that case up and says so.</b> Its cases are neither ones the line
      * turns in nor ones it turns nothing in, so they are where the line was not worked out
@@ -639,7 +649,7 @@ public enum CompositionBudget {
      * {@link #CASES_A_LINE_IS_TAKEN_APART_INTO}: it is read in the case as it was said, and a row
      * there is not told to be where the line decides ({@link ReadingGap.CasesNotWorkedOut}).
      */
-    CASES_A_LINE_IS_ASKED_IN(1024),
+    CASES_A_LINE_IS_ASKED_IN(8192),
 
     /**
      * How deep a construction plan descends.

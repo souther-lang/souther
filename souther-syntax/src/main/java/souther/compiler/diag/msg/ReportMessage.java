@@ -1227,6 +1227,8 @@ public sealed interface ReportMessage extends Message {
 
     record NumericallyConsistentWaysNotCounted(Message past) implements ReportMessage, Prose {}
 
+    record AtMostWaysWalkedFromTheRemainders(String ways) implements ReportMessage, Prose {}
+
     record TheStatesACountIsTakenIn() implements ReportMessage, Prose {}
 
     record TheWaysACountIsHeldTo() implements ReportMessage, Prose {}

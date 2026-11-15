@@ -552,10 +552,12 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                 new Proposition.Truth(new DecisionSubject.AnInput(N), true),
                 new DecidingCase.Cases.NotTakenApart(
                         CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached()));
-        // No more cases than are taken apart, each chosen through four parts of its own, and none
-        // of them one any row reaches though rows reach every part short of the last: the asking
-        // runs out of steps before it finds that none divides rows.
-        int depth = 4;
+        // No more cases than are taken apart, each chosen through as many parts of its own as the
+        // steps allow each of that many, and none of them one any row reaches though rows reach
+        // every part short of the last: the asking runs out of steps before it finds that none
+        // divides rows.
+        int depth = CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum()
+                / CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
         List<DecidingCase.Cases> each = new ArrayList<>();
         for (int i = 0; i < CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum() - 1; i++) {
             List<DecidingCase.Cases> parts = new ArrayList<>();
