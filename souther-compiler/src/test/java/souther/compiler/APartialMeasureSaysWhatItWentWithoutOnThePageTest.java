@@ -16,6 +16,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -80,7 +81,14 @@ class APartialMeasureSaysWhatItWentWithoutOnThePageTest {
     /** A page and a document of one model, measured and answered in full. */
     private record Report(String human, String japanese, JsonNode document) {
 
-        static Report of(String source) throws Exception {
+        /** Each model is measured once for the four tests that read it. */
+        private static final Map<String, Report> MEASURED = new ConcurrentHashMap<>();
+
+        static Report of(String source) {
+            return MEASURED.computeIfAbsent(source, Report::measure);
+        }
+
+        private static Report measure(String source) {
             Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
             SourceRendering rendering = SourceRendering.namedByIdentity(compilation.texts());
             AdequacyReport report = AdequacyReport.of(compilation);

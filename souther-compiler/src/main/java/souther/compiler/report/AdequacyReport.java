@@ -4160,39 +4160,44 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static void weightsNotDecided(StringBuilder out, List<TiltOfADerivedValue> weights,
                                           Page page) {
         for (TiltOfADerivedValue each : weights) {
-            Map<String, List<NumericTerm>> byReason = new LinkedHashMap<>();
+            Map<WhatAWeightWentWithout, List<NumericTerm>> byReason = new LinkedHashMap<>();
             each.positions().forEach((position, standing) -> {
                 if (standing instanceof TiltOfADerivedValue.Standing.Undecided it) {
-                    List<String> reasons = new ArrayList<>();
-                    for (Weakening.AWeightNotDecided.Why why : it.own().written()) {
-                        reasons.add(page.say(switch (why) {
-                            case NO_BORDER_OF_IT_WAS_READ ->
-                                    new ReportMessage.NoBorderOfTheComputationWasRead();
-                            case A_BORDER_WAS_NOT_READ_IN_FULL ->
-                                    new ReportMessage.ABorderOfTheComputationWasNotReadInFull();
-                            case A_RUN_WAS_NOT_WATCHED ->
-                                    new ReportMessage.ARowOfTheComputationWasNotWatched();
-                            case THE_ARITHMETIC_GAVE_OUT ->
-                                    new ReportMessage.TheArithmeticGaveOutOnAChangedWeight();
-                        }));
-                    }
-                    if (!it.carried().isEmpty()) {
-                        reasons.add(page.say(
-                                new ReportMessage.WhatABorderOfTheComputationWentWithout()));
-                    }
-                    byReason.computeIfAbsent(String.join("; ", reasons), _ -> new ArrayList<>())
-                            .add(position);
+                    byReason.computeIfAbsent(new WhatAWeightWentWithout(it.own().written(),
+                            !it.carried().isEmpty()), _ -> new ArrayList<>()).add(position);
                 }
             });
-            byReason.forEach((why, positions) -> {
+            byReason.forEach((without, positions) -> {
+                List<String> reasons = new ArrayList<>();
+                for (Weakening.AWeightNotDecided.Why why : without.own()) {
+                    reasons.add(page.say(switch (why) {
+                        case NO_BORDER_OF_IT_WAS_READ ->
+                                new ReportMessage.NoBorderOfTheComputationWasRead();
+                        case A_BORDER_WAS_NOT_READ_IN_FULL ->
+                                new ReportMessage.ABorderOfTheComputationWasNotReadInFull();
+                        case A_RUN_WAS_NOT_WATCHED ->
+                                new ReportMessage.ARowOfTheComputationWasNotWatched();
+                        case THE_ARITHMETIC_GAVE_OUT ->
+                                new ReportMessage.TheArithmeticGaveOutOnAChangedWeight();
+                    }));
+                }
+                if (without.borders()) {
+                    reasons.add(page.say(
+                            new ReportMessage.WhatABorderOfTheComputationWentWithout()));
+                }
                 out.append("      ? ").append(page.say(new ReportMessage.TheWeightsAreNotDecided(
-                        String.valueOf(each.widestWith(positions.getFirst()).left()), why)))
-                        .append(NEW_LINE);
+                        String.valueOf(each.widestWith(positions.getFirst()).left()),
+                        String.join("; ", reasons)))).append(NEW_LINE);
                 for (NumericTerm position : positions) {
                     out.append("          · ").append(position).append(NEW_LINE);
                 }
             });
         }
+    }
+
+    /** What a weight went without: its own reasons, and whether its borders went without. */
+    private record WhatAWeightWentWithout(List<Weakening.AWeightNotDecided.Why> own,
+                                          boolean borders) {
     }
 
     /**
