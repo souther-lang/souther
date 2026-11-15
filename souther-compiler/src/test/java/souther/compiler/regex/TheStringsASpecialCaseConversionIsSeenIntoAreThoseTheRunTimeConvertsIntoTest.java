@@ -2,6 +2,7 @@ package souther.compiler.regex;
 
 import org.junit.jupiter.api.Test;
 
+import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.Meter;
 import net.unit8.notation199x.pattern.PatternParser;
 import net.unit8.notation199x.pattern.PatternRead;
@@ -45,16 +46,21 @@ class TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTe
         return Normalizer.normalize(text.toUpperCase(Locale.ROOT), Normalizer.Form.NFC);
     }
 
+    /** Beside the rest, a dotless {@code ı}, whose capital is composed with a dot above after it
+     *  into {@code İ}, and an {@code e} and its composites with an acute. */
     private static final int[] ALPHABET = {
         'a', 'b', 'A', 'i', 'I', '@', '.', 0x0130, 0x03A3, 0x03C3, 0x03C2, 0x00DF, 0x1E9E,
-        0x01F0, 0x0307, 0x0301, 0x212A, 'k', 'K', 0x0345, 0x03B1};
+        0x01F0, 0x0307, 0x0301, 0x212A, 'k', 'K', 0x0345, 0x03B1, 0x0131, 'e', 0x00E9, 0x00C9};
 
     private static final int MOST_CODE_POINTS = 4;
 
     private static final Meter METER = new Meter(100_000, 10_000_000, 1_000_000_000L);
 
+    /** Beside languages of letters with no composite, languages of composites a conversion's
+     *  answer may be composed into. */
     private static final List<String> LANGUAGES = List.of("[a-z]+", "[a-z.]*", "i|ss|k|ς|σ",
-            "[a-z]+\\.[a-z]+", "SS|[A-Z]+", "[a-zσς]+", "i?k?", "[A-Z.]+");
+            "[a-z]+\\.[a-z]+", "SS|[A-Z]+", "[a-zσς]+", "i?k?", "[A-Z.]+", "\\x{130}",
+            "[A-Z\\x{130}\\x{C9}]+", "[a-z\\x{E9}]+");
 
     private static Language language(String regex) {
         Language made = PatternPlan.of(assertInstanceOf(PatternRead.Read.class,
@@ -84,6 +90,16 @@ class TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTe
     private static void agreesWithTheRunTime(UnaryOperator<String> conversion) {
         ConversionAnswers answers = ConversionAnswers.of(CodeMap.of(conversion), conversion);
         List<String> values = everyValue();
+        // A value of none of the code points that may lengthen is converted into one no longer.
+        CodePoints lengthening = answers.mayLengthen();
+        for (String value : values) {
+            if (value.codePoints().noneMatch(lengthening::has)) {
+                String answer = conversion.apply(value);
+                assertTrue(answer.codePointCount(0, answer.length())
+                        <= value.codePointCount(0, value.length()), () -> "lengthens: "
+                        + describe(value));
+            }
+        }
         boolean[] seenSome = {false};
         for (String regex : LANGUAGES) {
             Language into = language(regex);

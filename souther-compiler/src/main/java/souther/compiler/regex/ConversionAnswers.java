@@ -22,26 +22,31 @@ import net.unit8.notation199x.pattern.Meter;
  * ({@link StableStarters}).
  *
  * <p>Whether a conversion is exact is a fact of the conversion and of the question together, and
- * not of the conversion alone. {@link CodeMap} is exact for the code points sent to one stable
- * starter, which is what a question about any string needs. A question about strings that read
- * only stable starters needs less: a code point whose answer holds a code point the question does
- * not read is the code point of no string in the language, whatever the answer is — a stable
- * starter composes with nothing beside it, so nothing the answer holds can be turned into one by
- * what stands next to it, and a code point that is no stable starter can only be composed into
- * something that is no stable starter either. {@code İ} answers an {@code i} and a combining dot
- * above, which no string of {@code [a-z]+} holds, wherever {@code İ} stands.
+ * not of the conversion alone. The code points answered exactly are those answered with stable
+ * starters whatever stands beside them: those {@link CodeMap} sends to one, and those answered
+ * with several. A string of only these is converted into their answers one after another, which is
+ * in the form as it stands, since no mark stands among them for a starter to compose with.
  *
- * <p>So of every code point there are three things to say about it for such a language, and the
- * strings are those of the one they are made of:
+ * <p>Any other code point is answered with something the form is put over afterwards, and the
+ * form composes across what stood apart: {@code ı} is answered {@code I} in uppercase, and an
+ * {@code I} before a combining dot above is composed with it into {@code İ}. So nothing is said
+ * of a string holding one by what its answer holds as it stands. What is said is what no
+ * composition takes away: every code point the decomposition of an answer holds is in the
+ * decomposition of the string the form makes of it, inside whatever it was composed into. A
+ * string whose answer, however it is answered beside what stands next to it, decomposes into a
+ * code point that no code point the question reads decomposes into is the string of no answer in
+ * the language. {@code İ} lowercased decomposes into an {@code i} and a combining dot above, and
+ * no code point of {@code [a-z]+} decomposes into the dot.
+ *
+ * <p>So of every code point there are three things to say about it, and the strings are those of
+ * the one they are made of:
  * <ul>
  *   <li>it is answered exactly, by stable starters the language reads: the string's conversion is
  *       the answers put end to end, and the language is read through them
  *       ({@link #stringsSeenInto});</li>
- *   <li>it is answered, whatever stands beside it, with something the language does not hold: a
+ *   <li>every answer it is given decomposes into a code point nothing the language reads does: a
  *       string with it is in the language's preimage of none;</li>
- *   <li>it is answered in a way that is not said here — it turns on what stands beside it, or it is
- *       no stable starter and may be composed into one — and a string with it is shown neither
- *       way.</li>
+ *   <li>otherwise a string with it is shown neither way.</li>
  * </ul>
  *
  * <p>A conversion also commutes with where a string is cut at a code point that nothing it does
@@ -55,6 +60,11 @@ public final class ConversionAnswers {
         /** Whether the answers do not turn on what stands beside, and are stable starters. */
         boolean exact() {
             return !beyondWhatStandsBeside && holdsOnly(alone, StableStarters.all());
+        }
+
+        /** Whether some answer it is given, alone or beside a letter, holds only {@code some}. */
+        boolean someWithin(CodePoints some) {
+            return holdsOnly(alone, some) || beside.stream().anyMatch(each -> holdsOnly(each, some));
         }
 
         boolean mentions(int symbol) {
@@ -85,9 +95,10 @@ public final class ConversionAnswers {
      *
      * @param exactly the strings whose conversion is in the language, each of them: a string of
      *                code points answered exactly, put through the language
-     * @param perhaps the strings whose conversion may be in the language, which hold {@code exactly}:
-     *                those and the strings with a code point answered in a way not said here, and
-     *                no code point answered with what the language does not hold
+     * @param perhaps the strings whose conversion may be in the language, which hold {@code exactly}
+     *                and every value whose conversion is in it: those and the strings with a code
+     *                point not answered exactly, of code points each answered in some way that
+     *                decomposes into what the language's code points do
      * @param asLong  whether a string of {@code exactly} is converted into one as long as it is:
      *                no code point it may hold is answered with several
      */
@@ -136,20 +147,14 @@ public final class ConversionAnswers {
     }
 
     /**
-     * The code points the conversion may answer with more than one: those it answers so alone or
-     * beside a letter. A string of none of them is converted into one no longer than it is, since
-     * the form the answer is put in only joins code points.
+     * The code points a string may hold and be converted into a longer one: every code point but
+     * those the map sends to one stable starter. A string of those is converted into as many stable
+     * starters, which the form leaves as they stand. The form put over any other answer may make it
+     * longer than its parts where they meet ({@link Normalization#seamGrowthBound}), so a code
+     * point is not cleared by what it is answered alone.
      */
     public CodePoints mayLengthen() {
-        BitSet out = new BitSet();
-        several.keySet().forEach(out::set);
-        otherwise.forEach((codePoint, answered) -> {
-            if (answered.alone().length > 1
-                    || answered.beside().stream().anyMatch(each -> each.length > 1)) {
-                out.set(codePoint);
-            }
-        });
-        return CodeMap.codePointsOf(out);
+        return map.domain().not();
     }
 
     /** What {@code conversion} answers of each code point, read off {@code map} made of it. */
@@ -178,11 +183,9 @@ public final class ConversionAnswers {
         }
         // The code points answered by several stable starters the language reads, and where.
         NavigableMap<Integer, int[]> through = new TreeMap<>();
-        BitSet sent = new BitSet();
         for (Map.Entry<Integer, int[]> each : several.entrySet()) {
             if (holdsOnly(each.getValue(), read)) {
                 through.put(each.getKey(), each.getValue());
-                sent.set(each.getKey());
             }
         }
         List<List<Automaton.Step>> steps = new ArrayList<>();
@@ -210,26 +213,52 @@ public final class ConversionAnswers {
         if (exactly == null) {
             return null;
         }
-        // The code points a string may hold and be shown neither way: answered in a way not said
-        // here, and not answered with what the language does not hold in every way it may be.
+        // What the code points the language reads decompose into, and every code point made of
+        // those: an answer is the answer of a string of the language only where it decomposes into
+        // these alone.
+        CodePoints composed = composedOf(read);
+        if (composed == null) {
+            return null;
+        }
+        // The code points a string may hold and be shown neither way: those not answered exactly,
+        // answered in some way that decomposes into what the language's code points do. One
+        // answered as it is, which the map has not and which is answered elsewhere by nothing, is
+        // its own answer.
         BitSet unsaid = new BitSet();
         for (Map.Entry<Integer, Answered> each : otherwise.entrySet()) {
-            if (!neverHolds(each.getValue(), read) && holdsInSomeValue(each.getKey())) {
+            if (each.getValue().someWithin(composed) && holdsInSomeValue(each.getKey())) {
                 unsaid.set(each.getKey());
             }
         }
-        // A code point answered exactly with stable starters the language does not read is
-        // answered with what it does not hold, and is no more said than those.
-        CodePoints said = map.preimage(read).or(CodeMap.codePointsOf(sent));
+        CodePoints asItIs = composed.and(map.domain().not());
+        for (CodePoints.Range range : asItIs.ranges()) {
+            for (int each = range.from(); each <= range.to(); each++) {
+                if (!several.containsKey(each) && !otherwise.containsKey(each)
+                        && holdsInSomeValue(each)) {
+                    unsaid.set(each);
+                }
+            }
+        }
         CodePoints unknown = CodeMap.codePointsOf(unsaid);
         boolean asLong = through.isEmpty();
         if (unknown.isEmpty()) {
             return new Seen(exactly, exactly, asLong);
         }
-        CodePoints either = said.or(unknown);
-        List<List<Automaton.Step>> free = List.of(
-                List.of(new Automaton.Step(said, 0), new Automaton.Step(unknown, 1)),
-                List.of(new Automaton.Step(either, 1)));
+        // Beside such a code point, one answered exactly is answered with a stable starter, which
+        // a mark after it may be composed into: it stands where its answer decomposes into what
+        // the language's code points do.
+        BitSet severalWithin = new BitSet();
+        several.forEach((codePoint, answer) -> severalWithin.set(codePoint,
+                holdsOnly(answer, composed)));
+        CodePoints either = map.preimage(composed).or(CodeMap.codePointsOf(severalWithin))
+                .or(unknown);
+        // The strings of those code points with at least one shown neither way.
+        CodePoints before = either.and(unknown.not());
+        List<Automaton.Step> first = new ArrayList<>(List.of(new Automaton.Step(unknown, 1)));
+        if (!before.isEmpty()) {
+            first.add(new Automaton.Step(before, 0));
+        }
+        List<List<Automaton.Step>> free = List.of(first, List.of(new Automaton.Step(either, 1)));
         BitSet stops = new BitSet();
         stops.set(1);
         Language withOne = Language.canonical(Automaton.madeOf(free, stops), meter);
@@ -287,14 +316,47 @@ public final class ConversionAnswers {
         return Normalizer.isNormalized(Character.toString(codePoint), Normalizer.Form.NFC);
     }
 
+    /** The most code points a language may read for what they decompose into to be followed. */
+    private static final int MOST_READ = 512;
+
     /**
-     * Whether every answer a code point is given, alone and beside a letter, holds a code point
-     * {@code read} does not: then a string with it is in no language that reads {@code read}, since
-     * what is not a stable starter of the language stays in the answer however it is composed.
+     * The code points whose canonical decomposition holds only what the code points of
+     * {@code read} decompose into, those included: what the form may make an answer of a string
+     * of {@code read} out of. Or null where {@code read} holds more than are followed.
+     *
+     * <p>A composition is of a code point and a mark or a jamo after it, one at a time, so each
+     * code point made of those parts is reached from one of them by composing the parts in turn.
      */
-    private static boolean neverHolds(Answered answered, CodePoints read) {
-        return !holdsOnly(answered.alone(), read) && answered.beside().stream()
-                .noneMatch(each -> holdsOnly(each, read));
+    private static CodePoints composedOf(CodePoints read) {
+        if (read.size() > MOST_READ) {
+            return null;
+        }
+        BitSet made = new BitSet();
+        for (CodePoints.Range range : read.ranges()) {
+            for (int each = range.from(); each <= range.to(); each++) {
+                made.set(each);
+                Normalization.normalize(Normalization.Form.NFD, Character.toString(each))
+                        .codePoints().forEach(made::set);
+            }
+        }
+        // What composes with a code point before it is no stable starter.
+        int[] after = made.stream().filter(each -> !StableStarters.all().has(each)).toArray();
+        boolean grew = after.length > 0;
+        while (grew) {
+            grew = false;
+            for (int first : made.stream().toArray()) {
+                for (int second : after) {
+                    String both = Normalization.nfc(Character.toString(first)
+                            + Character.toString(second));
+                    if (both.codePointCount(0, both.length()) == 1
+                            && !made.get(both.codePointAt(0))) {
+                        made.set(both.codePointAt(0));
+                        grew = true;
+                    }
+                }
+            }
+        }
+        return CodeMap.codePointsOf(made);
     }
 
     /** The states {@code machine} is in after one more symbol, from {@code from}. */
