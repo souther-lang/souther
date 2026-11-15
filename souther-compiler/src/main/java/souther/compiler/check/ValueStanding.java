@@ -3,9 +3,11 @@ package souther.compiler.check;
 import souther.compiler.core.ConstructionProjection;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
+import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Set;
@@ -566,6 +568,74 @@ public final class ValueStanding {
             }
         }
         return true;
+    }
+
+    /** How many names are followed one into another before a value is not called written whole. */
+    private static final int MOST_NAMES_FOLLOWED = 64;
+
+    /**
+     * Whether {@code e}, read in {@code at}, is made of what was written and of nothing a run is
+     * handed: every name it reads is one the environment denotes a value for, and so on down, or
+     * one a closure inside it binds.
+     *
+     * <p>What such a value comes to is the same on every run, whether or not this works out what.
+     * {@link FoldedValue} says the other half, what it comes to, for the operators it knows; a
+     * quantifier over a list written in the body is as much a constant and no fold of it exists.
+     *
+     * <p>False wherever a name stands for something of its own — a parameter, a position of the
+     * input, an element an operation handed out that nothing written stands against — which is what
+     * a value can vary with.
+     */
+    public static <E, N extends Names<E, N>> boolean madeOfWhatIsWritten(Core e, E at, N names) {
+        return writtenWhole(e, at, names, Set.of(), MOST_NAMES_FOLLOWED);
+    }
+
+    private static <E, N extends Names<E, N>> boolean writtenWhole(
+            Core asPlaced, E at, N names, Set<BindingId> bound, int left) {
+        Core e = Core.withoutStanding(asPlaced);
+        if (e instanceof Core.Read read) {
+            if (bound.contains(read.binding())) {
+                return true;
+            }
+            if (left == 0) {
+                return false;
+            }
+            return switch (named(read, at, names)) {
+                case null -> false;
+                case Named.One<E, N>(Standing<E, N> one) ->
+                        writtenWhole(one.value(), one.at(), one.names(), Set.of(), left - 1);
+                case Named.OneOf<E, N>(List<Standing<E, N>> members) -> members.stream().allMatch(
+                        one -> writtenWhole(one.value(), one.at(), one.names(), Set.of(), left - 1));
+            };
+        }
+        boolean[] whole = {true};
+        ScopeStep.forEachChild(e, (child, step) -> {
+            if (whole[0]) {
+                whole[0] = writtenWhole(child, at, names, bindingsOf(step, bound), left);
+            }
+        });
+        return whole[0];
+    }
+
+    /** {@code bound} and what entering {@code step} binds. */
+    private static Set<BindingId> bindingsOf(
+            ScopeStep step, Set<BindingId> bound) {
+        List<Core.Binder> introduced = switch (step) {
+            case ScopeStep.Same _ -> List.of();
+            case ScopeStep.Let(Core.LetIn let) -> List.of(let.binder());
+            case ScopeStep.Block(Core.Block block) -> block.params();
+            case ScopeStep.Chosen(Choice.Decides.ACase(Core.Case arm, Core _)) ->
+                    arm.binder() == null ? List.of() : List.of(arm.binder());
+            case ScopeStep.Chosen(Choice.Decides.ItWasBuilt(Core.IfConstructed attempt)) ->
+                    List.of(attempt.binder());
+            case ScopeStep.Chosen _ -> List.of();
+        };
+        if (introduced.isEmpty()) {
+            return bound;
+        }
+        Set<BindingId> out = new HashSet<>(bound);
+        introduced.forEach(each -> out.add(each.binding()));
+        return out;
     }
 
     /**

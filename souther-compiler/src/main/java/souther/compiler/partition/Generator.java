@@ -3171,13 +3171,13 @@ public final class Generator {
         Map<souther.compiler.reading.Condition, Integer> hashes = new IdentityHashMap<>();
         for (InteractionCells.Group group : offered.groups()) {
             for (int index = 0; index < group.size(); index++) {
-                CellSelection selection = group.at(index);
-                if (selection == null) {
+                InteractionCells.Choice choice = group.at(index);
+                if (choice == null) {
                     continue;
                 }
                 out.computeIfAbsent(new ObligationIdentity.OfACombinationOfDecisions(
                         behavior, DecisionSet.of(group.settlesAt(index), hashes)),
-                        _ -> new ArrayList<>()).add(selection);
+                        _ -> new ArrayList<>()).addAll(choice.ways());
             }
         }
         return out;
@@ -3278,15 +3278,17 @@ public final class Generator {
         List<WhereToLook>out = new ArrayList<>();
         for (InteractionCells.Group group : offered.groups()) {
             for (int index = 0; index < group.size(); index++) {
-                CellSelection selection = group.at(index);
+                InteractionCells.Choice choice = group.at(index);
                 // A choice whose factors leave a position nothing is no combination the body has a
                 // path to, and there is nothing to look in.
-                if (selection == null) {
+                if (choice == null) {
                     continue;
                 }
-                List<ArmProbe> claims = claimed(selection);
-                if (claims.stream().anyMatch(armsOwed::contains)) {
-                    out.add(new WhereToLook(selection, claims));
+                for (CellSelection selection : choice.ways()) {
+                    List<ArmProbe> claims = claimed(selection);
+                    if (claims.stream().anyMatch(armsOwed::contains)) {
+                        out.add(new WhereToLook(selection, claims));
+                    }
                 }
             }
         }

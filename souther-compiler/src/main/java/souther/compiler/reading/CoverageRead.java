@@ -901,6 +901,14 @@ public final class CoverageRead {
             return known.seenApart() ? new Reach.Ways(ways) : fallbackWayIn(iff, part, naming,
                     PathAccess.Unsupported.Why.WAYS_NOT_TOLD_APART, ways);
         }
+        // A comparison of how many elements are kept comes out by the keeping decisions of the
+        // elements, which a run is not seen to tell apart at the arm.
+        List<WayIn> counted = WaysOfACount.of(iff.cond(), part == 0, meetings.keptElements(),
+                naming, body);
+        if (counted != null) {
+            return fallbackWayIn(iff, part, naming,
+                    PathAccess.Unsupported.Why.WAYS_NOT_TOLD_APART, counted);
+        }
         return fallbackWayIn(iff, part, naming,
                 PathAccess.Unsupported.Why.WAYS_NOT_ENUMERABLE, List.of());
     }
@@ -919,7 +927,8 @@ public final class CoverageRead {
         if (back == null) {
             return new Reach.Unnameable(PathAccess.Unsupported.Why.NO_WAY_IN_CAN_BE_NAMED);
         }
-        List<WayIn> arm = List.of(new WayIn(back.holds()));
+        List<WayIn> arm = List.of(new WayIn(back.comingOutBy(
+                written.stream().map(WayIn::conditions).toList()).holds()));
         return new Reach.Coarse(arm, why, written.isEmpty() ? arm : written);
     }
 

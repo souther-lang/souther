@@ -11,8 +11,10 @@ import souther.compiler.semantics.Accumulation;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -136,6 +138,11 @@ final class Meetings {
         }
     }
 
+    /** What reads the decisions that keep the elements a call counts or adds up. */
+    KeptElements keptElements() {
+        return keptElements;
+    }
+
     /** The groups, in the order the walk met them. */
     List<Interaction> found() {
         return List.copyOf(found);
@@ -165,13 +172,17 @@ final class Meetings {
      * would be seen meeting it.
      */
     private static List<Outcome> outcomesOf(Core e, ValueArrivals<Outcome> reading) {
-        List<Outcome> out = new ArrayList<>();
+        // What a run is seen doing, and with it the ways that were written down for it: two ways
+        // a run is not seen to tell apart are one outcome, which a row settles by either.
+        Map<Outcome, List<List<Condition>>> ways = new LinkedHashMap<>();
         for (Arrival<Outcome> each : reading.waysAt(e).orNone()) {
-            Outcome seen = each.provenance().seen();
-            if (each.isComplete() && !out.contains(seen)) {
-                out.add(seen);
+            if (each.isComplete()) {
+                ways.computeIfAbsent(each.provenance().seen(), _ -> new ArrayList<>())
+                        .add(each.path().holds().stream().map(Decision::constrains).toList());
             }
         }
+        List<Outcome> out = new ArrayList<>();
+        ways.forEach((seen, written) -> out.add(seen.comingOutBy(written)));
         return out;
     }
 

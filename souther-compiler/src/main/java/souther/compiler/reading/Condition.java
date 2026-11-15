@@ -211,12 +211,36 @@ public sealed interface Condition {
      * @param decidedBy the construct whose answer decides the fork, where what decides it is one
      *                  ({@link #decidingConstructOf}): what a reading that could name no subject
      *                  for the fork can still ask another reading about
+     * @param comesOutBy the ways the fork's condition was written down as coming out this arm's way,
+     *                   each a conjunction, where they were and a run is not seen to tell them
+     *                   apart; none where they were not written down. What a row has to be for a
+     *                   run to take the arm, which the arm itself does not say: a run is seen at the
+     *                   arm whichever of them it came. A reading of the arm and so no part of which
+     *                   arm it is: two of these are the same arm whatever each was told of it
      */
-    record Arm(ArmOccurrence arm, Optional<ConstructOccurrence> decidedBy) implements Condition {
+    record Arm(ArmOccurrence arm, Optional<ConstructOccurrence> decidedBy,
+               List<List<Condition>> comesOutBy) implements Condition {
 
         public Arm {
             Objects.requireNonNull(arm, "an arm of some fork");
             Objects.requireNonNull(decidedBy, "decided by some construct, or by none said");
+            comesOutBy = comesOutBy.stream().map(List::copyOf).toList();
+        }
+
+        /** An arm whose ways in were not written down. */
+        public Arm(ArmOccurrence arm, Optional<ConstructOccurrence> decidedBy) {
+            this(arm, decidedBy, List.of());
+        }
+
+        /** The same arm, told the ways its condition comes out to it by. */
+        public Arm comingOutBy(List<List<Condition>> ways) {
+            return new Arm(arm, decidedBy, ways);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Arm that && that.arm.equals(arm)
+                    && that.decidedBy.equals(decidedBy);
         }
 
         /**

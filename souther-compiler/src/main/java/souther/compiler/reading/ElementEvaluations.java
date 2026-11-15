@@ -125,18 +125,23 @@ final class ElementEvaluations {
      *                     the reading of statements takes up: what it counts is the statements that
      *                     hold, and an element kept by what a quantifier states is one of them
      * @param folded       the constant a truth comes to on every run, where it comes to one
+     * @param sameOnEveryRun whether a truth is made of what is written and nothing a run is handed,
+     *                     so that it comes out the same on every run whether or not it folds. An
+     *                     occurrence it keeps is taken to be there: what such a truth is is not
+     *                     worked out here, and nothing a row chooses varies it
      * @param choicesOf    what decides the value of an occurrence
      */
     static Result of(List<ReadMeaning.Occurrence> occurrences,
                      Predicate<ReadMeaning.Occurrence> contributes, boolean valueMatters,
                      boolean statementsCountIt,
                      Function<Denotation, Optional<Object>> folded,
+                     Predicate<Denotation> sameOnEveryRun,
                      Function<Denotation, ValueChoices.Of> choicesOf) {
         List<Deciding> deciding = new ArrayList<>();
         for (ReadMeaning.Occurrence occurrence : occurrences) {
             if (contributes.test(occurrence)) {
                 Deciding each = decidingOf(occurrence, valueMatters, statementsCountIt, folded,
-                        choicesOf);
+                        sameOnEveryRun, choicesOf);
                 if (each != null) {
                     deciding.add(each);
                 }
@@ -275,18 +280,24 @@ final class ElementEvaluations {
     private static Deciding decidingOf(ReadMeaning.Occurrence occurrence, boolean valueMatters,
                                        boolean statementsCountIt,
                                        Function<Denotation, Optional<Object>> folded,
+                                       Predicate<Denotation> sameOnEveryRun,
                                        Function<Denotation, ValueChoices.Of> choicesOf) {
         List<ReadMeaning.Occurrence.Kept> keptBy = new ArrayList<>();
         for (ReadMeaning.Occurrence.Kept kept : occurrence.keptWhere()) {
             if (kept instanceof ReadMeaning.Occurrence.Kept.ATruth(Denotation truth, boolean holds,
-                                                                   OptionalInt _)
-                    && folded.apply(truth).orElse(null) instanceof Boolean settled) {
-                if (settled != holds) {
-                    return null;
+                                                                   OptionalInt _)) {
+                if (folded.apply(truth).orElse(null) instanceof Boolean settled) {
+                    if (settled != holds) {
+                        return null;
+                    }
+                    continue;
                 }
-            } else {
-                keptBy.add(kept);
+                // The same on every run, so nothing a row chooses.
+                if (sameOnEveryRun.test(truth)) {
+                    continue;
+                }
             }
+            keptBy.add(kept);
         }
         if (statementsCountIt && isKeptByAQuantifierHolding(keptBy)) {
             // How many are kept, where each is kept by what a quantifier states of a container
@@ -322,6 +333,12 @@ final class ElementEvaluations {
                         && application.isPresent()) {
                     placed.computeIfAbsent(Core.withoutStanding(truth.value()),
                             _ -> new HashSet<>()).add(application.getAsInt());
+                } else if (kept instanceof ReadMeaning.Occurrence.Kept.AnArm(Denotation fork, int _)
+                        && evaluatedOnce(one.occurrence())) {
+                    // The arms of one fork, read in one reading, are outcomes of one evaluation:
+                    // a run takes one of them, and the elements they write are not decided apart.
+                    placed.computeIfAbsent(Core.withoutStanding(fork.value()),
+                            _ -> new HashSet<>()).add(new OneReading(fork.at()));
                 } else {
                     unplaced++;
                 }
@@ -359,6 +376,27 @@ final class ElementEvaluations {
             }
         }
         return unplaced + placed.values().stream().mapToInt(Set::size).sum();
+    }
+
+    /** One reading of a fork, told from another by being another object: a reading's own equality
+     *  compares what it holds, and two readings of one fork that hold alike are still two. */
+    private record OneReading(Object reading) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof OneReading one && one.reading == reading;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(reading);
+        }
+    }
+
+    /** Whether no application of any closure wrote {@code occurrence} out, so that a fork it was
+     *  kept by is evaluated once for each reading of it and not once for each application. */
+    private static boolean evaluatedOnce(ReadMeaning.Occurrence occurrence) {
+        return occurrence.answered().isEmpty() && occurrence.within().isEmpty();
     }
 
     /** Whether the one thing that keeps an occurrence is a quantifier ({@code all}, {@code any})

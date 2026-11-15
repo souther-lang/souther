@@ -131,6 +131,13 @@ final class GenerationFixtures {
         return out;
     }
 
+    /** The first place a row for the {@code index}th choice is looked for, or null where the choice
+     *  is no combination. Every way of one choice holds a row to the same claims. */
+    static CellSelection firstWay(InteractionCells.Group group, int index) {
+        InteractionCells.Choice choice = group.at(index);
+        return choice == null ? null : choice.ways().getFirst();
+    }
+
     /**
      * Every arm a combination of the body may take, which is at least every arm one does take.
      *
@@ -159,7 +166,7 @@ final class GenerationFixtures {
                 InteractionCells.of(groups, Generator.ordered(subject), budget.cellsPerGroup());
         for (InteractionCells.Group group : offered.groups()) {
             for (int index = 0; index < group.size(); index++) {
-                CellSelection selection = group.at(index);
+                CellSelection selection = firstWay(group, index);
                 if (selection != null) {
                     out.addAll(Generator.claimed(selection));
                 }

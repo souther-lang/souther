@@ -151,6 +151,7 @@ final class KeptElements {
         return switch (ElementEvaluations.of(each.asWritten(), contributing(call, valueMatters),
                 valueMatters, !valueMatters && compared,
                 truth -> names.folded(new ElementsWrittenOut.Stood<>(truth.value(), truth.at())),
+                truth -> truth.at().madeOfWhatIsWritten(truth.value(), symbols, newtypes),
                 value -> ValueChoices.of(value, names, newtypes))) {
             case ElementEvaluations.Result.NothingToJoin _ -> null;
             case ElementEvaluations.Result.NotJoined(var why) -> new Read.NotJoined(why);

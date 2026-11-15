@@ -236,9 +236,14 @@ public record InteractionEvidence(InteractionRequirements asked, Measure<RowsMee
             went = went.union(WeakeningSet.of(new Weakening.MeetingsNotWalked(
                     behavior, asked.notMeasured().size(), List.copyOf(limits))));
         }
-        // And the groups the classes do not place, which no run walks. Said on the measure for the
-        // same reason: dropped without a word, they read as combinations nobody owes.
-        if (!asked.notPlaced().isEmpty()) {
+        // And the combinations the classes do not state, which are asked for over a wider region
+        // than the rows that make them. One a run made is shown to exist; one nothing made is not
+        // shown to, and no search of a wider region says it does not, so it stays undetermined.
+        // Said on the measure for the same reason: dropped without a word, they read as
+        // combinations nobody owes.
+        boolean someUndetermined = asked.unconfirmed().stream()
+                .anyMatch(each -> !making.containsKey(each));
+        if (someUndetermined) {
             went = went.union(WeakeningSet.of(new Weakening.MeetingsNotPlaced(
                     behavior, asked.notPlaced().size())));
         }

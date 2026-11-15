@@ -20,6 +20,29 @@ public record Outcome(List<Decision> holds) {
         return holds.stream().map(Decision::claims).toList();
     }
 
+    /**
+     * This, as a run is seen doing it, told what a row has to be to settle the decision this way.
+     *
+     * <p>Where a run is seen at an arm whichever way it came, the arm is all this says, and the ways
+     * that were written down for it are what the classes of the input can place. Kept beside the
+     * arm and not in place of it: the arm is what witnesses and the ways are where to look.
+     *
+     * <p>Told only where there is one arm to tell it of. Ways of an outcome of several forks are not
+     * the ways of any one of them.
+     *
+     * @param ways the conjunctions that were written down as settling it, none where they were not
+     */
+    Outcome comingOutBy(List<List<Condition>> ways) {
+        long arms = holds.stream().filter(each -> each.constrains() instanceof Condition.Arm).count();
+        if (ways.isEmpty() || arms != 1) {
+            return this;
+        }
+        return new Outcome(holds.stream()
+                .map(each -> each.constrains() instanceof Condition.Arm at
+                        ? new Decision(at.comingOutBy(ways), each.claims()) : each)
+                .toList());
+    }
+
     @Override
     public String toString() {
         return String.join(" & ", holds.stream().map(Object::toString).toList());
