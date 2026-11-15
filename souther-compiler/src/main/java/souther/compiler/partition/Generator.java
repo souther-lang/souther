@@ -11222,7 +11222,7 @@ public final class Generator {
 
             public Limited {
                 boundsReached = Figure.inOrder(boundsReached);
-                planCut = Set.copyOf(planCut);
+                planCut = InDeclaredOrder.of(planCut);
             }
 
             /**
@@ -11330,7 +11330,8 @@ public final class Generator {
             return tried;
         }
         Set<CompositionBudget> cutShort = EnumSet.noneOf(CompositionBudget.class);
-        Witness result = tried;
+        Stopped stopped = stoppedOf(tried);
+        boolean limited = tried instanceof Witness.Limited;
         switch (GoingOn.holdingTogether(each, _ -> true)) {
             // Nothing here holds a row to them. A figure that left a part unlooked at is what the
             // answer says; a reason alone is this compiler having no demand, which is no more
@@ -11352,22 +11353,41 @@ public final class Generator {
                             || found instanceof Witness.Unconfirmed) {
                         return found;
                     }
-                    if (found instanceof Witness.Limited) {
-                        result = found;
-                    }
+                    // What every one of the searches found out is what the answer says, and
+                    // never the last of them.
+                    stopped = stopped.and(stoppedOf(found));
+                    limited |= found instanceof Witness.Limited;
                 }
             }
         }
-        if (cutShort.isEmpty()) {
-            return result;
+        stopped = stopped.and(new Stopped(SearchShortfall.NONE, List.of(), false, cutShort));
+        if (limited || !cutShort.isEmpty()) {
+            return new Witness.Limited(classesOf(tried), stopped.found(), stopped.boundsReached(),
+                    stopped.metARunNothingWatched(), stopped.planCut());
         }
-        return switch (result) {
-            case Witness.Limited limited -> new Witness.Limited(limited.classes(),
-                    limited.found(), limited.boundsReached(), limited.metARunNothingWatched(),
-                    cutShort);
-            case Witness.Exhausted exhausted -> new Witness.Limited(exhausted.classes(),
-                    exhausted.found(), List.of(), false, cutShort);
-            case Witness.Certified _, Witness.Unconfirmed _, Witness.NoCombination _ -> result;
+        Witness.Exhausted was = (Witness.Exhausted) tried;
+        return new Witness.Exhausted(was.classes(), was.reason(), was.detail(), was.said(),
+                stopped.found());
+    }
+
+    /** What {@code search} found out and was stopped by, where it came to nothing. */
+    private static Stopped stoppedOf(Witness search) {
+        return switch (search) {
+            case Witness.Limited it -> new Stopped(it.found(), it.boundsReached(),
+                    it.metARunNothingWatched(), it.planCut());
+            case Witness.Exhausted it -> new Stopped(it.found(), List.of(), false, Set.of());
+            case Witness.Certified _, Witness.Unconfirmed _, Witness.NoCombination _ ->
+                    new Stopped(SearchShortfall.NONE, List.of(), false, Set.of());
+        };
+    }
+
+    /** The classes a search that came to nothing looked at. */
+    private static List<String> classesOf(Witness search) {
+        return switch (search) {
+            case Witness.Limited it -> it.classes();
+            case Witness.Exhausted it -> it.classes();
+            case Witness.Certified _, Witness.Unconfirmed _, Witness.NoCombination _ ->
+                    List.of();
         };
     }
 
