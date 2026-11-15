@@ -84,6 +84,15 @@ public sealed interface ReplacementOwed {
      * @param separators  what the bodies the walk stands in part strings at: where a string of
      *                    those rows is put with a piece more, since a walk over the pieces of a
      *                    string is handed more elements only through the string
+     * @param borders     the values the body compares something with, and the ones either side of
+     *                    each: what an element of a list the walk goes over is made of, where the
+     *                    rows written hold nothing near what the body tells apart
+     * @param reads       the names of the fields the walk's call reads: of an element made of the
+     *                    values above, the leaves at these are changed first, since what the step
+     *                    reads is where two elements differ to it
+     * @param inputs      the names of the parameters of the behavior that the walk's call reads:
+     *                    the positions a row is changed at, these before the others, to change
+     *                    what the walk observes. Empty where it is not known
      * @param over        the lists of the input the walk goes over, as locations rooted at the
      *                    parameter they are in, at every place the walk is entered. Empty where
      *                    any of them goes over a list the input does not hold as it is, one a
@@ -94,6 +103,7 @@ public sealed interface ReplacementOwed {
                    SequencedMap<Integer, WalkRewrite> replacing,
                    List<List<ObservedValue>> seenThrough,
                    InputsRowsRanWith ranWith, List<String> separators,
+                   List<ObservedValue> borders, List<String> reads, List<String> inputs,
                    List<TermPath> over) implements ReplacementOwed {
 
         public OfAWalk {
@@ -101,6 +111,9 @@ public sealed interface ReplacementOwed {
             Objects.requireNonNull(how, "a walk is rewritten some way");
             Objects.requireNonNull(ranWith, "the rows of a module ran with something or nothing");
             separators = List.copyOf(separators);
+            borders = List.copyOf(borders);
+            reads = List.copyOf(reads);
+            inputs = List.copyOf(inputs);
             over = List.copyOf(over);
             occurrences = List.copyOf(occurrences);
             replacing = Collections.unmodifiableSequencedMap(new TreeMap<>(replacing));

@@ -294,7 +294,7 @@ public final class PublicationOrders {
                     ReplacementEvidence.Undecided.Why.A_COMPOSING_FIGURE_REACHED,
                     ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK,
                     ReplacementEvidence.Undecided.Why.A_STATEMENT_WAS_NOT_READ,
-                    ReplacementEvidence.Undecided.Why.A_RULE_WAS_NOT_READ,
+                    ReplacementEvidence.Undecided.Why.A_RULE_REFUSED_A_CANDIDATE,
                     ReplacementEvidence.Undecided.Why.NO_ROW_ANSWERED_DIFFERENTLY,
                     ReplacementEvidence.Undecided.Why.NOTHING_WAS_COMPOSED,
                     ReplacementEvidence.Undecided.Why.NOTHING_RAN));

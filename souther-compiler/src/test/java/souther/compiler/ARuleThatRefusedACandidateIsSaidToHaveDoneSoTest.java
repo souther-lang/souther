@@ -18,14 +18,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A rewrite left open where a rule of a position refused candidates says the rule was not read,
- * and not that the search ran short.
+ * A rewrite left open where a rule of a position refused a candidate says that was met, and does
+ * not read like a search that ran short.
  *
- * <p>The invariant admits one separator, so every string with a piece more is refused, and the
- * values it admits are not read to make others. Which strings come apart into more pieces is what
- * the invariant says, and this compiler does not derive that from a pattern.
+ * <p>The invariant admits one separator, so every string with a piece more is refused. The values
+ * an invariant admits are not worked out from a pattern to make others, so what is said is what
+ * the search met, and not that it is why the rewrite is open.
  */
-class AWalkOverPiecesAnInvariantAdmitsOneOfIsSaidToBeUnreadTest {
+class ARuleThatRefusedACandidateIsSaidToHaveDoneSoTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
@@ -46,12 +46,12 @@ class AWalkOverPiecesAnInvariantAdmitsOneOfIsSaidToBeUnreadTest {
             "    invariant String.matches(\"[^@]+@[^@]+\", value)\n", "");
 
     @Test
-    void aRuleThatRefusedCandidatesIsSaidNotToBeRead() {
+    void aRuleThatRefusedACandidateIsSaidToHaveDoneSo() {
         List<List<String>> because = openRewrites(ONE_SEPARATOR);
 
         assertEquals(2, because.size());
         for (List<String> each : because) {
-            assertTrue(each.contains("a_rule_was_not_read"), each::toString);
+            assertTrue(each.contains("a_rule_refused_a_candidate"), each::toString);
             assertFalse(each.contains("runs_spent"), each::toString);
         }
     }

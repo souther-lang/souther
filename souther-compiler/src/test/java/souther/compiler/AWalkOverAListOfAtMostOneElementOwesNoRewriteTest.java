@@ -7,10 +7,13 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A walk over a list that holds one element or none on every run owes neither rewrite, wherever
@@ -23,9 +26,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AWalkOverAListOfAtMostOneElementOwesNoRewriteTest {
 
+    private static final JsonMapper JSON = JsonMapper.builder().build();
+
     @Test
     void aListWrittenOutIsWalkedNoFurtherThanItsFirst() {
-        assertEquals(List.of(), undecided(measured("""
+        assertOwesNoWalkRewrite(measured("""
                 module repro.written
 
                 behavior bump : (n: Int) -> List<Int>
@@ -33,12 +38,12 @@ class AWalkOverAListOfAtMostOneElementOwesNoRewriteTest {
 
                 example bump
                     | "one" : (3) -> [ 4 ]
-                """)));
+                """));
     }
 
     @Test
     void aListAHelperAnswersIsRead() {
-        assertEquals(List.of(), undecided(measured("""
+        assertOwesNoWalkRewrite(measured("""
                 module repro.helper
 
                 let wrap (n: Int): List<Int> = [ n ]
@@ -48,12 +53,12 @@ class AWalkOverAListOfAtMostOneElementOwesNoRewriteTest {
 
                 example bump
                     | "one" : (3) -> [ 4 ]
-                """)));
+                """));
     }
 
     @Test
     void aListEveryArmOfAMatchAnswersIsRead() {
-        assertEquals(List.of(), undecided(measured("""
+        assertOwesNoWalkRewrite(measured("""
                 module repro.arms
 
                 data Kind = Tagged | Plain
@@ -71,12 +76,12 @@ class AWalkOverAListOfAtMostOneElementOwesNoRewriteTest {
                 example tags
                     | "tagged" : (Item { kind = Tagged, n = 3 }) -> [ 4 ]
                     | "plain" : (Item { kind = Plain, n = 3 }) -> [ ]
-                """)));
+                """));
     }
 
     @Test
     void aComprehensionWithAGuardAloneIsRead() {
-        assertEquals(List.of(), undecided(measured("""
+        assertOwesNoWalkRewrite(measured("""
                 module repro.comprehension
 
                 behavior bump : (n: Int) -> List<Int>
@@ -85,7 +90,7 @@ class AWalkOverAListOfAtMostOneElementOwesNoRewriteTest {
                 example bump
                     | "positive" : (3) -> [ 4 ]
                     | "zero" : (0) -> [ ]
-                """)));
+                """));
     }
 
     /** One arm of the match answers two, so a row can walk a second step and the rewrites are owed. */
@@ -111,9 +116,33 @@ class AWalkOverAListOfAtMostOneElementOwesNoRewriteTest {
                     | "plain" : (Item { kind = Plain, n = 3 }) -> [ ]
                 """);
 
-        assertTrue(page(compilation).lines().map(String::strip)
-                        .noneMatch(line -> line.startsWith("replacement 0/")),
-                () -> page(compilation));
+        assertEquals(List.of("fold_after_one_step", "fold_from_the_seed"),
+                walkRewritesOwedOfMap(compilation), () -> page(compilation));
+    }
+
+    /** No rewrite of the walk is owed, and so none is left open either. */
+    private static void assertOwesNoWalkRewrite(Compilation compilation) {
+        assertEquals(List.of(), walkRewritesOwedOfMap(compilation), () -> page(compilation));
+        assertEquals(List.of(), undecided(compilation), () -> page(compilation));
+    }
+
+    /**
+     * What is owed is the obligation list and not the page: a rewrite no row can be asked about is
+     * left out of it, and one the page does not word as open is still owed.
+     */
+    private static List<String> walkRewritesOwedOfMap(Compilation compilation) {
+        JsonNode replacement = JSON.readTree(AdequacyReport.of(compilation)
+                        .json(SourceRendering.namedByIdentity(compilation.texts())))
+                .get("modules").get(0).get("behaviors").get(0).get("replacement");
+        List<String> owed = new ArrayList<>();
+        for (JsonNode each : replacement.get("obligations")) {
+            JsonNode id = each.get("obligationId");
+            if (id.has("definition") && id.get("definition").asString().equals("map")
+                    && id.get("rewrite").asString().startsWith("fold_")) {
+                owed.add(id.get("rewrite").asString());
+            }
+        }
+        return owed;
     }
 
     private static List<String> undecided(Compilation compilation) {

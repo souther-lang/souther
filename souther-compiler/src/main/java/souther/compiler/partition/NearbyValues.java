@@ -347,7 +347,9 @@ final class NearbyValues {
      * budget is what ends them and says so.
      */
     static Iterator<ObservedValue> holding(ObservedValue value, Type type,
-                                           RuleReadingContext reading, List<ObservedValue> held) {
+                                           RuleReadingContext reading, List<ObservedValue> held,
+                                           List<String> reads) {
+        TermPath root = TermPath.of("element");
         Leaves toTheFirst = (_, leaf, _, _, _) -> {
             for (ObservedValue each : held) {
                 if (each.getClass() == leaf.getClass()) {
@@ -356,20 +358,27 @@ final class NearbyValues {
             }
             return none();
         };
-        Leaves toAny = (_, leaf, _, _, _) -> filtered(held.iterator(),
-                each -> each.getClass() == leaf.getClass() && !each.equals(leaf));
+        Leaves toAnyRead = (_, leaf, at, _, _) -> readBy(at, reads)
+                ? filtered(held.iterator(),
+                        each -> each.getClass() == leaf.getClass() && !each.equals(leaf))
+                : none();
+        Leaves toAnyOther = (_, leaf, at, _, _) -> readBy(at, reads)
+                ? none()
+                : filtered(held.iterator(),
+                        each -> each.getClass() == leaf.getClass() && !each.equals(leaf));
         ObservedValue allFirst = value;
-        Iterator<ObservedValue> next = of(allFirst, type, reading, null, List.of(), toTheFirst);
+        Iterator<ObservedValue> next = of(allFirst, type, reading, root, List.of(), toTheFirst);
         // One leaf at a time, and each is put as a value it then is, so the walk ends.
         while (next.hasNext()) {
             allFirst = next.next();
-            next = of(allFirst, type, reading, null, List.of(), toTheFirst);
+            next = of(allFirst, type, reading, root, List.of(), toTheFirst);
         }
         Set<ObservedValue> reached = new LinkedHashSet<>();
         reached.add(value);
         ArrayDeque<ObservedValue> toWalk = new ArrayDeque<>();
         toWalk.add(value);
         ArrayDeque<ObservedValue> ready = new ArrayDeque<>();
+        ArrayDeque<ObservedValue> later = new ArrayDeque<>();
         if (reached.add(allFirst)) {
             ready.add(allFirst);
             toWalk.add(allFirst);
@@ -379,14 +388,29 @@ final class NearbyValues {
             @Override
             public boolean hasNext() {
                 while (ready.isEmpty() && !toWalk.isEmpty()) {
-                    Iterator<ObservedValue> away =
-                            of(toWalk.poll(), type, reading, null, List.of(), toAny);
-                    while (away.hasNext()) {
-                        ObservedValue arranged = away.next();
+                    ObservedValue from = toWalk.poll();
+                    Iterator<ObservedValue> read = of(from, type, reading, root, List.of(),
+                            toAnyRead);
+                    while (read.hasNext()) {
+                        ObservedValue arranged = read.next();
                         if (reached.add(arranged)) {
                             ready.add(arranged);
                             toWalk.add(arranged);
                         }
+                    }
+                    Iterator<ObservedValue> other = of(from, type, reading, root, List.of(),
+                            toAnyOther);
+                    while (other.hasNext()) {
+                        ObservedValue arranged = other.next();
+                        if (reached.add(arranged)) {
+                            later.add(arranged);
+                            toWalk.add(arranged);
+                        }
+                    }
+                    // Where nothing a step reads is left to change from here, what it does not
+                    // read is next, rather than every arrangement of what it reads first.
+                    if (ready.isEmpty() && !later.isEmpty()) {
+                        ready.add(later.poll());
                     }
                 }
                 return !ready.isEmpty();
@@ -400,6 +424,26 @@ final class NearbyValues {
                 return ready.poll();
             }
         };
+    }
+
+    /**
+     * Whether a leaf at {@code at} is one a step reads: where the step reads no field by name, or
+     * the leaf is the element itself, or one of the fields in the path is one it reads.
+     */
+    private static boolean readBy(TermPath at, List<String> reads) {
+        if (reads.isEmpty() || at == null) {
+            return true;
+        }
+        boolean named = false;
+        for (TermPath.Step step : at.steps()) {
+            if (step instanceof TermPath.Step.Field field) {
+                named = true;
+                if (reads.contains(field.name())) {
+                    return true;
+                }
+            }
+        }
+        return !named;
     }
 
     /**
@@ -854,7 +898,7 @@ final class NearbyValues {
      * first; what is left of the longer one after the shorter is used up. {@code second} is made
      * the first time it is wanted.
      */
-    private static <A> Iterator<A> alternating(Iterator<A> first, Supplier<Iterator<A>> second) {
+    static <A> Iterator<A> alternating(Iterator<A> first, Supplier<Iterator<A>> second) {
         return new Iterator<>() {
             private Iterator<A> later;
 

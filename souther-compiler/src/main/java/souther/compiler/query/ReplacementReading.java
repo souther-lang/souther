@@ -4,6 +4,7 @@ import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.NamedValue;
 import souther.compiler.coverage.NotCarriedReason;
 import souther.compiler.coverage.WalkProbe;
 import souther.compiler.coverage.WalkRewrite;
@@ -28,7 +29,9 @@ import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -122,7 +125,34 @@ public final class ReplacementReading {
     /** The same for one rewrite of a walk, and what the bodies it stands in part strings at. */
     private record WalkOccurrences(ReplacementReportAnchor reportAt, WalkRewrites.Asked asked,
                                    List<WalkProbe> probes, Set<String> separators,
+                                   Set<NamedValue> named, Set<String> reads, Set<String> inputs,
                                    List<Optional<TermPath>> over) {}
+
+    /**
+     * The values a row is taken to for a comparison against {@code named} to answer differently:
+     * the value itself and the ones either side of it, since a comparison tells apart the values
+     * on its two sides.
+     */
+    private static List<ObservedValue> bordersOf(Collection<NamedValue> named) {
+        List<ObservedValue> out = new ArrayList<>();
+        for (NamedValue each : named) {
+            switch (each) {
+                case NamedValue.Whole(var value) -> {
+                    out.add(new ObservedValue.Integer(value + 1));
+                    out.add(new ObservedValue.Integer(value));
+                    out.add(new ObservedValue.Integer(value - 1));
+                }
+                case NamedValue.Fractional(var value) -> {
+                    BigDecimal unit = BigDecimal.ONE.scaleByPowerOfTen(-value.scale());
+                    out.add(new ObservedValue.Decimal(value.add(unit)));
+                    out.add(new ObservedValue.Decimal(value));
+                    out.add(new ObservedValue.Decimal(value.subtract(unit)));
+                }
+                case NamedValue.Characters(var value) -> out.add(new ObservedValue.Text(value));
+            }
+        }
+        return out;
+    }
 
     /** The lists of the input the walk goes over at every place it is entered, or none where any
      *  place goes over a list the input does not hold as it is. */
@@ -262,7 +292,9 @@ public final class ReplacementReading {
                 Replacement.OfAWalk replaced = new Replacement.OfAWalk(site.walk(), each.how());
                 WalkOccurrences at = walkOccurrences.computeIfAbsent(replaced,
                         _ -> new WalkOccurrences(reportAt, each, new ArrayList<>(),
-                                new LinkedHashSet<>(), new ArrayList<>()));
+                                new LinkedHashSet<>(), new LinkedHashSet<>(),
+                                new LinkedHashSet<>(), new LinkedHashSet<>(),
+                                new ArrayList<>()));
                 if (!at.reportAt().equals(reportAt)) {
                     throw new IllegalStateException(replaced + " is shown at " + at.reportAt()
                             + " where one call reaches it and at " + reportAt + " where another"
@@ -270,6 +302,12 @@ public final class ReplacementReading {
                 }
                 at.probes().add(site.index());
                 at.separators().addAll(site.separators());
+                at.named().addAll(site.named());
+                at.reads().addAll(site.reads());
+                // A parameter of a helper is no parameter of this behavior.
+                if (site.body().equals(behavior)) {
+                    at.inputs().addAll(site.inputs());
+                }
                 // A list read in a helper is a parameter of the helper, which is no location of
                 // this behavior's input.
                 at.over().add(site.body().equals(behavior)
@@ -281,6 +319,7 @@ public final class ReplacementReading {
         walkOccurrences.forEach((replaced, at) -> out.add(new Account(
                 new ReplacementAsWritten.OfAWalk(replaced), at.reportAt(),
                 walkStanding(replaced, at.asked(), at.probes(), List.copyOf(at.separators()),
+                        bordersOf(at.named()), List.copyOf(at.reads()), List.copyOf(at.inputs()),
                         listsWalked(at.over()), stated, entered, stoppedAt, ranWith))));
         // One answer only where no arm the body owes a row through has a rewrite that is another
         // program; the arms of a library operation's copy are asked about above and do not count.
@@ -334,6 +373,8 @@ public final class ReplacementReading {
      */
     private static Standing walkStanding(Replacement.OfAWalk replaced, WalkRewrites.Asked asked,
                                          List<WalkProbe> where, List<String> separators,
+                                         List<ObservedValue> borders, List<String> reads,
+                                         List<String> inputs,
                                          List<TermPath> over, List<RowOutcome> rows,
                                          Function<RowOutcome, Set<WalkProbe>> entered,
                                          Function<RowOutcome, ReplacementDisposition.Met> stoppedAt,
@@ -352,7 +393,8 @@ public final class ReplacementReading {
                 row -> where.stream().anyMatch(entered.apply(row)::contains), stoppedAt,
                 decided -> new ReplacementOwed.OfAWalk(replaced.walk(), replaced.how(), where,
                         replacing, inputsOf(decided),
-                        ValuesOfRareAnswersFirst.of(ranWith.get(), decided), separators, over));
+                        ValuesOfRareAnswersFirst.of(ranWith.get(), decided), separators, borders,
+                        reads, inputs, over));
     }
 
     /**
