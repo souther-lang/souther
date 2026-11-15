@@ -63,10 +63,14 @@ import java.util.Map;
  *                 of a type is made is where every reading of a behavior's input is made
  * @param blocks   what the module's {@code fake} blocks declare, which is what says whether a
  *                 dependency is answered without the row writing anything
+ * @param mostValues for each dependency, how many values each of its parameters takes at most,
+ *                   -1 where nothing bounds them. What lets a table with no {@code _} row be
+ *                   known to answer every call
  */
 record AnswersForARule(RequiredDependencies requires,
                        Map<ValueName.Behavior, AnswerSubjects> standing,
-                       FakeTables blocks) {
+                       FakeTables blocks,
+                       Map<ValueName.Behavior, List<Long>> mostValues) {
 
     /**
      * The subject a value for the whole of what {@code dependency} answers is composed over, or
@@ -390,9 +394,12 @@ record AnswersForARule(RequiredDependencies requires,
      * table is what it needs and this compiler writes none.
      */
     private boolean stated(ValueName.Behavior dependency) {
+        // A dependency nobody counted is one nothing bounds.
+        List<Long> most = mostValues.get(dependency);
         return ExampleProvisioning.standingIn(List.of(), dependency, blocks)
                 instanceof ExampleProvisioning.Standin.InTheModule(var table)
-                && ExampleStatements.answersEveryCall(table.read());
+                && ExampleStatements.answersEveryCall(table.read(),
+                        most == null ? List.of(-1L) : most);
     }
 
     /**

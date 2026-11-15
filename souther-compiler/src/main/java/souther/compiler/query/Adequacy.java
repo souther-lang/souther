@@ -102,6 +102,7 @@ import souther.compiler.publish.CanonicalSelection;
 import souther.compiler.publish.PublicationOrders;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
+import souther.compiler.check.TypeCardinality;
 import souther.compiler.check.CheckSurface;
 import souther.compiler.check.FixtureValueEntries;
 import souther.compiler.check.Sig;
@@ -4754,7 +4755,27 @@ public final class Adequacy {
         FakeTables blocks = db.ask(new Names.FakeTables(module)).value();
         return requires == null || blocks == null ? null
                 : new AnswersForARule(requires, standingForEach(db, module, subject, requires),
-                        blocks);
+                        blocks, mostValuesOfParameters(db, module, requires));
+    }
+
+    /**
+     * How many values each parameter of each required dependency takes at most, -1 where nothing
+     * bounds them or the module's reading of types was not reached.
+     */
+    private static Map<ValueName.Behavior, List<Long>> mostValuesOfParameters(
+            Db db, String module, RequiredDependencies requires) {
+        Answer<RuleReadingSource> reading = Shapes.ruleReading(db, module);
+        TypeCardinality.Counts counted = new Shapes.CountedElsewhere(db);
+        Map<ValueName.Behavior, List<Long>> most = new LinkedHashMap<>();
+        for (RequiredDependencies.Required each : requires.inOrder()) {
+            List<Long> ofEach = new ArrayList<>();
+            for (Type parameter : each.signature().inputTypes()) {
+                ofEach.add(reading.present()
+                        ? TypeCardinality.mostValues(parameter, reading.value(), counted) : -1L);
+            }
+            most.put(each.dependency(), ofEach);
+        }
+        return most;
     }
 
     /**
