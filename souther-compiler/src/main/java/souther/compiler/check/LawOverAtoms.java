@@ -684,18 +684,13 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
      * else.
      */
     private LinearForm<FactSubject> howManyMeet(LawNumber.HowManyMeet<DeclaredArgument> meet) {
-        if (call != null) {
-            // Named by the expressions the call was handed, which each environment spells its own
-            // way: of a call that a term names, that is a number of another value than the call's.
-            return null;
-        }
         LawProposition<DeclaredArgument> asked = meet.ofTheElement();
         Core container = applied.argument(meet.container());
         if (container == null) {
             return null;
         }
         if (statesAFailing(asked)) {
-            FactSubject all = countOf(container);
+            FactSubject all = countOfPart(meet.container());
             LinearForm<FactSubject> meeting = all == null ? null
                     : howManyMeet(new LawNumber.HowManyMeet<>(meet.container(), asked.denied()));
             return meeting == null ? null : LinearForm.atom(all).minus(meeting).orNull();
@@ -716,6 +711,13 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     private LinearForm<FactSubject> comingOut(DeclaredArgument named, Core container,
                                               LawSubject<DeclaredArgument> of,
                                               AnswerAspect aspect) {
+        // Named by the parts of the call's term where they can, which every route that reaches the
+        // call reads alike, and by the expressions it was handed where they cannot.
+        LinearForm<FactSubject> byTheTerms = holdingSomethingByTheTerms(named, container, of,
+                aspect);
+        if (byTheTerms != null) {
+            return byTheTerms;
+        }
         return switch (of) {
             case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument element)
                     when element.equals(named) ->
@@ -726,6 +728,31 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
             }
             default -> null;
         };
+    }
+
+    /** How many elements of {@code container}, the argument {@code named}, hold something — each
+     *  itself, or what the closure answers of each — named by the parts of the call's term, or null
+     *  where {@code aspect} asks anything else or a part is not named. */
+    private LinearForm<FactSubject> holdingSomethingByTheTerms(DeclaredArgument named,
+                                                              Core container,
+                                                              LawSubject<DeclaredArgument> of,
+                                                              AnswerAspect aspect) {
+        Term whole = partOfTheCall(named);
+        DeclaredArgument by = switch (of) {
+            case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(DeclaredArgument closure) ->
+                    closure;
+            default -> null;
+        };
+        Term closure = by == null ? null : partOfTheCall(by);
+        boolean eachItself = of instanceof LawSubject.ElementOf<DeclaredArgument>(
+                DeclaredArgument element) && element.equals(named);
+        if (aspect != AnswerAspect.EMPTINESS || whole == null || !(eachItself || closure != null)) {
+            return null;
+        }
+        return terms.howManyHoldSomething(whole, closure,
+                NumericMeasures.takenOf(Core.withoutStanding(container).type(),
+                        terms.newtypeInners()),
+                terms.elementMeasureOf(container, by == null ? null : applied.argument(by), at));
     }
 
     /** Whether {@code asked} states that something does not hold, so that what meets it is what
@@ -763,9 +790,6 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     /** How many different values {@code different} counts over its container: its elements, their
      *  keys, or what a closure answers of each — or null where it counts anything else. */
     private FactSubject different(LawNumber.HowManyDifferent<DeclaredArgument> different) {
-        if (call != null) {
-            return null;
-        }
         Core container = applied.argument(different.container());
         if (container == null) {
             return null;
@@ -835,7 +859,9 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
         if (whole != null && (by == null || closure != null)) {
             return terms.sumOfSizesAtomOf(whole, closure,
                     NumericMeasures.takenOf(Core.withoutStanding(container).type(),
-                            terms.newtypeInners()));
+                            terms.newtypeInners()),
+                    terms.elementMeasureOf(container, by == null ? null : applied.argument(by),
+                            at));
         }
         return terms.sumOfSizesAtomFor(container, by == null ? null : applied.argument(by), at);
     }

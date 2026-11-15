@@ -1352,6 +1352,25 @@ final class Terms {
         return names;
     }
 
+    /**
+     * The operation {@code value} is an application of, read through the operations that keep the
+     * size of what they were built from to the one whose size it is ({@link #sizeSourceOf}, which
+     * does the same of a term), and where its arguments are read.
+     */
+    private ExpandedApplication peeledApplicationOf(Core value, Denotations at) {
+        Given reading = given(value, at);
+        AnOperationApplied applied = AnOperationApplied.of(reading.value());
+        if (applied == null) {
+            return null;
+        }
+        BuiltFrom<DeclaredArgument> built =
+                DefaultBoundOperationFacts.get().buildsItsResultFrom(applied.operation());
+        Core source = built == null || built.size() != SizeAgainstItsSource.SAME ? null
+                : applied.argument(built.from());
+        return source == null ? new ExpandedApplication(applied, reading.at())
+                : peeledApplicationOf(source, reading.at());
+    }
+
     /** The term a size is really the size of: an operation that keeps the size of what it was built
      *  from is peeled away ({@link DischargeRules#sizeSource}, which does the same of an expression
      *  and stops at a name). */
@@ -2583,9 +2602,15 @@ final class Terms {
      * something, and one atom then has two answers.
      */
     FactSubject sizeAtomFor(ValueName size, Core container, Denotations at) {
-        // A container the term grammar cannot read is still one value, so its size is named by the
-        // evaluation it is ({@link #identityOf}) and what is known of it hangs off that.
-        Term counted = identityOf(DischargeRules.sizeSource(container), at);
+        Core source = DischargeRules.sizeSource(container);
+        Term counted = bodyKey(source, at);
+        // A list a walk grows that the term grammar cannot read is still one value, and what its
+        // step adds bounds how many it holds, so its size is named by the evaluation it is
+        // ({@link #identityOf}) and that is what hangs off it.
+        if (counted == null && Core.withoutStanding(given(source, at).value())
+                instanceof Core.Call walk && walk.fn() == Core.Emitted.BUILD_LIST) {
+            counted = identityOf(source, at);
+        }
         return counted == null ? null : sizeAtomOf(size, counted, container, at);
     }
 
@@ -2620,24 +2645,41 @@ final class Terms {
                 carrying(atom, structural);
                 return atom;
             }
+            // Where the term is a call, the operation it is a call of is the one whose laws apply,
+            // whether the value was reached as the call or as the expansion the call was made into:
+            // the same laws, over the parts of the same term.
+            ExpandedApplication expanded = expandedApplicationOf(container, at);
+            ExpandedApplication peeled = peeledApplicationOf(built.value(), built.at());
+            AnOperationApplied direct = peeled == null ? null : peeled.applied();
+            ValueName calledBy = counted.calledOperation();
+            boolean expansionIsTheCall = calledBy != null && expanded != null
+                    && calledBy.equals(expanded.applied().operation())
+                    && (direct == null || !calledBy.equals(direct.operation()));
+            AnOperationApplied applied = expansionIsTheCall ? expanded.applied() : direct;
+            Denotations appliedAt = expansionIsTheCall ? expanded.at()
+                    : peeled == null ? built.at() : peeled.at();
+            Term call = applied != null && applied.operation().equals(calledBy) ? counted : null;
             List<NumericConstraint> carried = new ArrayList<>(IntrinsicNumericFacts.ofSize(
-                    size, built.value(), atom, built.at(), this, counted));
+                    size, applied, atom, appliedAt, this, counted));
             carried.addAll(sizesRelatedAtACall(built.value(), built.at()));
             carried.addAll(noMoreThanTheStepAddsForEach(atom, built.value(), built.at()));
             carried.addAll(howManyPiecesAreParted(atom, counted));
             // What the operation this container is the expansion of says of how many it holds,
-            // said of the arguments the expansion was handed.
-            ExpandedApplication expanded = expandedApplicationOf(container, at);
-            if (expanded != null) {
+            // said of the arguments the expansion was handed, where the term is a call of another.
+            boolean expansionSaysMore = expanded != null && !expansionIsTheCall;
+            if (expansionSaysMore) {
                 carried.addAll(IntrinsicNumericFacts.ofTheSizeLaw(expanded.applied(), atom,
                         expanded.at(), this, null));
             }
+            // A relation of the atom to itself says nothing, and is what a law over a construction
+            // that keeps its source's size comes to once the two are one atom.
+            carried.removeIf(each -> each.form().coefs().isEmpty());
             carrying(atom, carried);
-            Derivation held = expanded != null
+            Derivation held = expansionSaysMore
                     ? IntrinsicNumericFacts.heldWhereItsLawsSay(expanded.applied(), atom,
                             expanded.at(), this, null)
-                    : IntrinsicNumericFacts.heldWhereItsLawsSay(built.value(), atom,
-                            built.at(), this, counted);
+                    : IntrinsicNumericFacts.heldWhereItsLawsSay(applied, atom, appliedAt, this,
+                            call);
             if (held != null) {
                 computedBy(atom, new AtomKnowledge.Computation.Derived(held));
             }
@@ -3063,13 +3105,20 @@ final class Terms {
         if (counted == null || (closure != null && by == null)) {
             return null;
         }
-        FactSubject atom = sumOfSizesAtomOf(counted, by,
-                NumericMeasures.takenOf(Core.withoutStanding(container).type(), newtypeInners()));
-        Term held = atom == null || closure != null ? null : sizeOfEach(container, null, null, at);
-        if (held != null) {
-            sumsOfWhatEachHolds.putIfAbsent(atom, new SumOfWhatEachHolds(counted, held));
-        }
-        return atom;
+        return sumOfSizesAtomOf(counted, by,
+                NumericMeasures.takenOf(Core.withoutStanding(container).type(), newtypeInners()),
+                elementMeasureOf(container, closure, at));
+    }
+
+    /** What counts each element of {@code container}, or each answer of {@code closure} where it
+     *  has one, or null where nothing counts what is held. */
+    ValueName elementMeasureOf(Core container, Core closure, Denotations at) {
+        Core.Block block = closure == null ? null : blockOf(closure, at);
+        Type answered = closure == null
+                ? Type.elementOf(TypeOps.base(Core.withoutStanding(container).type(),
+                        newtypeInners()))
+                : block == null ? null : block.body().type();
+        return answered == null ? null : NumericMeasures.takenOf(answered, newtypeInners());
     }
 
     /**
@@ -3080,11 +3129,26 @@ final class Terms {
      * <p>Never below nought. And where the closure answers lists written out, the sum is that many
      * of each element's, or no more than the most any of them writes out.
      */
-    FactSubject sumOfSizesAtomOf(Term container, Term closure, ValueName measure) {
+    FactSubject sumOfSizesAtomOf(Term container, Term closure, ValueName measure,
+                                 ValueName elementMeasure) {
         FactSubject atom = named(interned.sumOfSizes(container, closure), Carrier.WHOLE);
         if (atom != null && knowledgeOf(atom).intrinsic().isEmpty()) {
             List<NumericConstraint> facts = new ArrayList<>();
-            facts.add(new NumericConstraint(LinearForm.atom(atom), Rel.GE));
+            // No fewer than how many of the elements hold something, each of which holds at least
+            // one, and nought where none does.
+            LinearForm<FactSubject> nonEmpty = howManyHoldSomething(container, closure, measure,
+                    elementMeasure);
+            LinearForm<FactSubject> over = nonEmpty == null ? null
+                    : LinearForm.atom(atom).minus(nonEmpty).orNull();
+            facts.add(new NumericConstraint(over == null ? LinearForm.atom(atom) : over, Rel.GE));
+            if (over != null) {
+                guaranteedWhere(atom, nonEmpty, LinearForm.atom(atom), Rel.LE);
+            }
+            Term held = closure == null && elementMeasure != null
+                    ? interned.called(elementMeasure, List.of(interned.bound(0, 0))) : null;
+            if (held != null) {
+                sumsOfWhatEachHolds.putIfAbsent(atom, new SumOfWhatEachHolds(container, held));
+            }
             FactSubject all = measure == null ? null : sizeKeyOf(measure, container);
             Term answer = closure == null || closure.shape() != Term.Shape.CLOSURE
                     || closure.parts().size() != 1 ? null : closure.parts().getFirst();
@@ -3102,6 +3166,53 @@ final class Terms {
             carrying(atom, facts);
         }
         return atom;
+    }
+
+    /**
+     * How many of the elements of {@code container} hold something — each, or each answer of
+     * {@code closure} where it has one — named by the terms alone, or null where nothing counts
+     * what is held. The count of the elements that come out on the holding side of a statement
+     * that what they hold is no smaller than one, and the one a statement and its denial are
+     * counted by is the one the order of terms puts first, so the count of the other is how many
+     * there are less that one.
+     */
+    LinearForm<FactSubject> howManyHoldSomething(Term container, Term closure,
+                                                 ValueName measure, ValueName elementMeasure) {
+        WholeNumberRuns atLeastOne = WholeNumberRuns.standing(Rel.GE, ExactRatio.ONE);
+        if (elementMeasure == null || atLeastOne == null
+                || (closure != null && closure.parts().size() != 1)) {
+            return null;
+        }
+        Term size = interned.called(elementMeasure, List.of(
+                closure == null ? interned.bound(0, 0) : closure.parts().getFirst()));
+        Term by = interned.closureAnswering(size, atLeastOne);
+        Term opposite = interned.normalClosure(interned.closureDenying(by));
+        Term counting = interned.normalClosure(by);
+        boolean denies = Term.inOneOrder(opposite, counting) < 0;
+        counting = denies ? opposite : counting;
+        FactSubject atom = named(interned.howManyMeet(container, counting, AnswerAspect.TRUTH),
+                Carrier.WHOLE);
+        FactSubject all = measure == null ? null : sizeKeyOf(measure, container);
+        if (atom == null) {
+            return null;
+        }
+        if (knowledgeOf(atom).intrinsic().isEmpty()) {
+            List<NumericConstraint> among = new ArrayList<>();
+            among.add(new NumericConstraint(LinearForm.atom(atom), Rel.GE));
+            if (all != null) {
+                among.add(new NumericConstraint(LinearForm.difference(atom, all), Rel.LE));
+            }
+            carrying(atom, among);
+        }
+        Term.StatementOverWholeNumbers statement = counting.statementOverWholeNumbers();
+        if (statement != null) {
+            wholeNumberCounts.putIfAbsent(atom, new CountOfWholeNumbers(container,
+                    statement.subject(), statement.runs(), all));
+        }
+        if (!denies) {
+            return LinearForm.atom(atom);
+        }
+        return all == null ? null : LinearForm.atom(all).minus(LinearForm.atom(atom)).orNull();
     }
 
     /** The most elements the list {@code answer} is written with holds, where it is a list written

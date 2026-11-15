@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import net.unit8.notation199x.ScalarValues;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.ConstantArguments;
 import souther.compiler.semantics.ResultBound;
@@ -78,8 +79,9 @@ final class IntrinsicNumericFacts {
      * the same peeling the atom's own name was made through, so that what is stated here is stated
      * about the atom it is filed against and not about a neighbour of it.
      */
-    static List<NumericConstraint> ofSize(ValueName size, Core container, FactSubject atom,
-                                          Denotations at, Terms terms, Term named) {
+    static List<NumericConstraint> ofSize(ValueName size, AnOperationApplied applied,
+                                          FactSubject atom, Denotations at, Terms terms,
+                                          Term named) {
         List<NumericConstraint> out = new ArrayList<>();
         // What the measure itself states of what it answers, which is that a count is at or above
         // nought. Read off the operation's rows and not written here: it is the same proposition as
@@ -89,12 +91,11 @@ final class IntrinsicNumericFacts {
         // A construction's result is no smaller than each source the rule names for it. A rule may
         // name more than one — `a ++ b` is as long as either half — so this is a loop where the
         // building below is one answer.
-        AnOperationApplied applied = AnOperationApplied.of(container);
-        for (Core added : DischargeRules.noSmallerThan(container)) {
+        for (Core added : DischargeRules.noSmallerThan(applied)) {
             standing(atom, added, partOf(named, applied, added), Rel.GE, at, terms, out);
         }
-        if (Core.withoutStanding(container) instanceof Core.PreservedCall call) {
-            DischargeRules.Source built = DischargeRules.builtFrom(call);
+        if (applied != null) {
+            DischargeRules.Source built = DischargeRules.builtFrom(applied);
             Rel rel = built == null ? null : relationOf(built.size());
             if (rel != null) {
                 standing(atom, built.container(), partOf(named, applied, built.container()), rel,
@@ -106,8 +107,9 @@ final class IntrinsicNumericFacts {
         // no number of bounds on it against either half says.
         out.addAll(ofTheSizeLaw(applied, atom, at, terms, named));
         // And as many as it was written out with, where it was, which is what a size of it read
-        // as a number is and so what the atom a law names it by is.
-        OptionalLong written = terms.writtenCount(container, at);
+        // as a number is and so what the atom a law names it by is. Read off the term the atom is
+        // named by: how it was reached says nothing of how many it holds.
+        OptionalLong written = writtenWith(named);
         if (written.isPresent()) {
             out.add(new NumericConstraint(LinearForm.atomMinusConstant(atom,
                     ExactRatio.of(written.getAsLong())), Rel.EQ));
@@ -187,6 +189,17 @@ final class IntrinsicNumericFacts {
         if (there != null && !there.equals(atom)) {
             out.add(new NumericConstraint(LinearForm.difference(atom, there), rel));
         }
+    }
+
+    /** How many {@code written} was written out with: a text as many as its code points, a list as
+     *  many as its elements, or empty where the term is neither. */
+    private static OptionalLong writtenWith(Term written) {
+        return switch (written.shape()) {
+            case STRING -> OptionalLong.of(ScalarValues.count((String) written.carried()));
+            case LIST -> OptionalLong.of(written.parts().size());
+            case EMPTY_LIST -> OptionalLong.of(0);
+            default -> OptionalLong.empty();
+        };
     }
 
     /** What the measure {@code size} states of whatever it counts: that a count is at or above
