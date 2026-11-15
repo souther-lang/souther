@@ -17,8 +17,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A behavior reads a business case against the needs recorded, after a guard that decodes the
  * business case trimmed. What the trimmed string leaves is something exactly where the business
- * case holds a code point that is not whitespace, so the relation between the two strings is shown
- * over the business cases that do, and the report says which are left open: those holding none.
+ * case holds a code point that is not whitespace, so a business case holding none is the guard's
+ * and no run gets it to the relation between the two strings. The relation is asked of the
+ * business cases that do, and leaves none open: each of them is inside the lowercase of some need,
+ * so it tells none of them apart.
  *
  * <p>Measured at {@code witness}: what is read here is how the positions divide and why a relation
  * stops, and none of it turns on a value composed at a line.
@@ -66,12 +68,12 @@ class ABusinessCaseIsReadPastTheGuardThatTrimsItTest {
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
-    /** The relation is shown over a region at the needs and at the business case. */
+    /** The business case is read whole, and a need is not shown reached. */
     @Test
-    void theRelationIsShownOverARegionOfTheBusinessCaseAndNotShownToReachEveryNeed() {
+    void theBusinessCaseIsReadWholeAndANeedIsNotShownToReachEveryNeed() {
         String json = Measured.JSON;
-        assertTrue(Pattern.compile(SHOWN.formatted(Pattern.quote("businessCase")),
-                Pattern.DOTALL).matcher(json).find(), "the business case is shown over a region");
+        assertFalse(Pattern.compile(SHOWN.formatted(Pattern.quote("businessCase")),
+                Pattern.DOTALL).matcher(json).find(), "the business case is shown over no region");
         assertFalse(Pattern.compile(NOT_SHOWN.formatted(Pattern.quote("businessCase")),
                 Pattern.DOTALL).matcher(json).find(), "and is not named not shown");
         // A need may be any string: written after with starters, each is inside some business
@@ -80,22 +82,23 @@ class ABusinessCaseIsReadPastTheGuardThatTrimsItTest {
                 Pattern.DOTALL).matcher(json).find(), "a need is not shown reached");
     }
 
-    /** The business cases left open are those holding no code point that is not whitespace. */
+    /** The business cases holding no code point that is not whitespace are the guard's, and the
+     *  relation leaves none of them open. */
     @Test
-    void theBusinessCasesHoldingNoneAreLeftOpen() {
+    void theBusinessCasesHoldingNoneAreNotLeftOpenByTheRelation() {
         String json = Measured.JSON;
-        assertTrue(Pattern.compile("\"codePoints\"\\s*:\\s*\\[\\s*\\{\\s*\"class\"\\s*:"
-                + "\\s*\"not_whitespace\"\\s*,\\s*\"fewerThan\"\\s*:\\s*1\\s*\\}")
-                .matcher(json).find(), "the strings short of a code point that is not whitespace");
+        assertFalse(json.contains("not_whitespace"), "no value is open for how many it holds");
+        assertFalse(json.contains("\"leftOpen\""), "nothing is left open");
     }
 
-    /** A class is drawn at both places, over the strings the guard lets the run get to. */
+    /** Every business case the guard lets the run get to is inside some need, so the relation
+     *  parts none of them and no class is drawn at the place. */
     @Test
-    void aClassIsDrawnAtTheBusinessCase() {
+    void noClassIsDrawnAtTheBusinessCase() {
         Compilation compilation = ACompiledModel.compiles(Measured.MODEL);
         var evidence = compilation.db().ask(new Adequacy.Coverage("cases")).value()
                 .get("propose");
-        assertTrue(evidence.axes().stream().anyMatch(axis ->
+        assertTrue(evidence.axes().stream().noneMatch(axis ->
                 axis.path().equals("businessCase") && !axis.classes().isEmpty()),
                 () -> "businessCase has a class: " + evidence.axes());
     }

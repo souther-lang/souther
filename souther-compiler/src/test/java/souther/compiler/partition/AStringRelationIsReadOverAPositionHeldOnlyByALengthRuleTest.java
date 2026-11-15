@@ -204,25 +204,25 @@ class AStringRelationIsReadOverAPositionHeldOnlyByALengthRuleTest {
     /**
      * A guard that ends the length of the other string is on the strings and not a count of a
      * container: the relation is read over the strings of the lengths the run gets to it with, and
-     * the strings of the other lengths are left open, whether the needs are held by a length rule
-     * or by a pattern for the same strings.
+     * the strings of the other lengths are the guard's, which the relation is not asked of and
+     * leaves open for nothing, whether the needs are held by a length rule or by a pattern for the
+     * same strings. What is left open is what the lowercase's image is not shown of, at any
+     * length, and no length of the guard bounds it.
      */
     @Test
     void aGuardOnTheLengthOfTheOtherStringLeavesTheRelationReadOverThoseLengths() {
-        Map<String, String> openAt = new LinkedHashMap<>();
-        openAt.put("guard BusinessCase(businessCase) as stated else Missed", "\"shorterThan\" : 1");
-        openAt.put("guard String.length(businessCase) <= 3 else Missed", "\"longerThan\" : 3");
-        openAt.forEach((guard, left) -> {
+        for (String guard : List.of("guard BusinessCase(businessCase) as stated else Missed",
+                "guard String.length(businessCase) <= 3 else Missed")) {
             Compilation byLength = guarded("String.length(value) >= 1", guard);
             Compilation byPattern = guarded("String.matches(\"[\\\\s\\\\S]+\", value)", guard);
             NavigableSet<String> reasons = aboutTheRelation(byLength);
-            assertTrue(reasons.contains("relation_shown_over_a_region"), () -> guard + " " + reasons);
             assertFalse(reasons.contains("relation_not_shown_to_reach_every_value"),
                     () -> guard + " " + reasons);
-            assertTrue(json(byLength).contains(left), () -> guard + " leaves " + left + " open");
+            assertFalse(json(byLength).contains("longerThan"), () -> guard + " leaves some open");
+            assertFalse(json(byLength).contains("shorterThan"), () -> guard + " leaves some open");
             assertEquals(aboutTheRelation(byPattern), reasons, guard);
             assertEquals(classes(byPattern), classes(byLength), guard);
-        });
+        }
     }
 
     /** The operations each report entry names as open, in the order the entries are written. */

@@ -6884,18 +6884,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             left.put("shorterThan", open.shorterThan());
         }
         left.put("atAnyLength", open.atAnyLength());
-        if (!open.byCodePoints().isEmpty()) {
-            ArrayNode counted = left.putArray("codePoints");
-            for (BlockReason.CodePointsLeftOpen each : open.byCodePoints()) {
-                ObjectNode entry = counted.addObject();
-                codePointClass(entry, each.counted());
-                if (each.fewerThan() != null) {
-                    entry.put("fewerThan", each.fewerThan());
-                } else {
-                    entry.put("moreThan", each.moreThan());
-                }
-            }
-        }
         if (!open.imagesNotShown().isEmpty()) {
             ArrayNode names = left.putArray("imagesNotShown");
             open.imagesNotShown().forEach(names::add);

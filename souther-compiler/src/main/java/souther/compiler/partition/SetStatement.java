@@ -3,11 +3,9 @@ package souther.compiler.partition;
 import souther.compiler.check.PredicateStatement;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.values.ValueSet;
 import souther.compiler.values.ValuesAtLengths;
 import souther.compiler.values.ValuesWithin;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -35,10 +33,13 @@ import java.util.List;
  * have to name a class after where a rule was written.
  *
  * <p><b>And where neither side is shown.</b> A rule read off what another value can hold may show
- * some strings on neither side: the strings of {@code notShown} and those of {@code notReached}
- * ({@link #leftOpen}). Those are no class of either side, and a reader is told they are left open
- * rather than counted on the side nothing showed them on — and why, which differs between the two:
- * only the first are open for the operations of the library.
+ * some strings on neither side, for one of two reasons that are told apart. The strings of
+ * {@code notShown} are strings the rule is asked of and shows nothing of for the operations of the
+ * library ({@link #leftOpen}): they are no class of either side, and a reader is told they are left
+ * open rather than counted on the side nothing showed them on. The strings of {@code notReached}
+ * are those no run gets to the rule with, because a guard on the way keeps them from it: the rule
+ * is not asked of them, no row can put one to it, and the rule that keeps them away is the one that
+ * is owed a row there. They are not open, and are no class of this rule.
  *
  * <p><b>Each side is a set and the lengths of its values.</b> A length is a number of a string and
  * not a set of strings, so a side holding the strings of a set at some lengths is the set and the
@@ -54,50 +55,29 @@ import java.util.List;
  * @param origin    which rule this is, which reading of it, and where a reader is sent to find it
  * @param notShown  the values shown on neither side for {@code operations}, each as long as it is
  *                  left open at; none where every value is shown on one
- * @param notReached the values of the lengths at which no run gets to the relation, each as long
- *                  as it is left open at: shown on neither side, because the relation is not
- *                  worked out for a string of that length; none where a run gets to it at every
- *                  length
+ * @param notReached the values no run gets to the relation with, each as long as it is kept from
+ *                  it at: those of the lengths a guard on the way leaves out, and those holding so
+ *                  few or so many code points of a class that the guard leaves them out, which no
+ *                  length bounds; none where a run gets to it with every value
  * @param operations the operations of the library that are why {@code notShown} holds the
  *                  strings it holds, by why: whose image over the strings of a side is shown only
  *                  where it is exact, and which a run is not shown to get past
- * @param notCounted the values holding so few or so many code points of a class that no run gets
- *                  to the relation with them, which are shown on neither side as the values of
- *                  {@code notReached} are; kept apart because a length bounds none of them
  */
 public record SetStatement(NumericTerm.FromOnePosition term, ValuesAtLengths whenTrue,
                           ValuesAtLengths whenFalse, PredicateStatement statement,
                           PredicateOrigin origin, List<ValuesWithin> notShown,
                           List<ValuesWithin> notReached,
-                          BlockReason.OperationsNotShown operations,
-                          List<NotCounted> notCounted) {
-
-    /**
-     * The values holding a number of code points of a class that no run gets to the relation
-     * with.
-     *
-     * @param values the values
-     * @param why    which numbers of the class they are open for
-     */
-    public record NotCounted(ValueSet values, BlockReason.CodePointsLeftOpen why) {
-
-        public NotCounted {
-            if (values == null || why == null) {
-                throw new IllegalArgumentException("some values hold too few or too many");
-            }
-        }
-    }
+                          BlockReason.OperationsNotShown operations) {
 
     public SetStatement {
         if (term == null || whenTrue == null || whenFalse == null
                 || statement == null || origin == null || notShown == null
-                || notReached == null || operations == null || notCounted == null) {
+                || notReached == null || operations == null) {
             throw new IllegalArgumentException(
                     "a statement about a position names some values, and some rule made it");
         }
         notShown = List.copyOf(notShown);
         notReached = List.copyOf(notReached);
-        notCounted = List.copyOf(notCounted);
         // Whether the two sides hold anything is not asked here, and cannot be. What a rule leaves
         // is a set of every string there is; what the position holds is what its declarations left
         // it — so a side inhabited among the strings can be empty at the position, and one empty
@@ -111,27 +91,17 @@ public record SetStatement(NumericTerm.FromOnePosition term, ValuesAtLengths whe
                         ValuesAtLengths whenFalse, PredicateStatement statement,
                         PredicateOrigin origin, List<ValuesWithin> notShown) {
         this(term, whenTrue, whenFalse, statement, origin, notShown, List.of(),
-                BlockReason.OperationsNotShown.NONE, List.of());
+                BlockReason.OperationsNotShown.NONE);
     }
 
     /** The same statement of the same values, about the position {@code at}. */
     public SetStatement measuredAt(NumericTerm.FromOnePosition at) {
         return new SetStatement(at, whenTrue, whenFalse, statement, origin, notShown,
-                notReached, operations, notCounted);
+                notReached, operations);
     }
 
-    /** Whether every value is shown on one side or the other. */
+    /** Whether every value the rule is asked of is shown on one side or the other. */
     public boolean showsEveryValue() {
-        return leftOpen().isEmpty() && notCounted.isEmpty();
-    }
-
-    /**
-     * The values shown on neither side: those of {@code notShown}, and those of the lengths no run
-     * gets to the relation at.
-     */
-    public List<ValuesWithin> leftOpen() {
-        List<ValuesWithin> out = new ArrayList<>(notShown);
-        out.addAll(notReached);
-        return out;
+        return notShown.isEmpty();
     }
 }

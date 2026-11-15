@@ -467,10 +467,9 @@ final class Classing {
         if (cells.isEmpty() && !open.isEmpty()) {
             return notComposed(mine, told, BlockReason.RelationShownOverARegion.of(
                     open.stream().flatMap(each -> each.open().stream()).toList(),
-                    open.stream().map(LeftOpen::operations)
+                    open.stream().map(each -> each.statement().operations())
                             .reduce(BlockReason.OperationsNotShown.NONE,
-                                    BlockReason.OperationsNotShown::and),
-                    open.stream().flatMap(each -> each.byCodePoints().stream()).toList()), open);
+                                    BlockReason.OperationsNotShown::and)), open);
         }
         List<PartitionClass> out = new ArrayList<>();
         for (Cell cell : cells) {
@@ -490,31 +489,22 @@ final class Classing {
 
     /**
      * The values of a position one rule shows on neither of its sides, which no class holds: the
-     * strings it shows nothing of for its operations, and those of lengths no run gets to it at
-     * ({@link SetStatement#leftOpen}), each met with what the position holds.
+     * strings it shows nothing of for its operations ({@link SetStatement#notShown}), each met
+     * with what the position holds. The values no run gets to the rule with are not among them:
+     * the rule is asked of the values it is reached with, and no row can put one of the others
+     * to it.
      *
      * @param statement the rule
      * @param open      the values left open, each as long as it is left open at; none of them
      *                  shown to hold nothing
-     * @param forTheOperations whether some of {@code open} are open for the rule's operations
-     *                  ({@link SetStatement#notShown}), which a reader is then told beside them
      */
-    record LeftOpen(SetStatement statement, List<ValuesWithin> open, boolean forTheOperations,
-                    List<BlockReason.CodePointsLeftOpen> byCodePoints) {
+    record LeftOpen(SetStatement statement, List<ValuesWithin> open) {
 
         LeftOpen {
-            if (statement == null || open == null || byCodePoints == null
-                    || (open.isEmpty() && byCodePoints.isEmpty())) {
+            if (statement == null || open == null || open.isEmpty()) {
                 throw new IllegalArgumentException("a rule leaves some values of a position open");
             }
             open = List.copyOf(open);
-            byCodePoints = List.copyOf(byCodePoints);
-        }
-
-        /** The operations the values open are open for: the rule's, where some are open for
-         *  them, and none otherwise. */
-        BlockReason.OperationsNotShown operations() {
-            return forTheOperations ? statement.operations() : BlockReason.OperationsNotShown.NONE;
         }
     }
 
@@ -525,33 +515,12 @@ final class Classing {
     private static Worked<LeftOpen> leftOpen(NumericTerm.FromOnePosition term, ValueSet admits,
                                              SetStatement statement,
                                              Allowance<NumericTerm.FromOnePosition> allowance) {
-        List<ValuesWithin> open = new ArrayList<>();
-        Worked<List<ValuesWithin>> forTheOperations =
-                heldOf(term, admits, statement.notShown(), allowance);
-        if (forTheOperations.refused() != null) {
-            return Worked.refusedAt(forTheOperations.refused());
+        Worked<List<ValuesWithin>> open = heldOf(term, admits, statement.notShown(), allowance);
+        if (open.refused() != null) {
+            return Worked.refusedAt(open.refused());
         }
-        open.addAll(forTheOperations.answer());
-        Worked<List<ValuesWithin>> forAnotherReason =
-                heldOf(term, admits, statement.notReached(), allowance);
-        if (forAnotherReason.refused() != null) {
-            return Worked.refusedAt(forAnotherReason.refused());
-        }
-        open.addAll(forAnotherReason.answer());
-        List<BlockReason.CodePointsLeftOpen> byCodePoints = new ArrayList<>();
-        for (SetStatement.NotCounted each : statement.notCounted()) {
-            Allowance.Composed held =
-                    allowance.meet(Sameness.Block.of(term), admits, each.values());
-            if (held.gaveUp()) {
-                return Worked.refusedAt(held.refused());
-            }
-            if (!ValuesWithin.all(held.set()).shownToHoldNone()) {
-                byCodePoints.add(each.why());
-            }
-        }
-        return Worked.to(open.isEmpty() && byCodePoints.isEmpty() ? null
-                : new LeftOpen(statement, open, !forTheOperations.answer().isEmpty(),
-                        byCodePoints));
+        return Worked.to(open.answer().isEmpty() ? null
+                : new LeftOpen(statement, open.answer()));
     }
 
     /** Each of {@code open} met with what {@code term} holds, leaving out those shown to hold

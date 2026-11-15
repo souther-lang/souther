@@ -6,7 +6,11 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
+import souther.compiler.partition.SetStatement;
+import souther.compiler.partition.SetStatementAt;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.values.Value;
+import souther.compiler.values.ValuesWithin;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -16,17 +20,20 @@ import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Where a report classes the strings of a position whose length the way holds against a number, it
- * classes only lengths some row gets a run past, and leaves the rest open.
+ * classes only lengths some row gets a run past, and leaves no length open for the rest: the
+ * equality is not asked of a string no run gets to it with.
  *
  * <p>Asked of an independent run: every string of the position up to a length, with every value of
  * the number its declarations leave, is worked out by the rules of the language — an addition
  * stops a run where it passes the greatest {@code Int} — and the lengths at which some row reaches
- * the equality are the ones the report is held to. The report is read as a person reads it: the
- * open lengths it says, and whether it classes the strings at all.
+ * the equality are the ones the report is held to. The report is read as a person reads it, for
+ * what it leaves open and whether it classes the strings at all, and the sides of the statement
+ * the classes are made of are asked of every string of a length no row reaches.
  *
  * <p>What a model is built from varies each thing a proof that a row reaches the equality stands
  * on, one at a time: the strings the position admits (a single length, a range, lengths with a
@@ -88,10 +95,10 @@ class EveryLengthTheReportDoesNotLeaveOpenIsOneSomeRowGetsPastTest {
                     before ? "guard n.value + 1 > 0 else false" : "", guard[0], guard[1]);
         }
 
-        /** The lengths of the strings the position admits, up to the longest asked. */
-        Set<Integer> admitted() {
+        /** The strings the position admits, up to the longest asked. */
+        List<String> texts() {
             Pattern pattern = Pattern.compile(position);
-            Set<Integer> out = new TreeSet<>();
+            List<String> out = new ArrayList<>();
             for (int length = 0; length <= LONGEST; length++) {
                 for (int bits = 0; bits < 1 << length; bits++) {
                     StringBuilder text = new StringBuilder();
@@ -99,10 +106,17 @@ class EveryLengthTheReportDoesNotLeaveOpenIsOneSomeRowGetsPastTest {
                         text.append((bits >> at & 1) == 0 ? 'a' : 'b');
                     }
                     if (pattern.matcher(text).matches()) {
-                        out.add(length);
+                        out.add(text.toString());
                     }
                 }
             }
+            return out;
+        }
+
+        /** The lengths of the strings the position admits, up to the longest asked. */
+        Set<Integer> admitted() {
+            Set<Integer> out = new TreeSet<>();
+            texts().forEach(text -> out.add(text.length()));
             return out;
         }
 
@@ -195,16 +209,29 @@ class EveryLengthTheReportDoesNotLeaveOpenIsOneSomeRowGetsPastTest {
         if (!classed.contains("b")) {
             return;
         }
-        Set<Integer> open = openIn(json);
-        for (int length : shape.admitted()) {
-            if (length == 0) {
+        // No length is left open for a run that does not get to the equality: it is not asked of
+        // the strings of that length.
+        assertTrue(openIn(json).isEmpty(), "a length is left open: " + openIn(json) + shape);
+        // And no string of a length no row gets a run past is on a side of it: the sides are
+        // asked of the strings it is reached with, and are made of no others.
+        SetStatement statement = SetStatementAt.of(shape.source(), "b");
+        List<ValuesWithin> sides = new ArrayList<>(statement.whenTrue().pieces());
+        sides.addAll(statement.whenFalse().pieces());
+        for (String text : shape.texts()) {
+            int length = text.length();
+            if (length == 0 || reached.contains(length)) {
                 // The other string has at least one code point, so the empty string is never
                 // equal to it whichever row is run: the language says so, and no row is asked.
                 continue;
             }
-            assertTrue(open.contains(length) || reached.contains(length),
-                    "length " + length + " is classed and no row gets a run past at it; open "
-                            + open + ", reached " + reached + shape);
+            Value value = new Value.Text(text);
+            for (ValuesWithin side : sides) {
+                assertFalse(side.values().has(value) && side.shortest() <= length
+                                && (side.longest() == null || length <= side.longest()),
+                        "a string of " + length + " code points is on a side of the equality"
+                                + " and no row gets a run past at it: " + text + " " + side
+                                + ", reached " + reached + shape);
+            }
         }
     }
 

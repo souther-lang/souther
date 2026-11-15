@@ -50,7 +50,8 @@ class AStringHeldByBothSidesOfAContainmentIsItsOwnPartnerTest {
     /**
      * A string looked for that is a value is inside the value it makes with stable starters after
      * it, so the string looked for is open nowhere where the one looked in is held only to a
-     * length: what is open is the short strings of the one looked in, which the guard keeps out.
+     * length. The short strings of the one looked in are the guard's, which keeps them from the
+     * relation, and are none the relation is asked of.
      */
     @Test
     void aStringLookedForIsInsideWhatItMakesWithStarterAfterItWhereTheOtherIsHeldToALength() {
@@ -65,14 +66,13 @@ class AStringHeldByBothSidesOfAContainmentIsItsOwnPartnerTest {
                         }
                         """, "f");
 
-        assertEquals(List.of("a"), List.copyOf(open.keySet()));
-        assertEquals(3L, open.get("a").getFirst().shorterThan());
+        assertEquals(Map.of(), open);
     }
 
     /**
      * The same where both are lowercased: the starters written after the string looked for are
      * ones the lowercase cuts at, so its lowercase is inside the lowercase of what they make, and
-     * nothing of it is open: what is open is the short strings of the one looked in.
+     * nothing of it is open. The short strings of the one looked in are the guard's.
      */
     @Test
     void aLowercasedStringLookedForIsInsideWhatItMakesWithStartersTheLowercaseCutsAt() {
@@ -88,8 +88,7 @@ class AStringHeldByBothSidesOfAContainmentIsItsOwnPartnerTest {
                         }
                         """, "f");
 
-        assertEquals(List.of("a"), List.copyOf(open.keySet()), open::toString);
-        assertEquals(3L, open.get("a").getFirst().shorterThan());
+        assertEquals(Map.of(), open);
     }
 
     @Test
