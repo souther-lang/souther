@@ -157,6 +157,21 @@ public final class TypeCardinality {
     }
 
     /**
+     * How many values {@code type} has at most, or -1 where nothing bounds them.
+     *
+     * <p>Read where no rule is written about the type, so an invariant that takes values away is
+     * not counted: what comes back is no fewer than the values there are, and a reader that needs
+     * every one of them covered is asking for more than it has to. Nought where the type has no
+     * value. A name it reaches is asked of {@code counted}.
+     */
+    public static long mostValues(Type type, RuleReadingSource source, Counts counted) {
+        return switch (CardinalityTransfer.held(type, source, Answers.over(counted))) {
+            case Cardinality.None _ -> 0;
+            case Cardinality.Standing each -> each.boundOr(-1);
+        };
+    }
+
+    /**
      * Every declaration {@code roots} reaches answered in one walk of the graph.
      *
      * <p>Not the way a compilation counts. A compilation holds an answer per component and is handed

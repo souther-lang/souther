@@ -63,10 +63,14 @@ import java.util.Map;
  *                 of a type is made is where every reading of a behavior's input is made
  * @param blocks   what the module's {@code fake} blocks declare, which is what says whether a
  *                 dependency is answered without the row writing anything
+ * @param mostValues for each dependency, how many values each of its parameters takes at most,
+ *                   -1 where nothing bounds them. What lets a table with no {@code _} row be
+ *                   known to answer every call
  */
 record AnswersForARule(RequiredDependencies requires,
                        Map<ValueName.Behavior, AnswerSubjects> standing,
-                       FakeTables blocks) {
+                       FakeTables blocks,
+                       Map<ValueName.Behavior, List<Long>> mostValues) {
 
     /**
      * The subject a value for the whole of what {@code dependency} answers is composed over, or
@@ -131,10 +135,26 @@ record AnswersForARule(RequiredDependencies requires,
                 stood.add(each.stood());
                 evidence = evidence.and(each.evidence());
             }
-            out.add(new StandInAttempt(new AnswersStoodIn.Stood(stood),
+            out.add(new StandInAttempt(new AnswersStoodIn.Stood(stood, answering()),
                     account(demanded, evidence)));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * The position an answer of each dependency is a value at, for the dependencies whose answer is
+     * one value of one type. An answer that is a union of cases is no one position's value, so it
+     * has none.
+     */
+    private Map<ValueName.Behavior, MeasuredInput> answering() {
+        Map<ValueName.Behavior, MeasuredInput> out = new LinkedHashMap<>();
+        for (RequiredDependencies.Required each : requires.inOrder()) {
+            MeasuredInput subject = subjectOf(each.dependency());
+            if (subject != null) {
+                out.put(each.dependency(), subject);
+            }
+        }
+        return out;
     }
 
     /**
@@ -390,9 +410,12 @@ record AnswersForARule(RequiredDependencies requires,
      * table is what it needs and this compiler writes none.
      */
     private boolean stated(ValueName.Behavior dependency) {
+        // A dependency nobody counted is one nothing bounds.
+        List<Long> most = mostValues.get(dependency);
         return ExampleProvisioning.standingIn(List.of(), dependency, blocks)
                 instanceof ExampleProvisioning.Standin.InTheModule(var table)
-                && ExampleStatements.answersEveryCall(table.read());
+                && ExampleStatements.answersEveryCall(table.read(),
+                        most == null ? List.of(-1L) : most);
     }
 
     /**

@@ -4,6 +4,7 @@ import souther.compiler.coverage.ArmProbe;
 import souther.compiler.coverage.ArmReplacements;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.coverage.NamedValue;
 import souther.compiler.coverage.NotCarriedReason;
 import souther.compiler.coverage.WalkProbe;
 import souther.compiler.coverage.WalkRewrite;
@@ -27,8 +28,11 @@ import souther.compiler.partition.Replacement;
 import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -122,7 +126,24 @@ public final class ReplacementReading {
     /** The same for one rewrite of a walk, and what the bodies it stands in part strings at. */
     private record WalkOccurrences(ReplacementReportAnchor reportAt, WalkRewrites.Asked asked,
                                    List<WalkProbe> probes, Set<String> separators,
+                                   Set<NamedValue> named, Set<String> reads, Set<String> inputs,
+                                   Set<ValueName.Behavior> dependencies,
                                    List<Optional<TermPath>> over) {}
+
+    /** What a body writes out on one side of a comparison, as a value a row holds. */
+    private static List<ObservedValue> observedOf(Collection<NamedValue> named) {
+        List<ObservedValue> out = new ArrayList<>();
+        for (NamedValue each : named) {
+            out.add(switch (each) {
+                case NamedValue.Whole(var value) -> new ObservedValue.Integer(value);
+                case NamedValue.Fractional(var value) -> new ObservedValue.Decimal(value);
+                case NamedValue.Characters(var value) -> new ObservedValue.Text(value);
+                // A case stands for every value of it, which carries what the case holds.
+                case NamedValue.Case(var type) -> new ObservedValue.Unit(type);
+            });
+        }
+        return out;
+    }
 
     /** The lists of the input the walk goes over at every place it is entered, or none where any
      *  place goes over a list the input does not hold as it is. */
@@ -262,6 +283,8 @@ public final class ReplacementReading {
                 Replacement.OfAWalk replaced = new Replacement.OfAWalk(site.walk(), each.how());
                 WalkOccurrences at = walkOccurrences.computeIfAbsent(replaced,
                         _ -> new WalkOccurrences(reportAt, each, new ArrayList<>(),
+                                new LinkedHashSet<>(), new LinkedHashSet<>(),
+                                new LinkedHashSet<>(), new LinkedHashSet<>(),
                                 new LinkedHashSet<>(), new ArrayList<>()));
                 if (!at.reportAt().equals(reportAt)) {
                     throw new IllegalStateException(replaced + " is shown at " + at.reportAt()
@@ -270,6 +293,14 @@ public final class ReplacementReading {
                 }
                 at.probes().add(site.index());
                 at.separators().addAll(site.separators());
+                at.named().addAll(site.named());
+                at.reads().addAll(site.reads());
+                // A behavior is the same behavior from any body that reaches it.
+                at.dependencies().addAll(site.dependencies());
+                // A parameter of a helper is no parameter of this behavior.
+                if (site.body().equals(behavior)) {
+                    at.inputs().addAll(site.inputs());
+                }
                 // A list read in a helper is a parameter of the helper, which is no location of
                 // this behavior's input.
                 at.over().add(site.body().equals(behavior)
@@ -281,7 +312,8 @@ public final class ReplacementReading {
         walkOccurrences.forEach((replaced, at) -> out.add(new Account(
                 new ReplacementAsWritten.OfAWalk(replaced), at.reportAt(),
                 walkStanding(replaced, at.asked(), at.probes(), List.copyOf(at.separators()),
-                        listsWalked(at.over()), stated, entered, stoppedAt, ranWith))));
+                        observedOf(at.named()), List.copyOf(at.reads()), List.copyOf(at.inputs()),
+                        List.copyOf(at.dependencies()), listsWalked(at.over()), stated, entered, stoppedAt, ranWith))));
         // One answer only where no arm the body owes a row through has a rewrite that is another
         // program; the arms of a library operation's copy are asked about above and do not count.
         // Which family a body invites is the body's: one with a fork is asked about the fork, arm
@@ -320,8 +352,12 @@ public final class ReplacementReading {
         }
         return ranStanding(replaced, rows,
                 row -> where.stream().anyMatch(wentThrough.apply(row)::contains), stoppedAt,
-                seenThrough -> new ReplacementOwed.OfAnArm(replaced.fork(), replaced.part(),
-                        replaced.with(), where, replacing, seenThrough, ranWith.get()));
+                decided -> new ReplacementOwed.OfAnArm(replaced.fork(), replaced.part(),
+                        replaced.with(), where, replacing, inputsOf(decided), ranWith.get()));
+    }
+
+    private static List<List<ObservedValue>> inputsOf(List<RowOutcome> rows) {
+        return rows.stream().map(RowOutcome::inputs).toList();
     }
 
     /**
@@ -330,6 +366,9 @@ public final class ReplacementReading {
      */
     private static Standing walkStanding(Replacement.OfAWalk replaced, WalkRewrites.Asked asked,
                                          List<WalkProbe> where, List<String> separators,
+                                         List<ObservedValue> named, List<String> reads,
+                                         List<String> inputs,
+                                         List<ValueName.Behavior> dependencies,
                                          List<TermPath> over, List<RowOutcome> rows,
                                          Function<RowOutcome, Set<WalkProbe>> entered,
                                          Function<RowOutcome, ReplacementDisposition.Met> stoppedAt,
@@ -346,8 +385,31 @@ public final class ReplacementReading {
         }
         return ranStanding(replaced, rows,
                 row -> where.stream().anyMatch(entered.apply(row)::contains), stoppedAt,
-                seenThrough -> new ReplacementOwed.OfAWalk(replaced.walk(), replaced.how(), where,
-                        replacing, seenThrough, ranWith.get(), separators, over));
+                decided -> new ReplacementOwed.OfAWalk(replaced.walk(), replaced.how(), where,
+                        replacing, inputsOf(decided),
+                        namedFirst(ValuesOfRareAnswersFirst.of(ranWith.get(), decided), named),
+                        separators, named, reads, inputs, dependencies, over));
+    }
+
+    /**
+     * What the rows ran with, with the values the body names first: a value an element of the list
+     * may be made of that the body compares with or tells a case by is where a step is told apart,
+     * whatever the rows answered. Stable, so what was first among the rest is.
+     */
+    private static InputsRowsRanWith namedFirst(InputsRowsRanWith ranWith,
+                                                List<ObservedValue> named) {
+        return ranWith.orderedBy(value -> named.stream().anyMatch(each ->
+                each.equals(value) || (caseOf(each) != null
+                        && caseOf(each).equals(caseOf(value)))) ? 0 : 1);
+    }
+
+    /** The case a value is, whether it holds anything or not; none for a value that is no case. */
+    private static TypeSymbol caseOf(ObservedValue value) {
+        return switch (value) {
+            case ObservedValue.Unit unit -> unit.type();
+            case ObservedValue.Constructed made -> made.type();
+            default -> null;
+        };
     }
 
     /**
@@ -358,7 +420,7 @@ public final class ReplacementReading {
     private static Standing ranStanding(Replacement replaced, List<RowOutcome> rows,
                                         Predicate<RowOutcome> through,
                                         Function<RowOutcome, ReplacementDisposition.Met> stoppedAt,
-                                        Function<List<List<ObservedValue>>, ReplacementOwed>
+                                        Function<List<RowOutcome>, ReplacementOwed>
                                                 lookingFor) {
         RowOutcome shownBy = null;
         // How the rows left untold were stopped, each row one meeting: the figures, whatever no
@@ -366,7 +428,7 @@ public final class ReplacementReading {
         // host's stack — and whether one row was held by figures alone. One such is enough to
         // leave the rewrite to a wider run: a row that comes back there may be the row that tells.
         ReplacementDisposition.Met untold = null;
-        List<List<ObservedValue>> seenThrough = new ArrayList<>();
+        List<RowOutcome> decided = new ArrayList<>();
         for (RowOutcome row : rows) {
             if (!through.test(row)) {
                 continue;
@@ -377,7 +439,7 @@ public final class ReplacementReading {
                 untold = alsoUntold(untold, stoppedAt.apply(row));
                 continue;
             }
-            seenThrough.add(row.inputs());
+            decided.add(row);
             // Every rewrite of every arm a decided row went through and every walk it entered was
             // run, or is said to have run out, so one missing is this reading and the run
             // disagreeing about what was carried — not something to read a reason off.
@@ -404,7 +466,7 @@ public final class ReplacementReading {
             return new Standing.CannotBeAsked(new ReplacementEvidence.Undecided.Way(
                     ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK, untold));
         }
-        ReplacementOwed lookFor = lookingFor.apply(seenThrough);
+        ReplacementOwed lookFor = lookingFor.apply(decided);
         return shownBy != null
                 ? new Standing.Unnoticed(RowRef.of(shownBy), lookFor)
                 : new Standing.Open(lookFor);

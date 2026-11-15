@@ -126,6 +126,8 @@ class APairIsOneElementInTwoClassesTest {
         assertEquals(List.of("[Person { age = 17, status = Inactive }]",
                         "[Person { age = 18, status = Active }]"),
                 generated.get("select").composed().rows().stream()
+                        .filter(row -> row.purposes().stream().anyMatch(
+                                purpose -> !(purpose instanceof Generator.Purpose.ForAReplacement)))
                         .map(row -> row.inputs().get(0).text()).toList(),
                 () -> "a row for each combination nothing is in: "
                         + generated.get("select").composed().reasons());

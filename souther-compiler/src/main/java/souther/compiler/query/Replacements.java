@@ -453,6 +453,8 @@ public final class Replacements {
                         // that answered nothing, the host's stack.
                         case A_RUN_DID_NOT_COME_BACK ->
                                 ReplacementEvidence.Undecided.Why.A_RUN_DID_NOT_COME_BACK;
+                        case A_RULE_REFUSED_A_CANDIDATE ->
+                                ReplacementEvidence.Undecided.Why.A_RULE_REFUSED_A_CANDIDATE;
                         case NOTHING_RAN -> ReplacementEvidence.Undecided.Why.NOTHING_RAN;
                         // The measure's search is asked for on the measure's behalf, which no
                         // block's row limit stops ({@link RewriteSearch.For#THE_MEASURE}).
