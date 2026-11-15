@@ -9,7 +9,6 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.inputs.Requirements;
-import souther.compiler.reading.Condition;
 import souther.compiler.reading.Decision;
 import souther.compiler.reading.Factor;
 import souther.compiler.reading.Interaction;
@@ -670,14 +669,16 @@ public final class InteractionCells {
      * condition leaves of its position. Anything the classes do not state is every row, said not to
      * be exact: no position a class of this run divides is what it is about.
      */
-    static Steering steeringOf(Condition condition, MeasuredInput.MeasuredAxes axes) {
+    static Steering steeringOf(souther.compiler.reading.Condition condition,
+                               MeasuredInput.MeasuredAxes axes) {
         // An arm a run is seen at whichever way it came is the ways it came by: a union of what
         // each way needs, and exact where every way is.
-        if (condition instanceof Condition.Arm arm && !arm.comesOutBy().isEmpty()) {
+        if (condition instanceof souther.compiler.reading.Condition.Arm arm
+                && !arm.comesOutBy().isEmpty()) {
             List<Steering> ways = new ArrayList<>();
-            for (List<Condition> way : arm.comesOutBy()) {
+            for (List<souther.compiler.reading.Condition> way : arm.comesOutBy()) {
                 Steering both = Steering.exactly(Cell.anything(axes.axes()));
-                for (Condition each : way) {
+                for (souther.compiler.reading.Condition each : way) {
                     both = both.and(steeringOf(each, axes));
                 }
                 ways.add(both);
@@ -695,7 +696,7 @@ public final class InteractionCells {
         };
     }
 
-    private static Steering underTheCases(Condition condition,
+    private static Steering underTheCases(souther.compiler.reading.Condition condition,
                                           ConditionPlacement.UnderTheCases under,
                                           MeasuredInput.MeasuredAxes axes) {
         List<Steering> eachCase = new ArrayList<>();

@@ -7,6 +7,7 @@ import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.flow.Arrival;
 import souther.compiler.flow.Completeness;
+import souther.compiler.flow.Paths;
 import souther.compiler.flow.Provenance;
 import souther.compiler.flow.Truth;
 import souther.compiler.query.Bodies;
@@ -17,7 +18,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -48,7 +49,7 @@ class AnOutcomeIsToldItsWaysOnlyWhereEveryWayIsWrittenDownTest {
         assertEquals(1, reached.outcomes().size(),
                 "two ways a run is not seen to tell apart are one outcome");
         assertEquals(2, waysOf(reached.outcomes().getFirst()).size(), "and it is told both");
-        assertFalse(reached.unseen(), "and no way of it is one no run is seen taking");
+        assertTrue(reached.known(), "and no way of it is one no run is seen taking");
     }
 
     @Test
@@ -78,7 +79,7 @@ class AnOutcomeIsToldItsWaysOnlyWhereEveryWayIsWrittenDownTest {
 
         assertEquals(1, reached.outcomes().size(), "the arm a run is seen at is the outcome");
         assertTrue(waysOf(reached.outcomes().getFirst()).isEmpty(), "with its region unsaid");
-        assertFalse(reached.unseen(), "and it is no way that nobody is seen taking");
+        assertTrue(reached.known(), "and it is no way that nobody is seen taking");
     }
 
     /**
@@ -94,7 +95,63 @@ class AnOutcomeIsToldItsWaysOnlyWhereEveryWayIsWrittenDownTest {
                 fixture.unseen()));
 
         assertEquals(1, reached.outcomes().size(), "the outcome that can be seen is offered");
-        assertTrue(reached.unseen(), "and the one that cannot is said");
+        assertEquals(1, reached.unseen(), "and the one that cannot is said");
+    }
+
+    /**
+     * What this reading will not hold apart is not none: no run arriving at a value is an empty list
+     * of ways, and ways it will not enumerate is a different answer.
+     */
+    @Test
+    void waysThisReadingWillNotHoldApartAreNotNoWays() {
+        Meetings.Reached none = Meetings.reachedBy(new Paths.Held<>(List.of()));
+        Meetings.Reached beyond = Meetings.reachedBy(new Paths.Beyond<>());
+
+        assertTrue(none.known() && none.outcomes().isEmpty(), "a value no run arrives at");
+        assertTrue(beyond.unenumerated() && beyond.outcomes().isEmpty(),
+                "a value settled more ways than are held apart");
+        assertTrue(beyond.mayVary() && !none.mayVary(), "which may be a decision, as none is not");
+    }
+
+    /**
+     * An operand nothing is known of may be a decision, so a meeting with another that is one
+     * cannot be named, and is said and not offered over the operand that is known.
+     */
+    @Test
+    void anOperandOfWhichNothingIsKnownTakesTheMeetingOutOfBeingOffered() {
+        Fixture fixture = new Fixture();
+        Meetings.Reached two = Meetings.outcomesFrom(List.of(
+                fixture.reachingArm(0), fixture.reachingArm(1)));
+        Meetings.Reached one = Meetings.outcomesFrom(List.of(fixture.reachingArm(0)));
+        Meetings.Reached unknown = Meetings.Reached.NOT_ENUMERATED;
+
+        assertEquals(2, two.outcomes().size(), "two outcomes are a decision");
+        assertEquals(WhyNotJoined.AN_OPERAND_HAS_MORE_WAYS_THAN_ARE_READ,
+                Meetings.whyNotOffered(List.of(two, unknown)), "with one that is a decision");
+        assertEquals(WhyNotJoined.AN_OPERAND_HAS_MORE_WAYS_THAN_ARE_READ,
+                Meetings.whyNotOffered(List.of(unknown, unknown)),
+                "with another of which nothing is known");
+        assertNull(Meetings.whyNotOffered(List.of(one, unknown)),
+                "but not with one that is a single way: that is no second decision");
+    }
+
+    /**
+     * Two operands of which the same is not known are not one decision named twice. What is known of
+     * both is all the same, and that is no word on whether they are the same choice.
+     */
+    @Test
+    void operandsNothingIsKnownOfAreNotMergedForBeingAlike() {
+        Fixture fixture = new Fixture();
+        Meetings.Reached known = Meetings.outcomesFrom(List.of(
+                fixture.reaching(Completeness.COMPLETE, 0)));
+
+        assertEquals(2, Meetings.distinct(List.of(Meetings.Reached.NOT_ENUMERATED,
+                Meetings.Reached.NOT_ENUMERATED)).size(), "two that cannot be read stay two");
+        assertEquals(2, Meetings.distinct(List.of(new Meetings.Reached(List.of(), 2, false),
+                new Meetings.Reached(List.of(), 2, false))).size(),
+                "and so do two with ways unseen");
+        assertEquals(1, Meetings.distinct(List.of(known, known)).size(),
+                "while one that is all known and used twice is the one decision");
     }
 
     private static List<List<Condition>> waysOf(Outcome outcome) {
@@ -119,6 +176,13 @@ class AnOutcomeIsToldItsWaysOnlyWhereEveryWayIsWrittenDownTest {
             Outcome seen = outcomeOf(0);
             Outcome path = outcomeOf(way);
             return new Arrival<>(Truth.FALSE, new Provenance<>(path, completeness, List.of(), seen));
+        }
+
+        /** An arrival at the outcome that is the arm {@code arm}, written whole as that arm. */
+        Arrival<Outcome> reachingArm(int arm) {
+            Outcome outcome = outcomeOf(arm);
+            return new Arrival<>(Truth.FALSE,
+                    new Provenance<>(outcome, Completeness.COMPLETE, List.of(), null));
         }
 
         /** An arrival written down in part and seen at no arm: a path of nothing named, which no run

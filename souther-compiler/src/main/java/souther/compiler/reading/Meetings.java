@@ -5,6 +5,7 @@ import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.flow.Arrival;
+import souther.compiler.flow.Paths;
 import souther.compiler.flow.ValueArrivals;
 import souther.compiler.semantics.Accumulation;
 
@@ -86,18 +87,12 @@ final class Meetings {
         List<Core> meeting = meetingAt(node, absorbed);
         List<Factor> factors = new ArrayList<>();
         if (meeting != null) {
-            // The same decision used in two operands is one, so each is read once.
-            Set<Reached> operands = new LinkedHashSet<>();
-            for (Core operand : meeting) {
-                operands.add(outcomesOf(operand, reading));
-            }
-            // A way no run is seen taking is an outcome all the same, so an operand with one has
-            // more than one outcome and is a decision. Offered without it, the meeting would be
-            // measured over combinations of the ways that can be seen and called whole.
-            if (operands.stream().filter(each -> each.outcomes().size()
-                            + (each.unseen() ? 1 : 0) > 1).count() > 1
-                    && operands.stream().anyMatch(Reached::unseen)) {
-                notJoined.add(WhyNotJoined.AN_OUTCOME_NO_RUN_IS_SEEN_TAKING);                return;
+            List<Reached> operands = distinct(meeting.stream()
+                    .map(operand -> outcomesOf(operand, reading)).toList());
+            WhyNotJoined why = whyNotOffered(operands);
+            if (why != null) {
+                notJoined.add(why);
+                return;
             }
             for (Reached each : operands) {
                 // One outcome is no decision: the operand answers the same way however the row is
@@ -184,21 +179,84 @@ final class Meetings {
      * would be seen meeting it.
      */
     private static Reached outcomesOf(Core e, ValueArrivals<Outcome> reading) {
-        return outcomesFrom(reading.waysAt(e).orNone());
+        return reachedBy(reading.waysAt(e));
     }
 
     /**
-     * The outcomes of an operand: the ways it is settled that a run is seen taking, and whether
-     * there is a way that none is.
+     * What an operand is settled by, from the ways the reading holds of it.
      *
-     * @param unseen whether some way the operand is settled by is one no run is seen taking, so no
-     *               combination with it can be held to a run
+     * <p>Three things and not two: no way at all, where no run arrives; the ways, which are the
+     * outcomes; and ways this reading will not hold apart ({@link Paths.Beyond}), of which nothing
+     * is known. The last is no more "none" than it is any number: it is an answer about what this
+     * reading enumerates, and reading it as an empty list would take an operand that may be a
+     * decision out of the meeting.
      */
-    record Reached(List<Outcome> outcomes, boolean unseen) {
+    static Reached reachedBy(Paths<Outcome> ways) {
+        return ways instanceof Paths.Held<Outcome>(var arrivals) ? outcomesFrom(arrivals)
+                : Reached.NOT_ENUMERATED;
+    }
+
+    /**
+     * The outcomes of an operand, and what is not known of them.
+     *
+     * @param outcomes     the ways it is settled that a run is seen taking
+     * @param unseen       how many ways it is settled by that no run is seen taking, so that no
+     *                     combination with one can be held to a run
+     * @param unenumerated whether the ways it is settled by are more than this reading holds apart
+     */
+    record Reached(List<Outcome> outcomes, int unseen, boolean unenumerated) {
+
+        /** Nothing is known of the ways: there are more than are held apart. */
+        static final Reached NOT_ENUMERATED = new Reached(List.of(), 0, true);
 
         Reached {
             outcomes = List.copyOf(outcomes);
         }
+
+        /** Whether every way the operand is settled by is known and seen. */
+        boolean known() {
+            return unseen == 0 && !unenumerated;
+        }
+
+        /** Whether the operand may be settled more than one way, which is a decision. */
+        boolean mayVary() {
+            return unenumerated || outcomes.size() + unseen > 1;
+        }
+    }
+
+    /**
+     * The operands, the same decision used in two of them being one.
+     *
+     * <p>Told apart only where everything of an operand is known. Two operands of which the same is
+     * not known are not shown to be the same decision, and are two: equal readings of what cannot be
+     * read say nothing of whether they are one choice named twice.
+     */
+    static List<Reached> distinct(List<Reached> operands) {
+        List<Reached> out = new ArrayList<>();
+        for (Reached each : operands) {
+            if (!(each.known() && out.contains(each))) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Why {@code operands} cannot be offered as a meeting, or null where they can.
+     *
+     * <p>A meeting is of two decisions at least. An operand some of whose ways are not known may be
+     * one, so where another is, or another may be, the combinations cannot be named: said, and not
+     * measured over the operands that are known and called whole.
+     */
+    static WhyNotJoined whyNotOffered(List<Reached> operands) {
+        if (operands.stream().filter(Reached::mayVary).count() < 2) {
+            return null;
+        }
+        if (operands.stream().anyMatch(Reached::unenumerated)) {
+            return WhyNotJoined.AN_OPERAND_HAS_MORE_WAYS_THAN_ARE_READ;
+        }
+        return operands.stream().anyMatch(each -> each.unseen() > 0)
+                ? WhyNotJoined.AN_OUTCOME_NO_RUN_IS_SEEN_TAKING : null;
     }
 
     /**
@@ -221,12 +279,12 @@ final class Meetings {
             reaching.computeIfAbsent(each.provenance().seen(), _ -> new ArrayList<>()).add(each);
         }
         List<Outcome> out = new ArrayList<>();
-        boolean unseen = false;
+        int unseen = 0;
         for (Map.Entry<Outcome, List<Arrival<Outcome>>> one : reaching.entrySet()) {
             List<Arrival<Outcome>> reached = one.getValue();
             if (reached.stream().noneMatch(each -> each.isComplete()
                     || !each.provenance().isSeenWhole())) {
-                unseen = true;
+                unseen++;
                 continue;
             }
             out.add(reached.stream().allMatch(Arrival::isComplete)
@@ -236,7 +294,7 @@ final class Meetings {
                             .toList())
                     : one.getKey());
         }
-        return new Reached(out, unseen);
+        return new Reached(out, unseen, false);
     }
 
     /**

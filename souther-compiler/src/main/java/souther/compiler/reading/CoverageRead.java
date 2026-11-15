@@ -425,13 +425,15 @@ public final class CoverageRead {
      * be offered, rather than dropped for want of a way in to name. Where no run arrives there is
      * none. And inside the body of a function value there is one that is not this walk's: the
      * operation the function is handed to reads what its body decides, as the elements it keeps and
-     * what each is worth, so reading it here too would be one meeting said twice.
+     * what each is worth, so reading it here too would be one meeting said twice. Whatever else
+     * could not be stated of the way there, the body is the function's: the reasons gather as the
+     * walk goes in, and one of them being the function is what puts it inside one.
      */
     private static boolean meetingsAreReadUnder(Reach reach) {
         return switch (reach) {
             case Reach.Nothing _ -> false;
-            case Reach.Unnameable it -> it.whys().stream().anyMatch(
-                    why -> why != PathAccess.Unsupported.Why.RUNS_WHERE_SOMETHING_CALLS_IT);
+            case Reach.Unnameable it -> it.whys().stream().noneMatch(
+                    why -> why == PathAccess.Unsupported.Why.RUNS_WHERE_SOMETHING_CALLS_IT);
             case Reach.Ways _, Reach.Coarse _ -> true;
         };
     }
