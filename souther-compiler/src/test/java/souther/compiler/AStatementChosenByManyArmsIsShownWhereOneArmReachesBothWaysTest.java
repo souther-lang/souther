@@ -45,6 +45,20 @@ class AStatementChosenByManyArmsIsShownWhereOneArmReachesBothWaysTest {
 
         assertFalse(notShownAt(human, "d"), human);
         assertFalse(notShownAt(human, "s"), human);
+        assertFalse(notShownAt(human, "h"), human);
+    }
+
+    /** The way to the comparison states only differences ({@code d /= h}, {@code d == h}), and a
+     *  row moved by one amount in every number it names meets them as it did: a value of
+     *  {@code d} or of {@code s} is taken by a row wherever it is. */
+    @Test
+    void aWayStatingOnlyDifferencesTakesNoValueOfTheNumbersItNames() {
+        String human = report("([ d, d + 1.0m ] |> List.find(x -> x /= h)"
+                + " |> Option.withDefault(d)) >= s");
+
+        assertFalse(notShownAt(human, "d"), human);
+        assertFalse(notShownAt(human, "s"), human);
+        assertFalse(notShownAt(human, "h"), human);
     }
 
     /** The same with a third arm a row can take. */
@@ -55,5 +69,6 @@ class AStatementChosenByManyArmsIsShownWhereOneArmReachesBothWaysTest {
 
         assertFalse(notShownAt(human, "d"), human);
         assertFalse(notShownAt(human, "s"), human);
+        assertFalse(notShownAt(human, "h"), human);
     }
 }
