@@ -41,9 +41,9 @@ class ACombinationTheClassesCannotSayExistsIsOwedOnceARunIsSeenMakingItTest {
 
         // x == y with x > y cannot happen: no run is ever seen making it, and it stays open.
         assertEquals(3, findings.size(), () -> "the combinations the row did not make: " + findings);
-        assertTrue(findings.stream().anyMatch(Adequacy.Finding::established),
-                () -> "a combination a run is seen making is owed a row: " + findings);
-        assertTrue(findings.stream().anyMatch(each -> !each.open().isEmpty()),
+        assertEquals(2, findings.stream().filter(Adequacy.Finding::established).count(),
+                () -> "the two a run is seen making are owed a row: " + findings);
+        assertEquals(1, findings.stream().filter(each -> !each.open().isEmpty()).count(),
                 () -> "and the one no input makes stays open: " + findings);
         assertTrue(findings.stream().allMatch(each -> each.weakenedBy().isEmpty()),
                 "the measure itself went without nothing");
