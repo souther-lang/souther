@@ -125,7 +125,7 @@ public final class StringsOfAPiece {
         if (ofTheStrings == null) {
             return null;
         }
-        Language written = whole.heldAsWritten().language(meter);
+        Language written = StringsInNormalFormC.valuesOf(whole, meter);
         if (written == null) {
             return null;
         }

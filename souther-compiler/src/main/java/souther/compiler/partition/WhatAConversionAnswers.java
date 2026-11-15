@@ -54,10 +54,7 @@ final class WhatAConversionAnswers {
         if (through.equals(CaseMapping.NONE)) {
             // The values of the side where they are worked out, and the strings held as written,
             // which are some of them, where the code points it reads are more than are followed.
-            Language held = StringsInNormalFormC.within(partner, meter);
-            if (held == null) {
-                held = partner.heldAsWritten().language(meter);
-            }
+            Language held = StringsInNormalFormC.valuesOf(partner, meter);
             return held == null ? null : new WhatAConversionAnswers(held, standing, partner);
         }
         CodeMap map = CaseMaps.of(through);

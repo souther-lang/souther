@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.stream.IntStream;
 
 import net.unit8.notation199x.Normalization;
 import net.unit8.notation199x.pattern.Automaton;
@@ -26,9 +27,17 @@ import net.unit8.notation199x.pattern.Meter;
  * is in the form if nothing in it is changed by the form, which is asked of the run time's own
  * normalization of the last starter and a mark of that class standing before the next code point.
  *
+ * <p>A composite that ends in a mark, such as {@code é}, hides it: a mark of a lesser class after
+ * it is put before the mark and may compose with the letter, which the machine does not follow. It
+ * is left out of what is followed, and the strings that hold one are the strings held as written,
+ * which are in the form whatever they hold. What is made is so a part of the values, and all of
+ * them where the language holds no such composite beside a mark.
+ *
  * <p>Made only of the code points the language reads, and only where they are few: the machine has
  * a state for each starter among them and each class of mark. A language reading more is not made
- * here, and its values are said by what is held as written.
+ * here, since the machine of every string in the form is some thousands of states and a language
+ * read with it by the states of the two together; its values are said by what is held as written
+ * ({@link #valuesOf}).
  */
 public final class StringsInNormalFormC {
 
@@ -60,9 +69,29 @@ public final class StringsInNormalFormC {
         return known.computeIfAbsent(changes, key -> known.size());
     }
 
+    /** Whether {@code codePoint} is a composite that ends in the mark it was made with. */
+    private static boolean hidesAMark(int codePoint) {
+        String parts = Normalization.normalize(Normalization.Form.NFD,
+                Character.toString(codePoint));
+        return parts.codePointCount(0, parts.length()) > 1
+                && Normalization.combiningClass(parts.codePointBefore(parts.length())) != 0;
+    }
+
     /**
-     * The strings of {@code language} that are values, or null where the code points it reads are
-     * many or the machine is more than {@code meter} allows.
+     * Strings of {@code language} that are values, as many as are followed: all of them where the
+     * code points it reads are few and the machine is within what {@code meter} allows, and the
+     * strings held as written otherwise. Never more than the values, and null only past
+     * {@code meter}.
+     */
+    public static Language valuesOf(Language language, Meter meter) {
+        Language followed = within(language, meter);
+        return followed != null ? followed : language.heldAsWritten().language(meter);
+    }
+
+    /**
+     * The strings of {@code language} that are surely values, or null where the code points it
+     * reads are many or the machine is more than {@code meter} allows: those in the form that hold
+     * no composite ending in a mark, and those held as written.
      */
     public static Language within(Language language, Meter meter) {
         Automaton machine = language.machine();
@@ -75,21 +104,24 @@ public final class StringsInNormalFormC {
                 }
             }
         }
+        // A language of stable starters holds only values: they are in the form in any order.
         if (StableStarters.within(read).equals(read)) {
             return language;
         }
         if (read.size() > MOST_READ) {
             return null;
         }
-        int[] alphabet = new int[(int) read.size()];
-        int count = 0;
-        for (CodePoints.Range range : read.ranges()) {
-            for (int each = range.from(); each <= range.to(); each++) {
-                alphabet[count++] = each;
-            }
-        }
-        // The states of the form: what stands before, as a string the run time's normalization is
-        // asked of, and the code points that may follow it.
+        int[] alphabet = read.ranges().stream()
+                .flatMapToInt(range -> IntStream.rangeClosed(range.from(), range.to()))
+                .filter(each -> !hidesAMark(each)).toArray();
+        Language followed = followed(machine, live, alphabet, meter);
+        Language written = language.heldAsWritten().language(meter);
+        return followed == null || written == null ? null : followed.or(written, meter);
+    }
+
+    /** The strings of {@code machine} over {@code alphabet} that are in the form. */
+    private static Language followed(Automaton machine, BitSet live, int[] alphabet,
+                                     Meter meter) {
         // What stands before decides what may follow by the last starter and the greatest class of
         // the marks since it, so a state is those two. The string it stands for is the one that
         // first came to it: a mark blocks a later one from composing with the starter by its class
