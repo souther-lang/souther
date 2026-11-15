@@ -1512,8 +1512,11 @@ public sealed interface BlockReason {
      *
      * <p>Under {@code a.domain == d} with {@code d} the domain of an address, a domain is shown to
      * be one some address has where an address can be written round it within the longest
-     * {@code String}, and a domain no address has is shown that whatever its length. The longest
-     * domains are neither, and no class here holds them.
+     * {@code String}, and a domain no address has is shown that whatever its length. A domain
+     * longer than the longest {@code String} less the fewest code points an address has round it
+     * is no address's, and is on the false side. A domain between the longest that is shown to be
+     * an address's and that is neither, and no class here holds it; where every address is written
+     * round a domain by the same stretch there is none.
      *
      * <p>Apart from {@link RelationNotShownToReachEveryValue}, which leaves the position no class
      * of the rule's. Here the classes stand over what was shown, and what this says is where the

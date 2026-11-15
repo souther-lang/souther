@@ -208,9 +208,9 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
 
     /**
      * Every domain is the domain of an address, as far as an address can be written round it: a
-     * domain up to the longest string less two is, and a longer one is shown neither way. The
-     * domains are not parted, since every one shown is on one side; the longest are no class and
-     * are said to be open, and nothing says the relation is not shown at all.
+     * domain up to the longest string less two is, and a longer one is the domain of no address,
+     * since an address is at least two code points longer than its domain. The domains are not
+     * parted, since every one is on one side, and none is left open.
      */
     @Test
     void aDomainIsShownTheDomainOfAnAddressAsFarAsAnAddressIsWrittenRoundIt() {
@@ -230,9 +230,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                             domainsOf(email))
                 """);
 
-        assertEquals(List.of(new BlockReason.RelationShownOverARegion(false,
-                        LONGEST_DOMAIN_OF_AN_ADDRESS, List.of())),
-                leftOpenAt(evidence, "book[*].domain@Some"));
+        assertEquals(List.of(), leftOpenAt(evidence, "book[*].domain@Some"));
         assertEquals(false, notReadAt(evidence, "book[*].domain@Some").contains(
                 UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE));
     }
@@ -257,9 +255,7 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
         assertEquals(parted,
                 classesAtOf("book[*].domain@Some", ANY_EMAIL, domains,
                         THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
-        assertEquals(List.of(new BlockReason.RelationShownOverARegion(false,
-                        LONGEST_DOMAIN_OF_AN_ADDRESS, List.of())),
-                leftOpenAt(evidence, "book[*].domain@Some"));
+        assertEquals(List.of(), leftOpenAt(evidence, "book[*].domain@Some"));
         assertEquals(parted,
                 classesAtOf("book[*].domain@Some", ANY_EMAIL, shortDomains,
                         THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
@@ -385,8 +381,8 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
 
     /**
      * Every domain is shown to be the second piece of an email but those holding a code point that
-     * is no stable starter and those too long for an address round them, which are open: a domain
-     * of them may be one no email has. So the
+     * is no stable starter, which are open up to the longest an address can be written round: a
+     * domain of them may be one no email has, and a longer one is the piece of none. So the
      * domains are never said to come out on one side of the equality — the one class is those
      * shown on the side they are, and the rest are in none.
      */
@@ -400,8 +396,8 @@ class AnEqualityOfTwoStringsPartsEachByWhatTheOtherCanHoldTest {
                         List.of("book[*].domain@Some: x can be piece 1 of email")),
                 classesAtOf("book[*].domain@Some", emails, "[^@\\\\s]+",
                         THE_SECOND_PIECE_OF_AN_EMAIL_AGAINST_A_BOOK));
-        assertEquals(List.of(new BlockReason.RelationShownOverARegion(true,
-                        LONGEST_DOMAIN_OF_AN_ADDRESS, List.of())),
+        assertEquals(List.of(new BlockReason.RelationShownOverARegion(false, null,
+                        LONGEST_DOMAIN_OF_AN_ADDRESS + 1, List.of())),
                 leftOpenAt(evidence, "book[*].domain@Some"));
         assertFalse(notReadAt(evidence, "book[*].domain@Some").contains(
                 UndividedPosition.Reason.RULE_TELLS_NOTHING_APART),

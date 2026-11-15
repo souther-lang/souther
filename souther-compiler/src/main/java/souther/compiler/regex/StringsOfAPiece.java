@@ -80,8 +80,15 @@ public final class StringsOfAPiece {
      *                     value where it is short enough
      * @param upTo         the most code points a piece of {@code ofTheValues} is shown to be the
      *                     piece of a value at; below nought where none is
+     * @param noneBeyond   the most code points a piece can have and be the piece of a string a
+     *                     {@code String} holds: a piece longer than this is the piece of no value,
+     *                     whichever it is. Worked out over every string of the language, where
+     *                     {@code upTo} is worked out over those held as written, and over the
+     *                     least that must stand round a piece where {@code upTo} is over the most
+     *                     a piece may need. At least {@code upTo}; below nought where no string
+     *                     has a piece there
      */
-    public record Shown(Language ofTheStrings, Language ofTheValues, long upTo) {
+    public record Shown(Language ofTheStrings, Language ofTheValues, long upTo, long noneBeyond) {
 
         public Shown {
             if (ofTheStrings == null || ofTheValues == null) {
@@ -136,7 +143,28 @@ public final class StringsOfAPiece {
             around = Math.max(around, mostAround(written.machine(), separator,
                     Math.toIntExact(index)));
         }
-        return new Shown(ofTheStrings, ofTheWritten, Strings.LONGEST_TEXT - around);
+        return new Shown(ofTheStrings, ofTheWritten, Strings.LONGEST_TEXT - around,
+                noneBeyond(whole, separator, from, until, meter));
+    }
+
+    /**
+     * The most code points a piece in the window can have and be the piece of a string of
+     * {@code whole} no longer than the longest string ({@link Shown#noneBeyond}); the longest string
+     * where that is not worked out within {@code meter}.
+     */
+    private static long noneBeyond(Language whole, int separator, long from, long until,
+                                   Meter meter) {
+        Beginnings beginnings = beginningsIn(whole.machine(), separator, from, until,
+                meter.making());
+        if (beginnings == null) {
+            return Strings.LONGEST_TEXT;
+        }
+        long least = Long.MAX_VALUE;
+        for (long index : beginnings.indexes()) {
+            least = Math.min(least, leastAround(whole.machine(), separator,
+                    Math.toIntExact(index)));
+        }
+        return least == Long.MAX_VALUE ? -1 : Math.max(-1, Strings.LONGEST_TEXT - least);
     }
 
     /**
@@ -155,6 +183,71 @@ public final class StringsOfAPiece {
         if (index > states) {
             return (index + 2L) * (states + 1L);
         }
+        return aroundAPiece(machine, separator, index, true);
+    }
+
+    /**
+     * The fewest code points a string of {@code machine} has round a piece at {@code index}: the
+     * shortest stretch to a state a piece begins in, and the shortest that takes the machine on
+     * from a state the piece ends in, the least of the two together over every way the piece can
+     * stand there. A string that has any piece at that index has at least this many code points
+     * besides it, so a piece longer than the longest string less this is the piece of none.
+     *
+     * <p>Where the index is past the machine's states, only the separators before the piece are
+     * counted: one code point each.
+     *
+     * @return the fewest, or {@link Long#MAX_VALUE} where no string of the machine has a piece at
+     *         the index
+     */
+    static long leastAround(Automaton machine, int separator, int index) {
+        if (index > machine.size()) {
+            return index;
+        }
+        return aroundAPiece(machine, separator, index, false);
+    }
+
+    /**
+     * The most code points a string that stands inside some string of {@code whole} can need
+     * written round it: the longest of the shortest stretches that bring the machine to a state
+     * from the start, and the longest of those that take it on from a state to the end of some
+     * string, over the states that lie on a way from the one to the other. A string inside a string
+     * of the language is inside one of at most its own code points and this many more, and a
+     * string that is one of the language needs none round it.
+     *
+     * @return the most, or nought where the language holds no string
+     */
+    public static long mostAroundAStringInside(Language whole) {
+        Automaton machine = whole.machine();
+        int states = machine.size();
+        long[] fromTheStart = new long[states];
+        Arrays.fill(fromTheStart, Long.MAX_VALUE);
+        fromTheStart[Automaton.START] = 0;
+        Deque<Integer> pending = new ArrayDeque<>();
+        pending.add(Automaton.START);
+        while (!pending.isEmpty()) {
+            int state = pending.poll();
+            for (Automaton.Step each : machine.stepsFrom(state)) {
+                if (fromTheStart[each.to()] == Long.MAX_VALUE) {
+                    fromTheStart[each.to()] = fromTheStart[state] + 1;
+                    pending.add(each.to());
+                }
+            }
+        }
+        long[] toAnEnd = shortestToAnEnd(machine);
+        long before = 0;
+        long after = 0;
+        for (int state = 0; state < states; state++) {
+            if (fromTheStart[state] != Long.MAX_VALUE && toAnEnd[state] != Long.MAX_VALUE) {
+                before = Math.max(before, fromTheStart[state]);
+                after = Math.max(after, toAnEnd[state]);
+            }
+        }
+        return before + after;
+    }
+
+    /** The most, or the fewest, of what {@link #mostAround} and {@link #leastAround} count. */
+    private static long aroundAPiece(Automaton machine, int separator, int index, boolean most) {
+        int states = machine.size();
         CodePoints apart = CodePoints.of(separator);
         CodePoints within = apart.not();
         long[] before = new long[states];
@@ -177,7 +270,7 @@ public final class StringsOfAPiece {
             before = next;
         }
         long[] toAnEnd = shortestToAnEnd(machine);
-        long most = 0;
+        long out = most ? 0 : Long.MAX_VALUE;
         for (int begin = 0; begin < states; begin++) {
             if (before[begin] == Long.MAX_VALUE) {
                 continue;
@@ -192,11 +285,12 @@ public final class StringsOfAPiece {
                 }
                 long after = afterAPieceEndingAt(machine, end, apart, toAnEnd);
                 if (after != Long.MAX_VALUE) {
-                    most = Math.max(most, before[begin] + after);
+                    long round = before[begin] + after;
+                    out = most ? Math.max(out, round) : Math.min(out, round);
                 }
             }
         }
-        return most;
+        return out;
     }
 
     /** The fewest code points from where {@code from} has each state to each state reached on

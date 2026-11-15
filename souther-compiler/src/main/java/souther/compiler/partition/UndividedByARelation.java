@@ -1034,6 +1034,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param upTo    the most code points a string of {@code canBe} is shown to be a value of the
      *                partner at, for the longest string a value of the partner can be written
      *                round it in; or null where every one of them is
+     * @param noneBeyond the most code points a string can have and be a value of the partner, for
+     *                the least a string the partner is a piece of has round it; a string of
+     *                {@code mayBe} longer than that is shown to be none of them, and is on the
+     *                false side. Null where there is no such length
      * @param shownAt the lengths a string of {@code canBe} is shown to be a value of the partner
      *                at, for the operations: the partner is held to them, and a string of another
      *                length is the answer for one of them only through what the operations'
@@ -1051,7 +1055,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                strings of a side is shown only where it is exact, and which a run gets to
      *                the relation past only where it is shown to
      */
-    record StringsAPartnerCanHold(ValueSet canBe, ValueSet mayBe, Long upTo,
+    record StringsAPartnerCanHold(ValueSet canBe, ValueSet mayBe, Long upTo, Long noneBeyond,
                                   LengthRuns shownAt, StringsPastTheWay reached,
                                   StringsPastTheWay partnerHeldTo, String partner,
                                   BlockReason.OperationsNotShown operations)
@@ -1071,8 +1075,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          */
         static StringsAPartnerCanHold unreached(ValueSet canBe, ValueSet mayBe, Long upTo,
                                                 String partner) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, null, null, null, partner,
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, null, null, null, null, partner,
                     BlockReason.OperationsNotShown.NONE);
+        }
+
+        /**
+         * The same strings, none of which longer than {@code longest} is any of the partner's
+         * values; null where there is no such length. The strings of {@code mayBe} that long are
+         * shown on the false side, which no plan of strings says: a plan for them would be a
+         * machine as long as the longest string.
+         */
+        StringsAPartnerCanHold noneBeyond(Long longest) {
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, longest, shownAt, reached,
+                    partnerHeldTo, partner, operations);
         }
 
         /** Strings shown to be the partner's values exactly where {@code canBe} holds them, and
@@ -1083,22 +1098,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         /** The same strings, with the operations whose image is not shown beyond them. */
         StringsAPartnerCanHold withTheImagesNotShownOf(List<String> named) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, shownAt, reached, partnerHeldTo,
-                    partner, operations.andImagesOf(named));
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, shownAt, reached,
+                    partnerHeldTo, partner, operations.andImagesOf(named));
         }
 
         /** The same strings, with the operations a run is not shown to get past for some of
          *  them. */
         StringsAPartnerCanHold notShownGottenPast(List<String> named) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, shownAt, reached, partnerHeldTo,
-                    partner, operations.andNotGottenPast(named));
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, shownAt, reached,
+                    partnerHeldTo, partner, operations.andNotGottenPast(named));
         }
 
         /** The same strings, shown to be the partner's values only at {@code lengths}, the
          *  partner being held to them. */
         StringsAPartnerCanHold shownAt(LengthRuns lengths) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, lengths, reached, partnerHeldTo,
-                    partner, operations);
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, lengths, reached,
+                    partnerHeldTo, partner, operations);
         }
 
         /**
@@ -1107,15 +1122,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * strings alone is shown at every length, and the reach it was given is gone.
          */
         StringsAPartnerCanHold showing(ValueSet canBe, ValueSet mayBe, Long upTo) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, shownAt, reached, partnerHeldTo,
-                    partner, operations);
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, shownAt, reached,
+                    partnerHeldTo, partner, operations);
         }
 
         /** These, shown only at the lengths {@code lengths}, which every other length is left
          *  open at. */
         StringsAPartnerCanHold reachedAt(StringsPastTheWay lengths) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, shownAt, lengths, partnerHeldTo,
-                    partner, operations);
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, shownAt, lengths,
+                    partnerHeldTo, partner, operations);
         }
 
         /**
@@ -1134,20 +1149,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 throw new IllegalArgumentException("the partner is held to " + partnerHeldTo
                         + ", and " + lengths + " is no lengths beside it");
             }
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, shownAt, reached, both, partner,
-                    operations);
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, shownAt, reached,
+                    both, partner, operations);
         }
 
         /** Whether every string is shown on one side or the other, so that none is open. */
         boolean leavesNoneOpen() {
-            return upTo == null && shownAt == null && reached == null && partnerHeldTo == null
-                    && canBe.equals(mayBe);
+            return upTo == null && noneBeyond == null && shownAt == null && reached == null
+                    && partnerHeldTo == null && canBe.equals(mayBe);
         }
 
         /** Whether the same strings are shown on each side, whatever the partner is called. */
         boolean showsTheStringsOf(StringsAPartnerCanHold other) {
             return other != null && canBe.equals(other.canBe) && mayBe.equals(other.mayBe)
                     && Objects.equals(upTo, other.upTo)
+                    && Objects.equals(noneBeyond, other.noneBeyond)
                     && Objects.equals(shownAt, other.shownAt)
                     && Objects.equals(reached, other.reached)
                     && Objects.equals(partnerHeldTo, other.partnerHeldTo);
@@ -1157,10 +1173,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          *  partners' where it is shown to be either's. */
         StringsAPartnerCanHold orAnother(StringsAPartnerCanHold other) {
             StringsAPartnerCanHold named = partner.equals(other.partner) ? this
-                    : new StringsAPartnerCanHold(canBe, mayBe, upTo, shownAt, reached,
+                    : new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, shownAt, reached,
                             partnerHeldTo, partner + " or " + other.partner, operations);
-            return new StringsAPartnerCanHold(named.canBe, named.mayBe, named.upTo, named.shownAt,
-                    named.reached, named.partnerHeldTo, named.partner,
+            // A string is none of either partner's values only past the longer of the two.
+            Long beyond = noneBeyond == null || other.noneBeyond == null ? null
+                    : Math.max(noneBeyond, other.noneBeyond);
+            return new StringsAPartnerCanHold(named.canBe, named.mayBe, named.upTo, beyond,
+                    named.shownAt, named.reached, named.partnerHeldTo, named.partner,
                     operations.and(other.operations));
         }
     }
@@ -4078,11 +4097,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         // A string looked for that is shown inside a value stands in one written round it, which
-        // is longer than it by what the machine needs before and after.
-        boolean boundedByWhatSurroundsIt = standsInside && hereIsFirst;
+        // is longer than it by at most what the machine needs before and after.
+        // A string looked for that is itself a value has nothing written round it, so only the
+        // strings shown inside a value that are no value need room, and where none of them is as
+        // long as the room leaves there is nothing to bound.
+        long room = standsInside && hereIsFirst
+                ? StringsOfAPiece.mostAroundAStringInside(shownOther) : 0;
+        boolean boundedByWhatSurroundsIt = standsInside && hereIsFirst
+                && !(mineMap == null && noneOfThemIsAsLongAsTheRoomLeaves(shownHere, shownOther,
+                        TextExtents.LONGEST_STRING - room, meter));
         long upTo = boundedByWhatSurroundsIt
-                ? TextExtents.LONGEST_STRING - 2L * (shownOther.size() + 1L)
-                : TextExtents.LONGEST_STRING;
+                ? TextExtents.LONGEST_STRING - room : TextExtents.LONGEST_STRING;
         List<String> operations = new ArrayList<>(
                 operationsNotExactOver(mine.through(), languageOf(mineHolds)));
         operations.addAll(operationsNotExactOver(theirs.through(), partner));
@@ -4093,6 +4118,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return StringsAPartnerCanHold.unreached(ValueSet.matching(canBe),
                 ValueSet.matching(mayBe), boundedByWhatSurroundsIt ? upTo : null, called)
                 .withTheImagesNotShownOf(operations);
+    }
+
+    /**
+     * Whether no string of {@code some} that is not one of {@code strings} is longer than
+     * {@code longest}, where that is worked out within {@code meter}.
+     */
+    private static boolean noneOfThemIsAsLongAsTheRoomLeaves(Language some, Language strings,
+                                                             long longest, Meter meter) {
+        Language outside = strings.not(meter);
+        Language beyond = outside == null ? null : some.and(outside, meter);
+        if (beyond == null) {
+            return false;
+        }
+        if (beyond.isEmpty()) {
+            return true;
+        }
+        Language.Ends lengths = beyond.lengths();
+        return lengths != null && lengths.most() != null && lengths.most() <= longest;
     }
 
     /**
@@ -4435,7 +4478,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         return StringsAPartnerCanHold.unreached(ValueSet.matching(shown.ofTheValues()),
                 ValueSet.matching(alike ? shown.ofTheValues() : shown.ofTheStrings()),
-                bound <= shown.upTo() ? null : shown.upTo(), called);
+                bound <= shown.upTo() ? null : shown.upTo(), called)
+                .noneBeyond(shown.noneBeyond() >= bound ? null : shown.noneBeyond());
     }
 
     /**
