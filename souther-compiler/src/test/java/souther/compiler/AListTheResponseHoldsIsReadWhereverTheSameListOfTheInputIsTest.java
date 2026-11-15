@@ -136,7 +136,7 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                 "List.sum(List.mapIndexed((i, x) -> i * x, List.sortBy(x -> x, NUMS)))",
                 // A reversal between the selections puts their positions in another list.
                 "List.sum(List.take(1, List.reverse(List.drop(1, NUMS))))",
-                "List.sum(List.flatMap(i -> [i.quantity], ROWS))",
+                "List.sum(List.flatMap(i -> [i.quantity, i.quantity], ROWS))",
                 "List.fold((acc, x) -> acc + x, 0,"
                         + " List.sortBy(x -> x, List.map(.quantity, ROWS)))");
     }
