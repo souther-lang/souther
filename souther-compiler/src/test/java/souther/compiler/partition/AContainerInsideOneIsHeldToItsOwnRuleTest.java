@@ -63,6 +63,8 @@ class AContainerInsideOneIsHeldToItsOwnRuleTest {
     void aRowOfferedForAnInnerCollectionMeetsThatCollectionsFloor() {
         assertEquals(List.of("[Inner([5, 5])]"),
                 offered("twice", ">= 2", "[ 1, 2 ]").composed().rows().stream()
+                        .filter(row -> row.purposes().stream().anyMatch(
+                                purpose -> !(purpose instanceof Generator.Purpose.ForAReplacement)))
                         .map(row -> row.inputs().get(0).text()).toList(),
                 "the inner list holds the two its own rule asks for");
     }

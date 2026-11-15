@@ -63,6 +63,7 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
+import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -90,11 +91,14 @@ import java.util.OptionalInt;
 import java.util.SequencedMap;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 /**
@@ -1758,9 +1762,9 @@ public final class Generator {
         return switch (stood) {
             case AnswersStoodIn.NothingComposed(var why) ->
                     FillResult.nothingWasLookedFor(plan, why, List.of());
-            case AnswersStoodIn.Stood(var answers) ->
+            case AnswersStoodIn.Stood(var answers, var answering) ->
                     filling(plan, existing, check, read, runningOnce(trial), baselines, answers,
-                            holding, unanswered, budget);
+                            answering, holding, unanswered, budget);
         };
     }
 
@@ -1769,7 +1773,9 @@ public final class Generator {
                                       CandidateCheck check,
                                       souther.compiler.reading.CoverageRead.Read read,
                                       RunOnce trial, List<Baseline> baselines,
-                                      List<StoodInAnswer> answers, HeldOutcome.Of holding,
+                                      List<StoodInAnswer> answers,
+                                      Map<ValueName.Behavior, MeasuredInput> answering,
+                                      HeldOutcome.Of holding,
                                       WhereNothingIsAnswered unanswered,
                                       AdequacyPolicy.OfTheGeneration budget) {
         MeasuredInput subject = plan.subject();
@@ -2367,7 +2373,8 @@ public final class Generator {
                             inOrder(through, at -> candidatesBeside(arm.seenThrough().get(at),
                                     axes, purposes, check, answers, growing, lists)),
                             inOrder(through, at -> movedFrom(arm.seenThrough().get(at), axes,
-                                    purposes, looking, check, answers))));
+                                    purposes, looking, check, answers,
+                                    allPositions(axes.subject().parameters())))));
                 }
                 // From the rows seen entering the walk, which is where a run of it is known to start
                 // whatever a reading of the way in could state. A rewrite of a walk parts from it
@@ -2375,7 +2382,9 @@ public final class Generator {
                 // then by two is asked first. Then a row in each class of each position, as for a
                 // body answering one value: a walk over a list the rows hold fixed parts from its
                 // rewrite where the value its step reads lies, which is what the classes divide.
-                // And last a row with one position moved.
+                // And last a row with one position moved, and a row standing a dependency in with
+                // an answer that holds more elements. Where the walk is over no list of the input,
+                // the classes and the positions moved come before the lists are grown.
                 case ReplacementOwed.OfAWalk walk -> {
                     List<Purpose> purposes = List.of(new Purpose.ForAReplacement(asked));
                     // A candidate grown from each of the first rows in turn, the rows holding the
@@ -2395,16 +2404,23 @@ public final class Generator {
                                     : elementsWalked(row, walk.over(), axes.subject()));
                     int through = from.size();
                     Examining lists = new Examining(looking);
+                    // What the body compares with, and the values either side of each.
+                    List<ObservedValue> borders = NearbyValues.bordersOf(walk.named());
                     // One growth for the search: what stands for a type is made once, as far as the
                     // search asks.
                     Growth growth = aListGrownAmong(walk.ranWith(), axes.subject(), check, looking,
-                            NearbyValues.Put.BEFORE_AND_AFTER);
-                    Beside growing = grownTwice(growth, walk.over());
+                            NearbyValues.Put.BEFORE_AND_AFTER, borders, walk.reads());
+                    // Every way of changing a row below changes it at what the walk reads: what it
+                    // reads nothing of is not what it observes, and a candidate there takes the
+                    // runs of one that is.
+                    Beside growing = atWhatTheWalkReads(grownTwice(growth, walk.over()),
+                            walk.inputs());
                     // The lists the walk is not known to go over are grown last, since a step may
                     // read what another list holds, and no list grown there is one the walk is
                     // known to take a second step in.
                     Examining everyList = new Examining(looking);
-                    Beside growingAny = walk.over().isEmpty() ? null : grownTwice(growth, List.of());
+                    Beside growingAny = walk.over().isEmpty() ? null
+                            : atWhatTheWalkReads(grownTwice(growth, List.of()), walk.inputs());
                     // And beside each, a string the body parts with a piece more, and one put as
                     // pieces the body demands: a walk over the pieces is a walk over a list no
                     // input holds, and a string of more pieces is how it is handed more elements.
@@ -2414,53 +2430,116 @@ public final class Generator {
                     Examining pieces = new Examining(looking);
                     Examining parted = new Examining(looking);
                     Examining changed = new Examining(looking);
-                    Beside aPieceMore = (value, type, reading, parameter) ->
+                    Examining everyBorder = new Examining(looking);
+                    // The list holding every border the body compares with, at once.
+                    Beside withEveryBorder = borders.isEmpty() ? null
+                            : atWhatTheWalkReads(withEachArrangement(arrangementsOf(
+                                            standingFor(axes.subject(), check, saidTo(looking),
+                                                    MOST_REPAIRS),
+                                            axes.subject().ruleReading(), borders, walk.reads(),
+                                            check),
+                                    borders.size(), walk.over()), walk.inputs());
+                    Beside aPieceMore = atWhatTheWalkReads((value, type, reading, parameter) ->
                             NearbyValues.withAPieceMore(value, type, reading, parameter,
-                                    walk.separators());
-                    Beside anElementChanged = (value, type, reading, _) ->
-                            NearbyValues.withAnElementChanged(value, type, reading,
-                                    walk.ranWith());
+                                    walk.separators()), walk.inputs());
+                    Beside anElementChanged = atWhatTheWalkReads(
+                            (value, type, reading, _) -> NearbyValues.withAnElementChanged(value,
+                                    type, reading, walk.ranWith()), walk.inputs());
+                    // A row whose lists the walk goes over hold fewer than two elements between
+                    // them is one the walk takes no second step in, which is the only step a
+                    // rewrite of it changes anything from, so it is not made. Known only where the
+                    // lists are: a walk over a list no input holds is not told by the input.
+                    Predicate<List<ObservedValue>> takesASecondStep = row -> walk.over().isEmpty()
+                            || elementsWalked(row, walk.over(), axes.subject()) >= 2;
+                    // And beside each row, a dependency answering a list of its own that holds
+                    // more elements. After what is looked for in the inputs: a row that moves what
+                    // the input holds is one the dependency's table answers as it is, where this
+                    // changes what every row is answered with.
+                    Examining answered = new Examining(looking);
+                    List<Iterator<GeneratedRow>> answeredLast = new ArrayList<>();
+                    List<Iterator<GeneratedRow>> answeredAfter = new ArrayList<>();
                     List<Iterator<GeneratedRow>> grownFromEach = new ArrayList<>();
                     List<Iterator<GeneratedRow>> grownFromTheRest = new ArrayList<>();
                     for (int at = 0; at < from.size(); at++) {
                         List<ObservedValue> each = from.get(at);
                         List<Iterator<GeneratedRow>> into =
                                 at < ROWS_GROWN_IN_TURN ? grownFromEach : grownFromTheRest;
+                        answeredLast.addAll(candidatesAnswering(each, axes.subject(), answering,
+                                purposes, check, answers, walk.ranWith(), borders,
+                                walk.reads(), walk.dependencies(), true, looking, answered));
+                        answeredAfter.addAll(candidatesAnswering(each, axes.subject(), answering,
+                                purposes, check, answers, walk.ranWith(), borders,
+                                walk.reads(), walk.dependencies(), false, looking, answered));
                         into.add(candidatesBeside(each, axes, purposes, check, answers,
-                                growing, lists));
+                                growing, lists, takesASecondStep));
+                        if (withEveryBorder != null) {
+                            into.add(candidatesBeside(each, axes, purposes, check, answers,
+                                    withEveryBorder, everyBorder, takesASecondStep));
+                        }
                         into.add(candidatesBeside(each, axes, purposes, check, answers,
-                                anElementChanged, changed));
+                                anElementChanged, changed, takesASecondStep));
                         if (!walk.separators().isEmpty()) {
                             into.add(candidatesBeside(each, axes, purposes, check,
-                                    answers, aPieceMore, parted));
+                                    answers, aPieceMore, parted, takesASecondStep));
                         }
                         into.add(piecesDemanded(each, axes, purposes, looking, check,
                                 answers, read.piecesAttempted(), pieces));
                     }
-                    GeneratedRow seen = taking(looking, grownFromEach);
-                    for (int at = 0; at < axes.size() && seen == null; at++) {
-                        if (!looking.scope().moves(axes.get(at))) {
-                            continue;
-                        }
-                        for (int cls = 0; cls < axes.get(at).classes().size(); cls++) {
-                            Pins pins = Pins.of(axes, Map.of(at, cls));
-                            seen = looking.tookFromSearching(() -> search(axes, pins, purposes,
-                                    origins, (_, _) -> true, check, references, answers,
-                                    HeldTogether.Asked.NOTHING, row -> looking.of(row, null), true,
-                                    looking.scope(), goingOn.answersNothing()));
-                            if (seen != null) {
-                                break;
-                            }
-                        }
-                    }
-                    List<Iterator<GeneratedRow>> last = new ArrayList<>(grownFromTheRest);
-                    last.add(inOrder(through, at -> movedFrom(from.get(at), axes, purposes,
-                            looking, check, answers)));
+                    // What a row can change that the walk observes is one of four things: a list
+                    // the input holds, a position of the input the walk reads, what a dependency
+                    // answers, or a class of a position it reads. Which of them matters is not
+                    // known where the walk is over no list of the input as it is, so each is a
+                    // lane of its own and the one that has spent the fewest runs is asked next:
+                    // none is given the runs before another is asked.
+                    //
+                    // The positions the walk reads nothing of come after, since a row changed
+                    // there carries what the walk observes on to the answer and changes none of
+                    // it.
+                    List<String> parameters = axes.subject().parameters();
+                    // A row whose lists the walk goes over hold no two elements is changed at
+                    // those lists alone: what is changed anywhere else leaves it taking no second
+                    // step.
+                    Set<String> walkedLists = new HashSet<>();
+                    walk.over().forEach(each -> walkedLists.add(each.head()));
+                    BiFunction<List<ObservedValue>, List<Integer>, List<Integer>> movable =
+                            (row, positions) -> takesASecondStep.test(row) ? positions
+                                    : positions.stream().filter(at ->
+                                            walkedLists.contains(parameters.get(at))).toList();
+                    List<Lane> lanes = new ArrayList<>();
+                    lanes.add(candidatesOf(List.of(inTurn(grownFromEach),
+                            inTurn(grownFromTheRest))));
+                    lanes.add(candidatesOf(List.of(inOrder(through, at -> movedFrom(from.get(at),
+                            axes, purposes, looking, check, answers,
+                            movable.apply(from.get(at),
+                                    positionsRead(parameters, walk.inputs())))))));
+                    lanes.add(candidatesOf(List.of(inTurn(answeredLast))));
+                    // What the walk does not read of the dependencies is a lane of its own: the
+                    // walk's result may reach the answer only where they answer enough, and that
+                    // is not known of a walk that reads none of what changes it.
+                    lanes.add(candidatesOf(List.of(inTurn(answeredAfter))));
                     if (growingAny != null) {
-                        last.add(inOrder(through, at -> candidatesBeside(from.get(at), axes,
-                                purposes, check, answers, growingAny, everyList)));
+                        lanes.add(candidatesOf(List.of(inOrder(through, at -> candidatesBeside(
+                                from.get(at), axes, purposes, check, answers, growingAny,
+                                everyList, takesASecondStep)))));
                     }
-                    yield seen != null ? seen : taking(looking, last);
+                    // A search of one class is not a candidate: it composes and runs rows before it
+                    // comes back, and cannot be taken up where it was left. So it is not one of
+                    // the lanes asked a turn at a time, where it could take what the others are
+                    // owed or be cut with its rows untried; it comes after them, and the
+                    // positions the walk reads come before the ones it does not.
+                    Function<Pins, Searched> searching = pins -> search(axes, pins, purposes,
+                            origins, (_, _) -> true, check, references, answers,
+                            HeldTogether.Asked.NOTHING, row -> looking.of(row, null), true,
+                            looking.scope(), goingOn.answersNothing());
+                    List<Lane> afterwards = List.of(
+                            inEachClass(axes, looking, true, walk.inputs(), searching),
+                            candidatesOf(List.of(inOrder(through, at -> movedFrom(from.get(at),
+                                    axes, purposes, looking, check, answers,
+                                    movable.apply(from.get(at),
+                                            positionsNotRead(parameters, walk.inputs())))))),
+                            inEachClass(axes, looking, false, walk.inputs(), searching));
+                    GeneratedRow seen = takingInTurn(looking, lanes);
+                    yield seen != null ? seen : takingInTurn(looking, afterwards);
                 }
                 case ReplacementOwed.ByOneAnswer one -> {
                     // Where the composition stands before anything is asked of it first: a body
@@ -2563,7 +2642,8 @@ public final class Generator {
                                                     List<Purpose> purposes,
                                                     ReplacementWitness looking,
                                                     CandidateCheck check,
-                                                    List<StoodInAnswer> answers) {
+                                                    List<StoodInAnswer> answers,
+                                                    List<Integer> order) {
         MeasuredInput subject = axes.subject();
         List<FixtureTemplate> written = new ArrayList<>();
         for (int p = 0; p < seen.size(); p++) {
@@ -2585,8 +2665,8 @@ public final class Generator {
 
             @Override
             public boolean hasNext() {
-                while (!composedForIt.hasNext() && moved < written.size()) {
-                    composedForIt = composedWith(moved++);
+                while (!composedForIt.hasNext() && moved < order.size()) {
+                    composedForIt = composedWith(order.get(moved++));
                 }
                 return composedForIt.hasNext();
             }
@@ -2657,7 +2737,22 @@ public final class Generator {
     private static Growth aListGrownAmong(InputsRowsRanWith ranWith, MeasuredInput subject,
                                           CandidateCheck check, ReplacementWitness looking,
                                           NearbyValues.Put where) {
-        return aListGrownAmong(ranWith, subject, check, new ElementsOfAType.Stops() {
+        return aListGrownAmong(ranWith, subject, check, saidTo(looking), where, MOST_REPAIRS);
+    }
+
+    /** {@link #aListGrownAmong} with an element made of {@code observed} before the type's own. */
+    private static Growth aListGrownAmong(InputsRowsRanWith ranWith, MeasuredInput subject,
+                                          CandidateCheck check, ReplacementWitness looking,
+                                          NearbyValues.Put where, List<ObservedValue> observed,
+                                          List<String> reads) {
+        ElementsOfAType elements = standingFor(subject, check, saidTo(looking), MOST_REPAIRS);
+        return grownAmong(madeOf(elements, subject.ruleReading(), observed, reads, check),
+                ranWith, where);
+    }
+
+    /** Where what stopped the making of a type's values is said: to the search that asked. */
+    private static ElementsOfAType.Stops saidTo(ReplacementWitness looking) {
+        return new ElementsOfAType.Stops() {
 
             @Override
             public void met(CompositionShortfall shortfall) {
@@ -2669,25 +2764,115 @@ public final class Generator {
                 looking.composingStopped(List.of(
                         WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(most)));
             }
-        }, where, MOST_REPAIRS);
+        };
     }
 
     private static Growth aListGrownAmong(InputsRowsRanWith ranWith, MeasuredInput subject,
                                           CandidateCheck check, ElementsOfAType.Stops stops,
                                           NearbyValues.Put where, int most) {
-        // What stands for a type is the same for every row and list the search grows, so it is one
-        // for the search and made as far as the search asks, its stops said as they are met. A
-        // type's values are bounded as a composing's candidates are, and the bound is said as that
-        // figure.
-        ElementsOfAType elements = new ElementsOfAType(
+        return grownAmong(standingFor(subject, check, stops, most), ranWith, where);
+    }
+
+    /**
+     * What stands for a type at {@code subject}. The same for every row and list the search grows,
+     * so it is one for the search and made as far as the search asks, its stops said as they are
+     * met. A type's values are bounded as a composing's candidates are, and the bound is said as
+     * that figure.
+     */
+    private static ElementsOfAType standingFor(MeasuredInput subject, CandidateCheck check,
+                                               ElementsOfAType.Stops stops, int most) {
+        return new ElementsOfAType(
                 standingFor -> subject.representativesHolding(standingFor,
                         FieldDomains.ConstructionLimits.NONE),
                 ofOne -> ElementsOfAType.withOneElement(ofOne, subject.ruleReading()),
                 subject.ruleReading(), check, most, stops);
+    }
+
+    private static Growth grownAmong(ElementsOfAType elements, InputsRowsRanWith ranWith,
+                                     NearbyValues.Put where) {
+        return grownAmong(elements::of, ranWith, where);
+    }
+
+    private static Growth grownAmong(Function<Type, Iterator<ObservedValue>> stoodFor,
+                                     InputsRowsRanWith ranWith, NearbyValues.Put where) {
         return (value, type, reading, which, within) -> within == null
-                ? NearbyValues.grown(value, type, reading, ranWith, elements::of, where, which)
-                : NearbyValues.grownWithin(value, type, reading, ranWith, elements::of, where,
-                        which, within);
+                ? NearbyValues.grown(value, type, reading, ranWith, stoodFor, where, which)
+                : NearbyValues.grownWithin(value, type, reading, ranWith, stoodFor, where, which,
+                        within);
+    }
+
+    /**
+     * What stands for a type where a list is grown, the values a walk observes among the first: the
+     * type's own first value arranged from {@code observed} (every scalar it holds put as one of
+     * them, nearest arrangement first, the leaves the walk's step reads before the others), one
+     * in turn with what stands for the type.
+     *
+     * <p>Where a walk's step compares an element with something, that something is among what the
+     * walk observes, and an element made of it is the one the comparison answers differently on.
+     * The type's own values do not depend on what the step reads.
+     */
+    private static Function<Type, Iterator<ObservedValue>> madeOf(
+            ElementsOfAType elements, RuleReadingContext reading, List<ObservedValue> observed,
+            List<String> reads, CandidateCheck check) {
+        Function<Type, Iterator<ObservedValue>> arranged =
+                arrangementsOf(elements, reading, observed, reads, check);
+        return element -> {
+            Iterator<ObservedValue> made = arranged.apply(element);
+            if (!made.hasNext()) {
+                return elements.of(element);
+            }
+            // One of each in turn, so that an element the type stands for is among the first, as
+            // two elements that differ are what a walk over several is told apart by.
+            return NearbyValues.alternating(made, () -> elements.of(element));
+        };
+    }
+
+    /**
+     * The type's own first value arranged from {@code observed}, nearest arrangement first, and
+     * nothing where there is nothing observed or no value of the type.
+     */
+    private static Function<Type, Iterator<ObservedValue>> arrangementsOf(
+            ElementsOfAType elements, RuleReadingContext reading, List<ObservedValue> observed,
+            List<String> reads, CandidateCheck check) {
+        return element -> {
+            Iterator<ObservedValue> own = elements.of(element);
+            if (observed.isEmpty() || !own.hasNext()) {
+                return Collections.emptyIterator();
+            }
+            // Only the ones the element's own type admits: an element it refuses is no element of
+            // a list, and one put among others takes the whole list with it.
+            return NearbyValues.filtered(
+                    NearbyValues.holding(own.next(), element, reading, observed, reads),
+                    arranged -> !(ObservedFixtures.of(arranged, element, reading)
+                            instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                                    FixtureTemplate template))
+                            || check.admissibility(element, template)
+                                    != CandidateCheck.Admissibility.REFUSED);
+        };
+    }
+
+    /**
+     * The lists a walk goes over with every one of the first {@code count} arrangements put after
+     * what they hold, all at once: the list holding what a comparison tells apart and the values
+     * either side of it, so that no side of the comparison is left for a later candidate.
+     */
+    private static Beside withEachArrangement(
+            Function<Type, Iterator<ObservedValue>> arrangements, int count,
+            List<TermPath> over) {
+        if (over.isEmpty()) {
+            return (value, type, reading, _) ->
+                    NearbyValues.withEach(value, type, reading, arrangements, count, null);
+        }
+        return (value, type, reading, parameter) -> {
+            List<Iterator<ObservedValue>> inEach = new ArrayList<>();
+            for (TermPath each : over) {
+                if (each.head().equals(parameter)) {
+                    inEach.add(NearbyValues.withEach(value, type, reading, arrangements, count,
+                            each));
+                }
+            }
+            return NearbyValues.flat(inEach.iterator(), Function.identity());
+        };
     }
 
     /** How many elements the lists in {@code row} hold between them, at every depth. */
@@ -2709,18 +2894,24 @@ public final class Generator {
                 .map(Counted::inputs).toList();
     }
 
-    /** How many elements the lists {@code over} names hold in {@code row}, between them. */
+    /**
+     * How many elements the longest of the lists {@code over} names holds in {@code row}.
+     *
+     * <p>The longest and not all of them together: a walk goes over one list at each place it is
+     * entered, so two lists of one element are two walks that take no second step, and a rewrite
+     * changes something only where some one list holds two.
+     */
     private static int elementsWalked(List<ObservedValue> row, List<TermPath> over,
                                       MeasuredInput subject) {
-        int n = 0;
+        int most = 0;
         for (TermPath each : over) {
             int at = subject.parameters().indexOf(each.head());
             if (at >= 0 && at < row.size()) {
-                n += NearbyValues.heldAt(row.get(at), subject.types().get(at),
-                        subject.ruleReading(), each);
+                most = Math.max(most, NearbyValues.heldAt(row.get(at), subject.types().get(at),
+                        subject.ruleReading(), each));
             }
         }
-        return n;
+        return most;
     }
 
     private static int elementsIn(ObservedValue value) {
@@ -2833,14 +3024,26 @@ public final class Generator {
 
         private final Runnable whenSpent;
 
+        /** What is done when a rule of a position refuses a candidate this made. */
+        private final Runnable whenRefused;
+
+        /** What is done when the candidates looked at, run or not, are as many as may be. */
+        private final Consumer<CompositionShortfall> whenScanned;
+
+        /** The candidates looked at, run or not, which the figure for candidates made and checked
+         *  bounds, as it does for the rows beside a point. */
+        private final RowsBesideBudget scanning = new RowsBesideBudget();
+
         private int left;
 
         private boolean said;
 
+        private boolean saidScanned;
+
         private Examining(ReplacementWitness looking) {
             this(MOST_REPAIRS, () -> looking.composingStopped(
                     List.of(WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(MOST_REPAIRS))),
-                    looking.scope());
+                    looking.scope(), looking::refusedByARule, looking::composingMet);
         }
 
         private final RowsBesideBudget shared;
@@ -2848,11 +3051,14 @@ public final class Generator {
         /** Which parameters a candidate may move. */
         private final MoveScope scope;
 
-        private Examining(int most, Runnable whenSpent, MoveScope scope) {
+        private Examining(int most, Runnable whenSpent, MoveScope scope, Runnable whenRefused,
+                          Consumer<CompositionShortfall> whenScanned) {
             this.left = most;
             this.whenSpent = whenSpent;
             this.shared = null;
             this.scope = scope;
+            this.whenRefused = whenRefused;
+            this.whenScanned = whenScanned;
         }
 
         private Examining(RowsBesideBudget shared) {
@@ -2860,6 +3066,30 @@ public final class Generator {
             this.whenSpent = () -> { };
             this.shared = shared;
             this.scope = MoveScope.EVERYTHING;
+            this.whenRefused = () -> { };
+            this.whenScanned = _ -> { };
+        }
+
+        /**
+         * Whether one more candidate may be looked at, whether it goes on to be run or is dropped
+         * before it: the candidates a search makes and checks are bounded apart from the runs it
+         * makes, so dropping many of them is not unbounded, and reaching the bound is said as the
+         * figure it is.
+         */
+        boolean lookAtOneMore() {
+            if (shared != null || scanning.oneMore()) {
+                return true;
+            }
+            if (!saidScanned) {
+                saidScanned = true;
+                whenScanned.accept(scanning.shortOf());
+            }
+            return false;
+        }
+
+        /** A candidate this made was refused by the rule of the position it stands at. */
+        void refused() {
+            whenRefused.run();
         }
 
         /** Whether a candidate may move the value of the parameter {@code name}. */
@@ -3016,7 +3246,24 @@ public final class Generator {
                                                            CandidateCheck check,
                                                            List<StoodInAnswer> answers,
                                                            Beside how, Examining examining) {
-        return candidatesBeside(seen, axes.subject(), purposes, check, answers, how, examining);
+        return candidatesBeside(seen, axes.subject(), purposes, check, answers, how, examining,
+                _ -> true);
+    }
+
+    /**
+     * {@link #candidatesBeside}, the candidates that {@code worthRunning} refuses never made a
+     * candidate: they are not counted against {@code examining} and are never put to a run. What a
+     * caller refuses is a row it can show tells nothing, which a run would only find out.
+     */
+    private static Iterator<GeneratedRow> candidatesBeside(List<ObservedValue> seen,
+                                                           MeasuredInput.MeasuredAxes axes,
+                                                           List<Purpose> purposes,
+                                                           CandidateCheck check,
+                                                           List<StoodInAnswer> answers,
+                                                           Beside how, Examining examining,
+                                                           Predicate<List<ObservedValue>> worthRunning) {
+        return candidatesBeside(seen, axes.subject(), purposes, check, answers, how, examining,
+                worthRunning);
     }
 
     private static Iterator<GeneratedRow> candidatesBeside(List<ObservedValue> seen,
@@ -3025,6 +3272,17 @@ public final class Generator {
                                                            CandidateCheck check,
                                                            List<StoodInAnswer> answers,
                                                            Beside how, Examining examining) {
+        return candidatesBeside(seen, subject, purposes, check, answers, how, examining,
+                _ -> true);
+    }
+
+    private static Iterator<GeneratedRow> candidatesBeside(List<ObservedValue> seen,
+                                                           MeasuredInput subject,
+                                                           List<Purpose> purposes,
+                                                           CandidateCheck check,
+                                                           List<StoodInAnswer> answers,
+                                                           Beside how, Examining examining,
+                                                           Predicate<List<ObservedValue>> worthRunning) {
         // As the run had them, written once: a candidate moves one position and leaves the others
         // as they were.
         List<FixtureTemplate> kept = new ArrayList<>();
@@ -3060,19 +3318,31 @@ public final class Generator {
                         moved++;
                         continue;
                     }
-                    if (!examining.oneMore()) {
+                    if (!examining.lookAtOneMore()) {
                         moved = seen.size();
                         break;
                     }
                     ObservedValue near = nearer.next();
+                    List<ObservedValue> row = new ArrayList<>(seen);
+                    row.set(moved, near);
+                    if (!worthRunning.test(row)) {
+                        continue;
+                    }
+                    if (!examining.oneMore()) {
+                        moved = seen.size();
+                        break;
+                    }
                     if (ObservedFixtures.of(near, subject.types().get(moved),
                             subject.ruleReading())
                             instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
-                                    FixtureTemplate value)
-                            && check.refuse(moved, value).isEmpty()) {
-                        List<FixtureTemplate> inputs = new ArrayList<>(kept);
-                        inputs.set(moved, value);
-                        next = new GeneratedRow(purposes, inputs, answers);
+                                    FixtureTemplate value)) {
+                        if (check.refuse(moved, value).isEmpty()) {
+                            List<FixtureTemplate> inputs = new ArrayList<>(kept);
+                            inputs.set(moved, value);
+                            next = new GeneratedRow(purposes, inputs, answers);
+                        } else {
+                            examining.refused();
+                        }
                     }
                 }
                 return next != null;
@@ -3086,6 +3356,141 @@ public final class Generator {
                 GeneratedRow out = next;
                 next = null;
                 return out;
+            }
+        };
+    }
+
+    /**
+     * The inputs of a row a run was seen with, each beside the row standing one dependency in with
+     * an answer of its own that holds more elements.
+     *
+     * <p>A walk over a list a dependency answers is handed a second element by what the dependency
+     * answers, which no input holds. The answer is a value of its type's, grown as an input's list
+     * is — by one element and then by two — so what the search tries is how many elements the walk
+     * takes and which; whether a candidate tells a rewrite apart is what running it says.
+     *
+     * <p>One iterator for each dependency a position stands at the answer of, so that a search
+     * taking its candidates in turn does not spend them all on the first.
+     */
+    private static List<Iterator<GeneratedRow>> candidatesAnswering(
+            List<ObservedValue> seen, MeasuredInput subject,
+            Map<ValueName.Behavior, MeasuredInput> answering, List<Purpose> purposes,
+            CandidateCheck check, List<StoodInAnswer> answers, InputsRowsRanWith ranWith,
+            List<ObservedValue> borders, List<String> reads, List<ValueName.Behavior> reached,
+            boolean ofWhatTheWalkReads, ReplacementWitness looking, Examining examining) {
+        List<FixtureTemplate> kept = new ArrayList<>();
+        for (int p = 0; p < seen.size(); p++) {
+            if (!(ObservedFixtures.of(seen.get(p), subject.types().get(p), subject.ruleReading())
+                    instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                            FixtureTemplate value))) {
+                return List.of();
+            }
+            kept.add(value);
+        }
+        List<InputsRowsRanWith.Taken> taken = new ArrayList<>();
+        for (int p = 0; p < seen.size(); p++) {
+            InputsRowsRanWith.takenAt(subject.types().get(p), seen.get(p),
+                    subject.ruleReading().source(), taken);
+        }
+        // What the call was made with, and what the body compares with.
+        List<ObservedValue> valuesHeld = new ArrayList<>();
+        // As held and as they stand at a leaf: a value a name is worn around is the one an element
+        // is made of where a leaf of its kind stands.
+        taken.forEach(each -> {
+            valuesHeld.add(each.value());
+            ObservedValue inside = InputsRowsRanWith.withoutTheNamesWorn(each.type(),
+                    each.value(), subject.ruleReading().source());
+            if (!inside.equals(each.value())) {
+                valuesHeld.add(inside);
+            }
+        });
+        valuesHeld.addAll(borders);
+        List<Iterator<GeneratedRow>> out = new ArrayList<>();
+        // What the walk reads of the dependencies is what it observes of them; the answers of the
+        // others reach its result only through what comes after the walk, so they are asked
+        // after. Where the walk reads none of them, each is asked with the first.
+        boolean theWalkReadsOne = answers.stream().anyMatch(each ->
+                reached.contains(each.dependency()));
+        for (int at = 0; at < answers.size(); at++) {
+            ValueName.Behavior dependency = answers.get(at).dependency();
+            MeasuredInput answered = answering.get(dependency);
+            if (answered == null
+                    || (theWalkReadsOne && reached.contains(dependency) != ofWhatTheWalkReads)
+                    || (!theWalkReadsOne && !ofWhatTheWalkReads)) {
+                continue;
+            }
+            Type type = answered.types().getFirst();
+            RuleReadingContext reading = answered.ruleReading();
+            ElementsOfAType elements = standingFor(answered, check, saidTo(looking), MOST_REPAIRS);
+            // An answer is looked up by what the call was made with, which is the row's, and
+            // compared with what the body writes out: an element is made of both first.
+            Growth growth = grownAmong(madeOf(elements, reading, valuesHeld, reads, check),
+                    ranWith, NearbyValues.Put.BEFORE_AND_AFTER);
+            Beside growing = grownTwice(growth, List.of());
+            Iterator<ObservedValue> grown = NearbyValues.flat(theFirstOf(elements.of(type)),
+                    start -> growing.of(start, type, reading, answered.parameters().getFirst()));
+            int standing = at;
+            out.add(new Iterator<>() {
+
+                private GeneratedRow next;
+
+                @Override
+                public boolean hasNext() {
+                    while (next == null && grown.hasNext()) {
+                        ObservedValue near = grown.next();
+                        if (!examining.oneMore()) {
+                            return false;
+                        }
+                        if (ObservedFixtures.of(near, type, reading)
+                                instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                                        FixtureTemplate value)) {
+                            // An answer the type refuses is no answer to stand in with: a row
+                            // carrying it cannot be run, as an input the type refuses is no row.
+                            if (check.admissibility(type, value)
+                                    == CandidateCheck.Admissibility.REFUSED) {
+                                examining.refused();
+                                continue;
+                            }
+                            List<StoodInAnswer> stood = new ArrayList<>(answers);
+                            stood.set(standing, new StoodInAnswer.OnTheRow(dependency, value));
+                            next = new GeneratedRow(purposes, kept, stood);
+                        }
+                    }
+                    return next != null;
+                }
+
+                @Override
+                public GeneratedRow next() {
+                    if (!hasNext()) {
+                        throw new NoSuchElementException();
+                    }
+                    GeneratedRow row = next;
+                    next = null;
+                    return row;
+                }
+            });
+        }
+        return out;
+    }
+
+    /** The first of {@code values}, asked for when it is reached. */
+    private static <A> Iterator<A> theFirstOf(Iterator<A> values) {
+        return new Iterator<>() {
+
+            private boolean taken;
+
+            @Override
+            public boolean hasNext() {
+                return !taken && values.hasNext();
+            }
+
+            @Override
+            public A next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                taken = true;
+                return values.next();
             }
         };
     }
@@ -3115,6 +3520,179 @@ public final class Generator {
                 return current.next();
             }
         };
+    }
+
+    /**
+     * One way of looking for the row a rewrite answers differently on, asked a turn at a time.
+     *
+     * <p>A lane puts forward what it has when it is asked, and none is asked twice before the
+     * others are asked once, so no way of looking is given the runs before another is tried.
+     */
+    private interface Lane {
+
+        /** What this puts forward this turn, or null where it has nothing more. */
+        Turn turn();
+    }
+
+    /** What a lane puts forward on one turn. */
+    private sealed interface Turn {
+
+        /** A row to be put to the rewrite. */
+        record Proposed(GeneratedRow row) implements Turn {}
+
+        /** A row already put to the rewrite, which it answered differently on. */
+        record Found(GeneratedRow row) implements Turn {}
+
+        /** Nothing this turn, with more to come. */
+        enum Pass implements Turn { PASS }
+    }
+
+    /**
+     * {@code how}, at the parameters the walk reads, and where it is not known which it reads, at
+     * every one.
+     */
+    private static Beside atWhatTheWalkReads(Beside how, List<String> inputsRead) {
+        if (inputsRead.isEmpty()) {
+            return how;
+        }
+        return (value, type, reading, parameter) -> inputsRead.contains(parameter)
+                ? how.of(value, type, reading, parameter) : Collections.emptyIterator();
+    }
+
+    /** Every position of {@code parameters}, in order. */
+    private static List<Integer> allPositions(List<String> parameters) {
+        return IntStream.range(0, parameters.size()).boxed().toList();
+    }
+
+    /**
+     * The positions of {@code parameters} the walk reads, or where it is not known which it
+     * reads, every one. What a row changes there is what the walk observes.
+     */
+    private static List<Integer> positionsRead(List<String> parameters, List<String> inputsRead) {
+        return inputsRead.isEmpty() ? allPositions(parameters)
+                : allPositions(parameters).stream()
+                        .filter(at -> inputsRead.contains(parameters.get(at))).toList();
+    }
+
+    /** The positions of {@code parameters} the walk reads nothing of, which a row changes only to
+     *  carry what the walk observes on to the answer. */
+    private static List<Integer> positionsNotRead(List<String> parameters,
+                                                  List<String> inputsRead) {
+        List<Integer> read = positionsRead(parameters, inputsRead);
+        return allPositions(parameters).stream().filter(at -> !read.contains(at)).toList();
+    }
+
+    /** A lane of the candidates of {@code from}, one a turn, the iterators one after the other. */
+    private static Lane candidatesOf(List<Iterator<GeneratedRow>> from) {
+        Iterator<GeneratedRow> all = NearbyValues.flat(from.iterator(), Function.identity());
+        return () -> all.hasNext() ? new Turn.Proposed(all.next()) : null;
+    }
+
+    /** The candidates of {@code each} one at a time from each in turn. */
+    private static Iterator<GeneratedRow> inTurn(List<Iterator<GeneratedRow>> each) {
+        List<Iterator<GeneratedRow>> live = new ArrayList<>(each);
+        return new Iterator<>() {
+
+            private int at;
+
+            @Override
+            public boolean hasNext() {
+                while (!live.isEmpty()) {
+                    at = at % live.size();
+                    if (live.get(at).hasNext()) {
+                        return true;
+                    }
+                    live.remove(at);
+                }
+                return false;
+            }
+
+            @Override
+            public GeneratedRow next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                return live.get(at++).next();
+            }
+        };
+    }
+
+    /**
+     * A lane that searches one class of one position a turn, for a row the rewrite answers
+     * differently on, each searched as the classes divide the positions.
+     */
+    private static Lane inEachClass(MeasuredInput.MeasuredAxes axes, ReplacementWitness looking,
+                                    boolean ofWhatTheWalkReads, List<String> inputsRead,
+                                    Function<Pins, Searched> searching) {
+        List<String> heads = new ArrayList<>();
+        for (int at = 0; at < axes.size(); at++) {
+            heads.add(axes.get(at).path().head());
+        }
+        List<Integer> positions = (ofWhatTheWalkReads ? positionsRead(heads, inputsRead)
+                : positionsNotRead(heads, inputsRead)).stream()
+                .filter(at -> looking.scope().moves(axes.get(at))).toList();
+        // Made as each is reached: a search that finds its row in the first class has no use for
+        // the pins of the rest.
+        Iterator<Pins> each = NearbyValues.flat(positions.iterator(), at ->
+                IntStream.range(0, axes.get(at).classes().size())
+                        .mapToObj(cls -> Pins.of(axes, Map.of(at, cls))).iterator());
+        return () -> {
+            if (!each.hasNext()) {
+                return null;
+            }
+            // A search composes and runs rows before it comes back, and cannot be taken up where
+            // it was left: it is not begun where there is no run to put its rows to.
+            if (looking.runsLeft() <= 0) {
+                looking.ranOutOfRuns();
+                return null;
+            }
+            Pins pins = each.next();
+            GeneratedRow found = looking.tookFromSearching(() -> searching.apply(pins));
+            return found != null ? new Turn.Found(found) : Turn.Pass.PASS;
+        };
+    }
+
+    /**
+     * The row the first of {@code lanes} to find one found, the lane that has spent the fewest runs
+     * asked next, or null where none does or the runs are spent.
+     */
+    private static GeneratedRow takingInTurn(ReplacementWitness looking, List<Lane> lanes) {
+        List<Lane> live = new ArrayList<>(lanes);
+        // What each lane has spent of the runs: a turn of one lane may be a search and a turn of
+        // another a single candidate, so the lane asked next is the one that has spent the fewest.
+        Map<Lane, Integer> spent = new IdentityHashMap<>();
+        while (!live.isEmpty()) {
+            Lane next = live.getFirst();
+            for (Lane each : live) {
+                if (spent.getOrDefault(each, 0) < spent.getOrDefault(next, 0)) {
+                    next = each;
+                }
+            }
+            int before = looking.runsSpent();
+            Turn turn = next.turn();
+            GeneratedRow found = null;
+            switch (turn) {
+                case null -> live.remove(next);
+                case Turn.Found it -> found = it.row();
+                case Turn.Pass _ -> { }
+                case Turn.Proposed candidate -> {
+                    switch (looking.of(candidate.row(), null)) {
+                        case TAKEN -> found = candidate.row();
+                        case STOPPED -> {
+                            return null;
+                        }
+                        case PASSED -> { }
+                    }
+                }
+            }
+            if (found != null) {
+                return found;
+            }
+            // A turn that spent no run is still a turn, so a lane that only passes is not asked
+            // again before the others have been.
+            spent.merge(next, Math.max(1, looking.runsSpent() - before), Integer::sum);
+        }
+        return null;
     }
 
     /**
@@ -6654,7 +7232,7 @@ public final class Generator {
         // Only where a row can be run: one nothing stands the dependencies in for is no row
         // anything applies.
         RowPreference preferring =
-                stood.outcome() instanceof AnswersStoodIn.Stood(var answers)
+                stood.outcome() instanceof AnswersStoodIn.Stood(var answers, _)
                         ? judge.<RowPreference>map(each -> each.refusesAbsolutely()
                                         ? new ReachingWhatIsJudged(each, answers, trial)
                                         : new TellingArmsApart(trial, answers, each))
@@ -6880,7 +7458,7 @@ public final class Generator {
             // person cannot run is not a row this composed.
             case AnswersStoodIn.NothingComposed(var why) -> new BoundaryAttempt.Unresolved(
                     new UnresolvedCombination(List.of(label), why), where.unrepresented());
-            case AnswersStoodIn.Stood(var answers) -> new BoundaryAttempt.Built(
+            case AnswersStoodIn.Stood(var answers, _) -> new BoundaryAttempt.Built(
                     new GeneratedRow(List.of(new Purpose.ForAPoint(label)), inputs, answers),
                     where.unrepresented(), refusedOnly);
         };
@@ -10831,6 +11409,22 @@ public final class Generator {
             return answered.get();
         }
 
+        /** How many runs this search has made. */
+        int runsSpent() {
+            return runs;
+        }
+
+        /** How many runs this search may still make. */
+        int runsLeft() {
+            return mostRuns - runs;
+        }
+
+        /** Something was left untried where the runs were spent, as it is when a candidate is
+         *  asked for past them. */
+        void ranOutOfRuns() {
+            stop(ReplacementDisposition.Ended.RUNS_A_REWRITE_MAY_TAKE, runsReached());
+        }
+
         /** One more run of this search's own, where one is left. */
         private boolean spend() {
             if (runs >= mostRuns) {
@@ -10926,6 +11520,16 @@ public final class Generator {
             if (!met.figures().isEmpty()) {
                 composingStopped(asFigures(met.figures()));
             }
+        }
+
+        /**
+         * A candidate was refused by the rule of the position it stands at. Said of a search that
+         * found nothing: the values a rule admits are not read, so what it refused was not
+         * replaced by what it admits.
+         */
+        void refusedByARule() {
+            stopped.putIfAbsent(ReplacementDisposition.Ended.A_RULE_REFUSED_A_CANDIDATE,
+                    ReplacementDisposition.Met.AT_NO_FIGURE);
         }
 
         /** Composing the rows the search looked through stopped at {@code figure}. */
