@@ -9343,7 +9343,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             || each.number() instanceof NumericTerm.GatheredUnderItsKey,
                     on.spacingBetweenValues(), on.whereItStops(), each.number()));
         }
-        HeldOfTheDifference held = heldOfTheDifference(pair, stating, way, sizesAreRowsComputed);
+        HeldOfTheDifference held = heldOfTheDifference(pair, stating, way, sizesAreRowsComputed, read);
         if (held == null) {
             return Set.of();
         }
@@ -9412,7 +9412,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     realizes, null, true, on.spacingBetweenValues(), on.whereItStops(),
                     each.number()));
         }
-        HeldOfTheDifference held = heldOfTheDifference(pair, stating, way, sizesAreRowsComputed);
+        HeldOfTheDifference held = heldOfTheDifference(pair, stating, way, sizesAreRowsComputed, read);
         if (held == null) {
             return List.of();
         }
@@ -9514,7 +9514,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *  is held as an end on one side is. What else that working narrows is asked through the
      *  operations it carries. */
     private HeldOfTheDifference heldOfTheDifference(
-            TwoSides pair, List<List<OnAWay>> stating, WayRead way, boolean sizesAreRowsComputed) {
+            TwoSides pair, List<List<OnAWay>> stating, WayRead way, boolean sizesAreRowsComputed,
+            InputReading read) {
         List<TakenConstraint> onTheWay = way.onTheWay();
         Set<NumericTerm> ofTheSides = new HashSet<>();
         for (int at : List.of(pair.first(), pair.second())) {
@@ -9525,14 +9526,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         aboutEither.addAll(stating.get(pair.second()));
         List<WhatARelationLeavesUndivided.OnTheDifference> held = new ArrayList<>();
         List<ExactRatio> holes = new ArrayList<>();
+        List<TakenConstraint.Affine> stated = new ArrayList<>();
         for (OnAWay each : aboutEither) {
-            TakenConstraint.Affine affine = each.affine();
-            WhatARelationLeavesUndivided.OnTheDifference statement = affine == null ? null
-                    : onTheDifference(affine.form(), affine.rel(), pair);
+            if (each.affine() == null) {
+                return null;
+            }
+            stated.add(each.affine());
+        }
+        for (TakenConstraint.Affine affine : withoutWhatTheSidesDefine(stated, aboutEither,
+                ofTheSides, way, read)) {
+            WhatARelationLeavesUndivided.OnTheDifference statement =
+                    onTheDifference(affine.form(), affine.rel(), pair);
             if (statement != null) {
                 held.add(statement);
-            } else if (affine == null
-                    || !holdsASideAwayFromAValue(affine.form(), affine.rel(), ofTheSides, holes)) {
+            } else if (!holdsASideAwayFromAValue(affine.form(), affine.rel(), ofTheSides, holes)) {
                 return null;
             }
         }
@@ -9558,6 +9565,100 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return new HeldOfTheDifference(held, holes);
+    }
+
+    /**
+     * {@code stated} with each number that an equality with a number of the sides defines put in
+     * the others' terms and the equality dropped, so that what a way states of that number is
+     * stated of the sides: {@code d == from} and {@code d /= from + 1} say {@code from /= from + 1},
+     * which holds. A statement left over no numbers is dropped where it holds, and the statements
+     * stay as they were where it does not.
+     *
+     * <p>Only a number that nothing but {@code aboutEither} states anything of, that the
+     * declarations leave every value of its type and tie to no number of the sides, and that
+     * nothing the run narrows names: any other statement of it would be a statement of the sides
+     * that was not carried over.
+     */
+    private static List<TakenConstraint.Affine> withoutWhatTheSidesDefine(
+            List<TakenConstraint.Affine> stated, Set<OnAWay> aboutEither,
+            Set<NumericTerm> ofTheSides, WayRead way, InputReading read) {
+        List<TakenConstraint.Affine> out = stated;
+        for (TakenConstraint.Affine definition : stated) {
+            if (!out.contains(definition) || definition.rel() != Rel.EQ
+                    || definition.form().coefs().size() != 2) {
+                continue;
+            }
+            List<Map.Entry<NumericTerm, ExactRatio>> others = definition.form().coefs().entrySet()
+                    .stream().filter(each -> !ofTheSides.contains(each.getKey())).toList();
+            if (others.size() != 1 || !(others.getFirst().getKey()
+                    instanceof NumericTerm.ValueOf number)
+                    || !isDefinedByTheSides(number, aboutEither, ofTheSides, way, read)) {
+                continue;
+            }
+            List<TakenConstraint.Affine> without = withoutTheNumber(out, definition, number,
+                    others.getFirst().getValue());
+            if (without != null) {
+                out = without;
+            }
+        }
+        return out;
+    }
+
+    /** {@code statements} less {@code definition}, the others with {@code number}, which it
+     *  defines, put in the terms it is defined by — or null where that is not worked out or a
+     *  statement left over no numbers does not hold. */
+    private static List<TakenConstraint.Affine> withoutTheNumber(
+            List<TakenConstraint.Affine> statements, TakenConstraint.Affine definition,
+            NumericTerm number, ExactRatio weighed) {
+        List<TakenConstraint.Affine> out = new ArrayList<>();
+        for (TakenConstraint.Affine each : statements) {
+            ExactRatio mention = each.form().coefs().get(number);
+            if (each.equals(definition)) {
+                continue;
+            }
+            if (mention == null) {
+                out.add(each);
+                continue;
+            }
+            LinearForm<NumericTerm> form = mention.dividedBy(weighed)
+                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio scale)
+                    && definition.form().times(scale) instanceof ExactAnswer.Held<
+                            LinearForm<NumericTerm>>(LinearForm<NumericTerm> scaled)
+                    && each.form().minus(scaled) instanceof ExactAnswer.Held<
+                            LinearForm<NumericTerm>>(LinearForm<NumericTerm> left) ? left : null;
+            if (form == null) {
+                return null;
+            }
+            if (!form.coefs().isEmpty()) {
+                out.add(new TakenConstraint.Affine(form, each.rel()));
+            } else if (!each.rel().holds(form.constant().signum())) {
+                return null;
+            }
+        }
+        return out;
+    }
+
+    private static boolean isDefinedByTheSides(NumericTerm.ValueOf number,
+                                               Set<OnAWay> aboutEither,
+                                               Set<NumericTerm> ofTheSides, WayRead way,
+                                               InputReading read) {
+        Source source = sourceOf(number, read);
+        if (source == null || !source.takes().every() || source.named()
+                || way.onTheWay().stream().anyMatch(each -> each.terms().contains(number))
+                || way.ofTheRelation().stream().anyMatch(each -> each.terms().contains(number))
+                || way.conditions().stream().anyMatch(each ->
+                        touches(number, each.positions()) && !aboutEither.contains(each))) {
+            return false;
+        }
+        for (NumericTerm side : ofTheSides) {
+            if (side instanceof NumericTerm.FromOnePosition there
+                    && number.placesReadOff().stream().anyMatch(place ->
+                            there.placesReadOff().stream().anyMatch(at ->
+                                    tiedByARule(place, at, read)))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

@@ -61,6 +61,27 @@ class AStatementChosenByManyArmsIsShownWhereOneArmReachesBothWaysTest {
         assertFalse(notShownAt(human, "h"), human);
     }
 
+    /** A number the way holds equal to one of the sides ({@code d == from}) is that side, and
+     *  what the way states of it is stated of the side: {@code d /= from + 1} says nothing of
+     *  {@code from}, so the relation between {@code from} and {@code h} is read over every
+     *  value. */
+    @Test
+    void aNumberTheWayHoldsEqualToASideStatesNothingOfItsOwn() {
+        Compilation compilation = Compilation.ofSource("""
+                module p
+                behavior f : (from: Decimal, h: Decimal, d: Decimal) -> Bool
+                let f (from, h, d) = (List.find(x -> x - h > 0.0m, [ from, from + 1.0m ])
+                    |> Option.withDefault(from)) == d
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        String human = AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+
+        assertFalse(notShownAt(human, "from"), human);
+        assertFalse(notShownAt(human, "h"), human);
+    }
+
     /** The same with a third arm a row can take. */
     @Test
     void aThirdArmARowCanTakeChangesNothingOfWhatTheFirstReaches() {
