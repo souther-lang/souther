@@ -144,17 +144,9 @@ public final class WhatTheNumbersOfACaseLeave {
                 return;
             }
             int divisor = of.get(dividend).divisor().intValueExact();
-            Set<List<Boolean>> ways = new HashSet<>();
-            for (int remainder = 0; remainder < divisor; remainder++) {
-                List<Boolean> truths = new ArrayList<>();
-                for (long mask : masks) {
-                    truths.add((mask >>> remainder & 1L) != 0);
-                }
-                ways.add(truths);
-            }
             out.add(new CaseExpansion.CorrelatedRemainders(
                     spelled(of.get(dividend).dividend().coefs()), divisor, masks.size(),
-                    ways.size()));
+                    NumericallyConsistentWays.classesOfRemainders(divisor, masks).size()));
         });
         return out;
     }

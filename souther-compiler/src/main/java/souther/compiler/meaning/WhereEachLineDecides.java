@@ -22,6 +22,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Predicate;
@@ -1969,6 +1970,45 @@ public final class WhereEachLineDecides {
         }
         Proposition part = held(chosen);
         return with(stated, part, part.spelling().equals(chosen.spelling()));
+    }
+
+    /**
+     * A part as {@link #standsAs} finds it in a statement: its kind and the spelling of it held.
+     * {@link #given} changes a statement only where one of the statement's parts is the part
+     * chosen in these terms.
+     */
+    record PartHeld(Class<? extends Proposition> kind, Spelling spelling) {
+
+        PartHeld {
+            Objects.requireNonNull(kind, "a part is of some kind");
+            Objects.requireNonNull(spelling, "a part is spelled some way");
+        }
+    }
+
+    /** {@code chosen} as {@link #given} finds it, where it is one part ({@link #isOnePart}). */
+    static Optional<PartHeld> asOnePart(Proposition chosen) {
+        if (!isOnePart(chosen)) {
+            return Optional.empty();
+        }
+        Proposition part = held(chosen);
+        return Optional.of(new PartHeld(part.getClass(), part.spelling()));
+    }
+
+    /**
+     * Every part {@code stated} holds, anywhere in it, as {@link #standsAs} finds one: so
+     * {@link #given} hands {@code stated} back as it is for a part chosen that is none of these.
+     * Read down every part a statement holds, which is every place {@link #with} goes and more.
+     */
+    static Set<PartHeld> partsIn(Proposition stated) {
+        Set<PartHeld> out = new HashSet<>();
+        StatementReading.<Boolean>over((each, again) -> {
+            if (isOnePart(each)) {
+                out.add(new PartHeld(each.getClass(), held(each).spelling()));
+            }
+            each.eachPart(again);
+            return Boolean.TRUE;
+        }).read(stated);
+        return out;
     }
 
     /**

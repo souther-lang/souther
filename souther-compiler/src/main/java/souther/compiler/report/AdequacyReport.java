@@ -9427,6 +9427,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case NumericallyConsistentWays.Counted.NotCounted(var why) ->
                     consistent.put("notCounted", word(why));
         }
+        expansion.counted().walkedWaysAtMost().ifPresent(ways ->
+                into.put("walkedWaysAtMost", ways.toString()));
         switch (expansion.attributed()) {
             case CaseExpansion.NotAttributed(var why) -> into.put("notAttributed", word(why));
             case CaseExpansion.Attributed attributed -> {
@@ -9567,6 +9569,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         case WAYS_A_COUNT_IS_HELD_TO -> new ReportMessage.TheWaysACountIsHeldTo();
                     })));
         }
+        expansion.counted().walkedWaysAtMost().ifPresent(ways -> out.append(page.say(
+                new ReportMessage.AtMostWaysWalkedFromTheRemainders(grouped(ways)))));
         switch (expansion.attributed()) {
             case CaseExpansion.NotAttributed(var why) -> out.append(page.say(
                     new ReportMessage.WhatMadeItsPartsWasNotRead(switch (why) {
