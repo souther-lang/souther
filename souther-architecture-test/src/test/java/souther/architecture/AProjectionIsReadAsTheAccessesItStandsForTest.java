@@ -554,7 +554,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "coverage/CoverageSites", "collectFieldsRead", "(" + core
                 + "Ljava/util/Set;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "coverage/CoverageSites$Walk", "collectInputsRead", "(" + core
-                + "Ljava/util/Set;Ljava/util/Set;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
+                + "Ljava/util/Set;Ljava/util/Set;Ljava/util/Set;)V", Reading.THE_TREE_THAT_RUNS,
+                RUNS);
         row(out, c + "check/PathReachability", "gatherPlaces", "(" + core + reads
                 + "Ljava/util/Map;Ljava/util/Map;)V", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         // Whether an answer a body can come to is the same on every run, asked of the body a run

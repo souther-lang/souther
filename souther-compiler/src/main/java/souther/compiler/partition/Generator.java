@@ -2394,7 +2394,8 @@ public final class Generator {
                     int through = from.size();
                     Examining lists = new Examining(looking);
                     // What the body compares with, and the values either side of each.
-                    List<ObservedValue> borders = NearbyValues.bordersOf(walk.named());                    // One growth for the search: what stands for a type is made once, as far as the
+                    List<ObservedValue> borders = NearbyValues.bordersOf(walk.named());
+                    // One growth for the search: what stands for a type is made once, as far as the
                     // search asks.
                     Growth growth = aListGrownAmong(walk.ranWith(), axes.subject(), check, looking,
                             NearbyValues.Put.BEFORE_AND_AFTER, borders, walk.reads());
@@ -2445,6 +2446,7 @@ public final class Generator {
                     // changes what every row is answered with.
                     Examining answered = new Examining(looking);
                     List<Iterator<GeneratedRow>> answeredLast = new ArrayList<>();
+                    List<Iterator<GeneratedRow>> answeredAfter = new ArrayList<>();
                     List<Iterator<GeneratedRow>> grownFromEach = new ArrayList<>();
                     List<Iterator<GeneratedRow>> grownFromTheRest = new ArrayList<>();
                     for (int at = 0; at < from.size(); at++) {
@@ -2453,7 +2455,10 @@ public final class Generator {
                                 at < ROWS_GROWN_IN_TURN ? grownFromEach : grownFromTheRest;
                         answeredLast.addAll(candidatesAnswering(each, axes.subject(), answering,
                                 purposes, check, answers, walk.ranWith(), borders,
-                                walk.reads(), walk.inputs(), looking, answered));
+                                walk.reads(), walk.dependencies(), true, looking, answered));
+                        answeredAfter.addAll(candidatesAnswering(each, axes.subject(), answering,
+                                purposes, check, answers, walk.ranWith(), borders,
+                                walk.reads(), walk.dependencies(), false, looking, answered));
                         into.add(candidatesBeside(each, axes, purposes, check, answers,
                                 growing, lists, takesASecondStep));
                         if (withEveryBorder != null) {
@@ -2497,6 +2502,10 @@ public final class Generator {
                             movable.apply(from.get(at),
                                     positionsRead(parameters, walk.inputs())))))));
                     lanes.add(candidatesOf(List.of(inTurn(answeredLast))));
+                    // What the walk does not read of the dependencies is a lane of its own: the
+                    // walk's result may reach the answer only where they answer enough, and that
+                    // is not known of a walk that reads none of what changes it.
+                    lanes.add(candidatesOf(List.of(inTurn(answeredAfter))));
                     if (growingAny != null) {
                         lanes.add(candidatesOf(List.of(inOrder(through, at -> candidatesBeside(
                                 from.get(at), axes, purposes, check, answers, growingAny,
@@ -3356,8 +3365,8 @@ public final class Generator {
             List<ObservedValue> seen, MeasuredInput subject,
             Map<ValueName.Behavior, MeasuredInput> answering, List<Purpose> purposes,
             CandidateCheck check, List<StoodInAnswer> answers, InputsRowsRanWith ranWith,
-            List<ObservedValue> borders, List<String> reads, List<String> inputsRead,
-            ReplacementWitness looking, Examining examining) {
+            List<ObservedValue> borders, List<String> reads, List<ValueName.Behavior> reached,
+            boolean ofWhatTheWalkReads, ReplacementWitness looking, Examining examining) {
         List<FixtureTemplate> kept = new ArrayList<>();
         for (int p = 0; p < seen.size(); p++) {
             if (!(ObservedFixtures.of(seen.get(p), subject.types().get(p), subject.ruleReading())
@@ -3386,14 +3395,17 @@ public final class Generator {
         });
         valuesHeld.addAll(borders);
         List<Iterator<GeneratedRow>> out = new ArrayList<>();
-        // What the walk reads of the dependencies: the answers of the others are not what it
-        // observes. Where it is not known which it reads, every one is.
+        // What the walk reads of the dependencies is what it observes of them; the answers of the
+        // others reach its result only through what comes after the walk, so they are asked
+        // after. Where the walk reads none of them, each is asked with the first.
         boolean theWalkReadsOne = answers.stream().anyMatch(each ->
-                inputsRead.contains(each.dependency().name()));        for (int at = 0; at < answers.size(); at++) {
+                reached.contains(each.dependency()));
+        for (int at = 0; at < answers.size(); at++) {
             ValueName.Behavior dependency = answers.get(at).dependency();
             MeasuredInput answered = answering.get(dependency);
             if (answered == null
-                    || (theWalkReadsOne && !inputsRead.contains(dependency.name()))) {
+                    || (theWalkReadsOne && reached.contains(dependency) != ofWhatTheWalkReads)
+                    || (!theWalkReadsOne && !ofWhatTheWalkReads)) {
                 continue;
             }
             Type type = answered.types().getFirst();

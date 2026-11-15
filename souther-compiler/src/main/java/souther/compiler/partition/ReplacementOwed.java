@@ -6,6 +6,7 @@ import souther.compiler.coverage.WalkRewrite;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.ValueName;
 
 import java.util.Collections;
 import java.util.List;
@@ -94,6 +95,9 @@ public sealed interface ReplacementOwed {
      * @param inputs      the names of the parameters of the behavior that the walk's call reads:
      *                    the positions a row is changed at, these before the others, to change
      *                    what the walk observes. Empty where it is not known
+     * @param dependencies the behaviors the walk's call reaches: what is stood in for them first,
+     *                    the others after what the walk reads has been tried, since what they
+     *                    answer reaches the walk's result only through what comes after it
      * @param over        the lists of the input the walk goes over, as locations rooted at the
      *                    parameter they are in, at every place the walk is entered. Empty where
      *                    any of them goes over a list the input does not hold as it is, one a
@@ -105,6 +109,7 @@ public sealed interface ReplacementOwed {
                    List<List<ObservedValue>> seenThrough,
                    InputsRowsRanWith ranWith, List<String> separators,
                    List<ObservedValue> named, List<String> reads, List<String> inputs,
+                   List<ValueName.Behavior> dependencies,
                    List<TermPath> over) implements ReplacementOwed {
 
         public OfAWalk {
@@ -115,6 +120,7 @@ public sealed interface ReplacementOwed {
             named = List.copyOf(named);
             reads = List.copyOf(reads);
             inputs = List.copyOf(inputs);
+            dependencies = List.copyOf(dependencies);
             over = List.copyOf(over);
             occurrences = List.copyOf(occurrences);
             replacing = Collections.unmodifiableSequencedMap(new TreeMap<>(replacing));

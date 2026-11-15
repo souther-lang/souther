@@ -273,6 +273,41 @@ class AWalkOverWhatADependencyAnswersIsToldApartTest {
                 WalkRewritesOwed.of(compilation, "indexBy"));
     }
 
+    /**
+     * A dependency the walk does not read can still be what lets a difference of the walk reach
+     * the answer: the walk's result is only looked at where the other dependency answers enough
+     * elements. What is stood in for it is asked after what the walk reads, and not left out.
+     */
+    @Test
+    void aDependencyTheWalkDoesNotReadIsStoodInWhereItMasksTheWalk() {
+        String source = """
+                module repro.masked
+
+                behavior stock : (k: Int) -> List<Int>
+
+                behavior gate : (k: Int) -> List<Int>
+
+                behavior check : (k: Int) -> Bool
+                    depends on stock
+                    depends on gate
+
+                let check (k, stock, gate) =
+                    List.length(List.filter(x -> x > 1, stock(k))) >= 2
+                        && List.length(gate(k)) >= 2
+
+                fake stock
+                    | _ -> [ 0, 2, 2, 0 ]
+
+                fake gate
+                    | _ -> [ 0 ]
+
+                example check
+                    | "masked" : (0) -> false
+                """;
+
+        WalkRewritesOwed.assertToldApart(measured(source), "filter");
+    }
+
     private static Compilation measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());

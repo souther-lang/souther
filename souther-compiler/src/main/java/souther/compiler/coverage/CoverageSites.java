@@ -511,6 +511,8 @@ public final class CoverageSites {
      *                    element is where two elements differ to it
      * @param inputs      the names of the parameters of the body that the walk's call reads: what
      *                    a row changes to change what the walk observes
+     * @param dependencies the behaviors the walk's call reaches: what a row stands in for them to
+     *                    change what the walk is handed
      * @param over        the list the walk goes over, as the name of the parameter of the body it
      *                    is read from and the fields taken from it, where it is a list the input
      *                    holds as it is: a parameter, a name bound to one, or a field of one.
@@ -519,6 +521,7 @@ public final class CoverageSites {
     public record WalkSite(String body, SourceConstructOrigin walk, WalkProbe index,
                            boolean writtenHere, List<String> separators, List<NamedValue> named,
                            List<String> reads, List<String> inputs,
+                           List<ValueName.Behavior> dependencies,
                            Optional<List<String>> over) {
 
         public WalkSite {
@@ -530,6 +533,7 @@ public final class CoverageSites {
             named = List.copyOf(named);
             reads = List.copyOf(reads);
             inputs = List.copyOf(inputs);
+            dependencies = List.copyOf(dependencies);
             over = over.map(List::copyOf);
         }
     }
@@ -1310,7 +1314,7 @@ public final class CoverageSites {
             walks.add(new WalkSite(draft.body(), draft.walk(), at, draft.writtenHere(),
                     List.copyOf(walk.separators.getOrDefault(draft.body(), Set.of())),
                     namedAtAWalk(draft.call(), ofTheBody(walk, draft.body()), comparisons),
-                    fieldsReadAt(draft.call()), draft.inputsRead(),
+                    fieldsReadAt(draft.call()), draft.inputsRead(), draft.dependenciesRead(),
                     draft.over()));
             walksByNode.put(draft.call(), new Plan.WalkedAt(at, draft.walk(),
                     draft.listArgument()));
@@ -1445,11 +1449,12 @@ public final class CoverageSites {
     private record DraftWalk(Core.Call call, int listArgument, String body,
                              SourceConstructOrigin walk, NodeAddress at, boolean writtenHere, Set<WalkRewrite> theSame,
                              boolean overAFixedList, Optional<NotCarriedReason> notCarried,
-                             Optional<List<String>> over, List<String> inputsRead, int raw) {
+                             Optional<List<String>> over, List<String> inputsRead,
+                             List<ValueName.Behavior> dependenciesRead, int raw) {
 
         DraftWalk numbered(int number) {
             return new DraftWalk(call, listArgument, body, walk, at, writtenHere, theSame,
-                    overAFixedList, notCarried, over, inputsRead, number);
+                    overAFixedList, notCarried, over, inputsRead, dependenciesRead, number);
         }
     }
 
@@ -1640,7 +1645,7 @@ public final class CoverageSites {
             }
             walks.add(new DraftWalk(call, listArgument, behavior, call.origin(), places.of(call),
                     Citation.of(call.pos()) instanceof Citation.Written, theSame, closed(walked),
-                    Optional.empty(), listHeldAs(walked), inputsRead(call), -1));
+                    Optional.empty(), listHeldAs(walked), inputsRead(call), dependenciesRead(call), -1));
         }
 
         /**
@@ -1650,29 +1655,39 @@ public final class CoverageSites {
          */
         private List<String> inputsRead(Core e) {
             Set<String> out = new LinkedHashSet<>();
-            collectInputsRead(e, out, new HashSet<>());
+            collectInputsRead(e, out, new HashSet<>(), new LinkedHashSet<>());
             return List.copyOf(out);
         }
 
-        private void collectInputsRead(Core e, Set<String> out, Set<BindingId> followed) {
-            // A behavior the call reaches is read as a parameter is: what it answers is what the
-            // walk goes over.
+        /**
+         * The behaviors that {@code e} reaches, through the names the body binds: what a walk
+         * goes over where it is what a dependency answers. Kept apart from the parameters, which
+         * are names of this body, as a behavior is named by its module and its name.
+         */
+        private List<ValueName.Behavior> dependenciesRead(Core e) {
+            Set<ValueName.Behavior> out = new LinkedHashSet<>();
+            collectInputsRead(e, new LinkedHashSet<>(), new HashSet<>(), out);
+            return List.copyOf(out);
+        }
+
+        private void collectInputsRead(Core e, Set<String> out, Set<BindingId> followed,
+                                       Set<ValueName.Behavior> behaviors) {
             if (Core.withoutStanding(e) instanceof Core.Call call
                     && call.fn() instanceof Core.Reached.OfDeclaration reached
                     && reached.name().denotes() instanceof ValueName.Behavior behavior) {
-                out.add(behavior.name());
+                behaviors.add(behavior);
             }
             if (Core.withoutStanding(e) instanceof Core.Read read) {
                 Core bound = boundTo.get(read.binding());
                 if (bound != null) {
                     if (followed.add(read.binding())) {
-                        collectInputsRead(bound, out, followed);
+                        collectInputsRead(bound, out, followed, behaviors);
                     }
                 } else if (!boundInTheBody.contains(read.binding())) {
                     out.add(read.name());
                 }
             }
-            Core.forEachChild(e, child -> collectInputsRead(child, out, followed));
+            Core.forEachChild(e, child -> collectInputsRead(child, out, followed, behaviors));
         }
 
         /**

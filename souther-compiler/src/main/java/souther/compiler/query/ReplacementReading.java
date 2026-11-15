@@ -29,6 +29,7 @@ import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
 import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -126,6 +127,7 @@ public final class ReplacementReading {
     private record WalkOccurrences(ReplacementReportAnchor reportAt, WalkRewrites.Asked asked,
                                    List<WalkProbe> probes, Set<String> separators,
                                    Set<NamedValue> named, Set<String> reads, Set<String> inputs,
+                                   Set<ValueName.Behavior> dependencies,
                                    List<Optional<TermPath>> over) {}
 
     /** What a body writes out on one side of a comparison, as a value a row holds. */
@@ -283,7 +285,7 @@ public final class ReplacementReading {
                         _ -> new WalkOccurrences(reportAt, each, new ArrayList<>(),
                                 new LinkedHashSet<>(), new LinkedHashSet<>(),
                                 new LinkedHashSet<>(), new LinkedHashSet<>(),
-                                new ArrayList<>()));
+                                new LinkedHashSet<>(), new ArrayList<>()));
                 if (!at.reportAt().equals(reportAt)) {
                     throw new IllegalStateException(replaced + " is shown at " + at.reportAt()
                             + " where one call reaches it and at " + reportAt + " where another"
@@ -293,6 +295,8 @@ public final class ReplacementReading {
                 at.separators().addAll(site.separators());
                 at.named().addAll(site.named());
                 at.reads().addAll(site.reads());
+                // A behavior is the same behavior from any body that reaches it.
+                at.dependencies().addAll(site.dependencies());
                 // A parameter of a helper is no parameter of this behavior.
                 if (site.body().equals(behavior)) {
                     at.inputs().addAll(site.inputs());
@@ -309,7 +313,7 @@ public final class ReplacementReading {
                 new ReplacementAsWritten.OfAWalk(replaced), at.reportAt(),
                 walkStanding(replaced, at.asked(), at.probes(), List.copyOf(at.separators()),
                         observedOf(at.named()), List.copyOf(at.reads()), List.copyOf(at.inputs()),
-                        listsWalked(at.over()), stated, entered, stoppedAt, ranWith))));
+                        List.copyOf(at.dependencies()), listsWalked(at.over()), stated, entered, stoppedAt, ranWith))));
         // One answer only where no arm the body owes a row through has a rewrite that is another
         // program; the arms of a library operation's copy are asked about above and do not count.
         // Which family a body invites is the body's: one with a fork is asked about the fork, arm
@@ -364,6 +368,7 @@ public final class ReplacementReading {
                                          List<WalkProbe> where, List<String> separators,
                                          List<ObservedValue> named, List<String> reads,
                                          List<String> inputs,
+                                         List<ValueName.Behavior> dependencies,
                                          List<TermPath> over, List<RowOutcome> rows,
                                          Function<RowOutcome, Set<WalkProbe>> entered,
                                          Function<RowOutcome, ReplacementDisposition.Met> stoppedAt,
@@ -383,7 +388,7 @@ public final class ReplacementReading {
                 decided -> new ReplacementOwed.OfAWalk(replaced.walk(), replaced.how(), where,
                         replacing, inputsOf(decided),
                         namedFirst(ValuesOfRareAnswersFirst.of(ranWith.get(), decided), named),
-                        separators, named, reads, inputs, over));
+                        separators, named, reads, inputs, dependencies, over));
     }
 
     /**
