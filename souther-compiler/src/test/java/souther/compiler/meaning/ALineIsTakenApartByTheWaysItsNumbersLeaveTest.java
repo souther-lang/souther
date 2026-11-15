@@ -255,18 +255,20 @@ class ALineIsTakenApartByTheWaysItsNumbersLeaveTest {
     }
 
     /**
-     * The control: two dividends compared more than one way each, whose remainders together are
-     * more starts than a line is walked from. The remainders leave few ways, and the intervals
+     * The control: two dividends compared more than one way each, whose classes of remainders
+     * together are more starts than a line is walked from. The remainders leave few ways, and the intervals
      * many; walked from nothing chosen, a prefix would be refuted only late, so the line is cut off
      * as it stands, told the numbers' count.
      */
     @Test
     void remaindersOfTwoDividendsPastTheStartsStayCutOff() {
-        int moved = 5;
-        List<DecidingCase.Cases> choices = new ArrayList<>(remaindersMovedApart(X, moved, 7));
-        choices.addAll(remaindersMovedApart(number("y"), moved, 11));
+        int moved = 8;
+        List<DecidingCase.Cases> choices = new ArrayList<>(remaindersMovedApart(X, moved, 11));
+        choices.addAll(remaindersMovedApart(number("y"), moved, 13));
         DecidingCase.Cases cases = new DecidingCase.Cases.Together(choices);
-        assertTrue(7 * 11 > NumericallyConsistentWays.MOST_STARTS, "more starts than are walked");
+        assertTrue((moved + 1) * (moved + 1) > NumericallyConsistentWays.MOST_STARTS,
+                "more starts than are walked: a class for each moved, and one of the rest");
+        assertEquals(Optional.empty(), NumericallyConsistentWays.startingAtEachRemainder(cases));
         NumericallyConsistentWays.Counts counted = NumericallyConsistentWays.counted(cases);
         BigInteger leftEach = BigInteger.valueOf(moved + 1);
         assertEquals(new NumericallyConsistentWays.Counted.AtMost(leftEach.multiply(leftEach)),
@@ -309,6 +311,103 @@ class ALineIsTakenApartByTheWaysItsNumbersLeaveTest {
                         comparisonsIn(each.condition()).stream()
                                 .filter(Proposition.Compared::holds).count() == 1),
                 () -> "each with one nought: " + found.decidesIn());
+    }
+
+    /**
+     * Remainders no comparison tells apart are one start: moved by 0, 1 and 2, the comparisons of a
+     * remainder by seven leave four classes of remainder, those that are nought at one of them and
+     * the four that are nought at none.
+     */
+    @Test
+    void remaindersNoComparisonTellsApartAreOneStart() {
+        DecidingCase.Cases cases = new DecidingCase.Cases.Together(
+                remaindersMovedApart(X, 3, 7));
+        List<NumericallyConsistentWays.State> starts =
+                NumericallyConsistentWays.startingAtEachRemainder(cases).orElseThrow().states();
+        assertEquals(4, starts.size(), () -> "one start for each class: " + starts);
+    }
+
+    /**
+     * Two dividends, each compared more than one way, are walked from each pair of what tells their
+     * remainders apart: three classes of one by three, five of the other by five, fifteen starts.
+     */
+    @Test
+    void remaindersOfTwoDividendsAreWalkedFromEachPairOfClasses() {
+        List<DecidingCase.Cases> choices = new ArrayList<>(remaindersMovedApart(X, 3, 3));
+        choices.addAll(remaindersMovedApart(number("y"), 5, 5));
+        List<NumericallyConsistentWays.State> starts = NumericallyConsistentWays
+                .startingAtEachRemainder(new DecidingCase.Cases.Together(choices)).orElseThrow()
+                .states();
+        assertEquals(15, starts.size(), () -> "three by five: " + starts);
+    }
+
+    /**
+     * The ways walked are counted as they are walked. Seven comparisons of a remainder by seven,
+     * each chosen or a truth beside it taken instead, leave eight ways, those that take none of the
+     * comparisons holding at every remainder: with six truths beside them that is 512 ways the
+     * numbers leave, within what is taken apart, and 896 walked from the seven starts. The line is
+     * cut off and told the numbers' count, and no prefix is asked.
+     */
+    @Test
+    void waysHoldingAtSeveralStartsAreCountedAsManyTimesAsTheyAreWalked() {
+        List<DecidingCase.Cases> choices = new ArrayList<>();
+        for (int by = 0; by < 7; by++) {
+            Proposition truth = new Proposition.Truth(
+                    new DecisionSubject.AnInput(TermPath.of("skipped" + by)), true);
+            choices.add(new DecidingCase.Cases.EachOf(List.of(
+                    new DecidingCase.Cases.One(noughtLeft(X, by, 7)),
+                    new DecidingCase.Cases.One(truth))));
+        }
+        for (int at = 0; at < 6; at++) {
+            Proposition truth = new Proposition.Truth(
+                    new DecisionSubject.AnInput(TermPath.of("t" + at)), true);
+            choices.add(new DecidingCase.Cases.EachOf(List.of(new DecidingCase.Cases.One(truth),
+                    new DecidingCase.Cases.One(truth.denied()))));
+        }
+        DecidingCase.Cases cases = new DecidingCase.Cases.Together(choices);
+        NumericallyConsistentWays.Counts counted = NumericallyConsistentWays.counted(cases);
+        assertEquals(new NumericallyConsistentWays.Counted.AtMost(BigInteger.valueOf(8L << 6)),
+                counted.ofTheNumbers(), "eight ways, each times 64");
+        assertEquals(BigInteger.valueOf(14L << 6), NumericallyConsistentWays
+                        .startingAtEachRemainder(cases).orElseThrow().walked(),
+                "the one that takes none walked from each of seven, the seven from one");
+        Asking asking = new Asking(_ -> CasesOfALineAsked.Crossing.MAY_CROSS);
+
+        assertEquals(List.of(new CasesOfALineAsked.NotWorkedOut(new DecidingCase(SAID, cases),
+                        Set.of(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached()),
+                        Optional.of(new CaseCount(
+                                new CaseCount.Ways.Exactly(BigInteger.TWO.pow(13)),
+                                counted.ofTheNumbers())))),
+                asking.found(cases).notWorkedOutIn(), "cut off, told the numbers' count");
+        assertEquals(List.of(SAID), asking.asked(), "asked only as it was said");
+    }
+
+    /**
+     * Remainders no comparison tells apart are walked once. Three comparisons of a remainder by
+     * seven, moved by 0, 1 and 2, leave four ways, and seven choices of truths beside them multiply
+     * each by 128. The line is read in 512 cases and no way is asked twice: from the four remainders
+     * that are nought at none the walk is the same, so they are one start.
+     */
+    @Test
+    void remaindersNoComparisonTellsApartAreNotWalkedMoreThanOnce() {
+        List<DecidingCase.Cases> choices = new ArrayList<>(remaindersMovedApart(X, 3, 7));
+        int truths = 7;
+        for (int at = 0; at < truths; at++) {
+            Proposition truth = new Proposition.Truth(
+                    new DecisionSubject.AnInput(TermPath.of("t" + at)), true);
+            choices.add(new DecidingCase.Cases.EachOf(List.of(new DecidingCase.Cases.One(truth),
+                    new DecidingCase.Cases.One(truth.denied()))));
+        }
+        DecidingCase.Cases cases = new DecidingCase.Cases.Together(choices);
+        assertEquals(new NumericallyConsistentWays.Counted.AtMost(
+                        BigInteger.valueOf(4L << truths)),
+                NumericallyConsistentWays.counted(cases).ofTheNumbers(), "four ways, each times 128");
+        Asking asking = new Asking(_ -> CasesOfALineAsked.Crossing.MAY_CROSS);
+
+        CasesOfALineAsked.Found found = asking.found(cases);
+        assertEquals(Set.of(), found.notWorkedOut(), "every case worked out");
+        assertEquals(new HashSet<>(asking.asked()).size(), asking.asked().size(),
+                "no condition asked twice");
     }
 
     /**

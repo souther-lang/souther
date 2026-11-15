@@ -76,16 +76,19 @@ import java.util.function.Predicate;
  * <p>Where the intervals leave more than that, the line is taken apart still where the ways the
  * remainders leave as well are no more than that
  * ({@link NumericallyConsistentWays.Counts#ofTheNumbers}), and it is then walked once from each
- * remainder of every dividend two of its comparisons leave
- * different remainders of ({@link NumericallyConsistentWays#startingAtEachRemainder}). A count
+ * class of remainders, those no comparison tells apart, of every dividend two of its comparisons
+ * leave different remainders of ({@link NumericallyConsistentWays#startingAtEachRemainder}), and
+ * only where the ways walked from all the starts together are no more than that
+ * ({@link NumericallyConsistentWays.Starts#walked}): a way holding at the remainders of more than
+ * one start is walked from each, and the count of ways counts it once. A count
  * bounds the ways walked to the end and not the prefixes asked on the way to them, and walked from
  * nothing chosen, a prefix that takes comparisons of one dividend one at a time is refuted only
  * at the comparison that leaves the dividend no remainder, however many parts were asked between.
  * Walked from one remainder, each of those comparisons is decided before it is a choice, and a
  * way the remainder refutes ends at the first of them. What is left to the steps is the ways the
- * remainders leave, each walked once from each remainder it holds at. Where no dividend is
- * compared that way, or where its remainders are more starts than are walked, the line is cut off
- * as it stands.
+ * remainders leave, each walked once from each class it holds at. Where no dividend is compared
+ * that way, or where its classes are more starts than are walked, or where the ways walked from
+ * them are more than are taken apart, the line is cut off as it stands.
  *
  * <p><b>Counted by the step, and stopped short as a stop.</b> Every step of the choosing is counted
  * against {@link CompositionBudget#CASES_A_LINE_IS_ASKED_IN} for the one case they were said as:
@@ -371,17 +374,18 @@ public final class CasesOfALineAsked {
             NumericallyConsistentWays.Counts counts =
                     NumericallyConsistentWays.counted(said.standsFor());
             if (!noMoreThan(counts.ofTheIntervals(), most)) {
-                Optional<List<NumericallyConsistentWays.State>> byTheRemainders =
+                Optional<NumericallyConsistentWays.Starts> byTheRemainders =
                         noMoreThan(counts.ofTheNumbers(), most)
                                 ? NumericallyConsistentWays.startingAtEachRemainder(
                                         said.standsFor())
                                 : Optional.empty();
-                if (byTheRemainders.isEmpty()) {
+                if (byTheRemainders.isEmpty()
+                        || byTheRemainders.get().walked().compareTo(BigInteger.valueOf(most)) > 0) {
                     moreWaysThanAreTakenApart(said);
                     counted = Optional.of(CaseCount.of(said.standsFor(), counts.ofTheNumbers()));
                     return new Found(List.of(), notWorkedOutIn(said));
                 }
-                starts = byTheRemainders.get();
+                starts = byTheRemainders.get().states();
             }
         }
         DecidingCase.Cases cases = heldFirst(said.standsFor());

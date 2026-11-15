@@ -6,6 +6,7 @@ import souther.compiler.partition.CompositionBudget;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -37,7 +38,8 @@ import java.util.function.Function;
  * <p><b>What a line is taken apart by.</b> Where the ways as the choices stand are more than
  * {@link CompositionBudget#CASES_A_LINE_IS_TAKEN_APART_INTO}, {@link CasesOfALineAsked} takes the
  * line apart where the intervals' count is no more than that, and past it where the numbers'
- * count is, walked from each remainder ({@link #startingAtEachRemainder}); the walk ends every way
+ * count is, walked from each class of remainders ({@link #startingAtEachRemainder}), where the
+ * ways walked from all of them are no more than that as well; the walk ends every way
  * at the part a {@link State} leaves nothing of, so it walks no way either count leaves out. Where
  * the count is given up the line is cut off by the ways as the choices stand. The numbers' count
  * is what a reader is told beside a line that stopped there; neither figure it meets is one the
@@ -316,19 +318,22 @@ public final class NumericallyConsistentWays {
 
     /**
      * The states a walk of {@code cases} starts from so that no comparison of a remainder is a
-     * choice the walk finds refuted later: one for each way of taking one remainder of each
-     * dividend that two comparisons of {@code cases} leave different remainders of, less those no
-     * way is consistent from, so none where no way is. Nothing said where there is no such
-     * dividend, or where the starts would be more than {@link #MOST_STARTS}, or where a count from
-     * one of them is given up.
+     * choice the walk finds refuted later: one for each way of taking one class of remainders of
+     * each dividend that two comparisons of {@code cases} leave different remainders of, less
+     * those no way is consistent from, so none where no way is. A class is the remainders no
+     * comparison tells apart, so two remainders that every comparison holds at alike are one
+     * start and not two walks of the same ways. Nothing said where there is no such dividend, or
+     * where the starts would be more than {@link #MOST_STARTS}, or where a count from one of them
+     * is given up.
      *
      * <p>From each start every comparison of those dividends is decided, so a way the walk takes
      * past one is a way that start leaves, and is refuted at the comparison that refutes it rather
      * than at one chosen later. A way no comparison refutes holds at some remainder of each, so
-     * some start leaves it; and from each start it holds at, the walk takes it again. So the starts
-     * take every way the numbers' count counts, and no other.
+     * some start leaves it; and from each start it holds at, the walk takes it again, which
+     * {@link Starts#walked} counts. So the starts take every way the numbers' count counts, and no
+     * other.
      */
-    static Optional<List<State>> startingAtEachRemainder(DecidingCase.Cases cases) {
+    static Optional<Starts> startingAtEachRemainder(DecidingCase.Cases cases) {
         Map<Dividend, Set<Long>> compared = new LinkedHashMap<>();
         cases.fold(new DecidingCase.Cases.Fold<Boolean>() {
 
@@ -362,15 +367,15 @@ public final class NumericallyConsistentWays {
             if (one.getValue().size() < 2) {
                 continue;
             }
-            int divisor = one.getKey().divisor();
-            if ((long) each.size() * divisor > MOST_STARTS) {
+            List<Long> classes = classesOfRemainders(one.getKey().divisor(), one.getValue());
+            if ((long) each.size() * classes.size() > MOST_STARTS) {
                 return Optional.empty();
             }
             List<Map<Dividend, Long>> more = new ArrayList<>();
             for (Map<Dividend, Long> before : each) {
-                for (int remainder = 0; remainder < divisor; remainder++) {
+                for (long kind : classes) {
                     Map<Dividend, Long> taken = new HashMap<>(before);
-                    taken.put(one.getKey(), 1L << remainder);
+                    taken.put(one.getKey(), kind);
                     more.add(taken);
                 }
             }
@@ -382,14 +387,52 @@ public final class NumericallyConsistentWays {
         Counting counting = new Counting(true);
         Function<State, Map<State, BigInteger>> ways = cases.fold(counting);
         List<State> out = new ArrayList<>();
+        BigInteger walked = BigInteger.ZERO;
         for (Map<Dividend, Long> remainders : each) {
             State start = new State(Map.of(), remainders);
-            if (!ways.apply(start).isEmpty()) {
+            BigInteger from = ways.apply(start).values().stream().reduce(BigInteger.ZERO,
+                    BigInteger::add);
+            if (from.signum() > 0) {
                 out.add(start);
+                walked = walked.add(from);
             }
         }
         return counting.reached > STATES_A_COUNT_IS_TAKEN_IN ? Optional.empty()
-                : Optional.of(out);
+                : Optional.of(new Starts(out, walked));
+    }
+
+    /**
+     * Where a walk of some cases starts, and how many ways it takes from there.
+     *
+     * @param states the starts, each one a class of remainders for every dividend told apart
+     * @param walked the ways left from each start, together: how many times the walk comes to the
+     *               end of a way. A way that holds at the remainders of more than one start is
+     *               walked from each, so this is no fewer than the ways the numbers' count counts
+     */
+    record Starts(List<State> states, BigInteger walked) {
+
+        Starts {
+            states = List.copyOf(states);
+        }
+    }
+
+    /**
+     * The remainders of a dividend {@code divisor} divides by, as one mask for each class of them
+     * no comparison in {@code allowed} tells apart: those that every comparison holds at alike.
+     * Each comparison holds at all of a class or at none of it, so a walk from a class decides
+     * every comparison as it would from any one remainder in it.
+     */
+    static List<Long> classesOfRemainders(int divisor, Collection<Long> allowed) {
+        Map<List<Boolean>, Long> byWhatHolds = new LinkedHashMap<>();
+        List<Long> comparisons = List.copyOf(allowed);
+        for (int remainder = 0; remainder < divisor; remainder++) {
+            List<Boolean> holds = new ArrayList<>();
+            for (long comparison : comparisons) {
+                holds.add((comparison >> remainder & 1L) != 0);
+            }
+            byWhatHolds.merge(holds, 1L << remainder, (had, now) -> had | now);
+        }
+        return List.copyOf(byWhatHolds.values());
     }
 
     /** How many states a walk of a line's cases starts from, at most: each walks the cases. */
