@@ -21,7 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * A rewrite left open where a rule of a position refused a candidate says that was met, and does
  * not read like a search that ran short.
  *
- * <p>The invariant admits one separator, so every string with a piece more is refused. The values
+ * <p>The invariant admits two separators, so every string with a piece more is refused, and the
+ * pieces after the first are still as many as two, which leaves the walk over them open. The values
  * an invariant admits are not worked out from a pattern to make others, so what is said is what
  * the search met, and not that it is why the rewrite is open.
  */
@@ -33,7 +34,7 @@ class ARuleThatRefusedACandidateIsSaidToHaveDoneSoTest {
             module repro.domains
 
             data Email = String
-                invariant String.matches("[^@]+@[^@]+", value)
+                invariant String.matches("[^@]+(@[^@]+){1,2}", value)
 
             behavior domains : (e: Email) -> List<String>
             let domains (e) = List.map(d -> String.lowercase(d), List.drop(1, String.split("@", e.value)))
@@ -43,7 +44,7 @@ class ARuleThatRefusedACandidateIsSaidToHaveDoneSoTest {
             """;
 
     private static final String NO_INVARIANT = ONE_SEPARATOR.replace(
-            "    invariant String.matches(\"[^@]+@[^@]+\", value)\n", "");
+            "    invariant String.matches(\"[^@]+(@[^@]+){1,2}\", value)\n", "");
 
     @Test
     void aRuleThatRefusedACandidateIsSaidToHaveDoneSo() {

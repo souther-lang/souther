@@ -6,6 +6,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.IntPredicate;
 
 import net.unit8.notation199x.CaseConversion;
+import net.unit8.notation199x.Normalization;
 import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.Meter;
 
@@ -20,7 +21,7 @@ import souther.compiler.values.TextExtents;
  * from the run time's own conversion the first time a conversion is asked of, and kept for the
  * rest: the map is a fact of the language and not of the model being read.
  */
-final class CaseMaps {
+public final class CaseMaps {
 
     private static final Map<CaseMapping, CodeMap> MADE = new ConcurrentHashMap<>();
 
@@ -87,6 +88,23 @@ final class CaseMaps {
         }
         Language alone = CodeMap.stringsOf(everyStep, meter);
         return alone == null ? null : over.and(alone, meter);
+    }
+
+    /**
+     * Whether what {@code mapping} answers of a string holds {@code codePoint} no more times than
+     * the string does: the conversion leaves it, sends no other code point of its map to it,
+     * answers no code point outside its map with it alone or beside a letter
+     * ({@link CodeMap#answeredOutsideTheDomain}) — {@code ŉ} is answered {@code ʼN} in uppercase —
+     * and it is no composite a normalization could make of two code points answered apart.
+     */
+    public static boolean makesNoOccurrenceOf(CaseMapping mapping, int codePoint) {
+        CodeMap map = of(mapping);
+        CodePoints only = CodePoints.of(codePoint);
+        String alone = Character.toString(codePoint);
+        return map.domain().has(codePoint) && map.preimage(only).equals(only)
+                && map.image(only).equals(only)
+                && !map.answeredOutsideTheDomain().has(codePoint)
+                && Normalization.normalize(Normalization.Form.NFD, alone).equals(alone);
     }
 
     /** The one conversion done last of what {@code mapping} makes of a string, done alone. */
