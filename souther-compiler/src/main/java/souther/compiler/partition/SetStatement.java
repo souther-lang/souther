@@ -35,11 +35,11 @@ import java.util.List;
  * <p><b>And where neither side is shown.</b> A rule read off what another value can hold may show
  * some strings on neither side, for one of two reasons that are told apart. The strings of
  * {@code notShown} are strings the rule is asked of and shows nothing of for the operations of the
- * library ({@link #leftOpen}): they are no class of either side, and a reader is told they are left
- * open rather than counted on the side nothing showed them on. The strings of {@code notReached}
- * are those no run gets to the rule with, because a guard on the way keeps them from it: the rule
- * is not asked of them, no row can put one to it, and the rule that keeps them away is the one that
- * is owed a row there. They are not open, and are no class of this rule.
+ * library: they are no class of either side, and a reader is told they are left open rather than
+ * counted on the side nothing showed them on. The strings of {@code notReached} are those no run
+ * gets to the rule with, because a guard on the way keeps them from it or the run stops before it:
+ * the rule is not asked of them, no row can put one to it, and the rule that keeps them away is
+ * the one that is owed a row there. They are not open, and are no class of this rule.
  *
  * <p><b>Each side is a set and the lengths of its values.</b> A length is a number of a string and
  * not a set of strings, so a side holding the strings of a set at some lengths is the set and the
