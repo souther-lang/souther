@@ -36,7 +36,8 @@
     </properties>
 
     <dependencies>
-        <!-- The listener interface `CoverageByClass` implements. The launcher is on every test
+        <!-- The listener interfaces `CoverageByClass`, `TestWatchdog` and `TestDiscoveryWatchdog`
+             implement. The launcher is on every test
              run's classpath already, brought by surefire's provider; naming it here is what lets
              the listener compile. -->
         <dependency>

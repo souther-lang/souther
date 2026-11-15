@@ -3,15 +3,24 @@ package souther.compiler.execute.jvm;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourcePos;
+import souther.compiler.examples.CallerApplication;
 import souther.compiler.examples.Deadline;
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.observe.WaitShown;
+import souther.test.Workers;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.Condition;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
@@ -40,29 +49,38 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
      * this compiler ships starts a worker before it starts servicing.
      *
      * <p>Said here rather than through an arrangement because it is the interleaving that is being
-     * held, and an arrangement services immediately. This waits before it services, which is what a
-     * host that descheduled the servicing thread does.
+     * held, and an arrangement services immediately. The worker is first left until it cannot go
+     * further without the servicing thread, which is what a host that descheduled the servicing
+     * thread does, and what it has done by then is read off a flag rather than off how long it took.
      */
     @Test
     void aRowSpendsNothingOfItsOwnBeforeAnythingIsCountingIt() throws Exception {
         Handoff handoff = new Handoff();
-        Thread worker = new Thread(() -> {
+        AtomicBoolean began = new AtomicBoolean();
+        CountDownLatch release = new CountDownLatch(1);
+        Thread worker = Workers.started("the-row", () -> {
             try {
                 handoff.installedFor(() -> {
-                    Thread.sleep(60);
+                    began.set(true);
+                    release.await();
                     return "the row's own work";
                 });
             } catch (Exception _) {
                 // The row was given up on, which is not what this is about.
             }
         });
-        worker.setDaemon(true);
-        worker.start();
-        Thread.sleep(150);
+        while (worker.getState() != Thread.State.WAITING) {
+            Thread.onSpinWait();
+        }
 
-        assertEquals(Handoff.Serviced.WAIT_SPENT,
-                handoff.serviceUntilDone(Duration.ofMillis(20)),
-                "the row's own work is the compile's time whenever it was run");
+        assertFalse(began.get(), "the row did not begin before anything was counting it");
+        try {
+            assertEquals(Handoff.Serviced.WAIT_SPENT,
+                    handoff.serviceUntilDone(Duration.ofMillis(1)),
+                    "the row's own work is the compile's time, which nothing ends but the wait");
+        } finally {
+            release.countDown();
+        }
     }
 
     /**
@@ -133,29 +151,123 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
     /** A row of the compile's own that will not come back is given up on. */
     @Test
     void aRowThatStopsAnsweringSpendsTheWait() {
-        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(20));
+        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(1));
 
         Deadline.Outcome<String> came = deadline.given(WORK, () -> {
-            Thread.sleep(30_000);
+            new CountDownLatch(1).await();   // until abandoned, which interrupts it
             return "never answered";
         });
 
         assertInstanceOf(Deadline.Outcome.Overran.class, came).abandon().run();
     }
 
+    /**
+     * Time that passes only where the servicing thread is waiting.
+     *
+     * <p>What it takes for the wait to be spent is the row passing time, which a row does by working
+     * and which this lets a test say outright. A wait returns when the row has moved, and what is
+     * left of it is what the time passed inside it took. A row says it is about to move by
+     * {@link #crossing} and {@link #row}, which is what a wait that must not return before then
+     * asks for, so a wake-up that is not the row's leaves it waiting.
+     */
+    private static final class VirtualTime implements Handoff.Spending {
+
+        private final AtomicLong now = new AtomicLong();
+        private final AtomicInteger moves = new AtomicInteger();
+
+        void pass(Duration length) {
+            now.addAndGet(length.toNanos());
+        }
+
+        /** {@code application}, handed over at the crossing. */
+        Object crossing(CallerApplication.Application application)
+                throws ReflectiveOperationException {
+            moves.incrementAndGet();
+            return Handoff.onTheThreadThatAsked().call(application);
+        }
+
+        /** {@code body}, which says it is done by returning. */
+        <T> Callable<T> row(Callable<T> body) {
+            return () -> {
+                try {
+                    return body.call();
+                } finally {
+                    moves.incrementAndGet();
+                }
+            };
+        }
+
+        @Override
+        public long awaiting(Condition moved, long nanos) throws InterruptedException {
+            long began = now.get();
+            int seen = moves.get();
+            while (moves.get() == seen) {
+                moved.await();
+            }
+            return nanos - (now.get() - began);
+        }
+    }
+
+    /** Runs {@code row} as the row of {@code handoff}, on a worker of its own. */
+    private static void startRow(Handoff handoff, Callable<Object> row) {
+        Workers.started("the-row", () -> {
+            try {
+                handoff.installedFor(row);
+            } catch (Exception _) {
+                // Given up on, which is how a test ends a row that has stopped.
+            }
+        });
+    }
+
     /** An application taking three times the wait spends none of it. */
     @Test
-    void whatTheApplicationTakesIsNotTheCompilesToSpend() {
-        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(100));
+    void whatTheApplicationTakesIsNotTheCompilesToSpend() throws Exception {
+        VirtualTime time = new VirtualTime();
+        Handoff handoff = new Handoff(time);
+        startRow(handoff, time.row(() -> time.crossing(() -> {
+            time.pass(Duration.ofMillis(300));
+            return "answered";
+        })));
 
-        Deadline.Outcome<Object> came = deadline.given(WORK,
-                () -> Handoff.onTheThreadThatAsked().call(() -> {
-                    slept(300);
-                    return "answered";
-                }));
+        assertEquals(Handoff.Serviced.ROW_LEFT, handoff.serviceUntilDone(Duration.ofMillis(100)));
+    }
 
-        assertEquals("answered",
-                assertInstanceOf(Deadline.Outcome.Finished.class, came).value());
+    /** The same, through the deadline an example is run under: what it takes of the caller is not
+     *  what it is held to. */
+    @Test
+    void aDeadlineIsNotSpentByWhatTheApplicationTakes() {
+        VirtualTime time = new VirtualTime();
+        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(100), 0L, time);
+
+        Deadline.Outcome<Object> came = deadline.given(WORK, time.row(() -> time.crossing(() -> {
+            time.pass(Duration.ofMillis(300));
+            return "answered";
+        })));
+
+        assertEquals("answered", assertInstanceOf(Deadline.Outcome.Finished.class, came).value());
+    }
+
+    /**
+     * And the compile's own time on either side of a crossing is one wait, through the deadline.
+     * The stretches are those of {@link #whatTheCompileSpendsAroundCrossingsIsOneWait}.
+     */
+    @Test
+    void aDeadlineIsSpentByTheCompilesOwnTimeAroundCrossingsAsOneWait() {
+        VirtualTime time = new VirtualTime();
+        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(100), 0L, time);
+
+        Deadline.Outcome<Object> came = deadline.given(WORK, time.row(() -> {
+            for (int each = 0; each < 5; each++) {
+                time.pass(Duration.ofMillis(30));
+                time.crossing(() -> {
+                    time.pass(Duration.ofMillis(40));
+                    return null;
+                });
+            }
+            return "answered";
+        }));
+
+        assertInstanceOf(Deadline.Outcome.Overran.class, came).abandon().run();
     }
 
     /**
@@ -168,21 +280,26 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
      * against.
      */
     @Test
-    void whatTheCompileSpendsAroundCrossingsIsOneWait() {
-        Deadline deadline = JvmDeadlines.of(Duration.ofMillis(100));
-
-        Deadline.Outcome<Object> came = deadline.given(WORK, () -> {
+    void whatTheCompileSpendsAroundCrossingsIsOneWait() throws Exception {
+        VirtualTime time = new VirtualTime();
+        Handoff handoff = new Handoff(time);
+        startRow(handoff, time.row(() -> {
             for (int each = 0; each < 5; each++) {
-                Thread.sleep(30);
-                Handoff.onTheThreadThatAsked().call(() -> {
-                    slept(40);
+                time.pass(Duration.ofMillis(30));
+                time.crossing(() -> {
+                    time.pass(Duration.ofMillis(40));
                     return null;
                 });
             }
             return "answered";
-        });
+        }));
 
-        assertInstanceOf(Deadline.Outcome.Overran.class, came).abandon().run();
+        try {
+            assertEquals(Handoff.Serviced.WAIT_SPENT,
+                    handoff.serviceUntilDone(Duration.ofMillis(100)));
+        } finally {
+            handoff.abandon();
+        }
     }
 
     /**
@@ -203,14 +320,5 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
 
         assertInstanceOf(IllegalStateException.class,
                 assertInstanceOf(Deadline.Outcome.Threw.class, came).cause());
-    }
-
-    /** {@code ms} spent where an application is applied, which may not throw what a sleep does. */
-    private static void slept(long ms) {
-        try {
-            Thread.sleep(ms);
-        } catch (InterruptedException _) {
-            Thread.currentThread().interrupt();
-        }
     }
 }

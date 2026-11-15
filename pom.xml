@@ -333,6 +333,12 @@
                              what is checked here has to be checked on the stack the bound was set
                              for. A test that wants a smaller one makes its own thread. -->
                         <argLine>${test.jvm.args} -Xss${souther.jvm.stack} ${souther.jvm.layout}</argLine>
+                        <!-- The one place a test is held to a clock, and only to stop a build that
+                             has hung: no test asserts on how long it took, so no test is wrong for
+                             being slow. `souther.test.TestWatchdog`, from souther-test-support, is
+                             a launcher listener the launcher finds through the service loader; it
+                             names what stops making progress and halts the fork, which a JUnit
+                             timeout cannot do to a loop that ignores interrupts. -->
                         <systemPropertyVariables>
                             <souther.example.step.limit>${test.example.step.limit}</souther.example.step.limit>
                         </systemPropertyVariables>

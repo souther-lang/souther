@@ -11,11 +11,11 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 
 /**
@@ -43,23 +43,22 @@ public final class LocalRepository implements AutoCloseable {
         /** The request sent on to {@code location}, with a body of {@code length} bytes. */
         record Redirect(String location, int length) implements Serving {}
 
-        /** The file, a {@code pieces}th at a time, {@code millis} apart. */
-        record Trickle(int pieces, long millis) implements Serving {}
-
-        /** Half the file under its full length, then nothing until the repository is closed. */
-        record Cut() implements Serving {}
-
-        /** The answer begun, and nothing of the file until the repository is closed. */
-        record Silent() implements Serving {}
     }
 
     private final HttpServer server;
     private final Map<String, byte[]> files = new ConcurrentHashMap<>();
     private final Map<String, Serving> serving = new ConcurrentHashMap<>();
-    private final Map<String, Long> heldBack = new ConcurrentHashMap<>();
     private final List<String> asked = new CopyOnWriteArrayList<>();
-    private final CountDownLatch closed = new CountDownLatch(1);
-    private volatile long pomDelay;
+
+    /** Guards the poms held for one another: their width, how many are left to answer, how many
+     *  are waiting now, and the groups already let go. */
+    private final Object pomGate = new Object();
+    private int pomWidth;
+    private int pomsUnanswered;
+    private int pomsWaiting;
+    private int pomGroups;
+    private boolean closed;
+    private final List<Integer> pomsLetGoTogether = new ArrayList<>();
 
     private LocalRepository(HttpServer server) {
         this.server = server;
@@ -164,24 +163,6 @@ public final class LocalRepository implements AutoCloseable {
         serving.put(path(artifactId, version, classifier, "jar"), new Serving.Status(status));
     }
 
-    /**
-     * Serves half the release's jar under its full length, and then nothing more until the
-     * repository is closed: a connection that has stopped.
-     */
-    public void cut(String artifactId, String version, String classifier) {
-        serving.put(path(artifactId, version, classifier, "jar"), new Serving.Cut());
-    }
-
-    /** Begins the answer for {@code path} and sends nothing of it until the repository is closed. */
-    public void silence(String path) {
-        serving.put(path, new Serving.Silent());
-    }
-
-    /** Serves {@code path} a {@code pieces}th at a time, {@code millis} apart, all of it in the end. */
-    public void trickle(String path, int pieces, long millis) {
-        serving.put(path, new Serving.Trickle(pieces, millis));
-    }
-
     /** Answers {@code path} by sending the request on to {@code location}. */
     public void redirect(String path, String location) {
         redirect(path, location, 0);
@@ -192,14 +173,46 @@ public final class LocalRepository implements AutoCloseable {
         serving.put(path, new Serving.Redirect(location, length));
     }
 
-    /** Begins the answer for {@code path}, however it is served, only after {@code millis}. */
-    public void holdBack(String path, long millis) {
-        heldBack.put(path, millis);
+    /**
+     * Begins the answer for no pom until as many are waiting as there are to ask for in a group:
+     * {@code width}, or the poms still unanswered where that is fewer, out of {@code poms} in all.
+     * A repository far away leaves a client that asks one at a time waiting for each, and such a
+     * client never has a group waiting, so its first pom is never answered. A test that holds poms
+     * is bounded by its own timeout.
+     */
+    public void holdPomsInGroupsOf(int width, int poms) {
+        synchronized (pomGate) {
+            pomWidth = width;
+            pomsUnanswered = poms;
+        }
     }
 
-    /** Begins the answer for every pom only after {@code millis}, as a repository far away does. */
-    public void slowPoms(long millis) {
-        pomDelay = millis;
+    /** How many poms were waiting together each time the poms held by {@link #holdPomsInGroupsOf}
+     *  were let go, in the order they were. */
+    public List<Integer> pomsLetGoTogether() {
+        synchronized (pomGate) {
+            return List.copyOf(pomsLetGoTogether);
+        }
+    }
+
+    private void holdPom() throws InterruptedException {
+        synchronized (pomGate) {
+            if (pomWidth == 0) {
+                return;
+            }
+            int mine = pomGroups;
+            pomsWaiting++;
+            if (pomsWaiting >= Math.min(pomWidth, pomsUnanswered)) {
+                pomsLetGoTogether.add(pomsWaiting);
+                pomsUnanswered -= pomsWaiting;
+                pomsWaiting = 0;
+                pomGroups++;
+                pomGate.notifyAll();
+            }
+            while (pomGroups == mine && !closed) {
+                pomGate.wait();
+            }
+        }
     }
 
     public void put(String path, String content) {
@@ -216,7 +229,13 @@ public final class LocalRepository implements AutoCloseable {
         String path = exchange.getRequestURI().getPath();
         asked.add(path);
         String file = path.startsWith(ROOT) ? path.substring(ROOT.length()) : path;
-        pause(heldBack.getOrDefault(file, file.endsWith(".pom") ? pomDelay : 0));
+        if (file.endsWith(".pom")) {
+            try {
+                holdPom();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
         byte[] content = files.get(file);
         try (exchange) {
             switch (serving.getOrDefault(file, new Serving.Whole())) {
@@ -242,55 +261,16 @@ public final class LocalRepository implements AutoCloseable {
                         }
                     }
                 }
-                case Serving.Trickle trickle -> {
-                    exchange.sendResponseHeaders(200, content.length);
-                    try (OutputStream body = exchange.getResponseBody()) {
-                        int piece = (int) Math.ceil(content.length / (double) trickle.pieces());
-                        for (int from = 0; from < content.length; from += piece) {
-                            body.write(content, from, Math.min(piece, content.length - from));
-                            body.flush();
-                            pause(trickle.millis());
-                        }
-                    }
-                }
-                case Serving.Cut _ -> {
-                    exchange.sendResponseHeaders(200, content.length);
-                    OutputStream body = exchange.getResponseBody();
-                    body.write(content, 0, content.length / 2);
-                    body.flush();
-                    awaitClose();
-                }
-                case Serving.Silent _ -> {
-                    exchange.sendResponseHeaders(200, content.length);
-                    exchange.getResponseBody().flush();
-                    awaitClose();
-                }
             }
-        }
-    }
-
-    private void awaitClose() {
-        try {
-            closed.await();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    }
-
-    private static void pause(long millis) {
-        if (millis <= 0) {
-            return;
-        }
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
         }
     }
 
     @Override
     public void close() {
-        closed.countDown();
+        synchronized (pomGate) {
+            closed = true;
+            pomGate.notifyAll();
+        }
         server.stop(0);
     }
 }

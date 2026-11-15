@@ -15,6 +15,8 @@ import souther.compiler.query.Output;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -62,10 +64,10 @@ class ARowIsHeldToStepsAndNotToTheClockTest {
               | "counts down": (N(1000)) -> Out(0)
             """;
 
-    /** Steps enough for anything these models do that finishes, and a clock long enough that losing
-     *  to it would be a test that hangs rather than one that fails. */
+    /** Steps enough for anything these models do that finishes, under the clock a compile is
+     *  given by default. */
     private static EvaluationPolicy holdingTo(long steps) {
-        return EvaluationPolicy.of(steps).withCompilerTimeout(Duration.ofSeconds(30));
+        return EvaluationPolicy.of(steps);
     }
 
     /** The model compiled under {@code policy}, with the errors it is refused for. */
@@ -101,7 +103,7 @@ class ARowIsHeldToStepsAndNotToTheClockTest {
     @Test
     void aRowThatSpendsItsStepsFailsTheBuild() {
         CompileException raised = assertThrows(CompileException.class,
-                () -> Compiler.compiled(LOOPS, "Main", new java.util.ArrayList<>(),
+                () -> Compiler.compiled(LOOPS, "Main", new ArrayList<>(),
                         souther.compiler.query.Adequacy.Asked.NOTHING, holdingTo(10_000L)));
 
         assertEquals("E1910", raised.code());
@@ -164,28 +166,29 @@ class ARowIsHeldToStepsAndNotToTheClockTest {
      * purpose may still have a worker of its own going round — which is the very thing being tested
      * here and would answer for a compile that is not this one.
      *
-     * <p>Polled rather than read once: a worker that stops itself is still scheduled off after it
-     * does, and what is being asked is whether it stops, not how soon.
+     * <p>Joined rather than read once: a worker that stops itself is still scheduled off after it
+     * does, and what is being asked is whether it stops, not how soon. The bound on the join is
+     * there only so that a worker that never stops fails the test and does not hold the build.
      */
     private static boolean noWorkerRemainsBeyond(Set<Thread> before) {
-        for (int attempt = 0; attempt < 100; attempt++) {
-            Set<Thread> now = new java.util.HashSet<>(evaluationWorkers());
-            now.removeAll(before);
-            if (now.isEmpty()) {
-                return true;
-            }
+        Set<Thread> started = new HashSet<>(evaluationWorkers());
+        started.removeAll(before);
+        for (Thread worker : started) {
             try {
-                Thread.sleep(20);
+                worker.join(Duration.ofMinutes(5));
             } catch (InterruptedException _) {
                 Thread.currentThread().interrupt();
                 return false;
             }
+            if (worker.isAlive()) {
+                return false;
+            }
         }
-        return false;
+        return true;
     }
 
     private static Set<Thread> evaluationWorkers() {
-        Set<Thread> running = new java.util.HashSet<>();
+        Set<Thread> running = new HashSet<>();
         for (Thread t : Thread.getAllStackTraces().keySet()) {
             if (t.getName().startsWith("souther-reading") && t.isAlive()) {
                 running.add(t);

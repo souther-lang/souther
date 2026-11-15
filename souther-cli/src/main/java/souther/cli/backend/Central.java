@@ -260,12 +260,54 @@ public final class Central implements BackendFetch.Source {
         record Unstated() implements Stated {}
     }
 
+    /**
+     * What waiting for the repository is made of: a request sent, the time, and a wait on an answer
+     * for at most so long. Everything {@link Patience} counts goes through here, so a stand-in
+     * decides when an answer begins, when bytes arrive and how much time has passed.
+     */
+    interface Wire {
+
+        <T> CompletableFuture<HttpResponse<T>> send(HttpRequest request,
+                                                    HttpResponse.BodyHandler<T> body);
+
+        /** The time, in nanoseconds from some fixed point. */
+        long nanos();
+
+        /** What {@code answer} comes to, where it does within {@code nanos}. */
+        <T> T get(Future<T> answer, long nanos)
+                throws ExecutionException, TimeoutException, InterruptedException;
+
+        /** The repository's own client, and the system's clock. */
+        static Wire over(Repository repository) {
+            return new Wire() {
+                @Override
+                public <T> CompletableFuture<HttpResponse<T>> send(HttpRequest request,
+                                                                   HttpResponse.BodyHandler<T> body) {
+                    return repository.client().sendAsync(request, body);
+                }
+
+                @Override
+                public long nanos() {
+                    return System.nanoTime();
+                }
+
+                @Override
+                public <T> T get(Future<T> answer, long nanos)
+                        throws ExecutionException, TimeoutException, InterruptedException {
+                    return answer.get(nanos, TimeUnit.NANOSECONDS);
+                }
+            };
+        }
+    }
+
     private final Repository repository;
     private final Patience patience;
+    private final Wire wire;
 
-    private Central(Repository repository, Patience patience) {
+    private Central(Repository repository, Patience patience, Wire wire) {
         this.repository = repository;
         this.patience = patience;
+        this.wire = wire;
     }
 
     /**
@@ -275,14 +317,20 @@ public final class Central implements BackendFetch.Source {
     public static BackendFetch.Source configured(Map<String, String> variables,
                                                  Map<String, String> properties) {
         return switch (Repository.configured(variables, properties)) {
-            case Repository repository -> new Central(repository, Patience.USUAL);
+            case Repository repository -> new Central(repository, Patience.USUAL, Wire.over(repository));
             case Configured.Unusable unusable -> unusable;
         };
     }
 
     /** The repository at {@code root}, reached directly and waited for as {@code patience} says. */
     static Central at(URI root, Patience patience) {
-        return new Central(Repository.at(root), patience);
+        Repository repository = Repository.at(root);
+        return new Central(repository, patience, Wire.over(repository));
+    }
+
+    /** As {@link #at(URI, Patience)}, with {@code wire} in place of the repository's client. */
+    static Central at(URI root, Patience patience, Wire wire) {
+        return new Central(Repository.at(root), patience, wire);
     }
 
     @Override
@@ -459,7 +507,7 @@ public final class Central implements BackendFetch.Source {
      *         repository
      */
     void download(Release release, Path to) throws Stop, IOException, InterruptedException {
-        long deadline = System.nanoTime() + patience.answer().toNanos();
+        long deadline = wire.nanos() + patience.answer().toNanos();
         HttpResponse<Void> done = following(release.jar(), at -> downloadOnce(at, to, deadline));
         if (done.statusCode() != 200) {
             throw new Stop(new Failure.Answered(release.jar(), done.statusCode()));
@@ -476,12 +524,12 @@ public final class Central implements BackendFetch.Source {
     private HttpResponse<Void> downloadOnce(URI at, Path to, long deadline)
             throws Stop, IOException, InterruptedException {
         Receiving receiving = new Receiving(to);
-        CompletableFuture<HttpResponse<Void>> answer = repository.client().sendAsync(request(at),
+        CompletableFuture<HttpResponse<Void>> answer = wire.send(request(at),
                 _ -> receiving.begin());
         long stall = patience.stall().toNanos();
         // Looked at five times a stall, so a download that stopped is ended within a fifth of a
         // stall of the stall it was given, and not up to a stall late.
-        long tick = Math.max(1, Math.min(patience.stall().toMillis() / 5, 1000));
+        long tick = Math.max(1, Math.min(stall / 5, TimeUnit.SECONDS.toNanos(1)));
         long grew = -1;
         long had = 0;
         try {
@@ -489,10 +537,9 @@ public final class Central implements BackendFetch.Source {
                 // Until the answer begins, no longer than to the deadline, so that an answer
                 // that never began is given up on when it should have begun and not a tick later.
                 long wait = receiving.begun() ? tick
-                        : Math.max(1, Math.min(tick,
-                                TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime())));
+                        : Math.max(1, Math.min(tick, deadline - wire.nanos()));
                 try {
-                    return answer.get(wait, TimeUnit.MILLISECONDS);
+                    return wire.get(answer, wait);
                 } catch (ExecutionException e) {
                     receiving.throwUnwritten();
                     throw new Stop(new Failure.Unreachable(at, reason(e.getCause())));
@@ -500,7 +547,7 @@ public final class Central implements BackendFetch.Source {
                     // A body the file could not take is given up on by the subscriber, and the
                     // answer then never ends: what is waited for has failed here, not there.
                     receiving.throwUnwritten();
-                    long now = System.nanoTime();
+                    long now = wire.nanos();
                     if (!receiving.begun()) {
                         if (now - deadline >= 0) {
                             throw new Stop(new Failure.Unreachable(at, "no answer began in "
@@ -607,7 +654,7 @@ public final class Central implements BackendFetch.Source {
      * arrive whole, the redirects it is sent through included.
      */
     private HttpResponse<byte[]> small(URI uri) throws Stop, InterruptedException {
-        long deadline = System.nanoTime() + patience.answer().toNanos();
+        long deadline = wire.nanos() + patience.answer().toNanos();
         return following(uri, at -> smallOnce(at, deadline));
     }
 
@@ -618,15 +665,15 @@ public final class Central implements BackendFetch.Source {
      */
     private HttpResponse<byte[]> smallOnce(URI at, long deadline)
             throws Stop, InterruptedException {
-        long left = deadline - System.nanoTime();
+        long left = deadline - wire.nanos();
         if (left <= 0) {
             throw new Stop(new Failure.Unreachable(at,
                     "it did not arrive in " + patience.answer().toSeconds() + "s"));
         }
         CompletableFuture<HttpResponse<byte[]>> answer =
-                repository.client().sendAsync(request(at), HttpResponse.BodyHandlers.ofByteArray());
+                wire.send(request(at), HttpResponse.BodyHandlers.ofByteArray());
         try {
-            return answer.get(left, TimeUnit.NANOSECONDS);
+            return wire.get(answer, left);
         } catch (ExecutionException e) {
             throw new Stop(new Failure.Unreachable(at, reason(e.getCause())));
         } catch (TimeoutException e) {

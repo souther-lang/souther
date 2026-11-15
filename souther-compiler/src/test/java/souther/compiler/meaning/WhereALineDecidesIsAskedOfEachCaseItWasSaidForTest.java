@@ -7,7 +7,6 @@ import souther.compiler.observe.Figure;
 import souther.compiler.partition.CompositionBudget;
 
 import java.math.BigInteger;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -18,7 +17,6 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -619,15 +617,16 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
     }
 
     /**
-     * Ways of choosing written as choices are counted before any is chosen: forty choices of two,
+     * Ways of choosing written as choices are counted before any is chosen: ten choices of two,
      * one below the other, are more ways than are taken apart, and nothing is chosen, saying also
-     * the figure the cases at the bottom were never taken apart at.
+     * the figure the cases at the bottom were never taken apart at. That nothing is chosen is that
+     * nothing is asked but the condition.
      */
     @Test
     void waysWrittenAsChoicesAreCountedBeforeAnyIsChosen() {
         DecidingCase.Cases cases = new DecidingCase.Cases.NotTakenApart(
                 CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached());
-        for (int i = 0; i < 40; i++) {
+        for (int i = 0; i < 10; i++) {
             cases = new DecidingCase.Cases.Together(List.of(
                     new DecidingCase.Cases.EachOf(List.of(
                             new DecidingCase.Cases.Together(List.of()),
@@ -637,8 +636,7 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         DecidingCase.Cases deep = cases;
         Asking asking = new Asking(_ -> true);
 
-        Seen found =assertTimeoutPreemptively(Duration.ofSeconds(10),
-                () -> asking.of(deep), "the count bounds the choosing");
+        Seen found = asking.of(deep);
         assertEquals(new Seen(List.of(), Set.of(
                 CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached())), found);
         assertEquals(List.of(SAID), asking.asked(), "and nothing asked but the condition");

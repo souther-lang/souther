@@ -2,15 +2,15 @@ package souther.compiler.execute.jvm;
 
 import org.junit.jupiter.api.Test;
 
+import souther.test.Workers;
+
 import java.time.Duration;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * A row that is given up on leaves no worker held by its hand-off.
@@ -39,17 +39,15 @@ class GivingUpOnARowLeavesNothingWaitingOnTheHandoffTest {
 
         // The thread that asked for the row. Its application is held, so the row is inside the
         // hand-off waiting for an answer that has not been worked out yet.
-        Thread asked = new Thread(() -> {
+        Workers.started("the-caller-of-the-row", () -> {
             try {
                 handoff.serviceUntilDone(Duration.ofSeconds(30));
             } catch (InterruptedException _) {
                 Thread.currentThread().interrupt();
             }
         });
-        asked.setDaemon(true);
-        asked.start();
 
-        Thread worker = new Thread(() -> {
+        Thread worker = Workers.started("the-row", () -> {
             try {
                 handoff.installedFor(() -> handoff.handOver(() -> {
                     crossed.countDown();
@@ -60,15 +58,12 @@ class GivingUpOnARowLeavesNothingWaitingOnTheHandoffTest {
                 came.set(t);
             }
         });
-        worker.setDaemon(true);
-        worker.start();
 
         crossed.await();
         waitingOnTheHandoff(worker);
         handoff.abandon();
 
-        worker.join(10_000);
-        assertFalse(worker.isAlive(), "the row ended rather than waiting for an answer");
+        Workers.ended(worker, Duration.ofMinutes(1), "the row ended rather than waiting for an answer");
         assertInstanceOf(CancellationException.class, came.get());
         release.countDown();
     }
@@ -111,11 +106,7 @@ class GivingUpOnARowLeavesNothingWaitingOnTheHandoffTest {
 
     /** Until {@code worker} is inside the hand-off, which is the only thing it waits on. */
     private static void waitingOnTheHandoff(Thread worker) {
-        long until = System.nanoTime() + 10_000_000_000L;
         while (worker.getState() != Thread.State.WAITING) {
-            if (System.nanoTime() > until) {
-                fail("the worker never reached the hand-off: " + worker.getState());
-            }
             Thread.onSpinWait();
         }
     }
