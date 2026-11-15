@@ -11414,6 +11414,12 @@
             } ]
           },
           "taken" : true
+        } ],
+        "casesNotSeen" : [ {
+          "kind" : "search_step",
+          "from" : "zone",
+          "through" : [ "zones" ],
+          "step" : "nowhere_at_a_leaf"
         } ]
       },
       "replacement" : {

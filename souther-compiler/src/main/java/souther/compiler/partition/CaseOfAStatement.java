@@ -141,6 +141,16 @@ public sealed interface CaseOfAStatement {
             Objects.requireNonNull(way, "a case is one way round");
         }
 
+        /** The container whose elements the order is of. */
+        public TermPath container() {
+            return order.container();
+        }
+
+        /** The place of an element that the elements sharing a value at it are told apart by. */
+        public TermPath position() {
+            return order.position();
+        }
+
         @Override
         public String spelled() {
             return way + " of " + order.position() + " in " + order.container() + " in "

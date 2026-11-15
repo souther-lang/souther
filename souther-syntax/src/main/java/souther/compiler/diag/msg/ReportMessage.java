@@ -247,6 +247,18 @@ public sealed interface ReportMessage extends Message {
 
     record NoRowFixesTheWeight(String position, String into) implements ReportMessage, Prose {}
 
+    record TheWeightsAreNotDecided(String into, String why) implements ReportMessage, Prose {}
+
+    record NoBorderOfTheComputationWasRead() implements ReportMessage, Prose {}
+
+    record ABorderOfTheComputationWasNotReadInFull() implements ReportMessage, Prose {}
+
+    record ARowOfTheComputationWasNotWatched() implements ReportMessage, Prose {}
+
+    record TheArithmeticGaveOutOnAChangedWeight() implements ReportMessage, Prose {}
+
+    record WhatABorderOfTheComputationWentWithout() implements ReportMessage, Prose {}
+
     /** A point of a line some rule drew, by its role, which side of the line, and the rule. */
     record PointOfALine(String role, Message side, String rule) implements ReportMessage, Prose {}
 
@@ -808,6 +820,28 @@ public sealed interface ReportMessage extends Message {
     record NothingCouldShowARowAtADecisionRule(Message cameTo) implements ReportMessage, Prose {}
 
     record NotComposedAgainst(String what) implements ReportMessage, Prose {}
+
+    record NoRowIsInACaseOfASearch(String from, String through, Message step)
+            implements ReportMessage, Prose {}
+
+    record TheSearchFindsItAtTheNode() implements ReportMessage, Prose {}
+
+    record TheSearchFindsItBelowTheNode() implements ReportMessage, Prose {}
+
+    record TheSearchComesBackEmptyAtANodeWithNothingBelow() implements ReportMessage, Prose {}
+
+    record TheSearchComesBackEmptyFromEveryNodeBelow() implements ReportMessage, Prose {}
+
+    record NoRowIsInACaseOfAnOrder(String position, String container, Message way)
+            implements ReportMessage, Prose {}
+
+    record TheStatementHoldsByTheLastElementOfAKey() implements ReportMessage, Prose {}
+
+    record TheStatementFailsByTheLastElementOfAKey() implements ReportMessage, Prose {}
+
+    record NoRowCanBeAskedAboutTheCasesOfASearch() implements ReportMessage, Prose {}
+
+    record NoRowCanBeAskedAboutTheOrderOfARepeatedKey() implements ReportMessage, Prose {}
 
     record NoInputTakesOneWay() implements ReportMessage, Prose {}
 

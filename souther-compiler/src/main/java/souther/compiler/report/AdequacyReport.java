@@ -38,6 +38,8 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.BorderQuantity;
+import souther.compiler.partition.CaseOfAStatement;
+import souther.compiler.partition.CasesTheRowsTook;
 import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.AuthoredPlacement;
 import souther.compiler.partition.BoundHeldIn;
@@ -3993,6 +3995,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         String.valueOf(tilt.position()), String.valueOf(tilt.into().left())));
             }
         }
+        weightsNotDecided(out, behavior.weights(), page);
         // Every obligation the count holds and no row is at, said here or under the findings below:
         // a point nobody can say is missed is not a gap and is no finding, and left to the number
         // alone a reader is told a difference with nothing under it to act on.
@@ -4143,6 +4146,53 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case THE_CLASS_AT_THE_LINE_HOLDS_ONE_VALUE ->
                     new ReportMessage.TheClassAtTheLineHoldsOneValue();
         };
+    }
+
+    /**
+     * The weights the rows leave neither fixed nor shown unfixed, with what each went without.
+     *
+     * <p>One entry for the positions of a computation that went without the same things, and the
+     * positions under it: a comparison weighing many positions in several places has the same
+     * reason at every one, and one entry per position would write it as many times. The reasons are
+     * the weight's own and what the borders of the computation went without, which the weight
+     * carries as the borders said it.
+     */
+    private static void weightsNotDecided(StringBuilder out, List<TiltOfADerivedValue> weights,
+                                          Page page) {
+        for (TiltOfADerivedValue each : weights) {
+            Map<String, List<NumericTerm>> byReason = new LinkedHashMap<>();
+            each.positions().forEach((position, standing) -> {
+                if (standing instanceof TiltOfADerivedValue.Standing.Undecided it) {
+                    List<String> reasons = new ArrayList<>();
+                    for (Weakening.AWeightNotDecided.Why why : it.own().written()) {
+                        reasons.add(page.say(switch (why) {
+                            case NO_BORDER_OF_IT_WAS_READ ->
+                                    new ReportMessage.NoBorderOfTheComputationWasRead();
+                            case A_BORDER_WAS_NOT_READ_IN_FULL ->
+                                    new ReportMessage.ABorderOfTheComputationWasNotReadInFull();
+                            case A_RUN_WAS_NOT_WATCHED ->
+                                    new ReportMessage.ARowOfTheComputationWasNotWatched();
+                            case THE_ARITHMETIC_GAVE_OUT ->
+                                    new ReportMessage.TheArithmeticGaveOutOnAChangedWeight();
+                        }));
+                    }
+                    if (!it.carried().isEmpty()) {
+                        reasons.add(page.say(
+                                new ReportMessage.WhatABorderOfTheComputationWentWithout()));
+                    }
+                    byReason.computeIfAbsent(String.join("; ", reasons), _ -> new ArrayList<>())
+                            .add(position);
+                }
+            });
+            byReason.forEach((why, positions) -> {
+                out.append("      ? ").append(page.say(new ReportMessage.TheWeightsAreNotDecided(
+                        String.valueOf(each.widestWith(positions.getFirst()).left()), why)))
+                        .append(NEW_LINE);
+                for (NumericTerm position : positions) {
+                    out.append("          · ").append(position).append(NEW_LINE);
+                }
+            });
+        }
     }
 
     /**
@@ -5104,6 +5154,56 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         noInputTakes(out, behavior, decision, page, declaredIn);
         everyRunStops(out, behavior, decision, page, declaredIn);
         undecided(out, behavior, decision, page, declaredIn);
+        casesNoRowWasIn(out, took, page);
+    }
+
+    /**
+     * The cases a statement of the decision draws inside itself that no row was seen in, one to a
+     * line, and then the kinds of case no row can be asked about.
+     *
+     * <p>Every rule can be taken and the decision still be partial: the weakening says a case of a
+     * statement inside a rule has no row, and a reader told only that the rules are all taken has
+     * nothing to go on. The two are said apart because they are acted on apart — a row answers the
+     * first, and the second waits for this compiler to read further.
+     */
+    private static void casesNoRowWasIn(StringBuilder out,
+                                        Measure<DecisionEvidence.RowsPlaced> took, Page page) {
+        Optional<DecisionEvidence.RowsPlaced> made = took.made();
+        if (made.isEmpty()) {
+            return;
+        }
+        for (CaseOfAStatement each : made.get().unseenCases()) {
+            Message said = switch (each) {
+                case CaseOfAStatement.Search search -> new ReportMessage.NoRowIsInACaseOfASearch(
+                        search.statement().writtenAt().toString(),
+                        String.join(".", search.statement().through()), switch (search.step()) {
+                            case AT_THE_NODE -> new ReportMessage.TheSearchFindsItAtTheNode();
+                            case BELOW_IT -> new ReportMessage.TheSearchFindsItBelowTheNode();
+                            case NOWHERE_AT_A_LEAF ->
+                                    new ReportMessage.TheSearchComesBackEmptyAtANodeWithNothingBelow();
+                            case NOWHERE_BELOW ->
+                                    new ReportMessage.TheSearchComesBackEmptyFromEveryNodeBelow();
+                        });
+                case CaseOfAStatement.KeyOrder order -> new ReportMessage.NoRowIsInACaseOfAnOrder(
+                        order.position().toString(), order.container().toString(),
+                        switch (order.way()) {
+                            case HOLDS_BY_THE_LAST ->
+                                    new ReportMessage.TheStatementHoldsByTheLastElementOfAKey();
+                            case FAILS_BY_THE_LAST ->
+                                    new ReportMessage.TheStatementFailsByTheLastElementOfAKey();
+                        });
+            };
+            out.append("      ? ").append(page.say(said)).append(NEW_LINE);
+        }
+        for (CasesTheRowsTook.Kind kind : made.get().notAskable().written()) {
+            Message said = switch (kind) {
+                case A_NODE_A_SEARCH_REACHES ->
+                        new ReportMessage.NoRowCanBeAskedAboutTheCasesOfASearch();
+                case THE_ORDER_OF_A_REPEATED_KEY ->
+                        new ReportMessage.NoRowCanBeAskedAboutTheOrderOfARepeatedKey();
+            };
+            out.append("      ? ").append(page.say(said)).append(NEW_LINE);
+        }
     }
 
     /**
@@ -7039,6 +7139,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     case TiltOfADerivedValue.Standing.NotShown _ -> "not_shown";
                     case TiltOfADerivedValue.Standing.Undecided _ -> "undecided";
                 });
+                // Why, beside the word: the weight's own reasons, and what the borders of the
+                // computation went without as they said it. Either may be absent, never both.
+                if (standing instanceof TiltOfADerivedValue.Standing.Undecided undecided) {
+                    if (!undecided.own().isEmpty()) {
+                        ArrayNode own = one.putArray("undecidedBecause");
+                        undecided.own().written().forEach(why -> own.add(word(why)));
+                    }
+                    weakening(one, undecided.carried());
+                }
             });
         }
     }
@@ -9881,6 +9990,40 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 runsStopped(one, behavior.wayStops().get(each.way()).stream()
                         .sorted(WhereARunStopped.IN_A_STEADY_ORDER).toList(), sources);
             }
+        }
+        placed.ifPresent(rows -> casesNoRowWasIn(out, rows));
+    }
+
+    /**
+     * The cases of a statement inside a rule that no row was seen in, and the kinds no row can be
+     * asked about, which are what `reachable_node_cases_unmeasured` and
+     * `keyed_overwrite_cases_unmeasured` stand for. Absent where there are none.
+     */
+    private static void casesNoRowWasIn(ObjectNode into, DecisionEvidence.RowsPlaced rows) {
+        if (!rows.unseenCases().isEmpty()) {
+            ArrayNode all = into.putArray("casesNotSeen");
+            for (CaseOfAStatement each : rows.unseenCases()) {
+                ObjectNode one = all.addObject();
+                switch (each) {
+                    case CaseOfAStatement.Search search -> {
+                        one.put("kind", "search_step");
+                        one.put("from", search.statement().writtenAt().toString());
+                        ArrayNode through = one.putArray("through");
+                        search.statement().through().forEach(through::add);
+                        one.put("step", word(search.step()));
+                    }
+                    case CaseOfAStatement.KeyOrder order -> {
+                        one.put("kind", "key_order");
+                        one.put("container", order.container().toString());
+                        one.put("position", order.position().toString());
+                        one.put("way", word(order.way()));
+                    }
+                }
+            }
+        }
+        if (!rows.notAskable().isEmpty()) {
+            ArrayNode kinds = into.putArray("casesNotAskable");
+            rows.notAskable().written().forEach(kind -> kinds.add(word(kind)));
         }
     }
 

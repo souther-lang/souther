@@ -7197,6 +7197,73 @@
             }
           }
         },
+        "casesNotSeen": {
+          "type": "array",
+          "minItems": 1,
+          "description": "The cases a statement of the decision draws inside itself that no row was seen in, which are what `reachable_node_cases_unmeasured` and `keyed_overwrite_cases_unmeasured` stand for: every rule can be taken and a statement inside one of them still have a case no row is in. A `search_step` is one step of the recursion a search takes from a node, and a `key_order` one way round the order of the elements of a container that share a key. A row written for one makes it seen. Absent where none is unseen.",
+          "items": {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "search_step",
+                  "key_order"
+                ]
+              },
+              "from": {
+                "type": "string",
+                "description": "Of a `search_step`: the place the search starts from."
+              },
+              "through": {
+                "type": "array",
+                "description": "Of a `search_step`: the fields the search goes below a node through.",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "step": {
+                "enum": [
+                  "at_the_node",
+                  "below_it",
+                  "nowhere_at_a_leaf",
+                  "nowhere_below"
+                ],
+                "description": "Of a `search_step`: the node meets what the search asks; the node does not and one below does; the node does not and has nothing below; the node does not and every node below comes back empty."
+              },
+              "container": {
+                "type": "string",
+                "description": "Of a `key_order`: the container whose elements the order is of."
+              },
+              "position": {
+                "type": "string",
+                "description": "Of a `key_order`: the place the elements are keyed by."
+              },
+              "way": {
+                "enum": [
+                  "holds_by_the_last",
+                  "fails_by_the_last"
+                ],
+                "description": "Of a `key_order`: whether the statement holds with the last element of a key and fails with an earlier one, or the other way round."
+              }
+            }
+          }
+        },
+        "casesNotAskable": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "The kinds of case a statement of the decision draws that no row can be asked about, which leave the decision partial all the same: what answers them is this compiler reading further, and no row. Absent where there are none.",
+          "items": {
+            "enum": [
+              "a_node_a_search_reaches",
+              "the_order_of_a_repeated_key"
+            ]
+          }
+        },
         "waysUndecided": {
           "type": "array",
           "minItems": 1,
@@ -8191,6 +8258,24 @@
                   "undecided"
                 ],
                 "description": "`shown`: the rows beside the borders of the computation fix the weight of this position, which is where some row fails a computation weighing it one more and some row fails one weighing it one less. `not_shown`: they do not, so rows that fix it are owed and a finding names it. `undecided`: nothing was read against the computation, a border of it was not read and the rest leave the weight unfixed, or the exact arithmetic gave out on a row, which is no claim that the rows fix nothing and is no finding."
+              },
+              "undecidedBecause": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "description": "Why an `undecided` weight is, as far as the weights' own reading says: `no_border_of_it_was_read` (no border of the computation was read against the rows), `a_border_was_not_read_in_full`, `a_run_was_not_watched` (a row was left out because nothing watched its run) and `the_arithmetic_gave_out` (a model's own decimals put a changed weight out of the exact arithmetic's reach). Absent where the weight is not `undecided` or went without only what its borders did, which `weakening` says.",
+                "items": {
+                  "enum": [
+                    "no_border_of_it_was_read",
+                    "a_border_was_not_read_in_full",
+                    "a_run_was_not_watched",
+                    "the_arithmetic_gave_out"
+                  ]
+                }
+              },
+              "weakening": {
+                "$ref": "#/$defs/weakening",
+                "description": "What the borders of the computation went without, which the weight is undecided for as they said it. Absent where there is none."
               }
             }
           }

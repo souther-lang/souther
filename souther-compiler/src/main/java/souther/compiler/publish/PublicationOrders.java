@@ -5,6 +5,7 @@ import souther.compiler.diag.Citation;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.RunSensitivity;
+import souther.compiler.partition.CasesTheRowsTook;
 import souther.compiler.partition.CompositionBudget;
 import souther.compiler.partition.CompositionCapacity;
 import souther.compiler.partition.CompositionRepertoire;
@@ -313,6 +314,15 @@ public final class PublicationOrders {
                     Weakening.AWeightNotDecided.Why.NO_BORDER_OF_IT_WAS_READ,
                     Weakening.AWeightNotDecided.Why.A_BORDER_WAS_NOT_READ_IN_FULL,
                     Weakening.AWeightNotDecided.Why.THE_ARITHMETIC_GAVE_OUT));
+
+    /**
+     * The kinds of case of a statement no row can be asked about, searches before keys: a search
+     * is the statement a body states more often, and the one a reader meets first.
+     */
+    public static final CanonicalSelection.Order<CasesTheRowsTook.Kind>
+            KINDS_OF_CASE_NO_ROW_CAN_BE_ASKED_ABOUT = CanonicalSelection.Order.overValues(List.of(
+                    CasesTheRowsTook.Kind.A_NODE_A_SEARCH_REACHES,
+                    CasesTheRowsTook.Kind.THE_ORDER_OF_A_REPEATED_KEY));
 
     /**
      * What this compiler declined to do, from what bounds one value to what bounds a whole search.

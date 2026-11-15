@@ -260,6 +260,16 @@ public final class CasesTheRowsTook {
         return out;
     }
 
+    /**
+     * The kinds some statement draws a case of that no row can be asked about, which a row written
+     * for it would not make seen.
+     */
+    public Set<Kind> notAskable() {
+        Set<Kind> out = EnumSet.noneOf(Kind.class);
+        out.addAll(unaskable);
+        return out;
+    }
+
     /** The kinds of case some statement draws that none of the rows seen was in. */
     public Set<Kind> unseen() {
         Set<Kind> out = EnumSet.noneOf(Kind.class);
