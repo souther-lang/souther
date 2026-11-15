@@ -53,6 +53,18 @@ class AWayThatKeepsAValueOffNumbersNothingElseHoldsLeavesItsRunWholeTest {
         assertFalse(human.contains(NOT_SHOWN), human);
     }
 
+    /** The second membership is asked past the first failing, which keeps every element off
+     *  {@code d}: the line {@code d + 1 == element} is one that statement never takes a row off,
+     *  so {@code d} and the element are each left over every value. */
+    @Test
+    void aMembershipAskedPastAnotherFailingIsReadOverEveryValue() {
+        String human = report("", "hs: Set<Decimal>, d: Decimal",
+                "(hs, d) -> Set.contains(d, hs) || Set.contains(d + 1.0m, hs)");
+
+        assertFalse(notShownAt(human, "d"), human);
+        assertFalse(notShownAt(human, "hs[*]"), human);
+    }
+
     /** One value is kept off another that nothing else reads, so every value of the first has a
      *  partner that differs. */
     @Test

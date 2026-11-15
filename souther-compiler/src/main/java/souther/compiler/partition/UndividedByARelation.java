@@ -2081,9 +2081,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // Where the numbers are dense, a hyperplane taken out leaves both sides of the line open,
         // so a disequality that is not the line's own ties no side to another.
         List<OnAWay> tying = !dense ? conditions : conditions.stream().filter(each ->
-                each.whatStands() || each.affine() == null || each.affine().rel() != Rel.NE
-                        || each.bySome() != null || each.byEvery() != null
-                        || asked == null || keepsOffTheLineOf(each, asked)).toList();
+                each.disequality() == null || asked == null
+                        || keepsOffTheLineOf(each.disequality(), asked)).toList();
         TiedOnTheWay tied = TiedOnTheWay.of(tying, read, ignoring);
         List<Set<Object>> tiedTo = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
@@ -3047,6 +3046,31 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return relation instanceof TakenConstraint.Affine affine ? affine : null;
         }
 
+        /** The form it holds unequal to nought, as a statement of the numbers or as what every
+         *  element of a container meets in the one way, or null where it states anything else. */
+        TakenConstraint.Affine disequality() {
+            if (whatStands) {
+                return null;
+            }
+            if (bySome == null && byEvery == null) {
+                return affine() != null && affine().rel() == Rel.NE ? affine() : null;
+            }
+            if (byEvery == null || bySome != null || byEvery.ways().size() != 1
+                    || byEvery.ways().getFirst().size() != 1) {
+                return null;
+            }
+            return switch (byEvery.ways().getFirst().getFirst()) {
+                case RowDemand.Relational(TakenConstraint.Affine(var form, var rel, var _))
+                        when rel == Rel.NE -> new TakenConstraint.Affine(form, rel);
+                case RowDemand.DifferentFrom(Operand.At<TermPath>(var at)) ->
+                        new TakenConstraint.Affine(new LinearForm<>(ExactRatio.ZERO,
+                                Map.of(new NumericTerm.ValueOf(at), ExactRatio.ONE,
+                                        new NumericTerm.ValueOf(elementsOf.element()),
+                                        ExactRatio.ONE.negated())), Rel.NE);
+                default -> null;
+            };
+        }
+
         /** Whether this says nothing of the values {@code term} takes by saying only what stands
          *  at a value around it — which case it is, or how many it holds — and nothing at or
          *  under the term. */
@@ -3137,7 +3161,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         boolean inWholeSteps = carriers.stream()
                 .allMatch(each -> granularityOf(each) == Granularity.DISCRETE);
         boolean offItsLine = asStated != null && !written.isEmpty()
-                && written.stream().allMatch(each -> keepsOffTheLineOf(each, asStated));
+                && written.stream().allMatch(each -> keepsOffTheLineOf(each.affine(), asStated));
         List<OnAWay> unfree = offItsLine ? List.of()
                 : withoutWhatAFreeNumberMeets(written, declined, past, read);
         // What the way leaves of the lengths of the strings this relation is between, asked once
@@ -7545,8 +7569,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * Whether {@code statement} holds the form {@code asked} is of unequal to nought: the same
      * numbers, each weighed the same times one number, the constant too, held apart from it.
      */
-    private static boolean keepsOffTheLineOf(OnAWay statement, TakenConstraint.Affine asked) {
-        TakenConstraint.Affine affine = statement.affine();
+    private static boolean keepsOffTheLineOf(TakenConstraint.Affine affine,
+                                             TakenConstraint.Affine asked) {
         if (affine == null || affine.rel() != Rel.NE
                 || !affine.form().coefs().keySet().equals(asked.form().coefs().keySet())) {
             return false;
@@ -9726,14 +9750,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                       InputReading read) {
         Set<NumericTerm> moved = new LinkedHashSet<>();
         for (OnAWay each : conditions) {
-            if (each.whatStands() || each.elementsOf() != null || each.bySome() != null
-                    || each.byEvery() != null || each.ofThePieces() != null
-                    || each.onARemainder() != null || each.statedOfTheRun() != null
+            TakenConstraint.Affine stated = each.disequality() != null ? each.disequality()
+                    : each.elementsOf() == null ? each.affine() : null;
+            if (each.whatStands() || each.bySome() != null || stated == null
+                    || each.ofThePieces() != null || each.onARemainder() != null
+                    || each.statedOfTheRun() != null
                     || each.leavesAlone() != OnAWay.PartsLeftAlone.NONE
-                    || !(each.relation() instanceof TakenConstraint.Affine(var form, var rel,
-                            var _)) || !sumsToNothing(form)) {
+                    || !sumsToNothing(stated.form())) {
                 return false;
             }
+            LinearForm<NumericTerm> form = stated.form();
+            Rel rel = stated.rel();
             if (rel == Rel.NE && !(region.projectionOf(form)
                     instanceof NumericDomain.FormProjection.Within(var run)
                     && (run.min() == null || run.max() == null || !run.meet(
