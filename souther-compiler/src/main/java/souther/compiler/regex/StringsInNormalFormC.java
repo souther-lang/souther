@@ -1,6 +1,7 @@
 package souther.compiler.regex;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.HashMap;
 import java.util.List;
@@ -29,15 +30,19 @@ import net.unit8.notation199x.pattern.Meter;
  *
  * <p>A composite that ends in a mark, such as {@code é}, hides it: a mark of a lesser class after
  * it is put before the mark and may compose with the letter, which the machine does not follow. It
- * is left out of what is followed, and the strings that hold one are the strings held as written,
- * which are in the form whatever they hold. What is made is so a part of the values, and all of
- * them where the language holds no such composite beside a mark.
+ * is left out of what is followed, so a string that holds one is shown a value only where it is
+ * held as written, and is otherwise one that may be: {@code é} followed by a combining grave is a
+ * value the machine does not say is one.
  *
  * <p>Made only of the code points the language reads, and only where they are few: the machine has
  * a state for each starter among them and each class of mark. A language reading more is not made
  * here, since the machine of every string in the form is some thousands of states and a language
- * read with it by the states of the two together; its values are said by what is held as written
- * ({@link #valuesOf}).
+ * read with it by the states of the two together; its values are shown by what is held as
+ * written, and every string of it may be one.
+ *
+ * <p>So what is said is two languages and not one ({@link Values}): the strings shown to be
+ * values, which a question shown true of a value is asked of, and the strings outside which none
+ * is, which one shown false is.
  */
 public final class StringsInNormalFormC {
 
@@ -78,22 +83,63 @@ public final class StringsInNormalFormC {
     }
 
     /**
-     * Strings of {@code language} that are values, as many as are followed: all of them where the
-     * code points it reads are few and the machine is within what {@code meter} allows, and the
-     * strings held as written otherwise. Never more than the values, and null only past
-     * {@code meter}.
+     * The values of a language, as far as each is shown: every string of {@code surely} is a value,
+     * and no value is outside {@code perhaps}. A question shown true of a string is shown of the
+     * strings of {@code surely}, and one shown false of a string is shown of what is outside
+     * {@code perhaps} and nowhere else.
+     *
+     * @param surely  strings of the language each of which is a value
+     * @param perhaps strings of the language outside which none is a value, which hold
+     *                {@code surely}
      */
-    public static Language valuesOf(Language language, Meter meter) {
-        Language followed = within(language, meter);
-        return followed != null ? followed : language.heldAsWritten().language(meter);
+    public record Values(Language surely, Language perhaps) {
+
+        public Values {
+            if (surely == null || perhaps == null) {
+                throw new IllegalArgumentException("the values of a language are some strings");
+            }
+        }
     }
 
     /**
-     * The strings of {@code language} that are surely values, or null where the code points it
-     * reads are many or the machine is more than {@code meter} allows: those in the form that hold
-     * no composite ending in a mark, and those held as written.
+     * The values of {@code language} ({@link Values}), or null past what {@code meter} allows.
+     *
+     * <p>Where the code points it reads are few, every string in the form is followed but those
+     * holding a composite that ends in a mark, which are held as written where they are and are
+     * otherwise among the values that may be. Where they are many, the strings held as written are
+     * the values shown, and every string of the language may be one.
      */
-    public static Language within(Language language, Meter meter) {
+    public static Values of(Language language, Meter meter) {
+        Language written = language.heldAsWritten().language(meter);
+        if (written == null) {
+            return null;
+        }
+        Followed followed = followedOf(language, meter);
+        if (followed == null) {
+            return new Values(written, language);
+        }
+        Language surely = followed.inTheForm().or(written, meter);
+        if (surely == null) {
+            return null;
+        }
+        if (followed.hiding().isEmpty()) {
+            return new Values(surely, surely);
+        }
+        Language holding = CodeMap.stringsHolding(followed.hiding(), meter);
+        Language hidden = holding == null ? null : language.and(holding, meter);
+        Language perhaps = hidden == null ? null : surely.or(hidden, meter);
+        return perhaps == null ? null : new Values(surely, perhaps);
+    }
+
+    /** The strings of a language in the form that hold no composite ending in a mark, and those
+     *  composites the language reads. */
+    private record Followed(Language inTheForm, CodePoints hiding) {}
+
+    /**
+     * What is followed of {@code language} ({@link Followed}), or null where the code points it
+     * reads are many or the machine is more than {@code meter} allows.
+     */
+    private static Followed followedOf(Language language, Meter meter) {
         Automaton machine = language.machine();
         BitSet live = LiveStates.of(machine);
         CodePoints read = CodePoints.NONE;
@@ -106,17 +152,19 @@ public final class StringsInNormalFormC {
         }
         // A language of stable starters holds only values: they are in the form in any order.
         if (StableStarters.within(read).equals(read)) {
-            return language;
+            return new Followed(language, CodePoints.NONE);
         }
         if (read.size() > MOST_READ) {
             return null;
         }
-        int[] alphabet = read.ranges().stream()
-                .flatMapToInt(range -> IntStream.rangeClosed(range.from(), range.to()))
-                .filter(each -> !hidesAMark(each)).toArray();
+        int[] every = read.ranges().stream()
+                .flatMapToInt(range -> IntStream.rangeClosed(range.from(), range.to())).toArray();
+        int[] alphabet = Arrays.stream(every).filter(each -> !hidesAMark(each)).toArray();
+        BitSet hiding = new BitSet();
+        Arrays.stream(every).filter(StringsInNormalFormC::hidesAMark).forEach(hiding::set);
         Language followed = followed(machine, live, alphabet, meter);
-        Language written = language.heldAsWritten().language(meter);
-        return followed == null || written == null ? null : followed.or(written, meter);
+        return followed == null ? null
+                : new Followed(followed, CodeMap.codePointsOf(hiding));
     }
 
     /** The strings of {@code machine} over {@code alphabet} that are in the form. */

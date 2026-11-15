@@ -52,10 +52,11 @@ final class WhatAConversionAnswers {
         // conversion that is every string of the side.
         Language standing = CaseMaps.answeredAsTheyStand(through, partner, meter);
         if (through.equals(CaseMapping.NONE)) {
-            // The values of the side where they are worked out, and the strings held as written,
-            // which are some of them, where the code points it reads are more than are followed.
-            Language held = StringsInNormalFormC.valuesOf(partner, meter);
-            return held == null ? null : new WhatAConversionAnswers(held, standing, partner);
+            // The strings shown to be values of the side, which a string is made from; what may be
+            // is every string of it.
+            StringsInNormalFormC.Values values = StringsInNormalFormC.of(partner, meter);
+            return values == null ? null
+                    : new WhatAConversionAnswers(values.surely(), standing, partner);
         }
         CodeMap map = CaseMaps.of(through);
         Language exact = map.strings(meter);

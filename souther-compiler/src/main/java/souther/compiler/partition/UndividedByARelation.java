@@ -4116,8 +4116,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         // A relation is asked of the values a side holds, which are the strings of the language
         // in Normalization Form C. Where nothing is converted on this side, what the side may
-        // come to is asked of those, so a sequence that is no value is not a reason to leave one
-        // open: a string of a value that has a value inside it is one too.
+        // come to is asked of those, so a sequence shown to be no value is not a reason to leave
+        // one open.
         Language mineLanguage = languageOf(mineHolds);
         // A string both sides hold, with the same conversion done to both, is inside its own
         // answer, which starts with it and ends with it: it is its own partner. So it is shown
@@ -4141,14 +4141,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             canBe = withThem;
         }
-        Language mayBeValues = mineMap != null || mineLanguage == null ? null
-                : StringsInNormalFormC.within(mayBe.and(mineLanguage, meter), meter);
+        // Both are cut to the strings that may be values: a string shown to be none is no value a
+        // side holds, and only those are asked about. Never to the strings shown to be values,
+        // which are fewer than the values, and a value cut from what may be would be shown false.
+        Language mayBeOfMine = mineMap != null || mineLanguage == null ? null
+                : mayBe.and(mineLanguage, meter);
+        StringsInNormalFormC.Values mayBeValues = mayBeOfMine == null ? null
+                : StringsInNormalFormC.of(mayBeOfMine, meter);
         if (mayBeValues != null) {
-            Language shownValues = canBe.and(mayBeValues, meter);
+            Language shownValues = canBe.and(mayBeValues.perhaps(), meter);
             if (shownValues == null) {
                 return null;
             }
-            mayBe = mayBeValues;
+            mayBe = mayBeValues.perhaps();
             canBe = shownValues;
         }
         // A string looked for that is itself a value has nothing written round it, so only the

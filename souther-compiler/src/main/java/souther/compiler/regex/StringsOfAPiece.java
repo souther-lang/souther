@@ -125,10 +125,12 @@ public final class StringsOfAPiece {
         if (ofTheStrings == null) {
             return null;
         }
-        Language written = StringsInNormalFormC.valuesOf(whole, meter);
-        if (written == null) {
+        StringsInNormalFormC.Values values = StringsInNormalFormC.of(whole, meter);
+        if (values == null) {
             return null;
         }
+        // A piece is shown the piece of a value by writing a value out round it.
+        Language written = values.surely();
         Language ofTheWritten = piecesIn(written, separator, from, until, meter);
         if (ofTheWritten == null) {
             return null;

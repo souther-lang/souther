@@ -64,8 +64,10 @@ class TheValuesOfALanguageAreItsStringsThatAreInNormalFormCTest {
                 "[a-z̀]+", "[ax̣́]*", "[각]*",
                 "[axȩ̣̀́̇ͅ각]*")) {
             Language of = language(regex);
-            Language values = StringsInNormalFormC.within(of, METER);
-            assertNotNull(values, regex);
+            StringsInNormalFormC.Values shown = StringsInNormalFormC.of(of, METER);
+            assertNotNull(shown, regex);
+            Language values = shown.surely();
+            assertEquals(values, shown.perhaps(), regex);
             for (String each : everyString) {
                 boolean value = of.has(each) && Normalization.nfc(each).equals(each);
                 assertEquals(value, values.has(each), () -> regex + " "
@@ -116,25 +118,36 @@ class TheValuesOfALanguageAreItsStringsThatAreInNormalFormCTest {
      *  mark. */
     @Test
     void theValuesOfEveryStringOfSomeCodePointsAreThoseTheNormalizationLeavesAsTheyAre() {
-        Language every = StringsInNormalFormC.within(languageOf(PLAIN), METER);
+        StringsInNormalFormC.Values every = StringsInNormalFormC.of(languageOf(PLAIN), METER);
         assertNotNull(every);
+        assertEquals(every.surely(), every.perhaps());
         for (String each : everyStringOf(PLAIN, 3)) {
-            assertEquals(Normalization.nfc(each).equals(each), every.has(each), () -> named(each));
+            assertEquals(Normalization.nfc(each).equals(each), every.surely().has(each),
+                    () -> named(each));
         }
     }
 
-    /** Where the strings hold a composite that ends in a mark, what is held is values, and the
-     *  strings held as written are among them: a part of the values, never more. */
+    /**
+     * Where the strings hold a composite that ends in a mark, the strings shown to be values are
+     * values, and every value is among those that may be: {@code é} followed by a combining grave
+     * is a value, which a question shown false only of what is outside them does not take.
+     */
     @Test
-    void whatIsHeldOfStringsWithACompositeEndingInAMarkIsOnlyValues() {
+    void ofStringsWithACompositeEndingInAMarkWhatIsShownIsValuesAndNoValueIsLeftOut() {
         int[] both = IntStream.concat(Arrays.stream(PLAIN), Arrays.stream(HIDING)).toArray();
-        Language every = StringsInNormalFormC.within(languageOf(both), METER);
-        assertNotNull(every);
+        StringsInNormalFormC.Values values = StringsInNormalFormC.of(languageOf(both), METER);
+        assertNotNull(values);
         for (String each : everyStringOf(both, 3)) {
-            if (every.has(each)) {
-                assertTrue(Normalization.nfc(each).equals(each), () -> named(each));
+            boolean value = Normalization.nfc(each).equals(each);
+            if (values.surely().has(each)) {
+                assertTrue(value, () -> "shown: " + named(each));
+            }
+            if (value) {
+                assertTrue(values.perhaps().has(each), () -> "may be: " + named(each));
             }
         }
+        assertTrue(values.perhaps().has("é̀"));
+        Language every = values.surely();
         assertTrue(every.has("é"));
         assertTrue(every.has("ééa"));
         assertFalse(every.has("ẹ́"));
@@ -142,7 +155,7 @@ class TheValuesOfALanguageAreItsStringsThatAreInNormalFormCTest {
 
     @Test
     void aLoneCombiningMarkAndOneAfterALetterItComposesWithNothingAreValues() {
-        Language values = StringsInNormalFormC.within(language("[xè]+"), METER);
+        Language values = StringsInNormalFormC.of(language("[xè]+"), METER).surely();
 
         assertTrue(values.has("̀"));
         assertTrue(values.has("x̀"));
@@ -152,7 +165,21 @@ class TheValuesOfALanguageAreItsStringsThatAreInNormalFormCTest {
     @Test
     void aLanguageOfStableStartersHoldsOnlyValuesAndIsItsOwn() {
         Language of = language("[a-z]+");
+        StringsInNormalFormC.Values values = StringsInNormalFormC.of(of, METER);
 
-        assertSame(of, StringsInNormalFormC.within(of, METER));
+        assertEquals(of, values.surely());
+        assertEquals(of, values.perhaps());
+    }
+
+    /** A language reading more code points than are followed shows the strings held as written,
+     *  and every string of it may be a value. */
+    @Test
+    void ofALanguageReadingManyCodePointsEveryStringMayBeAValue() {
+        Language of = language("[^@]+");
+        StringsInNormalFormC.Values values = StringsInNormalFormC.of(of, METER);
+
+        assertSame(of, values.perhaps());
+        assertTrue(values.perhaps().has("é̀"));
+        assertFalse(values.surely().has("é̀"));
     }
 }
