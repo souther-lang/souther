@@ -735,6 +735,31 @@ final class NearbyValues {
         };
     }
 
+    /**
+     * The values a row is taken to for a comparison with each of {@code named} to answer
+     * differently: the value one step on, the value itself, and the value one step back, since a
+     * comparison tells apart the values on its two sides. A value with no step, a string among
+     * them, is itself alone.
+     */
+    static List<ObservedValue> bordersOf(List<ObservedValue> named) {
+        List<ObservedValue> out = new ArrayList<>();
+        for (ObservedValue each : named) {
+            Iterator<ObservedValue> beside = switch (each) {
+                case ObservedValue.Integer whole -> stepsOf(whole);
+                case ObservedValue.Decimal decimal -> unitsOf(decimal);
+                default -> none();
+            };
+            List<ObservedValue> steps = new ArrayList<>();
+            beside.forEachRemaining(steps::add);
+            if (!steps.isEmpty()) {
+                out.add(steps.getFirst());
+            }
+            out.add(each);
+            out.addAll(steps.stream().skip(1).toList());
+        }
+        return out;
+    }
+
     private static Iterator<ObservedValue> unitsOf(ObservedValue.Decimal decimal) {
         // A decimal written to more places than the host can step by one of is one with no unit
         // step to offer.

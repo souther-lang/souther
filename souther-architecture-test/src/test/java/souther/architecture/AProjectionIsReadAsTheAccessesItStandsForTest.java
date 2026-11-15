@@ -547,6 +547,14 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         // tree that runs.
         row(out, c + "coverage/CoverageSites$Walk", "listHeldAs", "(" + core
                 + ")Ljava/util/Optional;", Reading.THE_TREE_THAT_RUNS, RUNS);
+        // What a walk's call compares something with, which fields it reads, and which parameters
+        // of the body it reads, asked of the tree that runs.
+        row(out, c + "coverage/CoverageSites", "collectNamed", "(" + core + "Ljava/util/Set;)V",
+                Reading.THE_TREE_THAT_RUNS, RUNS);
+        row(out, c + "coverage/CoverageSites", "collectFieldsRead", "(" + core
+                + "Ljava/util/Set;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
+        row(out, c + "coverage/CoverageSites$Walk", "collectInputsRead", "(" + core
+                + "Ljava/util/Set;Ljava/util/Set;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "check/PathReachability", "gatherPlaces", "(" + core + reads
                 + "Ljava/util/Map;Ljava/util/Map;)V", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         // Whether an answer a body can come to is the same on every run, asked of the body a run

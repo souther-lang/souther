@@ -84,9 +84,10 @@ public sealed interface ReplacementOwed {
      * @param separators  what the bodies the walk stands in part strings at: where a string of
      *                    those rows is put with a piece more, since a walk over the pieces of a
      *                    string is handed more elements only through the string
-     * @param borders     the values the body compares something with, and the ones either side of
-     *                    each: what an element of a list the walk goes over is made of, where the
-     *                    rows written hold nothing near what the body tells apart
+     * @param named       the values the body compares something with, the walk's own first: what
+     *                    an element of a list the walk goes over is made of, with the values
+     *                    either side of each, where the rows written hold nothing near what the
+     *                    body tells apart
      * @param reads       the names of the fields the walk's call reads: of an element made of the
      *                    values above, the leaves at these are changed first, since what the step
      *                    reads is where two elements differ to it
@@ -103,7 +104,7 @@ public sealed interface ReplacementOwed {
                    SequencedMap<Integer, WalkRewrite> replacing,
                    List<List<ObservedValue>> seenThrough,
                    InputsRowsRanWith ranWith, List<String> separators,
-                   List<ObservedValue> borders, List<String> reads, List<String> inputs,
+                   List<ObservedValue> named, List<String> reads, List<String> inputs,
                    List<TermPath> over) implements ReplacementOwed {
 
         public OfAWalk {
@@ -111,7 +112,7 @@ public sealed interface ReplacementOwed {
             Objects.requireNonNull(how, "a walk is rewritten some way");
             Objects.requireNonNull(ranWith, "the rows of a module ran with something or nothing");
             separators = List.copyOf(separators);
-            borders = List.copyOf(borders);
+            named = List.copyOf(named);
             reads = List.copyOf(reads);
             inputs = List.copyOf(inputs);
             over = List.copyOf(over);

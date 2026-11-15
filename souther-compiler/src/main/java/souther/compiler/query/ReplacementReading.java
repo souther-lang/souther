@@ -29,7 +29,6 @@ import souther.compiler.observe.RowRef;
 import souther.compiler.partition.ReplacementDisposition;
 import souther.compiler.partition.ReplacementOwed;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -128,28 +127,15 @@ public final class ReplacementReading {
                                    Set<NamedValue> named, Set<String> reads, Set<String> inputs,
                                    List<Optional<TermPath>> over) {}
 
-    /**
-     * The values a row is taken to for a comparison against {@code named} to answer differently:
-     * the value itself and the ones either side of it, since a comparison tells apart the values
-     * on its two sides.
-     */
-    private static List<ObservedValue> bordersOf(Collection<NamedValue> named) {
+    /** What a body writes out on one side of a comparison, as a value a row holds. */
+    private static List<ObservedValue> observedOf(Collection<NamedValue> named) {
         List<ObservedValue> out = new ArrayList<>();
         for (NamedValue each : named) {
-            switch (each) {
-                case NamedValue.Whole(var value) -> {
-                    out.add(new ObservedValue.Integer(value + 1));
-                    out.add(new ObservedValue.Integer(value));
-                    out.add(new ObservedValue.Integer(value - 1));
-                }
-                case NamedValue.Fractional(var value) -> {
-                    BigDecimal unit = BigDecimal.ONE.scaleByPowerOfTen(-value.scale());
-                    out.add(new ObservedValue.Decimal(value.add(unit)));
-                    out.add(new ObservedValue.Decimal(value));
-                    out.add(new ObservedValue.Decimal(value.subtract(unit)));
-                }
-                case NamedValue.Characters(var value) -> out.add(new ObservedValue.Text(value));
-            }
+            out.add(switch (each) {
+                case NamedValue.Whole(var value) -> new ObservedValue.Integer(value);
+                case NamedValue.Fractional(var value) -> new ObservedValue.Decimal(value);
+                case NamedValue.Characters(var value) -> new ObservedValue.Text(value);
+            });
         }
         return out;
     }
@@ -319,7 +305,7 @@ public final class ReplacementReading {
         walkOccurrences.forEach((replaced, at) -> out.add(new Account(
                 new ReplacementAsWritten.OfAWalk(replaced), at.reportAt(),
                 walkStanding(replaced, at.asked(), at.probes(), List.copyOf(at.separators()),
-                        bordersOf(at.named()), List.copyOf(at.reads()), List.copyOf(at.inputs()),
+                        observedOf(at.named()), List.copyOf(at.reads()), List.copyOf(at.inputs()),
                         listsWalked(at.over()), stated, entered, stoppedAt, ranWith))));
         // One answer only where no arm the body owes a row through has a rewrite that is another
         // program; the arms of a library operation's copy are asked about above and do not count.
@@ -373,7 +359,7 @@ public final class ReplacementReading {
      */
     private static Standing walkStanding(Replacement.OfAWalk replaced, WalkRewrites.Asked asked,
                                          List<WalkProbe> where, List<String> separators,
-                                         List<ObservedValue> borders, List<String> reads,
+                                         List<ObservedValue> named, List<String> reads,
                                          List<String> inputs,
                                          List<TermPath> over, List<RowOutcome> rows,
                                          Function<RowOutcome, Set<WalkProbe>> entered,
@@ -393,7 +379,7 @@ public final class ReplacementReading {
                 row -> where.stream().anyMatch(entered.apply(row)::contains), stoppedAt,
                 decided -> new ReplacementOwed.OfAWalk(replaced.walk(), replaced.how(), where,
                         replacing, inputsOf(decided),
-                        ValuesOfRareAnswersFirst.of(ranWith.get(), decided), separators, borders,
+                        ValuesOfRareAnswersFirst.of(ranWith.get(), decided), separators, named,
                         reads, inputs, over));
     }
 

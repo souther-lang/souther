@@ -2393,10 +2393,12 @@ public final class Generator {
                                     : elementsWalked(row, walk.over(), axes.subject()));
                     int through = from.size();
                     Examining lists = new Examining(looking);
+                    // What the body compares with, and the values either side of each.
+                    List<ObservedValue> borders = NearbyValues.bordersOf(walk.named());
                     // One growth for the search: what stands for a type is made once, as far as the
                     // search asks.
                     Growth growth = aListGrownAmong(walk.ranWith(), axes.subject(), check, looking,
-                            NearbyValues.Put.BEFORE_AND_AFTER, walk.borders(), walk.reads());
+                            NearbyValues.Put.BEFORE_AND_AFTER, borders, walk.reads());
                     Beside growing = grownTwice(growth, walk.over());
                     // The lists the walk is not known to go over are grown last, since a step may
                     // read what another list holds, and no list grown there is one the walk is
@@ -2437,7 +2439,7 @@ public final class Generator {
                         List<Iterator<GeneratedRow>> into =
                                 at < ROWS_GROWN_IN_TURN ? grownFromEach : grownFromTheRest;
                         answeredLast.addAll(candidatesAnswering(each, axes.subject(), answering,
-                                purposes, check, answers, walk.ranWith(), walk.borders(),
+                                purposes, check, answers, walk.ranWith(), borders,
                                 walk.reads(), looking, answered));
                         into.add(candidatesBeside(each, axes, purposes, check, answers,
                                 growing, lists, takesASecondStep));
@@ -3423,7 +3425,7 @@ public final class Generator {
     private sealed interface Turn {
 
         /** A row to be put to the rewrite. */
-        record Candidate(GeneratedRow row) implements Turn {}
+        record Proposed(GeneratedRow row) implements Turn {}
 
         /** A row already put to the rewrite, which it answered differently on. */
         record Found(GeneratedRow row) implements Turn {}
@@ -3458,7 +3460,7 @@ public final class Generator {
     /** A lane of the candidates of {@code from}, one a turn, the iterators one after the other. */
     private static Lane candidatesOf(List<Iterator<GeneratedRow>> from) {
         Iterator<GeneratedRow> all = NearbyValues.flat(from.iterator(), Function.identity());
-        return () -> all.hasNext() ? new Turn.Candidate(all.next()) : null;
+        return () -> all.hasNext() ? new Turn.Proposed(all.next()) : null;
     }
 
     /** The candidates of {@code each} one at a time from each in turn. */
@@ -3545,7 +3547,7 @@ public final class Generator {
                 case null -> live.remove(next);
                 case Turn.Found it -> found = it.row();
                 case Turn.Pass _ -> { }
-                case Turn.Candidate candidate -> {
+                case Turn.Proposed candidate -> {
                     switch (looking.of(candidate.row(), null)) {
                         case TAKEN -> found = candidate.row();
                         case STOPPED -> {
