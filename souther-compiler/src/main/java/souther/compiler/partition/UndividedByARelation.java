@@ -8116,7 +8116,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? within : each.position() != null ? positionsLie(each.position(), region)
                     : NumericDomain.Bounds.OPEN, carriers.get(i));
             Way way = each.atOnePosition() == null || !heldWhole ? Way.TIES
-                    : wayOf(each.atOnePosition(), stating.get(i));
+                    : wayOf(each.atOnePosition(), withoutWhatRemovesNoValue(each.atOnePosition(),
+                            stating.get(i), conditions, region, read));
             if (way == Way.UNTOUCHED && narrowedByTheRun.stream().anyMatch(past ->
                     past.terms().stream().anyMatch(term -> term.equals(each.atOnePosition())))) {
                 way = Way.NARROWED;
@@ -9685,6 +9686,120 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             out = Way.NARROWED;
         }
         return out;
+    }
+
+    /**
+     * What {@code stating} says of {@code term} without the statements that take no value of its
+     * run away ({@link #removesNoValue}): a way that states only those is read as one that states
+     * nothing of the term.
+     */
+    private static List<OnAWay> withoutWhatRemovesNoValue(NumericTerm.FromOnePosition term,
+                                                          List<OnAWay> stating,
+                                                          List<OnAWay> conditions,
+                                                          SearchRegion region,
+                                                          InputReading read) {
+        return stating.stream()
+                .filter(each -> !removesNoValue(term, each, conditions, region, read)).toList();
+    }
+
+    /**
+     * Whether {@code statement} takes no value out of the run the region answers for
+     * {@code term}: it keeps the term off numbers, or equal to one of the elements of a container,
+     * that nothing else holds it beside, so that beside each value of the term the others take
+     * one that makes it hold.
+     *
+     * <p>Each of those takes every value its type holds, with no other statement of the way and
+     * no rule of the declarations reading it. A number kept off the term differs from each of its
+     * values, as every element of a container does where the container is written of such
+     * elements; and a number the term is kept equal to is the term's value, which the container
+     * holds where it may hold one element.
+     */
+    private static boolean removesNoValue(NumericTerm.FromOnePosition term, OnAWay statement,
+                                          List<OnAWay> conditions, SearchRegion region,
+                                          InputReading read) {
+        boolean some = statement.bySome() != null;
+        TermPath container = statement.elementsOf();
+        Set<NumericTerm> kept = statement.whatStands() ? null
+                : numbersKeptBeside(term, statement, some ? Rel.EQ : Rel.NE);
+        if (kept == null || kept.isEmpty()) {
+            return false;
+        }
+        for (NumericTerm each : kept) {
+            if (!(each instanceof NumericTerm.ValueOf other) || term.sharesAPlaceWith(other)
+                    || (container != null && !other.placesReadOff().stream()
+                            .allMatch(place -> place.isAtOrUnder(container.element())))
+                    || !isHeldByNothingElse(other, term, statement, conditions, read)) {
+                return false;
+            }
+        }
+        if (!some) {
+            return true;
+        }
+        NumericDomain.Bounds held = howManyAreHeld(container, read, region, false, 1);
+        return held != null && held.meet(new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(1)), null)).holdsAValue();
+    }
+
+    /**
+     * The numbers {@code statement} holds {@code term} beside by {@code rel}, an equality or a
+     * disequality, and by nothing else: the other numbers of a relation it states, or the element
+     * of the container it asks to equal or to differ from the value at the term's place. Null
+     * where it states anything else of the term.
+     */
+    private static Set<NumericTerm> numbersKeptBeside(NumericTerm.FromOnePosition term,
+                                                      OnAWay statement, Rel rel) {
+        RowDemand.AnElementMeets meets = rel == Rel.EQ ? statement.bySome() : statement.byEvery();
+        TermPath container = statement.elementsOf();
+        if (meets == null) {
+            return statement.relation() instanceof TakenConstraint.Affine(var form, var each,
+                    var _) && each == rel && form.coefs().containsKey(term)
+                    ? othersOf(form, term) : null;
+        }
+        if (meets.ways().size() != 1 || meets.ways().getFirst().size() != 1
+                || term.placesReadOff().stream()
+                        .anyMatch(place -> place.isAtOrUnder(container.element()))) {
+            return null;
+        }
+        return switch (meets.ways().getFirst().getFirst()) {
+            case RowDemand.Relational(TakenConstraint.Affine(var form, var each, var _))
+                    when each == rel && form.coefs().containsKey(term) -> othersOf(form, term);
+            case RowDemand.SameAs(Operand.At<TermPath>(var at))
+                    when rel == Rel.EQ && term.equals(new NumericTerm.ValueOf(at)) ->
+                    Set.of(new NumericTerm.ValueOf(container.element()));
+            case RowDemand.DifferentFrom(Operand.At<TermPath>(var at))
+                    when rel == Rel.NE && term.equals(new NumericTerm.ValueOf(at)) ->
+                    Set.of(new NumericTerm.ValueOf(container.element()));
+            default -> null;
+        };
+    }
+
+    private static Set<NumericTerm> othersOf(LinearForm<NumericTerm> form,
+                                             NumericTerm term) {
+        Set<NumericTerm> out = new LinkedHashSet<>(form.coefs().keySet());
+        out.remove(term);
+        return out;
+    }
+
+    /** Whether {@code number} takes every value its type holds, and neither a statement of
+     *  {@code conditions} other than {@code statement} nor a rule of the declarations reads it or
+     *  ties it to {@code term}. */
+    private static boolean isHeldByNothingElse(NumericTerm.ValueOf number,
+                                               NumericTerm.FromOnePosition term, OnAWay statement,
+                                               List<OnAWay> conditions, InputReading read) {
+        Source source = sourceOf(number, read);
+        if (source == null || !source.takes().every() || source.named()
+                || statingAnythingOfItsParameter(number, conditions, read).stream()
+                        .anyMatch(other -> other != statement)) {
+            return false;
+        }
+        for (TermPath place : term.placesReadOff()) {
+            for (TermPath there : number.placesReadOff()) {
+                if (tiedByARule(place, there, read)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     /**
