@@ -351,8 +351,10 @@ class AFoldOwesARowWhoseStepReadsWhatItCarriedTest {
         assertEquals(2, rows.size(), () -> block);
         assertTrue(rows.stream().anyMatch(row -> row.isFor("the fold stopping after its first element")
                         && row.values().contains("xs = [0, 1]")), () -> block);
+        // And the seed where it is read after: a list of two or more that starts with the one that
+        // lifts the accumulator. Which further elements follow is what the search came to first.
         assertTrue(rows.stream().anyMatch(row -> row.isFor("each step of the fold handed the seed")
-                        && row.values().contains("xs = [1, 0]")), () -> block);
+                        && row.values().contains("xs = [1, ")), () -> block);
     }
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
