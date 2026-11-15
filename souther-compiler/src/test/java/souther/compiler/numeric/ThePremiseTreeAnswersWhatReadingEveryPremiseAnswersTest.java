@@ -315,6 +315,40 @@ class ThePremiseTreeAnswersWhatReadingEveryPremiseAnswersTest {
     }
 
     @Test
+    void noLeafHoldsMoreThanTheLeafSizeWhateverTheWeightsTellApart() {
+        BigInteger big = BigInteger.TWO.pow(190);
+        for (int shape = 0; shape < 3; shape++) {
+            PremiseTree.Premise[] premises = new PremiseTree.Premise[400];
+            for (int at = 0; at < premises.length; at++) {
+                // Weights apart in value and the same as doubles; the same; and apart.
+                ExactRatio first = switch (shape) {
+                    case 0 -> whole(big.add(BigInteger.valueOf(at + 1)));
+                    case 1 -> ExactRatio.of(7);
+                    default -> ExactRatio.of(at + 1);
+                };
+                premises[at] = new PremiseTree.Premise(new ExactRatio[] {first, ExactRatio.ONE},
+                        ExactCut.inclusive(ExactRatio.of(at)), at);
+            }
+            PremiseTree tree = PremiseTree.over(premises, new ExactCut[2], new ExactCut[2],
+                    new PremiseTree.Pair[0]);
+            assertTrue(tree != null && tree.widestLeaf() <= PremiseTree.LEAF,
+                    "a leaf holds more than " + PremiseTree.LEAF + " premises of shape " + shape);
+        }
+    }
+
+    @Test
+    void premisesWhoseWeightsAreOneDoubleButNotOneNumberAreReadFromEveryPremiseToo() {
+        BigInteger big = BigInteger.TWO.pow(190);
+        List<RulesAsWritten.Written> written = new ArrayList<>();
+        for (int at = 1; at <= 40; at++) {
+            written.add(rule(Rel.LE, ExactRatio.of(-at), "x", whole(big.add(BigInteger.valueOf(at))),
+                    "y", ExactRatio.ONE));
+        }
+        assertTheTreeReadsWhatEveryPremiseDoes(written, Box.unbounded(),
+                Map.of("x", whole(big), "y", ExactRatio.of(2)));
+    }
+
+    @Test
     void boundsAHairApartAreToldApartByTheTree() {
         ExactRatio least = ExactRatio.of(BigInteger.ONE, new BigInteger("1000000000039"));
         ExactRatio hairAbove = least.times(ExactRatio.of(new BigDecimal("1.00000000000001")))

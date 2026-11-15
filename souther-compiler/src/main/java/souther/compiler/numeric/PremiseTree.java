@@ -44,8 +44,9 @@ final class PremiseTree {
         return STEPS.sum();
     }
 
-    /** How many premises a box holds before it is split. */
-    private static final int LEAF = 4;
+    /** How many premises a box holds before it is split: the most any leaf holds, since the
+     *  reading of a leaf selects among its premises one at a time. */
+    static final int LEAF = 4;
 
     /**
      * What a floor is lowered by, as a share of the sizes of the terms it is made of.
@@ -232,17 +233,36 @@ final class PremiseTree {
                 split = dimension;
             }
         }
-        if (to - from <= LEAF || split < 0) {
+        if (to - from <= LEAF) {
             node.held = Arrays.copyOfRange(points, from, to);
             return node;
         }
-        int along = split;
-        Arrays.sort(points, from, to,
-                (one, other) -> Double.compare(one.weights()[along], other.weights()[along]));
+        // Where no weight tells the premises apart they are halved as they stand: a box is made of
+        // the premises in it, so any halving is a sound one, and the leaves are no bigger than
+        // LEAF whatever the premises are.
+        if (split >= 0) {
+            int along = split;
+            long[] compared = new long[1];
+            Arrays.sort(points, from, to, (one, other) -> {
+                compared[0]++;
+                return Double.compare(one.weights()[along], other.weights()[along]);
+            });
+            STEPS.add(compared[0]);
+        }
         int middle = (from + to) >>> 1;
         node.below = build(points, from, middle, depth + 1, dimensions, pairCount);
         node.above = build(points, middle, to, depth + 1, dimensions, pairCount);
         return node;
+    }
+
+    /** The most premises any leaf holds, for a test holding it to {@link #LEAF}. */
+    int widestLeaf() {
+        return widestLeaf(root);
+    }
+
+    private static int widestLeaf(Node node) {
+        return node.held != null ? node.held.length
+                : Math.max(widestLeaf(node.below), widestLeaf(node.above));
     }
 
     /**
@@ -330,6 +350,7 @@ final class PremiseTree {
         /** The premises of one box, the one with the lowest floor read first: what it leaves the
          *  form is what the rest are held to, and most of them can then not leave it lower. */
         private void walkAmong(Point[] held) {
+            STEPS.add((long) held.length * held.length);
             double[] floors = new double[held.length];
             for (int at = 0; at < held.length; at++) {
                 Point each = held[at];
