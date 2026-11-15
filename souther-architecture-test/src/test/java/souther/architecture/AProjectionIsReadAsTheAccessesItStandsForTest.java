@@ -453,8 +453,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "check/TermMeaning", "project", "(" + core + "Ljava/util/List;)V",
                 Reading.NAMES, "what a term says: a projection says what the accesses it"
                         + " stands for say, the last one first");
-        row(out, c + "check/Terms", "chainInto", "(" + core + "Ljava/util/List;)V",
-                Reading.NAMES, READS_THE_NAMES);
         row(out, c + "check/Terms", "keyOfNowhere", "(" + core + at + ")L" + c + "check/Term;",
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "check/Terms", "namedByRule", "(" + core + at + ")Z",

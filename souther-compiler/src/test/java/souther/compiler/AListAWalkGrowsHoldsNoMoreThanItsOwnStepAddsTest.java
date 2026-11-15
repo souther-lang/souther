@@ -31,6 +31,7 @@ class AListAWalkGrowsHoldsNoMoreThanItsOwnStepAddsTest {
             """;
 
     private static List<Diagnostic> unproven(String source) {
+        ACompiledModel.answered(source);
         return Compiler.compileWithWarnings(source).warnings().stream()
                 .filter(d -> d.severity() == Severity.WARNING)
                 .filter(d -> d.code().equals("E2011")).toList();
