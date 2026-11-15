@@ -4121,9 +4121,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Language mineLanguage = languageOf(mineHolds);
         // A string both sides hold, with the same conversion done to both, is inside its own
         // answer, which starts with it and ends with it: it is its own partner. So it is shown
-        // wherever the partner holds it, whatever the conversion is exact on.
+        // wherever the partner holds it, whatever the conversion is exact on. With no conversion,
+        // a string looked for is as well inside what it makes with stable starters written after
+        // it, which are values where it is one, so it is shown wherever the partner holds that.
         if (standsInside && mineLanguage != null && mine.through().equals(theirs.through())) {
-            Language ownPartner = mineLanguage.and(partner, meter);
+            boolean madeLonger = hereIsFirst && where != StringsInsideStrings.Where.AT_THE_END
+                    && mine.through().equals(CaseMapping.NONE);
+            Language held = madeLonger
+                    ? StringsInsideStrings.extendedByStableStarters(partner, meter) : partner;
+            Language ownPartner = held == null ? null : mineLanguage.and(held, meter);
             Language withThem = ownPartner == null ? null : canBe.or(ownPartner, meter);
             if (withThem == null) {
                 return null;

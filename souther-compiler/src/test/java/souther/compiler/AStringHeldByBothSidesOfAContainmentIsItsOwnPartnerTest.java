@@ -52,6 +52,28 @@ class AStringHeldByBothSidesOfAContainmentIsItsOwnPartnerTest {
         }));
     }
 
+    /**
+     * A string looked for that is a value is inside the value it makes with stable starters after
+     * it, so the string looked for is open nowhere where the one looked in is held only to a
+     * length: what is open is the short strings of the one looked in, which the guard keeps out.
+     */
+    @Test
+    void aStringLookedForIsInsideWhatItMakesWithStarterAfterItWhereTheOtherIsHeldToALength() {
+        Map<String, List<BlockReason.RelationShownOverARegion>> open =
+                WhereAStringRelationIsLeftOpen.leftOpen("""
+                        module e2
+
+                        behavior f : (a: String, b: String) -> Int
+                        let f (a, b) = {
+                            guard String.length(a) >= 3 else 0
+                            if String.contains(b, a) then 1 else 2
+                        }
+                        """, "f");
+
+        assertEquals(List.of("a"), List.copyOf(open.keySet()));
+        assertEquals(3L, open.get("a").getFirst().shorterThan());
+    }
+
     @Test
     void aContainmentOfTwoStringsWithNoConversionLeavesNoStringOpen() {
         assertEquals(Map.of(), open("String", "%s", ""));
