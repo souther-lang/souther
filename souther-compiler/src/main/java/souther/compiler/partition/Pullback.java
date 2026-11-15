@@ -11851,6 +11851,11 @@ final class Pullback {
         }
 
         @Override
+        public int requiredInputsHash(ReadingState.Inputs inputs) {
+            return READING_STATE.requiredInputsHash(inputs);
+        }
+
+        @Override
         public int startConsulting() {
             return startConsultingInputs();
         }
