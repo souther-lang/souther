@@ -48,7 +48,8 @@ import java.util.List;
  *                number read from a run of a container has no such place, so it draws a line without
  *                dividing anything and never arrives here
  * @param classes exclusive over the term's values, and exhaustive over them but for what
- *                {@code leftOpenBy} leaves; or empty where the model does not divide them
+ *                {@code leftOpenBy} leaves and what {@code keptFromBy} keeps from a rule, which no
+ *                run gets to it with; or empty where the model does not divide them
  * @param cuts    the values the classes meet at, each carrying every rule that drew it there
  * @param divides which rules the classes were composed out of, each with which reading of it this
  *                is. The other half of what {@code cuts} is for a line: what a class is made of is
@@ -69,13 +70,26 @@ import java.util.List;
  *                here, which no class holds; empty where the classes hold every value. A value
  *                no class holds is one of those, and which class it is in is not worked out —
  *                where this is empty, no such value is, and one would be a broken partition
+ * @param keptFromBy the rules each kept some of the values here from itself: no run gets to the
+ *                rule with them, a guard keeps them away. A value a row holds that no class holds is
+ *                in no class and is owed nothing by such a rule — it is asked of the values a run
+ *                gets to it with. Where both this and {@code leftOpenBy} are empty, a value in no
+ *                class is a broken partition
  */
 public record Axis(AxisId id, NumericTerm.FromOnePosition term,
                    List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
                    List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed,
-                   List<RuleEvidenceOrigin> leftOpenBy) {
+                   List<RuleEvidenceOrigin> leftOpenBy, List<RuleEvidenceOrigin> keptFromBy) {
+
+    public Axis(AxisId id, NumericTerm.FromOnePosition term,
+                List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
+                List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed,
+                List<RuleEvidenceOrigin> leftOpenBy) {
+        this(id, term, classes, divides, cuts, parted, narrowed, leftOpenBy, List.of());
+    }
 
     public Axis {
+        keptFromBy = List.copyOf(keptFromBy);
         classes = List.copyOf(classes);
         divides = List.copyOf(divides);
         cuts = List.copyOf(cuts);
@@ -179,8 +193,17 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term,
                           List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
                           List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed,
                           List<RuleEvidenceOrigin> leftOpenBy) {
+        return of(behavior, term, classes, divides, cuts, parted, narrowed, leftOpenBy, List.of());
+    }
+
+    /** The same, with the rules that keep some of the number's values from themselves. */
+    public static Axis of(String behavior, NumericTerm.FromOnePosition term,
+                          List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
+                          List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed,
+                          List<RuleEvidenceOrigin> leftOpenBy,
+                          List<RuleEvidenceOrigin> keptFromBy) {
         return new Axis(AxisId.of(behavior, term), term, classes, divides, cuts, parted, narrowed,
-                leftOpenBy);
+                leftOpenBy, keptFromBy);
     }
 
 

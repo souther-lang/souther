@@ -215,12 +215,23 @@ final class Classing {
      *                 class holds; none where every rule shows every value on one. Carried by
      *                 every answer, the classes composed or not: it is what the rules left, and
      *                 is owed a question however the classes came out
+     * @param keptFromBy the rules that keep some of the position's values from themselves: no run
+     *                 gets to the rule with them ({@link SetStatement#notReached}). A row may hold
+     *                 one: it is in no class and the rule owes a question of it no more than
+     *                 any other. Carried by the classes that were composed, which hold only what a
+     *                 run gets to the rules with
      */
-    record Result(Classed classed, List<Disposed> forEach, List<LeftOpen> leftOpen) {
+    record Result(Classed classed, List<Disposed> forEach, List<LeftOpen> leftOpen,
+                  List<RuleEvidenceOrigin> keptFromBy) {
 
         Result {
             forEach = List.copyOf(forEach);
             leftOpen = List.copyOf(leftOpen);
+            keptFromBy = List.copyOf(keptFromBy);
+        }
+
+        Result(Classed classed, List<Disposed> forEach, List<LeftOpen> leftOpen) {
+            this(classed, forEach, leftOpen, List.of());
         }
 
         /** The rules the classes were made out of. */
@@ -484,7 +495,22 @@ final class Classing {
         }
         // The classes are sets, so everything that went into them went into them — a value singled
         // out of a string is one of these classes rather than a cut beside them.
-        return new Result(new Classed.Composed(out), filled(mine, told, Outcome.DIVIDED), open);
+        List<RuleEvidenceOrigin> kept = new ArrayList<>();
+        for (RuleEvidence each : mine) {
+            if (each instanceof RuleEvidence.BySet set) {
+                Worked<List<ValuesWithin>> none =
+                        heldOf(term, admits, set.states().notReached(), allowance);
+                if (none.refused() != null) {
+                    return notComposed(mine, told, new BlockReason.BehaviorDistinctionsTooCostly(
+                            ofTheDistinctions(none.refused())), open);
+                }
+                if (!none.answer().isEmpty() && !kept.contains(set.states().origin())) {
+                    kept.add(set.states().origin());
+                }
+            }
+        }
+        return new Result(new Classed.Composed(out), filled(mine, told, Outcome.DIVIDED), open,
+                kept);
     }
 
     /**

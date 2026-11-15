@@ -149,7 +149,8 @@ public final class InputClassifications {
             ids.add(each.id());
             answers.add(Recognitions.membershipOf(each.recognises(), value));
         }
-        return decided(axis.id(), ids, answers, !axis.leftOpenBy().isEmpty(), value);
+        return decided(axis.id(), ids, answers, !axis.leftOpenBy().isEmpty(),
+                !axis.keptFromBy().isEmpty(), value);
     }
 
     /**
@@ -169,11 +170,15 @@ public final class InputClassifications {
      * @param answers what each of them made of the value, in the same order
      * @param leavesValuesOpen whether a rule left some of the position's values in no class
      *                ({@link Axis#leftOpenBy})
+     * @param keptFrom whether a rule keeps some of the position's values from itself
+     *                ({@link Axis#keptFromBy}): a value no class holds is then in no class, and
+     *                nothing is owed of it
      * @param about   the value they were asked about, for the sentence a broken contract prints, and
      *                for nothing else. Null where a caller has none to name
      */
     static Classification decided(AxisId at, List<String> ids, List<Membership> answers,
-                                  boolean leavesValuesOpen, ObservedValue about) {
+                                  boolean leavesValuesOpen, boolean keptFrom,
+                                  ObservedValue about) {
         if (ids.size() != answers.size()) {
             throw new IllegalArgumentException(
                     "one answer per class: " + ids.size() + " classes, " + answers.size());
@@ -228,6 +233,11 @@ public final class InputClassifications {
             return Classification.unreadable(
                     Incompleteness.Cause.of(Incompleteness.Code.VALUE_OUTSIDE_WHAT_WAS_SHOWN),
                     at.behavior(), at.term());
+        }
+        // A value a guard keeps from the rules is read and is in no class, and no rule owes a
+        // question of it: it was read, and there is nothing more to say of where it falls.
+        if (keptFrom) {
+            return Classification.at(List.of(), null);
         }
         // Elsewhere `Axis` says it cannot happen: its classes are exhaustive over the position's
         // values. So this is that contract broken rather than anything about the value, and saying

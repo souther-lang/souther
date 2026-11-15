@@ -375,6 +375,11 @@ public final class BehaviorSetStatements {
                 reaching = new AdmittedPlan.Pattern(reached);
                 shown = AdmittedPlan.meeting(List.of(shown, reaching));
                 whenFalse = AdmittedPlan.meeting(List.of(whenFalse, reaching));
+                // What is left open is asked only of the strings a run gets to the equality with:
+                // one it does not get there with is no string the relation leaves unshown.
+                if (!notShown.equals(AdmittedPlan.NONE)) {
+                    notShown = AdmittedPlan.meeting(List.of(notShown, reaching));
+                }
                 switch (strings.reached()) {
                     case LengthRuns runs -> notReached = runs.outside();
                     case CodePointsPastTheWay counts -> notCounted = counts.outside().stream()

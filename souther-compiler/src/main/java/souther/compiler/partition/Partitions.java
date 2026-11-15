@@ -902,7 +902,8 @@ public final class Partitions {
                             null,
                             answered.leftOpen().stream()
                                     .<RuleEvidenceOrigin>map(each -> each.statement().origin())
-                                    .distinct().toList());
+                                    .distinct().toList(),
+                            answered.keptFromBy());
             // No classes and nothing they were composed from, and the cuts stand: they are
             // observations of their own rather than a projection of the classes.
             case Classing.Classed.NotComposed(var why) ->
@@ -1043,7 +1044,7 @@ public final class Partitions {
                 made.keepsCuts()
                         ? mergedPoints(merged(cutsOf(axis), reachable, carrier), points, carrier)
                         : List.of(),
-                parted, narrowedOf(axis), made.leftOpenByFor(axis),
+                parted, narrowedOf(axis), made.leftOpenByFor(axis), made.keptFromByFor(axis),
                 reachable.isEmpty() && points.isEmpty() ? null : new BodyCutInspection.Evidence(),
                 stated);
     }
@@ -1081,11 +1082,13 @@ public final class Partitions {
                                           List<RuleEvidenceOrigin> divides, List<Cut> cuts,
                                           List<Parting> parted, NarrowedBounds narrowed,
                                           List<RuleEvidenceOrigin> leftOpenBy,
+                                          List<RuleEvidenceOrigin> keptFromBy,
                                           BodyCutInspection drew, RulesWithNoLine rules) {
         if (classes.isEmpty() && cuts.isEmpty() && parted.isEmpty()) {
             return cameTo(term, at.position().path(), rules);
         }
-        out.add(Axis.of(behavior, term, classes, divides, cuts, parted, narrowed, leftOpenBy));
+        out.add(Axis.of(behavior, term, classes, divides, cuts, parted, narrowed, leftOpenBy,
+                keptFromBy));
         return drew != null ? drew : cameTo(term, at.position().path(), rules);
     }
 
@@ -1127,10 +1130,18 @@ public final class Partitions {
      * @param why       what stopped the classes, or null where nothing did
      * @param leftOpenBy the rules of {@code divides} that leave some values in none of
      *                  {@code classes} ({@link Axis#leftOpenBy})
+     * @param keptFromBy the rules that keep some values from themselves ({@link Axis#keptFromBy})
      */
     private record Composition(List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
                                boolean keepsCuts, BlockReason.RuleWithoutLineReason why,
-                               List<RuleEvidenceOrigin> leftOpenBy) {
+                               List<RuleEvidenceOrigin> leftOpenBy,
+                               List<RuleEvidenceOrigin> keptFromBy) {
+
+        Composition(List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
+                    boolean keepsCuts, BlockReason.RuleWithoutLineReason why,
+                    List<RuleEvidenceOrigin> leftOpenBy) {
+            this(classes, divides, keepsCuts, why, leftOpenBy, List.of());
+        }
 
         /** The order is the vocabulary, so the run of classes the caller works out is the answer. */
         private static final Composition ON_AN_ORDER =
@@ -1168,6 +1179,13 @@ public final class Partitions {
         List<RuleEvidenceOrigin> leftOpenByFor(Axis axis) {
             return why != null || onAnOrder() || (axis != null && axis.derivable())
                     ? List.of() : leftOpenBy;
+        }
+
+        /** The rules that keep values from themselves: as for {@link #leftOpenByFor}, those of this
+         *  answer's own classes. */
+        List<RuleEvidenceOrigin> keptFromByFor(Axis axis) {
+            return why != null || onAnOrder() || (axis != null && axis.derivable())
+                    ? List.of() : keptFromBy;
         }
     }
 
