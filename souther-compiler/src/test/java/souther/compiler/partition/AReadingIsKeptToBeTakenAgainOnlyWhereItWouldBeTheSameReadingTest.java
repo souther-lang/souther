@@ -61,6 +61,11 @@ class AReadingIsKeptToBeTakenAgainOnlyWhereItWouldBeTheSameReadingTest {
         }
 
         @Override
+        public int requiredInputsHash(Integer inputs) {
+            return inputs.hashCode();
+        }
+
+        @Override
         public Integer guards() {
             return guard;
         }
