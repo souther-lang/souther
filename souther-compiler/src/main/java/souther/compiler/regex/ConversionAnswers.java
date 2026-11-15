@@ -6,7 +6,7 @@ import java.util.Arrays;
 import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
-import java.util.SortedMap;
+import java.util.NavigableMap;
 import java.util.TreeMap;
 import java.util.function.UnaryOperator;
 
@@ -95,9 +95,9 @@ public final class ConversionAnswers {
     private final CodeMap map;
     private final UnaryOperator<String> conversion;
     /** The code points answered exactly with several stable starters, which the map has not. */
-    private final SortedMap<Integer, int[]> several = new TreeMap<>();
+    private final NavigableMap<Integer, int[]> several = new TreeMap<>();
     /** The code points answered in a way the map does not say, and that are not in {@code several}. */
-    private final SortedMap<Integer, Answered> otherwise = new TreeMap<>();
+    private final NavigableMap<Integer, Answered> otherwise = new TreeMap<>();
 
     private ConversionAnswers(CodeMap map, UnaryOperator<String> conversion) {
         this.map = map;
@@ -176,7 +176,7 @@ public final class ConversionAnswers {
             return null;
         }
         // The code points answered by several stable starters the language reads, and where.
-        SortedMap<Integer, int[]> through = new TreeMap<>();
+        NavigableMap<Integer, int[]> through = new TreeMap<>();
         BitSet sent = new BitSet();
         for (Map.Entry<Integer, int[]> each : several.entrySet()) {
             if (holdsOnly(each.getValue(), read)) {

@@ -31,11 +31,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTest {
 
-    private static final UnaryOperator<String> LOWER = text -> Normalizer.normalize(
-            text.toLowerCase(Locale.ROOT), Normalizer.Form.NFC);
+    private static final UnaryOperator<String> LOWER =
+            TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTest::lowered;
 
-    private static final UnaryOperator<String> UPPER = text -> Normalizer.normalize(
-            text.toUpperCase(Locale.ROOT), Normalizer.Form.NFC);
+    private static final UnaryOperator<String> UPPER =
+            TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTest::uppered;
+
+    private static String lowered(String text) {
+        return Normalizer.normalize(text.toLowerCase(Locale.ROOT), Normalizer.Form.NFC);
+    }
+
+    private static String uppered(String text) {
+        return Normalizer.normalize(text.toUpperCase(Locale.ROOT), Normalizer.Form.NFC);
+    }
 
     private static final int[] ALPHABET = {
         'a', 'b', 'A', 'i', 'I', '@', '.', 0x0130, 0x03A3, 0x03C3, 0x03C2, 0x00DF, 0x1E9E,

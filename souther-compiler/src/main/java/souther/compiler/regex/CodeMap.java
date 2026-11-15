@@ -7,7 +7,7 @@ import java.util.Comparator;
 import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
-import java.util.SortedMap;
+import java.util.NavigableMap;
 import java.util.TreeMap;
 import java.util.function.IntPredicate;
 import java.util.function.UnaryOperator;
@@ -57,10 +57,10 @@ public final class CodeMap {
     private final int[] imageReach;
     private final CodePoints domain;
     private final CodePoints leftAlone;
-    private final SortedMap<Integer, String> answeredElsewhere;
+    private final NavigableMap<Integer, String> answeredElsewhere;
 
     private CodeMap(List<Run> runs, CodePoints leftAlone,
-                    SortedMap<Integer, String> answeredElsewhere) {
+                    NavigableMap<Integer, String> answeredElsewhere) {
         this.answeredElsewhere = answeredElsewhere;
         this.runs = List.copyOf(runs);
         this.byImage = runs.stream().sorted(Comparator.comparingInt(Run::imageFrom)).toList();
@@ -114,7 +114,7 @@ public final class CodeMap {
         int found = 0;
         // What each code point outside the domain is answered with alone, where that is not the
         // code point itself.
-        SortedMap<Integer, String> elsewhere = new TreeMap<>();
+        NavigableMap<Integer, String> elsewhere = new TreeMap<>();
         for (int codePoint = 0; codePoint <= CodePoints.LAST; codePoint++) {
             if (CodePoints.isSurrogate(codePoint)) {
                 if (aloneFrom >= 0) {
@@ -243,7 +243,7 @@ public final class CodeMap {
      * starter, and for a code point whose answer turns on what stands beside it, the answer when
      * nothing does.
      */
-    public SortedMap<Integer, String> answeredElsewhere() {
+    public NavigableMap<Integer, String> answeredElsewhere() {
         return answeredElsewhere;
     }
 
