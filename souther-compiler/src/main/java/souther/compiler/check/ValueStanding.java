@@ -584,13 +584,22 @@ public final class ValueStanding {
      *
      * <p>False wherever a name stands for something of its own — a parameter, a position of the
      * input, an element an operation handed out that nothing written stands against — which is what
-     * a value can vary with.
+     * a value can vary with. The same question the plan of a run asks of the tree that runs
+     * ({@code CoverageSites}' closed values), read here in the environment a reading of the input
+     * follows its names in.
      */
     public static <E, N extends Names<E, N>> boolean madeOfWhatIsWritten(Core e, E at, N names) {
-        return writtenWhole(e, at, names, Set.of(), MOST_NAMES_FOLLOWED);
+        return writtenWhole(e, at, names, MOST_NAMES_FOLLOWED);
     }
 
-    private static <E, N extends Names<E, N>> boolean writtenWhole(
+    private static <E, N extends Names<E, N>> boolean writtenWhole(Core e, E at, N names,
+                                                                    int left) {
+        Set<BindingId> bound = new HashSet<>();
+        Core.bindersIn(e, bound);
+        return writtenUnder(e, at, names, bound, left);
+    }
+
+    private static <E, N extends Names<E, N>> boolean writtenUnder(
             Core asPlaced, E at, N names, Set<BindingId> bound, int left) {
         Core e = Core.withoutStanding(asPlaced);
         if (e instanceof Core.Read read) {
@@ -603,39 +612,15 @@ public final class ValueStanding {
             return switch (named(read, at, names)) {
                 case null -> false;
                 case Named.One<E, N>(Standing<E, N> one) ->
-                        writtenWhole(one.value(), one.at(), one.names(), Set.of(), left - 1);
+                        writtenWhole(one.value(), one.at(), one.names(), left - 1);
                 case Named.OneOf<E, N>(List<Standing<E, N>> members) -> members.stream().allMatch(
-                        one -> writtenWhole(one.value(), one.at(), one.names(), Set.of(), left - 1));
+                        one -> writtenWhole(one.value(), one.at(), one.names(), left - 1));
             };
         }
         boolean[] whole = {true};
-        ScopeStep.forEachChild(e, (child, step) -> {
-            if (whole[0]) {
-                whole[0] = writtenWhole(child, at, names, bindingsOf(step, bound), left);
-            }
-        });
+        Core.forEachChild(e, child -> whole[0] = whole[0]
+                && writtenUnder(child, at, names, bound, left));
         return whole[0];
-    }
-
-    /** {@code bound} and what entering {@code step} binds. */
-    private static Set<BindingId> bindingsOf(
-            ScopeStep step, Set<BindingId> bound) {
-        List<Core.Binder> introduced = switch (step) {
-            case ScopeStep.Same _ -> List.of();
-            case ScopeStep.Let(Core.LetIn let) -> List.of(let.binder());
-            case ScopeStep.Block(Core.Block block) -> block.params();
-            case ScopeStep.Chosen(Choice.Decides.ACase(Core.Case arm, Core _)) ->
-                    arm.binder() == null ? List.of() : List.of(arm.binder());
-            case ScopeStep.Chosen(Choice.Decides.ItWasBuilt(Core.IfConstructed attempt)) ->
-                    List.of(attempt.binder());
-            case ScopeStep.Chosen _ -> List.of();
-        };
-        if (introduced.isEmpty()) {
-            return bound;
-        }
-        Set<BindingId> out = new HashSet<>(bound);
-        introduced.forEach(each -> out.add(each.binding()));
-        return out;
     }
 
     /**

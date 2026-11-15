@@ -533,10 +533,11 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "types/BindingId;)Z", Reading.STRUCTURE, BINDINGS);
         row(out, c + "coverage/CoverageSites$Walk", "readsABindingOf", "(" + core + "L" + c
                 + "types/BindingOwner;)Z", Reading.STRUCTURE, BINDINGS);
-        // Whether a walk reads nothing a run is handed: the names it binds, and the names it reads
-        // that it does not bind.
-        row(out, c + "coverage/CoverageSites$Walk", "bindersIn", "(" + core
-                + "Ljava/util/Set;)V", Reading.STRUCTURE, BINDINGS);
+        row(out, c + "check/ValueStanding", "writtenUnder", "(" + core + "Ljava/lang/Object;L" + c
+                + "check/ValueStanding$Names;Ljava/util/Set;I)Z", Reading.STRUCTURE,
+                "whether a value reads a name that stands for something of its own: a projection"
+                        + " reads what its base reads");
+        // Whether a walk reads nothing a run is handed: the names it reads that it does not bind.
         row(out, c + "coverage/CoverageSites$Walk", "closedUnder", "(" + core
                 + "Ljava/util/Set;)Z", Reading.STRUCTURE, BINDINGS);
         // Whether the order of the list a walk goes over is one the language leaves unspecified,
