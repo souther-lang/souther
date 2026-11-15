@@ -175,17 +175,6 @@ public sealed interface AffineConstraint<A> {
                 || (one.form().isNegationOf(other.form()) && mine.equals(theirs.negated()));
     }
 
-    /** Whether every number this weighs a position by and is bounded by is a modest one
-     *  ({@link ExactRatio#isModest}). */
-    default boolean numbersAreModest() {
-        for (ExactRatio weight : form().coefs().values()) {
-            if (!weight.isModest()) {
-                return false;
-            }
-        }
-        return valueOf(this).isModest();
-    }
-
     private static ExactRatio valueOf(AffineConstraint<?> constraint) {
         return switch (constraint) {
             case Equality<?> at -> at.at();

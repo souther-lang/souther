@@ -184,6 +184,69 @@ class ThePremiseTreeAnswersWhatReadingEveryPremiseAnswersTest {
         assertTrue(compared > 20000, "only " + compared + " rests were compared");
     }
 
+    private static void assertTheTreeReadsWhatEveryPremiseDoes(
+            List<RulesAsWritten.Written> written, Box<String> ends, Map<String, ExactRatio> form) {
+        List<AffineConstraint<String>> rules = RulesAsWritten.statedOnly(written,
+                RulesNamingNoPositionInCommonCloseApartTest::spacing);
+        assertTrue(rules.size() >= 16, "the premises are too few to be put in a tree");
+        FormReach<String> reading = FormReach.over(rules, ends, DifferenceBounds.over(rules, ORDER),
+                ORDER);
+        Reach slow = reading.readingEveryPremise().of(form, ExactRatio.ZERO);
+        Reach quick = reading.of(form, ExactRatio.ZERO);
+        assertTrue(same(slow.most(), quick.most()) && same(slow.least(), quick.least()),
+                "the form " + form + " runs between " + slow + " from every premise and between "
+                        + quick + " from the tree");
+    }
+
+    private static RulesAsWritten.Written rule(Rel rel, ExactRatio constant, Object... weights) {
+        Map<String, ExactRatio> coefs = new LinkedHashMap<>();
+        for (int at = 0; at < weights.length; at += 2) {
+            coefs.put((String) weights[at], (ExactRatio) weights[at + 1]);
+        }
+        return new RulesAsWritten.Written(coefs, constant, rel);
+    }
+
+    private static ExactRatio whole(BigInteger value) {
+        return ExactRatio.of(value);
+    }
+
+    @Test
+    void weightsThatCancelOnlyInTheSumAreTheSameSumToTheTree() {
+        BigInteger big = BigInteger.TWO.pow(53);
+        List<RulesAsWritten.Written> written = new ArrayList<>();
+        written.add(rule(Rel.LE, ExactRatio.ZERO, "j", ExactRatio.ONE, "x", ExactRatio.of(-1)));
+        written.add(rule(Rel.LE, ExactRatio.ZERO, "x", whole(big.add(BigInteger.TWO)),
+                "j", whole(big.add(BigInteger.ONE).negate())));
+        for (int n = 3; n <= 16; n++) {
+            written.add(rule(Rel.LE, ExactRatio.of(-1000), "x", ExactRatio.of(n), "j", ExactRatio.ONE));
+        }
+        assertTheTreeReadsWhatEveryPremiseDoes(written, Box.unbounded(),
+                Map.of("x", ExactRatio.of(2), "j", ExactRatio.of(-1)));
+    }
+
+    @Test
+    void aProductBeyondADoubleIsNotAFormWithNoBoundFromAPremise() {
+        BigInteger end = BigInteger.TEN.pow(308).add(BigInteger.valueOf(3));
+        List<RulesAsWritten.Written> written = new ArrayList<>();
+        for (int at = 0; at < 16; at++) {
+            written.add(rule(Rel.LE, whole(end.subtract(BigInteger.ONE).add(BigInteger.valueOf(at))
+                    .negate()), "x", ExactRatio.of(-1), "y", ExactRatio.of(2)));
+        }
+        Map<String, ExactCut> atLeast = Map.of("x", ExactCut.inclusive(whole(end)),
+                "y", ExactCut.inclusive(whole(end)));
+        Map<String, ExactCut> atMost = Map.of("x", ExactCut.inclusive(whole(end.add(BigInteger.ONE))),
+                "y", ExactCut.inclusive(whole(end.add(BigInteger.ONE))));
+        assertTheTreeReadsWhatEveryPremiseDoes(written, new Box<>(atLeast, atMost),
+                Map.of("x", ExactRatio.ONE, "y", ExactRatio.ONE));
+    }
+
+    @Test
+    void anExponentOfTheLongestNegativeIsNoDouble() {
+        assertTrue(Double.isNaN(ExactRatio.tenTo(Long.MIN_VALUE).approximately()),
+                "an exponent no long negates is not one a double holds");
+        assertTrue(Double.isNaN(ExactRatio.tenTo(Long.MAX_VALUE).approximately()));
+    }
+
     @Test
     void aReadingOfFewPremisesIsNotPutInATree() {
         List<AffineConstraint<String>> few = RulesAsWritten.statedOnly(

@@ -56,6 +56,30 @@ final class PremiseTree {
     private static final double ROOM = 1e-13;
 
     /**
+     * What a floor is lowered by whatever the sizes of its terms: a product that falls below the
+     * smallest {@code double} with all its digits is off by more than a share of its size.
+     */
+    private static final double TINY = Double.MIN_NORMAL;
+
+    /**
+     * What a floor says is one of three things: a number that no premise of the box leaves the form
+     * below, positive infinity where none leaves it any, and not a number where it cannot be said.
+     * A value that is not finite is never one of the first two on its own account — a product that
+     * overflowed says nothing of whether there is a bound — so every subtraction and product a floor
+     * is made of passes through here.
+     */
+    private static double finite(double value) {
+        return Double.isFinite(value) ? value : Double.NaN;
+    }
+
+    /** The sum of two weights, worked out exactly before it is a {@code double}: the weights are
+     *  each rounded, and a sum of them that cancels is off by more than its own size. */
+    private static double sumOf(ExactRatio one, ExactRatio other) {
+        ExactRatio sum = one.plus(other).orNull();
+        return sum == null ? Double.NaN : sum.approximately();
+    }
+
+    /**
      * One premise.
      *
      * @param weights what it weighs each position by, nought where it does not name it
@@ -101,11 +125,6 @@ final class PremiseTree {
     private final boolean[] hasUp;
     private final boolean[] hasDown;
 
-    /** For each position, whether no weight has a negative term: the end above nought is not below
-     *  it and the one below nought is not above it, or there is none. Then a weight of nought is
-     *  the lowest term, and a weight nearer it is lower than one further. */
-    private final boolean[] unbelowNought;
-
     /** For each position, the size of its ends. */
     private final double[] endSize;
 
@@ -123,15 +142,12 @@ final class PremiseTree {
         down = new double[positions];
         hasUp = new boolean[positions];
         hasDown = new boolean[positions];
-        unbelowNought = new boolean[positions];
         endSize = new double[positions];
         for (int position = 0; position < positions; position++) {
             hasUp[position] = ups[position] != null;
             hasDown[position] = downs[position] != null;
             up[position] = hasUp[position] ? ups[position].at().approximately() : 0.0;
             down[position] = hasDown[position] ? downs[position].at().approximately() : 0.0;
-            unbelowNought[position] = (!hasUp[position] || ups[position].at().signum() >= 0)
-                    && (!hasDown[position] || downs[position].at().signum() <= 0);
             endSize[position] = Math.max(Math.abs(up[position]), Math.abs(down[position]));
         }
         above = new int[pairs.length];
@@ -171,7 +187,8 @@ final class PremiseTree {
             }
             double[] sums = new double[pairs.length];
             for (int pair = 0; pair < pairs.length; pair++) {
-                sums[pair] = weights[pairs[pair].above()] + weights[pairs[pair].below()];
+                sums[pair] = sumOf(each.weights()[pairs[pair].above()],
+                        each.weights()[pairs[pair].below()]);
             }
             double bound = each.bound().at().approximately();
             if (Double.isNaN(bound) || containsNaN(weights) || containsNaN(sums)) {
@@ -277,7 +294,7 @@ final class PremiseTree {
             this.reading = reading;
             formSums = new double[above.length];
             for (int pair = 0; pair < above.length; pair++) {
-                formSums[pair] = form[above[pair]] + form[below[pair]];
+                formSums[pair] = sumOf(weights[above[pair]], weights[below[pair]]);
             }
             found(best);
         }
@@ -410,40 +427,38 @@ final class PremiseTree {
                         + Math.max(Math.abs(least[position]), Math.abs(most[position])))
                         * endSize[position];
             }
-            return total - ROOM * size;
+            return finite(total - ROOM * size - TINY);
         }
 
-        /** The lowest term the form's weight at {@code position}, against the weights from
-         *  {@code least} to {@code most}, can come to: positive infinity where no weight in
-         *  between has an end to run up to. */
+        /**
+         * The lowest term the form's weight at {@code position}, against the weights from
+         * {@code least} to {@code most}, can come to: positive infinity where no weight in between
+         * has an end to run up to.
+         *
+         * <p>The weights are doubles that stand for exact ones, so what is left of the form's weight
+         * once the box's is taken off is an interval a little wider than the one the doubles give,
+         * and a term is no more than a sign away from the one beside it only where the interval is
+         * on one side of nought.
+         */
         private double termsFloor(int position, double least, double most) {
             double weight = form[position];
-            if (unbelowNought[position]) {
-                // No term is below nought, so the lowest is at the weight nearest nought: nought
-                // where the form's weight is among the box's, and otherwise at the box's weight
-                // nearest it.
-                if (weight > most) {
-                    return hasUp[position] ? (weight - most) * up[position]
-                            : Double.POSITIVE_INFINITY;
-                }
-                if (weight < least) {
-                    return hasDown[position] ? (weight - least) * down[position]
-                            : Double.POSITIVE_INFINITY;
-                }
-                return 0.0;
-            }
-            double low = weight - most;
-            double high = weight - least;
+            double slack = ROOM * (Math.abs(weight) + Math.max(Math.abs(least), Math.abs(most)));
+            double low = finite(weight - most - slack);
+            double high = finite(weight - least + slack);
             double lowest = Math.min(termAt(position, low), termAt(position, high));
             return low < 0 && high > 0 ? Math.min(lowest, 0.0) : lowest;
         }
 
         private double termAt(int position, double weight) {
+            if (Double.isNaN(weight)) {
+                return Double.NaN;
+            }
             if (weight > 0) {
-                return hasUp[position] ? weight * up[position] : Double.POSITIVE_INFINITY;
+                return hasUp[position] ? finite(weight * up[position]) : Double.POSITIVE_INFINITY;
             }
             if (weight < 0) {
-                return hasDown[position] ? weight * down[position] : Double.POSITIVE_INFINITY;
+                return hasDown[position] ? finite(weight * down[position])
+                        : Double.POSITIVE_INFINITY;
             }
             return 0.0;
         }
@@ -471,8 +486,10 @@ final class PremiseTree {
                     return Double.POSITIVE_INFINITY;
                 }
             }
-            double low = form[upper] - most[upper];
-            double high = form[upper] - least[upper];
+            double slack = ROOM * (Math.abs(form[upper])
+                    + Math.max(Math.abs(least[upper]), Math.abs(most[upper])));
+            double low = finite(form[upper] - most[upper] - slack);
+            double high = finite(form[upper] - least[upper] + slack);
             double lowest = Math.min(differenceTerm(pair, low), differenceTerm(pair, high));
             if (low < 0 && high > 0) {
                 lowest = Math.min(lowest, 0.0);
@@ -483,18 +500,21 @@ final class PremiseTree {
             double size = Math.abs(lowestBound) + Math.abs(constant) + (Math.abs(form[upper])
                     + Math.max(Math.abs(least[upper]), Math.abs(most[upper])))
                     * Math.max(Math.abs(aboveOverBelow[pair]), Math.abs(belowOverAbove[pair]));
-            return lowestBound + constant + lowest - ROOM * size;
+            return finite(lowestBound + constant + lowest - ROOM * size - TINY);
         }
 
         /** What a weight on the first of the pair and its negation on the second comes to by the
          *  closed differences. */
         private double differenceTerm(int pair, double weight) {
+            if (Double.isNaN(weight)) {
+                return Double.NaN;
+            }
             if (weight > 0) {
-                return hasAboveOverBelow[pair] ? weight * aboveOverBelow[pair]
+                return hasAboveOverBelow[pair] ? finite(weight * aboveOverBelow[pair])
                         : Double.POSITIVE_INFINITY;
             }
             if (weight < 0) {
-                return hasBelowOverAbove[pair] ? -weight * belowOverAbove[pair]
+                return hasBelowOverAbove[pair] ? finite(-weight * belowOverAbove[pair])
                         : Double.POSITIVE_INFINITY;
             }
             return 0.0;

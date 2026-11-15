@@ -124,11 +124,6 @@ public final class ClosedState<A> {
      */
     static final int ROUNDS = 16;
 
-    /** The round whose start is asked whether the rules leave a form nothing even where it is not
-     *  asked of every round: a form the rules leave nothing is most often found there, by the
-     *  ends the first round left, and finding it then ends the rounds. */
-    private static final int EARLY_ASK = 1;
-
     /** How many closures of several parts have been put together, for a test holding a question
      *  about one part to being answered without them: that is a shape and not a speed. */
     private static final AtomicLong PRODUCTS_MADE = new AtomicLong();
@@ -337,25 +332,6 @@ public final class ClosedState<A> {
                                              Function<A, Granularity> spacing,
                                              CanonicalOrder<A> order, ClosureWork<A> parent,
                                              ClosureWork<A> into, ClosedState<A> before) {
-        return closedTogether(constraints, spacing, order, parent, into, before, false);
-    }
-
-    /**
-     * The closure of the rules with every round asked whether the rules leave a form nothing, which
-     * is what the closure asks of fewer rounds: the reference that is held to.
-     */
-    static <A> ClosedState<A> closedAskingEveryRound(List<AffineConstraint<A>> constraints,
-                                                     Function<A, Granularity> spacing,
-                                                     CanonicalOrder<A> order) {
-        return closedTogether(constraints, spacing, order, null, null, null, true);
-    }
-
-    private static <A> ClosedState<A> closedTogether(List<AffineConstraint<A>> constraints,
-                                                     Function<A, Granularity> spacing,
-                                                     CanonicalOrder<A> order,
-                                                     ClosureWork<A> parent, ClosureWork<A> into,
-                                                     ClosedState<A> before,
-                                                     boolean everyRoundIsAsked) {
         PrefixBasis<A> prefix = null;
         DifferenceBounds<A> differences = null;
         if (before != null && before.bases.size() == 1 && !before.holdsNothing) {
@@ -390,10 +366,6 @@ public final class ClosedState<A> {
         }
         Set<AffineConstraint.HalfSpace<A>> sided = Set.of();
         Set<AffineConstraint.HalfSpace<A>> folded = Set.of();
-        // Whether a form the rules leave nothing is asked of every round or of the last one alone.
-        boolean askedOfEveryRound = everyRoundIsAsked || mustAskEveryRound(constraints);
-        FormReach<A> last = null;
-        boolean askedOfLast = false;
         ClosureWork<A> work = into;
         RoundWork<A> previous = null;
         for (int round = 0; round < ROUNDS; round++) {
@@ -418,9 +390,7 @@ public final class ClosedState<A> {
                 reading.working(from, here);
                 previous = here;
             }
-            last = reading;
-            askedOfLast = askedOfEveryRound || round == EARLY_ASK;
-            if (askedOfLast && theRulesLeaveAFormNothing(reading, constraints)) {
+            if (theRulesLeaveAFormNothing(reading, constraints)) {
                 return empty(differences);
             }
             AffineReduction.Reduction<A> found = AffineReduction.over(reading, spacing, order);
@@ -451,47 +421,12 @@ public final class ClosedState<A> {
                 return empty(differences);
             }
             if (next.equals(box) && tightened.sided().equals(sided)) {
-                if (!askedOfLast && theRulesLeaveAFormNothing(reading, constraints)) {
-                    return empty(differences);
-                }
                 return settled(box, differences, sided, Status.STABLE, everyBoundWasComposed);
             }
             box = next;
             sided = tightened.sided();
         }
-        if (!askedOfLast && theRulesLeaveAFormNothing(last, constraints)) {
-            return empty(differences);
-        }
         return settled(box, differences, sided, Status.BUDGET_EXHAUSTED, everyBoundWasComposed);
-    }
-
-    /**
-     * Whether the rules are ones a form they leave nothing may be missed in a round that is not asked.
-     *
-     * <p>Asking the last round and the second finds what asking every round finds where what one
-     * round finds is found by every round after it: the ends of a round are inside the ends of the
-     * round before, a form left nothing by wider ends is left nothing by narrower ones, and the
-     * rules the rounds read are the same rules. That is a fact about the numbers, and the reading
-     * of a form ({@link FormReach}) is a fact about what the arithmetic holds of them, which is
-     * the numbers only where it holds every sum and product it is asked for. Two things it is not
-     * so of, and the closure asks every round for each:
-     *
-     * <ul>
-     *   <li>A hole. The premises a round reads then include the holes the round before sided, which
-     *       are not the premises the rounds before it read.</li>
-     *   <li>A number too wide to be sure of ({@link ExactRatio#MODEST}). A sum of two numbers whose
-     *       exponents are far enough apart has no representation, so a bound found at one end of a
-     *       position can be lost at an end inside it: {@code M} is held beside nought where
-     *       {@code M - 1} is not.</li>
-     * </ul>
-     */
-    static <A> boolean mustAskEveryRound(List<AffineConstraint<A>> constraints) {
-        for (AffineConstraint<A> each : constraints) {
-            if (each instanceof AffineConstraint.Disequality<A> || !each.numbersAreModest()) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
@@ -592,7 +527,8 @@ public final class ClosedState<A> {
         Set<Map<A, ExactRatio>> asked = new LinkedHashSet<>();
         for (AffineConstraint<A> each : constraints) {
             Map<A, ExactRatio> form = each.form().coefs();
-            if (form.size() > 1 && asked.add(form) && reading.ofKept(each, form).isEmpty()) {
+            if (form.size() > 1 && asked.add(form)
+                    && reading.ofKept(each, form).isEmpty()) {
                 return true;
             }
         }
