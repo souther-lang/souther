@@ -102,11 +102,7 @@ final class IntrinsicNumericFacts {
         // And exactly as many as the law of the operation that answered it says, where it says a
         // number of the arguments this names: `a ++ b` holds as many as both halves together, which
         // no number of bounds on it against either half says.
-        LawOverAtoms.Sized lawSays =
-                LawOverAtoms.sizeOf(AnOperationApplied.of(container), at, terms);
-        if (lawSays != null) {
-            out.addAll(lawSays.carriedBy(atom));
-        }
+        out.addAll(ofTheSizeLaw(AnOperationApplied.of(container), atom, at, terms));
         // And as many as it was written out with, where it was, which is what a size of it read
         // as a number is and so what the atom a law names it by is.
         OptionalLong written = terms.writtenCount(container, at);
@@ -115,6 +111,16 @@ final class IntrinsicNumericFacts {
                     ExactRatio.of(written.getAsLong())), Rel.EQ));
         }
         return out;
+    }
+
+    /**
+     * What the size law of the operation {@code applied} says of the size {@code atom} of its
+     * answer, where it says it as one number of its arguments.
+     */
+    static List<NumericConstraint> ofTheSizeLaw(AnOperationApplied applied, FactSubject atom,
+                                                Denotations at, Terms terms) {
+        LawOverAtoms.Sized lawSays = LawOverAtoms.sizeOf(applied, at, terms);
+        return lawSays == null ? List.of() : lawSays.carriedBy(atom);
     }
 
     /**
@@ -129,7 +135,12 @@ final class IntrinsicNumericFacts {
      */
     static Derivation heldWhereItsLawsSay(Core container, FactSubject atom, Denotations at,
                                           Terms terms) {
-        AnOperationApplied applied = AnOperationApplied.of(container);
+        return heldWhereItsLawsSay(AnOperationApplied.of(container), atom, at, terms);
+    }
+
+    /** The same, of an application of an operation however it was found. */
+    static Derivation heldWhereItsLawsSay(AnOperationApplied applied, FactSubject atom,
+                                          Denotations at, Terms terms) {
         Derivation.HoldsSomethingWhere.Holding holds =
                 LawOverAtoms.whereItHolds(applied, AnswerAspect.EMPTINESS, at, terms);
         List<Derivation> recipes = new ArrayList<>();

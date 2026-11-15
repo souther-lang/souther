@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.PatternMeaning;
 import souther.compiler.check.Derivation.HoldsSomethingWhere.Holding;
 import souther.compiler.core.Core;
@@ -7,8 +8,10 @@ import souther.compiler.core.Kernel;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.regex.OccurrencesInAPattern;
 import souther.compiler.regex.WhatAStringSaysOfItsLength;
 import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
@@ -111,7 +114,7 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     static Sized sizeOf(AnOperationApplied applied, Denotations at, Terms terms) {
         OperationLaw.Size<DeclaredArgument> law = sizeLawOf(applied);
         if (law == null) {
-            return null;
+            return piecesParted(applied, at, terms);
         }
         LawOverAtoms reading = new LawOverAtoms(applied, at, terms);
         LinearForm<LawNumber<DeclaredArgument>> unconditional = law.unconditional();
@@ -119,6 +122,31 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
             return reading.byAValueHeldOnce(law.cases());
         }
         LinearForm<FactSubject> form = reading.form(unconditional);
+        return form == null ? null : new Sized(form, null);
+    }
+
+    /**
+     * How many pieces {@code applied} answers where it parts a string at a separator written as
+     * one code point: one more than the times the separator stands in the string. The number is the
+     * call's and not the operation's, since which code points are counted is the separator the call
+     * was handed ({@link BoundOperationFacts.Pieces#howManyPartedAt}); a separator that is longer,
+     * or is not written out, says nothing.
+     */
+    private static Sized piecesParted(AnOperationApplied applied, Denotations at, Terms terms) {
+        BoundOperationFacts.Pieces pieces = applied == null ? null
+                : DefaultBoundOperationFacts.get().piecesOf(applied.operation());
+        if (pieces == null || pieces.separator().isEmpty()) {
+            return null;
+        }
+        Core separator = applied.argument(pieces.separator().get());
+        if (separator == null || !(Core.withoutStanding(separator) instanceof Core.Str written)
+                || written.value().codePointCount(0, written.value().length()) != 1
+                || (written.value().length() == 1
+                        && Character.isSurrogate(written.value().charAt(0)))) {
+            return null;
+        }
+        LinearForm<FactSubject> form = new LawOverAtoms(applied, at, terms).form(
+                pieces.howManyPartedAt(written.value().codePointAt(0)));
         return form == null ? null : new Sized(form, null);
     }
 
@@ -574,13 +602,37 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
      * length is left out.
      */
     private Holding accepting(PatternMeaning meaning) {
-        FactSubject count = countOf(applied.args().get(
-                StringPredicates.of(Kernel.STRING_MATCHES).subject()));
+        Core string = applied.args().get(StringPredicates.of(Kernel.STRING_MATCHES).subject());
+        FactSubject count = countOf(string);
         WhatAStringSaysOfItsLength.Sides<FactSubject> said = count == null
                 ? WhatAStringSaysOfItsLength.Sides.nothing()
                 : WhatAStringSaysOfItsLength.inALanguage(count, meaning);
+        List<Holding> ifHolds = new ArrayList<>(standing(said.ifHolds()));
+        ifHolds.addAll(occurrencesIn(string, meaning));
         return new Holding.Unnamed(new Holding.Unnamed.Of.APattern(meaning),
-                standing(said.ifHolds()), standing(said.ifDenied()));
+                ifHolds, standing(said.ifDenied()));
+    }
+
+    /**
+     * The most times each code point the pattern writes out stands in {@code string}, where the
+     * pattern is accepted: a ceiling on how many of its code points are that one, wherever the
+     * pattern has one ({@link OccurrencesInAPattern}).
+     */
+    private List<Holding> occurrencesIn(Core string, PatternMeaning meaning) {
+        List<Holding> out = new ArrayList<>();
+        if (string == null || NumericMeasures.takenOf(Core.withoutStanding(string).type(),
+                terms.newtypeInners()) == null) {
+            return out;
+        }
+        OccurrencesInAPattern.writtenOutWithACeiling(meaning).forEach((codePoint, most) -> {
+            FactSubject standing = terms.codePointsAtomFor(string,
+                    CodePointClass.of(CodePoints.of(codePoint)), at);
+            if (standing != null) {
+                out.add(new Holding.Stands(LinearForm.atomMinusConstant(standing,
+                        ExactRatio.of(most)), Rel.LE));
+            }
+        });
+        return out;
     }
 
     /** How many code points the argument {@code subject} names holds, or null where it names no

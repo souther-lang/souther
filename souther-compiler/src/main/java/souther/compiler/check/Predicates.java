@@ -2184,6 +2184,15 @@ final class Predicates {
     }
 
     /**
+     * Whether {@code owed} holds in every case of the values inside it that are each one of
+     * several, under what {@code k} holds ({@link #piecewiseOf}); false where it makes no cases.
+     */
+    boolean entailedInEveryCase(NumericConstraint owed, Known k) {
+        Piecewise cases = piecewiseOf(owed);
+        return cases != null && cases.entailedBy(k.numbers());
+    }
+
+    /**
      * The most cases a clause is read as. Each is one closure of the domain, and what a clause
      * costs is that many of them, no more and no less, so the bound is what reading a clause case
      * by case may cost, stated once.

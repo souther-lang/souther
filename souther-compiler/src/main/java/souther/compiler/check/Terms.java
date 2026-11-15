@@ -2,6 +2,10 @@ package souther.compiler.check;
 
 import souther.compiler.semantics.Accumulation;
 import souther.compiler.semantics.AnswerAspect;
+import net.unit8.notation199x.pattern.CodePoints;
+import souther.compiler.partition.CaseMaps;
+import souther.compiler.types.BindingOwner;
+import souther.compiler.semantics.CaseMapping;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
@@ -47,6 +51,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -1252,6 +1257,55 @@ final class Terms {
         };
     }
 
+    /** An operation applied to the arguments an expansion of it was handed, and where they are
+     *  read. */
+    record ExpandedApplication(AnOperationApplied applied, Denotations at) {}
+
+    /**
+     * The operation {@code e} is the expansion of, applied to what the expansion was handed — or
+     * null where {@code e} is not the result of an expansion of one.
+     *
+     * <p>An expansion binds each argument the call was handed, in the order the callee declares
+     * them, to a binding that belongs to the expansion ({@link BindingOwner.Expansion}), and the
+     * body of the callee follows. What the body does with them is the callee's own definition,
+     * and what its declaration states of the answer is stated of the arguments, which are read
+     * where the call was written: the bindings are not in scope where the answer is used, and the
+     * arguments are what they stand for.
+     */
+    ExpandedApplication expandedApplicationOf(Core e, Denotations at) {
+        return switch (e) {
+            case Core.Widen w -> expandedApplicationOf(w.value(), at);
+            case Core.Read r -> {
+                ValueStanding.ReadThrough<Denotations> given = at.givenTo(r.binding());
+                yield given == null || given.value() == e ? null
+                        : expandedApplicationOf(given.value(), given.at());
+            }
+            case Core.LetIn li when li.binder().binding().owner()
+                    instanceof BindingOwner.Expansion expansion -> {
+                Map<Integer, Core> handed = new TreeMap<>();
+                Core rest = li;
+                while (rest instanceof Core.LetIn each
+                        && each.binder().binding().owner().equals(expansion)) {
+                    handed.put(each.binder().binding().ordinal(), each.value());
+                    rest = each.body();
+                }
+                // The bindings of the owner run on into the ones the callee's body makes, numbered
+                // after the parameters; the arguments are the ones from the first, without a gap,
+                // and a law names a parameter by its place among them.
+                List<Core> args = new ArrayList<>();
+                for (Core one = handed.get(0); one != null; one = handed.get(args.size())) {
+                    args.add(one);
+                }
+                if (args.isEmpty()) {
+                    yield null;
+                }
+                yield new ExpandedApplication(
+                        new AnOperationApplied(expansion.expanded(), args), at);
+            }
+            case null, default -> null;
+        };
+    }
+
     static <A> LinearForm<A> negate(LinearForm<A> f) {
         return f == null ? null : f.negate();
     }
@@ -2426,9 +2480,19 @@ final class Terms {
             List<NumericConstraint> carried = new ArrayList<>(IntrinsicNumericFacts.ofSize(
                     size, built.value(), atom, built.at(), this));
             carried.addAll(sizesRelatedAtACall(built.value(), built.at()));
+            // What the operation this container is the expansion of says of how many it holds,
+            // said of the arguments the expansion was handed.
+            ExpandedApplication expanded = expandedApplicationOf(container, at);
+            if (expanded != null) {
+                carried.addAll(IntrinsicNumericFacts.ofTheSizeLaw(expanded.applied(), atom,
+                        expanded.at(), this));
+            }
             carrying(atom, carried);
-            Derivation held = IntrinsicNumericFacts.heldWhereItsLawsSay(built.value(), atom,
-                    built.at(), this);
+            Derivation held = expanded != null
+                    ? IntrinsicNumericFacts.heldWhereItsLawsSay(expanded.applied(), atom,
+                            expanded.at(), this)
+                    : IntrinsicNumericFacts.heldWhereItsLawsSay(built.value(), atom,
+                            built.at(), this);
             if (held != null) {
                 computedBy(atom, new AtomKnowledge.Computation.Derived(held));
             }
@@ -2896,7 +2960,51 @@ final class Terms {
     FactSubject codePointsAtomFor(Core string, CodePointClass counted, Denotations at) {
         return measureOfEach(string, null, at,
                 (of, _) -> interned.codePoints(of, counted),
-                atom -> carrying(atom, amongTheElements(atom, string, at)));
+                atom -> {
+                    List<NumericConstraint> carried = new ArrayList<>(
+                            amongTheElements(atom, string, at));
+                    carried.addAll(noMoreThanWhatWasConverted(atom, string, counted, at));
+                    carrying(atom, carried);
+                });
+    }
+
+    /**
+     * That the code point {@code counted} stands in {@code string}, a string made by case
+     * conversions, no more times than in the string they were done to: a code point the
+     * conversions leave, make of no other, and make nothing else into
+     * ({@link CaseMaps#makesNoOccurrenceOf}). Said of one written code point, and nothing of any
+     * class; a conversion is no map on the code points of a class in general.
+     */
+    private List<NumericConstraint> noMoreThanWhatWasConverted(FactSubject atom, Core string,
+                                                               CodePointClass counted,
+                                                               Denotations at) {
+        if (!(counted instanceof CodePointClass.OneOf(CodePoints held)) || held.size() != 1) {
+            return List.of();
+        }
+        List<ValueName> done = new ArrayList<>();
+        Core source = string;
+        for (AnOperationApplied applied = AnOperationApplied.of(source);
+             applied != null && CaseMapping.isAConversion(applied.operation());
+             applied = AnOperationApplied.of(source)) {
+            BoundOperationFacts.KeptCodePoints kept = DefaultBoundOperationFacts.get()
+                    .keepsWhetherItHoldsACodePointOf(applied.operation());
+            Core inner = kept == null ? null : applied.argument(kept.string());
+            if (inner == null) {
+                break;
+            }
+            done.add(applied.operation());
+            source = inner;
+        }
+        CaseMapping mapping = CaseMapping.NONE;
+        for (ValueName operation : done.reversed()) {
+            mapping = CaseMapping.applying(operation, mapping);
+        }
+        if (done.isEmpty() || !CaseMaps.makesNoOccurrenceOf(mapping, held.least())) {
+            return List.of();
+        }
+        FactSubject before = codePointsAtomFor(source, counted, at);
+        return before == null ? List.of() : List.of(new NumericConstraint(
+                LinearForm.difference(atom, before), Rel.LE));
     }
 
     /** What {@code container} and {@code closure} were given, each where it stands, as the values
