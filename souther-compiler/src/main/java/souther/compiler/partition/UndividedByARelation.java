@@ -4119,6 +4119,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // come to is asked of those, so a sequence that is no value is not a reason to leave one
         // open: a string of a value that has a value inside it is one too.
         Language mineLanguage = languageOf(mineHolds);
+        // A string both sides hold, with the same conversion done to both, is inside its own
+        // answer, which starts with it and ends with it: it is its own partner. So it is shown
+        // wherever the partner holds it, whatever the conversion is exact on.
+        if (standsInside && mineLanguage != null && mine.through().equals(theirs.through())) {
+            Language ownPartner = mineLanguage.and(partner, meter);
+            Language withThem = ownPartner == null ? null : canBe.or(ownPartner, meter);
+            if (withThem == null) {
+                return null;
+            }
+            canBe = withThem;
+        }
         Language mayBeValues = mineMap != null || mineLanguage == null ? null
                 : StringsInNormalFormC.within(mayBe.and(mineLanguage, meter), meter);
         if (mayBeValues != null) {
@@ -4149,7 +4160,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         ValueSet.matching(mayBe), boundedByWhatSurroundsIt ? upTo : null, called);
         // The strings of this side that stop its own conversion. What the partner's conversion
         // answers is another side's strings, which are the image and are said as such above.
-        return unlessItStopsAt(out.withTheImagesNotShownOf(operations),
+        // A string inside another is shown at every length its room leaves, so what is open of it
+        // is open for its image only where some of the strings that may be are not shown to be. An
+        // equality is shown at lengths said after this.
+        boolean imageIsWhy = !standsInside || !canBe.equals(mayBe);
+        return unlessItStopsAt(imageIsWhy ? out.withTheImagesNotShownOf(operations) : out,
                 List.of(new DoneTo(mine.through(), languageOf(mineHolds))));
     }
 

@@ -140,15 +140,17 @@ class ThePiecesThatReachARelationAreHeldToTheLanguageTheWayHoldsThemToTest {
     }
 
     /**
-     * What the conversion makes of a string is not shown for every string, and the report says
-     * so of the string the pieces are of: the classes are drawn over the strings it is shown for.
+     * What the conversion makes of a string is not shown for every string: it makes one longer
+     * than a string holds of some, which the run does not get past. The report says so of the
+     * string the pieces are of, as the classes are drawn over the strings it is shown for.
      */
     @Test
-    void theImageOfAConversionNotShownIsSaidOfTheStringTheClassesAreOver() {
+    void whereAConversionMayStopIsSaidOfTheStringTheClassesAreOver() {
         String report = reportOf(LOWERED);
         assertTrue(report.lines().anyMatch(line -> line.contains(
                 "which class this rule puts some values in at s")
-                && line.contains("the image of String.lowercase not shown")), report);
+                && line.contains("String.lowercase not shown to answer with no more code points"
+                        + " than a String holds")), report);
     }
 
     /**

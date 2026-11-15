@@ -133,13 +133,14 @@ class AStringRelationIsReadPastAGuardOnTheCodePointsOfAClassTest {
     }
 
     /** The guard on the length itself is the control, and it is still read as it was: open for
-     *  the strings that are short, said by a length and not by a count of a class. */
+     *  the strings that are short, said by a length and not by a count of a class. The string
+     *  looked in is any string, and each string is a partner of itself, so none of its strings is
+     *  open: whether it is left undivided is what is not shown. */
     @Test
     void aGuardOnTheLengthOfTheStringIsStillSaidByALength() {
         Compilation compilation = guarded("guard String.length(a) >= 1", CONTAINS);
         NavigableSet<String> reasons = aboutTheRelation(compilation);
         assertTrue(reasons.contains("relation_shown_over_a_region"), reasons::toString);
-        assertFalse(reasons.contains("relation_not_shown_to_reach_every_value"), reasons::toString);
         assertTrue(json(compilation).contains("\"shorterThan\" : 1"), () -> json(compilation));
         assertEquals(List.of(), openByCodePoints(compilation));
     }

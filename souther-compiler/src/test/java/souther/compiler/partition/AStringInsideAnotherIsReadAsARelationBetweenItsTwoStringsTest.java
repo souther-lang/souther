@@ -295,15 +295,16 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
         }
     }
 
-    /** The report names the function whose image over the strings is not shown, whichever case
-     *  mapping it is, and says nothing of the other. */
+    /** The report names the function a run may stop at, whichever case mapping it is, and says
+     *  nothing of the other. Both strings are any string, and each is its own partner, so what is
+     *  left open is the strings the function stops on. */
     @Test
     void theReportNamesTheFunctionWhoseImageIsNotShown() {
         String lower = reported("List.any(p -> String.contains(String.lowercase(i.businessCase),"
                 + " String.lowercase(p.value)), i.points)");
         String upper = reported("List.any(p -> String.contains(String.uppercase(i.businessCase),"
                 + " String.uppercase(p.value)), i.points)");
-        assertTrue(lower.contains("imagesNotShown"), lower);
+        assertTrue(lower.contains("notShownGottenPast"), lower);
         assertTrue(lower.contains("lowercase"), "lowercase is named");
         assertFalse(lower.contains("uppercase"), "only the function applied is named");
         assertTrue(upper.contains("uppercase"), "uppercase is named");
