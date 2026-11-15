@@ -845,14 +845,15 @@ class AProductOfTwoNumbersIsALineOnTheProductTest {
     }
 
     /**
-     * The total of the agreed lines is a call whose stops nothing says: its sums can pass the
-     * greatest {@code Int}. A membership after it is reached by a run only if that total comes
-     * out, and a row of the unit prices the total stops at is no witness there. It is what keeps
-     * the comparison from being shown reached.
+     * The total of the agreed lines may stop a run: its sums can pass the greatest {@code Int}.
+     * What it stops on is the agreed lines and the unit prices, through the names its step binds
+     * as much as through the ones it is handed, and the membership after it reads neither. A row
+     * where the total comes out is a witness for every value the membership reads, so the
+     * comparison is shown reached.
      */
     @Test
-    void aTotalWhoseStopsNothingSaysKeepsTheMembershipAfterItFromBeingShownReached() {
-        assertTrue(aPlanStopsABorderRunsThrough(aRefundPlanWith("0.0m", "")));
+    void aTotalWhoseStopsReadNothingTheMembershipAfterItReadsKeepsItNoRunFromBeingShownReached() {
+        assertTrue(!aPlanStopsABorderRunsThrough(aRefundPlanWith("0.0m", "")));
     }
 
     /**
