@@ -334,6 +334,34 @@ final class NearbyValues {
     }
 
     /**
+     * {@code value} with every scalar leaf it holds put as the first of {@code held} of the leaf's
+     * own kind, and a leaf none of them is of the kind of left as it was.
+     *
+     * <p>For an element of what a dependency answers to a call: what is looked up by what the call
+     * was made with is found among the values the call holds, so an element made of them is the one
+     * a lookup goes on to find.
+     */
+    static ObservedValue holding(ObservedValue value, Type type, RuleReadingContext reading,
+                                 List<ObservedValue> held) {
+        Leaves toTheHeld = (_, leaf, _, _, _) -> {
+            for (ObservedValue each : held) {
+                if (each.getClass() == leaf.getClass()) {
+                    return each.equals(leaf) ? none() : List.of(each).iterator();
+                }
+            }
+            return none();
+        };
+        ObservedValue current = value;
+        Iterator<ObservedValue> next = of(current, type, reading, null, List.of(), toTheHeld);
+        // One leaf at a time, and each is put as a value it then is, so the walk ends.
+        while (next.hasNext()) {
+            current = next.next();
+            next = of(current, type, reading, null, List.of(), toTheHeld);
+        }
+        return current;
+    }
+
+    /**
      * The values {@code value}, the one a run had at {@code parameter}, becomes where a string it
      * holds is put as a string a body parts into pieces that are all ones it builds a newtype of
      * ({@link PieceDemand}), and everything else stays as it was.

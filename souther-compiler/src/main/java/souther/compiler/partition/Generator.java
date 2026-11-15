@@ -63,6 +63,7 @@ import souther.compiler.types.ReachName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.TypeReachName;
+import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -1758,9 +1759,9 @@ public final class Generator {
         return switch (stood) {
             case AnswersStoodIn.NothingComposed(var why) ->
                     FillResult.nothingWasLookedFor(plan, why, List.of());
-            case AnswersStoodIn.Stood(var answers) ->
+            case AnswersStoodIn.Stood(var answers, var answering) ->
                     filling(plan, existing, check, read, runningOnce(trial), baselines, answers,
-                            holding, unanswered, budget);
+                            answering, holding, unanswered, budget);
         };
     }
 
@@ -1769,7 +1770,9 @@ public final class Generator {
                                       CandidateCheck check,
                                       souther.compiler.reading.CoverageRead.Read read,
                                       RunOnce trial, List<Baseline> baselines,
-                                      List<StoodInAnswer> answers, HeldOutcome.Of holding,
+                                      List<StoodInAnswer> answers,
+                                      Map<ValueName.Behavior, MeasuredInput> answering,
+                                      HeldOutcome.Of holding,
                                       WhereNothingIsAnswered unanswered,
                                       AdequacyPolicy.OfTheGeneration budget) {
         MeasuredInput subject = plan.subject();
@@ -2364,7 +2367,9 @@ public final class Generator {
                 // then by two is asked first. Then a row in each class of each position, as for a
                 // body answering one value: a walk over a list the rows hold fixed parts from its
                 // rewrite where the value its step reads lies, which is what the classes divide.
-                // And last a row with one position moved.
+                // And last a row with one position moved, and a row standing a dependency in with
+                // an answer that holds more elements. Where the walk is over no list of the input,
+                // the classes and the positions moved come before the lists are grown.
                 case ReplacementOwed.OfAWalk walk -> {
                     List<Purpose> purposes = List.of(new Purpose.ForAReplacement(asked));
                     // A candidate grown from each of the first rows in turn, the rows holding the
@@ -2415,12 +2420,20 @@ public final class Generator {
                     // lists are: a walk over a list no input holds is not told by the input.
                     Predicate<List<ObservedValue>> takesASecondStep = row -> walk.over().isEmpty()
                             || elementsWalked(row, walk.over(), axes.subject()) >= 2;
+                    // And beside each row, a dependency answering a list of its own that holds
+                    // more elements. After what is looked for in the inputs: a row that moves what
+                    // the input holds is one the dependency's table answers as it is, where this
+                    // changes what every row is answered with.
+                    Examining answered = new Examining(looking);
+                    List<Iterator<GeneratedRow>> answeredLast = new ArrayList<>();
                     List<Iterator<GeneratedRow>> grownFromEach = new ArrayList<>();
                     List<Iterator<GeneratedRow>> grownFromTheRest = new ArrayList<>();
                     for (int at = 0; at < from.size(); at++) {
                         List<ObservedValue> each = from.get(at);
                         List<Iterator<GeneratedRow>> into =
                                 at < ROWS_GROWN_IN_TURN ? grownFromEach : grownFromTheRest;
+                        answeredLast.addAll(candidatesAnswering(each, axes.subject(), answering,
+                                purposes, check, answers, walk.ranWith(), looking, answered));
                         into.add(candidatesBeside(each, axes, purposes, check, answers,
                                 growing, lists, takesASecondStep));
                         into.add(candidatesBeside(each, axes, purposes, check, answers,
@@ -2432,31 +2445,50 @@ public final class Generator {
                         into.add(piecesDemanded(each, axes, purposes, looking, check,
                                 answers, read.piecesAttempted(), pieces));
                     }
-                    GeneratedRow seen = taking(looking, grownFromEach);
-                    for (int at = 0; at < axes.size() && seen == null; at++) {
-                        if (!looking.scope().moves(axes.get(at))) {
-                            continue;
-                        }
-                        for (int cls = 0; cls < axes.get(at).classes().size(); cls++) {
-                            Pins pins = Pins.of(axes, Map.of(at, cls));
-                            seen = looking.tookFromSearching(() -> search(axes, pins, purposes,
-                                    origins, (_, _) -> true, check, references, answers,
-                                    HeldTogether.Asked.NOTHING, row -> looking.of(row, null), true,
-                                    looking.scope(), goingOn.answersNothing()));
-                            if (seen != null) {
-                                break;
+                    Supplier<GeneratedRow> inEachClass = () -> {
+                        for (int at = 0; at < axes.size(); at++) {
+                            if (!looking.scope().moves(axes.get(at))) {
+                                continue;
+                            }
+                            for (int cls = 0; cls < axes.get(at).classes().size(); cls++) {
+                                Pins pins = Pins.of(axes, Map.of(at, cls));
+                                GeneratedRow inTheClass = looking.tookFromSearching(
+                                        () -> search(axes, pins, purposes, origins,
+                                                (_, _) -> true, check, references, answers,
+                                                HeldTogether.Asked.NOTHING,
+                                                row -> looking.of(row, null), true,
+                                                looking.scope(), goingOn.answersNothing()));
+                                if (inTheClass != null) {
+                                    return inTheClass;
+                                }
                             }
                         }
-                    }
+                        return null;
+                    };
+                    Iterator<GeneratedRow> moved = inOrder(through, at -> movedFrom(from.get(at),
+                            axes, purposes, looking, check, answers));
                     List<Iterator<GeneratedRow>> last = new ArrayList<>(grownFromTheRest);
-                    last.add(inOrder(through, at -> movedFrom(from.get(at), axes, purposes,
-                            looking, check, answers)));
                     if (growingAny != null) {
                         last.add(inOrder(through, at -> candidatesBeside(from.get(at), axes,
                                 purposes, check, answers, growingAny, everyList,
                                 takesASecondStep)));
                     }
-                    yield seen != null ? seen : taking(looking, last);
+                    // Where no list of the input is the one the walk goes over, growing the lists
+                    // the input holds is not where a second step is made: what the step compares
+                    // is a position of the input, so the classes and the positions moved come
+                    // before the lists are grown.
+                    GeneratedRow seen;
+                    if (walk.over().isEmpty()) {
+                        seen = inEachClass.get();
+                        seen = seen != null ? seen : taking(looking, List.of(moved));
+                        seen = seen != null ? seen : taking(looking, grownFromEach);
+                    } else {
+                        seen = taking(looking, grownFromEach);
+                        seen = seen != null ? seen : inEachClass.get();
+                        last.add(grownFromTheRest.size(), moved);
+                    }
+                    seen = seen != null ? seen : taking(looking, last);
+                    yield seen != null ? seen : taking(looking, answeredLast);
                 }
                 case ReplacementOwed.ByOneAnswer one -> {
                     // Where the composition stands before anything is asked of it first: a body
@@ -2653,7 +2685,12 @@ public final class Generator {
     private static Growth aListGrownAmong(InputsRowsRanWith ranWith, MeasuredInput subject,
                                           CandidateCheck check, ReplacementWitness looking,
                                           NearbyValues.Put where) {
-        return aListGrownAmong(ranWith, subject, check, new ElementsOfAType.Stops() {
+        return aListGrownAmong(ranWith, subject, check, saidTo(looking), where, MOST_REPAIRS);
+    }
+
+    /** Where what stopped the making of a type's values is said: to the search that asked. */
+    private static ElementsOfAType.Stops saidTo(ReplacementWitness looking) {
+        return new ElementsOfAType.Stops() {
 
             @Override
             public void met(CompositionShortfall shortfall) {
@@ -2665,21 +2702,32 @@ public final class Generator {
                 looking.composingStopped(List.of(
                         WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(most)));
             }
-        }, where, MOST_REPAIRS);
+        };
     }
 
     private static Growth aListGrownAmong(InputsRowsRanWith ranWith, MeasuredInput subject,
                                           CandidateCheck check, ElementsOfAType.Stops stops,
                                           NearbyValues.Put where, int most) {
-        // What stands for a type is the same for every row and list the search grows, so it is one
-        // for the search and made as far as the search asks, its stops said as they are met. A
-        // type's values are bounded as a composing's candidates are, and the bound is said as that
-        // figure.
-        ElementsOfAType elements = new ElementsOfAType(
+        return grownAmong(standingFor(subject, check, stops, most), ranWith, where);
+    }
+
+    /**
+     * What stands for a type at {@code subject}. The same for every row and list the search grows,
+     * so it is one for the search and made as far as the search asks, its stops said as they are
+     * met. A type's values are bounded as a composing's candidates are, and the bound is said as
+     * that figure.
+     */
+    private static ElementsOfAType standingFor(MeasuredInput subject, CandidateCheck check,
+                                               ElementsOfAType.Stops stops, int most) {
+        return new ElementsOfAType(
                 standingFor -> subject.representativesHolding(standingFor,
                         FieldDomains.ConstructionLimits.NONE),
                 ofOne -> ElementsOfAType.withOneElement(ofOne, subject.ruleReading()),
                 subject.ruleReading(), check, most, stops);
+    }
+
+    private static Growth grownAmong(ElementsOfAType elements, InputsRowsRanWith ranWith,
+                                     NearbyValues.Put where) {
         return (value, type, reading, which, within) -> within == null
                 ? NearbyValues.grown(value, type, reading, ranWith, elements::of, where, which)
                 : NearbyValues.grownWithin(value, type, reading, ranWith, elements::of, where,
@@ -2829,6 +2877,9 @@ public final class Generator {
 
         private final Runnable whenSpent;
 
+        /** What is done when a rule of a position refuses a candidate this made. */
+        private final Runnable whenRefused;
+
         private int left;
 
         private boolean said;
@@ -2836,7 +2887,7 @@ public final class Generator {
         private Examining(ReplacementWitness looking) {
             this(MOST_REPAIRS, () -> looking.composingStopped(
                     List.of(WorkFigure.CANDIDATES_A_REPAIR_BUILDS.at(MOST_REPAIRS))),
-                    looking.scope());
+                    looking.scope(), looking::refusedByARule);
         }
 
         private final RowsBesideBudget shared;
@@ -2844,11 +2895,12 @@ public final class Generator {
         /** Which parameters a candidate may move. */
         private final MoveScope scope;
 
-        private Examining(int most, Runnable whenSpent, MoveScope scope) {
+        private Examining(int most, Runnable whenSpent, MoveScope scope, Runnable whenRefused) {
             this.left = most;
             this.whenSpent = whenSpent;
             this.shared = null;
             this.scope = scope;
+            this.whenRefused = whenRefused;
         }
 
         private Examining(RowsBesideBudget shared) {
@@ -2856,6 +2908,12 @@ public final class Generator {
             this.whenSpent = () -> { };
             this.shared = shared;
             this.scope = MoveScope.EVERYTHING;
+            this.whenRefused = () -> { };
+        }
+
+        /** A candidate this made was refused by the rule of the position it stands at. */
+        void refused() {
+            whenRefused.run();
         }
 
         /** Whether a candidate may move the value of the parameter {@code name}. */
@@ -3097,11 +3155,14 @@ public final class Generator {
                     if (ObservedFixtures.of(near, subject.types().get(moved),
                             subject.ruleReading())
                             instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
-                                    FixtureTemplate value)
-                            && check.refuse(moved, value).isEmpty()) {
-                        List<FixtureTemplate> inputs = new ArrayList<>(kept);
-                        inputs.set(moved, value);
-                        next = new GeneratedRow(purposes, inputs, answers);
+                                    FixtureTemplate value)) {
+                        if (check.refuse(moved, value).isEmpty()) {
+                            List<FixtureTemplate> inputs = new ArrayList<>(kept);
+                            inputs.set(moved, value);
+                            next = new GeneratedRow(purposes, inputs, answers);
+                        } else {
+                            examining.refused();
+                        }
                     }
                 }
                 return next != null;
@@ -3115,6 +3176,123 @@ public final class Generator {
                 GeneratedRow out = next;
                 next = null;
                 return out;
+            }
+        };
+    }
+
+    /**
+     * The inputs of a row a run was seen with, each beside the row standing one dependency in with
+     * an answer of its own that holds more elements.
+     *
+     * <p>A walk over a list a dependency answers is handed a second element by what the dependency
+     * answers, which no input holds. The answer is a value of its type's, grown as an input's list
+     * is — by one element and then by two — so what the search tries is how many elements the walk
+     * takes and which; whether a candidate tells a rewrite apart is what running it says.
+     *
+     * <p>One iterator for each dependency a position stands at the answer of, so that a search
+     * taking its candidates in turn does not spend them all on the first.
+     */
+    private static List<Iterator<GeneratedRow>> candidatesAnswering(
+            List<ObservedValue> seen, MeasuredInput subject,
+            Map<ValueName.Behavior, MeasuredInput> answering, List<Purpose> purposes,
+            CandidateCheck check, List<StoodInAnswer> answers, InputsRowsRanWith ranWith,
+            ReplacementWitness looking, Examining examining) {
+        List<FixtureTemplate> kept = new ArrayList<>();
+        for (int p = 0; p < seen.size(); p++) {
+            if (!(ObservedFixtures.of(seen.get(p), subject.types().get(p), subject.ruleReading())
+                    instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                            FixtureTemplate value))) {
+                return List.of();
+            }
+            kept.add(value);
+        }
+        List<InputsRowsRanWith.Taken> taken = new ArrayList<>();
+        for (int p = 0; p < seen.size(); p++) {
+            InputsRowsRanWith.takenAt(subject.types().get(p), seen.get(p),
+                    subject.ruleReading().source(), taken);
+        }
+        List<ObservedValue> valuesHeld = taken.stream().map(InputsRowsRanWith.Taken::value).toList();
+        List<Iterator<GeneratedRow>> out = new ArrayList<>();
+        for (int at = 0; at < answers.size(); at++) {
+            ValueName.Behavior dependency = answers.get(at).dependency();
+            MeasuredInput answered = answering.get(dependency);
+            if (answered == null) {
+                continue;
+            }
+            Type type = answered.types().getFirst();
+            RuleReadingContext reading = answered.ruleReading();
+            ElementsOfAType elements = standingFor(answered, check, saidTo(looking), MOST_REPAIRS);
+            // An element made of what the row holds comes before the ones the type stands for: an
+            // answer is looked up by what the call was made with, which is the row's.
+            Function<Type, Iterator<ObservedValue>> madeOf = element -> {
+                Iterator<ObservedValue> own = elements.of(element);
+                if (!own.hasNext()) {
+                    return own;
+                }
+                ObservedValue held = NearbyValues.holding(own.next(), element, reading, valuesHeld);
+                return NearbyValues.flat(List.of(List.of(held).iterator(), elements.of(element))
+                        .iterator(), Function.identity());
+            };
+            Growth growth = (value, of, how, which, within) -> NearbyValues.grown(value, of, how,
+                    ranWith, madeOf, NearbyValues.Put.BEFORE_AND_AFTER, which);
+            Beside growing = grownTwice(growth, List.of());
+            Iterator<ObservedValue> grown = NearbyValues.flat(theFirstOf(elements.of(type)),
+                    start -> growing.of(start, type, reading, answered.parameters().getFirst()));
+            int standing = at;
+            out.add(new Iterator<>() {
+
+                private GeneratedRow next;
+
+                @Override
+                public boolean hasNext() {
+                    while (next == null && grown.hasNext()) {
+                        ObservedValue near = grown.next();
+                        if (!examining.oneMore()) {
+                            return false;
+                        }
+                        if (ObservedFixtures.of(near, type, reading)
+                                instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
+                                        FixtureTemplate value)) {
+                            List<StoodInAnswer> stood = new ArrayList<>(answers);
+                            stood.set(standing, new StoodInAnswer.OnTheRow(dependency, value));
+                            next = new GeneratedRow(purposes, kept, stood);
+                        }
+                    }
+                    return next != null;
+                }
+
+                @Override
+                public GeneratedRow next() {
+                    if (!hasNext()) {
+                        throw new NoSuchElementException();
+                    }
+                    GeneratedRow row = next;
+                    next = null;
+                    return row;
+                }
+            });
+        }
+        return out;
+    }
+
+    /** The first of {@code values}, asked for when it is reached. */
+    private static <A> Iterator<A> theFirstOf(Iterator<A> values) {
+        return new Iterator<>() {
+
+            private boolean taken;
+
+            @Override
+            public boolean hasNext() {
+                return !taken && values.hasNext();
+            }
+
+            @Override
+            public A next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                taken = true;
+                return values.next();
             }
         };
     }
@@ -6681,7 +6859,7 @@ public final class Generator {
         // Only where a row can be run: one nothing stands the dependencies in for is no row
         // anything applies.
         RowPreference preferring =
-                stood.outcome() instanceof AnswersStoodIn.Stood(var answers)
+                stood.outcome() instanceof AnswersStoodIn.Stood(var answers, _)
                         ? judge.<RowPreference>map(each -> each.refusesAbsolutely()
                                         ? new ReachingWhatIsJudged(each, answers, trial)
                                         : new TellingArmsApart(trial, answers, each))
@@ -6907,7 +7085,7 @@ public final class Generator {
             // person cannot run is not a row this composed.
             case AnswersStoodIn.NothingComposed(var why) -> new BoundaryAttempt.Unresolved(
                     new UnresolvedCombination(List.of(label), why), where.unrepresented());
-            case AnswersStoodIn.Stood(var answers) -> new BoundaryAttempt.Built(
+            case AnswersStoodIn.Stood(var answers, _) -> new BoundaryAttempt.Built(
                     new GeneratedRow(List.of(new Purpose.ForAPoint(label)), inputs, answers),
                     where.unrepresented(), refusedOnly);
         };
@@ -10953,6 +11131,16 @@ public final class Generator {
             if (!met.figures().isEmpty()) {
                 composingStopped(asFigures(met.figures()));
             }
+        }
+
+        /**
+         * A candidate was refused by the rule of the position it stands at. Said of a search that
+         * found nothing: the values a rule admits are not read, so what it refused was not
+         * replaced by what it admits.
+         */
+        void refusedByARule() {
+            stopped.putIfAbsent(ReplacementDisposition.Ended.A_RULE_REFUSED_A_CANDIDATE,
+                    ReplacementDisposition.Met.AT_NO_FIGURE);
         }
 
         /** Composing the rows the search looked through stopped at {@code figure}. */

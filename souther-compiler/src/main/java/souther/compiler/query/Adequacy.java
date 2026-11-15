@@ -7068,7 +7068,7 @@ public final class Adequacy {
                                             Generator.UnresolvedCombination.Reason
                                                     .NO_CERTIFIED_WITNESS;
                                     case RUNS_A_REWRITE_MAY_TAKE, A_FIGURE_OF_THE_COMPOSING,
-                                         A_RUN_DID_NOT_COME_BACK ->
+                                         A_RUN_DID_NOT_COME_BACK, A_RULE_REFUSED_A_CANDIDATE ->
                                             Generator.UnresolvedCombination.Reason
                                                     .THE_SEARCH_LEFT_SOMETHING_UNTRIED;
                                     case ROWS_A_BLOCK_MAY_HOLD ->

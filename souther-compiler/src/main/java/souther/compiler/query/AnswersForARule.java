@@ -135,10 +135,26 @@ record AnswersForARule(RequiredDependencies requires,
                 stood.add(each.stood());
                 evidence = evidence.and(each.evidence());
             }
-            out.add(new StandInAttempt(new AnswersStoodIn.Stood(stood),
+            out.add(new StandInAttempt(new AnswersStoodIn.Stood(stood, answering()),
                     account(demanded, evidence)));
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * The position an answer of each dependency is a value at, for the dependencies whose answer is
+     * one value of one type. An answer that is a union of cases is no one position's value, so it
+     * has none.
+     */
+    private Map<ValueName.Behavior, MeasuredInput> answering() {
+        Map<ValueName.Behavior, MeasuredInput> out = new LinkedHashMap<>();
+        for (RequiredDependencies.Required each : requires.inOrder()) {
+            MeasuredInput subject = subjectOf(each.dependency());
+            if (subject != null) {
+                out.put(each.dependency(), subject);
+            }
+        }
+        return out;
     }
 
     /**

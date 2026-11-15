@@ -1,0 +1,152 @@
+package souther.compiler;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.diag.SourceRendering;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+/**
+ * A rewrite of a walk over a list that only a dependency's answer holds is decided where a row
+ * stands the dependency in with an answer of more elements than the module's table gives.
+ *
+ * <p>The table answers one element however it is asked, so no row run against it takes a second
+ * step of the walk, and growing the inputs does not change that. What the walk goes over is what
+ * the dependency answers, so that is what a candidate changes.
+ */
+class AWalkOverWhatADependencyAnswersIsToldApartTest {
+
+    private static final String STOCK = """
+            module repro.stock
+
+            data Stock = { sku: String, qty: Int }
+
+            behavior readStock : (sku: String) -> List<Stock>
+
+            behavior available : (sku: String, want: Int) -> Bool
+                depends on readStock
+
+            let available (sku, want, readStock) =
+                List.indexBy(.sku, readStock(sku))
+                    |> Map.get(sku)
+                    |> Option.map(s -> s.qty >= want)
+                    |> Option.withDefault(false)
+
+            fake readStock
+                | _ -> [ Stock { sku = "apple", qty = 3 } ]
+
+            example available
+                | "enough" : ("apple", 2) -> true
+                | "too many" : ("apple", 5) -> false
+                | "unknown" : ("pear", 1) -> false
+            """;
+
+    @Test
+    void aTableAnsweringOneElementDoesNotLeaveTheRewritesOpen() {
+        assertEquals(List.of(), undecided(measured(STOCK)));
+    }
+
+    /**
+     * What tells the rewrite apart is a value in the answer the table gives that no row asks
+     * about as it stands: the elements are made of what the row holds, so the row that asks about
+     * "plum" is stood a dependency answering "plum".
+     */
+    @Test
+    void aTableAnsweringTwoElementsAndARowAskingForNeitherIsDecided() {
+        String source = STOCK
+                .replace("| _ -> [ Stock { sku = \"apple\", qty = 3 } ]",
+                        "| _ -> [ Stock { sku = \"apple\", qty = 3 }, Stock { sku = \"pear\", qty = 1 } ]")
+                .replace("| \"unknown\" : (\"pear\", 1) -> false",
+                        "| \"unknown\" : (\"plum\", 1) -> false");
+
+        assertEquals(List.of(), undecided(measured(source)));
+    }
+
+    /**
+     * A list the input holds that the walk does not go over is not where a second step is looked
+     * for: the date the schedule is read at is what the step compares, and it is moved before the
+     * lists are grown.
+     */
+    @Test
+    void aListTheWalkDoesNotGoOverIsNotGrownBeforeThePositionTheStepCompares() {
+        String source = """
+                module repro.schedule
+
+                data Category = Standard | Reduced
+
+                data Change = { from: Int, rate: Int }
+
+                data Item = { name: String, qty: Int }
+
+                behavior scheduleOf : (k: Category) -> List<Change>
+
+                behavior rateOn : (k: Category, items: List<Item>, on: Int) -> Int
+                    depends on scheduleOf
+
+                let rateOn (k, items, on, scheduleOf) =
+                    List.length(items) + (List.filter(c -> c.from <= on, scheduleOf(k))
+                        |> List.reverse |> List.get(0) |> Option.map(.rate) |> Option.withDefault(0))
+
+                fake scheduleOf
+                    | (Standard) -> [ Change { from = 10, rate = 3 }, Change { from = 20, rate = 5 }, Change { from = 30, rate = 8 } ]
+                    | (Reduced) -> [ Change { from = 30, rate = 4 } ]
+
+                example rateOn
+                    | "late" : (Standard, [ Item { name = "a", qty = 1 } ], 40) -> 9
+                    | "before" : (Reduced, [ Item { name = "a", qty = 1 }, Item { name = "b", qty = 2 } ], 29) -> 2
+                    | "none" : (Reduced, [ ], 29) -> 0
+                """;
+
+        assertEquals(List.of(), undecided(measured(source)));
+    }
+
+    /** A walk over a list of the input is left to the input: the answer is not what it goes over. */
+    @Test
+    void aWalkOverAnInputIsStillDecidedByTheInput() {
+        String source = """
+                module repro.inputs
+
+                data Stock = { sku: String, qty: Int }
+
+                behavior readStock : (sku: String) -> Int
+
+                behavior total : (lines: List<Stock>, sku: String) -> Int
+                    depends on readStock
+
+                let total (lines, sku, readStock) =
+                    List.sum(List.map(l -> l.qty + readStock(sku), lines))
+
+                fake readStock
+                    | _ -> 1
+
+                example total
+                    | "none" : ([ ], "a") -> 0
+                    | "one" : ([ Stock { sku = "a", qty = 2 } ], "a") -> 3
+                    | "two" : ([ Stock { sku = "a", qty = 2 }, Stock { sku = "b", qty = 4 } ], "a") -> 8
+                """;
+
+        assertEquals(List.of(), undecided(measured(source)));
+    }
+
+    private static List<String> undecided(Compilation compilation) {
+        return page(compilation).lines().map(String::strip)
+                .filter(line -> line.startsWith("? not decided whether a row would come out"))
+                .toList();
+    }
+
+    private static String page(Compilation compilation) {
+        return AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    private static Compilation measured(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        return ACompiledModel.compiles(compilation);
+    }
+}
