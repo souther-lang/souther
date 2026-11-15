@@ -2216,8 +2216,8 @@ public final class Generator {
                 // And where that came to nothing, the relations the decisions state of the input's
                 // numbers are what a row is composed to meet: they are in no class, so no cell
                 // says where such a row is.
-                if (tried instanceof Witness.Exhausted exhausted) {
-                    tried = heldToTheDecisions(exhausted, axes, at, check, trial, purpose,
+                if (tried instanceof Witness.Exhausted || tried instanceof Witness.Limited) {
+                    tried = heldToTheDecisions(tried, axes, at, check, trial, purpose,
                             holding, origins, references, answers);
                 }
                 switch (tried) {
@@ -11217,11 +11217,12 @@ public final class Generator {
          * did, which cuts a walk short at no figure at all.
          */
         record Limited(List<String> classes, SearchShortfall found, List<Figure> boundsReached,
-                       boolean metARunNothingWatched)
+                       boolean metARunNothingWatched, Set<CompositionBudget> planCut)
                 implements Witness {
 
             public Limited {
                 boundsReached = Figure.inOrder(boundsReached);
+                planCut = Set.copyOf(planCut);
             }
 
             /**
@@ -11229,9 +11230,10 @@ public final class Generator {
              * whatever the candidates it did try came to, and beside it what they found out.
              */
             CameToNothing cameToNothing() {
-                return found.published(classes,
+                CameToNothing came = found.published(classes,
                         UnresolvedCombination.Reason.THE_SEARCH_LEFT_SOMETHING_UNTRIED, null,
                         Optional.empty());
+                return new CameToNothing(came.why(), came.met(), planCut);
             }
         }
     }
@@ -11312,7 +11314,7 @@ public final class Generator {
      * decisions that were left unlooked at may be the ones that make the combination, so where no
      * row was found the search is said to have stopped, and at which figure.
      */
-    private static Witness heldToTheDecisions(Witness.Exhausted tried,
+    private static Witness heldToTheDecisions(Witness tried,
                                               MeasuredInput.MeasuredAxes axes,
                                               CellSelection selection, CandidateCheck check,
                                               RunOnce trial, List<Purpose> purpose,
@@ -11359,13 +11361,12 @@ public final class Generator {
         if (cutShort.isEmpty()) {
             return result;
         }
-        SearchShortfall stoppedAt = SearchShortfall.of(CompositionShortfall.of(cutShort));
         return switch (result) {
             case Witness.Limited limited -> new Witness.Limited(limited.classes(),
-                    limited.found().and(stoppedAt), limited.boundsReached(),
-                    limited.metARunNothingWatched());
+                    limited.found(), limited.boundsReached(), limited.metARunNothingWatched(),
+                    cutShort);
             case Witness.Exhausted exhausted -> new Witness.Limited(exhausted.classes(),
-                    exhausted.found().and(stoppedAt), List.of(), false);
+                    exhausted.found(), List.of(), false, cutShort);
             case Witness.Certified _, Witness.Unconfirmed _, Witness.NoCombination _ -> result;
         };
     }
@@ -12346,7 +12347,7 @@ public final class Generator {
                 // stands for a space this never entered.
                 case Completeness.Nothing.SEARCH_STOPPED ->
                         new Witness.Limited(named, foundOut, Figure.inOrder(boundsReached),
-                                metARunNothingWatched);
+                                metARunNothingWatched, Set.of());
                 // Every one of these carries what every candidate found out and not what the
                 // candidate whose word is said found out. Rows that went somewhere else are not
                 // every row the readings had where an offer was short of a rule, and the rule is
