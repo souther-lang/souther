@@ -99,34 +99,38 @@ class TheMonthADateIsMovedIntoIsARemainderOfItsMonthTest {
         assertEquals(List.of(), everyRunStops("", "Date.month(Date.addMonths(0, d)) == 3"));
     }
 
-    /** The year and the day a move lands on are not read as the month is, nor as anything: no line
-     *  is drawn and the date stays unread. */
+    /** The day a move lands on is read in the cases the calendar tells apart, as a line on the
+     *  date's own day, and neither it nor the year is stopped for being a date moved by months. */
     @Test
-    void theYearAndTheDayAreNotReadAsTheMonthIs() {
-        for (String compared : List.of("Date.year(Date.addMonths(1, d)) >= 2027",
-                "Date.day(Date.addMonths(1, d)) >= 29")) {
-            assertEquals(Set.of(), linesOf("", compared), compared);
-            assertTrue(notRead("", compared).contains("d"), compared);
-        }
+    void theYearAndTheDayAreReadInTheCasesTheCalendarTellsApart() {
+        assertEquals(Set.of("Date.day(d) 29"), linesOf("", "Date.day(Date.addMonths(1, d)) >= 29"));
+        assertFalse(notRead("", "Date.day(Date.addMonths(1, d)) >= 29").contains("d"));
+        assertFalse(human("", "Date.year(Date.addMonths(1, d)) >= 2027")
+                .contains("a date moved by months"));
     }
 
     /**
      * A comparison of the date a move answers is stopped for the move, for being a date no form of
-     * the one it moves, wherever the move is written: in the comparison, behind a name, inside a
-     * remainder, or in a function it is handed to. Each is sent to the call it stopped at, which
-     * is the move, or the remainder the move is read through, written in place or behind a name
-     * alike.
+     * the one it moves, where it is moved by more months than the cases the calendar tells apart
+     * are read for, wherever the move is written: in the comparison, behind a name, inside a
+     * remainder, or in a function it is handed to. Each is sent to the call it stopped at, which is the move, or the remainder the move is
+     * read through, written in place or behind a name alike.
      */
     @Test
     void theDateAMoveAnswersIsStoppedForTheMoveWhereverItIsWritten() {
+        // More months than the cases the calendar tells apart are read for.
+        String months = "100";
         String[][] written = {
-                {"", "Date.daysBetween(c, Date.addMonths(1, d)) >= 3", "Date.addMonths"},
-                {"let e = Date.addMonths(1, d)", "Date.daysBetween(c, e) >= 3", "Date.addMonths"},
-                {"", "Int.floorMod(Date.daysBetween(c, Date.addMonths(1, d)), 7) >= 1",
-                        "Int.floorMod(Date.daysBetween(c, Date"},
-                {"let e = Date.addMonths(1, d)", "Int.floorMod(Date.daysBetween(c, e), 7) >= 1",
+                {"", "Date.daysBetween(c, Date.addMonths(" + months + ", d)) >= 3",
+                        "Date.addMonths"},
+                {"let e = Date.addMonths(" + months + ", d)", "Date.daysBetween(c, e) >= 3",
+                        "Date.addMonths"},
+                {"", "Int.floorMod(Date.daysBetween(c, Date.addMonths(" + months + ", d)), 7)"
+                        + " >= 1", "Int.floorMod(Date.daysBetween(c, Date"},
+                {"let e = Date.addMonths(" + months + ", d)",
+                        "Int.floorMod(Date.daysBetween(c, e), 7) >= 1",
                         "Int.floorMod(Date.daysBetween(c, e)"},
-                {"", "weekday(c, Date.addMonths(1, d)) >= 1",
+                {"", "weekday(c, Date.addMonths(" + months + ", d)) >= 1",
                         "Int.floorMod(Date.daysBetween(c, d)"}};
         for (String[] each : written) {
             String human = human(each[0], each[1]);

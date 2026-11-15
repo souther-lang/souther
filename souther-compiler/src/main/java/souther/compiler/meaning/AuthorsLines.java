@@ -4,6 +4,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * What a reading of a comparison says of the lines its author drew: which of them each relation
@@ -22,14 +23,25 @@ import java.util.Objects;
  *                   stands to each
  * @param taken      for each line, where a row takes every arm it is under; a line under no arm
  *                   is taken wherever the comparison is
+ * @param onlySelectingCases the relations that were made only inside what selects a case of a
+ *                   definition the library writes an operation in. Such a relation says which case
+ *                   a reading is in, which stays part of what the statement comes to, and is no
+ *                   comparison its author wrote: it draws no line of its own
  */
 public record AuthorsLines(Map<Spelling, Map<WrittenLine, AuthoredPointMapping>> byRelation,
-                           Map<WrittenLine, Proposition> taken) {
+                           Map<WrittenLine, Proposition> taken,
+                           Set<Spelling> onlySelectingCases) {
 
     public AuthorsLines {
         Objects.requireNonNull(byRelation, "a reading says which lines each relation is a place of");
         byRelation = Collections.unmodifiableMap(new LinkedHashMap<>(byRelation));
         taken = Collections.unmodifiableMap(new LinkedHashMap<>(taken));
+        onlySelectingCases = Set.copyOf(onlySelectingCases);
+    }
+
+    /** Whether {@code relation} only says which case of a library's definition a reading is in. */
+    public boolean selectsOnlyACase(Spelling relation) {
+        return onlySelectingCases.contains(relation);
     }
 
     /** The lines {@code relation} is a place of and how it stands to each, or null where the

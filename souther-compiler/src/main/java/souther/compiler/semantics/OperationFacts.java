@@ -350,6 +350,7 @@ public final class OperationFacts {
             about("Date", "addMonths", new OperationFact.MovesADateByMonths(at(0), at(1),
                     ValueName.Stdlib.operation("Date", "year"),
                     ValueName.Stdlib.operation("Date", "month"),
+                    ValueName.Stdlib.operation("Date", "day"),
                     ValueName.Stdlib.operation("Int", "floorMod"))),
 
             // The operations answering the order of their two arguments as the sign of a number.

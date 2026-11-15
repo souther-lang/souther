@@ -133,6 +133,7 @@ public sealed interface OperationFact {
      */
     record MovesADateByMonths(ArgumentRef months, ArgumentRef date,
                               ValueName.Stdlib.Operation year, ValueName.Stdlib.Operation month,
+                              ValueName.Stdlib.Operation day,
                               ValueName.Stdlib.Operation remainder)
             implements OperationFact {
 
@@ -141,6 +142,7 @@ public sealed interface OperationFact {
             Objects.requireNonNull(date, "and moves a date");
             Objects.requireNonNull(year, "counted by the year it falls in");
             Objects.requireNonNull(month, "and the month");
+            Objects.requireNonNull(day, "and the day of it, which a shorter month lands on its last");
             Objects.requireNonNull(remainder, "and lands in the month a remainder says");
         }
     }

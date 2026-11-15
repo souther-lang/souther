@@ -2804,8 +2804,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         : AStatementAtARow.askableBesideItsRelations(stated)))) {
             return TheParts.READ_TO_THE_END;
         }
+        // A relation that only says which case of a library's definition a reading is in stays in
+        // the statement, where it decides where the lines are drawn, and draws no line itself.
         List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated,
-                read.quantities()::countsWhole);
+                read.quantities()::countsWhole).stream()
+                .filter(each -> authors.isEmpty()
+                        || !authors.get().selectsOnlyACase(each.line().spelling()))
+                .toList();
         if (lines.isEmpty()) {
             return TheParts.READ_TO_THE_END;
         }

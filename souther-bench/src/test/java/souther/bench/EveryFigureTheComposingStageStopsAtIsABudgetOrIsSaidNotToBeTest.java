@@ -72,6 +72,12 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
                             + ".MOST_DATES_A_WAY_IS_ASKED_OF",
                     "how many dates a way may state the parts of for them to be looked through"),
 
+            // How many steps of a date written as a move of another are followed to the date whose
+            // month it is the first of: the depth of an expression, which no search stops at.
+            Map.entry("souther.compiler.partition.Pullback.MOST_STEPS_TO_A_MONTH",
+                    "how deep a date written as moves of another is followed, which bounds the"
+                            + " expression and claims nothing of the model"),
+
             // A distance no assignment reaches, which a position with no class to move to is at.
             Map.entry("souther.compiler.partition.NearestAssignments.UNREACHABLE",
                     "no distance, which is what a position with no class to move to changes"

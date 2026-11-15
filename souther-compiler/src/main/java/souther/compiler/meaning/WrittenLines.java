@@ -1,6 +1,7 @@
 package souther.compiler.meaning;
 
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.ExpansionLineage;
 import souther.compiler.types.ModelOccurrence;
@@ -46,20 +47,31 @@ public final class WrittenLines {
      * the author wrote — whose relation faces that comparison's sides and not this one's.
      */
     private record Under(WrittenLine line, Proposition taken, boolean decidedOutside,
-                         boolean inAnother) {
+                         boolean inAnother, boolean selectingACase) {
 
         /** One arm further in, taken where {@code taking} holds as well. */
         Under then(WrittenLine.Arm arm, Proposition taking) {
             return new Under(line.then(arm), Proposition.all(List.of(taken, taking)),
-                    decidedOutside, inAnother);
+                    decidedOutside, inAnother, selectingACase);
         }
 
         Under outside() {
-            return new Under(line, taken, true, inAnother);
+            return new Under(line, taken, true, inAnother, selectingACase);
         }
 
         Under inAnotherComparison() {
-            return new Under(line, taken, decidedOutside, true);
+            return new Under(line, taken, decidedOutside, true, selectingACase);
+        }
+
+        /** Taken where {@code taking} holds as well, on the same line: no arm of the author's. */
+        Under takingOnly(Proposition taking) {
+            return new Under(line, Proposition.all(List.of(taken, taking)), decidedOutside,
+                    inAnother, selectingACase);
+        }
+
+        /** Inside what selects a case of the definition the library writes an operation in. */
+        Under selectingACaseOfTheLibrary() {
+            return new Under(line, taken, decidedOutside, inAnother, true);
         }
     }
 
@@ -91,6 +103,10 @@ public final class WrittenLines {
     private final Map<Spelling, Proposition.Compared> stated = new HashMap<>();
     /** Where a row takes the arms of each line some relation was made under. */
     private final Map<WrittenLine, Proposition> taken = new LinkedHashMap<>();
+    /** The relations made inside what selects a case of a definition the library writes. */
+    private final Set<Spelling> selectingCases = new HashSet<>();
+    /** The relations made anywhere else. */
+    private final Set<Spelling> madeElsewhere = new HashSet<>();
 
     private WrittenLines(ExpansionLineage comparison, Optional<ModelOccurrence> where) {
         this.comparison = comparison;
@@ -115,7 +131,7 @@ public final class WrittenLines {
             Optional<ComparisonClaim> written) {
         WrittenLines lines = new WrittenLines(comparison, where);
         lines.walk(how, new Under(WrittenLine.THE_COMPARISON, new Proposition.Always(true), false,
-                false));
+                false, false));
         Map<Spelling, Map<WrittenLine, AuthoredPointMapping>> out = new LinkedHashMap<>();
         lines.seen.forEach((relation, under) -> {
             Map<WrittenLine, AuthoredPointMapping> each = new LinkedHashMap<>();
@@ -133,7 +149,9 @@ public final class WrittenLines {
             });
             out.put(relation, each);
         });
-        return new AuthorsLines(out, lines.taken);
+        Set<Spelling> onlySelectingCases = new HashSet<>(lines.selectingCases);
+        onlySelectingCases.removeAll(lines.madeElsewhere);
+        return new AuthorsLines(out, lines.taken, onlySelectingCases);
     }
 
     private void walk(Derivation step, Under under) {
@@ -185,8 +203,11 @@ public final class WrittenLines {
                 walk(otherwise, under.then(new WrittenLine.Arm(at, 1, false), holds.denied()));
             }
             case Derivation.MatchArms(var arms) -> arms(at, arms, under);
-            case Derivation.AnOperationsCases(var _, var cases) -> arms(at, cases, under);
-            case Derivation.ASizeInCases(var _, var cases) -> arms(at, cases, under);
+            // The cases of a move by months are the calendar's, stated by what the date is and
+            // answering what the move comes to; no comparison its author wrote is one of them.
+            case Derivation.AnOperationsCases(var operation, var cases) -> arms(at, cases, under,
+                    DefaultBoundOperationFacts.get().movesADateByMonths(operation) != null);
+            case Derivation.ASizeInCases(var _, var cases) -> arms(at, cases, under, false);
             case Derivation.ByALaw(var _, var _, var law) -> ofTheLaw(at, law, under);
             default -> throw new IllegalArgumentException("a choice is an if, a match, the cases"
                     + " of an operation or a size, or a law: " + choice);
@@ -194,13 +215,30 @@ public final class WrittenLines {
     }
 
     private void arms(WrittenChoice at, List<Derivation.MatchArms.Arm> arms, Under under) {
+        arms(at, arms, under, false);
+    }
+
+    /**
+     * @param ofTheLibrary whether the arms are the cases of a definition the library writes: what
+     *                     selects one is no comparison its author wrote, so the relations it
+     *                     states are conditions and no lines, and no arm is a place of the
+     *                     author's line of its own: the line is the one however the operation is
+     *                     defined, taken where any case is
+     */
+    private void arms(WrittenChoice at, List<Derivation.MatchArms.Arm> arms, Under under,
+                      boolean ofTheLibrary) {
         Proposition always = new Proposition.Always(true);
         List<Proposition> before = new ArrayList<>();
         for (int i = 0; i < arms.size(); i++) {
             Proposition selects = concluded.of(arms.get(i).selects());
-            walk(arms.get(i).selects(), under.then(new WrittenLine.Arm(at, i, true), always));
-            walk(arms.get(i).states(), under.then(new WrittenLine.Arm(at, i, false),
-                    Derivation.taken(before, selects)));
+            Proposition takes = Derivation.taken(before, selects);
+            if (ofTheLibrary) {
+                walk(arms.get(i).selects(), under.selectingACaseOfTheLibrary());
+                walk(arms.get(i).states(), under.takingOnly(takes));
+            } else {
+                walk(arms.get(i).selects(), under.then(new WrittenLine.Arm(at, i, true), always));
+                walk(arms.get(i).states(), under.then(new WrittenLine.Arm(at, i, false), takes));
+            }
             before.add(selects);
         }
     }
@@ -296,6 +334,7 @@ public final class WrittenLines {
         // Reached by more than one way to it, a line's arms are taken where any of them is.
         taken.merge(under.line(), under.taken(), (one, other) -> Proposition.any(List.of(one,
                 other)));
+        (under.selectingACase() ? selectingCases : madeElsewhere).addAll(here);
         for (Spelling each : here) {
             boolean itsOwn = each.equals(own);
             Seen how = new Seen(under.decidedOutside() ? null

@@ -25,6 +25,7 @@ import souther.compiler.check.CallArguments;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.ClosureUses;
 import souther.compiler.check.DateMonthMoves;
+import souther.compiler.check.DateShifts;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
@@ -14243,6 +14244,12 @@ final class Pullback {
         if (!gone.firstGoingInto(stands.value(), stands.at())) {
             return null;
         }
+        // A move by months, or a number of a date, that this reading takes as the arithmetic of a
+        // case has been gone into: what is left to go into is what that arithmetic is made of,
+        // which the reading of it reaches.
+        if (stands.at().takenAsAForm(e) != null && isAMoveOrANumberOfADate(e, stands.at())) {
+            return null;
+        }
         // Every value it may be handed on some row: what is read on each is a statement of an
         // application it may be handed ({@link Proposition.OnAnApplication}), and one dropped on
         // every row is handed on none. Where none is left there is no value to go into.
@@ -14255,6 +14262,12 @@ final class Pullback {
         // A closure's body is read where it is applied, and is no part of this value.
         if (e instanceof Core.Block) {
             return null;
+        }
+        // A date moved by months, and the day, the month or the year of one, is read in the cases
+        // of the move before what it is made of is: what it is made of is stated by the cases.
+        Inside.ACallDefinedByCases ofAMove = aMoveOrANumberOfOneInCases(e, stands.at());
+        if (ofAMove != null) {
+            return ofAMove;
         }
         Inside[] found = {null};
         Core.forEachChild(e, child -> {
@@ -14378,6 +14391,165 @@ final class Pullback {
         List<Choice.ADefinitionCase> cases = Choice.casesOf(call);
         return cases.isEmpty() ? null
                 : new Inside.ACallDefinedByCases(call, operation, cases, at);
+    }
+
+    /**
+     * {@code e}, where it is a date moved by months written out, or the day, the month or the year
+     * of one, as a call defined in the cases the calendar tells apart ({@link MonthMovesInCases})
+     * — or null where it is neither.
+     */
+    private Inside.ACallDefinedByCases aMoveOrANumberOfOneInCases(Core e, InputReads at) {
+        return isAMoveOrANumberOfADate(e, at) ? inCases(e, at) : null;
+    }
+
+    /** Whether {@code e} is a date moved by months written out, or a day, a month or a year. */
+    private boolean isAMoveOrANumberOfADate(Core e, InputReads at) {
+        if (!(Core.withoutStanding(e) instanceof Core.PreservedCall call)) {
+            return false;
+        }
+        if (DateMonthMoves.stepOf(call, each -> at.folded(each, read.rules().symbols(),
+                read.rules().newtypes())) != null) {
+            return true;
+        }
+        return call.args().size() == 1
+                && call.operation() instanceof ValueName.Stdlib operation
+                && DefaultBoundOperationFacts.get().takenAs(operation)
+                        instanceof TakenAs.PartOfDate;
+    }
+
+    private Inside.ACallDefinedByCases inCases(Core e, InputReads at) {
+        MonthMovesInCases.Read cases = MonthMovesInCases.of(e, at, read.rules().symbols(),
+                read.rules().newtypes(), move -> theMonthStartOf(move.date(), at,
+                        move.law().day().operation(), 0));
+        return cases == null ? null
+                : new Inside.ACallDefinedByCases(cases.call(), cases.move(), cases.cases(), at);
+    }
+
+    /** How many steps from a date to the date whose month it is the first of are followed. */
+    private static final int MOST_STEPS_TO_A_MONTH = 8;
+
+    /**
+     * The date whose month {@code date} is the first of, and how many months on from the first of
+     * that month it is — or null where {@code date} is not the first of a month.
+     *
+     * <p>The first of a month is a date moved by one less than its own day of the month, and a
+     * date the first of a month is moved by months is the first of the month it lands in
+     * ({@link MonthMovesInCases.MonthStart}). So the first of a month of a date moved by months
+     * is the first of the month of what it moves, moved by the same months.
+     */
+    private MonthMovesInCases.MonthStart theMonthStartOf(Core date, InputReads at,
+                                                         ValueName dayOfTheMonth, int steps) {
+        if (steps > MOST_STEPS_TO_A_MONTH) {
+            return null;
+        }
+        Denotation stands = at.standing(date, read.rules().symbols(), read.rules().newtypes());
+        Denotation whose = theDateWhoseMonthItStarts(stands, dayOfTheMonth);
+        if (whose != null) {
+            return theMonthOf(whose, dayOfTheMonth, steps + 1);
+        }
+        DateMonthMoves.Step moved = DateMonthMoves.stepOf(stands.value(),
+                each -> stands.at().folded(each, read.rules().symbols(),
+                        read.rules().newtypes()));
+        MonthMovesInCases.MonthStart inner = moved == null ? null
+                : theMonthStartOf(moved.date(), stands.at(), dayOfTheMonth, steps + 1);
+        return inner == null ? null
+                : new MonthMovesInCases.MonthStart(inner.of(), inner.moved() + moved.months());
+    }
+
+    /**
+     * The date whose month the first of the month of {@code date} is the first of, and how many
+     * months on it is: {@code date} itself where it is a date no more is known of, and what it
+     * moves or is the first of the month of otherwise.
+     */
+    private MonthMovesInCases.MonthStart theMonthOf(Denotation date, ValueName dayOfTheMonth,
+                                                    int steps) {
+        Denotation stands = date.at().standing(date.value(), read.rules().symbols(),
+                read.rules().newtypes());
+        Denotation whose = steps > MOST_STEPS_TO_A_MONTH ? null
+                : theDateWhoseMonthItStarts(stands, dayOfTheMonth);
+        if (whose != null) {
+            return theMonthOf(whose, dayOfTheMonth, steps + 1);
+        }
+        DateMonthMoves.Step moved = steps > MOST_STEPS_TO_A_MONTH ? null
+                : DateMonthMoves.stepOf(stands.value(), each -> stands.at().folded(each,
+                        read.rules().symbols(), read.rules().newtypes()));
+        if (moved == null) {
+            return new MonthMovesInCases.MonthStart(writtenOutside(date).value(), 0);
+        }
+        MonthMovesInCases.MonthStart inner = theMonthOf(
+                writtenOutside(new Denotation(moved.date(), stands.at())), dayOfTheMonth,
+                steps + 1);
+        return new MonthMovesInCases.MonthStart(inner.of(), inner.moved() + moved.months());
+    }
+
+    /**
+     * The date {@code stands}, a date moved by a count of days, is the first of the month of — or
+     * null where it is not the first of any month.
+     *
+     * <p>A date moved by a count of days that is one less than the day of the month of the date it
+     * moves is the first of that date's month, however the call is written: read as the
+     * arithmetic reads a count, the count is one and the day of the month of that date taken
+     * away. A date the month starts on is in that date's month and year, and has no day of its own
+     * to state.
+     */
+    private Denotation theDateWhoseMonthItStarts(Denotation stands, ValueName dayOfTheMonth) {
+        DateShifts.Moved shifted = DateShifts.movedBy(stands.value());
+        if (shifted == null || shifted.weight().compareTo(ExactRatio.ONE) != 0) {
+            return null;
+        }
+        Denotation datum = writtenOutside(new Denotation(shifted.date(), stands.at()));
+        LinearForm<AffineForms.ACall<InputReads>> count = sides().overTheCalls(shifted.count(),
+                stands.at(), call -> AnOperationApplied.of(call) instanceof AnOperationApplied
+                        applied && applied.operation().equals(dayOfTheMonth)
+                        && applied.args().size() == 1);
+        if (count == null || count.coefs().size() != 1
+                || count.constant().compareTo(ExactRatio.ONE) != 0) {
+            return null;
+        }
+        Map.Entry<AffineForms.ACall<InputReads>, ExactRatio> day =
+                count.coefs().entrySet().iterator().next();
+        return day.getValue().compareTo(ExactRatio.ONE.negated()) == 0
+                && AnOperationApplied.of(day.getKey().call()) instanceof AnOperationApplied taken
+                && isTheSameDate(taken.args().getFirst(), day.getKey().at(), datum.value(),
+                        datum.at()) ? datum : null;
+    }
+
+    /**
+     * {@code date} as it is written outside what a helper was expanded into: a name a helper's
+     * parameter was given is the value it was given, which is written where the helper was called
+     * and is read the same wherever the call is.
+     */
+    private Denotation writtenOutside(Denotation date) {
+        Denotation datum = date;
+        Set<BindingId> met = new HashSet<>();
+        while (Core.withoutStanding(datum.value()) instanceof Core.Read name
+                && met.add(name.binding()) && datum.at().givenTo(name) instanceof Denotation given) {
+            datum = given;
+        }
+        return datum;
+    }
+
+    /** Whether {@code one}, read at {@code atOne}, and {@code other}, read at {@code atOther},
+     *  are one date: a name for the same binding, or what stands at one place. */
+    private boolean isTheSameDate(Core one, InputReads atOne, Core other, InputReads atOther) {
+        Denotation first = atOne.standing(one, read.rules().symbols(), read.rules().newtypes());
+        Denotation second = atOther.standing(other, read.rules().symbols(),
+                read.rules().newtypes());
+        Core a = Core.withoutStanding(first.value());
+        Core b = Core.withoutStanding(second.value());
+        if (a == b && first.at().standsInTheNamesOf(second.at())) {
+            return true;
+        }
+        if (a instanceof Core.Read nameA && b instanceof Core.Read nameB
+                && nameA.binding().equals(nameB.binding())
+                && first.at().standsInTheNamesOf(second.at())) {
+            return true;
+        }
+        return first.at().pathOf(a, read.rules().newtypes())
+                instanceof PathResolution.At(TermPath placeA)
+                && second.at().pathOf(b, read.rules().newtypes())
+                        instanceof PathResolution.At(TermPath placeB)
+                && placeA.equals(placeB);
     }
 
     /**
