@@ -24,8 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * move is defined by, and the weekday a first of a month moved by months falls on is read however
  * the first of the month is written and however many moves it is made through.
  *
- * <p>Deferred to the nightly: each of the shapes below is measured in full, which takes eight to
- * ten seconds a shape, and no cheaper question reads the weekday through the cases of a move. What
+ * <p>Deferred to the nightly: each of the shapes below is measured in full, which takes about ten
+ * seconds a shape, and no cheaper question reads the weekday through the cases of a move. What
  * a change to the reading of a move breaks here is as well found by the morning as by the change.
  * {@code ADateMovedByMonthsIsReadWhereItsDaysAreKnownTest} is what a change waits on.
  */
@@ -47,13 +47,20 @@ class AWeekdayOfADateMovedByMonthsIsReadToTheEndTest {
 
     private static final String WEEKDAY = "Int.floorMod(Date.daysBetween(sunday, %s), 7) >= 1";
 
-    /** The first of a month, moved once and twice, and a month's end behind both. */
+    /**
+     * The shapes that tell the ways a first of a month is read through a move apart: the first of
+     * a month that is itself the first of a month moved by months, taken twice, which holds the
+     * move of a first and the first of a move in it; and the day before one, which is a move
+     * shifted by days.
+     */
+    private static final List<String> SHAPES = List.of(
+            "Date.addMonths(1, monthStart(Date.addMonths(1, monthStart(x))))",
+            "endOfMonth(Date.addMonths(1, monthStart(x)))");
+
+    /** The first of a month, moved by months, is read to the end whichever way it is reached. */
     @Test
     void theWeekdayOfAMonthStartMovedByMonthsIsRead() {
-        for (String moved : List.of("Date.addMonths(1, monthStart(x))",
-                "monthStart(Date.addMonths(1, monthStart(x)))",
-                "Date.addMonths(1, monthStart(Date.addMonths(1, monthStart(x))))",
-                "endOfMonth(Date.addMonths(1, monthStart(x)))")) {
+        for (String moved : SHAPES) {
             String report = human(WEEKDAY.formatted(moved));
             assertFalse(report.contains("· not read:"), moved + "\n" + report);
             assertTrue(report.contains("measurement: complete"), moved + "\n" + report);
@@ -64,8 +71,7 @@ class AWeekdayOfADateMovedByMonthsIsReadToTheEndTest {
      *  and none is on the month or the year the cases are stated by. */
     @Test
     void theCasesOfAMoveDrawNoLineOfTheirOwn() {
-        for (String moved : List.of("Date.addMonths(1, monthStart(x))",
-                "endOfMonth(Date.addMonths(1, monthStart(x)))")) {
+        for (String moved : SHAPES) {
             List<BorderAssessment> lines = Adequacy.readingsOf(
                     measured(WEEKDAY.formatted(moved)).db(), "demo").get("f");
             assertTrue(lines != null && !lines.isEmpty(), moved);
