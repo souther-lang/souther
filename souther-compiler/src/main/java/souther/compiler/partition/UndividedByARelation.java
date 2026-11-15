@@ -3628,7 +3628,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             Optional<List<ConvertedOn>> reach = reachExactlyOn.apply(mine.subjectPath(),
                     room.place() == null ? Set.of() : Set.of(room.place()));
-            if (reach.isEmpty() || (undivided && reach.get().isEmpty())) {
+            // A side shown undivided with no conversion before the relation says nothing of its
+            // own, unless the way keeps some of its strings from the relation: those are said open
+            // whether or not the relation parts them.
+            if (reach.isEmpty()
+                    || (undivided && reach.get().isEmpty() && room.counts() == null)) {
                 continue;
             }
             StringsAPartnerCanHold exact = onlyWhereTheRunGetsPast(strings, reach.get(),
