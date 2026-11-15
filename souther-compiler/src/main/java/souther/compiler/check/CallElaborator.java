@@ -366,8 +366,10 @@ public final class CallElaborator {
      * runs is what was written.
      */
     private static Core.PreservedCall asTheMapItIs(Core.PreservedCall call, CheckContext ctx) {
+        // What a closure answers does not turn on the type it stands as, and the map is kept with
+        // the type the call answers, which is the one the flatMap was given.
         if (!call.declared().operation().equals(FLAT_MAP) || call.args().size() != 2
-                || !(call.args().getFirst() instanceof Core.Block step)
+                || !(Core.withoutStanding(call.args().getFirst()) instanceof Core.Block step)
                 || !(Core.withoutStanding(step.body()) instanceof Core.ListLit written)
                 || written.elements().size() != 1) {
             return call;

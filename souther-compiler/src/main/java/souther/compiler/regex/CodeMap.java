@@ -3,6 +3,7 @@ package souther.compiler.regex;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.List;
@@ -61,7 +62,10 @@ public final class CodeMap {
 
     private CodeMap(List<Run> runs, CodePoints leftAlone,
                     NavigableMap<Integer, String> answeredElsewhere) {
-        this.answeredElsewhere = answeredElsewhere;
+        // Held unchangeable: a map is shared by every reading of its conversion and told apart by
+        // this table.
+        this.answeredElsewhere = Collections.unmodifiableNavigableMap(
+                new TreeMap<>(answeredElsewhere));
         this.runs = List.copyOf(runs);
         this.byImage = runs.stream().sorted(Comparator.comparingInt(Run::imageFrom)).toList();
         this.imageReach = new int[byImage.size()];
