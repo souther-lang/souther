@@ -2674,12 +2674,8 @@ final class Terms {
             carried.addAll(howManyPiecesAreParted(atom, counted));
             // What the operation this container is the expansion of says of how many it holds,
             // said of the arguments the expansion was handed, where the term is a call of another.
-            // They are named as every reader names a value, by the term of the expression read
-            // where the call was written, and not as parts of this term: an argument is spelled
-            // by where it is read, and the same value read inside a helper and outside one is
-            // not always spelled alike, so a part-of test would refuse what is the same value.
             AnOperationApplied expansion = expanded == null || expansionIsTheCall ? null
-                    : expanded.applied();
+                    : overThePartsOf(counted, expanded.applied(), expanded.at());
             boolean expansionSaysMore = expansion != null;
             if (expansionSaysMore) {
                 carried.addAll(IntrinsicNumericFacts.ofTheSizeLaw(expansion, atom,
@@ -2710,6 +2706,13 @@ final class Terms {
      * operation, and otherwise the arguments the expression was handed, each of which has to be a
      * part of the term. One that is not is a value the term does not mention, and naming it would
      * state a fact of this atom that another route to the same term has no way to state.
+     *
+     * <p>That is a question of what the atom is related to and not of whether the law holds: the
+     * law holds of {@code applied} because {@code applied} is read off the expression the
+     * container was built by, so it is about the container's own value. The test only keeps a fact
+     * stated by one route from naming what the other routes to the term cannot. An argument with no
+     * term of its own passes it, and names no atom ({@link #sizeAtomFor}), so a law over it states
+     * nothing.
      */
     private AnOperationApplied overThePartsOf(Term whole, AnOperationApplied applied,
                                               Denotations at) {
@@ -4326,7 +4329,7 @@ final class Terms {
             if (here != null && leaf == Leaf.AN_EVALUATION && here.shape() == Term.Shape.BUILT) {
                 return new Naming.Named(readOff(here, stepsAlong(e).steps()));
             }
-            return here != null ? new Naming.Named(interned.on(here, chainOf(e)))
+            return here != null ? new Naming.Named(interned.on(here, stepsAlong(e).steps()))
                     : Naming.of(pathKey(e, at, leaf), Naming.Reason.A_BINDING_STANDS_FOR_NOTHING);
         }
         return switch (e) {
@@ -4656,27 +4659,6 @@ final class Terms {
             }
             case Core other -> new Steps(other, FieldPath.NONE);
         };
-    }
-
-    /** The fields read along a {@code x.a.b} chain, from the head down. */
-    static List<String> chainOf(Core e) {
-        List<String> out = new ArrayList<>();
-        chainInto(e, out);
-        return out;
-    }
-
-    private static void chainInto(Core e, List<String> out) {
-        switch (Core.withoutStanding(e)) {
-            case Core.FieldAccess fa -> {
-                chainInto(fa.target(), out);
-                out.add(fa.field());
-            }
-            case Core.FieldProjection p -> {
-                chainInto(p.base(), out);
-                p.steps().inOrder().forEach(step -> out.add(step.field()));
-            }
-            default -> { }
-        }
     }
 
     /**
