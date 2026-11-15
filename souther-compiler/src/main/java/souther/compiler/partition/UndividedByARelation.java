@@ -1019,9 +1019,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * and not of {@code canBe}, or of {@code canBe} and of another length — is shown neither, and
      * no class of this side is drawn over it.
      *
-     * <p>Each region is what the languages say at every length. Where a {@code String} stops is
-     * no distinction a model made, so no length of its own bounds a region: only the lengths a
-     * model states ({@code shownAt}, {@code reached}, {@code partnerHeldTo}) do.
+     * <p>Each region is what the languages say at every length (ADR-0130). Where a
+     * {@code String} stops is no distinction a model made, so no length of its own bounds a
+     * region: only the lengths a model states ({@code shownAt}, {@code reached},
+     * {@code partnerHeldTo}) do. A string within a few code points of the longest a
+     * {@code String} holds is so read as having a partner where the partner's language has one,
+     * though no value written round it would fit.
      *
      * @param canBe   the strings shown to be some value of the partner; empty where none is
      * @param mayBe   the strings outside which no value of the partner is, which hold

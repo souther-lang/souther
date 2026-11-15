@@ -15,6 +15,7 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.values.Allowance;
+import souther.compiler.values.TextExtents;
 import souther.compiler.values.Value;
 import souther.compiler.values.ValuesWithin;
 
@@ -83,6 +84,30 @@ class NoValueOfAStringRelationIsLeftInNoClassByWhereAStringStopsTest {
         assertEveryLengthIsOnASide(inside, "<abc>");
         assertEveryLengthIsOnASide(inside, "ABC");
         assertOnTheTrueSideAtEveryLength(inside, "abc");
+    }
+
+    /**
+     * No region of a rule's statement ends, or begins, within a few code points of the longest a
+     * {@code String} holds: the strings a value of the other side cannot be the partner of for
+     * being too long are drawn on no side of their own, since a class only a string of that length
+     * could fill is one no row is in. A length cuts a region where a model declared it, and these
+     * models declare none.
+     */
+    @Test
+    void noRegionIsCutWhereAStringStops() {
+        long near = TextExtents.LONGEST_STRING - 1_000;
+        for (SetStatement statement : List.of(statementAt(A_PIECE, "domain"),
+                statementAt(A_CONTAINMENT, "s"))) {
+            for (List<ValuesWithin> side : List.of(statement.whenTrue().pieces(),
+                    statement.whenFalse().pieces(), statement.notShown(),
+                    statement.notReached())) {
+                for (ValuesWithin each : side) {
+                    assertTrue(each.shortest() < near
+                            && (each.longest() == null || each.longest() < near),
+                            () -> "a region is cut at the longest a String holds: " + each);
+                }
+            }
+        }
     }
 
     /**
