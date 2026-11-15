@@ -13,7 +13,6 @@ import souther.compiler.query.Output;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.source.SourceId;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
@@ -59,11 +58,9 @@ class ARowALimitStoppedSaysTheNumberItWasHeldToTest {
     @Test
     void aRowThatSpentItsStepsSaysTheStepsItWasAllowed() {
         assertEquals(Optional.of(WorkFigure.EVALUATION_STEPS.at(10_000L)),
-                figureOf(LOOPS, EvaluationPolicy.of(10_000L)
-                        .withCompilerTimeout(Duration.ofSeconds(30))));
+                figureOf(LOOPS, EvaluationPolicy.of(10_000L)));
         assertEquals(Optional.of(WorkFigure.EVALUATION_STEPS.at(20_000L)),
-                figureOf(LOOPS, EvaluationPolicy.of(20_000L)
-                        .withCompilerTimeout(Duration.ofSeconds(30))),
+                figureOf(LOOPS, EvaluationPolicy.of(20_000L)),
                 "the same row under another policy says that policy's number");
     }
 
@@ -71,8 +68,7 @@ class ARowALimitStoppedSaysTheNumberItWasHeldToTest {
     @Test
     void aRowThatWentTooDeepSaysTheDepthItWasAllowed() {
         assertEquals(Optional.of(WorkFigure.RECURSION_DEPTH.at(100L)),
-                figureOf(DESCENDS, EvaluationPolicy.of(1_000_000L).withRecursionDepthLimit(100)
-                        .withCompilerTimeout(Duration.ofSeconds(30))));
+                figureOf(DESCENDS, EvaluationPolicy.of(1_000_000L).withRecursionDepthLimit(100)));
     }
 
     /**

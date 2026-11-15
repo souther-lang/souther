@@ -1910,11 +1910,17 @@ public final class CstParser {
         return false;
     }
 
+    /** Where a test in this package counts the tokens the parser looks at to find the next
+     *  meaningful ones and to read a parenthesised run, and null everywhere else. What a parse
+     *  answers does not say how often it looked at a token. */
+    static long[] COUNTING_LOOKED_AT;
+
     /** The token index of the nth meaningful token ahead of {@code pos}. */
     private int mi(int n) {
         int i = pos;
         int seen = 0;
         while (i < tokens.size()) {
+            looked();
             if (!tokens.get(i).kind().isTrivia()) {
                 if (seen == n) {
                     return i;
@@ -1927,6 +1933,13 @@ public final class CstParser {
             i++;
         }
         return tokens.size() - 1;
+    }
+
+    private static void looked() {
+        long[] counting = COUNTING_LOOKED_AT;
+        if (counting != null) {
+            counting[0]++;
+        }
     }
 
     private String tokenText(int index) {
@@ -1955,6 +1968,7 @@ public final class CstParser {
     private boolean parenRunFollowedByArrow() {
         int depth = 0;
         for (int i = mi(0); i < tokens.size(); i++) {
+            looked();
             SyntaxKind k = tokens.get(i).kind();
             if (k.isTrivia()) {
                 continue;

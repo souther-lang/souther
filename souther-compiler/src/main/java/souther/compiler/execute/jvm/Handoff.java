@@ -85,10 +85,30 @@ final class Handoff {
         record Abandoned() implements Phase {}
     }
 
+    /**
+     * How the servicing thread waits on a condition: for up to {@code nanos}, answering an estimate
+     * of what is left of them, as {@link Condition#awaitNanos} does. It is the only place the
+     * hand-off reads time, so whatever stands in for it decides what a wait costs.
+     */
+    @FunctionalInterface
+    interface Spending {
+        long awaiting(Condition moved, long nanos) throws InterruptedException;
+    }
+
     private final ReentrantLock lock = new ReentrantLock();
 
     /** Told to whoever is waiting for the other side to move. */
     private final Condition moved = lock.newCondition();
+
+    private final Spending spending;
+
+    Handoff() {
+        this(Condition::awaitNanos);
+    }
+
+    Handoff(Spending spending) {
+        this.spending = spending;
+    }
 
     private Phase phase = new Phase.Starting();
 
@@ -298,7 +318,7 @@ final class Handoff {
     @SuppressWarnings("WaitNotInLoop")
     private Duration waitedOut(Duration remaining) throws InterruptedException {
         long asked = remaining.compareTo(LONGEST_AWAIT) > 0 ? Long.MAX_VALUE : remaining.toNanos();
-        return leftOf(remaining, asked, moved.awaitNanos(asked));
+        return leftOf(remaining, asked, spending.awaiting(moved, asked));
     }
 
     /**

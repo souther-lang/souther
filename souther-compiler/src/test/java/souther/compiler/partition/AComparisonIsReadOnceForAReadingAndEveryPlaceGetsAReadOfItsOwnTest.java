@@ -19,7 +19,9 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -115,18 +117,24 @@ class AComparisonIsReadOnceForAReadingAndEveryPlaceGetsAReadOfItsOwnTest {
         AtomicInteger worked = new AtomicInteger();
         int threads = 8;
         CountDownLatch started = new CountDownLatch(threads);
+        Queue<Thread> asking = new ConcurrentLinkedQueue<>();
         ExecutorService pool = Executors.newFixedThreadPool(threads);
         try {
             List<Future<DemandReading.Read>> told = new ArrayList<>();
             for (int thread = 0; thread < threads; thread++) {
                 told.add(pool.submit(() -> {
+                    asking.add(Thread.currentThread());
                     started.countDown();
                     started.await();
                     return asked.of(above(3, true), () -> {
                         worked.incrementAndGet();
-                        // Held until the others have had the chance to come in, which they do
-                        // together where nothing keeps them out.
-                        sleep(100);
+                        // Held until every other thread is either kept out or working too.
+                        while (worked.get() + blocked(asking) < threads) {
+                            if (Thread.interrupted()) {
+                                throw new IllegalStateException("interrupted");
+                            }
+                            Thread.onSpinWait();
+                        }
                         return settled(true);
                     });
                 }));
@@ -163,13 +171,8 @@ class AComparisonIsReadOnceForAReadingAndEveryPlaceGetsAReadOfItsOwnTest {
         assertEquals(2, worked.get());
     }
 
-    private static void sleep(long millis) {
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException(interrupted);
-        }
+    private static long blocked(Queue<Thread> threads) {
+        return threads.stream().filter(each -> each.getState() == Thread.State.BLOCKED).count();
     }
 
     private static DemandReading.Read narrows(AtomicInteger worked) {

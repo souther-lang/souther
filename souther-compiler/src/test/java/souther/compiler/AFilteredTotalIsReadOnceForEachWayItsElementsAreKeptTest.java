@@ -8,14 +8,12 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
-import java.time.Duration;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -129,7 +127,7 @@ class AFilteredTotalIsReadOnceForEachWayItsElementsAreKeptTest {
                 + "    guard List.sum(List.map(r -> r.pay, List.filter(r -> r.days >= 17, [ "
                 + list + " ]))) >= 900 else No\n"
                 + "    Ok\n}\n";
-        String report = assertTimeoutPreemptively(Duration.ofSeconds(30), () -> report(body));
+        String report = report(body);
         assertFalse(report.contains("read as g/w.m1.pay"), report);
     }
 

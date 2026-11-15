@@ -9,13 +9,11 @@ import souther.compiler.meaning.Quantity;
 import souther.compiler.semantics.CaseMapping;
 import souther.compiler.types.ValueName;
 
-import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * How many case conversions a text is made by is the model's, so what a text is made of is read
@@ -77,9 +75,7 @@ class ConvertedTextOfAChainOfConversionsIsReadInALoopTest {
     @Test
     void aChainAHundredThousandConversionsLongIsReadWithoutOverflowingTheStack() {
         Quantity deep = converted(100_000, LOWERCASE);
-        assertNotNull(assertTimeoutPreemptively(Duration.ofSeconds(10),
-                () -> ConvertedText.of(deep)));
-        assertNull(assertTimeoutPreemptively(Duration.ofSeconds(10),
-                () -> ConvertedText.of(new Quantity.WhatAnOperationAnswers(TRIM, List.of(deep)))));
+        assertNotNull(ConvertedText.of(deep));
+        assertNull(ConvertedText.of(new Quantity.WhatAnOperationAnswers(TRIM, List.of(deep))));
     }
 }

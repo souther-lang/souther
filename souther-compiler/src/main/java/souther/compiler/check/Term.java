@@ -594,6 +594,7 @@ final class Term {
         }
 
         private int comparedByParts(Term one, Term other) {
+            counted();
             List<Term> these = inOrder(one);
             List<Term> those = inOrder(other);
             for (int at = 0; at < Math.min(these.size(), those.size()); at++) {
@@ -615,6 +616,18 @@ final class Term {
             Term first = term.parts.get(0);
             Term second = term.parts.get(1);
             return compare(first, second) <= 0 ? term.parts : List.of(second, first);
+        }
+    }
+
+    /** Where a test in this package counts the pairs of parts an equality or an ordering compares,
+     *  and null everywhere else. What a comparison answers does not say how many pairs it
+     *  compared to answer. */
+    static long[] COUNTING_PAIRS;
+
+    private static void counted() {
+        long[] counting = COUNTING_PAIRS;
+        if (counting != null) {
+            counting[0]++;
         }
     }
 
@@ -1021,6 +1034,7 @@ final class Term {
         if (known != null) {
             return known;
         }
+        counted();
         boolean answer;
         if (one.shape == Shape.EQ) {
             List<Term> a = one.parts;

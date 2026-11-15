@@ -766,6 +766,32 @@ public final class GuardThresholds {
     }
 
     /**
+     * What each place the comparison is filed at is left with, where the statement states a
+     * remainder of a number no position holds.
+     *
+     * <p>The remainder is a fact of the statement, read from what the statement states and not
+     * from where the arithmetic stopped, so it is said only where a place has no word of its own.
+     * What the place says of itself stays: a value an operation made, a position no line can be
+     * drawn on, a figure of this compiler's work, an operation no form says. Only a form nothing
+     * takes apart gives way to it, since the form here was read and what no line is drawn through
+     * is the remainder. Every place stays, the container of an element included: what a stop
+     * leaves unanswered is what weakens the measure of each place it is left at, and that is not a
+     * matter of which of them a report names ({@code PartitionEvidence#notRead}).
+     */
+    static Cutting.Read.Stopped whatEachPlaceIsLeftWithByARemainder(
+            StatedComparison comparison, AffineReading.OfAComparison.Stopped stopped,
+            InputReading read, InputReads reads, Arrivals answering) {
+        SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> said =
+                leftAtEachPlace(comparison, stopped, read, reads, answering);
+        BlockReason.RuleReadingStopped remainder =
+                new BlockReason.RuleAboutARemainderNoPositionHolds();
+        said.replaceAll((at, own) ->
+                own instanceof BlockReason.UnreadComparisonForm ? remainder : own);
+        return new Cutting.Read.Stopped(PlacesStopped.of(said, stoppedAtThe(stopped)),
+                whereItStopped(stopped, read));
+    }
+
+    /**
      * Where a reader is sent about the stop: the expression the arithmetic failed to take apart,
      * as the construct its author wrote — the call inside the calls the library states the form
      * of — and the rule itself where that is no call its author wrote, which is not a place

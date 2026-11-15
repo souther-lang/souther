@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.test.Visits;
+
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -12,17 +14,9 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.function.IntFunction;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -33,9 +27,11 @@ import java.util.stream.Stream;
  *
  * <p>A value used twice is one object held in two places, so the values made of it are a graph, and
  * the ways down a chain of values each holding the one before it twice are two to its length. A
- * reader of the values takes about as long on a chain of {@link #LONG} as on one of {@link #SHORT};
- * one that goes down every way takes two to the difference as long, which is what it is told by.
- * What it costs is not asked, so that this does not turn on how fast a machine is.
+ * reader of the values goes into each of them a few times; one that goes down every way goes into a
+ * chain of {@link #LONG} two to that many times, which is what it is told by ({@link Visits}). What
+ * it goes into is counted and time is not, so this does not turn on how fast a machine is, and a
+ * reader that allocates nothing is told as one that does. A chain of {@link #SHORT} is asked first
+ * and without counting, for whether the reader answers or refuses.
  *
  * <p>Asked of every static method of the compiler whose first parameter is the value, and of the
  * methods the value (or what wraps it) has. A method that refuses — throws — is said of apart ({@link Findings}): what it
@@ -53,8 +49,16 @@ public final class ReadersOfAGraph {
     /** Two to {@code LONG - SHORT} is 256; a reader of the values is nowhere near this. */
     private static final long GROWTH_THAT_IS_THE_WAYS = 16;
 
-    /** Under this a reader on the longer chain is too quick for the ratio to say anything. */
-    private static final long NANOS_TOO_SHORT_TO_TELL = 20_000_000L;
+    /** Under this a reader on the shorter chain goes into too few values for the ratio to say anything. */
+    private static final long VISITS_TOO_FEW_TO_TELL = 64;
+
+    /** Readers that go into the longer chain this often are the ones whose growth is asked: the
+     *  ways down it are two to {@link #LONG}, four times this, and a reader that is not going down
+     *  every way is nowhere near it, so that a group of them counted together stays under it. */
+    private static final long VISITS_THAT_ARE_THE_WAYS = 1L << 20;
+
+    /** How many readers are counted together, before the ones past the figure are told apart. */
+    private static final int ASKED_TOGETHER = 64;
 
     /** What a piece of a reading takes: the reading it is a piece of. */
     private static final Set<String> IN_A_READING = Set.of("StatementReading", "EachOnce",
@@ -88,7 +92,7 @@ public final class ReadersOfAGraph {
      * @param refused  a reader that threw on one of them, which a chain of this kind may be one
      *                 for: nothing is said of what it costs
      * @param notAsked a reader with a parameter that is not made, so that it was not asked
-     * @param slow     a reader that goes down every way, or that never finished
+     * @param slow     a reader that goes down every way
      */
     public record Findings(Set<String> answered, Set<String> refused, Set<String> notAsked,
                            Set<String> slow) {}
@@ -167,99 +171,85 @@ public final class ReadersOfAGraph {
         return null;
     }
 
-    /** Whether the reader answered; one that refuses throws. */
-    private static boolean invoke(Method method, Object receiver, Object[] args)
-            throws ReflectiveOperationException {
+    /**
+     * What the reader answers on a chain of {@code length}, or nothing where it refuses.
+     *
+     * <p>The chain and the arguments are made for this asking: a reader that gathers into the
+     * collection it is handed, or that the compiler keeps something of by what a statement is equal
+     * to, is asked of nothing a previous asking left. What it answers is wrapped, so that an answer
+     * of nothing is told from a refusal.
+     */
+    private static Optional<Optional<Object>> answerOn(Method method, boolean aMethodOfIt,
+                                                       Supplier<Object[]> others, Chain of,
+                                                       int length) {
+        Object chain = of.ofLength().apply(length);
+        Object[] args = others.get();
+        if (!aMethodOfIt) {
+            args[0] = chain;
+        }
         try {
-            method.invoke(receiver, args);
-            return true;
-        } catch (InvocationTargetException refused) {
-            return false;
+            return Optional.of(Optional.ofNullable(method.invoke(aMethodOfIt ? chain : null, args)));
+        } catch (InvocationTargetException refusing) {
+            return Optional.empty();
+        } catch (IllegalAccessException notAllowed) {
+            throw new IllegalStateException(method.toString(), notAllowed);
         }
     }
 
     /**
-     * How many times a reader is asked of each chain: once says nearly every reader is not one
-     * that goes down every way, and only one said to be is asked again, as the fastest of three,
-     * so that a pause of the machine is not what it is found by.
-     */
-    private static final int[] ASKINGS = {1, 3};
-
-    /**
-     * Whether the reader goes down every way, by what it costs on the longer chain against the
-     * shorter; none where it refuses.
+     * What of {@code asks} goes into the values more than {@link #VISITS_THAT_ARE_THE_WAYS} times.
      *
-     * <p>A reader that refuses the shorter chain refuses the longer, and the message it refuses
-     * with names the whole chain, so the longer is asked only of a reader that answered the shorter.
+     * <p>The asks are counted together and told apart only where the count says one of them is past
+     * the figure, by halves, so that what is counted is the few readings it takes to name the slow
+     * ones and not one for each reader.
      */
-    private static Optional<Boolean> goesDownEveryWay(Method method, boolean aMethodOfIt,
-                                                      Supplier<Object[]> others, Chain chain)
-            throws ReflectiveOperationException {
-        for (int askings : ASKINGS) {
-            OptionalLong onShort = fastest(method, aMethodOfIt, others, chain, SHORT, askings);
-            if (onShort.isEmpty()) {
-                return Optional.empty();
-            }
-            OptionalLong onLong = fastest(method, aMethodOfIt, others, chain, LONG, askings);
-            if (onLong.isEmpty()) {
-                return Optional.empty();
-            }
-            if (!goesDownEveryWay(onShort.getAsLong(), onLong.getAsLong())) {
-                return Optional.of(false);
-            }
+    private static Set<String> past(Visits visits, List<Map.Entry<String, Ask>> asks) {
+        if (asks.isEmpty()) {
+            return Set.of();
         }
-        return Optional.of(true);
+        Visits.Counted<List<Object>> asked = visits.count(() -> {
+            List<Object> answers = new ArrayList<>();
+            for (Map.Entry<String, Ask> ask : asks) {
+                answers.add(ask.getValue().onLong().get());
+            }
+            return answers;
+        });
+        if (asked.visits() <= VISITS_THAT_ARE_THE_WAYS) {
+            return Set.of();
+        }
+        if (asks.size() == 1) {
+            return goesDownEveryWay(visits, asks.getFirst().getValue())
+                    ? Set.of(asks.getFirst().getKey()) : Set.of();
+        }
+        Set<String> slow = new TreeSet<>();
+        int half = asks.size() / 2;
+        slow.addAll(past(visits, asks.subList(0, half)));
+        slow.addAll(past(visits, asks.subList(half, asks.size())));
+        return slow;
     }
 
     /**
-     * The fastest of {@code askings} of the reader on a chain of {@code length}; none where it
-     * refuses.
-     *
-     * <p>Each asking is given arguments made for it: a reader that gathers into the collection it
-     * is handed leaves it as it found it for no later asking, and the second would be a reader
-     * asked of what the first left. Making them is not what is timed.
+     * Whether a reader that goes into the values often is going down every way: it goes into the
+     * longer chain more than the ways down it is longer by as often as into the shorter. A reader
+     * that goes into each value many times goes into twice the values twice as often.
      */
-    private static OptionalLong fastest(Method method, boolean aMethodOfIt,
-                                        Supplier<Object[]> others, Chain of, int length,
-                                        int askings)
-            throws ReflectiveOperationException {
-        long best = Long.MAX_VALUE;
-        for (int times = 0; times < askings; times++) {
-            // A chain of its own too: what the compiler keeps of a statement it has met (it keeps
-            // some, held weakly, by what the statement is equal to) is not there for the next.
-            Object chain = of.ofLength().apply(length);
-            Object[] args = others.get();
-            if (!aMethodOfIt) {
-                args[0] = chain;
-            }
-            long start = System.nanoTime();
-            boolean answered = invoke(method, aMethodOfIt ? chain : null, args);
-            long took = System.nanoTime() - start;
-            if (!answered) {
-                return OptionalLong.empty();
-            }
-            best = Math.min(best, took);
-        }
-        return OptionalLong.of(best);
+    private static boolean goesDownEveryWay(Visits visits, Ask ask) {
+        long onShort = visits.count(ask.onShort()).visits();
+        long onLong = visits.count(ask.onLong()).visits();
+        return onLong > GROWTH_THAT_IS_THE_WAYS * Math.max(onShort, VISITS_TOO_FEW_TO_TELL);
     }
 
-    /** Whether {@code onLong} is the ways down to what {@code onShort} is the values of. */
-    private static boolean goesDownEveryWay(long onShort, long onLong) {
-        return onLong > NANOS_TOO_SHORT_TO_TELL
-                && onLong > GROWTH_THAT_IS_THE_WAYS * Math.max(onShort, 100_000L);
+    private static Set<String> past(Visits visits, Map<String, Ask> asks) {
+        Set<String> slow = new TreeSet<>();
+        List<Map.Entry<String, Ask>> all = new ArrayList<>(asks.entrySet());
+        for (int from = 0; from < all.size(); from += ASKED_TOGETHER) {
+            slow.addAll(past(visits, all.subList(from, Math.min(all.size(), from + ASKED_TOGETHER))));
+        }
+        return slow;
     }
 
-    private static long fastestMaking(Chain chain, int length) {
-        long best = Long.MAX_VALUE;
-        for (int times = 0; times < 3; times++) {
-            long start = System.nanoTime();
-            Object made = chain.ofLength().apply(length);
-            long took = System.nanoTime() - start;
-            Objects.requireNonNull(made, "a chain of " + chain.label() + " is made");
-            best = Math.min(best, took);
-        }
-        return best;
-    }
+    /** One reading asked on the shorter chain and on the longer. */
+    private record Ask(Supplier<Object> onShort, Supplier<Object> onLong) {}
 
     /**
      * Every reader of {@code chains} that goes down every way, by the name of the class and the
@@ -269,18 +259,19 @@ public final class ReadersOfAGraph {
      *                      name of the class and the method, with why
      */
     public static Findings askEach(List<Chain> chains, Map<String, String> byTheirNature)
-            throws IOException, ReflectiveOperationException, InterruptedException {
-        Set<String> slow = new TreeSet<>();
-        for (Chain chain : chains) {
-            if (goesDownEveryWay(fastestMaking(chain, SHORT), fastestMaking(chain, LONG))) {
-                slow.add("making " + chain.label());
-            }
+            throws IOException {
+        try (Visits visits = Visits.into(chains.stream().<Class<?>>map(Chain::type).toList())) {
+            return askEach(visits, chains, byTheirNature);
         }
-        ExecutorService pool = Executors.newCachedThreadPool(each -> {
-            Thread thread = new Thread(each);
-            thread.setDaemon(true);
-            return thread;
-        });
+    }
+
+    private static Findings askEach(Visits visits, List<Chain> chains,
+                                    Map<String, String> byTheirNature) throws IOException {
+        Map<String, Ask> asks = new LinkedHashMap<>();
+        for (Chain chain : chains) {
+            asks.put("making " + chain.label(), new Ask(() -> chain.ofLength().apply(SHORT),
+                    () -> chain.ofLength().apply(LONG)));
+        }
         Set<String> answered = new TreeSet<>();
         Set<String> refused = new TreeSet<>();
         Set<String> notAsked = new TreeSet<>();
@@ -317,24 +308,17 @@ public final class ReadersOfAGraph {
                         continue;
                     }
                     method.setAccessible(true);
-                    Future<Optional<Boolean>> run = pool.submit(() ->
-                            goesDownEveryWay(method, aMethodOfIt, others, chain));
-                    try {
-                        Optional<Boolean> goesDown = run.get(120, TimeUnit.SECONDS);
-                        (goesDown.isPresent() ? answered : refused).add(told);
-                        if (goesDown.orElse(false)) {
-                            slow.add(told);
-                        }
-                    } catch (TimeoutException wayTooLong) {
-                        run.cancel(true);
-                        slow.add(told);
-                    } catch (ExecutionException failed) {
-                        throw new IllegalStateException(told, failed.getCause());
+                    if (answerOn(method, aMethodOfIt, others, chain, SHORT).isPresent()) {
+                        answered.add(told);
+                        asks.put(told, new Ask(
+                                () -> answerOn(method, aMethodOfIt, others, chain, SHORT),
+                                () -> answerOn(method, aMethodOfIt, others, chain, LONG)));
+                    } else {
+                        refused.add(told);
                     }
                 }
             }
         }
-        pool.shutdownNow();
-        return new Findings(answered, refused, notAsked, slow);
+        return new Findings(answered, refused, notAsked, past(visits, asks));
     }
 }

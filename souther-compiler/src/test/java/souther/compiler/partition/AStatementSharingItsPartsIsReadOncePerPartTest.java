@@ -13,15 +13,17 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.ValueName;
+import souther.test.Growth;
+import souther.test.Visits;
 
 import java.math.BigInteger;
-import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -44,23 +46,48 @@ class AStatementSharingItsPartsIsReadOncePerPartTest {
     /** As deep as a statement goes whose spelling a string still holds. */
     private static final int LEVELS = 21;
 
-    @Test
-    void eachReadingWalksADeeplySharedStatementOnceForEachPart() {
-        Proposition first = level(remainderAtLeast(0, 2));
-        Proposition deep = first;
-        for (int at = 1; at < LEVELS; at++) {
+    /** A statement of {@code levels} levels. */
+    private static Proposition sharing(int levels) {
+        Proposition deep = level(remainderAtLeast(0, 2));
+        for (int at = 1; at < levels; at++) {
             deep = level(deep);
         }
-        Proposition shared = deep;
+        return deep;
+    }
+
+    /** Each reading asked of a statement, by what it is called. */
+    private static final Map<String, Consumer<Proposition>> READINGS = Map.of(
+            "the residues it leaves",
+            statement -> ResiduesAStatementLeaves.of(statement, form(), BigInteger.valueOf(7)),
+            "the element it weighs", OnOneElement::theElementOf,
+            "where it comes round", TheElementComesRound::in);
+
+    /** The statements are held to a count of how often each reading goes into them, at levels each
+     *  twice the last, so that a reading that goes down every way is two to the levels as often. */
+    @Test
+    void eachReadingGoesIntoADeeplySharedStatementOnceForEachPart() {
+        try (Visits visits = Visits.into(List.of(Proposition.class))) {
+            READINGS.forEach((reading, read) -> {
+                SequencedMap<Integer, Long> into = new LinkedHashMap<>();
+                for (int levels : new int[] {LEVELS / 2, LEVELS}) {
+                    Proposition statement = sharing(levels);
+                    into.put(levels, visits.during(() -> read.accept(statement)));
+                }
+                Growth.eachAtMost(into, 4, 1);
+            });
+        }
+    }
+
+    @Test
+    void eachReadingSaysOfADeeplySharedStatementWhatItSaysOfTheFirstLevel() {
+        Proposition first = sharing(1);
+        Proposition shared = sharing(LEVELS);
         BigInteger seven = BigInteger.valueOf(7);
-        assertTimeoutPreemptively(Duration.ofSeconds(2), () -> {
-            assertEquals(ResiduesAStatementLeaves.of(first, form(), seven),
-                    ResiduesAStatementLeaves.of(shared, form(), seven),
-                    "the deep statement means what the first level does");
-            assertTrue(OnOneElement.theElementOf(shared).isEmpty(), "it weighs no element");
-            assertTrue(TheElementComesRound.in(shared).isEmpty(),
-                    "and so comes round over none");
-        });
+        assertEquals(ResiduesAStatementLeaves.of(first, form(), seven),
+                ResiduesAStatementLeaves.of(shared, form(), seven),
+                "the deep statement means what the first level does");
+        assertTrue(OnOneElement.theElementOf(shared).isEmpty(), "it weighs no element");
+        assertTrue(TheElementComesRound.in(shared).isEmpty(), "and so comes round over none");
     }
 
     /** {@code (below and floorMod(d - s + 1, 7) >= 3) or (below and floorMod(d - s + 2, 7) >= 5)}:
