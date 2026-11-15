@@ -7,6 +7,8 @@ import java.util.Comparator;
 import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.function.IntPredicate;
 import java.util.function.UnaryOperator;
 
@@ -56,9 +58,12 @@ public final class CodeMap {
     private final CodePoints domain;
     private final CodePoints leftAlone;
     private final CodePoints answeredOutsideTheDomain;
+    private final SortedMap<Integer, String> answeredElsewhere;
 
-    private CodeMap(List<Run> runs, CodePoints leftAlone, CodePoints answeredOutsideTheDomain) {
+    private CodeMap(List<Run> runs, CodePoints leftAlone, CodePoints answeredOutsideTheDomain,
+                    SortedMap<Integer, String> answeredElsewhere) {
         this.answeredOutsideTheDomain = answeredOutsideTheDomain;
+        this.answeredElsewhere = answeredElsewhere;
         this.runs = List.copyOf(runs);
         this.byImage = runs.stream().sorted(Comparator.comparingInt(Run::imageFrom)).toList();
         this.imageReach = new int[byImage.size()];
@@ -111,6 +116,9 @@ public final class CodeMap {
         int found = 0;
         // What the code points outside the domain are answered with, alone and beside a letter.
         BitSet outside = new BitSet();
+        // What each code point outside the domain is answered with alone, where that is not the
+        // code point itself.
+        SortedMap<Integer, String> elsewhere = new TreeMap<>();
         for (int codePoint = 0; codePoint <= CodePoints.LAST; codePoint++) {
             if (CodePoints.isSurrogate(codePoint)) {
                 if (aloneFrom >= 0) {
@@ -147,6 +155,9 @@ public final class CodeMap {
                 found++;
             } else if (answer != null) {
                 answer.codePoints().forEach(outside::set);
+                if (!unchanged) {
+                    elsewhere.put(codePoint, answer);
+                }
             }
         }
         if (aloneFrom >= 0) {
@@ -171,6 +182,7 @@ public final class CodeMap {
         for (int at = dependsOnWhatStandsBeside.nextSetBit(0); at >= 0;
                 at = dependsOnWhatStandsBeside.nextSetBit(at + 1)) {
             answeredBesideALetter(conversion, candidates[at], targets[at], outside);
+            elsewhere.put(candidates[at], Character.toString(targets[at]));
         }
         // A run is made once it ends, and not again for each code point it is stretched over.
         List<Run> runs = new ArrayList<>();
@@ -197,7 +209,7 @@ public final class CodeMap {
         if (runFrom >= 0) {
             runs.add(new Run(runFrom, runTo, runShift));
         }
-        return new CodeMap(runs, new CodePoints(alone), codePointsOf(outside));
+        return new CodeMap(runs, new CodePoints(alone), codePointsOf(outside), elsewhere);
     }
 
     /**
@@ -228,7 +240,7 @@ public final class CodeMap {
     }
 
     /** The code points {@code set} holds, as ranges. */
-    private static CodePoints codePointsOf(BitSet set) {
+    static CodePoints codePointsOf(BitSet set) {
         List<CodePoints.Range> ranges = new ArrayList<>();
         for (int from = set.nextSetBit(0); from >= 0; ) {
             int past = set.nextClearBit(from);
@@ -257,7 +269,17 @@ public final class CodeMap {
      * of two, the code points of what the outer one answers, which are its own.
      */
     public CodeMap leavingBe(CodePoints alone) {
-        return new CodeMap(runs, alone, answeredOutsideTheDomain);
+        return new CodeMap(runs, alone, answeredOutsideTheDomain, answeredElsewhere);
+    }
+
+    /**
+     * What the conversion answers of each code point outside the {@link #domain} that it does not
+     * answer as it stands, alone: the answer may be several code points, or one that is no stable
+     * starter, and for a code point whose answer turns on what stands beside it, the answer when
+     * nothing does.
+     */
+    public SortedMap<Integer, String> answeredElsewhere() {
+        return answeredElsewhere;
     }
 
     /**
