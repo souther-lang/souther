@@ -65,6 +65,16 @@ class AWayThatKeepsAValueOffNumbersNothingElseHoldsLeavesItsRunWholeTest {
         assertFalse(notShownAt(human, "hs[*]"), human);
     }
 
+    /** A way that pins {@code h} and keeps {@code d} off it settles the comparison over runs, one
+     *  of which has no upper end; no run is above it, and the report is written. */
+    @Test
+    void aRunWithNoUpperEndHasNoRunAboveIt() {
+        String human = report("", "h: Decimal, d: Decimal, s: Decimal",
+                "(h, d, s) -> (if h == 1.0m then (if d /= h then d else 5.0m) else 7.0m) >= s");
+
+        assertFalse(human.isEmpty(), human);
+    }
+
     /** One value is kept off another that nothing else reads, so every value of the first has a
      *  partner that differs. */
     @Test

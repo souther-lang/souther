@@ -657,6 +657,11 @@ public final class WhatARelationLeavesUndivided {
                             out.add(new Line(run.from().inclusive() ? Rel.GE : Rel.GT,
                                     run.from().at()));
                         }
+                        // A run with no upper end covers everything above it, so no run after it
+                        // is above it and no line is drawn there.
+                        if (run.to() == null) {
+                            break;
+                        }
                         // Above it, values it leaves, or the next run settling it the other way.
                         if (leftAbove || after != null) {
                             out.add(new Line(run.to().inclusive() ? Rel.LE : Rel.LT,
