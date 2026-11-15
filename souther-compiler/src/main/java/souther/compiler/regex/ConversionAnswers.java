@@ -145,7 +145,7 @@ public final class ConversionAnswers {
      */
     public Seen stringsSeenInto(Language answers, Meter meter) {
         Automaton machine = answers.machine();
-        BitSet live = statesThatLeadToAnEnd(machine);
+        BitSet live = LiveStates.of(machine);
         CodePoints read = CodePoints.NONE;
         for (int state = 0; state < machine.size(); state++) {
             for (Automaton.Step each : machine.stepsFrom(state)) {
@@ -276,34 +276,6 @@ public final class ConversionAnswers {
     private static boolean neverHolds(Answered answered, CodePoints read) {
         return !holdsOnly(answered.alone(), read) && answered.beside().stream()
                 .noneMatch(each -> holdsOnly(each, read));
-    }
-
-    /**
-     * The states a walk may stop at from: a complete machine steps over the symbols it does not
-     * read into a state that leads nowhere, and what a language reads is what leads to an end.
-     */
-    private static BitSet statesThatLeadToAnEnd(Automaton machine) {
-        BitSet live = new BitSet();
-        boolean grew = true;
-        for (int state = 0; state < machine.size(); state++) {
-            live.set(state, machine.stopsAt(state));
-        }
-        while (grew) {
-            grew = false;
-            for (int state = 0; state < machine.size(); state++) {
-                if (live.get(state)) {
-                    continue;
-                }
-                for (Automaton.Step each : machine.stepsFrom(state)) {
-                    if (live.get(each.to())) {
-                        live.set(state);
-                        grew = true;
-                        break;
-                    }
-                }
-            }
-        }
-        return live;
     }
 
     /** The states {@code machine} is in after one more symbol, from {@code from}. */

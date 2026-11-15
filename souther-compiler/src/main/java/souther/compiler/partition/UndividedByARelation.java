@@ -88,6 +88,7 @@ import souther.compiler.regex.ConversionAnswers;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.regex.StringsHeldAsWritten;
+import souther.compiler.regex.StringsInNormalFormC;
 import souther.compiler.regex.StringsInsideStrings;
 import souther.compiler.regex.StringsOfAPiece;
 import souther.compiler.semantics.Accumulation;
@@ -4101,8 +4102,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (canBe == null || mayBe == null) {
             return null;
         }
-        // A string looked for that is shown inside a value stands in one written round it, which
-        // is longer than it by at most what the machine needs before and after.
+        // A relation is asked of the values a side holds, which are the strings of the language
+        // in Normalization Form C. Where nothing is converted on this side, what the side may
+        // come to is asked of those, so a sequence that is no value is not a reason to leave one
+        // open: a string of a value that has a value inside it is one too.
+        Language mineLanguage = languageOf(mineHolds);
+        Language mayBeValues = mineMap != null || mineLanguage == null ? null
+                : StringsInNormalFormC.within(mayBe.and(mineLanguage, meter), meter);
+        if (mayBeValues != null) {
+            Language shownValues = canBe.and(mayBeValues, meter);
+            if (shownValues == null) {
+                return null;
+            }
+            mayBe = mayBeValues;
+            canBe = shownValues;
+        }
         // A string looked for that is itself a value has nothing written round it, so only the
         // strings shown inside a value that are no value need room, and where none of them is as
         // long as the room leaves there is nothing to bound.
