@@ -9,6 +9,7 @@ import souther.compiler.semantics.TakenAs;
 
 import java.math.BigInteger;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -41,6 +42,6 @@ class WhatTheYearLeavesIsAClassOfDaysTest {
     void theWalkMeetsOnlyDaysOfTheClass() {
         DatePartsLeft leap = DatePartsLeft.yearLeaving(4, Set.of(0));
         DatePartsLeft.Walked walked = leap.walk(BigInteger.valueOf(day(2025, 1, 1)), null, true, 2);
-        assertEquals(java.util.List.of(day(2028, 1, 1), day(2028, 1, 2)), walked.days());
+        assertEquals(List.of(day(2028, 1, 1), day(2028, 1, 2)), walked.days());
     }
 }
