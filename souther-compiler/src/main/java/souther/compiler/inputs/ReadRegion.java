@@ -62,6 +62,13 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
+    public SearchRegion assumingTheYearLeaves(NumericTerm.ValueOf date, int divisor,
+                                              Set<Integer> remainders) {
+        ReadQuantities taken = within.assumingTheYearLeaves(date, divisor, remainders);
+        return taken == within ? this : new ReadRegion(taken);
+    }
+
+    @Override
     public SearchRegion apartFrom(NumericTerm.FromOnePosition term,
                                   souther.compiler.numeric.Place at) {
         ReadQuantities taken = within.apartFrom(term, at);
