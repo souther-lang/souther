@@ -3229,9 +3229,10 @@ public final class Generator {
                 if (!own.hasNext()) {
                     return own;
                 }
-                ObservedValue held = NearbyValues.holding(own.next(), element, reading, valuesHeld);
-                return NearbyValues.flat(List.of(List.of(held).iterator(), elements.of(element))
-                        .iterator(), Function.identity());
+                Iterator<ObservedValue> made =
+                        NearbyValues.holding(own.next(), element, reading, valuesHeld);
+                return NearbyValues.flat(List.of(made, elements.of(element)).iterator(),
+                        Function.identity());
             };
             Growth growth = (value, of, how, which, within) -> NearbyValues.grown(value, of, how,
                     ranWith, madeOf, NearbyValues.Put.BEFORE_AND_AFTER, which);

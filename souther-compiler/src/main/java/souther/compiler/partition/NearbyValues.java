@@ -11,6 +11,7 @@ import souther.compiler.semantics.CaseMapping;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -334,16 +335,20 @@ final class NearbyValues {
     }
 
     /**
-     * {@code value} with every scalar leaf it holds put as the first of {@code held} of the leaf's
-     * own kind, and a leaf none of them is of the kind of left as it was.
+     * The values {@code value} becomes where its scalar leaves are put as values of {@code held} of
+     * the leaf's own kind: first every leaf put as the first of them, then the arrangements one
+     * leaf away from {@code value}, then those one more leaf away, and so on. A leaf none of them
+     * is of the kind of stays as it was.
      *
      * <p>For an element of what a dependency answers to a call: what is looked up by what the call
      * was made with is found among the values the call holds, so an element made of them is the one
-     * a lookup goes on to find.
+     * a lookup goes on to find. Which of the held values stands at which leaf is not known, so the
+     * arrangements are handed over nearest first, each made when it is asked for, and the caller's
+     * budget is what ends them and says so.
      */
-    static ObservedValue holding(ObservedValue value, Type type, RuleReadingContext reading,
-                                 List<ObservedValue> held) {
-        Leaves toTheHeld = (_, leaf, _, _, _) -> {
+    static Iterator<ObservedValue> holding(ObservedValue value, Type type,
+                                           RuleReadingContext reading, List<ObservedValue> held) {
+        Leaves toTheFirst = (_, leaf, _, _, _) -> {
             for (ObservedValue each : held) {
                 if (each.getClass() == leaf.getClass()) {
                     return each.equals(leaf) ? none() : List.of(each).iterator();
@@ -351,14 +356,50 @@ final class NearbyValues {
             }
             return none();
         };
-        ObservedValue current = value;
-        Iterator<ObservedValue> next = of(current, type, reading, null, List.of(), toTheHeld);
+        Leaves toAny = (_, leaf, _, _, _) -> filtered(held.iterator(),
+                each -> each.getClass() == leaf.getClass() && !each.equals(leaf));
+        ObservedValue allFirst = value;
+        Iterator<ObservedValue> next = of(allFirst, type, reading, null, List.of(), toTheFirst);
         // One leaf at a time, and each is put as a value it then is, so the walk ends.
         while (next.hasNext()) {
-            current = next.next();
-            next = of(current, type, reading, null, List.of(), toTheHeld);
+            allFirst = next.next();
+            next = of(allFirst, type, reading, null, List.of(), toTheFirst);
         }
-        return current;
+        Set<ObservedValue> reached = new LinkedHashSet<>();
+        reached.add(value);
+        ArrayDeque<ObservedValue> toWalk = new ArrayDeque<>();
+        toWalk.add(value);
+        ArrayDeque<ObservedValue> ready = new ArrayDeque<>();
+        if (reached.add(allFirst)) {
+            ready.add(allFirst);
+            toWalk.add(allFirst);
+        }
+        return new Iterator<>() {
+
+            @Override
+            public boolean hasNext() {
+                while (ready.isEmpty() && !toWalk.isEmpty()) {
+                    Iterator<ObservedValue> away =
+                            of(toWalk.poll(), type, reading, null, List.of(), toAny);
+                    while (away.hasNext()) {
+                        ObservedValue arranged = away.next();
+                        if (reached.add(arranged)) {
+                            ready.add(arranged);
+                            toWalk.add(arranged);
+                        }
+                    }
+                }
+                return !ready.isEmpty();
+            }
+
+            @Override
+            public ObservedValue next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                return ready.poll();
+            }
+        };
     }
 
     /**

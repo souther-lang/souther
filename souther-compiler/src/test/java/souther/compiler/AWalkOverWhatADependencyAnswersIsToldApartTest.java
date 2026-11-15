@@ -105,7 +105,34 @@ class AWalkOverWhatADependencyAnswersIsToldApartTest {
         assertEquals(List.of(), undecided(measured(source)));
     }
 
-    /** A walk over a list of the input is left to the input: the answer is not what it goes over. */
+    /**
+     * A walk over a list made of the input's, which the input does not hold as it is, is decided by
+     * growing the input's list, though the positions are moved before the lists are grown.
+     */
+    @Test
+    void aWalkOverAListMadeOfTheInputsIsDecidedByGrowingTheInputs() {
+        String source = """
+                module repro.derived
+
+                data Item = { name: String, qty: Int }
+
+                behavior total : (items: List<Item>, limit: Int) -> Int
+
+                let total (items, limit) =
+                    List.sum(List.map(i -> i.qty + limit, List.filter(i -> i.qty > 0, items)))
+
+                example total
+                    | "none" : ([ ], 5) -> 0
+                    | "one" : ([ Item { name = "a", qty = 2 } ], 5) -> 7
+                """;
+
+        assertEquals(List.of(), undecided(measured(source)));
+    }
+
+    /**
+     * A walk over a list of the input is still decided where a dependency answers a list too: the
+     * rows written hold no list of two, so the input's list has to be grown.
+     */
     @Test
     void aWalkOverAnInputIsStillDecidedByTheInput() {
         String source = """
@@ -113,21 +140,52 @@ class AWalkOverWhatADependencyAnswersIsToldApartTest {
 
                 data Stock = { sku: String, qty: Int }
 
-                behavior readStock : (sku: String) -> Int
+                behavior readTags : (sku: String) -> List<String>
 
                 behavior total : (lines: List<Stock>, sku: String) -> Int
-                    depends on readStock
+                    depends on readTags
 
-                let total (lines, sku, readStock) =
-                    List.sum(List.map(l -> l.qty + readStock(sku), lines))
+                let total (lines, sku, readTags) =
+                    List.length(readTags(sku)) + List.sum(List.map(l -> l.qty, lines))
 
-                fake readStock
-                    | _ -> 1
+                fake readTags
+                    | _ -> [ "x" ]
 
                 example total
-                    | "none" : ([ ], "a") -> 0
+                    | "none" : ([ ], "a") -> 1
                     | "one" : ([ Stock { sku = "a", qty = 2 } ], "a") -> 3
-                    | "two" : ([ Stock { sku = "a", qty = 2 }, Stock { sku = "b", qty = 4 } ], "a") -> 8
+                """;
+
+        assertEquals(List.of(), undecided(measured(source)));
+    }
+
+    /**
+     * An element of the answer is made of the values the row holds, as many of them as it has
+     * leaves: the second key a lookup asks for is found in the answer as the first is.
+     */
+    @Test
+    void anElementIsMadeOfMoreThanTheFirstValueTheRowHolds() {
+        String source = """
+                module repro.both
+
+                data Stock = { sku: String, qty: Int }
+
+                behavior readStock : (sku: String) -> List<Stock>
+
+                behavior bothHeld : (sku: String, other: String) -> Bool
+                    depends on readStock
+
+                let bothHeld (sku, other, readStock) = {
+                    let held = List.indexBy(.sku, readStock(sku))
+                    Map.containsKey(other, held)
+                }
+
+                fake readStock
+                    | _ -> [ Stock { sku = "apple", qty = 3 } ]
+
+                example bothHeld
+                    | "found" : ("a", "apple") -> true
+                    | "absent" : ("a", "pear") -> false
                 """;
 
         assertEquals(List.of(), undecided(measured(source)));
