@@ -4933,6 +4933,15 @@ public final class InputReads {
     }
 
     /**
+     * Whether {@code e} is made of what was written and nothing a run is handed, read here
+     * ({@link ValueStanding#madeOfWhatIsWritten}): the same on every run, whether or not it folds.
+     */
+    public boolean madeOfWhatIsWritten(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
+        return ValueStanding.madeOfWhatIsWritten(e, this,
+                new Followed(symbols, newtypes, new HashSet<>()));
+    }
+
+    /**
      * The same, where a construction of a newtype is the value it wraps: what a source writes
      * where a place of a newtype's type is asked for, which is the value the place holds under
      * the name it wears. A reader that discharges a rule on a constant asks {@link #folded}.

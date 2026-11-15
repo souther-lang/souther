@@ -99,8 +99,6 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
         table.put("ABorderNotHeldAgainstTheLinesBesideIt", "asks what stood in the way/MAY_CHANGE");
         // And the same figure on the other criterion: a build allowed more walks the group.
         table.put("MeetingsNotWalked", "answers/MAY_CHANGE");
-        // A meeting the classes do not place is placed the same way however much a run allows.
-        table.put("MeetingsNotPlaced", "answers/UNAFFECTED");
         // And a sum whose decisions are not joined to evaluations is joined the same way.
         table.put("MeetingsNotJoined", "answers/UNAFFECTED");
         // A run this reading cannot place among the rules is not placed by allowing more.
@@ -240,8 +238,7 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                  Weakening.ProofContradicted _, Weakening.ProofOfAWayContradicted _,
                  Weakening.ArmsUnsettled _,
                  Weakening.DecisionOfRowUnreadable _, Weakening.DecisionRunNotWatched _,
-                 Weakening.MeetingsNotWalked _, Weakening.MeetingsNotPlaced _,
-                 Weakening.MeetingsNotJoined _,
+                 Weakening.MeetingsNotWalked _, Weakening.MeetingsNotJoined _,
                  Weakening.DecisionReadingIncomplete _,
                  Weakening.DecisionRuleReadShort _,
                  Weakening.KeyedOverwriteCasesUnmeasured _,
@@ -292,7 +289,6 @@ class WhatEachWeakeningSaysAboutAWiderRunTest {
                 Weakening.ABorderNotHeldAgainstTheLinesBesideIt.Why.NOTHING_WATCHED_THE_RUNS));
         out.add(new Weakening.MeetingsNotWalked("b", 1,
                 List.of(WorkFigure.COMBINATIONS_OF_A_GROUP_MEASURED.at(4))));
-        out.add(new Weakening.MeetingsNotPlaced("b", 1));
         out.add(new Weakening.MeetingsNotJoined("b", 1));
         out.add(new Weakening.DecisionOfRowUnreadable("b",
                 souther.compiler.partition.RulesTaken.WhichRule.Why.NO_RECOGNISABLE_RULE_MATCHES));

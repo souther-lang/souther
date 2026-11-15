@@ -6,6 +6,7 @@ import souther.compiler.diag.Messages;
 import souther.compiler.diag.msg.SearchMessage;
 import souther.compiler.check.NarrowedBounds;
 import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.Derivation.AComparisonRead.Facing;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.EndSide;
 import souther.compiler.numeric.Endpoint;
@@ -531,10 +532,10 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      * Which point of the author's line {@code point} of this reading is, as {@code proven} says the
      * reading faces it — or nothing where the facing does not say.
      *
-     * <p>The value the line is at is the author's line's value whichever way it is faced. A side is
+     * <p>Where the reading faces its sides a known way that is {@link #faced}. Otherwise a side is
      * told by what the line claims: an order's satisfied side is its satisfied side on any quantity
      * it is drawn on, so a side of this reading is the author's satisfied side exactly where the
-     * comparison holds there. Where this reading drew the relation the comparison denies — a
+     * comparison holds there, and the value the line is at is the author's. Where this reading drew the relation the comparison denies — a
      * statement of several holds each relation one way round, and the comparison may hold where it
      * fails — the relation's satisfied side is the comparison's other one, and what holds at the
      * value is what does not. A value singled out holds on neither side, and which side of it is
@@ -542,22 +543,17 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
      */
     private Optional<DomainPoint> theAuthorsPoint(DomainPoint point,
                                                   AuthoredPointMapping.Proven proven) {
-        if (point.side() == null) {
-            return Optional.of(point);
-        }
         // Where the line is the comparison's own relation and this reading's quantity faces the
         // sides it wrote a known way, a side is a side of the left against the right, whatever the
         // reading drew it as: the rules can leave one value at an order's end, and the line is
         // then a value singled out where the author wrote an order. A line something else in the
         // definition draws has no two sides of the comparison's written for it, and its claim is
         // what the comparison comes to across it.
-        Optional<Towards> faced = !proven.itsOwn() ? Optional.empty() : switch (proven.facing()) {
-            case AS_WRITTEN -> Optional.of(point.side());
-            case TURNED -> Optional.of(point.side().opposite());
-            case NOTHING_WRITTEN -> Optional.empty();
-        };
-        if (faced.isPresent()) {
-            return faced.map(towards -> sideOf(point, towards));
+        if (proven.itsOwn() && proven.facing() != Facing.NOTHING_WRITTEN) {
+            return Optional.of(faced(point, proven.facing() == Facing.TURNED, proven));
+        }
+        if (point.side() == null) {
+            return Optional.of(point);
         }
         Optional<Towards> side = switch (proven.claims()) {
             case ComparisonClaim.Cut authoredCut
@@ -579,6 +575,33 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
             default -> Optional.empty();
         };
         return side.map(towards -> sideOf(point, towards));
+    }
+
+    /**
+     * {@code point} as a point of the author's line, for a reading that faces its sides the way
+     * {@code turned} says.
+     *
+     * <p>Two orders cut the same values into the same two classes, and each names the number it is
+     * at as one of them. A relation and its denial name different ends of one cut — {@code x <= 1}
+     * and {@code x >= 2} are the cut between 1 and 2, named at 1 and at 2 — so the number the
+     * reading is at is not always the number the author's line is at. Where it falls in the other
+     * class once the sides are faced, the number the reading is at is the value beside the author's
+     * line, and the value beside the reading's line is the author's number. Anywhere else the
+     * numbers are one and a point is the same kind of point on the side the facing gives it.
+     */
+    private DomainPoint faced(DomainPoint point, boolean turned,
+                              AuthoredPointMapping.Proven proven) {
+        if (proven.claims() instanceof ComparisonClaim.Cut authored
+                && origin.lineFacts().claim() instanceof ComparisonClaim.Cut drawn
+                && (turned ? drawn.valueBelongs().opposite() : drawn.valueBelongs())
+                        != authored.valueBelongs()
+                && !(point instanceof DomainPoint.InTheRegion)) {
+            return point instanceof DomainPoint.AtTheLine
+                    ? new DomainPoint.BesideTheLine(authored.valueBelongs().opposite())
+                    : new DomainPoint.AtTheLine();
+        }
+        return point.side() == null ? point
+                : sideOf(point, turned ? point.side().opposite() : point.side());
     }
 
     /** {@code point}, on side {@code towards} of the line. */

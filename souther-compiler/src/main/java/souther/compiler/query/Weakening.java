@@ -106,7 +106,7 @@ public sealed interface Weakening {
                  ProofContradicted _, ProofOfAWayContradicted _, ArmsUnsettled _,
                  DecisionOfRowUnreadable _, DecisionRunNotWatched _, DecisionRuleReadShort _,
                  KeyedOverwriteCasesUnmeasured _, ReachableNodeCasesUnmeasured _,
-                 MeetingsNotPlaced _, MeetingsNotJoined _ -> List.of();
+                 MeetingsNotJoined _ -> List.of();
             case BorderValueUnreadable it -> it.why().figures();
             case BorderReadingsNotExhausted it -> it.limits();
             case ModelReadingIncomplete it -> it.cause().figures();
@@ -703,36 +703,6 @@ public sealed interface Weakening {
     }
 
     /**
-     * A meeting of the body's decisions whose combinations the classes of the input do not place.
-     *
-     * <p>A way of settling one of its factors, or the way to it, narrows no position — the arm
-     * itself, where what a run is seen doing does not tell the ways into it apart — or two ways of
-     * settling one factor leave the same classes. No row can be steered into one of its
-     * combinations rather than another, so none is asked for, and which of them the rows make is
-     * not measured. Nothing is owed at any of them, because nothing established that a row is
-     * missing.
-     *
-     * <p>Beside {@link MeetingsNotWalked}, which a wider run walks. This is how the body is read,
-     * and allowing more reads it the same way.
-     */
-    record MeetingsNotPlaced(String behavior, int groups) implements Weakening {
-
-        public MeetingsNotPlaced {
-            Objects.requireNonNull(behavior, "a meeting is a meeting of some behavior");
-            if (groups < 1) {
-                throw new IllegalArgumentException(
-                        "a measure that placed every group went without nothing here: " + groups);
-            }
-        }
-
-        /** The classes place what they place however much a run allows. */
-        @Override
-        public RunSensitivity runSensitivity() {
-            return RunSensitivity.UNAFFECTED;
-        }
-    }
-
-    /**
      * A sum of the elements a comparison keeps whose decisions this reading met and could not join
      * to the evaluations a run records.
      *
@@ -744,9 +714,9 @@ public sealed interface Weakening {
      * nothing established that a row is missing; and a behavior is not said to have had every
      * combination of its decisions made when some of them were never asked about.
      *
-     * <p>Beside {@link MeetingsNotPlaced}, which is the classes of the input not placing a group
-     * this reading did form. Here there is no group: the decisions were not joined into one. The
-     * reasons are {@code WhyNotJoined}'s, kept by the reading and not published.
+     * <p>There is no group here: the decisions were not joined into one, or an operand has a way
+     * that cannot be held to a row. The reasons are {@code WhyNotJoined}'s, kept by the reading and
+     * not published.
      */
     record MeetingsNotJoined(String behavior, int groups) implements Weakening {
 

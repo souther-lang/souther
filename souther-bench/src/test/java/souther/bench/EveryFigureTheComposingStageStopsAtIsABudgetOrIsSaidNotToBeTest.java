@@ -83,6 +83,14 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
                     "no distance, which is what a position with no class to move to changes"
                             + " a distance by"),
 
+            // How wide a region of rows is kept as a union of cells before it is read as the one
+            // cell that holds it. It widens and refuses nothing: every row the region had is still
+            // in it, a search of a wider region is still certified by what its run did, and a
+            // combination it makes inexact is said as one nothing showed to exist.
+            Map.entry("souther.compiler.partition.InteractionCells.Steering.MOST_CELLS",
+                    "how many cells a region holds before it is read as the one cell that holds"
+                            + " them all, which leaves out no row"),
+
             // A place in a list rather than an amount of anything.
             Map.entry("souther.compiler.partition.Generator.NOT_HERE",
                     "no position, which is what an index that found none is"),

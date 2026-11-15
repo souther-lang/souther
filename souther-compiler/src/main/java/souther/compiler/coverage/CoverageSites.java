@@ -1565,7 +1565,7 @@ public final class CoverageSites {
          */
         private boolean closed(Core e) {
             Set<BindingId> inside = new HashSet<>();
-            bindersIn(e, inside);
+            Core.bindersIn(e, inside);
             return closedUnder(e, inside);
         }
 
@@ -1659,26 +1659,6 @@ public final class CoverageSites {
             return closed;
         }
 
-        /** The names {@code e} binds anywhere inside it. */
-        private static void bindersIn(Core e, Set<BindingId> out) {
-            switch (e) {
-                case Core.Block block -> block.params().forEach(each -> out.add(each.binding()));
-                case Core.LetIn let -> out.add(let.binder().binding());
-                case Core.IfConstructed attempt -> {
-                    if (attempt.binder() != null) {
-                        out.add(attempt.binder().binding());
-                    }
-                }
-                case Core.Match match -> match.cases().forEach(each -> {
-                    if (each.binding().binder() != null) {
-                        out.add(each.binding().binder().binding());
-                    }
-                });
-                default -> { }
-            }
-            Core.forEachChild(e, child -> bindersIn(child, out));
-        }
-
         /** Whether {@code call} reaches a behavior, whose answer a run stands in or injects. */
         private static boolean reachesABehavior(Core.Call call) {
             return call.fn() instanceof Core.Reached.OfDeclaration declared
@@ -1698,7 +1678,7 @@ public final class CoverageSites {
             this.boundTo.clear();
             this.closedNames.clear();
             this.boundInTheBody.clear();
-            bindersIn(body, boundInTheBody);
+            Core.bindersIn(body, boundInTheBody);
             walk(body, true);
             oneValue.put(name, fromOneValue(body));
         }

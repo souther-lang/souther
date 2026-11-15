@@ -3,11 +3,15 @@ package souther.compiler.check;
 import souther.compiler.core.ConstructionProjection;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
+import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.BiPredicate;
 import java.util.function.Supplier;
@@ -566,6 +570,70 @@ public final class ValueStanding {
             }
         }
         return true;
+    }
+
+    /**
+     * Whether {@code e}, read in {@code at}, is made of what was written and of nothing a run is
+     * handed: every name it reads is one the environment denotes a value for, and so on down, or
+     * one a closure inside it binds.
+     *
+     * <p>What such a value comes to is the same on every run, whether or not this works out what.
+     * {@link FoldedValue} says the other half, what it comes to, for the operators it knows; a
+     * quantifier over a list written in the body is as much a constant and no fold of it exists.
+     *
+     * <p>False wherever a name stands for something of its own — a parameter, a position of the
+     * input, an element an operation handed out that nothing written stands against — which is what
+     * a value can vary with. The same question the plan of a run asks of the tree that runs
+     * ({@code CoverageSites}' closed values), read here in the environment a reading of the input
+     * follows its names in.
+     */
+    public static <E, N extends Names<E, N>> boolean madeOfWhatIsWritten(Core e, E at, N names) {
+        return writtenWhole(e, at, names, new IdentityHashMap<>());
+    }
+
+    /**
+     * {@code e} read in {@code at}, with what each name came to held in {@code done} by what it
+     * stands for where it is read, as {@link FoldedValue} holds it: a name read more than once is
+     * walked once, so a chain of names each read twice costs a walk per link and not two to the
+     * power of its length. A name is put down as not written whole while it is walked, so one that
+     * reaches itself answers rather than going round.
+     */
+    private static <E, N extends Names<E, N>> boolean writtenWhole(
+            Core e, E at, N names, Map<Object, Map<BindingId, Boolean>> done) {
+        Set<BindingId> bound = new HashSet<>();
+        Core.bindersIn(e, bound);
+        return writtenUnder(e, at, names, bound, done);
+    }
+
+    private static <E, N extends Names<E, N>> boolean writtenUnder(
+            Core asPlaced, E at, N names, Set<BindingId> bound,
+            Map<Object, Map<BindingId, Boolean>> done) {
+        Core e = Core.withoutStanding(asPlaced);
+        if (e instanceof Core.Read read) {
+            if (bound.contains(read.binding())) {
+                return true;
+            }
+            Map<BindingId, Boolean> here = done.computeIfAbsent(names.standingOf(read, at),
+                    _ -> new HashMap<>());
+            Boolean already = here.get(read.binding());
+            if (already != null) {
+                return already;
+            }
+            here.put(read.binding(), false);
+            boolean whole = switch (named(read, at, names)) {
+                case null -> false;
+                case Named.One<E, N>(Standing<E, N> one) ->
+                        writtenWhole(one.value(), one.at(), one.names(), done);
+                case Named.OneOf<E, N>(List<Standing<E, N>> members) -> members.stream().allMatch(
+                        one -> writtenWhole(one.value(), one.at(), one.names(), done));
+            };
+            here.put(read.binding(), whole);
+            return whole;
+        }
+        boolean[] whole = {true};
+        Core.forEachChild(e, child -> whole[0] = whole[0]
+                && writtenUnder(child, at, names, bound, done));
+        return whole[0];
     }
 
     /**
