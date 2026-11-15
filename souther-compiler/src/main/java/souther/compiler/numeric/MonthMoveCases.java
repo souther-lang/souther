@@ -57,25 +57,37 @@ public final class MonthMoveCases {
     public enum Of {
 
         /** The date as a day count. */
-        DAY_NUMBER,
+        DAY_NUMBER(0),
 
         /** The year it falls in. */
-        YEAR,
+        YEAR(1),
 
         /** The month it falls in. */
-        MONTH,
+        MONTH(2),
 
         /** The day of its month. */
-        DAY_OF_MONTH,
+        DAY_OF_MONTH(3),
 
         /** What its year leaves by four. */
-        YEAR_BY_4,
+        YEAR_BY_4(4),
 
         /** What its year leaves by one hundred. */
-        YEAR_BY_100,
+        YEAR_BY_100(5),
 
         /** What its year leaves by four hundred. */
-        YEAR_BY_400
+        YEAR_BY_400(6);
+
+        private final int id;
+
+        Of(int id) {
+            this.id = id;
+        }
+
+        /** The number that tells this one from the others in a derived origin; it does not move
+         *  when the constants are reordered. */
+        public int id() {
+            return id;
+        }
     }
 
     /** A number of the date standing in a relation to a number written out. */

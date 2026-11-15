@@ -210,10 +210,10 @@ final class MonthMovesInCases {
 
         /** A call no source wrote, derived from the move's, one for each number of the date. */
         private Core call(DeclaredOperation operation, List<Core> args, MonthMoveCases.Of of) {
-            int ordinal = of.ordinal();
+            int id = of.id();
             ApplicationOrigin application = ApplicationOrigin.composedOutOf(basis.application(),
-                    ordinal, ApplicationDerivationCause.NumberOfADateMoved::new);
-            ReferenceOrigin reference = ReferenceOrigin.composedOutOf(basis.reference(), ordinal,
+                    id, ApplicationDerivationCause.NumberOfADateMoved::new);
+            ReferenceOrigin reference = ReferenceOrigin.composedOutOf(basis.reference(), id,
                     ReferenceDerivationCause.NumberOfADateMovedReference::new);
             return new Core.PreservedCall(operation, args,
                     new Core.KeptCallPlace(reference, application, basis.place().lineage()),
