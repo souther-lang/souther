@@ -3,16 +3,20 @@ package souther.lsp;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.io.ByteArrayOutputStream;
+import souther.test.Workers;
+import souther.test.WrittenOutput;
+
 import java.io.IOException;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 
 /**
@@ -28,19 +32,23 @@ final class Session implements AutoCloseable {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    /** Long enough that a slow machine is not a failure, short enough to be a test. */
-    private static final long WAIT_MILLIS = 60_000;
-
-    /** How long nothing may arrive before the server is taken to have finished what it was doing. */
-    private static final long QUIET_MILLIS = 400;
+    /**
+     * What a hung server costs the build: the wait for a message that never comes ends here. It
+     * decides nothing about a server that is slow, because a wait ends when the message is written
+     * and this only bounds the case where it is not going to be.
+     */
+    private static final Duration HUNG = Duration.ofMinutes(2);
 
     private final PipedOutputStream toServer = new PipedOutputStream();
 
-    private final ByteArrayOutputStream fromServer = new ByteArrayOutputStream();
+    /** The frames the server writes. */
+    private final WrittenOutput fromServer = new WrittenOutput();
 
     private final Thread serving;
 
     private volatile Throwable stopped;
+
+    private int nextBarrier = 1_000_000;
 
     Session() {
         PipedInputStream in;
@@ -49,11 +57,13 @@ final class Session implements AutoCloseable {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        serving = Thread.ofPlatform().name("souther-lsp-under-test").start(() -> {
+        serving = Workers.started("souther-lsp-under-test", () -> {
             try {
                 LspServer.serve(in, fromServer);
             } catch (Throwable t) {
                 stopped = t;
+            } finally {
+                fromServer.ended();
             }
         });
     }
@@ -75,7 +85,7 @@ final class Session implements AutoCloseable {
 
     /** Everything the server has written so far that can be read as a whole frame. */
     List<JsonNode> heard() {
-        byte[] wrote = fromServer.toByteArray();
+        byte[] wrote = fromServer.bytes();
         List<JsonNode> messages = new ArrayList<>();
         int at = 0;
         while (true) {
@@ -101,39 +111,42 @@ final class Session implements AutoCloseable {
 
     /** Waits for a message the server writes that {@code what} holds of, and answers with it. */
     JsonNode await(Predicate<JsonNode> what, String wanted) {
-        long until = System.currentTimeMillis() + WAIT_MILLIS;
-        while (System.currentTimeMillis() < until) {
-            JsonNode found = heard().stream().filter(what).findFirst().orElse(null);
-            if (found != null) {
-                return found;
-            }
-            pause();
-        }
-        throw new AssertionError("the server never wrote " + wanted);
+        JsonNode[] found = new JsonNode[1];
+        awaitWritten(() -> {
+            found[0] = heard().stream().filter(what).findFirst().orElse(null);
+            return found[0] != null;
+        }, wanted);
+        return found[0];
     }
 
     /** Waits until the server has written at least {@code many} messages that {@code what} holds of. */
     void awaitAtLeast(long many, Predicate<JsonNode> what, String wanted) {
-        long until = System.currentTimeMillis() + WAIT_MILLIS;
-        while (System.currentTimeMillis() < until) {
-            if (count(what) >= many) {
-                return;
-            }
-            pause();
-        }
-        throw new AssertionError("the server never wrote " + wanted);
+        awaitWritten(() -> count(what) >= many, wanted);
     }
 
-    /** Waits until the server has written nothing for long enough to have finished what it had. */
-    void awaitQuiet() {
-        long lastChange = System.currentTimeMillis();
-        int seen = fromServer.size();
-        while (System.currentTimeMillis() - lastChange < QUIET_MILLIS) {
-            pause();
-            if (fromServer.size() != seen) {
-                seen = fromServer.size();
-                lastChange = System.currentTimeMillis();
+    /**
+     * Waits until the server has carried out everything sent before this call, and written what that
+     * came to.
+     *
+     * <p>The server carries frames out in the order they arrive, so the reply to a request nothing
+     * answers but an error is behind everything written for the frames before it: the replies, and
+     * the diagnostics a diagnose that gave way to one of them had already published. What it does not
+     * say is that the diagnose the last frame leaves owed has run.
+     */
+    void awaitCarriedOut() {
+        int id = nextBarrier++;
+        send(message(id, "souther/barrier", Map.of()));
+        await(replyTo(id), "the reply to a request that only asks to be carried out in order");
+    }
+
+    private void awaitWritten(BooleanSupplier written, String wanted) {
+        try {
+            if (!fromServer.awaitUntil(written, HUNG)) {
+                throw new AssertionError("the server never wrote " + wanted, stopped);
             }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(e);
         }
     }
 
@@ -141,24 +154,12 @@ final class Session implements AutoCloseable {
     public void close() {
         try {
             toServer.close();
-            serving.join(WAIT_MILLIS);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new AssertionError(e);
         }
+        Workers.ended(serving, HUNG, "the server returned at the end of its input");
         if (stopped != null) {
             throw new AssertionError("the session did not end the way a session ends", stopped);
-        }
-    }
-
-    private static void pause() {
-        try {
-            Thread.sleep(2);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new AssertionError(e);
         }
     }
 

@@ -1,10 +1,8 @@
 package souther.compiler.check;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -34,11 +32,8 @@ class PredicatesAreReadOutOnceEachHoweverDeeplyTheyWereSettledTest {
      *  answer. */
     private static final int LONGER_THAN_A_STACK = 100_000;
 
-    /**
-     * Doublings enough that a reader paying per reach rather than per part takes far longer than
-     * this test is given, and few enough that it still stops and says so.
-     */
-    private static final int MORE_REACHES_THAN_THERE_ARE_PARTS = 27;
+    /** Doublings enough that a reader paying per reach reads the key over a thousand times. */
+    private static final int MORE_REACHES_THAN_THERE_ARE_PARTS = 10;
 
     private static SettledPredicates<String> holding(String key) {
         return SettledPredicates.of(key, true);
@@ -120,14 +115,36 @@ class PredicatesAreReadOutOnceEachHoweverDeeplyTheyWereSettledTest {
      * at from the other end.
      */
     @Test
-    @Timeout(value = 10, unit = TimeUnit.SECONDS)
     void whatWasSettledOnceIsReadOnceHoweverManyTimesItIsReached() {
-        SettledPredicates<String> shared = holding("a");
+        AtomicInteger hashed = new AtomicInteger();
+        SettledPredicates<Counted> shared = SettledPredicates.of(new Counted(hashed), true);
         for (int doubled = 0; doubled < MORE_REACHES_THAN_THERE_ARE_PARTS; doubled++) {
             shared = shared.and(shared);
         }
 
-        assertEquals(List.of(holding("a")), shared.distinct());
+        assertEquals(1, shared.distinct().size());
+        assertEquals(1, hashed.get(), "the one settling is read once, not once per way to it");
+    }
+
+    /** A key that counts how often it is read into a set, which is how a settling that is
+     *  reached is read. */
+    private static final class Counted {
+        private final AtomicInteger hashed;
+
+        Counted(AtomicInteger hashed) {
+            this.hashed = hashed;
+        }
+
+        @Override
+        public int hashCode() {
+            hashed.incrementAndGet();
+            return 1;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return this == other;
+        }
     }
 
     /** A path deeper than a reader could call down answers what it settled. */

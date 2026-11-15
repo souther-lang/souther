@@ -1,10 +1,11 @@
 package souther.compiler.doc;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
+
+import souther.test.Workers;
 
 import javax.tools.ToolProvider;
 import java.io.BufferedReader;
@@ -20,6 +21,7 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 import java.util.regex.Matcher;
@@ -43,7 +45,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the answer the same call makes now is carried on from that answer, and a cursor from neither is
  * refused, as it is when nothing was kept.
  */
-@Timeout(120)
 class ThePartsOfALongAnswerAreCutFromTheAnswerAlreadyMadeTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -98,9 +99,7 @@ class ThePartsOfALongAnswerAreCutFromTheAnswerAlreadyMadeTest {
             PipedInputStream serverReads = new PipedInputStream(toServer, 1 << 16);
             PipedInputStream fromServer = new PipedInputStream(1 << 20);
             PipedOutputStream serverWrites = new PipedOutputStream(fromServer);
-            server = new Thread(() -> McpServer.serve(serverReads, serverWrites), "mcp-session");
-            server.setDaemon(true);
-            server.start();
+            server = Workers.started("mcp-session", () -> McpServer.serve(serverReads, serverWrites));
             requests = new PrintWriter(new OutputStreamWriter(toServer, StandardCharsets.UTF_8), true);
             answers = new BufferedReader(new InputStreamReader(fromServer, StandardCharsets.UTF_8));
         }
@@ -128,11 +127,10 @@ class ThePartsOfALongAnswerAreCutFromTheAnswerAlreadyMadeTest {
         public void close() throws IOException {
             requests.close();   // the server's reader sees the end of the stream and the loop returns
             try {
-                server.join(10_000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+                Workers.ended(server, Duration.ofSeconds(10), "the server returned at the end of its input");
+            } finally {
+                answers.close();
             }
-            answers.close();
         }
     }
 

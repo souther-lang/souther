@@ -8,14 +8,19 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.ValueName;
+import souther.test.Allocated;
+import souther.test.Growth;
+import souther.test.Visits;
 
-import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedMap;
+import java.util.function.IntFunction;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What an operation answers holds numbers of the input and other answers and nothing else, so what
@@ -29,8 +34,12 @@ class WhatReadsAskOfAnAnswerIsAskedOfItsOwnerTest {
 
     private static final TermPath ELEMENT_LIST = TermPath.of("i").then("ys");
 
-    /** Deep enough that two to the depth of it visits is out of reach. */
-    private static final int DEEP = 60;
+    /** Deep enough that a visit to each way down is four thousand and ninety-six, which is well
+     *  past what a visit to each call comes to. */
+    private static final int DEEP = 12;
+
+    /** Half of {@link #DEEP}, which a visit to each way down makes sixty-four times as cheap. */
+    private static final int HALF = DEEP / 2;
 
     private static DecisionAtom.OfTheInput input(String field) {
         return new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(TermPath.of("i").then(field)));
@@ -49,16 +58,36 @@ class WhatReadsAskOfAnAnswerIsAskedOfItsOwnerTest {
                 Map.of(quantity, ExactRatio.ONE)), Rel.GT), true);
     }
 
-    private static <T> T promptly(java.util.concurrent.Callable<T> ask) {
-        return assertTimeoutPreemptively(Duration.ofSeconds(10), ask::call);
+    /** What a reader of an answer goes into: the answers, what each holds, and the statements. */
+    private static final List<Class<?>> THE_VALUES_READ = List.of(Quantity.class,
+            Derivation.class, Proposition.class);
+
+    /**
+     * That how many times {@code asked} goes into the values at {@link #DEEP} is no more than eight
+     * times what it is at {@link #HALF}. A reader that goes down the calls once each goes into
+     * twice as many, and one that goes down every way goes into sixty-four times as many. Each
+     * depth is asked of a chain made beforehand.
+     */
+    private static void assertCostIsOfTheCallsAndNotTheWaysDown(IntFunction<Runnable> asked) {
+        try (Visits visits = Visits.into(THE_VALUES_READ)) {
+            SequencedMap<Integer, Long> bySize = new LinkedHashMap<>();
+            bySize.put(HALF, visits.during(asked.apply(HALF)));
+            bySize.put(DEEP, visits.during(asked.apply(DEEP)));
+            Growth.eachAtMost(bySize, 8, 1);
+        }
     }
 
     @Test
     void whetherAnAnswerMayBeAnElementOfAnUnrelatedContainerIsAskedOfItsPositions() {
         DecisionSubject unrelated = new DecisionSubject.AnInput(ELEMENT_LIST);
         boolean shallow = comparing(chain(2)).mayTurnOnAnElementOf(unrelated);
-        assertEquals(shallow, promptly(() -> comparing(chain(DEEP)).mayTurnOnAnElementOf(unrelated)));
+        assertEquals(shallow, comparing(chain(DEEP)).mayTurnOnAnElementOf(unrelated));
         assertFalse(shallow);
+
+        assertCostIsOfTheCallsAndNotTheWaysDown(depth -> {
+            Proposition compared = comparing(chain(depth));
+            return () -> compared.mayTurnOnAnElementOf(unrelated);
+        });
     }
 
     @Test
@@ -67,49 +96,84 @@ class WhatReadsAskOfAnAnswerIsAskedOfItsOwnerTest {
                 new NumericTerm.ValueOf(ELEMENT_LIST.element().then("p")));
         Quantity element = new Quantity.WhatAnOperationAnswers(FLOOR_MOD,
                 List.of(chain(DEEP), ofTheElement));
-        assertEquals(true, promptly(() -> comparing(element)
-                .mayTurnOnAnElementOf(new DecisionSubject.AnInput(ELEMENT_LIST))));
+        assertEquals(true, comparing(element)
+                .mayTurnOnAnElementOf(new DecisionSubject.AnInput(ELEMENT_LIST)));
     }
 
     @Test
     void whetherAStatementMovesWithANodeIsAskedOfTheAnswersPositions() {
         TermPath node = TermPath.of("i");
         boolean shallow = WrittenOfANode.movesWithIt(comparing(chain(2)), node, List.of());
-        assertEquals(shallow,
-                promptly(() -> WrittenOfANode.movesWithIt(comparing(chain(DEEP)), node, List.of())));
+        assertEquals(shallow, WrittenOfANode.movesWithIt(comparing(chain(DEEP)), node, List.of()));
+
+        assertCostIsOfTheCallsAndNotTheWaysDown(depth -> {
+            Proposition compared = comparing(chain(depth));
+            return () -> WrittenOfANode.movesWithIt(compared, node, List.of());
+        });
     }
 
     @Test
     void thePlacesAnAnswerIsReadOffAreCollectedOncePerPlace() {
         assertEquals(PositionsAStatementReads.ofANumber(chain(2)),
-                promptly(() -> PositionsAStatementReads.ofANumber(chain(DEEP))));
+                PositionsAStatementReads.ofANumber(chain(DEEP)));
         assertEquals(PositionsAStatementReads.everyPlaceOf(comparing(chain(2))),
-                promptly(() -> PositionsAStatementReads.everyPlaceOf(comparing(chain(DEEP)))));
+                PositionsAStatementReads.everyPlaceOf(comparing(chain(DEEP))));
+
+        assertCostIsOfTheCallsAndNotTheWaysDown(depth -> {
+            Quantity answer = chain(depth);
+            return () -> PositionsAStatementReads.ofANumber(answer);
+        });
+        assertCostIsOfTheCallsAndNotTheWaysDown(depth -> {
+            Proposition compared = comparing(chain(depth));
+            return () -> PositionsAStatementReads.everyPlaceOf(compared);
+        });
     }
 
     @Test
     void aNumberCarriedByAWalkIsNeverInAnAnswer() {
         Quantity.HowManyCarried carried = new Quantity.HowManyCarried(ACarriedValue.made());
-        assertFalse(promptly(() -> carried.isIn(chain(DEEP))));
+        assertFalse(carried.isIn(chain(DEEP)));
+
+        // Nothing a walk carries is in an answer, so the answer is not read at all: asked of a
+        // chain, it goes into no more than it does of an answer of one call.
+        Quantity answer = chain(DEEP);
+        Quantity single = chain(1);
+        try (Visits visits = Visits.into(THE_VALUES_READ)) {
+            assertEquals(visits.during(() -> carried.isIn(single)),
+                    visits.during(() -> carried.isIn(answer)));
+        }
     }
 
     /**
      * Each call handed a number of its own as well as the call before it, so the n-th answer is
      * made of n numbers. What is held for the answer asked is its numbers, and not the numbers of
-     * every answer it is made of, which for a chain this deep is more than memory holds.
+     * every answer it is made of. What is held is what is allocated: twice the calls is twice the
+     * numbers held, and the numbers of every answer along the way would be four times.
      */
     @Test
     void theNumbersOfAChainThatTakesOneMoreEachCallAreHeldForTheAnswerAskedOnly() {
-        int depth = 40_000;
+        int depth = 2_000;
+        Quantity.WhatAnOperationAnswers top = takingOneMoreEachCall(depth);
+        List<NumericTerm> numbers = top.positionsItIsMadeOf();
+        assertEquals(depth, numbers.size());
+        assertEquals(input("x0").term(), numbers.getFirst());
+        assertEquals(input("x" + (depth - 1)).term(), numbers.getLast());
+
+        takingOneMoreEachCall(depth).positionsItIsMadeOf();
+        SequencedMap<Integer, Long> bySize = new LinkedHashMap<>();
+        for (int calls : new int[] {depth, 2 * depth}) {
+            Quantity.WhatAnOperationAnswers answer = takingOneMoreEachCall(calls);
+            bySize.put(calls, Allocated.by(answer::positionsItIsMadeOf));
+        }
+        Growth.eachAtMost(bySize, 5, 2);
+    }
+
+    private static Quantity.WhatAnOperationAnswers takingOneMoreEachCall(int depth) {
         Quantity answer = input("x0");
         for (int i = 1; i < depth; i++) {
             answer = new Quantity.WhatAnOperationAnswers(FLOOR_MOD, List.of(answer, input("x" + i)));
         }
-        Quantity.WhatAnOperationAnswers top = (Quantity.WhatAnOperationAnswers) answer;
-        List<NumericTerm> numbers = promptly(top::positionsItIsMadeOf);
-        assertEquals(depth, numbers.size());
-        assertEquals(input("x0").term(), numbers.getFirst());
-        assertEquals(input("x" + (depth - 1)).term(), numbers.getLast());
+        return (Quantity.WhatAnOperationAnswers) answer;
     }
 
     @Test
@@ -121,7 +185,7 @@ class WhatReadsAskOfAnAnswerIsAskedOfItsOwnerTest {
                     List.of(answer));
         }
         Quantity.WhatAnOperationAnswers.OfOneArgument chain =
-                promptly(((Quantity.WhatAnOperationAnswers) answer)::chainOfOneArgument);
+                ((Quantity.WhatAnOperationAnswers) answer).chainOfOneArgument();
         assertEquals(input("x"), chain.from());
         assertEquals(100_000, chain.operations().size());
         assertEquals(FLOOR_MOD, chain.operations().getFirst());
@@ -141,9 +205,9 @@ class WhatReadsAskOfAnAnswerIsAskedOfItsOwnerTest {
     @Test
     void anAnswerAHundredThousandCallsDeepIsReadWithoutOverflowingTheStack() {
         Quantity.WhatAnOperationAnswers deep = (Quantity.WhatAnOperationAnswers) chain(100_000);
-        assertEquals(1, promptly(deep::positionsItIsMadeOf).size());
-        assertEquals(true, promptly(() -> deep.spelling().length() > 0));
-        assertEquals(deep, promptly(() -> chain(100_000)));
-        assertEquals(deep, promptly(() -> deep.rebuilt(input -> input)));
+        assertEquals(1, deep.positionsItIsMadeOf().size());
+        assertTrue(deep.spelling().length() > 0);
+        assertEquals(deep, chain(100_000));
+        assertEquals(deep, deep.rebuilt(input -> input));
     }
 }

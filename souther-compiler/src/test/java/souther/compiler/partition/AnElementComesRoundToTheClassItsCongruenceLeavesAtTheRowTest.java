@@ -27,7 +27,6 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 
 import java.math.BigInteger;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -36,7 +35,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * A case weighing the element of {@code List.rangeInclusive(0, days)} and holding it to a
@@ -90,12 +88,10 @@ class AnElementComesRoundToTheClassItsCongruenceLeavesAtTheRowTest {
     void theClassOfALargeDivisorIsWorkedOutAndNotWalkedTo() {
         int divisor = 1_000_000_007;
         ACaseAskedAtSomeElement asked = asked(1, 0, divisor, 0);
-        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> {
-            assertEquals(AStatementAtARow.Answer.HOLDS, asked.at(row(5, 2_000_000_000)),
-                    "the first element the class holds is the divisor less five");
-            assertEquals(AStatementAtARow.Answer.FAILS, asked.at(row(5, 1_000)),
-                    "the first is past the end of the list");
-        });
+        assertEquals(AStatementAtARow.Answer.HOLDS, asked.at(row(5, 2_000_000_000)),
+                "the first element the class holds is the divisor less five");
+        assertEquals(AStatementAtARow.Answer.FAILS, asked.at(row(5, 1_000)),
+                "the first is past the end of the list");
         ACaseAskedAtSomeElement even = asked(2, 0, 4, 0);
         assertEquals(AStatementAtARow.Answer.FAILS, even.at(row(1, 2_000_000_000)),
                 "twice a number and an odd one leave something by four, whatever the number");

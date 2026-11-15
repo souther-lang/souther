@@ -49,7 +49,7 @@ class WhatANameStoodForIsTheValueAPartIsAboutTest {
             new InputReads.ContainerOf.AtAPosition(ITEMS), HeldIn.Part.ELEMENT);
 
     /** What stands for a part read through two names for one element. */
-    private static final Proposition TWO_AS_ONE = new Proposition.Unread(Optional.empty(), 0,
+    private static final Proposition.Unread TWO_AS_ONE = new Proposition.Unread(Optional.empty(), 0,
             new WhyUnread.TwoElementsOfOneContainer(), false, true);
 
     private static ElementsNamed named(BindingId... names) {
@@ -328,6 +328,46 @@ class WhatANameStoodForIsTheValueAPartIsAboutTest {
                 below(GATE, ValueIdentity.AT_THE_POSITION))), kept);
         assertTrue(ReadThroughNames.holdsOneValueAtEachElement(kept));
         assertFalse(ReadThroughNames.holdsOneValueAtEachElement(stated));
+    }
+
+    /**
+     * Asking whether a statement holds one value at each element puts nothing together: a part
+     * of two values inside a quantifier over another container is answered as false, and the
+     * statement, which holds that quantifier, is never put inside it.
+     */
+    @Test
+    void askingForOneValueAtEachElementPutsNothingTogether() {
+        TermPath hs = TermPath.of("x").then("hs");
+        Proposition inside = Proposition.all(List.of(truth(PAID, of(A)), truth(PAID, of(B))));
+        Proposition stated = new Proposition.Some(
+                new DecisionSubject.AnInput(hs, ValueIdentity.AT_THE_POSITION), inside, true);
+        assertFalse(ReadThroughNames.holdsOneValueAtEachElement(stated));
+        assertTrue(ReadThroughNames.holdsOneValueAtEachElement(new Proposition.Some(
+                new DecisionSubject.AnInput(hs, ValueIdentity.AT_THE_POSITION),
+                truth(PAID, of(A)), true)));
+    }
+
+    /**
+     * A count of statements one of which is of no one value is no one number, and the statement
+     * it stands in is told as a part nothing read there, the rest of it as it stood. The part of
+     * no one value holds a quantifier over another container, which it is never put inside.
+     */
+    @Test
+    void aCountOfAStatementOfNoOneValueIsNoOneNumberAndLeavesTheRestAsItStood() {
+        DecisionSubject hs = new DecisionSubject.AnInput(
+                TermPath.of("x").then("hs"), ValueIdentity.AT_THE_POSITION);
+        DecisionSubject gs = new DecisionSubject.AnInput(
+                TermPath.of("x").then("gs"), ValueIdentity.AT_THE_POSITION);
+        Proposition ofTwo = Proposition.all(List.of(
+                truth(TermPath.of("x").then("gs").element().then("flag"),
+                        ValueIdentity.AT_THE_POSITION),
+                new Proposition.Some(hs, truth(PAID, ValueIdentity.AT_THE_POSITION), true)));
+        Proposition counted = Proposition.compared(new Relation.Affine(
+                LinearForm.atomMinusConstant(new Quantity.HowManyMeet(gs, ofTwo),
+                        ExactRatio.of(2)), Rel.GE), true);
+        Proposition beside = below(GATE, ValueIdentity.AT_THE_POSITION);
+        assertEquals(Proposition.all(List.of(beside, TWO_AS_ONE)),
+                readThrough(Proposition.all(List.of(beside, counted)), named(A, B)));
     }
 
     /**

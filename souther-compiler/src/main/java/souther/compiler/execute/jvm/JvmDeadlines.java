@@ -8,6 +8,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.locks.Condition;
 
 /**
  * The deadlines this machine keeps, and the words only this machine has for them.
@@ -89,6 +90,11 @@ public final class JvmDeadlines {
      * the policy admits, taking any positive length — would arrive as no wait at all.
      */
     public static Deadline of(Duration timeout, long stackBytes) {
+        return of(timeout, stackBytes, Condition::awaitNanos);
+    }
+
+    /** As {@link #of(Duration, long)}, with the hand-off reading time through {@code spending}. */
+    static Deadline of(Duration timeout, long stackBytes, Handoff.Spending spending) {
         return new Deadline() {
 
             @Override
@@ -114,7 +120,7 @@ public final class JvmDeadlines {
                             + " what a run within a run is held to, and where its applications go,"
                             + " is not decided");
                 }
-                Handoff handoff = new Handoff();
+                Handoff handoff = new Handoff(spending);
                 FutureTask<T> task = new FutureTask<>(() -> handoff.installedFor(body));
                 // A daemon, because work that overran is asked to stop and cannot be made to: a
                 // fixture's helper reaches no interrupt point, so the thread may outlive the answer

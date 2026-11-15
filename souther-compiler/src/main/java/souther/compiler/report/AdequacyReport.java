@@ -4556,6 +4556,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case RELATION_SHOWN_OVER_A_REGION -> new ReportMessage.ARelationShownOverARegion();
             case RULE_RELATING_TWO_VALUES -> new ReportMessage.ItRelatesTwoValues();
             case RULE_RELATING_ELEMENTS -> new ReportMessage.ItRelatesTheElements();
+            case RULE_RELATING_TWO_ELEMENTS_OF_ONE_CONTAINER ->
+                    new ReportMessage.ItRelatesTwoElementsOfOneContainer();
+            case RULE_ABOUT_A_REMAINDER_NO_POSITION_HOLDS ->
+                    new ReportMessage.ItIsAboutARemainderNoPositionHolds();
             case RULE_ABOUT_A_RUN -> new ReportMessage.ItIsAboutWhatTheValuesComeTo();
             case RULE_ABOUT_A_REMAINDER -> new ReportMessage.ItIsAboutARemainder();
             case RULE_MEASURED_ON_ITS_RUNS -> new ReportMessage.ItComparesWhatARunWorksOut();

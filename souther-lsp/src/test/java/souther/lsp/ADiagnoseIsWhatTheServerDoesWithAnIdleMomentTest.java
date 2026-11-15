@@ -48,9 +48,12 @@ class ADiagnoseIsWhatTheServerDoesWithAnIdleMomentTest {
                     message(null, "textDocument/didChange", changedTo(uri, edited("Amount0"))),
                     message(null, "textDocument/didChange", changedTo(uri, edited("Missing"))),
                     message(null, "textDocument/didChange", changedTo(uri, edited("Amount0"))));
+            // A diagnose of each edit would have published before the edit after it was carried
+            // out, so everything written for the edits is behind this reply.
+            session.awaitCarriedOut();
             session.awaitAtLeast(published + 1, publishedFor(uri),
                     "diagnostics for the document as the last of the edits left it");
-            session.awaitQuiet();
+            session.awaitCarriedOut();
 
             assertEquals(published + 1, session.count(publishedFor(uri)),
                     "three edits in a row are one thing to say about the document, said once");

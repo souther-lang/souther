@@ -8,7 +8,6 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.ConditionJoin;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -17,7 +16,6 @@ import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
  * A derivation that holds one step in more than one place says what the same derivation says made
@@ -120,28 +118,32 @@ class ASharedDerivationIsReadAsTheUnsharedOneIsTest {
                 .whereARunStops(), whereItStops);
     }
 
-    /** Where no arm is gone down the same step is said once, however many places hold it. */
+    /**
+     * Where no arm is gone down the same step is said once, however many places hold it.
+     *
+     * <p>Every join holds the one below twice, so a step held ten joins down has a thousand and
+     * twenty-four ways to it. What is said is a step once for each way to it that it was not said
+     * for already, so the count of what is said is the count of the ways walked: one where a step
+     * is walked once, and a thousand and twenty-four where the ways are.
+     */
     @Test
     void aStepHeldTwiceByEveryJoinOfAChainIsReadOnceForEachJoin() {
         Derivation read = readOf(FIRST);
         Derivation held = read;
         Derivation stops = stop();
         Derivation heldStop = stops;
-        for (int at = 0; at < 40; at++) {
+        for (int at = 0; at < 10; at++) {
             held = new Derivation.Joined(ConditionJoin.BOTH, held, held);
             heldStop = new Derivation.Joined(ConditionJoin.EITHER, heldStop, heldStop);
         }
         Derivation chain = held;
         Derivation stopChain = heldStop;
 
-        List<MeaningsOfABody.Meaning.ReadOnAnArm> said = assertTimeoutPreemptively(
-                Duration.ofSeconds(30),
-                () -> MeaningsOfABody.Meaning.relationsDownTheArmsOf(chain));
-        List<Relation> relations = assertTimeoutPreemptively(Duration.ofSeconds(30),
-                () -> MeaningsOfABody.Meaning.relationsReadIn(chain));
-        Proposition stopped = assertTimeoutPreemptively(Duration.ofSeconds(30),
-                () -> new MeaningsOfABody.Meaning(Proposition.all(List.of()), stopChain)
-                        .whereARunStops());
+        List<MeaningsOfABody.Meaning.ReadOnAnArm> said =
+                MeaningsOfABody.Meaning.relationsDownTheArmsOf(chain);
+        List<Relation> relations = MeaningsOfABody.Meaning.relationsReadIn(chain);
+        Proposition stopped = new MeaningsOfABody.Meaning(Proposition.all(List.of()), stopChain)
+                .whereARunStops();
 
         assertEquals(List.of(new MeaningsOfABody.Meaning.ReadOnAnArm(FIRST,
                 Proposition.all(List.of()))), said);
