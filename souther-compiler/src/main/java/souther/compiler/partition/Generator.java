@@ -3401,6 +3401,13 @@ public final class Generator {
                         if (ObservedFixtures.of(near, type, reading)
                                 instanceof ObservedFixtures.Writing.Written<FixtureTemplate>(
                                         FixtureTemplate value)) {
+                            // An answer the type refuses is no answer to stand in with: a row
+                            // carrying it cannot be run, as an input the type refuses is no row.
+                            if (check.admissibility(type, value)
+                                    == CandidateCheck.Admissibility.REFUSED) {
+                                examining.refused();
+                                continue;
+                            }
                             List<StoodInAnswer> stood = new ArrayList<>(answers);
                             stood.set(standing, new StoodInAnswer.OnTheRow(dependency, value));
                             next = new GeneratedRow(purposes, kept, stood);

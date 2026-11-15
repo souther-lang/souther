@@ -401,6 +401,13 @@ public final class CoverageSites {
         };
     }
 
+    /** What {@code body} names: what it compares with, then what else it writes out. */
+    private static Set<NamedValue> ofTheBody(Walk walk, String body) {
+        Set<NamedValue> out = new LinkedHashSet<>(walk.named.getOrDefault(body, Set.of()));
+        out.addAll(walk.mentioned.getOrDefault(body, Set.of()));
+        return out;
+    }
+
     /**
      * What a walk's call compares something with, in the call and below it.
      *
@@ -1302,8 +1309,7 @@ public final class CoverageSites {
             WalkProbe at = numbering.walk(draft.raw());
             walks.add(new WalkSite(draft.body(), draft.walk(), at, draft.writtenHere(),
                     List.copyOf(walk.separators.getOrDefault(draft.body(), Set.of())),
-                    namedAtAWalk(draft.call(), walk.named.getOrDefault(draft.body(), Set.of()),
-                            comparisons),
+                    namedAtAWalk(draft.call(), ofTheBody(walk, draft.body()), comparisons),
                     fieldsReadAt(draft.call()), draft.inputsRead(),
                     draft.over()));
             walksByNode.put(draft.call(), new Plan.WalkedAt(at, draft.walk(),
@@ -1545,6 +1551,8 @@ public final class CoverageSites {
         private final Map<String, Set<String>> separators = new LinkedHashMap<>();
         /** What each body writes out on one side of a comparison, in the order met. */
         private final Map<String, Set<NamedValue>> named = new LinkedHashMap<>();
+        /** What each body writes out anywhere, in the order met. */
+        private final Map<String, Set<NamedValue>> mentioned = new LinkedHashMap<>();
         /** What each name of the body being walked is bound to by a {@code let}, as the walk passes
          *  it, which is what says whether reading the name reads something a run is handed
          *  ({@link #closed}). */
@@ -2553,8 +2561,14 @@ public final class CoverageSites {
             // answer to which slots there are.
             CoreStructure.Children structural = CoreStructure.Children.of(e);
             switch (e) {
-                case Core.Int _, Core.Decimal _, Core.Str _, Core.Bool _, Core.Temporal _,
-                     Core.Read _, Core.UnitValue _, Core.OptionNone _ -> { }
+                // What the body writes out where it makes a value is named as what it compares
+                // with is, after it: a limit written where a record is made reaches the comparison
+                // through the data, and no comparison of the body writes it.
+                case Core.Int _, Core.Decimal _, Core.Str _ ->
+                        mentioned.computeIfAbsent(behavior, _ -> new LinkedHashSet<>())
+                                .add(namedBy(e));
+                case Core.Bool _, Core.Temporal _, Core.Read _, Core.UnitValue _,
+                     Core.OptionNone _ -> { }
                 // A leaf, and one holding no fork. Whether the arm it stands in is an arm to cover is
                 // decided where that arm is made, not here.
                 case Core.Unreachable _ -> { }

@@ -5,6 +5,10 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 /**
  * A rewrite of a walk over a list that only a dependency's answer holds is decided where a row
  * stands the dependency in with an answer of more elements than the module's table gives.
@@ -183,6 +187,48 @@ class AWalkOverWhatADependencyAnswersIsToldApartTest {
                 """;
 
         WalkRewritesOwed.assertToldApart(measured(source), "indexBy");
+    }
+
+    /**
+     * What a dependency answers has an invariant of its own that a longer list breaks: no answer
+     * of two is one the type admits, so none is stood in, and the rewrites are left open as the
+     * search that met a refusal leaves them. A row stood in with an answer the type refuses is
+     * one nothing can run.
+     */
+    @Test
+    void anAnswerTheTypeRefusesIsNotStoodIn() {
+        String source = """
+                module repro.snapshot
+
+                data Stock = { sku: String, qty: Int }
+
+                data Snapshot = { rows: List<Stock> }
+                    invariant List.length(rows) <= 1
+
+                behavior readStock : (sku: String) -> Snapshot
+
+                behavior available : (sku: String, want: Int) -> Bool
+                    depends on readStock
+
+                let available (sku, want, readStock) =
+                    List.indexBy(.sku, readStock(sku).rows)
+                        |> Map.get(sku)
+                        |> Option.map(s -> s.qty >= want)
+                        |> Option.withDefault(false)
+
+                fake readStock
+                    | _ -> Snapshot { rows = [ Stock { sku = "apple", qty = 3 } ] }
+
+                example available
+                    | "enough" : ("apple", 2) -> true
+                    | "too many" : ("apple", 5) -> false
+                    | "unknown" : ("pear", 1) -> false
+                """;
+
+        Compilation compilation = measured(source);
+
+        assertEquals(List.of("fold_after_one_step: undecided", "fold_from_the_seed: undecided"),
+                WalkRewritesOwed.of(compilation, "indexBy"));
     }
 
     private static Compilation measured(String source) {

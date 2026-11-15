@@ -196,6 +196,36 @@ class ARewriteIsToldApartByWhatItsStepObservesTest {
         assertToldApart(measured(source), "any");
     }
 
+    /**
+     * The number the sum is compared with is written where a limit is made, and reaches the
+     * comparison through a list of limits: no comparison writes it, and the body does.
+     */
+    @Test
+    void aBorderTheBodyWritesWhereALimitIsMadeIsReached() {
+        String source = """
+                module repro.limit
+
+                data Cap = { amount: Int }
+
+                let reaches (xs: List<Int>, cap: Cap): Bool =
+                    List.sum(List.map(x -> x, xs)) >= cap.amount
+
+                behavior check : (xs: List<Int>) -> Bool
+                let check (xs) = {
+                    let caps = [ Cap { amount = 100000 } ]
+                    List.length(List.filter(cap -> reaches(xs, cap), caps)) >= 1
+                }
+
+                example check
+                    | "none" : ([ ]) -> false
+                    | "one" : ([ 1 ]) -> false
+                    | "two" : ([ 1, 2 ]) -> false
+                    | "three" : ([ 5, 6, 7 ]) -> false
+                """;
+
+        assertToldApart(measured(source), "map");
+    }
+
     /** The side of a negative border the difference lies on is either: here it is the one below. */
     @Test
     void aNegativeBorderIsToldApartFromEitherSide() {
