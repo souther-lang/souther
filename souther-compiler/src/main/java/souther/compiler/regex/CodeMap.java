@@ -57,12 +57,10 @@ public final class CodeMap {
     private final int[] imageReach;
     private final CodePoints domain;
     private final CodePoints leftAlone;
-    private final CodePoints answeredOutsideTheDomain;
     private final SortedMap<Integer, String> answeredElsewhere;
 
-    private CodeMap(List<Run> runs, CodePoints leftAlone, CodePoints answeredOutsideTheDomain,
+    private CodeMap(List<Run> runs, CodePoints leftAlone,
                     SortedMap<Integer, String> answeredElsewhere) {
-        this.answeredOutsideTheDomain = answeredOutsideTheDomain;
         this.answeredElsewhere = answeredElsewhere;
         this.runs = List.copyOf(runs);
         this.byImage = runs.stream().sorted(Comparator.comparingInt(Run::imageFrom)).toList();
@@ -114,8 +112,6 @@ public final class CodeMap {
         // Those of them that are sent to themselves beside any letter as well, by the tables.
         BitSet settled = new BitSet();
         int found = 0;
-        // What the code points outside the domain are answered with, alone and beside a letter.
-        BitSet outside = new BitSet();
         // What each code point outside the domain is answered with alone, where that is not the
         // code point itself.
         SortedMap<Integer, String> elsewhere = new TreeMap<>();
@@ -153,11 +149,8 @@ public final class CodeMap {
                 candidates[found] = codePoint;
                 targets[found] = target;
                 found++;
-            } else if (answer != null) {
-                answer.codePoints().forEach(outside::set);
-                if (!unchanged) {
-                    elsewhere.put(codePoint, answer);
-                }
+            } else if (answer != null && !unchanged) {
+                elsewhere.put(codePoint, answer);
             }
         }
         if (aloneFrom >= 0) {
@@ -181,7 +174,6 @@ public final class CodeMap {
                 .forEach(each -> dependsOnWhatStandsBeside.set(askedAt[each]));
         for (int at = dependsOnWhatStandsBeside.nextSetBit(0); at >= 0;
                 at = dependsOnWhatStandsBeside.nextSetBit(at + 1)) {
-            answeredBesideALetter(conversion, candidates[at], targets[at], outside);
             elsewhere.put(candidates[at], Character.toString(targets[at]));
         }
         // A run is made once it ends, and not again for each code point it is stretched over.
@@ -209,34 +201,7 @@ public final class CodeMap {
         if (runFrom >= 0) {
             runs.add(new Run(runFrom, runTo, runShift));
         }
-        return new CodeMap(runs, new CodePoints(alone), codePointsOf(outside), elsewhere);
-    }
-
-    /**
-     * What {@code conversion} answers of {@code own}, a code point it sends to {@code alone} by
-     * itself and to something else beside a letter, put into {@code into}: alone, and beside a
-     * letter before, after and on both sides. Where the letter's own answer is not where it is
-     * looked for at either end, the whole answer is put in, letters and all, which says more
-     * code points may be answered than are.
-     */
-    private static void answeredBesideALetter(UnaryOperator<String> conversion, int own,
-                                              int alone, BitSet into) {
-        into.set(alone);
-        String letter = conversion.apply("a");
-        String one = Character.toString(own);
-        for (String[] around : new String[][] {{"a", ""}, {"", "a"}, {"a", "a"}}) {
-            String answer = conversion.apply(around[0] + one + around[1]);
-            if (answer == null || letter == null) {
-                continue;
-            }
-            String before = around[0].isEmpty() ? "" : letter;
-            String after = around[1].isEmpty() ? "" : letter;
-            String between = answer.startsWith(before) && answer.endsWith(after)
-                    && answer.length() >= before.length() + after.length()
-                    ? answer.substring(before.length(), answer.length() - after.length())
-                    : answer;
-            between.codePoints().forEach(into::set);
-        }
+        return new CodeMap(runs, new CodePoints(alone), elsewhere);
     }
 
     /** The code points {@code set} holds, as ranges. */
@@ -256,12 +221,12 @@ public final class CodeMap {
     public boolean equals(Object other) {
         return other instanceof CodeMap that && runs.equals(that.runs)
                 && leftAlone.equals(that.leftAlone)
-                && answeredOutsideTheDomain.equals(that.answeredOutsideTheDomain);
+                && answeredElsewhere.equals(that.answeredElsewhere);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(runs, leftAlone, answeredOutsideTheDomain);
+        return Objects.hash(runs, leftAlone, answeredElsewhere);
     }
 
     /**
@@ -269,7 +234,7 @@ public final class CodeMap {
      * of two, the code points of what the outer one answers, which are its own.
      */
     public CodeMap leavingBe(CodePoints alone) {
-        return new CodeMap(runs, alone, answeredOutsideTheDomain, answeredElsewhere);
+        return new CodeMap(runs, alone, answeredElsewhere);
     }
 
     /**
@@ -280,18 +245,6 @@ public final class CodeMap {
      */
     public SortedMap<Integer, String> answeredElsewhere() {
         return answeredElsewhere;
-    }
-
-    /**
-     * The code points the conversion answers some code point outside the {@link #domain} with,
-     * alone or beside a letter: those a converted string may hold although no code point of the
-     * domain is sent to them. A code point of the domain that is none of these, that no other
-     * code point of the domain is sent to, and that no composition makes — it decomposes to
-     * nothing else — is in a converted string no more times than what it is sent from is in the
-     * string converted.
-     */
-    public CodePoints answeredOutsideTheDomain() {
-        return answeredOutsideTheDomain;
     }
 
     /**
@@ -480,6 +433,24 @@ public final class CodeMap {
         List<Automaton.Step> loop = symbols.isEmpty() ? List.of()
                 : List.of(new Automaton.Step(symbols, 0));
         return Language.canonical(Automaton.madeOf(List.of(loop), accepting), meter);
+    }
+
+    /** Every string that holds some code point of {@code some}, or null past what {@code meter}
+     *  allows. */
+    public static Language stringsHolding(CodePoints some, Meter meter) {
+        List<List<Automaton.Step>> steps = new ArrayList<>();
+        List<Automaton.Step> before = new ArrayList<>();
+        if (!some.isEmpty()) {
+            before.add(new Automaton.Step(some, 1));
+        }
+        if (!some.not().isEmpty()) {
+            before.add(new Automaton.Step(some.not(), 0));
+        }
+        steps.add(before);
+        steps.add(List.of(new Automaton.Step(CodePoints.EVERYTHING, 1)));
+        BitSet accepting = new BitSet();
+        accepting.set(1);
+        return Language.canonical(Automaton.madeOf(steps, accepting), meter);
     }
 
     /**

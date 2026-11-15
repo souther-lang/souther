@@ -10,6 +10,7 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.function.UnaryOperator;
 
+import net.unit8.notation199x.Normalization;
 import net.unit8.notation199x.pattern.Automaton;
 import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.Meter;
@@ -131,6 +132,23 @@ public final class ConversionAnswers {
                 otherwise.put(codePoint, answered);
             }
         }
+    }
+
+    /**
+     * The code points the conversion may answer with more than one: those it answers so alone or
+     * beside a letter. A string of none of them is converted into one no longer than it is, since
+     * the form the answer is put in only joins code points.
+     */
+    public CodePoints mayLengthen() {
+        BitSet out = new BitSet();
+        several.keySet().forEach(out::set);
+        otherwise.forEach((codePoint, answered) -> {
+            if (answered.alone().length > 1
+                    || answered.beside().stream().anyMatch(each -> each.length > 1)) {
+                out.set(codePoint);
+            }
+        });
+        return CodeMap.codePointsOf(out);
     }
 
     /** What {@code conversion} answers of each code point, read off {@code map} made of it. */
@@ -304,30 +322,42 @@ public final class ConversionAnswers {
     }
 
     /**
-     * Whether the conversion of a string cut at {@code separator} is the conversion of each part
-     * with the separator between them: nothing the conversion does reaches across it, and nothing
-     * it does makes one.
+     * Whether the conversion makes no {@code separator} that the string did not hold, and answers
+     * each it held as it stands: it is a stable starter sent to itself, no other code point is sent
+     * to it, and none is answered with it, alone or beside a letter. So the separators of a string
+     * converted are those of the string, in the same places.
      *
-     * <p>The separator is a stable starter the conversion answers as it stands, no other code point
-     * is answered with it, and the conversions that turn on what stands beside a code point — a
-     * capital sigma closes a word — are asked of it standing among letters and sigmas, since a code
-     * point that is cased, or ignored between cased letters, is no cut.
+     * <p>{@code ŉ} is answered {@code ʼN} in uppercase, and a separator that is a composite a
+     * normalization could make of two code points answered apart is none of these either.
      */
-    public boolean cutsAt(int separator) {
+    public boolean keepsSeparator(int separator) {
+        String alone = Character.toString(separator);
         if (!StableStarters.all().has(separator)
                 || !map.sentToThemselves().has(separator)
-                || !map.preimage(CodePoints.of(separator)).equals(CodePoints.of(separator))) {
+                || !map.preimage(CodePoints.of(separator)).equals(CodePoints.of(separator))
+                || !Normalization.normalize(Normalization.Form.NFD, alone).equals(alone)) {
             return false;
         }
-        for (Map.Entry<Integer, int[]> each : several.entrySet()) {
-            if (holds(each.getValue(), separator)) {
+        for (int[] each : several.values()) {
+            if (holds(each, separator)) {
                 return false;
             }
         }
-        for (Answered each : otherwise.values()) {
-            if (each.mentions(separator)) {
-                return false;
-            }
+        return otherwise.values().stream().noneMatch(each -> each.mentions(separator));
+    }
+
+    /**
+     * Whether the conversion of a string cut at {@code separator} is the conversion of each part
+     * with the separator between them: it keeps the separators ({@link #keepsSeparator}), and
+     * nothing it does reaches across one.
+     *
+     * <p>The conversions that turn on what stands beside a code point — a capital sigma closes a
+     * word — are asked of the separator standing among letters and sigmas, since a code point that
+     * is cased, or ignored between cased letters, is no cut.
+     */
+    public boolean cutsAt(int separator) {
+        if (!keepsSeparator(separator)) {
+            return false;
         }
         String cut = Character.toString(separator);
         for (String before : List.of("", "a", "Α", "ΑΣ", "Σ")) {

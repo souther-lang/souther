@@ -37,11 +37,24 @@ class StringsShorterThanSomeAndLongerThanOthersAreOneSetOfValuesTest {
 
     @Test
     void meetingASetOfOneRunLeavesTheLengthsBothHold() {
-        ValuesAtLengths upToTen = ValuesAtLengths.of(new ValuesWithin(ValueSet.ANY, 0, 10L));
-        assertEquals(List.of(new ValuesAtLengths.Run(0, 0L)),
-                OUTSIDE_ONE_TO_A_HUNDRED_THOUSAND.meeting(upToTen, ValueSet.ANY).runs());
-        ValuesAtLengths fromTwo = ValuesAtLengths.of(new ValuesWithin(ValueSet.ANY, 2, 10L));
-        assertTrue(OUTSIDE_ONE_TO_A_HUNDRED_THOUSAND.meeting(fromTwo, ValueSet.ANY)
-                .shownToHoldNone());
+        ValuesWithin upToTen = new ValuesWithin(ValueSet.ANY, 0, 10L);
+        List<ValuesWithin> both = OUTSIDE_ONE_TO_A_HUNDRED_THOUSAND.pieces().stream()
+                .map(each -> each.meeting(upToTen, ValueSet.ANY))
+                .filter(each -> !each.shownToHoldNone()).toList();
+        assertEquals(List.of(new ValuesWithin(ValueSet.ANY, 0, 0L)), both);
+        ValuesWithin fromTwo = new ValuesWithin(ValueSet.ANY, 2, 10L);
+        assertTrue(OUTSIDE_ONE_TO_A_HUNDRED_THOUSAND.pieces().stream()
+                .allMatch(each -> each.meeting(fromTwo, ValueSet.ANY).shownToHoldNone()));
+    }
+
+    /** Regions of different sets at the same lengths stay apart, and each is a side of its own. */
+    @Test
+    void regionsOfDifferentSetsAreKeptApart() {
+        ValuesAtLengths some = new ValuesAtLengths(List.of(
+                new ValuesWithin(ValueSet.ANY, 0, 5L),
+                ValuesWithin.longerThan(ValueSet.just(new Value.Text("a")), 5)));
+        assertEquals(2, some.pieces().size());
+        assertTrue(some.has(new Value.Text("ab")));
+        assertFalse(some.has(new Value.Text("a".repeat(7) + "b")));
     }
 }

@@ -673,18 +673,16 @@ final class Classing {
     private static Worked<Telling> tellsApart(NumericTerm.FromOnePosition term, ValueSet admits,
                                               AsASet said, LeftOpen open,
                                               Allowance<NumericTerm.FromOnePosition> allowance) {
-        Allowance.Composed yes =
-                allowance.meet(Sameness.Block.of(term), admits, said.whenTrue().values());
-        if (yes.gaveUp()) {
+        Worked<ValuesAtLengths> yes = heldBy(term, admits, said.whenTrue(), allowance);
+        if (yes.refused() != null) {
             return Worked.refusedAt(yes.refused());
         }
-        Allowance.Composed no =
-                allowance.meet(Sameness.Block.of(term), admits, said.whenFalse().values());
-        if (no.gaveUp()) {
+        Worked<ValuesAtLengths> no = heldBy(term, admits, said.whenFalse(), allowance);
+        if (no.refused() != null) {
             return Worked.refusedAt(no.refused());
         }
-        ValuesAtLengths holding = said.whenTrue().over(yes.set());
-        ValuesAtLengths failing = said.whenFalse().over(no.set());
+        ValuesAtLengths holding = yes.answer();
+        ValuesAtLengths failing = no.answer();
         if (open == null && (holding.shownToHoldNone() || failing.shownToHoldNone())) {
             return Worked.to(Telling.NOTHING_APART);
         }
@@ -693,6 +691,23 @@ final class Classing {
         }
         return Worked.to(open != null && settled(holding) && settled(failing)
                 ? Telling.OVER_WHAT_WAS_SHOWN : Telling.UNSETTLED);
+    }
+
+    /** Each region of {@code side} met with what the position holds; or the limit the allowance
+     *  refused a meet at. */
+    private static Worked<ValuesAtLengths> heldBy(
+            NumericTerm.FromOnePosition term, ValueSet admits, ValuesAtLengths side,
+            Allowance<NumericTerm.FromOnePosition> allowance) {
+        List<ValuesWithin> held = new ArrayList<>();
+        for (ValuesWithin each : side.pieces()) {
+            Allowance.Composed met =
+                    allowance.meet(Sameness.Block.of(term), admits, each.values());
+            if (met.gaveUp()) {
+                return Worked.refusedAt(met.refused());
+            }
+            held.add(each.over(met.set()));
+        }
+        return Worked.to(new ValuesAtLengths(held));
     }
 
     /** Whether {@code side} is shown to hold a value or shown to hold none. */
@@ -728,7 +743,7 @@ final class Classing {
     record Cell(ValuesAtLengths values, List<Answered> under) {
 
         Cell {
-            if (values == null || values.values().isEmpty()) {
+            if (values == null || values.pieces().isEmpty()) {
                 throw new IllegalArgumentException(
                         "a class of a position holds a value; an empty one is no class of it");
             }
@@ -777,12 +792,18 @@ final class Classing {
             for (Cell cell : cells) {
                 for (boolean holding : new boolean[] {true, false}) {
                     ValuesAtLengths side = holding ? each.whenTrue() : each.whenFalse();
-                    Allowance.Composed met = allowance.meet(Sameness.Block.of(term),
-                            cell.values().values(), side.values());
-                    if (met.gaveUp()) {
-                        return Worked.refusedAt(met.refused());
+                    List<ValuesWithin> shared = new ArrayList<>();
+                    for (ValuesWithin inCell : cell.values().pieces()) {
+                        for (ValuesWithin onSide : side.pieces()) {
+                            Allowance.Composed met = allowance.meet(Sameness.Block.of(term),
+                                    inCell.values(), onSide.values());
+                            if (met.gaveUp()) {
+                                return Worked.refusedAt(met.refused());
+                            }
+                            shared.add(inCell.meeting(onSide, met.set()));
+                        }
                     }
-                    ValuesAtLengths both = cell.values().meeting(side, met.set());
+                    ValuesAtLengths both = new ValuesAtLengths(shared);
                     if (both.shownToHoldAValue()) {
                         narrower.add(cell.and(both, each.states(), holding));
                     } else if (!both.shownToHoldNone()) {
@@ -887,7 +908,8 @@ final class Classing {
         if (orders == null || !(carrier instanceof Carrier.Whole)) {
             return null;
         }
-        WholeNumberSet numbers = ValueSet.wholeNumbersOf(cell.values().values());
+        WholeNumberSet numbers = ValueSet.wholeNumbersOf(
+                cell.values().pieces().getFirst().values());
         if (numbers == null || within == null) {
             return numbers;
         }

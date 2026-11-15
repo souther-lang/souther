@@ -2,10 +2,14 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.inputs.BlockReason;
+import souther.runtime.Strings;
+
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A piece of a lowercased string is read by what the piece itself holds. The string is cut at a
@@ -16,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class APieceOfAConvertedStringIsReadWhateverTheRestOfTheStringHoldsTest {
 
     private static String screen(String emailPattern) {
-        return screen(emailPattern, null, "253");
+        return screen(emailPattern, "254", "253");
     }
 
     private static String screen(String emailPattern, String emailBound, String domainBound) {
@@ -66,6 +70,25 @@ class APieceOfAConvertedStringIsReadWhateverTheRestOfTheStringHoldsTest {
             assertEquals(Map.of(), WhereAStringRelationIsLeftOpen.leftOpen(
                     bounded(bounds[0], bounds[1]), "screen"), List.of(bounds).toString());
         }
+    }
+
+    /**
+     * An address with no bound on its length is not read at the lowercase's stop: one so long that
+     * its answer is longer than a {@code String} holds ends the run before the equality, which is
+     * said, with the length it is gotten past at every string, and nothing else is open.
+     */
+    @Test
+    void anAddressWithNoBoundIsOpenOnlyForTheStringsTheLowercaseMayStopOn() {
+        Map<String, List<BlockReason.RelationShownOverARegion>> open =
+                WhereAStringRelationIsLeftOpen.leftOpen(
+                        screen("[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", null, "253"), "screen");
+
+        assertEquals(List.of("email"), List.copyOf(open.keySet()));
+        BlockReason.RelationShownOverARegion email = open.get("email").getFirst();
+        assertEquals(List.of("String.lowercase"), email.notShownGottenPast());
+        assertTrue(email.longerThan() > 0 && email.longerThan() < Strings.LONGEST_TEXT,
+                () -> "the stop is past the length every string is gotten past at, and within a"
+                        + " String: " + email.longerThan());
     }
 
     /** The four address languages of the issue: whichever side of the {@code @} holds any code

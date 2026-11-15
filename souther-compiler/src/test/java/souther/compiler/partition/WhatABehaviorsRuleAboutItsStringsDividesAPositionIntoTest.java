@@ -318,7 +318,8 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
                 // A position whose own declarations leave it a language, which is what an
                 // `invariant String.matches(...)` leaves. Meeting a rule with it is machine work,
                 // and that is the work this allowance cannot afford.
-                ((RuleEvidence.BySet) read.statements().get(0)).states().whenTrue().values(),
+                ((RuleEvidence.BySet) read.statements().get(0)).states().whenTrue().pieces()
+                        .getFirst().values(),
                 spent, PatternPlan.Budget.OF_A_WITNESS::meter, place -> null);
 
         assertInstanceOf(Classing.Classed.NotComposed.class, answered.classed(),
@@ -493,7 +494,7 @@ class WhatABehaviorsRuleAboutItsStringsDividesAPositionIntoTest {
     /** {@code read}, its true side shown only as far as {@code longest}: the values of it longer
      *  than that are shown on neither side, for no operation. */
     private static RuleEvidence shownUpTo(SetStatement read, long longest) {
-        ValueSet holding = read.whenTrue().values();
+        ValueSet holding = read.whenTrue().pieces().getFirst().values();
         return new RuleEvidence.BySet(new SetStatement(read.term(),
                 ValuesAtLengths.of(ValuesWithin.upTo(holding, longest)), read.whenFalse(),
                 read.statement(), read.origin(), List.of(),

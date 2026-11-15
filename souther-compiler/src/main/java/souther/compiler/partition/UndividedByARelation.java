@@ -110,7 +110,6 @@ import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 import souther.compiler.values.ValuesWithin;
 
-import net.unit8.notation199x.Normalization;
 import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.Meter;
 
@@ -1058,6 +1057,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                the relation past only where it is shown to
      */
     record StringsAPartnerCanHold(ValueSet canBe, ValueSet mayBe, Long upTo, Long noneBeyond,
+                                  CaseMaps.MayStop mayStop,
                                   LengthRuns shownAt, StringsPastTheWay reached,
                                   StringsPastTheWay partnerHeldTo, String partner,
                                   BlockReason.OperationsNotShown operations)
@@ -1077,8 +1077,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          */
         static StringsAPartnerCanHold unreached(ValueSet canBe, ValueSet mayBe, Long upTo,
                                                 String partner) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, null, null, null, null, partner,
-                    BlockReason.OperationsNotShown.NONE);
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, null, null, null, null, null,
+                    partner, BlockReason.OperationsNotShown.NONE);
         }
 
         /**
@@ -1088,8 +1088,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * machine as long as the longest string.
          */
         StringsAPartnerCanHold noneBeyond(Long longest) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, longest, shownAt, reached,
-                    partnerHeldTo, partner, operations);
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, longest, mayStop, shownAt,
+                    reached, partnerHeldTo, partner, operations);
+        }
+
+        /**
+         * The same strings, of which those {@code stopping} holds may end a run before the relation
+         * where they are longer than it says: shown on neither side there, and open.
+         */
+        StringsAPartnerCanHold mayStop(CaseMaps.MayStop stopping) {
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, stopping, shownAt,
+                    reached, partnerHeldTo, partner, operations);
         }
 
         /** Strings shown to be the partner's values exactly where {@code canBe} holds them, and
@@ -1100,22 +1109,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         /** The same strings, with the operations whose image is not shown beyond them. */
         StringsAPartnerCanHold withTheImagesNotShownOf(List<String> named) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, shownAt, reached,
-                    partnerHeldTo, partner, operations.andImagesOf(named));
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, mayStop, shownAt,
+                    reached, partnerHeldTo, partner, operations.andImagesOf(named));
         }
 
         /** The same strings, with the operations a run is not shown to get past for some of
          *  them. */
         StringsAPartnerCanHold notShownGottenPast(List<String> named) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, shownAt, reached,
-                    partnerHeldTo, partner, operations.andNotGottenPast(named));
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, mayStop, shownAt,
+                    reached, partnerHeldTo, partner, operations.andNotGottenPast(named));
         }
 
         /** The same strings, shown to be the partner's values only at {@code lengths}, the
          *  partner being held to them. */
         StringsAPartnerCanHold shownAt(LengthRuns lengths) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, lengths, reached,
-                    partnerHeldTo, partner, operations);
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, mayStop, lengths,
+                    reached, partnerHeldTo, partner, operations);
         }
 
         /**
@@ -1124,15 +1133,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * strings alone is shown at every length, and the reach it was given is gone.
          */
         StringsAPartnerCanHold showing(ValueSet canBe, ValueSet mayBe, Long upTo) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, shownAt, reached,
-                    partnerHeldTo, partner, operations);
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, mayStop, shownAt,
+                    reached, partnerHeldTo, partner, operations);
         }
 
         /** These, shown only at the lengths {@code lengths}, which every other length is left
          *  open at. */
         StringsAPartnerCanHold reachedAt(StringsPastTheWay lengths) {
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, shownAt, lengths,
-                    partnerHeldTo, partner, operations);
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, mayStop, shownAt,
+                    lengths, partnerHeldTo, partner, operations);
         }
 
         /**
@@ -1151,14 +1160,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 throw new IllegalArgumentException("the partner is held to " + partnerHeldTo
                         + ", and " + lengths + " is no lengths beside it");
             }
-            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, shownAt, reached,
-                    both, partner, operations);
+            return new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, mayStop, shownAt,
+                    reached, both, partner, operations);
         }
 
         /** Whether every string is shown on one side or the other, so that none is open. */
         boolean leavesNoneOpen() {
-            return upTo == null && noneBeyond == null && shownAt == null && reached == null
-                    && partnerHeldTo == null && canBe.equals(mayBe);
+            return upTo == null && noneBeyond == null && mayStop == null && shownAt == null
+                    && reached == null && partnerHeldTo == null && canBe.equals(mayBe);
         }
 
         /** Whether the same strings are shown on each side, whatever the partner is called. */
@@ -1166,6 +1175,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return other != null && canBe.equals(other.canBe) && mayBe.equals(other.mayBe)
                     && Objects.equals(upTo, other.upTo)
                     && Objects.equals(noneBeyond, other.noneBeyond)
+                    && Objects.equals(mayStop, other.mayStop)
                     && Objects.equals(shownAt, other.shownAt)
                     && Objects.equals(reached, other.reached)
                     && Objects.equals(partnerHeldTo, other.partnerHeldTo);
@@ -1175,13 +1185,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          *  partners' where it is shown to be either's. */
         StringsAPartnerCanHold orAnother(StringsAPartnerCanHold other) {
             StringsAPartnerCanHold named = partner.equals(other.partner) ? this
-                    : new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, shownAt, reached,
-                            partnerHeldTo, partner + " or " + other.partner, operations);
+                    : new StringsAPartnerCanHold(canBe, mayBe, upTo, noneBeyond, mayStop, shownAt,
+                            reached, partnerHeldTo, partner + " or " + other.partner, operations);
             // A string is none of either partner's values only past the longer of the two.
             Long beyond = noneBeyond == null || other.noneBeyond == null ? null
                     : Math.max(noneBeyond, other.noneBeyond);
+            CaseMaps.MayStop stopping = mayStop == null ? other.mayStop
+                    : other.mayStop == null ? mayStop : mayStop.and(other.mayStop,
+                            PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
             return new StringsAPartnerCanHold(named.canBe, named.mayBe, named.upTo, beyond,
-                    named.shownAt, named.reached, named.partnerHeldTo, named.partner,
+                    stopping, named.shownAt, named.reached, named.partnerHeldTo, named.partner,
                     operations.and(other.operations));
         }
     }
@@ -3638,8 +3651,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             StringsAPartnerCanHold exact = onlyWhereTheRunGetsPast(strings, reach.get(),
-                    at == 0, here, there, mine.subjectPath(), theirs.subjectPath(), theirStrings,
-                    mineHolds);
+                    mine.subjectPath(), theirs.subjectPath(), theirStrings, mineHolds);
             if (exact != null && !(undivided && exact.leavesNoneOpen())) {
                 out.put(mine, exact);
             }
@@ -4130,13 +4142,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<String> operations = new ArrayList<>(
                 operationsNotExactOver(mine.through(), languageOf(mineHolds)));
         operations.addAll(operationsNotExactOver(theirs.through(), partner));
-        if (upTo < 0) {
-            return StringsAPartnerCanHold.unreached(ValueSet.NONE, ValueSet.matching(mayBe), null,
-                    called).withTheImagesNotShownOf(operations);
-        }
-        return StringsAPartnerCanHold.unreached(ValueSet.matching(canBe),
-                ValueSet.matching(mayBe), boundedByWhatSurroundsIt ? upTo : null, called)
-                .withTheImagesNotShownOf(operations);
+        StringsAPartnerCanHold out = upTo < 0
+                ? StringsAPartnerCanHold.unreached(ValueSet.NONE, ValueSet.matching(mayBe), null,
+                        called)
+                : StringsAPartnerCanHold.unreached(ValueSet.matching(canBe),
+                        ValueSet.matching(mayBe), boundedByWhatSurroundsIt ? upTo : null, called);
+        // The strings of this side that stop its own conversion. What the partner's conversion
+        // answers is another side's strings, which are the image and are said as such above.
+        return unlessItStopsAt(out.withTheImagesNotShownOf(operations),
+                List.of(new DoneTo(mine.through(), languageOf(mineHolds))));
     }
 
     /**
@@ -4195,82 +4209,59 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * {@code strings} for the strings a run gets to the relation at, where it gets there only past
-     * {@code conversions} exactly: a string of the other side is the partner's only if the run
-     * gets to the relation at it, so those the run is not shown to get past the conversion at
-     * ({@link CaseMaps#gottenPastExactly}) are shown neither way; and a string of this side is
-     * shown either way only where the run gets to the relation at it, so those strings are left
-     * open. Or null where a conversion is of a place neither side is, or the strings are not a
-     * language.
+     * {@code strings}, where the run gets to the relation only past {@code conversions}: a
+     * conversion ends a run where its answer is longer than a {@code String} holds, so the strings
+     * that may stop it ({@link CaseMaps#mayStop}) are shown on neither side at the lengths they
+     * may, and are left open there. Or null where a conversion is of a place neither side is.
      */
     private StringsAPartnerCanHold onlyWhereTheRunGetsPast(
-            StringsAPartnerCanHold strings, List<ConvertedOn> conversions, boolean hereIsFirst,
-            Side here, Side there, TermPath mine, TermPath theirs, ValuesWithin theirStrings,
-            ValueSet mineHolds) {
-        if (conversions.isEmpty()) {
-            return strings;
-        }
-        Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
-        Language onMine = null;
-        Language onTheirs = null;
+            StringsAPartnerCanHold strings, List<ConvertedOn> conversions, TermPath mine,
+            TermPath theirs, ValuesWithin theirStrings, ValueSet mineHolds) {
+        List<DoneTo> done = new ArrayList<>();
         for (ConvertedOn each : conversions) {
-            Language exact = CaseMaps.gottenPastExactly(each.conversion(), meter);
             boolean ofMine = each.place().equals(mine);
-            if (exact == null || (!ofMine && !each.place().equals(theirs))) {
+            if (!ofMine && !each.place().equals(theirs)) {
                 return null;
             }
-            Language had = ofMine ? onMine : onTheirs;
-            Language both = had == null ? exact : had.and(exact, meter);
-            if (both == null) {
-                return null;
-            }
-            if (ofMine) {
-                onMine = both;
-            } else {
-                onTheirs = both;
-            }
+            done.add(new DoneTo(each.conversion(),
+                    languageOf(ofMine ? mineHolds : theirStrings.values())));
         }
-        StringsAPartnerCanHold out = strings;
-        if (onTheirs != null) {
-            Language partnerHolds = languageOf(theirStrings.values());
-            Language reaching = partnerHolds == null ? null : partnerHolds.and(onTheirs, meter);
-            if (reaching == null) {
-                return null;
-            }
-            // What is shown of the strings is the answer asked of; the lengths it is shown at are
-            // the ones it was given, so none are asked again.
-            StringsAPartnerCanHold narrowed = partnerCanHold(hereIsFirst, here, there,
-                    theirStrings.over(ValueSet.matching(reaching)), LengthRuns.EVERY, mineHolds,
-                    strings.partner());
-            out = narrowed == null ? strings.showing(ValueSet.NONE, strings.mayBe(), null)
-                    : strings.showing(narrowed.canBe(), strings.mayBe(), narrowed.upTo());
-        }
-        if (onMine != null) {
-            Language canBe = languageOf(out.canBe());
-            Language mayBe = languageOf(out.mayBe());
-            Language neverReached = onMine.not(meter);
-            Language canBeThere = canBe == null ? null : canBe.and(onMine, meter);
-            Language mayBeOrNot = mayBe == null || neverReached == null ? null
-                    : mayBe.or(neverReached, meter);
-            if (canBeThere == null || mayBeOrNot == null) {
-                return null;
-            }
-            out = out.showing(ValueSet.matching(canBeThere), ValueSet.matching(mayBeOrNot),
-                    out.upTo());
-        }
-        // Each conversion the run is gotten past exactly is one it is not shown to get past at the
-        // strings it is not exact on, which are the ones left open: a conversion ends a run where
-        // its answer is longer than a String holds, and what was taken for a string the run gets
-        // past is a string the map is exact on. Its image is another question, and not why —
-        // unless the side reads what it answers, where its image is why those strings are open
-        // already, and getting past it opens none of its own.
+        return unlessItStopsAt(strings, done);
+    }
+
+    /** A conversion, and the strings it is done to, or null where they are not a language. */
+    private record DoneTo(CaseMapping conversion, Language strings) {}
+
+    /**
+     * {@code strings}, where a run may stop at a conversion of strings of {@code held}: the strings
+     * that may end it ({@link CaseMaps#mayStop}) are shown on neither side at the lengths they
+     * may, and are open there.
+     *
+     * <p>Named where some string the place holds is one it may stop on: the others are open for
+     * nothing it does. And not named where its image is why those strings are open already: the
+     * side reads what it answers, and getting past it opens none of its own.
+     *
+     * @param done each conversion the relation is read past, with the strings it is done to
+     */
+    private static StringsAPartnerCanHold unlessItStopsAt(StringsAPartnerCanHold strings,
+                                                           List<DoneTo> done) {
+        Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
+        CaseMaps.MayStop stopping = null;
         List<String> operations = new ArrayList<>();
-        for (ConvertedOn each : conversions) {
-            operations.addAll(operationsNotExactOver(each.conversion(),
-                    each.place().equals(mine) ? languageOf(mineHolds)
-                            : languageOf(theirStrings.values())));
+        for (DoneTo each : done) {
+            CaseMaps.MayStop one = CaseMaps.mayStop(each.conversion(), meter);
+            if (one == null) {
+                continue;
+            }
+            stopping = stopping == null ? one : stopping.and(one, meter);
+            Language heldAndStopping = each.strings() == null ? null
+                    : each.strings().and(one.strings(), meter);
+            if (heldAndStopping == null || !heldAndStopping.isEmpty()) {
+                operations.addAll(each.conversion().operations());
+            }
         }
-        List<String> images = out.operations().images();
+        List<String> images = strings.operations().images();
+        StringsAPartnerCanHold out = stopping == null ? strings : strings.mayStop(stopping);
         return out.notShownGottenPast(operations.stream()
                 .filter(each -> !images.contains(each)).toList());
     }
@@ -4844,29 +4835,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * Whether separators counted in a string that {@code counted} was done to are at least as many
      * as the pieces of a string that {@code parted} was done to are parted at: the same
-     * conversion, or none where the conversion makes no separator the string did not hold. It
-     * makes none where it leaves the separator, sends no other code point of its map to it,
-     * answers no code point outside its map with it alone or beside a letter
-     * ({@link CodeMap#answeredOutsideTheDomain}) — {@code ŉ} is answered {@code ʼN} in uppercase —
-     * and the separator is no composite a normalization could make of two code points answered
-     * apart.
+     * conversion, or none where the conversion makes no separator the string did not hold
+     * ({@link ConversionAnswers#keepsSeparator}).
      */
     static boolean countsTheSeparatorsTheWayThePiecesAreParted(CaseMapping counted,
                                                               CaseMapping parted,
                                                               int separator) {
-        if (counted.equals(parted)) {
-            return true;
-        }
-        if (!counted.equals(CaseMapping.NONE)) {
-            return false;
-        }
-        CodeMap map = CaseMaps.of(parted);
-        CodePoints only = CodePoints.of(separator);
-        String alone = Character.toString(separator);
-        return map.domain().has(separator) && map.preimage(only).equals(only)
-                && map.image(only).equals(only)
-                && !map.answeredOutsideTheDomain().has(separator)
-                && Normalization.normalize(Normalization.Form.NFD, alone).equals(alone);
+        return counted.equals(parted)
+                || (counted.equals(CaseMapping.NONE) && CaseMaps.keepsSeparator(parted, separator));
     }
 
     /**

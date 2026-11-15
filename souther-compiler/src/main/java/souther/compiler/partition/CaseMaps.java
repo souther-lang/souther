@@ -63,11 +63,57 @@ final class CaseMaps {
      * language does not, so its answers are not said code point by code point.
      */
     static ConversionAnswers answers(CaseMapping mapping) {
-        if (mapping instanceof CaseMapping.None || mapping.doneSoFar().size() != 1) {
-            return null;
-        }
+        return mapping instanceof CaseMapping.None || mapping.doneSoFar().size() != 1 ? null
+                : answersOf(mapping);
+    }
+
+    /** Whether {@code mapping} makes no {@code separator} and leaves each there is
+     *  ({@link ConversionAnswers#keepsSeparator}). */
+    static boolean keepsSeparator(CaseMapping mapping, int separator) {
+        return answersOf(mapping).keepsSeparator(separator);
+    }
+
+    /** What {@code mapping} answers of each code point, of however many conversions it is made. */
+    private static ConversionAnswers answersOf(CaseMapping mapping) {
         return ANSWERED.computeIfAbsent(mapping, each -> ConversionAnswers.of(of(each),
                 text -> BoundUnderEvaluation.mapped(each, text)));
+    }
+
+    /**
+     * The strings a run may stop on at {@code mapping}, and the length they are gotten past at
+     * every one of them up to.
+     *
+     * <p>A conversion ends a run where its answer is longer than a {@code String} holds. The answer
+     * is no longer than the string unless it holds a code point that is answered with several, so
+     * the strings that may stop a run are those that hold one of those, and of those only the ones
+     * longer than the conversions' growth leaves room for ({@link #gottenPastAtEveryStringUpTo}).
+     *
+     * @param strings every string that holds a code point answered with several; every string where
+     *                that is past what {@code meter} allows
+     * @param past    a string no longer than this is gotten past, whatever it holds
+     */
+    record MayStop(Language strings, long past) {
+
+        /** What may stop a run at either: the strings of both, and the shorter length. */
+        MayStop and(MayStop other, Meter meter) {
+            Language both = strings.or(other.strings, meter);
+            return new MayStop(both == null ? Language.EVERY_STRING : both,
+                    Math.min(past, other.past));
+        }
+    }
+
+    /** The strings a run may stop on at {@code mapping}, or null where it stops on none. */
+    static MayStop mayStop(CaseMapping mapping, Meter meter) {
+        if (mapping instanceof CaseMapping.None) {
+            return null;
+        }
+        CodePoints lengthening = answersOf(mapping).mayLengthen();
+        if (lengthening.isEmpty()) {
+            return null;
+        }
+        Language holding = CodeMap.stringsHolding(lengthening, meter);
+        return new MayStop(holding == null ? Language.EVERY_STRING : holding,
+                gottenPastAtEveryStringUpTo(mapping));
     }
 
     /**
@@ -132,26 +178,6 @@ final class CaseMaps {
         Language standing = converted == null ? null : answeredAsTheyStand(mapping, answers, meter);
         Language joined = standing == null ? null : converted.or(standing, meter);
         return joined == null ? converted : joined;
-    }
-
-    /**
-     * The strings a run is shown to get past {@code mapping} at: the strings it is exactly a map
-     * on, and the strings it leaves as they stand ({@link #answeredAsTheyStand}), whose answer is
-     * the string itself and so is no longer than it. Every other string may stop the run there,
-     * by the answer being longer than a {@code String} holds.
-     *
-     * <p>Asked whether the run gets past at a string, which is a question of a value: the second
-     * kind holds sequences that are no value. A string a witness holds is chosen from
-     * {@link CodeMap#strings}, which is values alone.
-     *
-     * @return the strings, or null past what {@code meter} allows
-     */
-    static Language gottenPastExactly(CaseMapping mapping, Meter meter) {
-        Language exact = of(mapping).strings(meter);
-        Language standing = exact == null ? null
-                : answeredAsTheyStand(mapping, Language.EVERY_STRING, meter);
-        Language joined = standing == null ? null : exact.or(standing, meter);
-        return joined == null ? exact : joined;
     }
 
     /**
