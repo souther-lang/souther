@@ -40,7 +40,7 @@ class TheCasesOfALineAreReadOnlyThroughTheirFoldTest {
 
     private static final String CHOOSING = AMethod.of("souther/compiler/meaning/CasesOfALineAsked",
             "chosen", "(Lsouther/compiler/meaning/CasesOfALineAsked$SoFar;"
-                    + "Lsouther/compiler/meaning/NumericallyConsistentWays$State;Ljava/util/List;"
+                    + "Lsouther/compiler/meaning/NumericallyConsistentWays$State;ZLjava/util/List;"
                     + "Ljava/util/function/Function;Ljava/util/function/Consumer;)V");
 
     private static final CompiledOutputs PUBLISHED = CompiledOutputs.ofWhatThisRepositoryPublishes();

@@ -9223,6 +9223,11 @@
             }
           }
         },
+        "walkedWaysAtMost": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$",
+          "description": "Present where the line was cut off at `CASES_A_LINE_IS_TAKEN_APART_INTO` though `numericallyConsistentWays.atMost` is within it: no more than this many ways would be walked to their end from the starts of the remainders together. A way holding at the remainders of several starts is walked from each and counted once by `numericallyConsistentWays`, so this is the cost the line was cut off at. A bound, since questions the walk asks may end ways sooner."
+        },
         "diagnosed": {
           "type": "array",
           "description": "How many ways some of the parts the case is taken apart on can come out together, where they compare one number and so cannot come out every way. What the numbers leave, and nothing a reading of the cases does: neither is a count of cases, and neither says how many ways a reading would be left with were the model written otherwise — a statement with fewer comparisons may be taken apart into more ways. Empty where no two parts compare one number so.",

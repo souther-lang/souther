@@ -2908,11 +2908,12 @@ final class Pullback {
                 if (!hasParts[0] && Core.withoutStanding(operand) instanceof Core.Read name) {
                     // A name stands for the value it was bound to, and a run that works the name
                     // out stops on what that value is made of.
-                    Core standsFor = Core.withoutStanding(reads.standing(operand,
-                            read.rules().symbols(), read.rules().newtypes()).value());
+                    Denotation stands = reads.standing(operand,
+                            read.rules().symbols(), read.rules().newtypes());
+                    Core standsFor = Core.withoutStanding(stands.value());
                     if (!(standsFor instanceof Core.Read same
                             && same.binding().equals(name.binding()))) {
-                        leaveUnsaidOverWhereItStands(standsFor, reads, bound);
+                        leaveUnsaidOverWhereItStands(standsFor, stands.at(), bound);
                         return;
                     }
                     operated.leaveUnsaidOver(bound != null && !bound.names().contains(name.binding())

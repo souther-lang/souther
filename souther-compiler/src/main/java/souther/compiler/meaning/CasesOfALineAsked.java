@@ -73,23 +73,34 @@ import java.util.function.Predicate;
  * are then among the ones counted, and the count is what bounds them. Only where a line's cases
  * are asked: an answer for every case is for each case there is.
  *
- * <p>The intervals let a line be taken apart, and the remainders do not, though both end a way.
- * A count bounds the ways walked to the end and not the prefixes asked on the way to them, which
- * are what the steps count; that the ways are few says nothing of how many prefixes they share.
- * Which count lets a line in is a choice of where the steps are spent, and not a claim about
- * which ways a row can take: a line the remainders leave few ways in and the intervals many can
- * take every step there is and say no more than the figure would, and is cut off as it stands.
+ * <p>Where the intervals leave more than that, the line is taken apart still where the ways the
+ * remainders leave as well are no more than that
+ * ({@link NumericallyConsistentWays.Counts#ofTheNumbers}), and it is then walked once from each
+ * class of remainders, those no comparison tells apart, of every dividend two of its comparisons
+ * leave different remainders of ({@link NumericallyConsistentWays#startingAtEachRemainder}), and
+ * only where the ways walked from all the starts together are no more than that
+ * ({@link NumericallyConsistentWays.Starts#walked}): a way holding at the remainders of more than
+ * one start is walked from each, and the count of ways counts it once. A count
+ * bounds the ways walked to the end and not the prefixes asked on the way to them, and walked from
+ * nothing chosen, a prefix that takes comparisons of one dividend one at a time is refuted only
+ * at the comparison that leaves the dividend no remainder, however many parts were asked between.
+ * Walked from one remainder, each of those comparisons is decided before it is a choice, and a
+ * way the remainder refutes ends at the first of them. What is left to the steps is the ways the
+ * remainders leave, each walked once from each class it holds at. Where no dividend is compared
+ * that way, or where its classes are more starts than are walked, or where the ways walked from
+ * them are more than are taken apart, the line is cut off as it stands.
  *
  * <p><b>Counted by the step, and stopped short as a stop.</b> Every step of the choosing is counted
  * against {@link CompositionBudget#CASES_A_LINE_IS_ASKED_IN} for the one case they were said as:
- * each alternative taken and each part asked. Counted by the questions alone, the alternatives
- * would be walked unbounded where nothing is asked — the cases of a choice nobody took apart, or
- * every way of choosing past the last question allowed — and those are as many as the product of
- * the choices. Where the steps run out the choosing stops there, and says the figures it met and,
- * of what it did not walk to, only what is written in the cases already: that some were never
- * taken apart, and the figure each stopped at. And where the cases were never taken apart nothing
- * is asked of them at all. Either way what was not walked is neither a case the line turns in nor
- * one it does not, and the cases already shown to divide rows are what they are beside it.
+ * each alternative taken and each part chosen, asked there or not. Counted by the questions
+ * alone, the alternatives would be walked unbounded where nothing is asked — the cases of a
+ * choice nobody took apart, or every way of choosing past the last question allowed — and those
+ * are as many as the product of the choices. Where the steps run out the choosing stops there,
+ * and says the figures it met and, of what it did not walk to, only what is written in the cases
+ * already: that some were never taken apart, and the figure each stopped at. And where the cases
+ * were never taken apart nothing is asked of them at all. Either way what was not walked is
+ * neither a case the line turns in nor one it does not, and the cases already shown to divide
+ * rows are what they are beside it.
  *
  * <p>Here, beside where the cases were taken apart, because what a case chosen part by part has
  * chosen so far is a conjunction of the statement's parts, and those are joined where a rule joins
@@ -319,7 +330,7 @@ public final class CasesOfALineAsked {
             return new Atoms<>(List.of(), stopped);
         }
         List<Atom<T>> out = new ArrayList<>();
-        chosen(SoFar.NOTHING, NumericallyConsistentWays.State.NOTHING_CHOSEN,
+        chosen(SoFar.NOTHING, NumericallyConsistentWays.State.NOTHING_CHOSEN, true,
                 List.of(heldFirst(said.standsFor())), crossedIn,
                 chosen -> out.add(new Atom<>(chosen, answer.apply(chosen))));
         return new Atoms<>(out, stopped);
@@ -329,8 +340,9 @@ public final class CasesOfALineAsked {
      * Whether {@code cases} are more ways of choosing one than
      * {@link CompositionBudget#CASES_A_LINE_IS_TAKEN_APART_INTO} as the choices stand: where they
      * are not, every case is asked; where they are, each case is answered for none, and a line is
-     * asked in them only where the ways the intervals leave are no more than that. So every line
-     * whose cases are not taken apart is one of these, and not every one of these is such a line.
+     * asked in them only where the ways the intervals leave, or the ways the remainders leave as
+     * well, are no more than that. So every line whose cases are not taken apart is one of these,
+     * and not every one of these is such a line.
      */
     public static boolean pastTheFigureAsTheChoicesStand(DecidingCase.Cases cases) {
         long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
@@ -356,20 +368,32 @@ public final class CasesOfALineAsked {
         if (said.saidAlone()) {
             return new Found(List.of(said), List.of());
         }
+        List<NumericallyConsistentWays.State> starts =
+                List.of(NumericallyConsistentWays.State.NOTHING_CHOSEN);
         if (pastTheFigureAsTheChoicesStand(said.standsFor())) {
             NumericallyConsistentWays.Counts counts =
                     NumericallyConsistentWays.counted(said.standsFor());
-            if (!(counts.ofTheIntervals()
-                    instanceof NumericallyConsistentWays.Counted.AtMost(var ways))
-                    || ways.compareTo(BigInteger.valueOf(most)) > 0) {
-                moreWaysThanAreTakenApart(said);
-                counted = Optional.of(CaseCount.of(said.standsFor(), counts.ofTheNumbers()));
-                return new Found(List.of(), notWorkedOutIn(said));
+            if (!noMoreThan(counts.ofTheIntervals(), most)) {
+                Optional<NumericallyConsistentWays.Starts> byTheRemainders =
+                        noMoreThan(counts.ofTheNumbers(), most)
+                                ? NumericallyConsistentWays.startingAtEachRemainder(
+                                        said.standsFor())
+                                : Optional.empty();
+                if (byTheRemainders.isEmpty()
+                        || byTheRemainders.get().walked().compareTo(BigInteger.valueOf(most)) > 0) {
+                    moreWaysThanAreTakenApart(said);
+                    counted = Optional.of(CaseCount.of(said.standsFor(), counts.ofTheNumbers(),
+                            byTheRemainders.map(NumericallyConsistentWays.Starts::walked)));
+                    return new Found(List.of(), notWorkedOutIn(said));
+                }
+                starts = byTheRemainders.get().states();
             }
         }
         DecidingCase.Cases cases = heldFirst(said.standsFor());
-        chosen(SoFar.NOTHING, NumericallyConsistentWays.State.NOTHING_CHOSEN, List.of(cases),
-                crossedIn, chosen -> dividing.add(chosen));
+        for (NumericallyConsistentWays.State start : starts) {
+            chosen(SoFar.NOTHING, start, true, List.of(cases), crossedIn,
+                    chosen -> dividing.add(chosen));
+        }
         // Every case with a row in it divides rows and every one was worked out: the case is what
         // it was said as, and saying it again would read the line under another condition for
         // nothing. A case no row is in adds no row to where it holds, so the rows it holds are
@@ -380,6 +404,101 @@ public final class CasesOfALineAsked {
         }
         return new Found(dividing.stream().map(DecidingCase::alone).toList(),
                 notWorkedOutIn(said));
+    }
+
+    /**
+     * What choosing a case of some cases takes first: a part, a choice among alternatives, cases
+     * nobody took apart, or nothing at all, which is no step.
+     */
+    private sealed interface Begins {
+
+        /** A part, {@code condition}. */
+        record WithAPart(Proposition condition) implements Begins {}
+
+        /**
+         * A choice, each alternative of which takes {@code first} first: a part where it begins
+         * with one, and nothing said where it begins with anything else.
+         */
+        record WithAChoice(List<Optional<Proposition>> first) implements Begins {
+
+            public WithAChoice {
+                first = List.copyOf(first);
+            }
+        }
+
+        /** Cases nobody took apart. */
+        record WithAStop() implements Begins {}
+
+        /** Nothing: cases held together that are none. */
+        record WithNothing() implements Begins {}
+    }
+
+    /** What each case begins with, worked out once for each case however many ways lead to it. */
+    private static final DecidingCase.Cases.Fold<Begins> BEGINS = new DecidingCase.Cases.Fold<>() {
+
+        @Override
+        public Begins one(DecidingCase.Cases.One one) {
+            return new Begins.WithAPart(one.condition());
+        }
+
+        @Override
+        public Begins eachOf(DecidingCase.Cases.EachOf node, List<Begins> alternatives) {
+            return new Begins.WithAChoice(alternatives.stream()
+                    .map(each -> each instanceof Begins.WithAPart(var condition)
+                            ? Optional.of(condition) : Optional.<Proposition>empty())
+                    .toList());
+        }
+
+        @Override
+        public Begins together(DecidingCase.Cases.Together node, List<Begins> factors) {
+            return factors.stream().filter(each -> !(each instanceof Begins.WithNothing))
+                    .findFirst().orElse(new Begins.WithNothing());
+        }
+
+        @Override
+        public Begins notTakenApart(DecidingCase.Cases.NotTakenApart notTakenApart) {
+            return new Begins.WithAStop();
+        }
+    };
+
+    /** What each case walked so far begins with ({@link #BEGINS}). */
+    private final Map<DecidingCase.Cases, Begins> begins = new IdentityHashMap<>();
+
+    /**
+     * Whether the walk takes more than one way past what {@code rest} chooses first: the first
+     * thing to choose is a choice two or more of whose alternatives {@code numbers} leaves open, or
+     * cases nobody took apart, which end the way. Another part next, or a choice the numbers leave
+     * one alternative of, goes on along one way; and nothing left is the end of the way.
+     *
+     * <p>An alternative is left open unless the part it chooses first is one {@code numbers} has
+     * no value left for, which is how the walk ends it.
+     */
+    private boolean branchesNext(List<DecidingCase.Cases> rest,
+                                 NumericallyConsistentWays.State numbers) {
+        for (DecidingCase.Cases each : rest) {
+            switch (each.fold(BEGINS, begins)) {
+                case Begins.WithAPart _ -> {
+                    return false;
+                }
+                case Begins.WithNothing _ -> { }
+                case Begins.WithAChoice(var first) -> {
+                    return first.stream()
+                            .filter(part -> part.isEmpty()
+                                    || numbers.takingAll(part.get()) != null)
+                            .limit(2).count() > 1;
+                }
+                case Begins.WithAStop _ -> {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Whether {@code counted} says there are no more ways than {@code most}. */
+    private static boolean noMoreThan(NumericallyConsistentWays.Counted counted, long most) {
+        return counted instanceof NumericallyConsistentWays.Counted.AtMost(var ways)
+                && ways.compareTo(BigInteger.valueOf(most)) <= 0;
     }
 
     /** Where the cases of {@code said} nobody worked out are, if there are any: where it holds,
@@ -500,31 +619,74 @@ public final class CasesOfALineAsked {
      * of it and decided by each one's choices, and written beside each it would be asked of the
      * way to every case in full.
      *
-     * @param parts each part chosen, in the order it was, as the others leave it
+     * <p>Each part is kept with what {@link WhereEachLineDecides#given} reads of it: the part it
+     * is as one ({@link WhereEachLineDecides#asOnePart}), and every part it holds
+     * ({@link WhereEachLineDecides#partsIn}). A part chosen comes out in another only where the
+     * other holds it, so a part is put through the others that hold it and no other, and those
+     * that hold the part chosen are the only ones put through it: the rest would each be handed
+     * back as they are, after a reading of the whole part. And the conjunction is made once, when
+     * it is first asked for: a case is asked as it is chosen and kept as it was asked.
      */
-    private record SoFar(List<Proposition> parts) {
+    static final class SoFar {
 
         static final SoFar NOTHING = new SoFar(List.of());
 
-        SoFar {
-            parts = List.copyOf(parts);
+        /**
+         * A part chosen, as the others leave it, with what {@link WhereEachLineDecides#given}
+         * reads of it.
+         *
+         * @param part  the part
+         * @param asOne the part it is as one, where it is one
+         * @param holds every part it holds
+         */
+        private record Chosen(Proposition part, Optional<WhereEachLineDecides.PartHeld> asOne,
+                              Set<WhereEachLineDecides.PartHeld> holds) {
+
+            static Chosen of(Proposition part) {
+                return new Chosen(part, WhereEachLineDecides.asOnePart(part),
+                        WhereEachLineDecides.partsIn(part));
+            }
+        }
+
+        /** Each part chosen, in the order it was. */
+        private final List<Chosen> parts;
+
+        /** The conjunction of {@link #parts}, once it has been asked for. */
+        private Proposition condition;
+
+        private SoFar(List<Chosen> parts) {
+            this.parts = List.copyOf(parts);
         }
 
         /** This, with {@code condition} chosen as well. */
         SoFar and(Proposition condition) {
-            List<Proposition> out = new ArrayList<>(parts);
+            List<Chosen> out = new ArrayList<>(parts);
             for (Proposition part : condition instanceof Proposition.All all ? all.parts()
                     : List.of(condition)) {
-                Proposition left = part;
-                for (Proposition chosen : out) {
-                    left = WhereEachLineDecides.given(left, chosen);
+                Chosen left = Chosen.of(part);
+                for (Chosen chosen : out) {
+                    if (chosen.asOne().isPresent()
+                            && left.holds().contains(chosen.asOne().get())) {
+                        Proposition met = WhereEachLineDecides.given(left.part(), chosen.part());
+                        if (met != left.part()) {
+                            left = Chosen.of(met);
+                        }
+                    }
                 }
-                if (left instanceof Proposition.Always(boolean holds) && holds) {
+                if (left.part() instanceof Proposition.Always(boolean holds) && holds) {
                     continue;
                 }
-                if (WhereEachLineDecides.isOnePart(left)) {
-                    Proposition one = left;
-                    out.replaceAll(each -> WhereEachLineDecides.given(each, one));
+                if (left.asOne().isPresent()) {
+                    WhereEachLineDecides.PartHeld one = left.asOne().get();
+                    for (int at = 0; at < out.size(); at++) {
+                        Chosen each = out.get(at);
+                        if (each.holds().contains(one)) {
+                            Proposition met = WhereEachLineDecides.given(each.part(), left.part());
+                            if (met != each.part()) {
+                                out.set(at, Chosen.of(met));
+                            }
+                        }
+                    }
                 }
                 out.add(left);
             }
@@ -533,7 +695,10 @@ public final class CasesOfALineAsked {
 
         /** The conjunction of what has been chosen. */
         Proposition condition() {
-            return Proposition.all(parts);
+            if (condition == null) {
+                condition = Proposition.all(parts.stream().map(Chosen::part).toList());
+            }
+            return condition;
         }
     }
 
@@ -549,12 +714,28 @@ public final class CasesOfALineAsked {
      * about still bears on the answer through whatever the way, the line and the declarations
      * hold of those places together — a relation of the line, a rule of a value around them, a
      * tie a run makes — so the question asked beside it is no question asked without it.
+     *
+     * <p>But a line's prefix is asked only where the walk is about to take more than one way:
+     * before a choice two or more of whose alternatives the numbers chosen so far leave open
+     * ({@link #branchesNext}), and at the end of a way. A part chosen where the walk goes on along
+     * one way only — the next is another part, or a choice the numbers leave one alternative of —
+     * owes its question to the part chosen next, which asks it of everything chosen. Asked
+     * there, the narrower prefix holds no more rows on either side than the one put off, so where
+     * that one would have ended the way so does this, and no way is walked further than to the
+     * next question. What is saved is a reading of the whole way for each such part, where
+     * ending the one way there was all it could do. And before any figure is said for cases past
+     * a prefix, the question owed for it is asked: a prefix no row is in has no cases past it to
+     * say anything of.
+     *
+     * @param asked whether {@code chosen} has been asked, or a question is owed for it
      */
-    private void chosen(SoFar chosen, NumericallyConsistentWays.State numbers,
+    private void chosen(SoFar chosen, NumericallyConsistentWays.State numbers, boolean asked,
                         List<DecidingCase.Cases> toChoose, Function<Proposition, Crossing> goesOn,
                         Consumer<Proposition> atEnd) {
         if (toChoose.isEmpty()) {
-            atEnd.accept(chosen.condition());
+            if (goesOnPast(chosen, asked, goesOn)) {
+                atEnd.accept(chosen.condition());
+            }
             return;
         }
         List<DecidingCase.Cases> rest = toChoose.subList(1, toChoose.size());
@@ -569,16 +750,17 @@ public final class CasesOfALineAsked {
                     return;
                 }
                 if (!aStepIsLeft()) {
-                    pastTheSteps(toChoose);
+                    if (goesOnPast(chosen, asked, goesOn)) {
+                        pastTheSteps(toChoose);
+                    }
                     return;
                 }
                 SoFar further = chosen.and(condition);
                 // A prefix no row is in leaves no row in any case past it, so none of those is
                 // walked or said as one not worked out.
-                switch (goesOn.apply(further.condition())) {
-                    case MAY_CROSS -> chosen(further, numbersLeft, rest, goesOn, atEnd);
-                    case CANNOT_CROSS -> droppedNonDividing = true;
-                    case NO_ROWS -> { }
+                boolean asksNow = !readsTheNumbers || branchesNext(rest, numbersLeft);
+                if (!asksNow || goesOnPast(further, false, goesOn)) {
+                    chosen(further, numbersLeft, asksNow, rest, goesOn, atEnd);
                 }
             }
             // Every alternative: one that divides rows is no answer about another. Each taken is
@@ -586,26 +768,52 @@ public final class CasesOfALineAsked {
             case DecidingCase.Cases.EachOf(var alternatives) -> {
                 for (int at = 0; at < alternatives.size(); at++) {
                     if (!aStepIsLeft()) {
-                        List<DecidingCase.Cases> notWalked =
-                                new ArrayList<>(alternatives.subList(at, alternatives.size()));
-                        notWalked.addAll(rest);
-                        pastTheSteps(notWalked);
+                        if (goesOnPast(chosen, asked, goesOn)) {
+                            List<DecidingCase.Cases> notWalked = new ArrayList<>(
+                                    alternatives.subList(at, alternatives.size()));
+                            notWalked.addAll(rest);
+                            pastTheSteps(notWalked);
+                        }
                         return;
                     }
                     List<DecidingCase.Cases> next = new ArrayList<>();
                     next.add(alternatives.get(at));
                     next.addAll(rest);
-                    chosen(chosen, numbers, next, goesOn, atEnd);
+                    chosen(chosen, numbers, asked, next, goesOn, atEnd);
                 }
             }
             case DecidingCase.Cases.Together(var factors) -> {
                 List<DecidingCase.Cases> next = new ArrayList<>(factors);
                 next.addAll(rest);
-                chosen(chosen, numbers, next, goesOn, atEnd);
+                chosen(chosen, numbers, asked, next, goesOn, atEnd);
             }
             // Nobody took them apart, and nothing asks them.
-            case DecidingCase.Cases.NotTakenApart(var stoppedAt) -> stopped.add(stoppedAt);
+            case DecidingCase.Cases.NotTakenApart(var stoppedAt) -> {
+                if (goesOnPast(chosen, asked, goesOn)) {
+                    stopped.add(stoppedAt);
+                }
+            }
         }
+    }
+
+    /**
+     * Whether rows may stand on each side of the line where {@code chosen} holds: so where it has
+     * been asked, and otherwise as asking it now says. A case whose rows are on one side is
+     * dropped from the case asked as it was said; one no row is in, from nothing.
+     */
+    private boolean goesOnPast(SoFar chosen, boolean asked,
+                               Function<Proposition, Crossing> goesOn) {
+        if (asked) {
+            return true;
+        }
+        return switch (goesOn.apply(chosen.condition())) {
+            case MAY_CROSS -> true;
+            case CANNOT_CROSS -> {
+                droppedNonDividing = true;
+                yield false;
+            }
+            case NO_ROWS -> false;
+        };
     }
 
     /**
