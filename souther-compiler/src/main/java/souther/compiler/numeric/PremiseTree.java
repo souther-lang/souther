@@ -48,29 +48,20 @@ final class PremiseTree {
     private static final int LEAF = 4;
 
     /**
-     * What a floor is lowered by, as a share of the sizes of the terms it is made of. A floor takes
-     * a subtraction, a product and a sum for each of at most {@link FormReach}'s eight positions,
-     * each off by half a unit in the last place, and each number it starts from is that far off the
-     * exact one: under {@code 5e-15} of the largest term, so this is twenty times that.
+     * What a floor is lowered by, as a share of the sizes of the terms it is made of.
+     *
+     * <p>Every number a floor starts from is a {@link ExactRatio#approximately} one, so zero or from
+     * {@code 2^-200} to {@code 2^200} and off by {@link ExactRatio#APPROXIMATELY_OFF}, or not a
+     * number and a floor that is not a number, which passes over nothing. What a floor does with
+     * them — subtract, multiply, add, at most eight positions' worth — then never overflows or
+     * falls below the smallest normal number, so each operation is off by half a unit in the last
+     * place of its result and no more. Each term is off by under {@code 6e-15} of its size, and
+     * this is more than ten times that.
+     *
+     * <p>A floor says one of three things: a number that no premise of the box leaves the form
+     * below, positive infinity where none leaves it any, and not a number where it cannot be said.
      */
     private static final double ROOM = 1e-13;
-
-    /**
-     * What a floor is lowered by whatever the sizes of its terms: a product that falls below the
-     * smallest {@code double} with all its digits is off by more than a share of its size.
-     */
-    private static final double TINY = Double.MIN_NORMAL;
-
-    /**
-     * What a floor says is one of three things: a number that no premise of the box leaves the form
-     * below, positive infinity where none leaves it any, and not a number where it cannot be said.
-     * A value that is not finite is never one of the first two on its own account — a product that
-     * overflowed says nothing of whether there is a bound — so every subtraction and product a floor
-     * is made of passes through here.
-     */
-    private static double finite(double value) {
-        return Double.isFinite(value) ? value : Double.NaN;
-    }
 
     /** The sum of two weights, worked out exactly before it is a {@code double}: the weights are
      *  each rounded, and a sum of them that cancels is off by more than its own size. */
@@ -427,7 +418,7 @@ final class PremiseTree {
                         + Math.max(Math.abs(least[position]), Math.abs(most[position])))
                         * endSize[position];
             }
-            return finite(total - ROOM * size - TINY);
+            return total - ROOM * size;
         }
 
         /**
@@ -443,8 +434,8 @@ final class PremiseTree {
         private double termsFloor(int position, double least, double most) {
             double weight = form[position];
             double slack = ROOM * (Math.abs(weight) + Math.max(Math.abs(least), Math.abs(most)));
-            double low = finite(weight - most - slack);
-            double high = finite(weight - least + slack);
+            double low = weight - most - slack;
+            double high = weight - least + slack;
             double lowest = Math.min(termAt(position, low), termAt(position, high));
             return low < 0 && high > 0 ? Math.min(lowest, 0.0) : lowest;
         }
@@ -454,11 +445,10 @@ final class PremiseTree {
                 return Double.NaN;
             }
             if (weight > 0) {
-                return hasUp[position] ? finite(weight * up[position]) : Double.POSITIVE_INFINITY;
+                return hasUp[position] ? weight * up[position] : Double.POSITIVE_INFINITY;
             }
             if (weight < 0) {
-                return hasDown[position] ? finite(weight * down[position])
-                        : Double.POSITIVE_INFINITY;
+                return hasDown[position] ? weight * down[position] : Double.POSITIVE_INFINITY;
             }
             return 0.0;
         }
@@ -488,8 +478,8 @@ final class PremiseTree {
             }
             double slack = ROOM * (Math.abs(form[upper])
                     + Math.max(Math.abs(least[upper]), Math.abs(most[upper])));
-            double low = finite(form[upper] - most[upper] - slack);
-            double high = finite(form[upper] - least[upper] + slack);
+            double low = form[upper] - most[upper] - slack;
+            double high = form[upper] - least[upper] + slack;
             double lowest = Math.min(differenceTerm(pair, low), differenceTerm(pair, high));
             if (low < 0 && high > 0) {
                 lowest = Math.min(lowest, 0.0);
@@ -500,7 +490,7 @@ final class PremiseTree {
             double size = Math.abs(lowestBound) + Math.abs(constant) + (Math.abs(form[upper])
                     + Math.max(Math.abs(least[upper]), Math.abs(most[upper])))
                     * Math.max(Math.abs(aboveOverBelow[pair]), Math.abs(belowOverAbove[pair]));
-            return finite(lowestBound + constant + lowest - ROOM * size - TINY);
+            return lowestBound + constant + lowest - ROOM * size;
         }
 
         /** What a weight on the first of the pair and its negation on the second comes to by the
@@ -510,11 +500,11 @@ final class PremiseTree {
                 return Double.NaN;
             }
             if (weight > 0) {
-                return hasAboveOverBelow[pair] ? finite(weight * aboveOverBelow[pair])
+                return hasAboveOverBelow[pair] ? weight * aboveOverBelow[pair]
                         : Double.POSITIVE_INFINITY;
             }
             if (weight < 0) {
-                return hasBelowOverAbove[pair] ? finite(-weight * belowOverAbove[pair])
+                return hasBelowOverAbove[pair] ? -weight * belowOverAbove[pair]
                         : Double.POSITIVE_INFINITY;
             }
             return 0.0;

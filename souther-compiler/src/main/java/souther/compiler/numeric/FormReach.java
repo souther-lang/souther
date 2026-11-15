@@ -315,7 +315,7 @@ final class FormReach<A> {
     ExactCut leastOfTheRestOf(AffineConstraint<A> asking, Map<A, ExactRatio> coefs,
                               ExactRatio constant) {
         Map<A, ExactRatio> ordered = inOrder(coefs);
-        return least(ordered, constant, asking, namingAnyOf(ordered));
+        return least(ordered, constant, asking);
     }
 
     /**
@@ -334,7 +334,7 @@ final class FormReach<A> {
             return null;
         }
         Map<A, ExactRatio> ordered = inOrder(coefs);
-        return highest(ordered, constant, null, namingAnyOf(ordered));
+        return highest(ordered, constant, null);
     }
 
     /**
@@ -360,11 +360,7 @@ final class FormReach<A> {
     }
 
     private Reach between(Map<A, ExactRatio> coefs, ExactRatio constant, AffineConstraint<A> without) {
-        // The form and its negation name the same positions, so which premises name one of them is
-        // asked once for the two.
-        BitSet naming = namingAnyOf(coefs);
-        return new Reach(least(coefs, constant, without, naming),
-                highest(coefs, constant, without, naming));
+        return new Reach(least(coefs, constant, without), highest(coefs, constant, without));
     }
 
     /**
@@ -373,8 +369,8 @@ final class FormReach<A> {
      * come apart.
      */
     private ExactCut least(Map<A, ExactRatio> coefs, ExactRatio constant,
-                           AffineConstraint<A> without, BitSet naming) {
-        ExactCut flipped = highest(negated(coefs), constant.negated(), without, naming);
+                           AffineConstraint<A> without) {
+        ExactCut flipped = highest(negated(coefs), constant.negated(), without);
         return flipped == null ? null : new ExactCut(flipped.at().negated(), flipped.inclusive());
     }
 
@@ -1056,13 +1052,8 @@ final class FormReach<A> {
         return out;
     }
 
-    /**
-     * @param naming which premises, by their place in {@link #premises}, name one of
-     *               {@code coefs}' positions ({@link #namingAnyOf}); null for a form of one
-     *               position or none, which asks no premise
-     */
     private ExactCut highest(Map<A, ExactRatio> coefs, ExactRatio constant,
-                                AffineConstraint<A> without, BitSet naming) {
+                             AffineConstraint<A> without) {
         if (coefs.size() <= 1) {
             // A form naming one position is answered by the ends and by nothing else, because the
             // ends *are* this step at one position, run until they stop moving or until the rounds
@@ -1084,6 +1075,7 @@ final class FormReach<A> {
         // side by side. Where the form weighs two positions or more, that residual has three or
         // more, so the ranges are its only route — see passesOver for when they bound it no lower
         // than what is already held.
+        BitSet naming = namingAnyOf(coefs);
         int weighs = weighed(coefs);
         boolean residualsAreRangedOnly = weighs >= 2;
         int unbounded = residualsAreRangedOnly ? unboundedIn(coefs) : 0;

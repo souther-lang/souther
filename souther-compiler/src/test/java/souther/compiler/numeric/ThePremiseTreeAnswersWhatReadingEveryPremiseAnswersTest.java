@@ -2,6 +2,7 @@ package souther.compiler.numeric;
 
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -41,7 +42,29 @@ class ThePremiseTreeAnswersWhatReadingEveryPremiseAnswersTest {
         };
     }
 
-    private static RulesAsWritten.Written drawn(Random random, int positions) {
+    /**
+     * {@code value}, now and then times a power of two, of five or of ten: mostly to sizes the tree
+     * holds, as far from one as {@code 2^-150} to {@code 2^150}, and once in a hundred to any size
+     * up to {@code 2^300}, which takes the whole reading out of the tree.
+     */
+    private static ExactRatio wide(Random random, ExactRatio value) {
+        int draw = random.nextInt(100);
+        ExactRatio scaled = switch (draw) {
+            case 0 -> by(value, BigInteger.TWO, random.nextInt(601) - 300);
+            case 1, 2, 3, 4, 5 -> by(value, BigInteger.TWO, random.nextInt(301) - 150);
+            case 6, 7, 8 -> by(value, BigInteger.TEN, random.nextInt(81) - 40);
+            case 9, 10 -> by(value, BigInteger.valueOf(5), random.nextInt(121) - 60);
+            default -> value;
+        };
+        return scaled == null ? value : scaled;
+    }
+
+    private static ExactRatio by(ExactRatio value, BigInteger base, int exponent) {
+        ExactRatio power = ExactRatio.of(base.pow(Math.abs(exponent)));
+        return (exponent >= 0 ? value.times(power) : value.dividedBy(power)).orNull();
+    }
+
+    private static RulesAsWritten.Written drawn(Random random, int positions, boolean wide) {
         Map<String, ExactRatio> coefs = new LinkedHashMap<>();
         if (random.nextInt(4) == 0) {
             int one = random.nextInt(positions);
@@ -60,7 +83,12 @@ class ThePremiseTreeAnswersWhatReadingEveryPremiseAnswersTest {
                 coefs.put(POSITIONS[0], ExactRatio.ONE);
             }
         }
-        return new RulesAsWritten.Written(coefs, scaled(random, random.nextInt(25) - 12),
+        ExactRatio constant = scaled(random, random.nextInt(25) - 12);
+        if (wide) {
+            coefs.replaceAll((position, weight) -> wide(random, weight));
+            constant = wide(random, constant);
+        }
+        return new RulesAsWritten.Written(coefs, constant,
                 RELATIONS[random.nextInt(RELATIONS.length)]);
     }
 
@@ -73,20 +101,26 @@ class ThePremiseTreeAnswersWhatReadingEveryPremiseAnswersTest {
                 : ExactRatio.of(whole);
     }
 
-    private static Box<String> endsDrawn(Random random, int positions) {
+    private static Box<String> endsDrawn(Random random, int positions, boolean wide) {
         Map<String, ExactCut> atLeast = new LinkedHashMap<>();
         Map<String, ExactCut> atMost = new LinkedHashMap<>();
         for (int at = 0; at < positions; at++) {
             if (random.nextInt(10) < 7) {
-                atLeast.put(POSITIONS[at], new ExactCut(scaled(random, random.nextInt(41) - 30),
+                atLeast.put(POSITIONS[at], new ExactCut(
+                        sized(random, scaled(random, random.nextInt(41) - 30), wide),
                         random.nextBoolean()));
             }
             if (random.nextInt(10) < 7) {
-                atMost.put(POSITIONS[at], new ExactCut(scaled(random, random.nextInt(41) - 10),
+                atMost.put(POSITIONS[at], new ExactCut(
+                        sized(random, scaled(random, random.nextInt(41) - 10), wide),
                         random.nextBoolean()));
             }
         }
         return new Box<>(atLeast, atMost);
+    }
+
+    private static ExactRatio sized(Random random, ExactRatio value, boolean wide) {
+        return wide ? wide(random, value) : value;
     }
 
     private static boolean same(ExactCut one, ExactCut other) {
@@ -94,28 +128,44 @@ class ThePremiseTreeAnswersWhatReadingEveryPremiseAnswersTest {
                 && one.at().compareTo(other.at()) == 0 && one.inclusive() == other.inclusive();
     }
 
-    private static List<AffineConstraint<String>> rulesDrawn(Random random, int positions) {
+    private static List<AffineConstraint<String>> rulesDrawn(Random random, int positions,
+                                                             boolean wide) {
         List<RulesAsWritten.Written> written = new ArrayList<>();
         int count = 10 + random.nextInt(25);
         for (int rule = 0; rule < count; rule++) {
-            written.add(drawn(random, positions));
+            written.add(drawn(random, positions, wide));
         }
         return RulesAsWritten.statedOnly(written, RulesNamingNoPositionInCommonCloseApartTest::spacing);
     }
 
     @Test
     void everyFormOfDrawnRulesRunsBetweenTheSameEndsEitherWay() {
-        Random random = new Random(7);
-        int compared = 0;
         long before = PremiseTree.steps();
-        for (int each = 0; each < 3000; each++) {
+        int compared = formsCompared(new Random(7), 3000, false);
+        assertTrue(compared > 20000, "only " + compared + " forms were compared");
+        assertTrue(PremiseTree.steps() - before > 100000, "the tree was asked too little to say it "
+                + "answers as every premise does");
+    }
+
+    @Test
+    void everyFormOfRulesOfEverySizeRunsBetweenTheSameEndsEitherWay() {
+        long before = PremiseTree.steps();
+        int compared = formsCompared(new Random(13), 1500, true);
+        assertTrue(compared > 8000, "only " + compared + " forms were compared");
+        assertTrue(PremiseTree.steps() - before > 20000, "the numbers were mostly beyond what the "
+                + "tree holds, so it was asked too little to say it answers as every premise does");
+    }
+
+    private static int formsCompared(Random random, int cases, boolean wide) {
+        int compared = 0;
+        for (int each = 0; each < cases; each++) {
             int positions = 2 + random.nextInt(3);
-            List<AffineConstraint<String>> rules = rulesDrawn(random, positions);
+            List<AffineConstraint<String>> rules = rulesDrawn(random, positions, wide);
             DifferenceBounds<String> differences = DifferenceBounds.over(rules, ORDER);
             if (differences.holdsNothing()) {
                 continue;
             }
-            FormReach<String> reading = FormReach.over(rules, endsDrawn(random, positions),
+            FormReach<String> reading = FormReach.over(rules, endsDrawn(random, positions, wide),
                     differences, ORDER);
             FormReach<String> every = reading.readingEveryPremise();
             Set<Map<String, ExactRatio>> forms = new LinkedHashSet<>();
@@ -147,23 +197,31 @@ class ThePremiseTreeAnswersWhatReadingEveryPremiseAnswersTest {
                                 + rules + " in " + reading.ends());
             }
         }
-        assertTrue(compared > 20000, "only " + compared + " forms were compared");
-        assertTrue(PremiseTree.steps() - before > 100000, "the tree was asked too little to say it "
-                + "answers as every premise does");
+        return compared;
     }
 
     @Test
     void theRestOfEveryRuleIsLeftWhatEveryPremiseLeavesItEitherWay() {
-        Random random = new Random(11);
+        int compared = restsCompared(new Random(11), 1500, false);
+        assertTrue(compared > 20000, "only " + compared + " rests were compared");
+    }
+
+    @Test
+    void theRestOfEveryRuleOfEverySizeIsLeftWhatEveryPremiseLeavesItEitherWay() {
+        int compared = restsCompared(new Random(17), 800, true);
+        assertTrue(compared > 8000, "only " + compared + " rests were compared");
+    }
+
+    private static int restsCompared(Random random, int cases, boolean wide) {
         int compared = 0;
-        for (int each = 0; each < 1500; each++) {
+        for (int each = 0; each < cases; each++) {
             int positions = 3 + random.nextInt(2);
-            List<AffineConstraint<String>> rules = rulesDrawn(random, positions);
+            List<AffineConstraint<String>> rules = rulesDrawn(random, positions, wide);
             DifferenceBounds<String> differences = DifferenceBounds.over(rules, ORDER);
             if (differences.holdsNothing()) {
                 continue;
             }
-            FormReach<String> reading = FormReach.over(rules, endsDrawn(random, positions),
+            FormReach<String> reading = FormReach.over(rules, endsDrawn(random, positions, wide),
                     differences, ORDER);
             FormReach<String> every = reading.readingEveryPremise();
             for (AffineConstraint<String> rule : rules) {
@@ -181,13 +239,13 @@ class ThePremiseTreeAnswersWhatReadingEveryPremiseAnswersTest {
                 }
             }
         }
-        assertTrue(compared > 20000, "only " + compared + " rests were compared");
+        return compared;
     }
 
     private static void assertTheTreeReadsWhatEveryPremiseDoes(
             List<RulesAsWritten.Written> written, Box<String> ends, Map<String, ExactRatio> form) {
         List<AffineConstraint<String>> rules = RulesAsWritten.statedOnly(written,
-                RulesNamingNoPositionInCommonCloseApartTest::spacing);
+                _ -> Granularity.DENSE);
         assertTrue(rules.size() >= 16, "the premises are too few to be put in a tree");
         FormReach<String> reading = FormReach.over(rules, ends, DifferenceBounds.over(rules, ORDER),
                 ORDER);
@@ -241,10 +299,35 @@ class ThePremiseTreeAnswersWhatReadingEveryPremiseAnswersTest {
     }
 
     @Test
-    void anExponentOfTheLongestNegativeIsNoDouble() {
-        assertTrue(Double.isNaN(ExactRatio.tenTo(Long.MIN_VALUE).approximately()),
-                "an exponent no long negates is not one a double holds");
-        assertTrue(Double.isNaN(ExactRatio.tenTo(Long.MAX_VALUE).approximately()));
+    void endsAndBoundsApartByLessThanADoublesLastPlaceAreReadFromEveryPremiseToo() {
+        BigInteger end = BigInteger.TWO.pow(190).add(BigInteger.valueOf(3));
+        List<RulesAsWritten.Written> written = new ArrayList<>();
+        for (int at = 0; at < 16; at++) {
+            written.add(rule(Rel.LE, whole(end.subtract(BigInteger.ONE).add(BigInteger.valueOf(at))
+                    .negate()), "x", ExactRatio.of(-1), "y", ExactRatio.of(2)));
+        }
+        Map<String, ExactCut> atLeast = Map.of("x", ExactCut.inclusive(whole(end)),
+                "y", ExactCut.inclusive(whole(end)));
+        Map<String, ExactCut> atMost = Map.of("x", ExactCut.inclusive(whole(end.add(BigInteger.ONE))),
+                "y", ExactCut.inclusive(whole(end.add(BigInteger.ONE))));
+        assertTheTreeReadsWhatEveryPremiseDoes(written, new Box<>(atLeast, atMost),
+                Map.of("x", ExactRatio.ONE, "y", ExactRatio.ONE));
+    }
+
+    @Test
+    void boundsAHairApartAreToldApartByTheTree() {
+        ExactRatio least = ExactRatio.of(BigInteger.ONE, new BigInteger("1000000000039"));
+        ExactRatio hairAbove = least.times(ExactRatio.of(new BigDecimal("1.00000000000001")))
+                .orNull();
+        List<RulesAsWritten.Written> written = new ArrayList<>();
+        written.add(rule(Rel.LE, hairAbove.negated(), "x", ExactRatio.ONE, "y", ExactRatio.ONE));
+        written.add(rule(Rel.LE, least.negated(), "x", ExactRatio.ONE, "y", ExactRatio.ONE));
+        for (int at = 2; at < 16; at++) {
+            written.add(rule(Rel.LE, least.times(ExactRatio.of(at)).orNull().negated(),
+                    "x", ExactRatio.ONE, "y", ExactRatio.ONE));
+        }
+        assertTheTreeReadsWhatEveryPremiseDoes(written, Box.unbounded(),
+                Map.of("x", ExactRatio.ONE, "y", ExactRatio.ONE));
     }
 
     @Test
