@@ -1524,13 +1524,18 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     private static Map<PartOfAComparison, AuthoredPointMapping> authorsLines(
             AuthorsLines lines, List<Proposition.Compared> scales, ComparisonClaim written) {
         Map<PartOfAComparison, AuthoredPointMapping> out = new LinkedHashMap<>();
+        // A relation that only selects a case of a library's definition parts the values like any
+        // other and is no place of a line the author wrote.
         for (Proposition.Compared relation : scales) {
             // The author's lines were read at positions, before any name was told.
-            Map<WrittenLine, AuthoredPointMapping> under = lines.of(((Proposition.Compared)
-                    ReadThroughNames.atThePositions(relation)).heldSpelling());
+            Spelling at = ((Proposition.Compared) ReadThroughNames.atThePositions(relation))
+                    .heldSpelling();
+            Map<WrittenLine, AuthoredPointMapping> under = lines.of(at);
             if (under != null) {
-                under.forEach((line, mapping) ->
-                        out.putIfAbsent(PartOfAComparison.of(line), mapping));
+                boolean selectsACase = lines.selectsOnlyACase(at);
+                under.forEach((line, mapping) -> out.putIfAbsent(PartOfAComparison.of(line),
+                        selectsACase ? new AuthoredPointMapping.SelectsACase(line,
+                                mapping.claims()) : mapping));
             }
         }
         if (out.isEmpty()) {
@@ -2804,13 +2809,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         : AStatementAtARow.askableBesideItsRelations(stated)))) {
             return TheParts.READ_TO_THE_END;
         }
-        // A relation that only says which case of a library's definition a reading is in stays in
-        // the statement, where it decides where the lines are drawn, and draws no line itself.
         List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated,
-                read.quantities()::countsWhole).stream()
-                .filter(each -> authors.isEmpty()
-                        || !authors.get().selectsOnlyACase(each.line().spelling()))
-                .toList();
+                read.quantities()::countsWhole);
         if (lines.isEmpty()) {
             return TheParts.READ_TO_THE_END;
         }

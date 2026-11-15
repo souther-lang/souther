@@ -1541,6 +1541,12 @@ public final class Partitions {
                     new BorderQuantity.OfACoordinate(axis.id().behavior(), axis.term(), orders),
                     new Level.OnACarrier(cut.carrier(), cut.at()));
             for (LineOrigin origin : cut.origins()) {
+                // A line that only selects a case of a library's definition parts the values, as
+                // it did above, and owes no row at its points: no comparison of the author's is
+                // there.
+                if (origin.onlySelectsACase()) {
+                    continue;
+                }
                 // One cut, one border. Whether the quantity reaches the line is settled where the
                 // cut was made — a bound's line is an end of what the bound leaves — so there is
                 // nothing to test here and nothing to drop. It used to answer null and be dropped
