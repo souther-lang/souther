@@ -137,7 +137,8 @@ final class Classing {
     private static AsASet asASet(RuleEvidence evidence, Carrier carrier) {
         return switch (evidence) {
             case RuleEvidence.BySet(SetStatement it) ->
-                    new AsASet(it.whenTrue(), it.whenFalse(), it.statement());
+                    new AsASet(it.whenTrue(), it.whenFalse(), it.statement(),
+                            new ValuesAtLengths(it.notReached()));
             case RuleEvidence.Singles(GuardThresholds.Guards.Singled it) -> {
                 if (carrier instanceof Carrier.Whole && wholeOf(it.value()) != null) {
                     // A whole number singled out is the one number and every other.
@@ -194,9 +195,17 @@ final class Classing {
      * @param whenTrue  the values shown on the side the rule holds on, a length and all: what is
      *                  asked of that side is asked of the length as well
      * @param whenFalse the values shown on the other side, a length and all
+     * @param notReached the values no run gets to the rule with: the rule is on neither side of
+     *                  them, and says nothing of them, which is a third thing to be and not a hole
+     *                  between the two. Nothing for a distinction that is reached by every value
      */
     private record AsASet(ValuesAtLengths whenTrue, ValuesAtLengths whenFalse,
-                          PredicateStatement states) {}
+                          PredicateStatement states, ValuesAtLengths notReached) {
+
+        AsASet(ValuesAtLengths whenTrue, ValuesAtLengths whenFalse, PredicateStatement states) {
+            this(whenTrue, whenFalse, states, new ValuesAtLengths(List.of()));
+        }
+    }
 
     /**
      * What the rules of one position came to: the classes, and the rules that make none.
@@ -743,15 +752,25 @@ final class Classing {
         }
 
         /** The same cell, with one more rule coming out {@code holding} and what that leaves. */
-        Cell and(ValuesAtLengths narrowed, PredicateStatement states, boolean holding) {
+        Cell and(ValuesAtLengths narrowed, PredicateStatement states, Boolean holding) {
             List<Answered> wider = new ArrayList<>(under);
             wider.add(new Answered(states, holding));
             return new Cell(narrowed, wider);
         }
+
+        /** Whether some rule is asked of the values of this cell: one no rule gets to is no
+         *  class, since nothing is said of it. */
+        boolean isAskedBySome() {
+            return under.stream().anyMatch(each -> each.holds() != null);
+        }
     }
 
-    /** One of a position's rules, and whether a value in the cell satisfies it. */
-    record Answered(PredicateStatement states, boolean holds) {
+    /**
+     * One of a position's rules, and whether a value in the cell satisfies it: it does, or it
+     * does not, or no run gets to the rule with it ({@code null}), and the rule says nothing of
+     * the cell.
+     */
+    record Answered(PredicateStatement states, Boolean holds) {
 
         Answered {
             if (states == null) {
@@ -782,8 +801,15 @@ final class Classing {
         for (AsASet each : said) {
             List<Cell> narrower = new ArrayList<>();
             for (Cell cell : cells) {
-                for (boolean holding : new boolean[] {true, false}) {
-                    ValuesAtLengths side = holding ? each.whenTrue() : each.whenFalse();
+                // The rule is true of the cell, false of it, or not got to with it. Each of the
+                // three is a region of the position the rule is asked about, so a value one rule
+                // does not get to is still divided by the rules that do.
+                for (Boolean holding : new Boolean[] {true, false, null}) {
+                    ValuesAtLengths side = holding == null ? each.notReached()
+                            : holding ? each.whenTrue() : each.whenFalse();
+                    if (side.shownToHoldNone()) {
+                        continue;
+                    }
                     List<ValuesWithin> shared = new ArrayList<>();
                     for (ValuesWithin inCell : cell.values().pieces()) {
                         for (ValuesWithin onSide : side.pieces()) {
@@ -806,7 +832,8 @@ final class Classing {
             }
             cells = narrower;
         }
-        return Worked.to(cells);
+        // The values no rule gets to are in no class: nothing is said of them.
+        return Worked.to(cells.stream().filter(Cell::isAskedBySome).toList());
     }
 
     /**
@@ -885,6 +912,7 @@ final class Classing {
      */
     private static String said(Cell cell, String subject) {
         return cell.under().stream()
+                .filter(each -> each.holds() != null)
                 .map(each -> each.holds() ? each.states().saidOf(subject)
                         : each.states().deniedOf(subject))
                 .reduce((one, other) -> one + " and " + other).orElseThrow();

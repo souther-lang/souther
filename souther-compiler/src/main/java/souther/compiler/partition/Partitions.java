@@ -903,7 +903,12 @@ public final class Partitions {
                             answered.leftOpen().stream()
                                     .<RuleEvidenceOrigin>map(each -> each.statement().origin())
                                     .distinct().toList(),
-                            answered.keptFromBy());
+                            answered.keptFromBy(),
+                            answered.leftOpen().stream()
+                                    .flatMap(each -> each.open().stream())
+                                    .<Recognition>map(each -> Recognition.Under.of(
+                                            view.wrappers(), new Recognition.OfASet(each)))
+                                    .toList());
             // No classes and nothing they were composed from, and the cuts stand: they are
             // observations of their own rather than a projection of the classes.
             case Classing.Classed.NotComposed(var why) ->
@@ -1045,7 +1050,7 @@ public final class Partitions {
                         ? mergedPoints(merged(cutsOf(axis), reachable, carrier), points, carrier)
                         : List.of(),
                 parted, narrowedOf(axis), made.leftOpenByFor(axis), made.keptFromByFor(axis),
-                reachable.isEmpty() && points.isEmpty() ? null : new BodyCutInspection.Evidence(),
+                made.openAtFor(axis), reachable.isEmpty() && points.isEmpty() ? null : new BodyCutInspection.Evidence(),
                 stated);
     }
 
@@ -1083,12 +1088,13 @@ public final class Partitions {
                                           List<Parting> parted, NarrowedBounds narrowed,
                                           List<RuleEvidenceOrigin> leftOpenBy,
                                           List<RuleEvidenceOrigin> keptFromBy,
+                                          List<Recognition> openAt,
                                           BodyCutInspection drew, RulesWithNoLine rules) {
         if (classes.isEmpty() && cuts.isEmpty() && parted.isEmpty()) {
             return cameTo(term, at.position().path(), rules);
         }
         out.add(Axis.of(behavior, term, classes, divides, cuts, parted, narrowed, leftOpenBy,
-                keptFromBy));
+                keptFromBy, openAt));
         return drew != null ? drew : cameTo(term, at.position().path(), rules);
     }
 
@@ -1135,12 +1141,12 @@ public final class Partitions {
     private record Composition(List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
                                boolean keepsCuts, BlockReason.RuleWithoutLineReason why,
                                List<RuleEvidenceOrigin> leftOpenBy,
-                               List<RuleEvidenceOrigin> keptFromBy) {
+                               List<RuleEvidenceOrigin> keptFromBy, List<Recognition> openAt) {
 
         Composition(List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
                     boolean keepsCuts, BlockReason.RuleWithoutLineReason why,
                     List<RuleEvidenceOrigin> leftOpenBy) {
-            this(classes, divides, keepsCuts, why, leftOpenBy, List.of());
+            this(classes, divides, keepsCuts, why, leftOpenBy, List.of(), List.of());
         }
 
         /** The order is the vocabulary, so the run of classes the caller works out is the answer. */
@@ -1186,6 +1192,12 @@ public final class Partitions {
         List<RuleEvidenceOrigin> keptFromByFor(Axis axis) {
             return why != null || onAnOrder() || (axis != null && axis.derivable())
                     ? List.of() : keptFromBy;
+        }
+
+        /** The values the rules were shown on neither side of: as for {@link #leftOpenByFor}. */
+        List<Recognition> openAtFor(Axis axis) {
+            return why != null || onAnOrder() || (axis != null && axis.derivable())
+                    ? List.of() : openAt;
         }
     }
 
