@@ -1997,21 +1997,17 @@ final class Coverages {
             for (ModelOccurrence copy : each.value().copies()) {
                 List<TiltOfADerivedValue.RowsOnABorder> ofOneCall = new ArrayList<>();
                 for (ReadingOfALine reading : readings) {
-                    // A border whose quantity is not derived from several positions weighs none of
-                    // the computation's, so what was or was not read against it says nothing of
-                    // them and it is no border of the call.
-                    if (each.value().isCutBy(reading.border(), copy)
-                            && reading.border().cut().of().derivedFromSeveralPositions()
-                                    .isPresent()) {
+                    if (each.value().isCutBy(reading.border(), copy)) {
                         // A border nothing was read against says nothing, and is not left out of
                         // the call: the call's weights are fixed by the rows on every border of it,
                         // and not by the ones that happened to be read.
                         // What nothing was read against it is the border's own measurement to
                         // say, and it is carried as that measurement says it.
+                        // Every border of the call weighs the computation's positions, so one with
+                        // no reading of its weights is one nothing was read against.
                         ofOneCall.add(reading.tilt().map(tilt -> tilt.evidence().get())
                                 .orElseGet(() -> TiltOfADerivedValue.RowsOnABorder.unread(
-                                        reading.absent() == null ? WeakeningSet.none()
-                                                : reading.absent().weakening())));
+                                        reading.absent().weakening())));
                     }
                 }
                 byCall.put(copy, ofOneCall);
