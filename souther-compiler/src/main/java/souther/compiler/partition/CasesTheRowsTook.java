@@ -3,8 +3,14 @@ package souther.compiler.partition;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.meaning.Proposition;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -54,6 +60,20 @@ public final class CasesTheRowsTook {
         THE_ORDER_OF_A_REPEATED_KEY
     }
 
+    /**
+     * A statement of the decision that draws cases of a kind and cannot be asked of a row.
+     *
+     * <p>The statement and not only the kind: a decision with three such searches has three things
+     * to act on, and a reader told only that one kind is unaskable cannot tell which.
+     */
+    record NotAskable(Proposition statement, Kind kind) {
+
+        public NotAskable {
+            Objects.requireNonNull(statement, "what cannot be asked is some statement");
+            Objects.requireNonNull(kind, "and draws some kind of case");
+        }
+    }
+
     private final DecisionReading read;
     private final BehaviorInputs inputs;
     private final Quantities quantities;
@@ -61,9 +81,11 @@ public final class CasesTheRowsTook {
     private final Set<CaseOfAStatement> owed = new LinkedHashSet<>();
     /** The cases the rows taken in were evidence of. */
     private final Set<CaseOfAStatement> seen = new LinkedHashSet<>();
-    /** The kinds some statement draws a case of that no row can be asked about. Not cases that are
-     *  unseen: a candidate for one could not be told to have reached it either. */
-    private final Set<Kind> unaskable = EnumSet.noneOf(Kind.class);
+    /** The statements that draw a case no row can be asked about. Not cases that are unseen: a
+     *  candidate for one could not be told to have reached it either. */
+    private final Set<NotAskable> unaskable = new LinkedHashSet<>();
+    /** Where each case's condition is written, for the cases a way states. */
+    private final Map<CaseOfAStatement, ConditionReportAnchor> anchors = new LinkedHashMap<>();
 
     /** Owed nothing, so nothing of the reading is ever asked. */
     private CasesTheRowsTook() {
@@ -77,6 +99,13 @@ public final class CasesTheRowsTook {
         this.inputs = inputs;
         this.quantities = quantities;
         for (DecisionReading.Ruled each : read.found()) {
+            // Where the condition a case is drawn from is written, which is the only thing a
+            // reader can be sent to: the statement is the compiler's own spelling.
+            for (RuleStep step : each.steps()) {
+                for (CaseWay way : step.cases()) {
+                    anchors.putIfAbsent(way.which(), way.puts().getFirst().anchor());
+                }
+            }
             each.rule().consulted().forEach((condition, decided) -> {
                 if (!(condition instanceof DecisionCondition.AStatement(Proposition stated))
                         || !(decided instanceof DecidedCondition.Held(var _, boolean held))) {
@@ -86,19 +115,19 @@ public final class CasesTheRowsTook {
                     if (stated instanceof Proposition.SomeReachable search) {
                         Set<CaseOfAStatement.Step> steps = owedBy(search, held == search.holds());
                         if (steps.isEmpty()) {
-                            unaskable.add(Kind.A_NODE_A_SEARCH_REACHES);
+                            unaskable.add(new NotAskable(search, Kind.A_NODE_A_SEARCH_REACHES));
                         }
                         for (CaseOfAStatement.Step step : steps) {
                             owed.add(new CaseOfAStatement.Search(search, step));
                         }
                     } else {
-                        unaskable.add(Kind.A_NODE_A_SEARCH_REACHES);
+                        unaskable.add(new NotAskable(stated, Kind.A_NODE_A_SEARCH_REACHES));
                     }
                 }
                 for (Proposition.LastToHold last : stated.lastsToHold()) {
                     StandingAtAPoint.OrderOfAKey order = StandingAtAPoint.OrderOfAKey.of(last);
                     if (order == null) {
-                        unaskable.add(Kind.THE_ORDER_OF_A_REPEATED_KEY);
+                        unaskable.add(new NotAskable(stated, Kind.THE_ORDER_OF_A_REPEATED_KEY));
                     } else {
                         for (CaseOfAStatement.Way way : CaseOfAStatement.Way.values()) {
                             owed.add(new CaseOfAStatement.KeyOrder(stated, order, way));
@@ -260,16 +289,89 @@ public final class CasesTheRowsTook {
         return out;
     }
 
+    /**
+     * What each statement of the decision still lacks, in the order the reading met them: the
+     * cases of each thing no row was seen in, and whether some case it draws is one no row can be
+     * asked for.
+     *
+     * <p>Derived here, where the cases, the statements no row can be asked about and where each
+     * case's condition is written are all held, and handed on as a list. A reader of the gap — the
+     * page, the document — takes the grouping as it is and never regroups, so the two cannot say
+     * one thing in two orders, and no map of the reading leaves for a reader to walk.
+     */
+    public List<StatementShort> statementsShort() {
+        return lacking(unseenCases(), unaskable, anchors);
+    }
+
+    /**
+     * The statements that lack cases, from what the reading holds of them.
+     *
+     * <p>A statement is one entry however its cases come: a search that comes out finding a node
+     * owes the steps of finding one, and the same search coming out empty may owe a step no row can
+     * be told from another — one statement with cases to write rows for and cases no row can be
+     * asked for, which is one thing to act on and not two. Keyed by the kind and what the cases
+     * are cases of ({@link CaseOfAStatement#ofWhat}), which a statement no row can be asked about
+     * is also keyed by, so the two meet where they are of one statement.
+     */
+    static List<StatementShort> lacking(Set<CaseOfAStatement> unseen, Set<NotAskable> notAskable,
+                                        Map<CaseOfAStatement, ConditionReportAnchor> anchors) {
+        Map<String, List<CaseOfAStatement>> byWhat = new LinkedHashMap<>();
+        for (CaseOfAStatement each : unseen) {
+            byWhat.computeIfAbsent(each.kind() + " " + each.ofWhat(), _ -> new ArrayList<>())
+                    .add(each);
+        }
+        Set<String> alsoNotAskable = new LinkedHashSet<>();
+        for (NotAskable each : notAskable) {
+            alsoNotAskable.add(each.kind() + " " + each.statement().spelling());
+        }
+        List<StatementShort> out = new ArrayList<>();
+        byWhat.forEach((key, cases) -> out.add(new StatementShort(cases.getFirst().ofWhat(),
+                cases.getFirst().statement(), cases.getFirst().kind(), cases,
+                alsoNotAskable.contains(key),
+                cases.stream().map(anchors::get).filter(Objects::nonNull).findFirst())));
+        for (NotAskable each : notAskable) {
+            if (!byWhat.containsKey(each.kind() + " " + each.statement().spelling())) {
+                out.add(new StatementShort(each.statement().spelling().toString(),
+                        each.statement(), each.kind(), List.of(), true, Optional.empty()));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * One thing the decision draws cases of, and what of it lacks a row.
+     *
+     * @param what       what the cases are cases of, by its key ({@link CaseOfAStatement#ofWhat})
+     * @param statement  the statement it is of
+     * @param kind       the kind of case it draws
+     * @param unseen     the cases no row was seen in, which a row can be written for
+     * @param notAskable whether some case it draws is one no row can be asked for, which a row
+     *                   written for it would not make seen. A statement with nothing in
+     *                   {@code unseen} is so entirely
+     * @param at         which question places the condition the cases are drawn from, the one
+     *                   thing of it an author wrote; none for a statement none of whose cases a row
+     *                   can be asked for, which is a column of the decision and is written nowhere
+     *                   in particular
+     */
+    public record StatementShort(String what, Proposition statement, Kind kind,
+                                 List<CaseOfAStatement> unseen, boolean notAskable,
+                                 Optional<ConditionReportAnchor> at) {
+
+        public StatementShort {
+            unseen = List.copyOf(unseen);
+            if (unseen.isEmpty() && !notAskable) {
+                throw new IllegalArgumentException(
+                        "a statement lacks a case nobody was seen in, or one no row can be asked for: "
+                                + what);
+            }
+        }
+    }
+
     /** The kinds of case some statement draws that none of the rows seen was in. */
     public Set<Kind> unseen() {
         Set<Kind> out = EnumSet.noneOf(Kind.class);
-        out.addAll(unaskable);
-        for (CaseOfAStatement each : unseenCases()) {
-            out.add(switch (each) {
-                case CaseOfAStatement.Search _ -> Kind.A_NODE_A_SEARCH_REACHES;
-                case CaseOfAStatement.KeyOrder _ -> Kind.THE_ORDER_OF_A_REPEATED_KEY;
-            });
-        }
+        unaskable.forEach(each -> out.add(each.kind()));
+        unseenCases().forEach(each -> out.add(each.kind()));
         return out;
     }
 }
