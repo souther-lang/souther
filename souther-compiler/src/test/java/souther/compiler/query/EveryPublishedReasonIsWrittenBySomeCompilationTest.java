@@ -485,30 +485,18 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                         |> List.map(n -> if Bool.not(List.contains(n, hs)) then n else n + 1)
                         |> List.filter(d -> List.contains(d, hs))
                 """));
-        // The weekday of a date a walk found, held to a bound: a remainder whose dividend is a
-        // number the body works out and no position holds.
+        // A number of a range's element held to a membership, behind a walk that stops at the
+        // first element that holds: a remainder whose dividend is a number the body works out and
+        // no position holds, and which a run does not make on every element the walk is handed.
         out.put(UndividedPosition.Reason.RULE_ABOUT_A_REMAINDER_NO_POSITION_HOLDS, of("""
                 module m
 
-                data C = { holidays: Set<Date>, aSunday: Date }
-
-                let weekday (c: C, d: Date): Int =
-                    Int.floorMod(Date.daysBetween(c.aSunday, d), 7)
-
-                let ok (c: C, d: Date): Bool =
-                    weekday(c, d) >= 1 && Bool.not(Set.contains(d, c.holidays))
-
-                let first (c: C, from: Date): Date =
-                    List.rangeInclusive(0, 1)
-                        |> List.map(n -> Date.addDays(n, from))
-                        |> List.find(d -> ok(c, d))
-                        |> Option.withDefault(from)
-
-                behavior u : (c: C, from: Date, days: Int) -> List<Date>
-                let u (c, from, days) =
+                behavior f : (hs: Set<Int>, from: Int, days: Int) -> Int
+                let f (hs, from, days) =
                     List.rangeInclusive(0, days)
-                        |> List.map(n -> first(c, Date.addDays(n, from)))
-                        |> List.filter(d -> Bool.not(ok(c, d)))
+                        |> List.map(n -> if Int.floorMod(from + n, 7) >= 1 && Bool.not(Set.contains(from + n, hs)) then from + n else from + n + 1)
+                        |> List.find(d -> Set.contains(d, hs))
+                        |> Option.withDefault(0)
                 """));
         // Read to the end, and the positions cancel: the rule is about the position and the
         // quantity it cuts is nothing.

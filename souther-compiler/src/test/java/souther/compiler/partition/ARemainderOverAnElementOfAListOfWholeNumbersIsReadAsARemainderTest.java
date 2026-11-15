@@ -160,6 +160,43 @@ class ARemainderOverAnElementOfAListOfWholeNumbersIsReadAsARemainderTest {
                 () -> report(compilation));
     }
 
+    /** The choice a walk's closure makes, which holds a remainder of the element and a membership,
+     *  and a filter that asks a set of what the choice made. The filter is handed every element
+     *  the walk made, so it is read on the elements the list starts with, and what it states
+     *  there is a relation between the set and the input's numbers, which is said as that and not
+     *  as a remainder no position holds. */
+    @Test
+    void aRemainderBesideAMembershipOfTheChoiceIsReadWhereTheFilterIsMadeOnEveryElement() {
+        Compilation compilation = compiled("hs: Set<Int>, from: Int, days: Int", "List<Int>",
+                CHOSEN_BY_A_MEMBERSHIP + " |> List.filter(d -> Set.contains(d, hs))");
+        assertFalse(report(compilation).contains(NO_POSITION_HOLDS_IT), () -> report(compilation));
+        List<String> notRead = report(compilation).lines()
+                .filter(line -> line.contains("· not read:")).toList();
+        assertFalse(notRead.isEmpty(), () -> report(compilation));
+        notRead.forEach(line -> assertTrue(
+                line.contains("relates the value here to another value"),
+                () -> line + "\n" + report(compilation)));
+    }
+
+    /** The same choice behind an operation that stops at the first element that holds is made
+     *  on a later element only where none before held, so it is read on none of them. */
+    @Test
+    void aRemainderBesideAMembershipOfTheChoiceIsNotReadWhereTheWalkStopsAtAnAnswer() {
+        Compilation compilation = compiled("hs: Set<Int>, from: Int, days: Int", "Int",
+                CHOSEN_BY_A_MEMBERSHIP + " |> List.find(d -> Set.contains(d, hs))"
+                        + " |> Option.withDefault(0)");
+        assertTrue(report(compilation).contains(NO_POSITION_HOLDS_IT), () -> report(compilation));
+    }
+
+    /** What a comparison that was not read for being about a remainder no position holds says. */
+    private static final String NO_POSITION_HOLDS_IT = "about what a division leaves of a number"
+            + " the body works out, which no position holds, so what it says about the values"
+            + " here is not worked out";
+
+    private static final String CHOSEN_BY_A_MEMBERSHIP = "List.rangeInclusive(0, days)"
+            + " |> List.map(n -> if Int.floorMod(from + n, 7) >= 1"
+            + " && Bool.not(Set.contains(from + n, hs)) then from + n else from + n + 1)";
+
     /** A divisor past how many readings one condition is read in is read on no element, and
      *  says so. */
     @Test

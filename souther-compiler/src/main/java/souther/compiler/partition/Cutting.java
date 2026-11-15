@@ -2324,15 +2324,18 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * <p>Read once, under the names of the one application it is asked of: which applications
      * there are, and where each is reached, is what {@link #ofAnApplicationOnEach} walks, so that
      * a comparison read here and a statement read as lines are told apart by the same walk.
+     *
+     * @param onEveryElement whether a run that gets to the closure the application stands in
+     *                       makes it on every element the closure is handed, which is what lets a
+     *                       comparison of a remainder be read on the elements a list starts with.
+     *                       False where the applications are not said
      */
     static Read ofALawComparison(String behavior, StatedComparison comparison,
                                  InputReading read, InputReads reads,
                                  Arrivals answering, WhatConditionsState conditions,
-                                 Optional<ExpansionLineage> writtenIn) {
-        // Nothing is claimed of every element a closure is handed: that is only ever what lets a
-        // comparison of a remainder be read on the elements a list starts with.
+                                 boolean onEveryElement, Optional<ExpansionLineage> writtenIn) {
         Read drawn = readOnce(behavior, comparison, read, reads, answering,
-                conditions.comparison(comparison, reads, read), false, writtenIn);
+                conditions.comparison(comparison, reads, read), onEveryElement, writtenIn);
         // An application states lines, the values it relates, or a stop
         // ({@link ComparisonAssessment#ofAnApplication}), and takes no other reading of a
         // comparison as its own.
