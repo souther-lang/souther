@@ -419,6 +419,26 @@ public final class CoverageRead {
     }
 
     /**
+     * Whether the meetings at a place reached by {@code reach} are read here.
+     *
+     * <p>A meeting where no way in can be stated is still one: it is read, and said where it cannot
+     * be offered, rather than dropped for want of a way in to name. Where no run arrives there is
+     * none. And inside the body of a function value there is one that is not this walk's: the
+     * operation the function is handed to reads what its body decides, as the elements it keeps and
+     * what each is worth, so reading it here too would be one meeting said twice. Whatever else
+     * could not be stated of the way there, the body is the function's: the reasons gather as the
+     * walk goes in, and one of them being the function is what puts it inside one.
+     */
+    private static boolean meetingsAreReadUnder(Reach reach) {
+        return switch (reach) {
+            case Reach.Nothing _ -> false;
+            case Reach.Unnameable it -> it.whys().stream().noneMatch(
+                    why -> why == PathAccess.Unsupported.Why.RUNS_WHERE_SOMETHING_CALLS_IT);
+            case Reach.Ways _, Reach.Coarse _ -> true;
+        };
+    }
+
+    /**
      * That each of {@code ways}, which a run reaching a place under {@code reach} is known to have
      * come by, was written without every step nothing states on the way there — the step into a
      * function value as the function's, where the way goes on to {@code fork} inside it.
@@ -516,6 +536,11 @@ public final class CoverageRead {
      * in are named, so both are already settled here.
      */
     private void takesAt(Interaction group) {
+        // A meeting reached some way that is not stated has no way in to hold its decisions to, and
+        // says nothing of how a fork inside it is taken that the walk into the fork does not.
+        if (!group.reachStated()) {
+            return;
+        }
         taken.add(new WayIn(group.reach()));
         for (Factor factor : group.factors()) {
             for (Outcome outcome : factor.outcomes()) {
@@ -561,7 +586,7 @@ public final class CoverageRead {
             walk(let.body(), naming.entering(new ScopeStep.Let(let)), reach, arrives);
             return;
         }
-        if (arrives && !reach.ways().isEmpty()) {
+        if (arrives && meetingsAreReadUnder(reach)) {
             meetings.at(node, naming, body, reach.ways().stream().map(WayIn::decisions).toList(),
                     reading);
         }
@@ -901,6 +926,14 @@ public final class CoverageRead {
             return known.seenApart() ? new Reach.Ways(ways) : fallbackWayIn(iff, part, naming,
                     PathAccess.Unsupported.Why.WAYS_NOT_TOLD_APART, ways);
         }
+        // A comparison of how many elements are kept comes out by the keeping decisions of the
+        // elements, which a run is not seen to tell apart at the arm.
+        List<WayIn> counted = WaysOfACount.of(iff.cond(), part == 0, meetings.keptElements(),
+                naming, body);
+        if (counted != null) {
+            return fallbackWayIn(iff, part, naming,
+                    PathAccess.Unsupported.Why.WAYS_NOT_TOLD_APART, counted);
+        }
         return fallbackWayIn(iff, part, naming,
                 PathAccess.Unsupported.Why.WAYS_NOT_ENUMERABLE, List.of());
     }
@@ -919,7 +952,8 @@ public final class CoverageRead {
         if (back == null) {
             return new Reach.Unnameable(PathAccess.Unsupported.Why.NO_WAY_IN_CAN_BE_NAMED);
         }
-        List<WayIn> arm = List.of(new WayIn(back.holds()));
+        List<WayIn> arm = List.of(new WayIn(back.comingOutBy(
+                written.stream().map(WayIn::conditions).toList()).holds()));
         return new Reach.Coarse(arm, why, written.isEmpty() ? arm : written);
     }
 

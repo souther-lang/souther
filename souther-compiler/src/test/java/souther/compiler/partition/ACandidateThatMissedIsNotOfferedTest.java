@@ -189,7 +189,7 @@ class ACandidateThatMissedIsNotOfferedTest {
         List<ControlClaim> out = new ArrayList<>();
         for (InteractionCells.Group group : InteractionCells.of(model.groups(), model.subject().axes(), Budgets.generation().cellsPerGroup()).groups()) {
             for (int index = 0; index < group.size(); index++) {
-                CellSelection selection = group.at(index);
+                CellSelection selection = GenerationFixtures.firstWay(group, index);
                 if (selection != null) {
                     out.addAll(selection.claims());
                 }

@@ -511,6 +511,14 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.reading.Meetings.at",
                     "asks the enum whether the operator compares, which is what a count handed to"
                             + " it is made into a statement by"),
+            new Held("souther.compiler.reading.WaysOfACount.of",
+                    "asks the enum whether the operator compares, which is what a count set"
+                            + " against a number the body writes is made into the ways it comes"
+                            + " out by"),
+            new Held("souther.compiler.reading.WaysOfACount.relationOf",
+                    "names the six comparisons as the relations they state, so that which counts"
+                            + " bring a comparison out a given way is the relation's own answer"
+                            + " and no table of six written beside it"),
             new Held("souther.compiler.reading.ValueChoices.of",
                     "asks the enum whether the operator stops early, which a conjunction does and"
                             + " a comparison does not: what an if decides by is one comparison only"

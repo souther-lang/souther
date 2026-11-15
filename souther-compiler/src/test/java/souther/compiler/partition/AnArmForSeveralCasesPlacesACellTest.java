@@ -63,7 +63,7 @@ class AnArmForSeveralCasesPlacesACellTest {
 
         assertEquals(1, offered.groups().size(),
                 () -> "the two values meeting at the sum are one group: " + read.interactions());
-        assertEquals(4, offered.groups().getFirst().left(0),
+        assertEquals(4, GenerationFixtures.combinationsOf(offered.groups().getFirst()),
                 () -> "two outcomes of each, every one of them placing a row");
     }
 }
