@@ -7961,8 +7961,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                   SearchRegion region, InputReading read) {
         Map<TermPath, List<OnAWay>> met = new LinkedHashMap<>();
         for (OnAWay each : conditions) {
-            if (each.bySome() != null && terms.stream().allMatch(term -> term.placesReadOff()
-                    .stream().allMatch(place -> place.isAtOrUnder(each.elementsOf().element())))) {
+            if (each.bySome() != null && terms.stream().allMatch(term ->
+                    term.placesReadOff().stream().allMatch(place ->
+                            place.isAtOrUnder(each.elementsOf().element()))
+                    || (heldEqualToOthers(each) && touches(term, each.positions())))) {
                 met.computeIfAbsent(each.elementsOf(), _ -> new ArrayList<>()).add(each);
             }
         }
@@ -8022,19 +8024,33 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         for (List<RowDemand.OfAnElement> way : statement.bySome().ways()) {
             List<RowDemand.OfAnElement> ofItsNumbers = new ArrayList<>();
+            List<NumericTerm.FromOnePosition> pinned = new ArrayList<>();
             boolean truthsWritten = true;
             for (RowDemand.OfAnElement each : way) {
                 if (each instanceof RowDemand.ATruth(TermPath at, var _)) {
                     truthsWritten &= at.isAtOrUnder(container.element())
                             && !namedDownTo(at, deepest, read, null).isReadByARule()
                             && apartFrom.stream().noneMatch(at::bearsOn);
+                } else if (numberHeldEqualToOthers(each, container) != null) {
+                    pinned.add(numberHeldEqualToOthers(each, container));
                 } else {
                     ofItsNumbers.add(each);
                 }
             }
             Map<NumericTerm.FromOnePosition, NumericDomain.Bounds> ends =
                     truthsWritten ? endsAsked(ofItsNumbers, container) : null;
-            if (ends != null && ends.entrySet().stream().allMatch(each ->
+            // A number held equal to what is stated of other places is written at that value,
+            // wherever it lies, where it takes every value of its type and nothing reads it.
+            boolean writtenAtItsValue = pinned.stream().distinct().count() == pinned.size()
+                    && pinned.stream().noneMatch(number -> ends != null
+                            && ends.containsKey(number))
+                    && pinned.stream().allMatch(number -> {
+                        Source source = sourceOf(number, read);
+                        return source != null && source.takes().every() && !source.named()
+                                && !namedDownTo(number.subjectPath(), deepest, read, null)
+                                        .isReadByARule();
+                    });
+            if (ends != null && writtenAtItsValue && ends.entrySet().stream().allMatch(each ->
                     aValueIsShownInside(each.getKey(), each.getValue(), ends.size() == 1,
                             deepest, region, read)
                     && (!apart.found || !keptApartBeside(container,
@@ -8045,6 +8061,44 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return false;
+    }
+
+    /** Whether {@code statement} asks some element of a container only to be equal to what is
+     *  stated of other places, in every way it may be met. */
+    private static boolean heldEqualToOthers(OnAWay statement) {
+        return statement.bySome().ways().stream().allMatch(way -> way.stream().allMatch(demand ->
+                numberHeldEqualToOthers(demand, statement.elementsOf()) != null));
+    }
+
+    /**
+     * The number of an element of {@code container} that {@code demand} holds equal to numbers of
+     * places that are not under the element — {@code element == from + 1}, or the element the
+     * same as a value — or null where it asks anything else of it.
+     */
+    private static NumericTerm.FromOnePosition numberHeldEqualToOthers(
+            RowDemand.OfAnElement demand, TermPath container) {
+        return switch (demand) {
+            case RowDemand.SameAs(Operand.At<TermPath>(var at))
+                    when !at.isAtOrUnder(container.element()) ->
+                    new NumericTerm.ValueOf(container.element());
+            case RowDemand.Relational(TakenConstraint.Affine(var form, var rel, var _))
+                    when rel == Rel.EQ -> {
+                List<NumericTerm> under = form.coefs().keySet().stream()
+                        .filter(term -> term.placesReadOff().stream()
+                                .allMatch(place -> place.isAtOrUnder(container.element())))
+                        .toList();
+                // Held equal to a constant is an end on the element's own number, which
+                // {@link #endsAsked} reads.
+                yield under.size() == 1 && form.coefs().size() > 1
+                        && form.coefs().keySet().stream()
+                                .filter(term -> !under.contains(term)).allMatch(term ->
+                                        term.placesReadOff().stream().noneMatch(place ->
+                                                place.isAtOrUnder(container.element())))
+                        && under.getFirst() instanceof NumericTerm.FromOnePosition number
+                        ? number : null;
+            }
+            default -> null;
+        };
     }
 
     /**
@@ -11730,7 +11784,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return (int) Math.min(counted, Integer.MAX_VALUE);
         }
         boolean unwritten = !(TypeOps.outermost(each, rules.inners()) instanceof TypeOps.Unwrapped);
+        if (unwritten && aPointInTime(each, read)) {
+            return Integer.MAX_VALUE;
+        }
         return unwritten && withoutEnd(each, read) ? -1 : 1;
+    }
+
+    /** Whether the values of {@code type} are days, times or instants, each of which has more
+     *  distinct values between its ends than any count a container is asked to hold. */
+    private static boolean aPointInTime(Type type, InputReading read) {
+        RuleReadingSource rules = read.rules();
+        return TypeView.shapeOf(type, rules.inners(), rules.symbols(), rules.kinds(), rules.sums())
+                instanceof Shape.Scalar(Type.Prim prim)
+                && (prim == Type.Prim.DATE || prim == Type.Prim.TIME
+                        || prim == Type.Prim.DATETIME || prim == Type.Prim.INSTANT);
     }
 
     /**

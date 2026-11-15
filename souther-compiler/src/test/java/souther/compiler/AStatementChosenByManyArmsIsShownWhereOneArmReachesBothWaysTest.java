@@ -82,6 +82,29 @@ class AStatementChosenByManyArmsIsShownWhereOneArmReachesBothWaysTest {
         assertFalse(notShownAt(human, "h"), human);
     }
 
+    /** A walk over candidates that skips each one a set holds: a candidate is reached only past
+     *  the earlier ones being in the set, which asks the set for an element equal to a value and
+     *  is met by an element written at that value, whatever it is. So the membership of each
+     *  candidate is read over every value of {@code from} and of the set's elements. */
+    @Test
+    void aWalkPastCandidatesASetHoldsReadsEachMembershipOverEveryValue() {
+        Compilation compilation = Compilation.ofSource("""
+                module p
+                import List ( find )
+                let free (hs: Set<Decimal>, d: Decimal): Bool = Bool.not(Set.contains(d, hs))
+                behavior f : (hs: Set<Decimal>, from: Decimal) -> Decimal
+                let f (hs, from) = [ from, from + 1.0m, from + 2.0m ]
+                    |> find(d -> free(hs, d)) |> Option.withDefault(from)
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        String human = AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+
+        assertFalse(notShownAt(human, "from"), human);
+        assertFalse(notShownAt(human, "hs[*]"), human);
+    }
+
     /** The same with a third arm a row can take. */
     @Test
     void aThirdArmARowCanTakeChangesNothingOfWhatTheFirstReaches() {
