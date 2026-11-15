@@ -614,31 +614,74 @@ public final class CasesOfALineAsked {
      * of it and decided by each one's choices, and written beside each it would be asked of the
      * way to every case in full.
      *
-     * @param parts each part chosen, in the order it was, as the others leave it
+     * <p>Each part is kept with what {@link WhereEachLineDecides#given} reads of it: the part it
+     * is as one ({@link WhereEachLineDecides#asOnePart}), and every part it holds
+     * ({@link WhereEachLineDecides#partsIn}). A part chosen comes out in another only where the
+     * other holds it, so a part is put through the others that hold it and no other, and those
+     * that hold the part chosen are the only ones put through it: the rest would each be handed
+     * back as they are, after a reading of the whole part. And the conjunction is made once, when
+     * it is first asked for: a case is asked as it is chosen and kept as it was asked.
      */
-    private record SoFar(List<Proposition> parts) {
+    private static final class SoFar {
 
         static final SoFar NOTHING = new SoFar(List.of());
 
-        SoFar {
-            parts = List.copyOf(parts);
+        /**
+         * A part chosen, as the others leave it, with what {@link WhereEachLineDecides#given}
+         * reads of it.
+         *
+         * @param part  the part
+         * @param asOne the part it is as one, where it is one
+         * @param holds every part it holds
+         */
+        private record Chosen(Proposition part, Optional<WhereEachLineDecides.PartHeld> asOne,
+                              Set<WhereEachLineDecides.PartHeld> holds) {
+
+            static Chosen of(Proposition part) {
+                return new Chosen(part, WhereEachLineDecides.asOnePart(part),
+                        WhereEachLineDecides.partsIn(part));
+            }
+        }
+
+        /** Each part chosen, in the order it was. */
+        private final List<Chosen> parts;
+
+        /** The conjunction of {@link #parts}, once it has been asked for. */
+        private Proposition condition;
+
+        private SoFar(List<Chosen> parts) {
+            this.parts = List.copyOf(parts);
         }
 
         /** This, with {@code condition} chosen as well. */
         SoFar and(Proposition condition) {
-            List<Proposition> out = new ArrayList<>(parts);
+            List<Chosen> out = new ArrayList<>(parts);
             for (Proposition part : condition instanceof Proposition.All all ? all.parts()
                     : List.of(condition)) {
-                Proposition left = part;
-                for (Proposition chosen : out) {
-                    left = WhereEachLineDecides.given(left, chosen);
+                Chosen left = Chosen.of(part);
+                for (Chosen chosen : out) {
+                    if (chosen.asOne().isPresent()
+                            && left.holds().contains(chosen.asOne().get())) {
+                        Proposition met = WhereEachLineDecides.given(left.part(), chosen.part());
+                        if (met != left.part()) {
+                            left = Chosen.of(met);
+                        }
+                    }
                 }
-                if (left instanceof Proposition.Always(boolean holds) && holds) {
+                if (left.part() instanceof Proposition.Always(boolean holds) && holds) {
                     continue;
                 }
-                if (WhereEachLineDecides.isOnePart(left)) {
-                    Proposition one = left;
-                    out.replaceAll(each -> WhereEachLineDecides.given(each, one));
+                if (left.asOne().isPresent()) {
+                    WhereEachLineDecides.PartHeld one = left.asOne().get();
+                    for (int at = 0; at < out.size(); at++) {
+                        Chosen each = out.get(at);
+                        if (each.holds().contains(one)) {
+                            Proposition met = WhereEachLineDecides.given(each.part(), left.part());
+                            if (met != each.part()) {
+                                out.set(at, Chosen.of(met));
+                            }
+                        }
+                    }
                 }
                 out.add(left);
             }
@@ -647,7 +690,10 @@ public final class CasesOfALineAsked {
 
         /** The conjunction of what has been chosen. */
         Proposition condition() {
-            return Proposition.all(parts);
+            if (condition == null) {
+                condition = Proposition.all(parts.stream().map(Chosen::part).toList());
+            }
+            return condition;
         }
     }
 
