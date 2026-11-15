@@ -364,9 +364,8 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
     /**
      * The places a side is made of are all of them places the run reads, and each the place of an
      * argument the side was read at: never a union of the places of several ways a value may have
-     * been made. What leaves a place out of the places a run that reaches the relation stands at
-     * ({@link WhereARunReachingARelationStands}) rests on this, so it is held here, where the
-     * sides are made, and not only where it is used.
+     * been made. What a reader of the relation's places asks of them rests on this, so it is held
+     * here, where the sides are made, and not only where it is used.
      */
     @Test
     void aSideIsMadeOfTheEveryPlaceItIsReadAtAndNoPlaceItMayHaveComeFrom() {
