@@ -2268,12 +2268,12 @@ final class Pullback {
      * multiplied out exactly ({@link GetsPast.WhereTheProductFits}) — and the number it comes to,
      * before it is held to anything, lies there whatever its operands are ({@link #exactRangeOf}).
      * A total of what an element meets is a count, which comes to no more than a list holds: it
-     * is an {@code Int} on every run. And a span between two numbers that answers where it is no
-     * longer than a collection holds ({@link GetsPast.WhereTheSpanFits}), where the greatest its
-     * last number comes to less the least its first comes to leaves it no longer
-     * ({@link #theSpanFits}). A whole-number quotient that stops only on the least {@code Int}
-     * divided by minus one ({@link GetsPast.WhereTheQuotientFits}), where what it divides never
-     * comes to the least or what it divides by never to minus one ({@link #theQuotientFits}). A
+     * is an {@code Int} on every run. And an operation that ends a run only past what a
+     * {@code String} or a collection holds, on every run of a row
+     * ({@link WorkedOutToReachIt#completionOfARowsRun}). A whole-number quotient that stops only
+     * on the least {@code Int} divided by minus one ({@link GetsPast.WhereTheQuotientFits}), where
+     * what it divides never comes to the least or what it divides by never to minus one
+     * ({@link #theQuotientFits}). A
      * whole number made of a number only where it is whole
      * ({@link GetsPast.WhereTheWholeNumberFits}), where every whole number the number comes to is
      * an {@code Int} ({@link #theWholeNumberFits}).

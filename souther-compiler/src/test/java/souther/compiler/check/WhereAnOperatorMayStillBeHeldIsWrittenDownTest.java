@@ -202,9 +202,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.Pullback.productOfWrittenOut",
                     "multiplies the runs of the elements of a list written out, which is the"
                             + " number a product the library multiplies out exactly comes to"),
-            new Held("souther.compiler.partition.Pullback.theSpanFits",
-                    "takes the run of the first number of a span from that of the last, which is"
-                            + " how much longer than one element the span is"),
             new Held("souther.compiler.semantics.WhereAnOperatorAnswers.ofAProduct",
                     "names the multiplication a product the library multiplies out exactly is"
                             + " held to its type as, for every reader of where such a product"
@@ -809,7 +806,11 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.LineDownATree.Reading.holdsTheValue",
                     "names the equality, the one comparison that is whether a field of a node is"
                             + " the value handed beside it; an order, an inequality or a"
-                            + " connective is another search"));
+                            + " connective is another search"),
+            new Held("souther.compiler.partition.StopPastTheRepresentation.nameOf",
+                    "names the join of two texts as it is written, the one operator that ends a"
+                            + " run only past what a String holds; which operators do is asked of"
+                            + " the owner of where a run ends, and this only says the one found"));
 
     @Test
     void everythingWithAnOperatorIsWrittenDownWithAReason() {
