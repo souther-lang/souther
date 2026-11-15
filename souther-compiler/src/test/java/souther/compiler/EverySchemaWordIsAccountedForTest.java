@@ -655,7 +655,8 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "decision", "properties", "casesNotSeen", "items",
                             "properties", "way"), CaseOfAStatement.Way.class),
             new Vocabulary("decision.casesNotAskable[]",
-                    List.of("$defs", "decision", "properties", "casesNotAskable", "items"),
+                    List.of("$defs", "decision", "properties", "casesNotAskable", "items",
+                            "properties", "kind"),
                     CasesTheRowsTook.Kind.class),
             // Why a weight of a derived value is undecided, as far as the weights' own reading
             // says.

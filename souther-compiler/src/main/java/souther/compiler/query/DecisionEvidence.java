@@ -16,7 +16,6 @@ import souther.compiler.partition.RulesTaken;
 import souther.compiler.partition.RunPlacement;
 import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.publish.CanonicalSelection;
-import souther.compiler.publish.PublicationOrders;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -145,11 +144,11 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
                              int rowsNotPlaced, int rowsNotWatched,
                              Map<DecisionRule, RowWitnesses> wentAgainst,
                              List<CaseOfAStatement> unseenCases,
-                             CanonicalSelection<CasesTheRowsTook.Kind> notAskable) {
+                             List<CasesTheRowsTook.NotAskable> notAskable) {
 
         public RowsPlaced {
             unseenCases = List.copyOf(unseenCases);
-            Objects.requireNonNull(notAskable, "what no row can be asked about is said, or none");
+            notAskable = List.copyOf(notAskable);
             // Sealed and not only copied. What the account answers about a behavior is read off
             // this — which rules were covered, which were not — and a map a caller can add to is a
             // value whose answers change after it was made.
@@ -523,9 +522,7 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
         RowsPlaced made =
                 new RowsPlaced(rows.size(), RowWitnesses.Gathering.done(took), placed, notPlaced,
                         notWatched, RowWitnesses.Gathering.done(wentAgainst),
-                        List.copyOf(cases.unseenCases()),
-                        PublicationOrders.KINDS_OF_CASE_NO_ROW_CAN_BE_ASKED_ABOUT
-                                .keep(cases.notAskable()));
+                        List.copyOf(cases.unseenCases()), cases.notAskable());
         // A row this reading could not place says what stopped it, and a row nothing watched says
         // what the run went without. Where something is left either leaves the placement partial,
         // and neither may arrive as a complete reading of the rows.

@@ -5,6 +5,8 @@ import souther.compiler.meaning.Proposition;
 
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -54,6 +56,20 @@ public final class CasesTheRowsTook {
         THE_ORDER_OF_A_REPEATED_KEY
     }
 
+    /**
+     * A statement of the decision that draws cases of a kind and cannot be asked of a row.
+     *
+     * <p>The statement and not only the kind: a decision with three such searches has three things
+     * to act on, and a reader told only that one kind is unaskable cannot tell which.
+     */
+    public record NotAskable(Proposition statement, Kind kind) {
+
+        public NotAskable {
+            Objects.requireNonNull(statement, "what cannot be asked is some statement");
+            Objects.requireNonNull(kind, "and draws some kind of case");
+        }
+    }
+
     private final DecisionReading read;
     private final BehaviorInputs inputs;
     private final Quantities quantities;
@@ -61,9 +77,9 @@ public final class CasesTheRowsTook {
     private final Set<CaseOfAStatement> owed = new LinkedHashSet<>();
     /** The cases the rows taken in were evidence of. */
     private final Set<CaseOfAStatement> seen = new LinkedHashSet<>();
-    /** The kinds some statement draws a case of that no row can be asked about. Not cases that are
-     *  unseen: a candidate for one could not be told to have reached it either. */
-    private final Set<Kind> unaskable = EnumSet.noneOf(Kind.class);
+    /** The statements that draw a case no row can be asked about. Not cases that are unseen: a
+     *  candidate for one could not be told to have reached it either. */
+    private final Set<NotAskable> unaskable = new LinkedHashSet<>();
 
     /** Owed nothing, so nothing of the reading is ever asked. */
     private CasesTheRowsTook() {
@@ -86,19 +102,19 @@ public final class CasesTheRowsTook {
                     if (stated instanceof Proposition.SomeReachable search) {
                         Set<CaseOfAStatement.Step> steps = owedBy(search, held == search.holds());
                         if (steps.isEmpty()) {
-                            unaskable.add(Kind.A_NODE_A_SEARCH_REACHES);
+                            unaskable.add(new NotAskable(search, Kind.A_NODE_A_SEARCH_REACHES));
                         }
                         for (CaseOfAStatement.Step step : steps) {
                             owed.add(new CaseOfAStatement.Search(search, step));
                         }
                     } else {
-                        unaskable.add(Kind.A_NODE_A_SEARCH_REACHES);
+                        unaskable.add(new NotAskable(stated, Kind.A_NODE_A_SEARCH_REACHES));
                     }
                 }
                 for (Proposition.LastToHold last : stated.lastsToHold()) {
                     StandingAtAPoint.OrderOfAKey order = StandingAtAPoint.OrderOfAKey.of(last);
                     if (order == null) {
-                        unaskable.add(Kind.THE_ORDER_OF_A_REPEATED_KEY);
+                        unaskable.add(new NotAskable(stated, Kind.THE_ORDER_OF_A_REPEATED_KEY));
                     } else {
                         for (CaseOfAStatement.Way way : CaseOfAStatement.Way.values()) {
                             owed.add(new CaseOfAStatement.KeyOrder(stated, order, way));
@@ -261,19 +277,17 @@ public final class CasesTheRowsTook {
     }
 
     /**
-     * The kinds some statement draws a case of that no row can be asked about, which a row written
-     * for it would not make seen.
+     * The statements that draw a case no row can be asked about, in the order the reading met
+     * them. A row written for one would not make it seen.
      */
-    public Set<Kind> notAskable() {
-        Set<Kind> out = EnumSet.noneOf(Kind.class);
-        out.addAll(unaskable);
-        return out;
+    public List<NotAskable> notAskable() {
+        return List.copyOf(unaskable);
     }
 
     /** The kinds of case some statement draws that none of the rows seen was in. */
     public Set<Kind> unseen() {
         Set<Kind> out = EnumSet.noneOf(Kind.class);
-        out.addAll(unaskable);
+        unaskable.forEach(each -> out.add(each.kind()));
         for (CaseOfAStatement each : unseenCases()) {
             out.add(switch (each) {
                 case CaseOfAStatement.Search _ -> Kind.A_NODE_A_SEARCH_REACHES;

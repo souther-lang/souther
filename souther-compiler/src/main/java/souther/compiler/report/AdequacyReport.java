@@ -38,6 +38,7 @@ import souther.compiler.numeric.Towards;
 import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.BorderQuantity;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.partition.CaseOfAStatement;
 import souther.compiler.partition.CasesTheRowsTook;
 import souther.compiler.partition.LinearQuantity;
@@ -4160,44 +4161,60 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static void weightsNotDecided(StringBuilder out, List<TiltOfADerivedValue> weights,
                                           Page page) {
         for (TiltOfADerivedValue each : weights) {
-            Map<WhatAWeightWentWithout, List<NumericTerm>> byReason = new LinkedHashMap<>();
+            Map<UndecidedWeighing, List<NumericTerm>> together = new LinkedHashMap<>();
             each.positions().forEach((position, standing) -> {
                 if (standing instanceof TiltOfADerivedValue.Standing.Undecided it) {
-                    byReason.computeIfAbsent(new WhatAWeightWentWithout(it.own().written(),
-                            !it.carried().isEmpty()), _ -> new ArrayList<>()).add(position);
+                    together.computeIfAbsent(
+                            new UndecidedWeighing(each.widestWith(position), it),
+                            _ -> new ArrayList<>()).add(position);
                 }
             });
-            byReason.forEach((without, positions) -> {
-                List<String> reasons = new ArrayList<>();
-                for (Weakening.AWeightNotDecided.Why why : without.own()) {
-                    reasons.add(page.say(switch (why) {
-                        case NO_BORDER_OF_IT_WAS_READ ->
-                                new ReportMessage.NoBorderOfTheComputationWasRead();
-                        case A_BORDER_WAS_NOT_READ_IN_FULL ->
-                                new ReportMessage.ABorderOfTheComputationWasNotReadInFull();
-                        case A_RUN_WAS_NOT_WATCHED ->
-                                new ReportMessage.ARowOfTheComputationWasNotWatched();
-                        case THE_ARITHMETIC_GAVE_OUT ->
-                                new ReportMessage.TheArithmeticGaveOutOnAChangedWeight();
-                    }));
-                }
-                if (without.borders()) {
-                    reasons.add(page.say(
-                            new ReportMessage.WhatABorderOfTheComputationWentWithout()));
-                }
+            together.forEach((weighing, positions) -> {
                 out.append("      ? ").append(page.say(new ReportMessage.TheWeightsAreNotDecided(
-                        String.valueOf(each.widestWith(positions.getFirst()).left()),
-                        String.join("; ", reasons)))).append(NEW_LINE);
+                        String.valueOf(weighing.into().left())))).append(NEW_LINE);
                 for (NumericTerm position : positions) {
                     out.append("          · ").append(position).append(NEW_LINE);
                 }
+                for (Weakening.AWeightNotDecided.Why why : weighing.standing().own().written()) {
+                    out.append("          ").append(page.say(new ReportMessage.TheyAreNotDecidedBecause(
+                            switch (why) {
+                                case NO_BORDER_OF_IT_WAS_READ ->
+                                        new ReportMessage.NoBorderOfTheComputationWasRead();
+                                case A_BORDER_WAS_NOT_READ_IN_FULL ->
+                                        new ReportMessage.ABorderOfTheComputationWasNotReadInFull();
+                                case A_RUN_WAS_NOT_WATCHED ->
+                                        new ReportMessage.ARowOfTheComputationWasNotWatched();
+                                case THE_ARITHMETIC_GAVE_OUT ->
+                                        new ReportMessage.TheArithmeticGaveOutOnAChangedWeight();
+                            }))).append(NEW_LINE);
+                }
+                // What the borders went without, each as the border it was at and the word the
+                // document publishes for it, in an order that does not depend on how the set was
+                // built.
+                List<String> carried = new ArrayList<>();
+                for (Weakening cause : weighing.standing().carried().causes()) {
+                    String where = Subjects.of(cause) instanceof Subject.AtABorder at
+                            ? at.line().target().label() : "";
+                    carried.add(page.say(new ReportMessage.TheyAreNotDecidedBecause(
+                            new ReportMessage.ABorderOfTheComputationWentWithout(where,
+                                    kindOf(cause)))));
+                }
+                carried.sort(null);
+                carried.forEach(line -> out.append("          ").append(line).append(NEW_LINE));
             });
         }
     }
 
-    /** What a weight went without: its own reasons, and whether its borders went without. */
-    private record WhatAWeightWentWithout(List<Weakening.AWeightNotDecided.Why> own,
-                                          boolean borders) {
+    /**
+     * Positions that are weighed into one value and are undecided for the same things.
+     *
+     * <p>Keyed by the weighing and by the standing itself, which is what the reasons are asked of.
+     * A computation holds several weighings, and a position is weighed into one of them: positions
+     * of different weighings are not one group however alike their reasons read, and neither are
+     * two whose borders went without different things.
+     */
+    private record UndecidedWeighing(LinearQuantity into,
+                                     TiltOfADerivedValue.Standing.Undecided standing) {
     }
 
     /**
@@ -5177,35 +5194,62 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         if (made.isEmpty()) {
             return;
         }
+        // By what the cases are cases of, which is the statement for a search and the order of one
+        // container for a key: one statement may rest on the orders of two maps, and what one
+        // decides is not what the other does. A decision with two searches from one place through
+        // one field has two things to act on too, and the compiler's spelling of a statement has
+        // no words an author wrote to tell them by. So each is numbered on this page, in the order
+        // the reading met them, and the document says each by its spelling.
+        Map<Object, List<CaseOfAStatement>> byStatement = new LinkedHashMap<>();
         for (CaseOfAStatement each : made.get().unseenCases()) {
-            Message said = switch (each) {
-                case CaseOfAStatement.Search search -> new ReportMessage.NoRowIsInACaseOfASearch(
-                        search.statement().writtenAt().toString(),
-                        String.join(".", search.statement().through()), switch (search.step()) {
-                            case AT_THE_NODE -> new ReportMessage.TheSearchFindsItAtTheNode();
-                            case BELOW_IT -> new ReportMessage.TheSearchFindsItBelowTheNode();
-                            case NOWHERE_AT_A_LEAF ->
-                                    new ReportMessage.TheSearchComesBackEmptyAtANodeWithNothingBelow();
-                            case NOWHERE_BELOW ->
-                                    new ReportMessage.TheSearchComesBackEmptyFromEveryNodeBelow();
-                        });
-                case CaseOfAStatement.KeyOrder order -> new ReportMessage.NoRowIsInACaseOfAnOrder(
-                        order.position().toString(), order.container().toString(),
-                        switch (order.way()) {
-                            case HOLDS_BY_THE_LAST ->
-                                    new ReportMessage.TheStatementHoldsByTheLastElementOfAKey();
-                            case FAILS_BY_THE_LAST ->
-                                    new ReportMessage.TheStatementFailsByTheLastElementOfAKey();
-                        });
-            };
-            out.append("      ? ").append(page.say(said)).append(NEW_LINE);
+            Object ofWhat = each instanceof CaseOfAStatement.KeyOrder order
+                    ? List.of(order.statement(), order.container(), order.position())
+                    : each.statement();
+            byStatement.computeIfAbsent(ofWhat, _ -> new ArrayList<>()).add(each);
         }
-        for (CasesTheRowsTook.Kind kind : made.get().notAskable().written()) {
-            Message said = switch (kind) {
-                case A_NODE_A_SEARCH_REACHES ->
-                        new ReportMessage.NoRowCanBeAskedAboutTheCasesOfASearch();
+        int number = 0;
+        for (List<CaseOfAStatement> cases : byStatement.values()) {
+            number++;
+            out.append("      ? ").append(page.say(switch (cases.getFirst()) {
+                case CaseOfAStatement.Search search -> new ReportMessage.NoRowIsInTheseCasesOfASearch(
+                        number, search.statement().writtenAt().toString(),
+                        String.join(".", search.statement().through()));
+                case CaseOfAStatement.KeyOrder order ->
+                        new ReportMessage.NoRowIsInTheseCasesOfAnOrder(number,
+                                order.position().toString(), order.container().toString());
+            })).append(NEW_LINE);
+            for (CaseOfAStatement each : cases) {
+                out.append("          · ").append(page.say(switch (each) {
+                    case CaseOfAStatement.Search search -> switch (search.step()) {
+                        case AT_THE_NODE -> new ReportMessage.TheSearchFindsItAtTheNode();
+                        case BELOW_IT -> new ReportMessage.TheSearchFindsItBelowTheNode();
+                        case NOWHERE_AT_A_LEAF ->
+                                new ReportMessage.TheSearchComesBackEmptyAtANodeWithNothingBelow();
+                        case NOWHERE_BELOW ->
+                                new ReportMessage.TheSearchComesBackEmptyFromEveryNodeBelow();
+                    };
+                    case CaseOfAStatement.KeyOrder order -> switch (order.way()) {
+                        case HOLDS_BY_THE_LAST ->
+                                new ReportMessage.TheStatementHoldsByTheLastElementOfAKey();
+                        case FAILS_BY_THE_LAST ->
+                                new ReportMessage.TheStatementFailsByTheLastElementOfAKey();
+                    };
+                })).append(NEW_LINE);
+            }
+        }
+        // One line for each statement no row can be asked about, so a decision with three is told
+        // three things. A search says where it starts and what it goes through; a shape with
+        // nothing an author wrote to say is said as what it is, and the document has its spelling.
+        for (CasesTheRowsTook.NotAskable each : made.get().notAskable()) {
+            number++;
+            Message said = switch (each.kind()) {
+                case A_NODE_A_SEARCH_REACHES -> each.statement()
+                        instanceof Proposition.SomeReachable search
+                        ? new ReportMessage.NoRowCanBeAskedAboutTheCasesOfASearch(number,
+                                search.writtenAt().toString(), String.join(".", search.through()))
+                        : new ReportMessage.NoRowCanBeAskedAboutTheCasesOfASearchOfThisShape();
                 case THE_ORDER_OF_A_REPEATED_KEY ->
-                        new ReportMessage.NoRowCanBeAskedAboutTheOrderOfARepeatedKey();
+                        new ReportMessage.NoRowCanBeAskedAboutTheOrderOfAKey();
             };
             out.append("      ? ").append(page.say(said)).append(NEW_LINE);
         }
@@ -10012,6 +10056,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 switch (each) {
                     case CaseOfAStatement.Search search -> {
                         one.put("kind", "search_step");
+                        one.put("statement", search.statement().spelling().toString());
                         one.put("from", search.statement().writtenAt().toString());
                         ArrayNode through = one.putArray("through");
                         search.statement().through().forEach(through::add);
@@ -10019,6 +10064,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     }
                     case CaseOfAStatement.KeyOrder order -> {
                         one.put("kind", "key_order");
+                        one.put("statement", order.statement().spelling().toString());
                         one.put("container", order.container().toString());
                         one.put("position", order.position().toString());
                         one.put("way", word(order.way()));
@@ -10027,8 +10073,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
         }
         if (!rows.notAskable().isEmpty()) {
-            ArrayNode kinds = into.putArray("casesNotAskable");
-            rows.notAskable().written().forEach(kind -> kinds.add(word(kind)));
+            ArrayNode statements = into.putArray("casesNotAskable");
+            for (CasesTheRowsTook.NotAskable each : rows.notAskable()) {
+                ObjectNode one = statements.addObject();
+                one.put("kind", word(each.kind()));
+                one.put("statement", each.statement().spelling().toString());
+            }
         }
     }
 

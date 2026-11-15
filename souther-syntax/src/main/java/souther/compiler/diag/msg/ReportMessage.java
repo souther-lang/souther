@@ -247,7 +247,9 @@ public sealed interface ReportMessage extends Message {
 
     record NoRowFixesTheWeight(String position, String into) implements ReportMessage, Prose {}
 
-    record TheWeightsAreNotDecided(String into, String why) implements ReportMessage, Prose {}
+    record TheWeightsAreNotDecided(String into) implements ReportMessage, Prose {}
+
+    record TheyAreNotDecidedBecause(Message why) implements ReportMessage, Prose {}
 
     record NoBorderOfTheComputationWasRead() implements ReportMessage, Prose {}
 
@@ -257,7 +259,8 @@ public sealed interface ReportMessage extends Message {
 
     record TheArithmeticGaveOutOnAChangedWeight() implements ReportMessage, Prose {}
 
-    record WhatABorderOfTheComputationWentWithout() implements ReportMessage, Prose {}
+    record ABorderOfTheComputationWentWithout(String border, String word)
+            implements ReportMessage, Prose {}
 
     /** A point of a line some rule drew, by its role, which side of the line, and the rule. */
     record PointOfALine(String role, Message side, String rule) implements ReportMessage, Prose {}
@@ -821,7 +824,7 @@ public sealed interface ReportMessage extends Message {
 
     record NotComposedAgainst(String what) implements ReportMessage, Prose {}
 
-    record NoRowIsInACaseOfASearch(String from, String through, Message step)
+    record NoRowIsInTheseCasesOfASearch(int number, String from, String through)
             implements ReportMessage, Prose {}
 
     record TheSearchFindsItAtTheNode() implements ReportMessage, Prose {}
@@ -832,16 +835,19 @@ public sealed interface ReportMessage extends Message {
 
     record TheSearchComesBackEmptyFromEveryNodeBelow() implements ReportMessage, Prose {}
 
-    record NoRowIsInACaseOfAnOrder(String position, String container, Message way)
+    record NoRowIsInTheseCasesOfAnOrder(int number, String position, String container)
             implements ReportMessage, Prose {}
 
     record TheStatementHoldsByTheLastElementOfAKey() implements ReportMessage, Prose {}
 
     record TheStatementFailsByTheLastElementOfAKey() implements ReportMessage, Prose {}
 
-    record NoRowCanBeAskedAboutTheCasesOfASearch() implements ReportMessage, Prose {}
+    record NoRowCanBeAskedAboutTheCasesOfASearch(int number, String from, String through)
+            implements ReportMessage, Prose {}
 
-    record NoRowCanBeAskedAboutTheOrderOfARepeatedKey() implements ReportMessage, Prose {}
+    record NoRowCanBeAskedAboutTheCasesOfASearchOfThisShape() implements ReportMessage, Prose {}
+
+    record NoRowCanBeAskedAboutTheOrderOfAKey() implements ReportMessage, Prose {}
 
     record NoInputTakesOneWay() implements ReportMessage, Prose {}
 
