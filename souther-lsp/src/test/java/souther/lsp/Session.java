@@ -3,6 +3,7 @@ package souther.lsp;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.test.Workers;
 import souther.test.WrittenOutput;
 
 import java.io.IOException;
@@ -56,7 +57,7 @@ final class Session implements AutoCloseable {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        serving = Thread.ofPlatform().name("souther-lsp-under-test").start(() -> {
+        serving = Workers.started("souther-lsp-under-test", () -> {
             try {
                 LspServer.serve(in, fromServer);
             } catch (Throwable t) {
@@ -153,13 +154,10 @@ final class Session implements AutoCloseable {
     public void close() {
         try {
             toServer.close();
-            serving.join(HUNG);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new AssertionError(e);
         }
+        Workers.ended(serving, HUNG, "the server returned at the end of its input");
         if (stopped != null) {
             throw new AssertionError("the session did not end the way a session ends", stopped);
         }

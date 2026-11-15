@@ -4,7 +4,9 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.observe.Applied;
 import souther.compiler.observe.Stage;
+import souther.test.Workers;
 
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -27,12 +29,12 @@ class HowFarARowGotAndWhatEnteredItAreOnePublicationTest {
     private static final int ROUNDS = 200_000;
 
     @Test
-    void aRowThatTakesBackHavingEnteredIsNeverReadHalfWay() throws InterruptedException {
+    void aRowThatTakesBackHavingEnteredIsNeverReadHalfWay() {
         ExampleVerifier.RowState state = new ExampleVerifier.RowState();
         AtomicBoolean torn = new AtomicBoolean();
         AtomicBoolean done = new AtomicBoolean();
 
-        Thread reader = new Thread(() -> {
+        Thread reader = Workers.started("row-state-reader", () -> {
             while (!done.get()) {
                 ExampleVerifier.Reached read = state.reached;
                 if (read.stage().reached(Stage.INVOKED) != (read.applied() != null)) {
@@ -41,8 +43,6 @@ class HowFarARowGotAndWhatEnteredItAreOnePublicationTest {
                 }
             }
         });
-        reader.setDaemon(true);
-        reader.start();
 
         // What a row does when its answerer comes back saying it never got in: enter, then take it
         // back. The two writes are the ones a reader can fall between.
@@ -51,7 +51,7 @@ class HowFarARowGotAndWhatEnteredItAreOnePublicationTest {
             state.neverEntered();
         }
         done.set(true);
-        reader.join();
+        Workers.ended(reader, Duration.ofMinutes(1), "the reader stopped once it was told it was done");
 
         assertEquals(false, torn.get(),
                 "a reader of a row still running never sees a stage that says the behavior was"

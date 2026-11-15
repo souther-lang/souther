@@ -1,6 +1,7 @@
 package souther.cli;
 
 import souther.lsp.transport.MessageConnection;
+import souther.test.Workers;
 import souther.test.WrittenOutput;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
@@ -24,7 +25,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -109,7 +109,7 @@ class TheLanguageServerIsOneThisCommandLineServesTest {
         Environment environment = CliInProcess.environment(Files.createTempDirectory("souther-lsp"),
                 serverIn, wrote, complained);
         AtomicInteger code = new AtomicInteger(-1);
-        Thread serving = Thread.ofPlatform().name("souther-lsp-under-test").start(() -> {
+        Thread serving = Workers.started("souther-lsp-under-test", () -> {
             try {
                 code.set(Main.run(new String[] {"lsp"}, environment));
             } finally {
@@ -120,9 +120,8 @@ class TheLanguageServerIsOneThisCommandLineServesTest {
             conversation.accept(new Said(toServer, wrote));
         } finally {
             toServer.close();
-            serving.join(HUNG);
         }
-        assertFalse(serving.isAlive(), "the server returned at the end of its input");
+        Workers.ended(serving, HUNG, "the server returned at the end of its input");
         return new Answer(code.get(), framesSoFar(wrote.bytes()),
                 complained.toString(StandardCharsets.UTF_8));
     }

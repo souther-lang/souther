@@ -8,6 +8,7 @@ import souther.compiler.examples.Deadline;
 import souther.compiler.execute.EvaluationPolicy;
 import souther.compiler.observe.RowIdentity;
 import souther.compiler.observe.WaitShown;
+import souther.test.Workers;
 
 import java.time.Duration;
 import java.util.List;
@@ -57,7 +58,7 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
         Handoff handoff = new Handoff();
         AtomicBoolean began = new AtomicBoolean();
         CountDownLatch release = new CountDownLatch(1);
-        Thread worker = new Thread(() -> {
+        Thread worker = Workers.started("the-row", () -> {
             try {
                 handoff.installedFor(() -> {
                     began.set(true);
@@ -68,8 +69,6 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
                 // The row was given up on, which is not what this is about.
             }
         });
-        worker.setDaemon(true);
-        worker.start();
         while (worker.getState() != Thread.State.WAITING) {
             Thread.onSpinWait();
         }
@@ -211,15 +210,13 @@ class WhatTheWaitCountsIsThisCompilesOwnTimeTest {
 
     /** Runs {@code row} as the row of {@code handoff}, on a worker of its own. */
     private static void startRow(Handoff handoff, Callable<Object> row) {
-        Thread worker = new Thread(() -> {
+        Workers.started("the-row", () -> {
             try {
                 handoff.installedFor(row);
             } catch (Exception _) {
                 // Given up on, which is how a test ends a row that has stopped.
             }
         });
-        worker.setDaemon(true);
-        worker.start();
     }
 
     /** An application taking three times the wait spends none of it. */

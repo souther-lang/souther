@@ -116,7 +116,7 @@ class WhatAnAlternativeStatesIsReadOnceHoweverItWasComposedTest {
             SequencedMap<Integer, Long> reached = new LinkedHashMap<>();
             for (int doublings : new int[] {SHALLOW, SHALLOW * 2}) {
                 StatedApartness<String> reading = doubled(doublings);
-                reached.put(doublings, visits.during(reading::denials));
+                reached.put(doublings, visits.duringLeast(reading::denials));
             }
             Growth.eachAtMost(reached, 3, 1);
         }

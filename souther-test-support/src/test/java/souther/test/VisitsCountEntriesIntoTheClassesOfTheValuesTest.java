@@ -2,12 +2,17 @@ package souther.test;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a walk allocates is nothing for a walk that only descends, so a walk over values is told by
@@ -58,6 +63,52 @@ class VisitsCountEntriesIntoTheClassesOfTheValuesTest {
                     Collections.newSetFromMap(new IdentityHashMap<>())));
             assertEquals(2L * LENGTH, walked.visits());
         }
+    }
+
+    /** The counts are the JVM's, not the thread's, so a counter opened while another thread is
+     *  running the counted classes is refused by its own calibration. */
+    @Test
+    void aCounterOpenedWhileAnotherThreadRunsTheCountedClassesIsRefused() throws InterruptedException {
+        Values.Leaf leaf = new Values.Leaf(1);
+        AtomicBoolean stop = new AtomicBoolean();
+        CountDownLatch running = new CountDownLatch(1);
+        Thread stray = Workers.started("stray-reader", () -> {
+            while (!stop.get()) {
+                leaf.value();
+                running.countDown();
+            }
+        });
+        try {
+            running.await();
+            assertThrows(AssertionError.class, () -> Visits.into(List.of(Values.class)));
+        } finally {
+            stop.set(true);
+            Workers.ended(stray, Duration.ofMinutes(1), "the stray reader stopped");
+        }
+    }
+
+    /** A burst by another thread in one of two countings is not in the least of them. */
+    @Test
+    void theLeastOfTwoCountingsLeavesOutWhatAStrayThreadAddedToOne() {
+        try (Visits visits = Visits.into(List.of(Values.class))) {
+            assertTrue(visits.during(aBurstByAnotherThreadOnTheFirstRun()) >= 1000);
+            assertEquals(0, visits.duringLeast(aBurstByAnotherThreadOnTheFirstRun()));
+        }
+    }
+
+    /** Work that does nothing itself, and on its first run has another thread go into the values. */
+    private static Runnable aBurstByAnotherThreadOnTheFirstRun() {
+        Values.Leaf leaf = new Values.Leaf(1);
+        AtomicBoolean first = new AtomicBoolean(true);
+        return () -> {
+            if (first.getAndSet(false)) {
+                Workers.ended(Workers.started("stray-burst", () -> {
+                    for (int at = 0; at < 1000; at++) {
+                        leaf.value();
+                    }
+                }), Duration.ofMinutes(1), "the burst ended");
+            }
+        };
     }
 
     @Test

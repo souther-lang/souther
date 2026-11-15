@@ -71,8 +71,8 @@ class WhatReadsAskOfAnAnswerIsAskedOfItsOwnerTest {
     private static void assertCostIsOfTheCallsAndNotTheWaysDown(IntFunction<Runnable> asked) {
         try (Visits visits = Visits.into(THE_VALUES_READ)) {
             SequencedMap<Integer, Long> bySize = new LinkedHashMap<>();
-            bySize.put(HALF, visits.during(asked.apply(HALF)));
-            bySize.put(DEEP, visits.during(asked.apply(DEEP)));
+            bySize.put(HALF, visits.duringLeast(asked.apply(HALF)));
+            bySize.put(DEEP, visits.duringLeast(asked.apply(DEEP)));
             Growth.eachAtMost(bySize, 8, 1);
         }
     }
@@ -139,8 +139,8 @@ class WhatReadsAskOfAnAnswerIsAskedOfItsOwnerTest {
         Quantity answer = chain(DEEP);
         Quantity single = chain(1);
         try (Visits visits = Visits.into(THE_VALUES_READ)) {
-            assertEquals(visits.during(() -> carried.isIn(single)),
-                    visits.during(() -> carried.isIn(answer)));
+            assertEquals(visits.duringLeast(() -> carried.isIn(single)),
+                    visits.duringLeast(() -> carried.isIn(answer)));
         }
     }
 

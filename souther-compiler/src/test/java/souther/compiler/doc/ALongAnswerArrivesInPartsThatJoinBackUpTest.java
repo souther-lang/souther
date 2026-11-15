@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.test.Workers;
+
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -17,6 +19,7 @@ import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -77,15 +80,13 @@ class ALongAnswerArrivesInPartsThatJoinBackUpTest {
         PipedOutputStream serverWrites = new PipedOutputStream(fromServer);
         SESSION = new PrintWriter(new OutputStreamWriter(toServer, StandardCharsets.UTF_8), true);
         ANSWERS = new BufferedReader(new InputStreamReader(fromServer, StandardCharsets.UTF_8));
-        SERVER = new Thread(() -> McpServer.serve(serverReads, serverWrites), "mcp-session");
-        SERVER.setDaemon(true);
-        SERVER.start();
+        SERVER = Workers.started("mcp-session", () -> McpServer.serve(serverReads, serverWrites));
     }
 
     @AfterAll
-    static void closeTheSession() throws InterruptedException {
+    static void closeTheSession() {
         SESSION.close();   // the server's reader sees the end of the stream and the loop returns
-        SERVER.join(10_000);
+        Workers.ended(SERVER, Duration.ofSeconds(10), "the server returned at the end of its input");
     }
 
     /** What a part that is not the last one ends with, and the cursor that carries it on. */

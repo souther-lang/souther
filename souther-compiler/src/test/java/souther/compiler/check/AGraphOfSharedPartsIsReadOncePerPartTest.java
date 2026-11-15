@@ -75,7 +75,7 @@ class AGraphOfSharedPartsIsReadOncePerPartTest {
      *  which doubles at most for twice the links. */
     private static void assertAskedOncePerPart(IntFunction<Runnable> askedAt) {
         try (Visits visits = Visits.into(List.of(ValueOrigin.class))) {
-            assertDoublesAtMost(links -> visits.during(askedAt.apply(links)));
+            assertDoublesAtMost(links -> visits.duringLeast(askedAt.apply(links)));
         }
     }
 

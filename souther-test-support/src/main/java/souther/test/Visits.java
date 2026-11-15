@@ -37,7 +37,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * with a floor under which a count says nothing, and not for a count of its own.
  *
  * <p>The entries are counted by the JVM's method timing, which is asked for the classes of the
- * values and the classes nested in them. A count of nothing is a state a test of a cost has to tell
+ * values and the classes nested in them. The timing is the JVM's and has no thread in it, so a
+ * count is of every thread: a worker another test left running the counted classes, or one this
+ * test started, adds its entries to the count of whatever is being counted while it runs. A test
+ * that counts leaves no worker running the counted classes (one already running when the counter
+ * is opened fails its calibration, one that starts later is not seen), and one that fails on a count being
+ * too high asks {@link #duringLeast} so that a stray thread in one counting cannot fail it. A count
+ * of nothing is a state a test of a cost has to tell
  * from a counter that is not counting, so the counter is asked to count a visit of known number when
  * it is opened and refuses to be used if it did not.
  */
@@ -118,7 +124,8 @@ public final class Visits implements AutoCloseable {
             return sum;
         });
         assertEquals(CALIBRATION_VISITS, seen.visits(), "the counter reported " + seen.visits()
-                + " entries for " + CALIBRATION_VISITS + " visits of a value, so it is not counting");
+                + " entries for " + CALIBRATION_VISITS + " visits of a value, so it is not counting"
+                + " (or another thread is running the classes it counts)");
     }
 
     /** What {@code work} came to, and how many times it went into the classes while it did. */
@@ -141,6 +148,18 @@ public final class Visits implements AutoCloseable {
             work.run();
             return Boolean.TRUE;
         }).visits();
+    }
+
+    /**
+     * The smaller of two countings of {@code work}, which is done twice.
+     *
+     * <p>For a count a test fails on when it is high. What another thread adds to one counting is
+     * not there in the other unless that thread is running through both, so a count that is over
+     * only because of a stray thread is not over here. Work that keeps something of what it did
+     * counts less the second time, which can only lower the answer.
+     */
+    public long duringLeast(Runnable work) {
+        return Math.min(during(work), during(work));
     }
 
     private long entriesSoFar() {
