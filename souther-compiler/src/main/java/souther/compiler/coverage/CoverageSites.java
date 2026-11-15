@@ -399,9 +399,10 @@ public final class CoverageSites {
      * observed of, so what they compare with is where a row tells the rewrite apart, and what the
      * rest of the body compares with comes after it.
      */
-    private static List<NamedValue> namedAtAWalk(Core call, Set<NamedValue> ofTheBody) {
+    private static List<NamedValue> namedAtAWalk(Core call, Set<NamedValue> ofTheBody,
+                                                 ComparisonCatalog comparisons) {
         Set<NamedValue> out = new LinkedHashSet<>();
-        collectNamed(call, out);
+        collectNamed(call, out, comparisons);
         out.addAll(ofTheBody);
         return List.copyOf(out);
     }
@@ -421,8 +422,10 @@ public final class CoverageSites {
         Core.forEachChild(node, child -> collectFieldsRead(child, into));
     }
 
-    private static void collectNamed(Core node, Set<NamedValue> into) {
-        if (Core.withoutStanding(node) instanceof Core.Binary b && b.op().compares()) {
+    private static void collectNamed(Core node, Set<NamedValue> into,
+                                     ComparisonCatalog comparisons) {
+        if (Core.withoutStanding(node) instanceof Core.Binary b
+                && comparisons.occurrenceAt(b).isPresent()) {
             for (Core side : List.of(b.left(), b.right())) {
                 NamedValue value = namedBy(side);
                 if (value != null) {
@@ -430,7 +433,7 @@ public final class CoverageSites {
                 }
             }
         }
-        Core.forEachChild(node, child -> collectNamed(child, into));
+        Core.forEachChild(node, child -> collectNamed(child, into, comparisons));
     }
 
     /**
@@ -1256,7 +1259,8 @@ public final class CoverageSites {
             WalkProbe at = numbering.walk(draft.raw());
             walks.add(new WalkSite(draft.body(), draft.walk(), at, draft.writtenHere(),
                     List.copyOf(walk.separators.getOrDefault(draft.body(), Set.of())),
-                    namedAtAWalk(draft.call(), walk.named.getOrDefault(draft.body(), Set.of())),
+                    namedAtAWalk(draft.call(), walk.named.getOrDefault(draft.body(), Set.of()),
+                            comparisons),
                     fieldsReadAt(draft.call()), draft.inputsRead(),
                     draft.over()));
             walksByNode.put(draft.call(), new Plan.WalkedAt(at, draft.walk(),
@@ -2519,7 +2523,7 @@ public final class CoverageSites {
                 // field an access at a time, so one arriving here is the wrong tree.
                 case Core.FieldProjection p -> throw p.unexpectedIn("coverage numbering");
                 case Core.Binary b -> {
-                    if (b.op().compares()) {
+                    if (comparisons.occurrenceAt(b).isPresent()) {
                         nameWhatIsComparedWith(b.left());
                         nameWhatIsComparedWith(b.right());
                     }
@@ -2704,6 +2708,14 @@ public final class CoverageSites {
             structural.requireExhausted();
         }
 
+        /** What a comparison writes out on {@code side}, kept for the body being walked. */
+        private void nameWhatIsComparedWith(Core side) {
+            NamedValue value = namedBy(side);
+            if (value != null) {
+                named.computeIfAbsent(behavior, _ -> new LinkedHashSet<>()).add(value);
+            }
+        }
+
         /**
          * One comparison, numbered where a run through it could be recorded.
          *
@@ -2724,13 +2736,6 @@ public final class CoverageSites {
          *               answers a value. A comparison behind an abort is one no run reaches, and a
          *               site for it would be one the emitter lights on no run
          */
-        private void nameWhatIsComparedWith(Core side) {
-            NamedValue value = namedBy(side);
-            if (value != null) {
-                named.computeIfAbsent(behavior, _ -> new LinkedHashSet<>()).add(value);
-            }
-        }
-
         private void number(Core.Binary comparison, boolean inside) {
             // Which comparison this node is, asked of the catalog, which is where that is decided.
             // Numbered once. A node reached twice is one comparison written once, and a second number

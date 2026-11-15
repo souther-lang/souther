@@ -549,8 +549,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + ")Ljava/util/Optional;", Reading.THE_TREE_THAT_RUNS, RUNS);
         // What a walk's call compares something with, which fields it reads, and which parameters
         // of the body it reads, asked of the tree that runs.
-        row(out, c + "coverage/CoverageSites", "collectNamed", "(" + core + "Ljava/util/Set;)V",
-                Reading.THE_TREE_THAT_RUNS, RUNS);
+        row(out, c + "coverage/CoverageSites", "collectNamed", "(" + core + "Ljava/util/Set;L" + c
+                + "coverage/ComparisonCatalog;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "coverage/CoverageSites", "collectFieldsRead", "(" + core
                 + "Ljava/util/Set;)V", Reading.THE_TREE_THAT_RUNS, RUNS);
         row(out, c + "coverage/CoverageSites$Walk", "collectInputsRead", "(" + core
