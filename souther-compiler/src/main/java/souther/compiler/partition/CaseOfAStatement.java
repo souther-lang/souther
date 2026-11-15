@@ -23,10 +23,26 @@ public sealed interface CaseOfAStatement {
     Proposition statement();
 
     /**
-     * What tells the case from every other, written whole: the statement by its key, and which
-     * case of it. A key within a document, and no sentence.
+     * What the case is a case of, by its key: the statement for a search, and the order of one
+     * container's key under the statement for a key. Every case of one thing the rows could be
+     * written for shares it, so a reader that says the cases together asks it and never works out
+     * again what they have in common. A key within a document, and no sentence.
      */
-    String spelled();
+    String ofWhat();
+
+    /** The kind of case it is. */
+    CasesTheRowsTook.Kind kind();
+
+    /** Which side of {@link #ofWhat} the case is, by its word. */
+    String side();
+
+    /**
+     * What tells the case from every other, written whole: what it is a case of, and which case.
+     * A key within a document, and no sentence.
+     */
+    default String spelled() {
+        return side() + " of " + ofWhat();
+    }
 
     /**
      * The steps of a search from a node, which are the steps of the recursion it is and not depths.
@@ -61,8 +77,18 @@ public sealed interface CaseOfAStatement {
         }
 
         @Override
-        public String spelled() {
-            return step + " of " + statement.spelling();
+        public String ofWhat() {
+            return statement.spelling().toString();
+        }
+
+        @Override
+        public CasesTheRowsTook.Kind kind() {
+            return CasesTheRowsTook.Kind.A_NODE_A_SEARCH_REACHES;
+        }
+
+        @Override
+        public String side() {
+            return step.toString();
         }
 
         /**
@@ -152,9 +178,18 @@ public sealed interface CaseOfAStatement {
         }
 
         @Override
-        public String spelled() {
-            return way + " of " + order.position() + " in " + order.container() + " in "
-                    + statement.spelling();
+        public String ofWhat() {
+            return order.position() + " in " + order.container() + " in " + statement.spelling();
+        }
+
+        @Override
+        public CasesTheRowsTook.Kind kind() {
+            return CasesTheRowsTook.Kind.THE_ORDER_OF_A_REPEATED_KEY;
+        }
+
+        @Override
+        public String side() {
+            return way.toString();
         }
     }
 }

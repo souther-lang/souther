@@ -147,6 +147,13 @@ class APartialMeasureSaysWhatItWentWithoutOnThePageTest {
             }
         }
 
+        /** The statements the decision lacks cases of, in the order the page numbers them. */
+        JsonNode statements() {
+            List<JsonNode> found = fieldsNamed("statementsNoRowIsIn");
+            assertEquals(1, found.size(), "one behavior, one decision");
+            return found.getFirst();
+        }
+
         /** Every object under the document that has the field, in document order. */
         List<JsonNode> fieldsNamed(String name) {
             List<JsonNode> out = new ArrayList<>();
@@ -174,21 +181,23 @@ class APartialMeasureSaysWhatItWentWithoutOnThePageTest {
 
         assertTrue(report.weakeningWords().contains("reachable_node_cases_unmeasured"),
                 report.weakeningWords()::toString);
-        assertTrue(report.human().contains("      ? no row is in these cases of search 1, from t"
-                + " through below:\n          · the node does not and one below it does\n"
+        assertTrue(report.human().contains("      ? no row is in these cases of statement 1,"
+                + " a search from t through below:\n"
+                + "          · the node does not and one below it does\n"
                 + "          · the node does not and every node below it comes back empty\n"),
                 report.human());
         assertFalse(report.human().contains("the node meets what it asks"), report.human());
-        List<JsonNode> cases = report.fieldsNamed("casesNotSeen");
-        assertEquals(1, cases.size());
-        List<String> steps = new ArrayList<>();
-        cases.getFirst().forEach(each -> {
-            assertEquals("search_step", each.get("kind").asString());
-            assertEquals("t", each.get("from").asString());
-            assertEquals("below", each.get("through").get(0).asString());
-            steps.add(each.get("step").asString());
-        });
-        assertEquals(List.of("below_it", "nowhere_below"), steps);
+        JsonNode statements = report.statements();
+        assertEquals(1, statements.size());
+        assertEquals("a_node_a_search_reaches", statements.get(0).get("kind").asString());
+        assertTrue(statements.get(0).get("askable").asBoolean());
+        assertEquals(List.of("below_it", "nowhere_below"), words(statements.get(0).get("cases")));
+    }
+
+    private static List<String> words(JsonNode array) {
+        List<String> out = new ArrayList<>();
+        array.forEach(each -> out.add(each.asString()));
+        return out;
     }
 
     /**
@@ -201,27 +210,33 @@ class APartialMeasureSaysWhatItWentWithoutOnThePageTest {
             throws Exception {
         Report report = Report.of(TWO_SEARCHES);
 
-        assertTrue(report.human().contains("? no row is in these cases of search 1, from t through"
-                + " below:"), report.human());
-        assertTrue(report.human().contains("? no row is in these cases of search 2, from t through"
-                + " below:"), report.human());
-        List<JsonNode> cases = report.fieldsNamed("casesNotSeen");
-        assertEquals(1, cases.size());
-        Set<String> statements = new TreeSet<>();
-        cases.getFirst().forEach(each -> statements.add(each.get("statement").asString()));
-        assertEquals(2, statements.size(), statements::toString);
+        assertTrue(report.human().contains("? no row is in these cases of statement 1, a search"
+                + " from t through below:"), report.human());
+        assertTrue(report.human().contains("? no row is in these cases of statement 2, a search"
+                + " from t through below:"), report.human());
+        assertTwoDifferentStatements(report);
     }
 
     @Test
     void twoOrdersOfTwoMapsAreTwoStatementsOnThePageAndInTheDocument() throws Exception {
         Report report = Report.of(TWO_MAPS);
 
-        assertTrue(report.human().contains("(statement 1):"), report.human());
-        assertTrue(report.human().contains("(statement 2):"), report.human());
-        Set<String> containers = new TreeSet<>();
-        report.fieldsNamed("casesNotSeen").getFirst()
-                .forEach(each -> containers.add(each.get("container").asString()));
-        assertEquals(Set.of("a", "b"), containers);
+        assertTrue(report.human().contains("statement 1, the order of the elements of a that share"
+                + " a a[*].sku:\n          · the statement holds with the last of them"),
+                report.human());
+        assertTrue(report.human().contains("statement 2, the order of the elements of b that share"
+                + " a b[*].sku:\n          · the statement holds with the last of them"),
+                report.human());
+        assertTwoDifferentStatements(report);
+    }
+
+    /** What the page numbers 1 and 2 are two entries of the document, and are not one spelled
+     *  twice. */
+    private static void assertTwoDifferentStatements(Report report) {
+        JsonNode statements = report.statements();
+        assertEquals(2, statements.size(), statements::toString);
+        assertFalse(statements.get(0).get("statement").asString()
+                .equals(statements.get(1).get("statement").asString()), statements::toString);
     }
 
     @Test
@@ -230,18 +245,16 @@ class APartialMeasureSaysWhatItWentWithoutOnThePageTest {
 
         assertTrue(report.weakeningWords().contains("keyed_overwrite_cases_unmeasured"),
                 report.weakeningWords()::toString);
-        assertTrue(report.human().contains("      ? no row is in these cases of the order of the"
-                + " elements of rows that share a rows[*].sku (statement 1):\n"
+        assertTrue(report.human().contains("      ? no row is in these cases of statement 1, the"
+                + " order of the elements of rows that share a rows[*].sku:\n"
                 + "          · the statement holds with the last of them and fails with an earlier"
                 + " one\n          · the statement fails with the last of them and holds with an"
                 + " earlier one\n"), report.human());
-        List<JsonNode> cases = report.fieldsNamed("casesNotSeen");
-        assertEquals(1, cases.size());
-        assertEquals("key_order", cases.getFirst().get(0).get("kind").asString());
-        assertEquals("rows", cases.getFirst().get(0).get("container").asString());
-        assertEquals("rows[*].sku", cases.getFirst().get(0).get("position").asString());
-        assertEquals(List.of("holds_by_the_last", "fails_by_the_last"), cases.getFirst()
-                .valueStream().map(each -> each.get("way").asString()).toList());
+        JsonNode statements = report.statements();
+        assertEquals(1, statements.size());
+        assertEquals("the_order_of_a_repeated_key", statements.get(0).get("kind").asString());
+        assertEquals(List.of("holds_by_the_last", "fails_by_the_last"),
+                words(statements.get(0).get("cases")));
     }
 
     @Test
@@ -271,12 +284,14 @@ class APartialMeasureSaysWhatItWentWithoutOnThePageTest {
     void aWordPublishedForAWeakeningHasALineOnThePageAndTheDetailInTheDocument() throws Exception {
         Map<String, String> sourceOf = Map.of("search", SEARCH, "keyed", KEYED, "weights", WEIGHTS);
         Map<String, List<String>> lineFor = Map.of(
-                "reachable_node_cases_unmeasured", List.of("? no row is in these cases of search"),
-                "keyed_overwrite_cases_unmeasured", List.of("? no row is in these cases of the order"),
+                "reachable_node_cases_unmeasured",
+                        List.of("? no row is in these cases of statement 1, a search"),
+                "keyed_overwrite_cases_unmeasured",
+                        List.of("? no row is in these cases of statement 1, the order"),
                 "a_weight_not_decided", List.of("? not decided whether the rows fix how"));
         Map<String, String> detailFor = Map.of(
-                "reachable_node_cases_unmeasured", "casesNotSeen",
-                "keyed_overwrite_cases_unmeasured", "casesNotSeen",
+                "reachable_node_cases_unmeasured", "statementsNoRowIsIn",
+                "keyed_overwrite_cases_unmeasured", "statementsNoRowIsIn",
                 "a_weight_not_decided", "undecidedBecause");
         Set<String> checked = new TreeSet<>();
         for (Map.Entry<String, String> model : sourceOf.entrySet()) {

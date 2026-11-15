@@ -40,7 +40,6 @@ import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.BorderQuantity;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.partition.CaseOfAStatement;
-import souther.compiler.partition.CasesTheRowsTook;
 import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.AuthoredPlacement;
 import souther.compiler.partition.BoundHeldIn;
@@ -4188,19 +4187,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                         new ReportMessage.TheArithmeticGaveOutOnAChangedWeight();
                             }))).append(NEW_LINE);
                 }
-                // What the borders went without, each as the border it was at and the word the
-                // document publishes for it, in an order that does not depend on how the set was
-                // built.
-                List<String> carried = new ArrayList<>();
-                for (Weakening cause : weighing.standing().carried().causes()) {
-                    String where = Subjects.of(cause) instanceof Subject.AtABorder at
-                            ? at.line().target().label() : "";
-                    carried.add(page.say(new ReportMessage.TheyAreNotDecidedBecause(
-                            new ReportMessage.ABorderOfTheComputationWentWithout(where,
-                                    kindOf(cause)))));
+                // What the borders went without, in the words the document publishes for it. The
+                // borders say it themselves under the line they are at, so what is said here is
+                // that the weight waits on them.
+                if (!weighing.standing().carried().isEmpty()) {
+                    out.append("          ").append(page.say(new ReportMessage.TheyAreNotDecidedBecause(
+                            new ReportMessage.TheBordersOfTheComputationWentWithout(String.join(", ",
+                                    weakeningWords(weighing.standing().carried())))))).append(NEW_LINE);
                 }
-                carried.sort(null);
-                carried.forEach(line -> out.append("          ").append(line).append(NEW_LINE));
             });
         }
     }
@@ -5180,13 +5174,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
-     * The cases a statement of the decision draws inside itself that no row was seen in, one to a
-     * line, and then the kinds of case no row can be asked about.
+     * What each statement of the decision lacks: the cases of a thing no row was seen in, and the
+     * statements no row can be asked about, each under a numbered line.
      *
      * <p>Every rule can be taken and the decision still be partial: the weakening says a case of a
      * statement inside a rule has no row, and a reader told only that the rules are all taken has
      * nothing to go on. The two are said apart because they are acted on apart — a row answers the
-     * first, and the second waits for this compiler to read further.
+     * first, and the second waits for this compiler to read further. The number is the entry's
+     * place in the document's {@code statementsNoRowIsIn}.
      */
     private static void casesNoRowWasIn(StringBuilder out,
                                         Measure<DecisionEvidence.RowsPlaced> took, Page page) {
@@ -5194,32 +5189,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         if (made.isEmpty()) {
             return;
         }
-        // By what the cases are cases of, which is the statement for a search and the order of one
-        // container for a key: one statement may rest on the orders of two maps, and what one
-        // decides is not what the other does. A decision with two searches from one place through
-        // one field has two things to act on too, and the compiler's spelling of a statement has
-        // no words an author wrote to tell them by. So each is numbered on this page, in the order
-        // the reading met them, and the document says each by its spelling.
-        Map<Object, List<CaseOfAStatement>> byStatement = new LinkedHashMap<>();
-        for (CaseOfAStatement each : made.get().unseenCases()) {
-            Object ofWhat = each instanceof CaseOfAStatement.KeyOrder order
-                    ? List.of(order.statement(), order.container(), order.position())
-                    : each.statement();
-            byStatement.computeIfAbsent(ofWhat, _ -> new ArrayList<>()).add(each);
-        }
+        // Numbered in the order the reading met them, which is the order of the document's array:
+        // the compiler's spelling of a statement has no words an author wrote, and two searches
+        // from one place through one field are two things to act on.
         int number = 0;
-        for (List<CaseOfAStatement> cases : byStatement.values()) {
+        for (DecisionEvidence.StatementShort each : made.get().statementsShort()) {
             number++;
-            out.append("      ? ").append(page.say(switch (cases.getFirst()) {
-                case CaseOfAStatement.Search search -> new ReportMessage.NoRowIsInTheseCasesOfASearch(
-                        number, search.statement().writtenAt().toString(),
-                        String.join(".", search.statement().through()));
-                case CaseOfAStatement.KeyOrder order ->
-                        new ReportMessage.NoRowIsInTheseCasesOfAnOrder(number,
-                                order.position().toString(), order.container().toString());
-            })).append(NEW_LINE);
-            for (CaseOfAStatement each : cases) {
-                out.append("          · ").append(page.say(switch (each) {
+            Message of = ofWhat(each);
+            out.append("      ? ").append(page.say(each.askable()
+                    ? new ReportMessage.NoRowIsInTheseCases(number, of)
+                    : new ReportMessage.NoRowCanBeAskedAbout(number, of))).append(NEW_LINE);
+            for (CaseOfAStatement unseen : each.unseen()) {
+                out.append("          · ").append(page.say(switch (unseen) {
                     case CaseOfAStatement.Search search -> switch (search.step()) {
                         case AT_THE_NODE -> new ReportMessage.TheSearchFindsItAtTheNode();
                         case BELOW_IT -> new ReportMessage.TheSearchFindsItBelowTheNode();
@@ -5237,22 +5218,28 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 })).append(NEW_LINE);
             }
         }
-        // One line for each statement no row can be asked about, so a decision with three is told
-        // three things. A search says where it starts and what it goes through; a shape with
-        // nothing an author wrote to say is said as what it is, and the document has its spelling.
-        for (CasesTheRowsTook.NotAskable each : made.get().notAskable()) {
-            number++;
-            Message said = switch (each.kind()) {
-                case A_NODE_A_SEARCH_REACHES -> each.statement()
-                        instanceof Proposition.SomeReachable search
-                        ? new ReportMessage.NoRowCanBeAskedAboutTheCasesOfASearch(number,
-                                search.writtenAt().toString(), String.join(".", search.through()))
-                        : new ReportMessage.NoRowCanBeAskedAboutTheCasesOfASearchOfThisShape();
-                case THE_ORDER_OF_A_REPEATED_KEY ->
-                        new ReportMessage.NoRowCanBeAskedAboutTheOrderOfAKey();
+    }
+
+    /** What a statement that lacks cases is, in the places an author wrote and nothing else. */
+    private static Message ofWhat(DecisionEvidence.StatementShort lacking) {
+        if (lacking.askable()) {
+            return switch (lacking.unseen().getFirst()) {
+                case CaseOfAStatement.Search search -> ofASearch(search.statement());
+                case CaseOfAStatement.KeyOrder order -> new ReportMessage.OfAnOrder(
+                        order.container().toString(), order.position().toString());
             };
-            out.append("      ? ").append(page.say(said)).append(NEW_LINE);
         }
+        return switch (lacking.kind()) {
+            case A_NODE_A_SEARCH_REACHES -> lacking.statement()
+                    instanceof Proposition.SomeReachable search
+                    ? ofASearch(search) : new ReportMessage.OfASearchNoPlaceIsSaidOf();
+            case THE_ORDER_OF_A_REPEATED_KEY -> new ReportMessage.OfAnOrderNoPlaceIsSaidOf();
+        };
+    }
+
+    private static Message ofASearch(Proposition.SomeReachable search) {
+        return new ReportMessage.OfASearch(search.writtenAt().toString(),
+                String.join(".", search.through()));
     }
 
     /**
@@ -10040,44 +10027,28 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         .sorted(WhereARunStopped.IN_A_STEADY_ORDER).toList(), sources);
             }
         }
-        placed.ifPresent(rows -> casesNoRowWasIn(out, rows));
+        placed.ifPresent(rows -> statementsNoRowIsIn(out, rows));
     }
 
     /**
-     * The cases of a statement inside a rule that no row was seen in, and the kinds no row can be
-     * asked about, which are what `reachable_node_cases_unmeasured` and
-     * `keyed_overwrite_cases_unmeasured` stand for. Absent where there are none.
+     * The statements of the decision that lack cases, which are what
+     * `reachable_node_cases_unmeasured` and `keyed_overwrite_cases_unmeasured` stand for, in the
+     * order the page numbers them. Absent where there are none.
      */
-    private static void casesNoRowWasIn(ObjectNode into, DecisionEvidence.RowsPlaced rows) {
-        if (!rows.unseenCases().isEmpty()) {
-            ArrayNode all = into.putArray("casesNotSeen");
-            for (CaseOfAStatement each : rows.unseenCases()) {
-                ObjectNode one = all.addObject();
-                switch (each) {
-                    case CaseOfAStatement.Search search -> {
-                        one.put("kind", "search_step");
-                        one.put("statement", search.statement().spelling().toString());
-                        one.put("from", search.statement().writtenAt().toString());
-                        ArrayNode through = one.putArray("through");
-                        search.statement().through().forEach(through::add);
-                        one.put("step", word(search.step()));
-                    }
-                    case CaseOfAStatement.KeyOrder order -> {
-                        one.put("kind", "key_order");
-                        one.put("statement", order.statement().spelling().toString());
-                        one.put("container", order.container().toString());
-                        one.put("position", order.position().toString());
-                        one.put("way", word(order.way()));
-                    }
-                }
-            }
+    private static void statementsNoRowIsIn(ObjectNode into, DecisionEvidence.RowsPlaced rows) {
+        List<DecisionEvidence.StatementShort> lacking = rows.statementsShort();
+        if (lacking.isEmpty()) {
+            return;
         }
-        if (!rows.notAskable().isEmpty()) {
-            ArrayNode statements = into.putArray("casesNotAskable");
-            for (CasesTheRowsTook.NotAskable each : rows.notAskable()) {
-                ObjectNode one = statements.addObject();
-                one.put("kind", word(each.kind()));
-                one.put("statement", each.statement().spelling().toString());
+        ArrayNode all = into.putArray("statementsNoRowIsIn");
+        for (DecisionEvidence.StatementShort each : lacking) {
+            ObjectNode one = all.addObject();
+            one.put("statement", each.what());
+            one.put("kind", word(each.kind()));
+            one.put("askable", each.askable());
+            if (each.askable()) {
+                ArrayNode cases = one.putArray("cases");
+                each.unseen().forEach(unseen -> cases.add(word(unseen.side())));
             }
         }
     }
@@ -11353,17 +11324,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         if (weakenedBy.isEmpty()) {
             return;
         }
+        ArrayNode out = of.putArray("weakening");
+        weakeningWords(weakenedBy).forEach(out::add);
+    }
+
+    /**
+     * The words of a set of weakenings, once each and in the order the words are published in.
+     *
+     * <p>The same order whichever readers found which weakenings. What a consumer compares against
+     * the last run is the array of these, so the order it comes out in may not be the order a walk
+     * arrived at them. The page says them in the same order, so the two never differ.
+     */
+    private static List<String> weakeningWords(WeakeningSet weakenedBy) {
         List<WeakeningVocabulary> said = new ArrayList<>();
         for (Weakening each : weakenedBy.causes()) {
             said.add(vocabularyOf(each));
         }
-        ArrayNode out = of.putArray("weakening");
-        // In the order the words are published in, which is the same one whichever readers found
-        // which weakenings. What a consumer compares against the last run is this array, so the
-        // order it comes out in may not be the order a walk arrived at them.
-        for (WeakeningVocabulary each : PublicationOrders.WEAKENING_WORDS.keep(said).written()) {
-            out.add(word(each));
-        }
+        return PublicationOrders.WEAKENING_WORDS.keep(said).written().stream()
+                .map(AdequacyReport::word).toList();
     }
 
     /**

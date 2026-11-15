@@ -288,12 +288,7 @@ public final class CasesTheRowsTook {
     public Set<Kind> unseen() {
         Set<Kind> out = EnumSet.noneOf(Kind.class);
         unaskable.forEach(each -> out.add(each.kind()));
-        for (CaseOfAStatement each : unseenCases()) {
-            out.add(switch (each) {
-                case CaseOfAStatement.Search _ -> Kind.A_NODE_A_SEARCH_REACHES;
-                case CaseOfAStatement.KeyOrder _ -> Kind.THE_ORDER_OF_A_REPEATED_KEY;
-            });
-        }
+        unseenCases().forEach(each -> out.add(each.kind()));
         return out;
     }
 }

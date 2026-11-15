@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.meaning.Proposition;
 import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.observe.Target;
@@ -183,6 +184,51 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
         /** Whether every row of the behavior was one something watched. */
         public boolean everyRowWasWatched() {
             return rowsNotWatched == 0;
+        }
+
+        /**
+         * What a statement of the decision still lacks: the cases of each thing no row was seen
+         * in, then each statement no row can be asked about. In the order the reading met them.
+         *
+         * <p>The one grouping a reader of the gap says, so that a page and a document number and
+         * order the same entries and neither works out which cases belong together.
+         */
+        public List<StatementShort> statementsShort() {
+            Map<String, List<CaseOfAStatement>> byWhat = new LinkedHashMap<>();
+            for (CaseOfAStatement each : unseenCases) {
+                byWhat.computeIfAbsent(each.ofWhat(), _ -> new ArrayList<>()).add(each);
+            }
+            List<StatementShort> out = new ArrayList<>();
+            byWhat.forEach((what, cases) -> out.add(
+                    new StatementShort(what, cases.getFirst().statement(),
+                            cases.getFirst().kind(), cases)));
+            for (CasesTheRowsTook.NotAskable each : notAskable) {
+                out.add(new StatementShort(each.statement().spelling().toString(),
+                        each.statement(), each.kind(), List.of()));
+            }
+            return out;
+        }
+    }
+
+    /**
+     * One thing the decision draws cases of, and which of them no row was seen in.
+     *
+     * @param what      what the cases are cases of, by its key ({@link CaseOfAStatement#ofWhat})
+     * @param statement the statement it is of
+     * @param kind      the kind of case it draws
+     * @param unseen    the cases no row was seen in; none where no row can be asked about the
+     *                  statement at all, which a row written for it would not change
+     */
+    public record StatementShort(String what, Proposition statement, CasesTheRowsTook.Kind kind,
+                                 List<CaseOfAStatement> unseen) {
+
+        public StatementShort {
+            unseen = List.copyOf(unseen);
+        }
+
+        /** Whether a row could be written for it. */
+        public boolean askable() {
+            return !unseen.isEmpty();
         }
     }
 

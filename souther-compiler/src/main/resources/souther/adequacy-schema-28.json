@@ -7197,122 +7197,64 @@
             }
           }
         },
-        "casesNotSeen": {
+        "statementsNoRowIsIn": {
           "type": "array",
           "minItems": 1,
-          "description": "The cases a statement of the decision draws inside itself that no row was seen in, which are what `reachable_node_cases_unmeasured` and `keyed_overwrite_cases_unmeasured` stand for: every rule can be taken and a statement inside one of them still have a case no row is in. A `search_step` is one step of the recursion a search takes from a node, and a `key_order` one way round the order of the elements of a container that share a key. A row written for one makes it seen. Absent where none is unseen.",
+          "description": "The statements of the decision that lack cases, which are what `reachable_node_cases_unmeasured` and `keyed_overwrite_cases_unmeasured` stand for: every rule can be taken and a statement inside one of them still have a case no row is in, or be one no row can be asked about. One entry for each thing the cases are cases of, in the order the page numbers them from 1. Absent where there are none.",
           "items": {
             "type": "object",
             "required": [
+              "statement",
               "kind",
-              "statement"
+              "askable"
             ],
             "additionalProperties": false,
             "allOf": [
               {
                 "if": {
                   "properties": {
-                    "kind": {
-                      "const": "search_step"
+                    "askable": {
+                      "const": true
                     }
                   }
                 },
                 "then": {
                   "required": [
-                    "from",
-                    "through",
-                    "step"
-                  ]
-                }
-              },
-              {
-                "if": {
-                  "properties": {
-                    "kind": {
-                      "const": "key_order"
-                    }
-                  }
-                },
-                "then": {
-                  "required": [
-                    "container",
-                    "position",
-                    "way"
+                    "cases"
                   ]
                 }
               }
             ],
             "properties": {
-              "kind": {
-                "enum": [
-                  "search_step",
-                  "key_order"
-                ]
-              },
               "statement": {
                 "type": "string",
-                "description": "The statement the case is of, as the compiler spells it: what tells two cases of the same shape apart when a decision has more than one search, or more than one statement resting on an order."
+                "description": "What the cases are cases of, as the compiler spells it: a search, or the order of one container's key under a statement. What tells two of the same shape apart."
               },
-              "from": {
-                "type": "string",
-                "description": "Of a `search_step`: the place the search starts from."
-              },
-              "through": {
-                "type": "array",
-                "description": "Of a `search_step`: the fields the search goes below a node through.",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "step": {
-                "enum": [
-                  "at_the_node",
-                  "below_it",
-                  "nowhere_at_a_leaf",
-                  "nowhere_below"
-                ],
-                "description": "Of a `search_step`: the node meets what the search asks; the node does not and one below does; the node does not and has nothing below; the node does not and every node below comes back empty."
-              },
-              "container": {
-                "type": "string",
-                "description": "Of a `key_order`: the container whose elements the order is of."
-              },
-              "position": {
-                "type": "string",
-                "description": "Of a `key_order`: the place the elements are keyed by."
-              },
-              "way": {
-                "enum": [
-                  "holds_by_the_last",
-                  "fails_by_the_last"
-                ],
-                "description": "Of a `key_order`: whether the statement holds with the last element of a key and fails with an earlier one, or the other way round."
-              }
-            }
-          }
-        },
-        "casesNotAskable": {
-          "type": "array",
-          "minItems": 1,
-          "uniqueItems": true,
-          "description": "The statements of the decision that draw a case no row can be asked about, which leave the decision partial all the same: what answers them is this compiler reading further, and no row. One entry for each statement, so a decision with three of them says which three. Absent where there are none.",
-          "items": {
-            "type": "object",
-            "required": [
-              "kind",
-              "statement"
-            ],
-            "additionalProperties": false,
-            "properties": {
               "kind": {
                 "enum": [
                   "a_node_a_search_reaches",
                   "the_order_of_a_repeated_key"
                 ]
               },
-              "statement": {
-                "type": "string",
-                "description": "The statement, as the compiler spells it."
+              "askable": {
+                "type": "boolean",
+                "description": "Whether a row can be written for it. `false` leaves the decision partial all the same: what answers it is this compiler reading further, and no row."
+              },
+              "cases": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "description": "The cases no row was seen in. For a search the node meets what it asks (`at_the_node`), does not and one below does (`below_it`), does not and has nothing below (`nowhere_at_a_leaf`), or does not and every node below comes back empty (`nowhere_below`); for the order of a key the statement holds with the last element of a key and fails with an earlier one (`holds_by_the_last`), or the other way round (`fails_by_the_last`). Present exactly where `askable`.",
+                "items": {
+                  "enum": [
+                    "at_the_node",
+                    "below_it",
+                    "nowhere_at_a_leaf",
+                    "nowhere_below",
+                    "holds_by_the_last",
+                    "fails_by_the_last"
+                  ]
+                }
               }
             }
           }
