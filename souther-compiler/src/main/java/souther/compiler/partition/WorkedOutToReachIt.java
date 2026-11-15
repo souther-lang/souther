@@ -14,7 +14,6 @@ import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.semantics.ResultBound;
-import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -154,13 +153,13 @@ final class WorkedOutToReachIt {
     }
 
     /**
-     * Whether {@code e}, read whole, ends a run only past what the representation holds: where it
-     * is handed no function, what it ends a run for apart from the closures written at it is all
-     * it ends one for.
+     * Whether {@code e}, read whole, ends a run only past what the representation holds: where
+     * what it ends a run for whole is what it ends one for apart from the closures written at it,
+     * as the owner says both, where it answers apart from them is where it answers.
      */
     private static boolean endsARowsRunOnlyPastTheRepresentation(Core e) {
-        return !(Core.withoutStanding(e) instanceof Core.PreservedCall kept
-                && kept.args().stream().anyMatch(arg -> arg.type() instanceof Type.FnOf))
+        return WhatARunMayEndFor.itself(e)
+                .equals(WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(e))
                 && WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e)
                         .endsOnlyPastTheRepresentation();
     }
