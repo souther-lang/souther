@@ -20,6 +20,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -188,7 +189,7 @@ final class Term {
          * the container alone, or what a closure answers of each, over the container and the
          * closure.
          */
-        SUM_OF_SIZES(Payload.none()),
+        SUM_OF_SIZES(Payload.of(CountedBy.class)),
         /**
          * What the elements of a list come to when the accumulation the payload names is carried
          * over all of them, over the list.
@@ -767,6 +768,34 @@ final class Term {
         return shape == Shape.CALLED ? (ValueName) of : null;
     }
 
+    /** Whether {@code part} is this term or stands anywhere within it. A term is a graph, so each
+     *  is asked once; terms are interned, so a part is the very instance it is looked for as. */
+    boolean holds(Term part) {
+        return holds(part, Collections.newSetFromMap(new IdentityHashMap<>()));
+    }
+
+    private boolean holds(Term part, Set<Term> asked) {
+        if (this == part) {
+            return true;
+        }
+        if (!asked.add(this)) {
+            return false;
+        }
+        for (Term each : parts) {
+            if (each.holds(part, asked)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The answer of a closure of one parameter, or null where this is no such closure: the
+     *  parameter count is what the payload of a closure says, and a body is the one part of it
+     *  however many parameters it has. */
+    Term answerOfAClosureOfOneParameter() {
+        return shape == Shape.CLOSURE && Integer.valueOf(1).equals(of) ? parts.getFirst() : null;
+    }
+
     /**
      * Whether this is a closure of one parameter that answers what it is handed as it is. Counting
      * what such a closure answers of each element is counting the elements, so a count that names
@@ -1120,7 +1149,8 @@ final class Term {
             case HOW_MANY_DIFFERENT ->
                     joined(sb.append("howManyDifferent(").append(of).append(", "), ", ")
                             .append(')');
-            case SUM_OF_SIZES -> joined(sb.append("sumOfSizes("), ", ").append(')');
+            case SUM_OF_SIZES -> joined(sb.append("sumOfSizes(").append(of).append(", "), ", ")
+                    .append(')');
             case EXACT_TOTAL -> sb.append("exact ").append(((ValueName) of).name()).append('(')
                     .append(parts.get(0).rendered()).append(')');
             case CODE_POINTS -> sb.append("codePoints(").append(parts.get(0).rendered())
@@ -1162,6 +1192,19 @@ final class Term {
 
         Built {
             fields = List.copyOf(fields);
+        }
+    }
+
+    /**
+     * What counts a container and what counts each of its elements or each answer of a closure
+     * over them, either null where nothing counts it. What a sum of sizes carries is a function of
+     * these as much as of the terms it is over, so they are part of which sum it is.
+     */
+    record CountedBy(ValueName whole, ValueName each) {
+
+        @Override
+        public String toString() {
+            return whole + "/" + each;
         }
     }
 
@@ -1543,8 +1586,8 @@ final class Term {
 
         /** How many the elements of {@code container} hold, added up: each element where
          *  {@code closure} is null, and otherwise what it answers of each. */
-        Term sumOfSizes(Term container, Term closure) {
-            return of(Shape.SUM_OF_SIZES, null, ofEach(container, closure));
+        Term sumOfSizes(Term container, Term closure, CountedBy countedBy) {
+            return of(Shape.SUM_OF_SIZES, countedBy, ofEach(container, closure));
         }
 
         /** What {@code operation}, a sum or a product, comes to over all of the elements of

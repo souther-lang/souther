@@ -108,7 +108,6 @@ import souther.compiler.values.Value;
 import souther.compiler.values.ValueSet;
 import souther.compiler.values.ValuesWithin;
 
-import net.unit8.notation199x.Normalization;
 import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.Meter;
 
@@ -4692,13 +4691,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (!counted.equals(CaseMapping.NONE)) {
             return false;
         }
-        CodeMap map = CaseMaps.of(parted);
-        CodePoints only = CodePoints.of(separator);
-        String alone = Character.toString(separator);
-        return map.domain().has(separator) && map.preimage(only).equals(only)
-                && map.image(only).equals(only)
-                && !map.answeredOutsideTheDomain().has(separator)
-                && Normalization.normalize(Normalization.Form.NFD, alone).equals(alone);
+        return CaseMaps.makesNoOccurrenceOf(parted, separator);
     }
 
     /**
