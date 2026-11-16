@@ -3067,10 +3067,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 case RowDemand.Relational(TakenConstraint.Affine(var form, var rel, var _))
                         when rel == Rel.NE -> new TakenConstraint.Affine(form, rel);
                 case RowDemand.DifferentFrom(Operand.At<TermPath>(var at)) ->
-                        new TakenConstraint.Affine(new LinearForm<>(ExactRatio.ZERO,
-                                Map.of(new NumericTerm.ValueOf(at), ExactRatio.ONE,
-                                        new NumericTerm.ValueOf(elementsOf.element()),
-                                        ExactRatio.ONE.negated())), Rel.NE);
+                        new TakenConstraint.Affine(LinearForm.<NumericTerm>difference(
+                                new NumericTerm.ValueOf(at),
+                                new NumericTerm.ValueOf(elementsOf.element())), Rel.NE);
                 default -> null;
             };
         }
