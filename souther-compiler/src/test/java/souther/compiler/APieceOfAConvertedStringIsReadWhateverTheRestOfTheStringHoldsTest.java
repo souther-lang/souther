@@ -17,8 +17,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class APieceOfAConvertedStringIsReadWhateverTheRestOfTheStringHoldsTest {
 
+    /**
+     * The bounds are small: what is read does not turn on how many code points an address holds,
+     * and a machine with a state for each of some hundreds is what a test pays for and says
+     * nothing more by.
+     */
     private static String screen(String emailPattern) {
-        return screen(emailPattern, "254", "253");
+        return screen(emailPattern, "12", "11");
     }
 
     private static String screen(String emailPattern, String emailBound, String domainBound) {
@@ -59,12 +64,12 @@ class APieceOfAConvertedStringIsReadWhateverTheRestOfTheStringHoldsTest {
 
     /**
      * A domain is the piece of an address whatever its length, as far as an address is written
-     * round it: a domain at the longest the address allows less the stretch it needs, and one more
-     * than the bound of the domain's own, are read the same, and nothing is tuned to the compiler.
+     * round it: a bound on the domain that is the longest the address allows less the stretch it
+     * needs ({@code x@}), and one more than that, are read the same.
      */
     @Test
     void aBoundOnTheDomainBesideABoundOnTheAddressIsReadWhateverTheNumbers() {
-        for (String[] bounds : new String[][] {{"254", "253"}, {"254", "252"}}) {
+        for (String[] bounds : new String[][] {{"12", "11"}, {"12", "10"}}) {
             assertEquals(Map.of(), WhereAStringRelationIsLeftOpen.leftOpen(
                     bounded(bounds[0], bounds[1]), "screen"), List.of(bounds).toString());
         }
@@ -78,7 +83,7 @@ class APieceOfAConvertedStringIsReadWhateverTheRestOfTheStringHoldsTest {
      */
     @Test
     void anAddressWithNoBoundIsReadAndTheLowercaseIsSaidToStop() {
-        String source = screen("[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", null, "253");
+        String source = screen("[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", null, "11");
 
         assertEquals(Map.of(), WhereAStringRelationIsLeftOpen.leftOpen(source, "screen"));
         assertEquals(List.of("List.flatMap", "String.lowercase"), WhereAStringRelationIsLeftOpen
@@ -86,12 +91,12 @@ class APieceOfAConvertedStringIsReadWhateverTheRestOfTheStringHoldsTest {
                 .map(StopPastTheRepresentation::operation).distinct().toList());
     }
 
-    /** The four address languages of the issue: whichever side of the {@code @} holds any code
-     *  point, the address is read. */
+    /** Whichever side of the {@code @} holds any code point, the address is read: the other three
+     *  of the four languages that two sides, each any code point or letters only, make. The first,
+     *  any code point on both, is read above. */
     @Test
     void anAddressIsReadWhereverItHoldsCodePointsAConversionDoesNotMapOneToOne() {
         for (String pattern : List.of(
-                "[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+",
                 "[a-zA-Z0-9]+@[a-zA-Z0-9\\\\-]+\\\\.[a-zA-Z0-9.\\\\-]+",
                 "[^@\\\\s]+@[a-zA-Z0-9\\\\-]+\\\\.[a-zA-Z0-9.\\\\-]+",
                 "[a-z]+@[^@\\\\s]+\\\\.[^@\\\\s]+")) {

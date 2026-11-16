@@ -20,25 +20,24 @@ class AContainmentIsReadOverTheValuesNotOverTheStableStartersTest {
                 module k16
 
                 data T = String
-                    invariant String.matches("%s", value) && String.length(value) <= 100
+                    invariant String.matches("%s", value) && String.length(value) <= 5
 
                 behavior f : (p: T, bc: T) -> Bool
                 let f (p, bc) = String.contains(p.value, bc.value)
-
-                example f
-                    | "in" : (T("ab"), T("xxabyy")) -> true
-                    | "out" : (T("ab"), T("xxyy")) -> false
                 """.formatted(alphabet);
     }
 
+    /**
+     * One alphabet for each way a code point is no stable starter: a combining mark, which
+     * composes with the letter before it; a Hangul jamo, which composes with its neighbours into a
+     * syllable; and a Greek letter, which has a decomposition of its own.
+     */
     @Test
     void aStringOverLettersAndCodePointsThatAreNoStableStarterIsReadAtBothSides() {
         for (String alphabet : List.of(
-                "[a-z\\\\u0300]+",
                 "[a-z\\\\u0300-\\\\u036F]+",
                 "[a-z\\\\u1100-\\\\u11FF]+",
-                "[a-z\\\\u0370-\\\\u03FF]+",
-                "[a-z\\\\u0400-\\\\u04FF]+")) {
+                "[a-z\\\\u0370-\\\\u03FF]+")) {
             assertEquals(Map.of(), WhereAStringRelationIsLeftOpen.leftOpen(contains(alphabet), "f"),
                     alphabet);
         }

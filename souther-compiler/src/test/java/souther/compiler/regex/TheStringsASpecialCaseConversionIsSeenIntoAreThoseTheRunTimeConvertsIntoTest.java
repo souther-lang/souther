@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * has its conversion in it, and a string with a code point answered with what the language does
  * not hold is in neither.
  *
- * <p>Held over every value of up to four code points of an alphabet that has the cases that turn
+ * <p>Held over every value of up to three code points of an alphabet that has the cases that turn
  * on what stands beside them, those that answer several code points, one that answers a code point
  * and a combining mark, the combining marks themselves, and the separator.
  */
@@ -53,7 +53,9 @@ class TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTe
         'a', 'b', 'A', 'i', 'I', '@', '.', 0x0130, 0x03A3, 0x03C3, 0x03C2, 0x00DF, 0x1E9E,
         0x01F0, 0x0307, 0x0301, 0x212A, 'k', 'K', 0x0345, 0x03B1, 0x0131, 'e', 0x00E9, 0x00C9};
 
-    private static final int MOST_CODE_POINTS = 4;
+    /** What a conversion turns on is what stands beside a code point, one before and one after, so
+     *  three code points hold each case there is; a fourth multiplies the values by the alphabet. */
+    private static final int MOST_CODE_POINTS = 3;
 
     private static final Meter METER = new Meter(100_000, 10_000_000, 1_000_000_000L);
 

@@ -4,6 +4,7 @@ import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -177,10 +178,13 @@ public final class ConversionAnswers {
         }
         List<List<Automaton.Step>> steps = new ArrayList<>();
         BitSet accepting = new BitSet();
+        // The same code points are read at many steps of a machine, so what the map sends to them
+        // is worked out once for each set.
+        Map<CodePoints, CodePoints> preimages = new HashMap<>();
         for (int state = 0; state < machine.size(); state++) {
             List<Automaton.Step> out = new ArrayList<>();
             for (Automaton.Step each : machine.stepsFrom(state)) {
-                CodePoints from = map.preimage(each.over());
+                CodePoints from = preimages.computeIfAbsent(each.over(), map::preimage);
                 if (!from.isEmpty()) {
                     out.add(new Automaton.Step(from, each.to()));
                 }
@@ -264,16 +268,20 @@ public final class ConversionAnswers {
             steps.add(new ArrayList<>());
             accepting.set(state, machine.stopsAt(state));
         }
+        // A machine reads the same code points at many of its steps — a string bounded to some
+        // hundreds of code points is as many states with the same one — so what the map and the
+        // answers of several code points make of a set of them is worked out once for each.
+        Map<CodePoints, CodePoints> images = new HashMap<>();
+        Map<CodePoints, List<Map.Entry<Integer, int[]>>> severalIn = new HashMap<>();
         for (int state = 0; state < machine.size(); state++) {
             for (Automaton.Step each : machine.stepsFrom(state)) {
-                CodePoints to = map.image(each.over());
+                CodePoints to = images.computeIfAbsent(each.over(), map::image);
                 if (!to.isEmpty()) {
                     steps.get(state).add(new Automaton.Step(to, each.to()));
                 }
-                for (Map.Entry<Integer, int[]> point : several.entrySet()) {
-                    if (!each.over().has(point.getKey())) {
-                        continue;
-                    }
+                for (Map.Entry<Integer, int[]> point : severalIn.computeIfAbsent(each.over(),
+                        over -> several.entrySet().stream()
+                                .filter(one -> over.has(one.getKey())).toList())) {
                     // The answer is read through states of its own, one for each code point of it
                     // but the last, which leads where the code point does.
                     int[] answer = point.getValue();
