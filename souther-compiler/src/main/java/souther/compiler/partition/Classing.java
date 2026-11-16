@@ -833,7 +833,28 @@ final class Classing {
             cells = narrower;
         }
         // The values no rule gets to are in no class: nothing is said of them.
-        return Worked.to(cells.stream().filter(Cell::isAskedBySome).toList());
+        return Worked.to(ofOneMeaning(cells.stream().filter(Cell::isAskedBySome).toList()));
+    }
+
+    /**
+     * {@code cells} with those that say the same made one.
+     *
+     * <p>A class is named by what it means, and what a cell means is the rules asked of it and how
+     * each came out: a rule it is not got to with says nothing. So two cells that differ only by
+     * which rule they are not got to with, the same relation written on two paths, mean one thing
+     * and are one class of the values of both. Left apart they would carry one name, and a row
+     * placed in the class by that name could not be told from a row in the other.
+     */
+    private static List<Cell> ofOneMeaning(List<Cell> cells) {
+        Map<String, Cell> byMeaning = new LinkedHashMap<>();
+        for (Cell each : cells) {
+            byMeaning.merge(said(each, "x"), each, (one, other) -> {
+                List<ValuesWithin> pieces = new ArrayList<>(one.values().pieces());
+                pieces.addAll(other.values().pieces());
+                return new Cell(new ValuesAtLengths(pieces), one.under());
+            });
+        }
+        return List.copyOf(byMeaning.values());
     }
 
     /**

@@ -10,7 +10,9 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenAs;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * One measure a model makes of a number of its input: the classes it divides that number into, and
@@ -142,6 +144,16 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term,
         openAt = List.copyOf(openAt);
         keptFromBy = List.copyOf(keptFromBy);
         classes = List.copyOf(classes);
+        // A class is told from another by its identity: a row is placed in the class of that name,
+        // and coverage counts the classes by it. Two classes under one name are one to every
+        // reader, and the values of one would be taken for the values of the other.
+        Set<String> named = new HashSet<>();
+        for (PartitionClass one : classes) {
+            if (!named.add(one.id())) {
+                throw new IllegalArgumentException(
+                        "`" + id + "` has two classes called `" + one.id() + "`");
+            }
+        }
         divides = List.copyOf(divides);
         cuts = List.copyOf(cuts);
         parted = List.copyOf(parted);

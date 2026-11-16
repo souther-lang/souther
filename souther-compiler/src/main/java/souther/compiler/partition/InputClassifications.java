@@ -227,25 +227,17 @@ public final class InputClassifications {
         // of which the measure is short as of any value whose class nobody could say; or it is one
         // no run gets to a rule with, which is read and in no class, with nothing more to say of
         // where it falls.
-        switch (outside.get()) {
-            case OWED -> {
-                return Classification.unreadable(
-                        Incompleteness.Cause.of(Incompleteness.Code.VALUE_OUTSIDE_WHAT_WAS_SHOWN),
-                        at.behavior(), at.term());
-            }
-            case NOTHING_OWED -> {
-                return Classification.at(List.of(), null);
-            }
-            case NOT_AN_ANSWER -> {
-                // `Axis` says it cannot happen: its classes hold what the rules leave. So this is
-                // that contract broken rather than anything about the value, and saying it could
-                // not be read would be reporting a measurement failure for a defect in the
-                // partition.
-                throw new IllegalStateException(
-                        "no class of " + at + " holds a value it read: " + about);
-            }
-        }
-        throw new AssertionError(outside);
+        return switch (outside.get()) {
+            case OWED -> Classification.unreadable(
+                    Incompleteness.Cause.of(Incompleteness.Code.VALUE_OUTSIDE_WHAT_WAS_SHOWN),
+                    at.behavior(), at.term());
+            case NOTHING_OWED -> Classification.at(List.of(), null);
+            // `Axis` says it cannot happen: its classes hold what the rules leave. So this is that
+            // contract broken rather than anything about the value, and saying it could not be
+            // read would be reporting a measurement failure for a defect in the partition.
+            case NOT_AN_ANSWER -> throw new IllegalStateException(
+                    "no class of " + at + " holds a value it read: " + about);
+        };
     }
 
     private InputClassifications() {}
