@@ -7,8 +7,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -45,23 +43,28 @@ class AGuardOverAFlatMapOfAnAttemptedConstructionIsCarriedToTheComparisonItTurns
                 .replaceAll("@\\d+:\\d+", "").replaceAll("at \\d+:\\d+", "at");
     }
 
+    private static void theGuardIsCarriedToTheEquality(String inner, String report) {
+        assertTrue(report.contains("doms[*] is divided by comparison"), () -> inner + report);
+        assertTrue(report.contains("the comparison at holds")
+                && report.contains("the comparison at does not hold"), () -> inner + report);
+        assertFalse(report.contains("about a value made from this one"), () -> inner + report);
+    }
+
     @Test
-    void theGuardIsCarriedToTheEqualityWhateverTheInnerFlatMapWrites() {
-        for (String inner : List.of("p -> [ p ]",
-                "p -> if D(p) as n then [ n.value ] else []")) {
-            String report = reported(inner);
-            assertTrue(report.contains("doms[*] is divided by comparison"), () -> inner + report);
-            assertTrue(report.contains("the comparison at holds")
-                    && report.contains("the comparison at does not hold"), () -> inner + report);
-            assertFalse(report.contains("about a value made from this one"), () -> inner + report);
-        }
+    void theGuardIsCarriedToTheEqualityWhereTheInnerFlatMapWritesThePiece() {
+        String inner = "p -> [ p ]";
+
+        theGuardIsCarriedToTheEquality(inner, reported(inner));
     }
 
     /** Where the piece is made into a newtype, which holds only some strings, the equality divides
      *  the string the pieces are of as well. */
     @Test
-    void whereThePieceIsMadeIntoANewtypeTheEqualityDividesTheStringItIsAPieceOf() {
-        String report = reported("p -> if D(p) as n then [ n.value ] else []");
+    void theGuardIsCarriedToTheEqualityWhereThePieceIsMadeIntoANewtypeAndItDividesTheString() {
+        String inner = "p -> if D(p) as n then [ n.value ] else []";
+        String report = reported(inner);
+
+        theGuardIsCarriedToTheEquality(inner, report);
         assertTrue(report.contains("email is divided by comparison"), report);
     }
 }

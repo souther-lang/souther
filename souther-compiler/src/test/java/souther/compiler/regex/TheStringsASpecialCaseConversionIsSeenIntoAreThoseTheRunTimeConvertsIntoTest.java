@@ -27,16 +27,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * has its conversion in it, and a string with a code point answered with what the language does
  * not hold is in neither.
  *
- * <p>Held over every value of up to three code points of an alphabet that has the cases that turn
+ * <p>Held over every value of up to two code points of an alphabet that has the cases that turn
  * on what stands beside them, those that answer several code points, one that answers a code point
  * and a combining mark, the combining marks themselves, and the separator.
  */
 class TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTest {
 
-    private static final UnaryOperator<String> LOWER =
+    static final UnaryOperator<String> LOWER =
             TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTest::lowered;
 
-    private static final UnaryOperator<String> UPPER =
+    static final UnaryOperator<String> UPPER =
             TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTest::uppered;
 
     private static String lowered(String text) {
@@ -53,9 +53,11 @@ class TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTe
         'a', 'b', 'A', 'i', 'I', '@', '.', 0x0130, 0x03A3, 0x03C3, 0x03C2, 0x00DF, 0x1E9E,
         0x01F0, 0x0307, 0x0301, 0x212A, 'k', 'K', 0x0345, 0x03B1, 0x0131, 'e', 0x00E9, 0x00C9};
 
-    /** What a conversion turns on is what stands beside a code point, one before and one after, so
-     *  three code points hold each case there is; a fourth multiplies the values by the alphabet. */
-    private static final int MOST_CODE_POINTS = 3;
+    /** What a conversion turns on is what stands beside a code point, so two code points hold each
+     *  of the cases that matter, and a value of a second is what a change to the answers is asked
+     *  of at once. Three, which put a code point between two others, are asked at night
+     *  ({@link EveryValueOfThreeCodePointsIsSeenIntoALanguageAsTheRunTimeConvertsItTest}). */
+    private static final int MOST_CODE_POINTS = 2;
 
     private static final Meter METER = new Meter(100_000, 10_000_000, 1_000_000_000L);
 
@@ -83,12 +85,13 @@ class TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTe
     }
 
     /** Every value of up to the most code points, made once for the tests that ask of all. */
-    private static final List<String> EVERY_VALUE = everyValue();
+    private static final List<String> EVERY_VALUE = everyValue(MOST_CODE_POINTS);
 
-    private static List<String> everyValue() {
+    /** Every value of the alphabet of up to {@code most} code points that a {@code String} holds. */
+    static List<String> everyValue(int most) {
         List<String> out = new ArrayList<>(List.of(""));
         List<String> last = List.of("");
-        for (int length = 1; length <= MOST_CODE_POINTS; length++) {
+        for (int length = 1; length <= most; length++) {
             List<String> next = new ArrayList<>();
             for (String shorter : last) {
                 for (int each : ALPHABET) {
@@ -103,9 +106,10 @@ class TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTe
                 .toList();
     }
 
-    private static void agreesWithTheRunTime(UnaryOperator<String> conversion) {
+    /** That what is seen of {@code conversion} into each language agrees, over {@code values},
+     *  with what the run time converts. */
+    static void agreesWithTheRunTime(UnaryOperator<String> conversion, List<String> values) {
         ConversionAnswers answers = answersOf(conversion);
-        List<String> values = EVERY_VALUE;
         boolean[] seenSome = {false};
         for (String regex : LANGUAGES) {
             Language into = language(regex);
@@ -146,12 +150,12 @@ class TheStringsASpecialCaseConversionIsSeenIntoAreThoseTheRunTimeConvertsIntoTe
 
     @Test
     void lowercaseIsSeenIntoALanguageAsTheRunTimeConvertsIntoIt() {
-        agreesWithTheRunTime(LOWER);
+        agreesWithTheRunTime(LOWER, EVERY_VALUE);
     }
 
     @Test
     void uppercaseIsSeenIntoALanguageAsTheRunTimeConvertsIntoIt() {
-        agreesWithTheRunTime(UPPER);
+        agreesWithTheRunTime(UPPER, EVERY_VALUE);
     }
 
     /** A string with a code point answered with a combining mark is in no language of letters. */

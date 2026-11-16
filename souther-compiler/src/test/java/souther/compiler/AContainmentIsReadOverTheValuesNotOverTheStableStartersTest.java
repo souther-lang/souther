@@ -2,7 +2,6 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -15,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class AContainmentIsReadOverTheValuesNotOverTheStableStartersTest {
 
-    private static String contains(String alphabet) {
+    static String contains(String alphabet) {
         return """
                 module k16
 
@@ -28,18 +27,13 @@ class AContainmentIsReadOverTheValuesNotOverTheStableStartersTest {
     }
 
     /**
-     * One alphabet for each way a code point is no stable starter: a combining mark, which
-     * composes with the letter before it; a Hangul jamo, which composes with its neighbours into a
-     * syllable; and a Greek letter, which has a decomposition of its own.
+     * A combining mark, which composes with the letter before it and is no stable starter. The
+     * other kinds of code point that are none are asked at night
+     * ({@link EveryKindOfCodePointThatIsNoStableStarterIsReadInAContainmentTest}).
      */
     @Test
-    void aStringOverLettersAndCodePointsThatAreNoStableStarterIsReadAtBothSides() {
-        for (String alphabet : List.of(
-                "[a-z\\\\u0300-\\\\u036F]+",
-                "[a-z\\\\u1100-\\\\u11FF]+",
-                "[a-z\\\\u0370-\\\\u03FF]+")) {
-            assertEquals(Map.of(), WhereAStringRelationIsLeftOpen.leftOpen(contains(alphabet), "f"),
-                    alphabet);
-        }
+    void aStringOverLettersAndCombiningMarksIsReadAtBothSides() {
+        assertEquals(Map.of(), WhereAStringRelationIsLeftOpen.leftOpen(
+                contains("[a-z\\\\u0300-\\\\u036F]+"), "f"));
     }
 }

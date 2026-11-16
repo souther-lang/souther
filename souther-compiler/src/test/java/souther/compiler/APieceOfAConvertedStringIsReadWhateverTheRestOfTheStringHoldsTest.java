@@ -22,7 +22,7 @@ class APieceOfAConvertedStringIsReadWhateverTheRestOfTheStringHoldsTest {
      * and a machine with a state for each of some hundreds is what a test pays for and says
      * nothing more by.
      */
-    private static String screen(String emailPattern) {
+    static String screen(String emailPattern) {
         return screen(emailPattern, "12", "11");
     }
 
@@ -89,18 +89,5 @@ class APieceOfAConvertedStringIsReadWhateverTheRestOfTheStringHoldsTest {
         assertEquals(List.of("List.flatMap", "String.lowercase"), WhereAStringRelationIsLeftOpen
                 .evidenceOf(source, "screen").stopsPastTheRepresentation().stream()
                 .map(StopPastTheRepresentation::operation).distinct().toList());
-    }
-
-    /** Whichever side of the {@code @} holds any code point, the address is read: each side in
-     *  turn any code point beside letters only on the other. Any code point on both is read above,
-     *  and what one side admits does not turn on the other, so letters on both adds no case. */
-    @Test
-    void anAddressIsReadWhereverItHoldsCodePointsAConversionDoesNotMapOneToOne() {
-        for (String pattern : List.of(
-                "[^@\\\\s]+@[a-zA-Z0-9\\\\-]+\\\\.[a-zA-Z0-9.\\\\-]+",
-                "[a-z]+@[^@\\\\s]+\\\\.[^@\\\\s]+")) {
-            assertEquals(Map.of(), WhereAStringRelationIsLeftOpen.leftOpen(screen(pattern),
-                    "screen"), pattern);
-        }
     }
 }
