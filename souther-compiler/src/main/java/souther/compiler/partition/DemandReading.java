@@ -18,9 +18,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
-import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.PartedString;
-import souther.compiler.meaning.PieceWitness;
 import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
@@ -554,29 +552,17 @@ final class DemandReading {
          *  {@link #byPart}'s answer about the statement and the same each time it is read: a
          *  statement of several asks one part at as many places as it is written. */
         private final Map<Proposition, ModelOccurrences> partsReadOff = new HashMap<>();
-        /** The string each piece held to a language was read as a piece of, and how its pieces
-         *  were taken, by the statement about some piece it is a piece of. */
-        private final PartedStringsOfThePieces partedStrings;
         /** Which elements the parts each read was made of are about ({@link ValueIdentity}). */
         final Map<Read, ElementsNamed> namedIn = new IdentityHashMap<>();
 
-        private Projection(Map<Spelling,ModelOccurrences> byPart, ModelOccurrences own,
-                           PartedStringsOfThePieces parted) {
+        private Projection(Map<Spelling,ModelOccurrences> byPart, ModelOccurrences own) {
             this.byPart = byPart;
             this.own = own;
-            this.partedStrings = parted;
-        }
-
-        /** The string the piece {@code within} is a piece of, where it is read to be of one. */
-        Optional<PartedString> partedStringOfThePiece(
-                PieceWitness within) {
-            return partedStrings.of(within);
         }
 
         /** A projection nothing says the parts of. */
         static Projection unplaced() {
-            return new Projection(Map.of(), ModelOccurrences.NONE,
-                    PartedStringsOfThePieces.NONE);
+            return new Projection(Map.of(), ModelOccurrences.NONE);
         }
 
         /** A projection of what {@code pulled} states, each part read off where it was, and what
@@ -597,16 +583,7 @@ final class DemandReading {
             }
             Map<Spelling,ModelOccurrences> byPart = new LinkedHashMap<>();
             found.forEach((key, copies) -> byPart.put(key, copies.gathered()));
-            List<Derivation.APieceInALanguage> held = new ArrayList<>();
-            if (pulled != null) {
-                for (Pullback.Leaf leaf : pulled.leaves()) {
-                    if (Derivation.readOff(leaf.step())
-                            instanceof Derivation.APieceInALanguage piece) {
-                        held.add(piece);
-                    }
-                }
-            }
-            return new Projection(byPart, own, PartedStringsOfThePieces.of(held));
+            return new Projection(byPart, own);
         }
 
         /**
@@ -1799,12 +1776,12 @@ final class DemandReading {
             case Proposition.SameValue _ ->
                     List.of(forTheRun(stated, RowDemand.NoComposer.TWO_SUBJECTS_ONE_VALUE));
             // A piece held to a language depends on the string it is a piece of, which the
-            // proposition does not say and the way the piece was read does.
+            // proposition says.
             case Proposition.InTheStrings(
-                    Proposition.InTheStrings.Strings.OfAPiece(PieceWitness within, var _), var _, var _,
+                    Proposition.InTheStrings.Strings.OfAPiece(var _, var parted), var _, var _,
                     var _) ->
                     List.of(forTheRun(stated, RowDemand.NoComposer.A_STRING_IN_A_LANGUAGE,
-                            List.of(), projection.partedStringOfThePiece(within)));
+                            List.of(), parted));
             case Proposition.InTheStrings _ ->
                     List.of(forTheRun(stated, RowDemand.NoComposer.A_STRING_IN_A_LANGUAGE));
             case Proposition.StringInside _ ->

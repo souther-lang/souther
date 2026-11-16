@@ -42,6 +42,29 @@ class ACountOfAListBuiltWhereAStringIsInALanguageIsReadTest {
     private static final String MATCHES =
             "String.matches(\"[a-z0-9]+(\\\\.[a-z0-9]+)+\", address.value)";
 
+    /** The piece at the index one of {@code of}, counted where it is held to the pattern. */
+    private static String pickedUnder(String of) {
+        return "match List.get(1, String.split(\"@\", " + of + ".value)) with | Some d -> if "
+                + "String.matches(\"[a-z0-9]+(\\\\.[a-z0-9]+)+\", d) then [ d ] else [] | None -> []";
+    }
+
+    /**
+     * Two strings parted by one written closure, which a behavior called twice runs over each: the
+     * pieces of one are not the pieces of the other, whatever the two statements about a piece are
+     * named.
+     */
+    private static final String TWO_STRINGS = """
+
+            behavior heldBy : (address: Address) -> Int
+            let heldBy (address) = List.length(%s)
+
+            behavior twoStrings : (address: Address, other: Address) -> Int
+            let twoStrings (address, other) = {
+                guard heldBy(address) + heldBy(other) >= 1 else 0
+                1
+            }
+            """.formatted(pickedUnder("address"));
+
     private static String behavior(String name, String built) {
         return """
 
@@ -68,7 +91,9 @@ class ACountOfAListBuiltWhereAStringIsInALanguageIsReadTest {
                 + behavior("attempt", "if Domain(address.value) as name then [ name ] else []")
                 + behavior("pickedPiece", "match List.get(1, String.split(\"@\", address.value))"
                         + " with | Some d -> if Domain(d) as name then [ name ] else []"
-                        + " | None -> []");
+                        + " | None -> []")
+                + behavior("pickedMatch", pickedUnder("address"))
+                + TWO_STRINGS;
 
         assertEquals(List.of(), notRead(report(source)));
     }
