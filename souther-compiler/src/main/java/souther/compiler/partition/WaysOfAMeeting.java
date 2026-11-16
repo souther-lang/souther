@@ -5,6 +5,7 @@ import souther.compiler.publish.PublicationOrders;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -37,8 +38,8 @@ final class WaysOfAMeeting {
             throw new IllegalArgumentException("a meeting nothing was looked for at has no search"
                     + " to have come to nothing");
         }
-        CompositionShortfall met = ways.getFirst().met();
-        BesideTheWord beside = ways.getFirst().why().beside();
+        CompositionShortfall met = CompositionShortfall.NONE;
+        BesideTheWord beside = BesideTheWord.NOTHING;
         Set<CompositionBudget> planCut = EnumSet.noneOf(CompositionBudget.class);
         for (CameToNothing each : ways) {
             met = met.and(each.met());
@@ -51,9 +52,12 @@ final class WaysOfAMeeting {
                 .thenComparing(each -> String.valueOf(each.why()));
         CameToNothing said = ways.stream().filter(each -> !each.why().reason().provesInfeasible())
                 .min(asSaid).orElseGet(() -> ways.stream().min(asSaid).orElseThrow());
-        Generator.UnresolvedCombination.Reason word = met.figures().isEmpty()
-                ? said.why().reason()
-                : Generator.UnresolvedCombination.Reason.wordFor(met.figures());
+        // The word for all that every way found out, which is the question of what was found out
+        // and is asked of it ({@link SearchShortfall#wordFor}): a figure, a repertoire or a number
+        // not held, and an offer short of a rule, each make the word one that is not a proof.
+        Generator.UnresolvedCombination.Reason word = new SearchShortfall(met,
+                beside.shortOf(), false, false, Optional.empty(), Optional.empty())
+                .wordFor(said.why().reason());
         return new CameToNothing(new Generator.UnresolvedCombination(said.why().classes(), word,
                 said.why().detail(), said.why().told(), beside), met, planCut);
     }

@@ -80,6 +80,18 @@ class TheWaysAMeetingIsLookedForAtAreSaidOnceOverAllOfThemTest {
                 List.copyOf(said.met().figures()));
     }
 
+    /** A repertoire a search did not write is found out as a figure is: the word is no proof. */
+    @Test
+    void aRepertoireNotWrittenMakesTheWordOneThatIsNoProof() {
+        Generator.UnresolvedCombination.Reason said = PROOF;
+        CompositionShortfall notWritten = new CompositionShortfall(Set.of(),
+                Set.of(CompositionRepertoire.WAYS_A_TOTAL_IS_SPREAD), Set.of());
+        CameToNothing way = new CameToNothing(new Generator.UnresolvedCombination(List.of(), said),
+                notWritten, Set.of());
+
+        assertEquals(UNTRIED, WaysOfAMeeting.said(List.of(way)).why().reason());
+    }
+
     /** Whichever of the two says the word, what the other said beside its own is said too. */
     @Test
     void whatEveryWayWasShortOfOrStoppedAtIsSaid() {

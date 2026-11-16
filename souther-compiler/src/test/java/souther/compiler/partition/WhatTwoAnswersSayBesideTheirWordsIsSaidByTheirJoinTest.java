@@ -39,6 +39,14 @@ class WhatTwoAnswersSayBesideTheirWordsIsSaidByTheirJoinTest {
         assertEquals(List.of(TermPath.of("a"), TermPath.of("b")), List.copyOf(both.shortOf().keySet()));
     }
 
+    /** Two answers short of the same thing are short of one thing. */
+    @Test
+    void whatBothAnswersWereShortOfIsSaidOnce() {
+        BesideTheWord both = shortAt("a").and(shortAt("a"));
+
+        assertEquals(1, both.shortOf().get(TermPath.of("a")).these().size());
+    }
+
     @Test
     void whereTheRunsOfTheEarlierStoppedIsKept() {
         BesideTheWord earlier = BesideTheWord.NOTHING.stopping(List.of(STOPPED));
