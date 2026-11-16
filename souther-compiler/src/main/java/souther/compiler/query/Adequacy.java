@@ -16,6 +16,7 @@ import souther.compiler.check.ClauseName;
 import souther.compiler.diag.PhysicalPos;
 import souther.compiler.partition.ClauseOfAConstruction;
 import souther.compiler.partition.PassedConstruction;
+import souther.compiler.partition.StopPastTheRepresentation;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.partition.CountWitnesses;
 import souther.compiler.partition.ReachWitnesses;
@@ -2737,9 +2738,14 @@ public final class Adequacy {
             // whether a row at each of its classes checks anything. Not known where it was not
             // read, and owed then as a read position is.
             InputUses.Walked read = db.ask(new ReadsOf(name, spec.name())).value();
+            // And where a run of the body stops only past what the representation holds, which the
+            // classes are drawn without and which is said once, of the operation.
+            AnalysisBody analysis = checked == null ? null
+                    : checked.analysisBodies().get(spec.name());
             return Coverages.of(subject, seen,
                     db.ask(new Front.Adequacy()).value().measures(), body,
-                    read == null ? InputUses.NOT_KNOWN : read.uses());
+                    read == null ? InputUses.NOT_KNOWN : read.uses(),
+                    analysis == null ? List.of() : StopPastTheRepresentation.in(analysis));
         }
     }
 

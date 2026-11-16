@@ -210,19 +210,17 @@ class AListMadeByFlatMapOfAnAttemptOnADerivedStringIsReadTest {
     }
 
     /**
-     * What is left unread is the one comparison of a domain with a row's, and only for what it is
-     * not shown to reach: its classes hold the values it was shown over, and the image of the
-     * lowercase conversion is not shown. A value not shown to be made stays not shown.
+     * The comparison of a domain with a row's is read to the end: a run that stops at the
+     * lowercase or at a flatMap stops only where an answer is longer than a {@code String} holds
+     * or a list holds more than one can, which leaves no value of the comparison open, and is
+     * said once of each of those operations.
      */
     @Test
-    void whatIsLeftOfTheIssueExampleIsTheComparisonOverTheValuesItWasShownOver() {
+    void nothingOfTheIssueExampleIsLeftUnreadAndItsStopsAreSaidOfTheirOperations() {
         String report = report(SCREEN);
-        List<String> left = notRead(report);
-        assertTrue(!left.isEmpty(), report);
-        assertTrue(left.stream().allMatch(line -> line.contains("comparison@")), report);
-        assertTrue(left.stream().allMatch(line -> line.contains(
-                "its classes hold the values it was shown over")
-                || line.contains("the image of String.lowercase not shown")), report);
+        assertEquals(List.of(), notRead(report), report);
+        assertTrue(report.lines().anyMatch(line -> line.contains("a run stops only where")
+                && line.contains("String.lowercase@") && line.contains("List.flatMap@")), report);
     }
 
     /** No example is dropped, merged or left waiting for the reading. */

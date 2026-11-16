@@ -12,8 +12,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A relation over how often a key occurs, read off a fold that counts under each key, is reached
@@ -36,9 +36,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * reads.
  *
  * <p>And the witness of a count holds the counted container at the most it holds, which a rule of
- * the container may lower, and does not claim a row where what is inside the container is held to
- * more than one element: a count of copies then holds more pieces than the walk's list may. Which
- * values the count takes is a claim of its own, of rows of copies, and the witness makes none.
+ * the container may lower. Where what is inside the container is held to more than one element, a
+ * count of copies holds more pieces than the walk's list may only where that list would hold more
+ * than a list can, which parts no counts. Which values the count takes is a claim of its own, of
+ * rows of copies, and the witness makes none.
  */
 class ACountAFoldFilesUnderEachKeyGetsARunToEveryValueItTakesTest {
 
@@ -387,13 +388,13 @@ class ACountAFoldFilesUnderEachKeyGetsARunToEveryValueItTakesTest {
                         .get("issuesBesideTheirKeys"));
     }
 
-    /** A count of copies of an issue held to two labels holds twice the pieces it counts, which
-     *  a list built of them may not hold at every count: no row is claimed. */
+    /** A count of copies of an issue held to two labels holds twice the pieces it counts, which a
+     *  list built of them holds at every count but where it would hold more than a list can, and
+     *  that stop parts no counts: the count is reached at every value. */
     @Test
-    void aCountOverContainersHeldToMoreThanOneElementIsNotClaimed() {
-        List<UndividedPosition.Reason> paired =
-                reasonsAt(THE_COUNT, List.of("countedPaired")).get("countedPaired");
-        assertFalse(paired.contains(RELATES), paired.toString());
+    void aCountOverContainersHeldToMoreThanOneElementIsReachedAtEveryValue() {
+        assertEquals(List.of(RELATES),
+                reasonsAt(THE_COUNT, List.of("countedPaired")).get("countedPaired"));
     }
 
     /** The places the count's walk reads, read after it: the count's own operations stop no run
@@ -433,16 +434,20 @@ class ACountAFoldFilesUnderEachKeyGetsARunToEveryValueItTakesTest {
     }
 
     /**
-     * A walk that puts one element in what it carries at each element holds no more than the
-     * elements it walks, whatever it is built for: a set gathered from the empty set fits on every
-     * run. One that joins what it carries to itself doubles it, and still stops a run.
+     * A walk that builds a collection stops a run only where what it carries would hold more
+     * elements than a collection holds, which parts no values: a set gathered from the empty set
+     * and a list joined to itself at each element both leave the relation after them reached at
+     * every value. The join is said as a stop of its own.
      */
     @Test
-    void aWalkPuttingInOneElementAtEachFitsOnEveryRun() {
+    void aWalkThatBuildsACollectionLeavesTheRelationAfterItReached() {
         Map<String, List<UndividedPosition.Reason>> expected = new LinkedHashMap<>();
         expected.put("gatheredThenGuard", List.of(RELATES));
-        expected.put("doubledThenGuard", List.of(NOT_REACHED));
+        expected.put("doubledThenGuard", List.of(RELATES));
         assertEquals(expected, reasonsAt(HOW_MANY_ISSUES, expected.keySet()));
+        List<String> stops = COVERAGE.get("doubledThenGuard").stopsPastTheRepresentation()
+                .stream().map(StopPastTheRepresentation::operation).toList();
+        assertTrue(stops.contains("List.append"), stops::toString);
     }
 
     /** For each of {@code behaviors}, the reasons its rules give at {@code place}. */

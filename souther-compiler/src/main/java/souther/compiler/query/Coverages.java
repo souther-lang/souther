@@ -10,6 +10,7 @@ import souther.compiler.meaning.Quantity;
 import souther.compiler.partition.BehaviorInputs;
 import souther.compiler.partition.BorderObligationPoint;
 import souther.compiler.partition.CountWitnesses;
+import souther.compiler.partition.StopPastTheRepresentation;
 import souther.compiler.diag.Citation;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.ReadingPolicy;
@@ -408,7 +409,8 @@ final class Coverages {
     static PartitionEvidence of(souther.compiler.partition.MeasuredInput subject,
                                 souther.compiler.query.Adequacy.RowReading observed,
                                 souther.compiler.partition.AdequacyPolicy.OfTheMeasures budget,
-                                BodyInputReading body, InputUses uses) {
+                                BodyInputReading body, InputUses uses,
+                                List<StopPastTheRepresentation> pastTheRepresentation) {
         Partitions.Partitioning partitioning = subject.partitioning();
 
         List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
@@ -445,7 +447,7 @@ final class Coverages {
                 // measured is the separate answer `undivided` beside them carries, and a position
                 // no axis came back for still has whatever was written about it.
                 partitioning.notSeparated(), unansweredIn(partitioning),
-                readings.whyUnclassified(), partitioning.caseExpansions());
+                readings.whyUnclassified(), partitioning.caseExpansions(), pastTheRepresentation);
     }
 
     /**

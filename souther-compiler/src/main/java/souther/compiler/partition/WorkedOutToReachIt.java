@@ -13,6 +13,7 @@ import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.semantics.ResultBound;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -123,13 +124,44 @@ final class WorkedOutToReachIt {
             return aConstructionEndsNoRun(made, value.at());
         }
         if (!closuresApart) {
-            return WhatARunMayEndFor.itself(written).endsNone();
+            return WhatARunMayEndFor.itself(written).endsNone()
+                    || endsARowsRunOnlyPastTheRepresentation(written);
         }
         // The sites a library call works out are the ones it may end a run at, and it ends none
         // where the library shows it answers whatever it is handed.
         return WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(written).endsNone()
-                || WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(written)
-                        instanceof GetsPast.Always;
+                || completionOfARowsRun(written) instanceof GetsPast.Always;
+    }
+
+    /**
+     * Where {@code e} itself answers on a run of a row, apart from the closures written at it: as
+     * its owner says ({@link WhatARunMayEndFor#completionApartFromTheClosuresWrittenAtIt}), but
+     * everywhere where it ends a run only past what the representation holds
+     * ({@link GetsPast#endsOnlyPastTheRepresentation}).
+     *
+     * <p>A class is drawn over the values a model tells apart, and where a {@code String} or a
+     * collection stops is none of those: the longest string ends no class of a length
+     * ({@link ResultBound.Limit}), and a run stopped only because an answer is past it does not
+     * part the values either. So the runs a relation is read over are taken to get past such an
+     * operation, and that a run stops there is said once, of the operation
+     * ({@link StopPastTheRepresentation}). What the owner says stands for every reader that is
+     * not drawing classes: a proof that a body ends no run asks the owner.
+     */
+    static GetsPast completionOfARowsRun(Core e) {
+        GetsPast owned = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
+        return owned.endsOnlyPastTheRepresentation() ? new GetsPast.Always() : owned;
+    }
+
+    /**
+     * Whether {@code e}, read whole, ends a run only past what the representation holds: where
+     * what it ends a run for whole is what it ends one for apart from the closures written at it,
+     * as the owner says both, where it answers apart from them is where it answers.
+     */
+    private static boolean endsARowsRunOnlyPastTheRepresentation(Core e) {
+        return WhatARunMayEndFor.itself(e)
+                .equals(WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(e))
+                && WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e)
+                        .endsOnlyPastTheRepresentation();
     }
 
     /**

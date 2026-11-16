@@ -4,6 +4,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawSubject;
+import souther.compiler.semantics.ResultBound;
 
 import java.math.BigInteger;
 import java.util.LinkedHashMap;
@@ -24,6 +25,22 @@ import java.util.Objects;
  * does not know of is {@link NotKnown}, which is not that it ends a run.
  */
 public sealed interface GetsPast {
+
+    /**
+     * Whether it ends a run only where what it makes would be more than the representation holds:
+     * a collection holding more elements than a collection holds, or a text longer than a
+     * {@code String} holds. Those are where the representation stops, which is no distinction a
+     * model made ({@link ResultBound.Limit}); an {@code Int} past its
+     * ends is a value the type has no place for, and is.
+     */
+    default boolean endsOnlyPastTheRepresentation() {
+        return switch (this) {
+            case WhereTheAnswerFits _, WhereTheSpanFits _, WhereTheTextFits _,
+                 WhereTheTextBuiltFits _ -> true;
+            case Always _, WhereTheTotalFits _, WhereTheProductFits _, WhereTheQuotientFits _,
+                 WhereTheRoundedNumberFits _, WhereTheWholeNumberFits _, NotKnown _ -> false;
+        };
+    }
 
     /** It answers whatever it is handed. */
     record Always() implements GetsPast {}

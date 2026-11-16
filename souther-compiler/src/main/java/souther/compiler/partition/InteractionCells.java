@@ -657,7 +657,14 @@ public final class InteractionCells {
         return size;
     }
 
-    /** What each outcome of each factor leaves open, or null where the group is not one to offer. */
+    /**
+     * What each outcome of each factor leaves open, or null where the group is not one to offer.
+     *
+     * <p>An outcome whose decisions no value makes together is left out of its factor and is no
+     * reason to lose the others: the combinations of the outcomes some value does take, with those
+     * of the other factors, are owed as they were. A factor left with none is a value no run
+     * settles, so the group has no path and nothing is owed.
+     */
     private static List<List<Placed>> factorsOf(Interaction group,
                                                 MeasuredInput.MeasuredAxes axes) {
         List<List<Placed>> out = new ArrayList<>();
@@ -665,10 +672,12 @@ public final class InteractionCells {
             List<Placed> outcomes = new ArrayList<>();
             for (Outcome outcome : factor.outcomes()) {
                 Placed at = placedBy(outcome.holds(), axes);
-                if (at == null) {
-                    return null;
+                if (at != null) {
+                    outcomes.add(at);
                 }
-                outcomes.add(at);
+            }
+            if (outcomes.isEmpty()) {
+                return null;
             }
             out.add(outcomes);
         }

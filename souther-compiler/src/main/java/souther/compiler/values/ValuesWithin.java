@@ -9,8 +9,8 @@ import souther.compiler.regex.Language;
  * The values of a set whose length lies between two numbers of code points.
  *
  * <p>What a rule is shown over, where it is shown only so far: the strings a relation shows to be
- * another value's are those of a language no longer than a value can be written round them, and
- * the strings past that are shown neither way. One value and not a set beside a length, so that
+ * another value's are those of a language at the lengths a run gets to the relation at, and the
+ * strings of other lengths are shown neither way. One value and not a set beside a length, so that
  * whatever asks about it — whether it holds a value, whether a value is in it, what it holds met
  * with something else, which value stands for it — asks the length with the set, and none of them
  * can ask the set alone.

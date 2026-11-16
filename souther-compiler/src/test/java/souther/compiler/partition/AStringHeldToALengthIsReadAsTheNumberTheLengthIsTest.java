@@ -146,16 +146,17 @@ class AStringHeldToALengthIsReadAsTheNumberTheLengthIsTest {
     /**
      * The operations are said beside the values open for them and no others. A sum of the length
      * of {@code b} with a number near the greatest {@code Int} gets a run to the equality only
-     * with a {@code b} of two code points or fewer: the longer ones are open for that, and not for
-     * the lowercase's image, while the strings of {@code a} the partner holds at those lengths are
-     * open for the image.
+     * with a {@code b} of two code points or fewer: the longer ones are none the equality is asked
+     * of, and are open for nothing, while the strings of {@code a} the partner holds at those
+     * lengths are open for the lowercase's image. A string of {@code a} so long that the
+     * lowercase's answer is longer than a {@code String} holds ends the run where the
+     * representation stops, and is open for nothing.
      */
     @Test
     void theOperationsAreSaidBesideTheValuesOpenForThemAndNoOthers() {
         assertEquals(List.of(
                         "a {\"shorterThan\":3,\"atAnyLength\":false,"
-                                + "\"imagesNotShown\":[\"String.lowercase\"]}",
-                        "b {\"longerThan\":2,\"atAnyLength\":false}"),
+                                + "\"imagesNotShown\":[\"String.lowercase\"]}"),
                 leftOpenIn("""
                         module reach
 

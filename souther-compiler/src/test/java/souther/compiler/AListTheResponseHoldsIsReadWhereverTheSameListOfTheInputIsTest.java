@@ -122,6 +122,9 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                 // which a choice in the closure says as well, and in any order.
                 List.of("List.sum(List.map(i -> if i.active then i.quantity else 0, ROWS))",
                         "List.sum(List.map(.quantity, List.filter(i -> i.active, ROWS)))"),
+                // A closure that writes one element for each element is a map.
+                List.of("List.sum(List.map(.quantity, ROWS))",
+                        "List.sum(List.flatMap(i -> [i.quantity], ROWS))"),
                 List.of("List.sum(List.map(x -> if x > 0 then x else 0, NUMS))",
                         "List.sum(List.filter(x -> x > 0, NUMS))"));
     }
@@ -136,7 +139,7 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                 "List.sum(List.mapIndexed((i, x) -> i * x, List.sortBy(x -> x, NUMS)))",
                 // A reversal between the selections puts their positions in another list.
                 "List.sum(List.take(1, List.reverse(List.drop(1, NUMS))))",
-                "List.sum(List.flatMap(i -> [i.quantity], ROWS))",
+                "List.sum(List.flatMap(i -> [i.quantity, i.quantity], ROWS))",
                 "List.fold((acc, x) -> acc + x, 0,"
                         + " List.sortBy(x -> x, List.map(.quantity, ROWS)))");
     }
