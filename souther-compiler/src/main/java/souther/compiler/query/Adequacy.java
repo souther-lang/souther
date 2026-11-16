@@ -1763,7 +1763,7 @@ public final class Adequacy {
                 }
                 souther.compiler.partition.InteractionRequirements asked =
                         souther.compiler.partition.InteractionRequirements.of(behavior,
-                                read.interactions(), read.notJoined(), subject.axes(), cells);
+                                read.interactions(), read.unjoined(), subject.axes(), cells);
                 out.put(behavior, whatTheRowsMade(behavior, asked,
                         RowReadings.readingFor(byTarget, behavior), numbering,
                         db.ask(new Unanswered(name, behavior)).value()));

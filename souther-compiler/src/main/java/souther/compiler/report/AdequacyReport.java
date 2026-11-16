@@ -95,6 +95,7 @@ import souther.compiler.partition.RoleAnswer;
 import souther.compiler.partition.RuleEvidenceOrigin;
 import souther.compiler.partition.UndividedPosition;
 import souther.compiler.diag.Citation;
+import souther.compiler.diag.Localizable;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRendering;
@@ -172,6 +173,7 @@ import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.partition.WhichLine;
 import souther.compiler.partition.WhyKept;
 import souther.compiler.reading.PathAccess;
+import souther.compiler.reading.UnjoinedMeeting;
 import souther.compiler.query.ArmCoverage;
 import souther.compiler.query.ArmObligation;
 import souther.compiler.query.ArmSummary;
@@ -2377,12 +2379,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         List<Adequacy.DeclaredLine> lines = module.declaredLines();
         ObligationSummary<Adequacy.DeclaredDebt> account =
                 ObligationSummary.of(debts, each -> each.debt().owed());
-        if (!debts.isEmpty() || !lines.isEmpty() || !module.declaredExclusions().isEmpty()) {
-            out.append("  ")
-                    .append(DisplayColumns.padRight(page.say(new ReportMessage.Declarations()), 15))
-                    .append(page.say(new ReportMessage.BorderCounts(lines.size(),
-                            account.met().size() + "/" + account.counted())))
-                    .append(refuted(account, page)).append(NEW_LINE);
+        boolean counted = !debts.isEmpty() || !lines.isEmpty()
+                || !module.declaredExclusions().isEmpty();
+        WeakeningSet went = module.declarationsWeakenedBy();
+        // A heading wherever something is said under it. A reading that went without and found
+        // nothing owes no count, since nothing was found is not nothing is owed: the heading then
+        // says only whose account the lines under it are of, and not how many it holds.
+        if (counted || !went.isEmpty()) {
+            out.append("  ").append(counted
+                    ? DisplayColumns.padRight(page.say(new ReportMessage.Declarations()), 15)
+                    + page.say(new ReportMessage.BorderCounts(lines.size(),
+                            account.met().size() + "/" + account.counted()))
+                    + refuted(account, page)
+                    : page.say(new ReportMessage.Declarations())).append(NEW_LINE);
+            wentWithout(out, "      ", went, page);
         }
         // Every obligation the count holds and no row is at, so that the difference between the two
         // numbers is a difference a reader can walk. A point nobody can say is missed is not a gap
@@ -3293,6 +3303,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         marks);
                 decision(out, behavior, module.declaredIn(), page, onlyBy, marks);
                 replacement(out, behavior, module.module(), module.declaredIn(), page);
+                wentWithout(out, "    ", behavior.weakenedBy(), page);
                 // Under the behavior it names, because a reason printed at the module's foot is
                 // read as belonging to whichever behavior came last. That was survivable while the
                 // only reasons naming one were rare; a position that could not be read is not.
@@ -4989,9 +5000,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *
      * <p>The count and the gaps beside it.
      *
-     * <p>The meetings the measure would not walk are said beside the count rather than folded into
-     * it. What they hold is combinations nobody counted, and a reader told only the ratio would
-     * take a behavior measured in part for one measured in full.
+     * <p>The meetings the measure would not walk, and the ones it could not join to what a run
+     * records, are said beside the count rather than folded into it. Each of the second is then
+     * said under it by where it is written and why. What they hold is combinations nobody
+     * counted, and a reader told only the ratio would take a behavior measured in part for one
+     * measured in full.
      *
      * <p>Every group that has combinations no row makes is said once, as what it is made of, and
      * under it the sets of its choices that no row makes, one to a line the way an arm or a
@@ -5009,15 +5022,31 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                              SourceId declaredIn, Page page,
                              MarksWritten marks) {
         Optional<InteractionEvidence.RowsMeeting> made = meetings.made().made();
-        String held = meetings.asked().notMeasured().isEmpty() ? ""
-                : "   " + page.say(new ReportMessage.MeetingsNotWalked(
-                        meetings.asked().notMeasured().size()));
+        // What the count leaves out, by both ways a meeting is left out of it.
+        StringBuilder held = new StringBuilder();
+        if (!meetings.asked().notMeasured().isEmpty()) {
+            held.append("   ").append(page.say(new ReportMessage.MeetingsNotWalked(
+                    meetings.asked().notMeasured().size())));
+        }
+        if (!meetings.asked().notJoined().isEmpty()) {
+            held.append("   ").append(page.say(new ReportMessage.MeetingsNotJoined(
+                    meetings.asked().notJoined().size())));
+        }
         measureLine(out, new ReportMessage.Interaction(), page, page.say(made
                 .<Message>map(rows -> new ReportMessage.InteractionCombinations(
                         rows.met().size() + "/" + meetings.counted()))
                 .orElseGet(() -> new ReportMessage.InteractionCombinationsUncounted(
                         meetings.counted(), ReasonProse.of(meetings.made().why()).sentence())))
-                + held);
+                + held.toString());
+        // The meetings no combination is asked of, each by where it is written and why, since the
+        // count beside them says nothing of what is left unmeasured.
+        int number = 0;
+        for (UnjoinedMeeting each : meetings.asked().notJoined()) {
+            number++;
+            out.append("      ? ").append(page.say(new ReportMessage.TheMeetingIsNotJoined(number,
+                    whereWritten(each.at(), page, declaredIn),
+                    phrase("not-joined", each.why())))).append(NEW_LINE);
+        }
         for (UnobservedGroup group : behavior.unobserved()) {
             decidedTogether(out, group, declaredIn, page);
             for (UnobservedChoices missing : group.choices()) {
@@ -5237,7 +5266,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             number++;
             Citation written = each.at().map(places.places()::get).orElse(null);
             Message at = written == null ? new ReportMessage.Nothing()
-                    : new ReportMessage.AtAPlace(written.said(page.rendering(), declaredIn));
+                    : whereWritten(written, page, declaredIn);
             Message of = ofWhat(each, at);
             out.append("      ? ").append(page.say(each.unseen().isEmpty()
                     ? new ReportMessage.NoRowCanBeAskedAbout(number, of)
@@ -5265,6 +5294,54 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             if (each.notAskable() && !each.unseen().isEmpty()) {
                 out.append("          · ").append(page.say(
                         new ReportMessage.NoRowCanBeAskedForTheOthers())).append(NEW_LINE);
+            }
+        }
+    }
+
+    /**
+     * Where code is written, as a clause of a line about it.
+     *
+     * <p>Chosen by what the citation says. A place the code is written at is "written at"; code
+     * that is written elsewhere than where this compile met it has a citation that names where it
+     * is and the call it was reached at, and "written at" before that reads the call as the place
+     * the code is.
+     */
+    static Message whereWritten(Citation at, Page page, SourceId declaredIn) {
+        String place = at.said(page.rendering(), declaredIn);
+        return at instanceof Citation.Elsewhere
+                ? new ReportMessage.InAPlace(place) : new ReportMessage.AtAPlace(place);
+    }
+
+    /**
+     * The catalog's phrase for one value of an enum, found under {@code kind.<family>.} by the
+     * value's name.
+     *
+     * <p>A phrase is one entry per value and no code, so a value that is added is a phrase to
+     * write and nothing else to touch; {@code EveryWordOfThePageHasAPhraseInEveryCatalogTest} holds
+     * each family to having one for every value.
+     */
+    static Localizable phrase(String family, Enum<?> value) {
+        return Localizable.of("kind." + family + "." + word(value).replace('_', '-'));
+    }
+
+    /**
+     * One line for each thing a partial measure went without, said in a sentence.
+     *
+     * <p>The words are the ones the document's {@code weakening} array carries, from the same
+     * derivation, so a behavior's page and its document name the same things. A weakening that is
+     * an observation gone missing is not said here: the page says it under the behavior it names,
+     * as the reason it carries ({@link PublishedIncompleteness}).
+     *
+     * <p>Said under whatever the weakening is of, which is what {@code indent} places it under: a
+     * line that is not under the heading of its own account reads as the last behavior's.
+     */
+    private static void wentWithout(StringBuilder out, String indent, WeakeningSet weakenedBy,
+                                    Page page) {
+        for (WeakeningVocabulary each : weakeningsSaid(weakenedBy).written()) {
+            if (each instanceof WeakeningVocabulary.AWordOfThisDocuments said) {
+                Message line = new ReportMessage.ThePartialMeasureWentWithout(
+                        phrase("weakening", said.word()));
+                out.append(indent).append("? ").append(page.say(line)).append(NEW_LINE);
             }
         }
     }
@@ -10229,6 +10306,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         ObjectNode out = into.putObject("interaction");
         measured(out.putObject("coverage"), meetings.made());
         out.put("groupsNotMeasured", meetings.asked().notMeasured().size());
+        if (!meetings.asked().notJoined().isEmpty()) {
+            ArrayNode unjoined = out.putArray("meetingsNotJoined");
+            for (UnjoinedMeeting each : meetings.asked().notJoined()) {
+                ObjectNode one = unjoined.addObject();
+                one.put("why", word(each.why()));
+                PublishedAt.of(each.at()).ifPresent(place -> at(one, place, sources));
+            }
+        }
         ArrayNode all = out.putArray("obligations");
         Optional<InteractionEvidence.RowsMeeting> met = meetings.made().made();
         if (met.isPresent()) {
@@ -11388,12 +11473,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * arrived at them. The page says them in the same order, so the two never differ.
      */
     private static List<String> weakeningWords(WeakeningSet weakenedBy) {
+        return weakeningsSaid(weakenedBy).written().stream().map(AdequacyReport::word).toList();
+    }
+
+    /** The same, as the vocabulary each word is written in, for a surface that says more than the
+     *  word. */
+    private static CanonicalSelection<WeakeningVocabulary> weakeningsSaid(
+            WeakeningSet weakenedBy) {
         List<WeakeningVocabulary> said = new ArrayList<>();
         for (Weakening each : weakenedBy.causes()) {
             said.add(vocabularyOf(each));
         }
-        return PublicationOrders.WEAKENING_WORDS.keep(said).written().stream()
-                .map(AdequacyReport::word).toList();
+        return PublicationOrders.WEAKENING_WORDS.keep(said);
     }
 
     /**

@@ -75,7 +75,7 @@ class AWayIsOneChoiceOfCaseWhateverOrderItsConditionsComeInTest {
         List<WayIn> answeredTurned =
                 turnedRound(read.answeredBy(), read.saidInPart(), turnedInPart);
         BodyInputReading turnedRoundReading = BodyInputReading.of(new CoverageRead.Read(
-                read.interactions(), read.notJoined(), read.arms(), turned, answeredTurned,
+                read.interactions(), read.unjoined(), read.arms(), turned, answeredTurned,
                 turnedInPart,
                 read.restOfTheBlock(), read.answersNothing(), read.piecesAttempted()),
                 subject, arrives);

@@ -45,8 +45,12 @@ class AChoiceOfBoundsOnOneNumberStopsItWhereBothLeaveItTest {
             List.of("border      borders 0   obligations 0/0", "declarations   borders 1");
     private static final List<String> NO_LINE =
             List.of("border      not applicable (the rules of this behavior draw no line)");
+    /** The behavior has no line, and the declarations, which went without one too, say so under a
+     *  heading that counts nothing: a count would be a claim that none was drawn, and none was
+     *  found. */
     private static final List<String> NOT_MEASURED =
-            List.of("border      not measured (no line was derived at any position)");
+            List.of("border      not measured (no line was derived at any position)",
+                    "declarations");
 
     /**
      * Two ordinary bounds on how long the string is, one under a choice.

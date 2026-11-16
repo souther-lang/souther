@@ -1,5 +1,7 @@
 package souther.compiler.diag.msg;
 
+import souther.compiler.diag.Localizable;
+
 /**
  * The lines of the examples report a person reads, and the parts of those lines.
  *
@@ -773,6 +775,19 @@ public sealed interface ReportMessage extends Message {
 
     record MeetingsNotWalked(int count) implements ReportMessage, Prose {}
 
+    /** How many meetings no combination of which is asked of the rows, beside the count of those
+     *  that are. */
+    record MeetingsNotJoined(int count) implements ReportMessage, Prose {}
+
+    /** One such meeting: where it is written, and why not, the reason being a phrase of the
+     *  catalog's {@code kind.not-joined} family. */
+    record TheMeetingIsNotJoined(int number, Message at, Localizable why)
+            implements ReportMessage, Prose {}
+
+    /** One thing a partial measure went without, a phrase of the catalog's
+     *  {@code kind.weakening} family. */
+    record ThePartialMeasureWentWithout(Localizable cause) implements ReportMessage, Prose {}
+
     record InteractionCombinations(String combinations) implements ReportMessage, Prose {}
 
     record InteractionCombinationsUncounted(int count, Message why)
@@ -833,6 +848,10 @@ public sealed interface ReportMessage extends Message {
     record OfASearch(String from, String through, Message at) implements ReportMessage, Prose {}
 
     record AtAPlace(String place) implements ReportMessage, Prose {}
+
+    /** The same for code written elsewhere than where it was reached, which the place says by the
+     *  name it is reached by and the call it was reached at. */
+    record InAPlace(String place) implements ReportMessage, Prose {}
 
     record OfASearchNoPlaceIsSaidOf() implements ReportMessage, Prose {}
 

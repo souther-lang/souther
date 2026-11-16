@@ -7638,6 +7638,9 @@
                 "no_row_came_back",
                 "the_rows_carry_no_account"
               ]
+            },
+            "weakening": {
+              "$ref": "#/$defs/weakening"
             }
           }
         },
@@ -7645,6 +7648,47 @@
           "type": "integer",
           "minimum": 0,
           "description": "How many groups of this body's decisions were wider than the measure walks. What they hold is combinations nobody counted, so a consumer reading the entries below as the whole of what the body has is told here that it is not."
+        },
+        "meetingsNotJoined": {
+          "type": "array",
+          "minItems": 1,
+          "description": "The meetings of this body's decisions that could not be joined to what a run records, so no combination of them is asked of the rows and the measure is partial by `meetings_not_joined`. One entry for each meeting, in the order the walk met them, which is the order the page numbers them from 1. Absent where there are none.",
+          "items": {
+            "type": "object",
+            "required": [
+              "why"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "why": {
+                "type": "string",
+                "enum": [
+                  "kept_by_several",
+                  "kept_by_another_kind",
+                  "kept_by_a_test_not_worked_out",
+                  "not_one_comparison",
+                  "a_value_choice_not_read",
+                  "a_value_choice_not_numbered",
+                  "a_comparison_of_cases",
+                  "a_number_no_input_holds",
+                  "no_run_is_recorded_at_it",
+                  "more_visits_than_are_recorded",
+                  "not_one_closure",
+                  "an_application_said_two_things",
+                  "not_one_comparison_that_runs",
+                  "more_elements_than_are_written_out",
+                  "the_meeting_is_in_code_run_again",
+                  "an_outcome_no_run_is_seen_taking",
+                  "an_operand_has_more_ways_than_are_read"
+                ],
+                "description": "Why the meeting could not be joined."
+              },
+              "at": {
+                "$ref": "#/$defs/at",
+                "description": "Where the meeting is written. Absent where no place can be said."
+              }
+            }
+          }
         },
         "obligations": {
           "type": "array",

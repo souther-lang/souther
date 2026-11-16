@@ -1,10 +1,10 @@
 package souther.compiler.reading;
 
 /**
- * Why a sum of the elements a comparison keeps could not be joined to the evaluations of that
- * comparison, and so was not asked of the rows.
+ * Why a meeting, most often a sum of the elements a comparison keeps, could not be joined to the
+ * evaluations of that comparison, and so was not asked of the rows.
  *
- * <p>The sum is a meeting all the same: it is made of decisions, and nothing here says it is not.
+ * <p>The meeting is one all the same: it is made of decisions, and nothing here says it is not.
  * What is missing is which evaluation a run records is which application's, and every reason below
  * is a way that was out of reach of this reading rather than a fact about what a sum means. A
  * measure that went without one of these says so ({@code Weakening.MeetingsNotJoined}), and does not
