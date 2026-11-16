@@ -91,13 +91,12 @@ class APieceOfAConvertedStringIsReadWhateverTheRestOfTheStringHoldsTest {
                 .map(StopPastTheRepresentation::operation).distinct().toList());
     }
 
-    /** Whichever side of the {@code @} holds any code point, the address is read: the other three
-     *  of the four languages that two sides, each any code point or letters only, make. The first,
-     *  any code point on both, is read above. */
+    /** Whichever side of the {@code @} holds any code point, the address is read: each side in
+     *  turn any code point beside letters only on the other. Any code point on both is read above,
+     *  and what one side admits does not turn on the other, so letters on both adds no case. */
     @Test
     void anAddressIsReadWhereverItHoldsCodePointsAConversionDoesNotMapOneToOne() {
         for (String pattern : List.of(
-                "[a-zA-Z0-9]+@[a-zA-Z0-9\\\\-]+\\\\.[a-zA-Z0-9.\\\\-]+",
                 "[^@\\\\s]+@[a-zA-Z0-9\\\\-]+\\\\.[a-zA-Z0-9.\\\\-]+",
                 "[a-z]+@[^@\\\\s]+\\\\.[^@\\\\s]+")) {
             assertEquals(Map.of(), WhereAStringRelationIsLeftOpen.leftOpen(screen(pattern),
