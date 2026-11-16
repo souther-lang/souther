@@ -28,9 +28,9 @@ class TwoSearchesThatStoppedAreOneAnswerOfWhatBothFoundTest {
 
     @Test
     void theFiguresEitherMetAreBothMet() {
-        Stopped first = new Stopped(met(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG),
+        SearchStops first = new SearchStops(met(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG),
                 List.of(), false, Set.of());
-        Stopped second = new Stopped(met(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT),
+        SearchStops second = new SearchStops(met(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT),
                 List.of(), false, Set.of());
 
         assertEquals(Set.of(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG,
@@ -42,8 +42,10 @@ class TwoSearchesThatStoppedAreOneAnswerOfWhatBothFoundTest {
 
     @Test
     void theBoundsEitherStoppedAtAreBothKept() {
-        Stopped first = new Stopped(SearchShortfall.NONE, List.of(READINGS), false, Set.of());
-        Stopped second = new Stopped(SearchShortfall.NONE, List.of(RUNS), false, Set.of());
+        SearchStops first = new SearchStops(SearchShortfall.NONE, List.of(READINGS), false,
+                Set.of());
+        SearchStops second = new SearchStops(SearchShortfall.NONE, List.of(RUNS), false,
+                Set.of());
 
         assertEquals(Figure.inOrder(List.of(READINGS, RUNS)), first.and(second).boundsReached());
         assertEquals(first.and(second).boundsReached(), second.and(first).boundsReached());
@@ -51,8 +53,8 @@ class TwoSearchesThatStoppedAreOneAnswerOfWhatBothFoundTest {
 
     @Test
     void aRunNothingWatchedInEitherIsOne() {
-        Stopped watched = new Stopped(SearchShortfall.NONE, List.of(), false, Set.of());
-        Stopped unwatched = new Stopped(SearchShortfall.NONE, List.of(), true, Set.of());
+        SearchStops watched = new SearchStops(SearchShortfall.NONE, List.of(), false, Set.of());
+        SearchStops unwatched = new SearchStops(SearchShortfall.NONE, List.of(), true, Set.of());
 
         assertTrue(watched.and(unwatched).metARunNothingWatched());
         assertTrue(unwatched.and(watched).metARunNothingWatched());
@@ -61,9 +63,9 @@ class TwoSearchesThatStoppedAreOneAnswerOfWhatBothFoundTest {
 
     @Test
     void thePlanEitherWasCutShortIsCutShort() {
-        Stopped first = new Stopped(SearchShortfall.NONE, List.of(), false,
+        SearchStops first = new SearchStops(SearchShortfall.NONE, List.of(), false,
                 Set.of(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG));
-        Stopped second = new Stopped(SearchShortfall.NONE, List.of(), false, Set.of());
+        SearchStops second = new SearchStops(SearchShortfall.NONE, List.of(), false, Set.of());
 
         assertEquals(Set.of(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG),
                 first.and(second).planCut());
@@ -75,12 +77,12 @@ class TwoSearchesThatStoppedAreOneAnswerOfWhatBothFoundTest {
      *  other. */
     @Test
     void aFigureMetAndAFigureCutFromThePlanStayApart() {
-        Stopped met = new Stopped(met(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT),
+        SearchStops met = new SearchStops(met(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT),
                 List.of(), false, Set.of());
-        Stopped cut = new Stopped(SearchShortfall.NONE, List.of(), false,
+        SearchStops cut = new SearchStops(SearchShortfall.NONE, List.of(), false,
                 Set.of(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG));
 
-        Stopped both = met.and(cut);
+        SearchStops both = met.and(cut);
 
         assertEquals(List.of(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT),
                 List.copyOf(both.found().met().figures()));

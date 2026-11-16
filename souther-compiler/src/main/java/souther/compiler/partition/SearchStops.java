@@ -21,22 +21,22 @@ import java.util.Set;
  *                               did
  * @param planCut                the figures that cut short the plan any of them ran over
  */
-record Stopped(SearchShortfall found, List<Figure> boundsReached, boolean metARunNothingWatched,
-               Set<CompositionBudget> planCut) {
+record SearchStops(SearchShortfall found, List<Figure> boundsReached, boolean metARunNothingWatched,
+                   Set<CompositionBudget> planCut) {
 
-    Stopped {
+    SearchStops {
         boundsReached = Figure.inOrder(boundsReached);
         planCut = InDeclaredOrder.of(planCut);
     }
 
     /** What two searches stopped by, together. */
-    Stopped and(Stopped other) {
+    SearchStops and(SearchStops other) {
         List<Figure> bounds = new ArrayList<>(boundsReached);
         bounds.addAll(other.boundsReached());
         Set<CompositionBudget> cut = EnumSet.noneOf(CompositionBudget.class);
         cut.addAll(planCut);
         cut.addAll(other.planCut());
-        return new Stopped(found.and(other.found()), bounds,
+        return new SearchStops(found.and(other.found()), bounds,
                 metARunNothingWatched || other.metARunNothingWatched(), cut);
     }
 }
