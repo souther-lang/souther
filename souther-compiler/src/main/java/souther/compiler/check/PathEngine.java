@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.numeric.ClosedStates;
-import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.OrderedIntervals;
 import souther.compiler.numeric.Rel;
@@ -801,9 +800,6 @@ final class PathEngine {
         return out;
     }
 
-    /** The most elements a closure is tried against: a bound above it is not looked for. */
-    private static final int MOST_A_CLOSURE_IS_TRIED_FOR = 4;
-
     /**
      * The most elements {@code answer}, the list {@code closure} answers, holds for every value of
      * the type of its parameter ({@link AnswersForEveryArgument}).
@@ -827,16 +823,8 @@ final class PathEngine {
             return OptionalLong.empty();
         }
         List<NumericConstraint> carried = terms.carriedBy(List.of(size));
-        Known knowing = carrying(entered.known(), carried);
-        for (int most = 0; most <= MOST_A_CLOSURE_IS_TRIED_FOR; most++) {
-            NumericConstraint owed = new NumericConstraint(
-                    LinearForm.atomMinusConstant(size, ExactRatio.of(most)), Rel.LE);
-            if (knowing.numbers().entails(owed.form(), Rel.LE)
-                    || predicates.entailedInEveryCase(owed, knowing, carried)) {
-                return OptionalLong.of(most);
-            }
-        }
-        return OptionalLong.empty();
+        return predicates.mostOf(LinearForm.atom(size), carrying(entered.known(), carried),
+                carried);
     }
 
     /**

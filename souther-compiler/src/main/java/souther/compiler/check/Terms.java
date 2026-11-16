@@ -1307,11 +1307,8 @@ final class Terms {
      *  an add writes out no list, what {@code closure} answers for every argument. */
     private OptionalLong mostAdded(Core step, Core.Block closure, Denotations at) {
         return switch (Core.withoutStanding(step)) {
-            case Core.Call add when add.fn() == Core.Emitted.GROW_LIST -> {
-                OptionalLong written = mostWrittenCount(add.args().get(1), at);
-                yield written.isPresent() ? written
-                        : closureAnswers.mostOf(add.args().get(1), closure, at);
-            }
+            case Core.Call add when add.fn() == Core.Emitted.GROW_LIST ->
+                    mostHeldBy(add.args().get(1), closure, at);
             case Core.If choice -> larger(mostAdded(choice.then(), closure, at),
                     mostAdded(choice.els(), closure, at));
             case Core.IfConstructed choice -> {
@@ -1334,10 +1331,47 @@ final class Terms {
         };
     }
 
+    /** The bound of two alternatives, which holds of either: the larger, and none where either has
+     *  none. Not for two proofs of one bound ({@link #least}). */
     private static OptionalLong larger(OptionalLong one, OptionalLong other) {
         return one.isPresent() && other.isPresent()
                 ? OptionalLong.of(Math.max(one.getAsLong(), other.getAsLong()))
                 : OptionalLong.empty();
+    }
+
+    /**
+     * The bound two independent proofs of the same bound come to together: each holds, so the
+     * smaller does, and the one that shows a bound where the other shows none is the bound.
+     *
+     * <p>The opposite of {@link #larger}, which joins alternatives and so needs both. A reader that
+     * takes whichever proof answered first leaves the other's bound unused wherever it is the
+     * smaller.
+     */
+    static OptionalLong least(OptionalLong one, OptionalLong other) {
+        if (one.isEmpty()) {
+            return other;
+        }
+        return other.isEmpty() ? one : OptionalLong.of(Math.min(one.getAsLong(), other.getAsLong()));
+    }
+
+    /**
+     * The most elements the list {@code answer} holds, the least of what each reading of it shows:
+     * the elements it is written out with ({@link ElementsWrittenOut}), what its term says of its
+     * choices ({@link #mostWritten}), and what the type of the parameter of {@code closure} leaves
+     * it for every argument ({@link AnswersForEveryArgument}).
+     *
+     * <p>The last is the dearest, and is asked only where the others leave more than one: what a
+     * bound of one or none can still gain from it is to be none, which a walk over the list does
+     * not ask.
+     */
+    private OptionalLong mostHeldBy(Core answer, Core.Block closure, Denotations at) {
+        Term written = bodyKey(answer, at);
+        OptionalLong most = least(mostWrittenCount(answer, at),
+                written == null ? OptionalLong.empty() : mostWritten(written));
+        if (most.isPresent() && most.getAsLong() <= 1) {
+            return most;
+        }
+        return least(most, closureAnswers.mostOf(answer, closure, at));
     }
 
     /** Whether {@code e} adds to the list a walk grows, outside any walk inside it. */

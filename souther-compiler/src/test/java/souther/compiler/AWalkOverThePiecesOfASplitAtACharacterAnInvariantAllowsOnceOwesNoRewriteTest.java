@@ -238,6 +238,40 @@ class AWalkOverThePiecesOfASplitAtACharacterAnInvariantAllowsOnceOwesNoRewriteTe
                 """)));
     }
 
+    /** Two arms that write one element each answer one at most, not the two written. */
+    @Test
+    void aClosureWhoseTwoBranchesWriteOneEachIsAWalkOverOneAtMost() {
+        assertEquals(List.of(), walkRewritesOwed(measured("""
+                module repro.branches
+                behavior sizes : (x: Int) -> List<Int>
+                let sizes (x) =
+                    List.map(y -> y + 1,
+                             List.flatMap(e -> if e > 0 then [ e ] else [ 0 ], [ x ]))
+
+                example sizes
+                    | "one" : (1) -> [ 2 ]
+                """)));
+    }
+
+    /** What a guard says where the closure is applied is the application's, not the closure's: the
+     *  same closure applied elsewhere is not held to it. */
+    @Test
+    void aClosureThatAnswersOneOnlyWhereAGuardHoldsIsNotAWalkOverOneAtMost() {
+        assertEquals(List.of("fold_after_one_step", "fold_from_the_seed"),
+                walkRewritesOwed(measured("""
+                        module repro.guarded
+                        behavior sizes : (x: Int, b: Int) -> List<Int>
+                        let sizes (x, b) =
+                            if b > 0
+                            then List.map(y -> y + 1,
+                                          List.flatMap(e -> if b > 0 then [ e ] else [ e, e ], [ x ]))
+                            else []
+
+                        example sizes
+                            | "one" : (1, 1) -> [ 2 ]
+                        """)));
+    }
+
     @Test
     void aMatchOneOfWhoseArmsHoldSeveralIsNotAWalkOverOneAtMost() {
         assertEquals(List.of("fold_after_one_step", "fold_from_the_seed"),

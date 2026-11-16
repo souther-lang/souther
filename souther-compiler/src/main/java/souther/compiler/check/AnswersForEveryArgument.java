@@ -12,6 +12,11 @@ import java.util.OptionalLong;
  * off the path that applies the closure would be a fact of that application, and a reader asking it
  * of another application would be handed it.
  *
+ * <p>An answer is worked out of the typed closure each time and kept under no key the closure's
+ * term makes, which does not hold the type of its parameter: two closures of one body over
+ * parameters of two types share a term and not a bound. What an answer would be kept under has to
+ * name the types.
+ *
  * <p>Asked of the engine a reading is made for, which is the one that knows what a type guarantees
  * of a value entered as a parameter. Everything else asks {@link #NONE}, which bounds nothing.
  */
