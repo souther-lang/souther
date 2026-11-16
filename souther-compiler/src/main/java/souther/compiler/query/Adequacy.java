@@ -7509,18 +7509,31 @@ public final class Adequacy {
         private static HeldOutcome.Of heldBy(MeasuredInput subject,
                                              List<BorderAssessment> edges,
                                              ReachingCuts reaching) {
-            Map<ControlPlace, HeldOutcome.Bringing> found = new LinkedHashMap<>();
             MeasuredInput.Lines drawn = subject.lines();
-            return place -> found.computeIfAbsent(place, asked -> switch (asked) {
+            Map<ControlPlace, HeldOutcome.Bringing> atAPoint = new LinkedHashMap<>();
+            Map<ControlPlace, HeldOutcome.Bringing> onTheSide = new LinkedHashMap<>();
+            return new HeldOutcome.Of(
+                    place -> atAPoint.computeIfAbsent(place, asked ->
+                            held(subject, drawn, edges, reaching, asked, true)),
+                    place -> onTheSide.computeIfAbsent(place, asked ->
+                            held(subject, drawn, edges, reaching, asked, false)));
+        }
+
+        /** What holds a run at {@code place}, at a point of a border or on the side it is on. */
+        private static HeldOutcome.Bringing held(MeasuredInput subject, MeasuredInput.Lines drawn,
+                                                 List<BorderAssessment> edges,
+                                                 ReachingCuts reaching, ControlPlace place,
+                                                 boolean atAPoint) {
+            return switch (place) {
                 case ControlPlace.Outcome outcome ->
-                        holding(subject, drawn, edges, reaching, outcome);
+                        holding(subject, drawn, edges, reaching, outcome, atAPoint);
                 // An arm a run is seen taking where its fork's condition is a truth nothing else
                 // records: what that truth coming out the way the arm is taken on asks of a row.
                 case ControlPlace.Arm arm -> ModelOccurrence.statedAt(arm.arm().fork())
                         .map(fork -> reaching.heldAtTheArm(fork, arm.arm().part(),
                                 subject.quantities().region()))
                         .orElseGet(HeldOutcome.Bringing.NothingFound::new);
-            });
+            };
         }
 
         /**
@@ -7530,13 +7543,15 @@ public final class Adequacy {
          * {@link PointRole#ON} or {@link PointRole#IN} is one the comparison holds at, and one in
          * {@link PointRole#OFF} or {@link PointRole#OUT} one it fails at. For a truth, and for a
          * comparison no border offers such a point for, what it coming out that way asks of a row
-         * ({@link ReachingCuts#heldAt}).
+         * ({@link ReachingCuts#heldAt}), which is also what a comparison is held to where
+         * {@code atAPoint} is not asked: the side it comes out on and no point of it.
          */
         private static HeldOutcome.Bringing holding(MeasuredInput subject,
                                                     MeasuredInput.Lines drawn,
                                                     List<BorderAssessment> edges,
                                                     ReachingCuts reaching,
-                                                    ControlPlace.Outcome outcome) {
+                                                    ControlPlace.Outcome outcome,
+                                                    boolean atAPoint) {
             for (BorderAssessment edge : edges) {
                 // Only a line whose sides are which way the comparison comes out. A line of a
                 // statement of several is not: the other relations may settle the statement on
@@ -7559,7 +7574,8 @@ public final class Adequacy {
                         instanceof souther.compiler.partition.Reachability.Reaching able)) {
                     return new HeldOutcome.Bringing.NoValueCanStandThere();
                 }
-                List<PointRole> onThatSide = outcome.held()
+                List<PointRole> onThatSide = !atAPoint ? List.of()
+                        : outcome.held()
                         ? List.of(PointRole.ON, PointRole.IN)
                         : List.of(PointRole.OFF, PointRole.OUT);
                 for (PointRole wanted : onThatSide) {
@@ -9529,16 +9545,33 @@ public final class Adequacy {
     }
 
     /**
-     * Which of the combinations no row made, and the classes of the input do not say exist, a run
-     * was seen making on a row the search composed.
+     * What a search for a row made of the combinations no row made and the classes of the input do
+     * not say exist: which a run was seen making on a row the search composed, and which have no
+     * row because the rules of their decisions leave no value.
      *
      * <p>Asked on the measure's behalf, as a rewrite no row tells apart is ({@link Replacements}):
      * what is found here decides whether a combination is owed a row at all, so nothing the
-     * generation may spend stops it. A combination missing from the answer was not shown to exist,
-     * which says what this compiler composed and nothing about whether an input is there.
+     * generation may spend stops it. A combination in neither was not shown to exist, which says
+     * what this compiler composed and nothing about whether an input is there.
      */
-    public record MeetingsShownToExist(String name, String behavior)
-            implements Key<Set<ObligationIdentity.OfACombinationOfDecisions>> {
+    public record MeetingsSearchedFor(String name, String behavior)
+            implements Key<MeetingsSearchedFor.WhatTheSearchSaid> {
+
+        /**
+         * @param exist a row the search composed was seen making each of these
+         * @param none  the rules of the decisions leave no value for each of these, which is
+         *              the model's answer and holds of every row
+         */
+        public record WhatTheSearchSaid(Set<ObligationIdentity.OfACombinationOfDecisions> exist,
+                                        Set<ObligationIdentity.OfACombinationOfDecisions> none) {
+
+            static final WhatTheSearchSaid NOTHING = new WhatTheSearchSaid(Set.of(), Set.of());
+
+            public WhatTheSearchSaid {
+                exist = Collections.unmodifiableSet(new LinkedHashSet<>(exist));
+                none = Collections.unmodifiableSet(new LinkedHashSet<>(none));
+            }
+        }
 
         @Override
         public String module() {
@@ -9546,7 +9579,7 @@ public final class Adequacy {
         }
 
         @Override
-        public Answer<Set<ObligationIdentity.OfACombinationOfDecisions>> compute(Db db) {
+        public Answer<WhatTheSearchSaid> compute(Db db) {
             Map<String, InteractionEvidence> all = db.ask(new Interacts(name)).value();
             InteractionEvidence evidence = all == null ? null : all.get(behavior);
             if (evidence == null) {
@@ -9555,7 +9588,7 @@ public final class Adequacy {
             List<ObligationIdentity.OfACombinationOfDecisions> unshown =
                     evidence.notStatedToExist();
             if (unshown.isEmpty()) {
-                return Answer.of(Set.of());
+                return Answer.of(WhatTheSearchSaid.NOTHING);
             }
             Generated.Environment here = Generated.Environment.of(db, name, behavior);
             if (here == null) {
@@ -9563,13 +9596,19 @@ public final class Adequacy {
             }
             FillResult composed = here.searchedFor(GenerationPlan.of(here.subject(), List.of(),
                     List.of(), List.of(), unshown));
-            Set<ObligationIdentity.OfACombinationOfDecisions> out = new LinkedHashSet<>();
+            Set<ObligationIdentity.OfACombinationOfDecisions> exist = new LinkedHashSet<>();
+            Set<ObligationIdentity.OfACombinationOfDecisions> none = new LinkedHashSet<>();
             for (ObligationIdentity.OfACombinationOfDecisions each : unshown) {
-                if (composed.discharge().at(each) instanceof ClassDisposition.Built) {
-                    out.add(each);
+                switch (composed.discharge().at(each)) {
+                    case ClassDisposition.Built _ -> exist.add(each);
+                    case ClassDisposition.Unresolved unresolved -> {
+                        if (unresolved.why().reason().provesInfeasible()) {
+                            none.add(each);
+                        }
+                    }
                 }
             }
-            return Answer.of(Collections.unmodifiableSet(out));
+            return Answer.of(new WhatTheSearchSaid(exist, none));
         }
     }
 
@@ -9659,11 +9698,12 @@ public final class Adequacy {
                 if (branch != null && branch.measured().made().isPresent()) {
                     out.addAll(armFindings(behavior.name(), branch.arms()));
                 }
-                Set<ObligationIdentity.OfACombinationOfDecisions> shownToExist =
-                        db.ask(new MeetingsShownToExist(name, behavior.name())).value();
+                MeetingsSearchedFor.WhatTheSearchSaid searched =
+                        db.ask(new MeetingsSearchedFor(name, behavior.name())).value();
                 combinationFindings(behavior.name(), CombinationCriterion.of(
                         meetings == null ? null : meetings.get(behavior.name()), divided),
-                        shownToExist == null ? Set.of() : shownToExist, answersNothing, out);
+                        searched == null ? MeetingsSearchedFor.WhatTheSearchSaid.NOTHING : searched,
+                        answersNothing, out);
                 ReplacementEvidence rewrites =
                         replacements == null ? null : replacements.get(behavior.name());
                 if (rewrites != null) {
@@ -9712,8 +9752,7 @@ public final class Adequacy {
          */
         private static void combinationFindings(String behavior,
                                                 CombinationCriterion criterion,
-                                                Set<ObligationIdentity.OfACombinationOfDecisions>
-                                                        shownToExist,
+                                                MeetingsSearchedFor.WhatTheSearchSaid searched,
                                                 WhereNothingIsAnswered answersNothing,
                                                 List<Finding> out) {
             // Under the criterion the behavior is held to, which the one choice says for every
@@ -9727,13 +9766,17 @@ public final class Adequacy {
                     }
                     for (ObligationIdentity.OfACombinationOfDecisions each
                             : meetings.notMadeByRows()) {
+                        // The model leaves nothing to write a row for: counted, and nobody's work.
+                        if (searched.none().contains(each)) {
+                            continue;
+                        }
                         // What this meeting's own reading went without, and not what the measure
                         // did. A group the walk would not take leaves the meetings it could have
                         // stated undecided and says nothing about the rest — held to the measure,
                         // a gap the rows established would be undecided because something else
                         // went unwalked.
                         out.add(Finding.by(new FindingSubject.OfABehavior(each.behavior()),
-                                meetings.at(each, shownToExist),
+                                meetings.at(each, searched.exist()),
                                 new About.ACombinationNoRowMakes(each)));
                     }
                 }

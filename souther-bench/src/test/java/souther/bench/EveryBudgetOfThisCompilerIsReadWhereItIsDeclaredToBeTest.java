@@ -475,7 +475,8 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " the first were more than the ones the guard's ways share, was cut"
                             + " short under the figure, beside the row that goes out"),
             Map.entry("souther.compiler.partition.Generator$GoingOn#holdingTogether("
-                            + "Ljava/util/List;Ljava/util/function/Predicate;)"
+                            + "Ljava/util/List;Ljava/util/function/Predicate;"
+                            + "Lsouther/compiler/inputs/SearchRegion;)"
                             + "Lsouther/compiler/partition/Generator$GoingOn$WayPastTheGuard;",
                     "holds the parts of a way, a way past a guard or the decisions of a"
                             + " combination, to no more of the ways they can be held along than"

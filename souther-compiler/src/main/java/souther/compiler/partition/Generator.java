@@ -2224,8 +2224,16 @@ public final class Generator {
                 // numbers are what a row is composed to meet: they are in no class, so no cell
                 // says where such a row is.
                 if (tried instanceof Witness.Exhausted || tried instanceof Witness.Limited) {
-                    searches.addAll(heldToTheDecisions(tried, axes, at, check, trial, purpose,
-                            holding, origins, references, answers));
+                    List<Witness> held = heldToTheDecisions(tried, axes, at, check, trial,
+                            purpose, holding, origins, references, answers);
+                    // The decisions leaving no value is what is asked of every row making the
+                    // combination, so it is the answer for this cell and what the searches that
+                    // came before it did not finish says nothing more.
+                    if (held.stream().anyMatch(Witness.NoCombination.class::isInstance)) {
+                        searches = held;
+                    } else {
+                        searches.addAll(held);
+                    }
                 }
                 for (Witness each : searches) {
                     switch (each) {
@@ -4356,7 +4364,8 @@ public final class Generator {
                                     : new RepairShortfall.AtTheGuard.NoWayGoesPast()));
                 }
                 ArmProbe goneOn = rest.get().arm();
-                List<WayPastTheGuard> ways = waysOn(seen, written, against);
+                List<WayPastTheGuard> ways = waysOn(seen, written, against,
+                        axes.subject().quantities().region());
                 RepairShortfall.WayPast[] came = new RepairShortfall.WayPast[ways.size()];
                 // Two choices that ask the row for the same things are one search, whichever ways
                 // they are choices of, and what it came to is what both of them came to.
@@ -4622,10 +4631,10 @@ public final class Generator {
          */
         private List<WayPastTheGuard> waysOn(AlignedObservation seen,
                                              List<List<ControlClaim>> written,
-                                             Set<String> against) {
+                                             Set<String> against, SearchRegion declarations) {
             List<WayPastTheGuard> out = new ArrayList<>();
             for (List<ControlClaim> way : written) {
-                out.add(wayOn(seen, way, against));
+                out.add(wayOn(seen, way, against, declarations));
             }
             return out;
         }
@@ -4638,7 +4647,7 @@ public final class Generator {
          * row to, which would send an author looking for a row nobody can write.
          */
         private WayPastTheGuard wayOn(AlignedObservation seen, List<ControlClaim> way,
-                                      Set<String> against) {
+                                      Set<String> against, SearchRegion declarations) {
             List<HeldOutcome.Bringing> each = new ArrayList<>();
             for (ControlClaim part : way) {
                 if (!part.satisfiedBy(seen)) {
@@ -4651,7 +4660,7 @@ public final class Generator {
             }
             // A way that would write a stated value afresh is left, and the rest are what holds
             // the part.
-            return holdingTogether(each, one -> !writesAnyOf(one, against));
+            return holdingTogether(each, one -> !writesAnyOf(one, against), declarations);
         }
 
         /**
@@ -4662,7 +4671,8 @@ public final class Generator {
          * and the figure is handed on with them, which says they were cut short there.
          */
         private static WayPastTheGuard holdingTogether(List<HeldOutcome.Bringing> each,
-                                                       Predicate<HeldOutcome> kept) {
+                                                       Predicate<HeldOutcome> kept,
+                                                       SearchRegion declarations) {
             PartsHeld together = partsHeld(each, kept);
             if (together.noRowGoes()) {
                 return WayPastTheGuard.Unheld.because(
@@ -4673,7 +4683,17 @@ public final class Generator {
             }
             Set<CompositionBudget> cutShort = EnumSet.noneOf(CompositionBudget.class);
             cutShort.addAll(together.cutShort());
-            OneOfEach.Taken<HeldOutcome> choices = OneOfEach.ofEachPart(together.parts(),
+            // Only the ways that leave a value beside the other parts are looked along; where a
+            // part has none left and every way it had was looked at, no row goes that way.
+            List<List<HeldOutcome>> parts =
+                    WaysThatLeaveAValueBesideTheRest.of(together.parts(), declarations);
+            if (parts.stream().anyMatch(List::isEmpty)) {
+                return cutShort.isEmpty()
+                        ? WayPastTheGuard.Unheld.because(
+                                RepairShortfall.Barrier.NO_VALUE_CAN_GO_THAT_WAY)
+                        : new WayPastTheGuard.Unheld(Set.of(), cutShort);
+            }
+            OneOfEach.Taken<HeldOutcome> choices = OneOfEach.ofEachPart(parts,
                     CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum());
             if (!choices.everyWay()) {
                 cutShort.add(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG);
@@ -11323,9 +11343,14 @@ public final class Generator {
      *
      * <p>Each is another way to a row for the same combination, so none of them stands for the
      * rest and what they come to is said over all of them ({@link WaysOfAMeeting}). {@code tried}
-     * is what the search before them came to: a way no row takes, or one this compiler has no
-     * demand to hold a row to, says nothing of whether the combination is made. A row is only ever
-     * taken by a run seen making the combination, as everywhere else.
+     * is what the search before them came to. A row is only ever taken by a run seen making the
+     * combination, as everywhere else.
+     *
+     * <p>What the decisions ask is asked of every row making the combination, on the side each
+     * comes out on and at no point of it ({@link HeldOutcome.Of#onTheSideAt}). So where no value
+     * stands on a side, or no way of holding the decisions together leaves a value beside the
+     * others, there is no such row: the answer is that the model has no such combination, which is
+     * what a decision this compiler has no demand for cannot take away, since it only asks less.
      *
      * <p>A figure that cut the looking short is a search of its own that stopped: ways of holding
      * the decisions that were left unlooked at may be the ones that make the combination, so it is
@@ -11343,14 +11368,14 @@ public final class Generator {
                                                     List<StoodInAnswer> answers) {
         List<HeldOutcome.Bringing> each = new ArrayList<>();
         for (ControlClaim claim : selection.claims()) {
-            each.add(holding.at(claim.at()));
+            each.add(holding.onTheSideAt(claim.at()));
         }
         // Held to what can be read of the decisions, and the rest left to the classes and the run
-        // ({@link ReadableDemands}). No value on a side a decision comes out on says nothing more
-        // than what was already found.
+        // ({@link ReadableDemands}). What the decisions that can be read ask is asked of every row
+        // making the combination, so where they leave no value there is no such row.
         ReadableDemands asked = ReadableDemands.of(each);
         if (asked.impossible()) {
-            return List.of();
+            return List.of(noValueHoldsThem());
         }
         Set<CompositionBudget> cutShort = EnumSet.noneOf(CompositionBudget.class);
         cutShort.addAll(asked.cutShort());
@@ -11359,11 +11384,17 @@ public final class Generator {
                     SearchShortfall.NONE, List.of(), false, cutShort));
         }
         List<Witness> attempts = new ArrayList<>();
-        switch (GoingOn.holdingTogether(asked.readable(), _ -> true)) {
-            // Nothing here holds a row to them. A figure that left a part unlooked at is what the
-            // answer says; a reason alone is this compiler having no demand, which is no more
-            // than what was already found.
-            case GoingOn.WayPastTheGuard.Unheld(var _, var figures) -> cutShort.addAll(figures);
+        switch (GoingOn.holdingTogether(asked.readable(), _ -> true,
+                axes.subject().quantities().region())) {
+            // Nothing here holds a row to them. That no value goes that way is what the answer
+            // says; a figure that left a part unlooked at is the figure, and any other reason is
+            // this compiler having no demand, which is no more than what was already found.
+            case GoingOn.WayPastTheGuard.Unheld(var why, var figures) -> {
+                if (why.contains(RepairShortfall.Barrier.NO_VALUE_CAN_GO_THAT_WAY)) {
+                    return List.of(noValueHoldsThem());
+                }
+                cutShort.addAll(figures);
+            }
             case GoingOn.WayPastTheGuard.Holding ways -> {
                 cutShort.addAll(ways.cutShort());
                 List<Purpose> composedFor = new ArrayList<>(claimed(selection).stream()
@@ -11390,6 +11421,11 @@ public final class Generator {
                     false, cutShort));
         }
         return attempts;
+    }
+
+    /** What the decisions of a combination ask, together, of the input: nothing there is. */
+    private static Witness noValueHoldsThem() {
+        return new Witness.NoCombination(new SearchMessage.ThePositionsAreNotInOneValue());
     }
 
     /** The classes a search that came to nothing looked at. */
