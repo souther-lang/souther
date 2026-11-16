@@ -7599,11 +7599,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /** How the values of {@code carrier} are spaced, or null where they are no numbers a
      *  relation's settling values are worked out over. */
     private static Granularity granularityOf(Carrier carrier) {
-        return switch (carrier) {
-            case Carrier.Whole _ -> Granularity.DISCRETE;
-            case Carrier.Dense _ -> Granularity.DENSE;
-            case null, default -> null;
-        };
+        return carrier == null ? null : carrier.spacingBetweenValues();
     }
 
     /** The greatest whole number {@code carrier} holds, or null where it holds no greatest or none
@@ -8058,13 +8054,46 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     : holds.meet(new NumericDomain.Bounds(
                             Endpoint.inclusive(Count.of(new BigDecimal(leastTotal))), null));
             WhatARelationLeavesUndivided.Term<FilingCoordinate> term =
-                    new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(), lies,
+                    new WhatARelationLeavesUndivided.Term<>(each.madeOf(), each.weight(),
+                            endsAreTheRepresentations(each.number())
+                                    ? withoutTheEndsOf(lies, runsTo) : lies,
                             withinTheEnds(realizes, runsTo), takes,
                             each.number() instanceof NumericTerm.ValueOf,
                             spacingOf(carriers.get(i)), runsTo, each.key());
             terms.add(stepped == null ? term : term.takingEvery(stepped));
         }
         return terms;
+    }
+
+    /**
+     * Whether the ends the region leaves {@code number} are those of the representation: the
+     * whole units a count of seconds comes to, and a number taken by an operation that declares
+     * its ends are where what it is read out of stops. What the model keeps such a number to is
+     * not them, so it is held without them ({@link #withoutTheEndsOf}).
+     */
+    private static boolean endsAreTheRepresentations(NumericTerm number) {
+        return switch (number) {
+            case NumericTerm.WholeUnitsOf _ -> true;
+            case NumericTerm.TakenOf taken -> DefaultBoundOperationFacts.get()
+                    .endsAreWhereTheRepresentationStops(taken.operation());
+            case null, default -> false;
+        };
+    }
+
+    /**
+     * {@code run} without an end that is where the order ends. What a term lies between is what the
+     * model keeps it to, and the order's end is no model's: a line a relation draws only there is
+     * the type's and not the model's
+     * ({@link WhatARelationLeavesUndivided.Leaves.Settled#ofTheTypeAlone}).
+     */
+    private static NumericDomain.Bounds withoutTheEndsOf(NumericDomain.Bounds run,
+                                                         NumericDomain.Bounds order) {
+        if (run == null || order == null) {
+            return run;
+        }
+        return new NumericDomain.Bounds(
+                run.min() != null && run.min().equals(order.min()) ? null : run.min(),
+                run.max() != null && run.max().equals(order.max()) ? null : run.max());
     }
 
     /**

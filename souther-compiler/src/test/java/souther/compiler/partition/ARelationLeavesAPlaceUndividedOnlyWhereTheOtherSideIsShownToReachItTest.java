@@ -2438,14 +2438,15 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * they stand, and only how far apart they are settles it. A date and a count of days are not
      * moved together: a count past the days from the first date to the last or short of those to
      * the first settles the comparison, which is where the dates stop and no line the model
-     * draws, so the count is read; the days to a date past which no count runs are not shown.
+     * draws, so the count is read; every date has a count either side of its days from the
+     * first, so the date is related to the count and no date is parted.
      */
     @Test
     void twoValuesADayApartRelateEachOther() {
         assertEquals(Map.of("a", RELATES, "b", RELATES),
                 left("a: Date, b: Date", "data Unused = Int", "Date.daysBetween(a, b) == 1",
                         "4:39"));
-        assertEquals(Map.of("a", NOT_SHOWN, "n", RELATES),
+        assertEquals(Map.of("a", RELATES, "n", RELATES),
                 left("a: Date, n: Int", "data Unused = Int",
                         "Date.daysBetween(Date(\"2026-01-01\"), a) <= n", "4:56"));
     }
@@ -2532,14 +2533,15 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
-     * No two dates are ten trillion days apart, so the comparison holds for none of them; and
-     * four hundred billion days apart are only dates nearer the two ends than the middle is.
-     * Three hundred billion days leave the middle date partners either side.
+     * No two dates are ten trillion days apart, so the comparison holds for none of them, and
+     * every date has a row at it: they are related and nothing parts them. The same holds past
+     * four hundred billion days. Three hundred billion days leave the middle date partners
+     * either side.
      */
     @Test
     void aDifferenceHasToBeOneTheMiddleOfTheTypeReachesBothWays() {
         for (String apart : List.of("10000000000000", "400000000000")) {
-            assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
+            assertEquals(Map.of("a", RELATES, "b", RELATES),
                     left("a: Date, b: Date", "data Unused = Int",
                             "Date.daysBetween(a, b) > " + apart, "4:39"), apart);
         }
@@ -2628,7 +2630,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("a", RELATES, "b", RELATES),
                 left("a: Date, b: Date", "data Unused = Int",
                         "if " + apart + " >= 0 then " + apart + " <= 14 else false", "4:75"));
-        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
+        assertEquals(Map.of("a", RELATES),
                 left("a: Date, b: Date", "data Unused = Int",
                         "if a >= Date(\"2020-01-01\") then " + apart + " <= 14 else false",
                         "4:71"));
@@ -3269,7 +3271,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("level", RELATES, "cap", RELATES),
                 left("level: Level, cap: Level", declarations,
                         "if level >= Low then level == cap else false", "4:49"));
-        assertEquals(Map.of("level", RELATES, "cap", NOT_SHOWN),
+        assertEquals(Map.of("level", RELATES),
                 left("level: Level, cap: Level", declarations,
                         "if level >= Mid then level == cap else false", "4:49"));
     }

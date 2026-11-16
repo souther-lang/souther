@@ -41,6 +41,15 @@ class AnArmOfAChoiceIsReadOverWhatItsOwnRunWorksOutTest {
         assertFalse(human.contains(NOT_SHOWN), human);
     }
 
+    /** Dates are spaced a day apart, so the same arm is read over them as over whole numbers. */
+    @Test
+    void anAdditionOnAnArmLeavesNoValueOfTheOtherSideUnreadOverDate() {
+        String human = comparison("h: Date, d: Date, s: Date",
+                "(h, d, s) -> (if d >= h then Date.addDays(1, d) else d) >= s");
+
+        assertFalse(human.contains(NOT_SHOWN), human);
+    }
+
     /** The same where the way is a membership, which states nothing of the numbers. */
     @Test
     void anAdditionOnAnArmPastAMembershipLeavesNoValueUnreadOverInt() {

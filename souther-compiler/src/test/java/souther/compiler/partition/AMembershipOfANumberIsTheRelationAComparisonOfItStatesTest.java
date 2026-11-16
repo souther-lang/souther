@@ -145,14 +145,22 @@ class AMembershipOfANumberIsTheRelationAComparisonOfItStatesTest {
         for (int j = 0; j < 4; j++) {
             holidaysOfEveryCandidate.add("d cal.holidays[*]" + (j == 0 ? "" : " - " + j));
         }
+        // Every candidate is a date worked out before any is looked at, so no row has a date
+        // within three of the last: a holiday on the last two dates is none a candidate is, and
+        // one on the day before them is.
+        String pastEveryCandidate = "cal.holidays[*] " + LocalDate.MAX.minusDays(2);
         Set<String> everyLine = new TreeSet<>(everyCandidate);
         everyLine.addAll(holidaysOfEveryCandidate);
+        everyLine.add(pastEveryCandidate);
         assertEquals(everyLine, linesOf(withHolidays));
         Pattern candidate = Pattern.compile(
                 "Int\\.floorMod\\(-cal\\.aSunday \\+ d(?: \\+ (\\d))?, 7\\) (\\d)");
         List<String> reachedPastAClosedDay = new ArrayList<>();
         Pattern holidayOf = Pattern.compile("d cal\\.holidays\\[\\*](?: - (\\d))?");
         everyRowAt(withHolidays, (line, row) -> {
+            if (line.equals(pastEveryCandidate)) {
+                return dates(field(row.getFirst(), "holidays")).contains(LocalDate.MAX.minusDays(2));
+            }
             Matcher holiday = holidayOf.matcher(line);
             if (holiday.matches()) {
                 int k = holiday.group(1) == null ? 0 : Integer.parseInt(holiday.group(1));
