@@ -36,9 +36,19 @@ class ADisequalityTiesTheSidesOnlyWhereItIsTheLineOfTheRelationOnceTheEqualities
         return new TakenConstraint.Affine(LinearForm.<NumericTerm>difference(one, other), rel);
     }
 
-    private static OnAWay equality(NumericTerm one, NumericTerm other) {
-        return new OnAWay(Set.of(TermPath.of("x")), false, affine(one, other, Rel.EQ), null, null,
-                OnAWay.PartsLeftAlone.NONE, null, null);
+    /** {@code constant} and each term weighed, held against nought as {@code rel}. */
+    private static TakenConstraint.Affine weighed(Rel rel, long constant,
+                                                  Object... termsAndWeights) {
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        for (int i = 0; i < termsAndWeights.length; i += 2) {
+            coefs.put((NumericTerm) termsAndWeights[i],
+                    ExactRatio.of(((Number) termsAndWeights[i + 1]).longValue()));
+        }
+        return new TakenConstraint.Affine(new LinearForm<>(ExactRatio.of(constant), coefs), rel);
+    }
+
+    private static List<UndividedByARelation.Step> stepsOf(TakenConstraint.Affine... equalities) {
+        return UndividedByARelation.stepsOf(List.of(equalities));
     }
 
     /** {@code d - s} held against nought: the relation {@code d >= s} drawn at its line. */
@@ -51,15 +61,14 @@ class ADisequalityTiesTheSidesOnlyWhereItIsTheLineOfTheRelationOnceTheEqualities
         TakenConstraint.Affine kept = affine(H, S, Rel.NE);
 
         assertTrue(UndividedByARelation.keepsTheLine(kept, lineOfDAndS(),
-                UndividedByARelation.stepsOf(List.of(equality(D, H)))));
+                stepsOf(affine(D, H, Rel.EQ))));
     }
 
     @Test
     void theSameDisequalityIsAnotherLineBesideNoEquality() {
         TakenConstraint.Affine kept = affine(H, S, Rel.NE);
 
-        assertFalse(UndividedByARelation.keepsTheLine(kept, lineOfDAndS(),
-                UndividedByARelation.stepsOf(List.of())));
+        assertFalse(UndividedByARelation.keepsTheLine(kept, lineOfDAndS(), stepsOf()));
     }
 
     @Test
@@ -67,31 +76,28 @@ class ADisequalityTiesTheSidesOnlyWhereItIsTheLineOfTheRelationOnceTheEqualities
         TakenConstraint.Affine kept = affine(K, S, Rel.NE);
 
         assertTrue(UndividedByARelation.keepsTheLine(kept, lineOfDAndS(),
-                UndividedByARelation.stepsOf(List.of(equality(D, H), equality(H, K)))));
+                stepsOf(affine(D, H, Rel.EQ), affine(H, K, Rel.EQ))));
         assertFalse(UndividedByARelation.keepsTheLine(kept, lineOfDAndS(),
-                UndividedByARelation.stepsOf(List.of(equality(D, H)))));
+                stepsOf(affine(D, H, Rel.EQ))));
     }
 
     /** {@code d - s + 1 /= 0} is the line {@code d - s = -1}, which {@code d >= s} is not drawn at. */
     @Test
     void aDisequalityBesideTheLineButNotOnItTiesNothingWhateverTheEqualities() {
-        TakenConstraint.Affine kept = new TakenConstraint.Affine(new LinearForm<>(ExactRatio.ONE,
-                LinearForm.<NumericTerm>difference(D, S).coefs()), Rel.NE);
+        TakenConstraint.Affine kept = weighed(Rel.NE, 1, D, 1, S, -1);
 
+        assertFalse(UndividedByARelation.keepsTheLine(kept, lineOfDAndS(), stepsOf()));
         assertFalse(UndividedByARelation.keepsTheLine(kept, lineOfDAndS(),
-                UndividedByARelation.stepsOf(List.of())));
-        assertFalse(UndividedByARelation.keepsTheLine(kept, lineOfDAndS(),
-                UndividedByARelation.stepsOf(List.of(equality(H, K)))));
+                stepsOf(affine(H, K, Rel.EQ))));
     }
 
-    private static TakenConstraint.Affine weighed(Rel rel, long constant,
-                                                  Object... termsAndWeights) {
-        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
-        for (int i = 0; i < termsAndWeights.length; i += 2) {
-            coefs.put((NumericTerm) termsAndWeights[i],
-                    ExactRatio.of(((Number) termsAndWeights[i + 1]).longValue()));
-        }
-        return new TakenConstraint.Affine(new LinearForm<>(ExactRatio.of(constant), coefs), rel);
+    /** A disequality that holds whatever the others are, once they are in, ties nothing. */
+    @Test
+    void aDisequalityThatHoldsWhateverTheOthersAreTiesNothing() {
+        TakenConstraint.Affine kept = weighed(Rel.NE, 1, D, 1, H, -1);
+
+        assertFalse(UndividedByARelation.keepsTheLine(kept, lineOfDAndS(),
+                stepsOf(affine(D, H, Rel.EQ))));
     }
 
     /**
@@ -102,30 +108,28 @@ class ADisequalityTiesTheSidesOnlyWhereItIsTheLineOfTheRelationOnceTheEqualities
      */
     @Test
     void aNumberPutInTheTermsOfTheOthersKeepsEveryWeightAndTheConstant() {
-        // d - 2h - 3 == 0
-        var definedAsTwiceHPlusThree = UndividedByARelation.stepsOf(
-                List.of(new OnAWay(Set.of(TermPath.of("x")), false,
-                        weighed(Rel.EQ, -3, D, 1, H, -2), null, null,
-                        OnAWay.PartsLeftAlone.NONE, null, null)));
+        var definedAsTwiceHPlusThree = stepsOf(weighed(Rel.EQ, -3, D, 1, H, -2));
         assertEquals(List.of(weighed(Rel.GE, 4, H, 2, S, -1)), UndividedByARelation.reducedBy(
                 weighed(Rel.GE, 1, D, 1, S, -1), definedAsTwiceHPlusThree));
 
-        // 2d - h == 0
-        var twiceDIsH = UndividedByARelation.stepsOf(
-                List.of(new OnAWay(Set.of(TermPath.of("x")), false,
-                        weighed(Rel.EQ, 0, D, 2, H, -1), null, null,
-                        OnAWay.PartsLeftAlone.NONE, null, null)));
+        var twiceDIsH = stepsOf(weighed(Rel.EQ, 0, D, 2, H, -1));
         assertEquals(List.of(weighed(Rel.GE, 0, H, 1, S, -1)), UndividedByARelation.reducedBy(
                 weighed(Rel.GE, 0, D, 2, S, -1), twiceDIsH));
     }
 
-    /** A disequality that holds whatever the others are, once they are in, ties nothing. */
+    /** What the way states of numbers by an equality is taken; a disequality, or a statement of
+     *  which case a value is, is not. */
     @Test
-    void aDisequalityThatHoldsWhateverTheOthersAreTiesNothing() {
-        TakenConstraint.Affine kept = new TakenConstraint.Affine(new LinearForm<>(ExactRatio.ONE,
-                LinearForm.<NumericTerm>difference(D, H).coefs()), Rel.NE);
+    void theEqualitiesAWayStatesAreThoseOfNumbers() {
+        Set<TermPath> at = Set.of(TermPath.of("x"));
+        OnAWay equality = new OnAWay(at, false, affine(D, H, Rel.EQ), null, null,
+                OnAWay.PartsLeftAlone.NONE, null, null);
+        OnAWay disequality = new OnAWay(at, false, affine(D, H, Rel.NE), null, null,
+                OnAWay.PartsLeftAlone.NONE, null, null);
+        OnAWay whichCase = new OnAWay(at, true, affine(D, H, Rel.EQ), null, null,
+                OnAWay.PartsLeftAlone.NONE, null, null);
 
-        assertFalse(UndividedByARelation.keepsTheLine(kept, lineOfDAndS(),
-                UndividedByARelation.stepsOf(List.of(equality(D, H)))));
+        assertEquals(List.of(affine(D, H, Rel.EQ)),
+                UndividedByARelation.equalitiesOf(List.of(equality, disequality, whichCase)));
     }
 }

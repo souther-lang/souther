@@ -122,17 +122,18 @@ class AWayThatKeepsAValueOffNumbersNothingElseHoldsLeavesItsRunWholeTest {
         }
     }
 
-    /** A number weighed otherwise than once is put at a value no whole number has, and is not
-     *  taken for written wherever the others are, however it is stated. */
+    /** An element held equal to three times a value is put at a third of it, which is no finite
+     *  decimal where the value is one: so it is not written wherever the value is, and the element
+     *  held equal to the value is. */
     @Test
-    void anElementHeldEqualToTwiceAValueIsNotTakenForWrittenAtIt() {
-        String once = report("", "xs: List<Decimal>, d: Decimal, s: Decimal",
+    void anElementHeldEqualToAThirdOfAValueIsNotTakenForWrittenAtIt() {
+        String same = report("", "xs: List<Decimal>, d: Decimal, s: Decimal",
                 "(xs, d, s) -> (if List.any(e -> e == d, xs) then d else 0.0m) >= s");
-        String twice = report("", "xs: List<Decimal>, d: Decimal, s: Decimal",
-                "(xs, d, s) -> (if List.any(e -> 2.0m * e == d, xs) then d else 0.0m) >= s");
+        String third = report("", "xs: List<Decimal>, d: Decimal, s: Decimal",
+                "(xs, d, s) -> (if List.any(e -> 3.0m * e == d, xs) then d else 0.0m) >= s");
 
-        assertFalse(notShownAt(once, "d"), once);
-        assertTrue(notShownAt(twice, "d"), twice);
+        assertFalse(notShownAt(same, "d"), same);
+        assertTrue(notShownAt(third, "d"), third);
     }
 
     /** One value is kept off another that nothing else reads, so every value of the first has a
