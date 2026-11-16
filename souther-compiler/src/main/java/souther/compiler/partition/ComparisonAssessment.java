@@ -2002,6 +2002,11 @@ sealed interface ComparisonAssessment {
         Map<Proposition, InACase> asked = new HashMap<>();
         Function<Proposition, InACase> inCase = condition ->
                 asked.computeIfAbsent(condition, _ -> {
+                    // A relation drawn beside no line parts nothing in any case, whichever rows
+                    // arrive: only whether some row is in the case is left to ask.
+                    if (against.beside().isEmpty()) {
+                        return new InACase(wayToACase.reaches(condition), List.of());
+                    }
                     Reachability toIt = wayToACase.apply(condition);
                     return new InACase(toIt instanceof Reachability.Reaching,
                             against.whereRowsArrive(reading, waysArrivedBy(toIt, arrivals),
