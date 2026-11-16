@@ -6,6 +6,7 @@ import souther.compiler.partition.CompositionBudget;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -216,6 +217,51 @@ public final class CasesOfALineAsked {
     /** The figures the asking stopped at, each made where it stopped. */
     private final Set<Figure.Budget> stopped = new LinkedHashSet<>();
 
+    /**
+     * Where the choosing has been, once a way has taken a part and met it: what the parts chosen
+     * leave of the numbers and what they say besides, and what is yet to choose. Ways that reach
+     * the same place choose the same cases past it ({@link #chosen}).
+     */
+    private final Set<Met> met = new HashSet<>();
+
+    /**
+     * What the cases past a part chosen depend on, and nothing of how it was reached.
+     *
+     * <p>The numbers the parts chosen leave hold the rows every comparison of a form among them
+     * leaves, so two ways leaving the same numbers and saying the same besides hold the same rows;
+     * what is yet to choose is the same cases when it is the same objects, in the same order.
+     *
+     * @param numbers what the parts chosen leave each form and dividend
+     * @param besides the parts chosen that a state of numbers says nothing of
+     * @param toChoose what is yet to be chosen
+     */
+    private record Met(NumericallyConsistentWays.State numbers, Set<Proposition> besides,
+                       List<DecidingCase.Cases> toChoose) {
+
+        @Override
+        public boolean equals(Object other) {
+            if (!(other instanceof Met same) || !numbers.equals(same.numbers)
+                    || !besides.equals(same.besides) || toChoose.size() != same.toChoose.size()) {
+                return false;
+            }
+            for (int at = 0; at < toChoose.size(); at++) {
+                if (toChoose.get(at) != same.toChoose.get(at)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        @Override
+        public int hashCode() {
+            int hash = 31 * numbers.hashCode() + besides.hashCode();
+            for (DecidingCase.Cases each : toChoose) {
+                hash = 31 * hash + System.identityHashCode(each);
+            }
+            return hash;
+        }
+    }
+
     /** How many ways of choosing the cases asked there were, where their number stopped them. */
     private Optional<CaseCount> counted = Optional.empty();
 
@@ -305,7 +351,7 @@ public final class CasesOfALineAsked {
                                        Predicate<Proposition> mayHoldARow) {
         return new CasesOfALineAsked(
                 condition -> mayHoldARow.test(condition) ? Crossing.MAY_CROSS : Crossing.NO_ROWS,
-                false).allAsked(said, answer, false);
+                true).allAsked(said, answer, false);
     }
 
     /**
@@ -629,7 +675,7 @@ public final class CasesOfALineAsked {
      */
     static final class SoFar {
 
-        static final SoFar NOTHING = new SoFar(List.of());
+        static final SoFar NOTHING = new SoFar(List.of(), Set.of());
 
         /**
          * A part chosen, as the others leave it, with what {@link WhereEachLineDecides#given}
@@ -654,8 +700,12 @@ public final class CasesOfALineAsked {
         /** The conjunction of {@link #parts}, once it has been asked for. */
         private Proposition condition;
 
-        private SoFar(List<Chosen> parts) {
+        /** What has been chosen that a numbers' state says nothing of, as each was said. */
+        private final Set<Proposition> besides;
+
+        private SoFar(List<Chosen> parts, Set<Proposition> besides) {
             this.parts = List.copyOf(parts);
+            this.besides = besides;
         }
 
         /** This, with {@code condition} chosen as well. */
@@ -690,7 +740,23 @@ public final class CasesOfALineAsked {
                 }
                 out.add(left);
             }
-            return new SoFar(out);
+            return new SoFar(out, besidesWith(condition));
+        }
+
+        /**
+         * What has been chosen and {@code condition} as well that a numbers' state says nothing
+         * of, as each was said: asked before the condition is chosen, since where a way has been
+         * met the condition is not.
+         */
+        Set<Proposition> besidesWith(Proposition condition) {
+            Set<Proposition> out = new HashSet<>(besides);
+            for (Proposition part : condition instanceof Proposition.All all ? all.parts()
+                    : List.of(condition)) {
+                if (NumericallyConsistentWays.leavesAStateWhatItHolds(part)) {
+                    out.add(part);
+                }
+            }
+            return out;
         }
 
         /** The conjunction of what has been chosen. */
@@ -753,6 +819,12 @@ public final class CasesOfALineAsked {
                     if (goesOnPast(chosen, asked, goesOn)) {
                         pastTheSteps(toChoose);
                     }
+                    return;
+                }
+                // A way that reaches where another has been chooses the same cases past it, in the
+                // rows they hold, and those are not walked twice.
+                if (readsTheNumbers && !met.add(new Met(numbersLeft.rowsLeft(),
+                        chosen.besidesWith(condition), List.copyOf(rest)))) {
                     return;
                 }
                 SoFar further = chosen.and(condition);
