@@ -6,7 +6,7 @@ import souther.compiler.inputs.NumericTerms;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.PartedString;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.Relation;
@@ -1253,7 +1253,7 @@ public sealed interface RowDemand {
      *                  leaves reads the statement and not a way of writing a row for it
      */
     record ForTheRun(Proposition statement, NoComposer why, List<WhyUnread> past,
-                     Optional<Derivation.APieceInALanguage.PartedString> partedStrings,
+                     Optional<PartedString> partedStrings,
                      Optional<ComposedAs> composedAs)
             implements OfACondition {
 
@@ -1286,7 +1286,7 @@ public sealed interface RowDemand {
         }
 
         public ForTheRun(Proposition statement, NoComposer why, List<WhyUnread> past,
-                         Optional<Derivation.APieceInALanguage.PartedString> partedStrings) {
+                         Optional<PartedString> partedStrings) {
             this(statement, why, past, partedStrings, Optional.empty());
         }
 

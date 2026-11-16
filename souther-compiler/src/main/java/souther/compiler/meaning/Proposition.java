@@ -290,6 +290,10 @@ public sealed interface Proposition {
      * comparison of the place with it ({@link SameValue#asAComparison}), or this statement where
      * none is.
      *
+     * <p>A part nothing read the meaning of, where its operation's owner says what it would be
+     * said as ({@link Unread#couldBe}), is that statement: the one a guard takes of the same call,
+     * so a comparison over the count of what such a call chooses states what the call states.
+     *
      * <p>The one place that says how a statement about a written value is read as a relation on
      * the order its place stands on, which is what draws a line there. Every reader of lines asks
      * this of the statement as a whole, so a written value is a comparison to all of them and
@@ -311,6 +315,8 @@ public sealed interface Proposition {
         return switch (this) {
             case SameValue same -> same.asAComparison() instanceof Compared compared
                     ? compared : this;
+            case Unread unread -> unread.couldBe().isPresent()
+                    ? unread.couldBe().get().on(unread.holds()) : this;
             case All all -> {
                 List<Proposition> parts = comparedEach(all.parts(), again);
                 yield parts == null ? this : all(parts);
@@ -694,16 +700,25 @@ public sealed interface Proposition {
                 }
             }
 
-            /** The piece of a string that one statement about some piece is about. */
-            record OfAPiece(PieceWitness within) implements Strings {
+            /**
+             * The piece of a string that one statement about some piece is about.
+             *
+             * <p>Of the string {@code parted} says, where it says one: what a row reads the piece
+             * off, and what tells this piece from the piece of another string that the witness
+             * would also name, so the spelling carries it.
+             */
+            record OfAPiece(PieceWitness within, Optional<PartedString> parted)
+                    implements Strings {
 
                 public OfAPiece {
                     Objects.requireNonNull(within, "a piece is of some statement about a piece");
+                    Objects.requireNonNull(parted, "the piece is of a string or of none");
                 }
 
                 @Override
                 public String spelled() {
-                    return "piece#" + within.spelled();
+                    return "piece#" + within.spelled()
+                            + parted.map(of -> "(" + of.spelled() + ")").orElse("");
                 }
             }
         }
