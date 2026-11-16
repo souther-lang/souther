@@ -234,6 +234,78 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                 relation(), cases), relation(), inCases::get, _ -> true);
     }
 
+    /** A relation that draws no line beside the one it states. */
+    private static ComparisonAssessment.AgainstAnotherValue relationBesideNoLine() {
+        return new ComparisonAssessment.AgainstAnotherValue(line().cutting().over(), List.of(),
+                Set.of(), List.of(), Optional.empty(), Map.of(), Map.of(), Set.of(), Map.of(),
+                Map.of());
+    }
+
+    private static List<ComparisonAssessment.Several.Part> partsBesideNoLine(
+            List<DecidingCase> cases, Function<Proposition, ComparisonAssessment.InACase> inCase) {
+        return ComparisonAssessment.partsOfARelation(new ComparisonAssessment.Several.Part(
+                new PlaceOfALine(PartOfAComparison.of(WrittenLine.THE_COMPARISON),
+                        Spelling.of("relation")),
+                relationBesideNoLine(), cases), relationBesideNoLine(), inCase, _ -> true);
+    }
+
+    /** Beside no line no case parts the values, so a case a row is in is all there is to find and
+     *  the cases after it are not asked. */
+    @Test
+    void aRelationBesideNoLineIsNotAskedOfTheCasesAfterTheFirstARowIsIn() {
+        List<Proposition> asked = new ArrayList<>();
+        DecidingCase low = caseNamed("low");
+        DecidingCase high = caseNamed("high");
+
+        List<ComparisonAssessment.Several.Part> parts = partsBesideNoLine(List.of(low, high),
+                condition -> {
+                    asked.add(condition);
+                    return new ComparisonAssessment.InACase(true, List.of());
+                });
+
+        assertEquals(List.of(low.condition()), asked);
+        assertEquals(List.of(relationBesideNoLine().partedBy(List.of())),
+                parts.stream().map(ComparisonAssessment.Several.Part::line).toList());
+        assertEquals(List.of(List.of()),
+                parts.stream().map(ComparisonAssessment.Several.Part::cases).toList());
+    }
+
+    /** No case a row is in, every one worked out: the relation turns the statement nowhere. */
+    @Test
+    void aRelationBesideNoLineWithARowInNoCaseTurnsNothing() {
+        List<Proposition> asked = new ArrayList<>();
+        DecidingCase low = caseNamed("low");
+        DecidingCase high = caseNamed("high");
+
+        List<ComparisonAssessment.Several.Part> parts = partsBesideNoLine(List.of(low, high),
+                condition -> {
+                    asked.add(condition);
+                    return new ComparisonAssessment.InACase(false, List.of());
+                });
+
+        assertEquals(List.of(low.condition(), high.condition()), asked);
+        assertEquals(List.of(new ComparisonAssessment.RelationTurnsNothing(
+                        line().cutting().over())),
+                parts.stream().map(ComparisonAssessment.Several.Part::line).toList());
+    }
+
+    /** No case found where a case was not worked out: it is left unread, as a line is. */
+    @Test
+    void aRelationBesideNoLineWithACaseNotWorkedOutIsLeftUnread() {
+        DecidingCase.Cases readTooLong = new DecidingCase.Cases.NotTakenApart(
+                CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.reached());
+
+        List<ComparisonAssessment.Several.Part> parts = partsBesideNoLine(
+                List.of(new DecidingCase(caseNamed("low").condition(), readTooLong)),
+                _ -> new ComparisonAssessment.InACase(true, List.of()));
+
+        assertEquals(List.of(relationBesideNoLine().partedBy(List.of())),
+                parts.subList(0, 1).stream().map(ComparisonAssessment.Several.Part::line)
+                        .toList());
+        assertInstanceOf(ComparisonAssessment.Unread.class, parts.getLast().line());
+        assertEquals(2, parts.size());
+    }
+
     /** What a relation parts in a case is that case's: cases are said for several only past it. */
     @Test
     void casesPartingARelationByDifferentLinesAreReadEachByItsOwn() {

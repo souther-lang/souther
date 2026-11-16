@@ -2037,6 +2037,18 @@ sealed interface ComparisonAssessment {
         Set<Figure.Budget> stoppedAt = new LinkedHashSet<>();
         boolean someCaseLeftUndrawn = part.cases().isEmpty();
         for (DecidingCase each : part.cases()) {
+            // Beside no line, no case has a line to part the values by: a case some row is in is
+            // all there is to find, and the cases not walked after it have none to leave unread.
+            if (against.beside().isEmpty()) {
+                CasesOfALineAsked.Some<InACase> some = CasesOfALineAsked.someCaseAnswers(each,
+                        inCase, reachable, InACase::reachable);
+                if (some.first().isPresent()) {
+                    return List.of(new Several.Part(part.id(), against.partedBy(List.of()),
+                            List.of()));
+                }
+                stoppedAt.addAll(some.notWorkedOut());
+                continue;
+            }
             CasesOfALineAsked.Atoms<InACase> atoms =
                     CasesOfALineAsked.atomsOf(each, inCase, reachable);
             stoppedAt.addAll(atoms.notWorkedOut());

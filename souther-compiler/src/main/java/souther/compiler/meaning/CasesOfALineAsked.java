@@ -207,6 +207,9 @@ public final class CasesOfALineAsked {
 
     private int left = CompositionBudget.CASES_A_LINE_IS_ASKED_IN.maximum();
 
+    /** Whether a case answered left nothing to ask of the cases chosen after it: none is walked. */
+    private boolean settled;
+
     /** Each case shown to divide rows, as the conjunction of what it chose. */
     private final Set<Proposition> dividing = new LinkedHashSet<>();
 
@@ -335,7 +338,8 @@ public final class CasesOfALineAsked {
      * are counted as they are for {@link #casesOf}.
      */
     public static <T> Atoms<T> atomsOf(DecidingCase said, Function<Proposition, T> answer) {
-        return new CasesOfALineAsked(_ -> Crossing.MAY_CROSS, false).allAsked(said, answer, true);
+        return new CasesOfALineAsked(_ -> Crossing.MAY_CROSS, false)
+                .allAsked(said, answer, true, _ -> false);
     }
 
     /**
@@ -351,7 +355,39 @@ public final class CasesOfALineAsked {
                                        Predicate<Proposition> mayHoldARow) {
         return new CasesOfALineAsked(
                 condition -> mayHoldARow.test(condition) ? Crossing.MAY_CROSS : Crossing.NO_ROWS,
-                true).allAsked(said, answer, false);
+                true).allAsked(said, answer, false, _ -> false);
+    }
+
+    /**
+     * What asking for a case with a wanted answer found.
+     *
+     * @param first        the first such case in the order they are chosen, where one was found
+     * @param notWorkedOut every figure some case was stopped at where none was found: empty says
+     *                     there is none, and not empty that there may be one among the cases not
+     *                     worked out
+     */
+    public record Some<T>(Optional<Atom<T>> first, Set<Figure.Budget> notWorkedOut) {
+
+        public Some {
+            notWorkedOut = Set.copyOf(notWorkedOut);
+        }
+    }
+
+    /**
+     * Whether some case of {@code said} that some row may be in has an answer {@code wanted} says
+     * yes to, asked of the cases as {@link #atomsOf(DecidingCase, Function, Predicate)} chooses
+     * them and walked no further than the first.
+     */
+    public static <T> Some<T> someCaseAnswers(DecidingCase said, Function<Proposition, T> answer,
+                                              Predicate<Proposition> mayHoldARow,
+                                              Predicate<T> wanted) {
+        CasesOfALineAsked asking = new CasesOfALineAsked(
+                condition -> mayHoldARow.test(condition) ? Crossing.MAY_CROSS : Crossing.NO_ROWS,
+                true);
+        Atoms<T> walked = asking.allAsked(said, answer, false, wanted);
+        Optional<Atom<T>> found = asking.settled ? Optional.of(walked.each().getLast())
+                : Optional.empty();
+        return new Some<>(found, found.isPresent() ? Set.of() : walked.notWorkedOut());
     }
 
     /**
@@ -361,15 +397,18 @@ public final class CasesOfALineAsked {
      * {@code waysCounted}, nothing being there to leave a case out by.
      */
     private <T> Atoms<T> allAsked(DecidingCase said, Function<Proposition, T> answer,
-                                  boolean waysCounted) {
+                                  boolean waysCounted, Predicate<T> settles) {
         if (!aStepIsLeft()) {
             pastTheSteps(List.of(said.standsFor()));
             return new Atoms<>(List.of(), stopped);
         }
         if (said.saidAlone()) {
-            return new Atoms<>(crossedIn.apply(said.condition()) == Crossing.NO_ROWS ? List.of()
-                    : List.of(new Atom<>(said.condition(), answer.apply(said.condition()))),
-                    Set.of());
+            if (crossedIn.apply(said.condition()) == Crossing.NO_ROWS) {
+                return new Atoms<>(List.of(), Set.of());
+            }
+            T answered = answer.apply(said.condition());
+            settled = settles.test(answered);
+            return new Atoms<>(List.of(new Atom<>(said.condition(), answered)), Set.of());
         }
         if (waysCounted && pastTheFigureAsTheChoicesStand(said.standsFor())) {
             moreWaysThanAreTakenApart(said);
@@ -378,7 +417,11 @@ public final class CasesOfALineAsked {
         List<Atom<T>> out = new ArrayList<>();
         chosen(SoFar.NOTHING, NumericallyConsistentWays.State.NOTHING_CHOSEN, true,
                 List.of(heldFirst(said.standsFor())), crossedIn,
-                chosen -> out.add(new Atom<>(chosen, answer.apply(chosen))));
+                chosen -> {
+                    T answered = answer.apply(chosen);
+                    out.add(new Atom<>(chosen, answered));
+                    settled |= settles.test(answered);
+                });
         return new Atoms<>(out, stopped);
     }
 
@@ -798,6 +841,9 @@ public final class CasesOfALineAsked {
     private void chosen(SoFar chosen, NumericallyConsistentWays.State numbers, boolean asked,
                         List<DecidingCase.Cases> toChoose, Function<Proposition, Crossing> goesOn,
                         Consumer<Proposition> atEnd) {
+        if (settled) {
+            return;
+        }
         if (toChoose.isEmpty()) {
             if (goesOnPast(chosen, asked, goesOn)) {
                 atEnd.accept(chosen.condition());
