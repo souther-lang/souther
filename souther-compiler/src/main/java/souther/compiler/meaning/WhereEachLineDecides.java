@@ -842,7 +842,7 @@ public final class WhereEachLineDecides {
             for (int i = 0; i < named.size(); i++) {
                 index.put(named.get(i).spelling(), i);
             }
-            this.twice = askedTwice(named);
+            this.twice = askedTwice(named, ReadThroughNames.holdsOneValueAtEachElement(stated));
             this.ways = new WhatAStatementComesTo();
             this.canBe = lifted ? canBe(named, twice) : List.of();
             if (!lifted) {
@@ -1702,12 +1702,21 @@ public final class WhereEachLineDecides {
      */
     private record AskedTwice(DecisionSubject value, List<Integer> parts, List<Refinement> atoms) {}
 
-    /** Every value of the row {@code named} asks the case of more than once, in the order they are
-     *  first asked. */
-    private static List<AskedTwice> askedTwice(List<Proposition> named) {
+    /**
+     * Every value of the row {@code named} asks the case of more than once, in the order they are
+     * first asked.
+     *
+     * <p>A value at an element of a container is one of them where the statement holds one value
+     * at each element's position ({@code oneValueEach}): two parts asking the cases of one value
+     * there ask it of the one element the statement is about, and a statement about two elements
+     * holds two values at that position and says so.
+     */
+    private static List<AskedTwice> askedTwice(List<Proposition> named, boolean oneValueEach) {
         Map<DecisionSubject, List<Integer>> byValue = new LinkedHashMap<>();
         for (int i = 0; i < named.size(); i++) {
-            if (named.get(i) instanceof Proposition.InCases cases && oneValueOfTheRow(cases)) {
+            if (named.get(i) instanceof Proposition.InCases cases && cases.holds()
+                    && (aValueOfTheRow(cases.of())
+                    || (oneValueEach && aValueAtAnElement(cases.of())))) {
                 byValue.computeIfAbsent(cases.of(), _ -> new ArrayList<>()).add(i);
             }
         }
@@ -1928,6 +1937,13 @@ public final class WhereEachLineDecides {
                 && (identity instanceof ValueIdentity.OfAnElement
                 || at.steps().stream().noneMatch(step -> step instanceof TermPath.Step.Element
                         || step instanceof TermPath.Step.Key));
+    }
+
+    /** Whether {@code value} is at an element of a container and at no key of one. */
+    private static boolean aValueAtAnElement(DecisionSubject value) {
+        return value instanceof DecisionSubject.AnInput(TermPath at, var _)
+                && at.steps().stream().anyMatch(step -> step instanceof TermPath.Step.Element)
+                && at.steps().stream().noneMatch(step -> step instanceof TermPath.Step.Key);
     }
 
     /**

@@ -24,20 +24,35 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * An element of a container read through a name is one value wherever the name is read, so the
- * cases it is are never two at once, and where a line decides is taken apart on the case it is and
- * not on what the other cases would have asked.
+ * The cases of a value at an element of a container are never two at once where the statement
+ * holds one value at that position, and where a line decides is taken apart on the case the value
+ * is and not on what the other cases would have asked.
  *
- * <p>A statement that walks a chain of candidates under one case of the element and another chain
- * under another has a line decide in each case where its own chain says so. Were the element's
- * cases left free of each other, the line would decide in a way for every pair of ways the two
- * chains come out, and a chain would be asked in the case that does not walk it.
+ * <p>A statement that walks a chain of candidates under one case of the value and another chain
+ * under another has a line decide in each case where its own chain says so. Were the cases left
+ * free of each other, the line would decide in a way for every pair of ways the two chains come
+ * out, and a chain would be asked in the case that does not walk it. A statement about two
+ * elements of the container holds two values at the position, and then one element may be one
+ * case while the other is another.
  */
-class TheCasesOfAnElementReadThroughANameAreNeverTwoAtOnceTest {
+class TheCasesOfOneValueAtAnElementOfAStatementAreNeverTwoAtOnceTest {
 
     private static final BindingOwner OWNER = new BindingOwner.OfValue("demo", "go");
 
     private static final int CHAIN = 3;
+
+    /** How the statement reads the element of {@code rules}. */
+    private enum Reads {
+        /** Every part through the one name the element was given. */
+        ONE_NAME,
+        /** Every part through no name: the one element the statement is about. */
+        NO_NAME,
+        /** The cases of {@code B} through one name, the others through another: two elements. */
+        TWO_NAMES,
+        /** {@code B} and {@code C} through no name, and {@code A} through a name: the statement
+         *  holds two values at the position, and which of them the unnamed two are is not said. */
+        NO_NAME_BESIDE_A_NAME
+    }
 
     private static Proposition.Compared line() {
         return new Proposition.Compared(new Relation.Affine(new LinearForm<>(ExactRatio.ZERO,
@@ -49,13 +64,23 @@ class TheCasesOfAnElementReadThroughANameAreNeverTwoAtOnceTest {
         return new Proposition.Truth(new DecisionSubject.AnInput(TermPath.of(name)), true);
     }
 
-    /** The element of {@code rules} being {@code leaf}, read through a name where {@code named}. */
-    private static Proposition is(String leaf, boolean named) {
-        DecisionSubject.AnInput element = named
-                ? new DecisionSubject.AnInput(TermPath.of("rules").element(),
-                        new ValueIdentity.OfAnElement(new BindingId(OWNER, 4)))
-                : new DecisionSubject.AnInput(TermPath.of("rules").element());
-        return new Proposition.InCases(element, CasesLeft.ofEach(List.of(Refinement.of(
+    private static ValueIdentity named(int ordinal) {
+        return new ValueIdentity.OfAnElement(new BindingId(OWNER, ordinal));
+    }
+
+    /** The element of {@code rules} being {@code leaf}, read as {@code reads} says. */
+    private static Proposition is(String leaf, Reads reads) {
+        TermPath element = TermPath.of("rules").element();
+        DecisionSubject.AnInput subject = switch (reads) {
+            case ONE_NAME -> new DecisionSubject.AnInput(element, named(4));
+            case NO_NAME -> new DecisionSubject.AnInput(element);
+            case TWO_NAMES -> new DecisionSubject.AnInput(element,
+                    named(leaf.equals("B") ? 4 : 5));
+            case NO_NAME_BESIDE_A_NAME -> leaf.equals("A")
+                    ? new DecisionSubject.AnInput(element, named(7))
+                    : new DecisionSubject.AnInput(element);
+        };
+        return new Proposition.InCases(subject, CasesLeft.ofEach(List.of(Refinement.of(
                 new Case.SumCase(TypeSymbols.declared(new TypeKey("probe", leaf)), true)))), true);
     }
 
@@ -69,11 +94,11 @@ class TheCasesOfAnElementReadThroughANameAreNeverTwoAtOnceTest {
 
     /** Every case where the line decides, as the parts each asks: where the element is {@code A},
      *  or {@code B} with one of {@code b1..b3} holding, or {@code C} with one of {@code c1..c3}. */
-    private static List<List<Proposition>> casesOfTheLine(boolean named) {
+    private static List<List<Proposition>> casesOfTheLine(Reads reads) {
         Proposition stated = Proposition.any(List.of(
-                Proposition.all(List.of(is("A", named), line())),
-                Proposition.all(List.of(is("B", named), chain("b"), line())),
-                Proposition.all(List.of(is("C", named), chain("c"), line()))));
+                Proposition.all(List.of(is("A", reads), line())),
+                Proposition.all(List.of(is("B", reads), chain("b"), line())),
+                Proposition.all(List.of(is("C", reads), chain("c"), line()))));
         List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated, term -> false);
         assertEquals(1, lines.size(), "one relation is a line");
         List<List<Proposition>> out = new ArrayList<>();
@@ -99,9 +124,8 @@ class TheCasesOfAnElementReadThroughANameAreNeverTwoAtOnceTest {
 
     /** A case for the element being {@code A}, and one for each way a chain comes out in each of
      *  the others: a line is taken apart on its own chain. */
-    @Test
-    void aCaseAsksTheChainOfTheCaseTheElementIsAndNoOther() {
-        List<List<Proposition>> cases = casesOfTheLine(true);
+    private static void assertEachCaseAsksOnlyItsOwnChain(Reads reads) {
+        List<List<Proposition>> cases = casesOfTheLine(reads);
 
         assertEquals(1 + 2 * CHAIN, cases.size(), "a way for each of the chains");
         for (List<Proposition> one : cases) {
@@ -117,11 +141,32 @@ class TheCasesOfAnElementReadThroughANameAreNeverTwoAtOnceTest {
         }
     }
 
-    /** Read through no name, two parts asking the cases of an element may ask it of two elements,
-     *  and the cases may be two at once: a chain is asked beside the element being the other. */
     @Test
-    void anElementReadThroughNoNameMayBeTwoCasesAtOnce() {
-        List<List<Proposition>> cases = casesOfTheLine(false);
+    void anElementReadThroughOneNameAsksTheChainOfItsOwnCaseAlone() {
+        assertEachCaseAsksOnlyItsOwnChain(Reads.ONE_NAME);
+    }
+
+    /** A statement that reads the element through no name holds one value at its position. */
+    @Test
+    void anElementReadThroughNoNameIsOneValueWhereTheStatementHoldsOne() {
+        assertEachCaseAsksOnlyItsOwnChain(Reads.NO_NAME);
+    }
+
+    /** Two names at one position are two elements: one may be {@code C} while the other is
+     *  {@code B}, and a chain of B is asked beside the cases of C. */
+    @Test
+    void twoElementsOfTheContainerMayBeTwoCasesAtOnce() {
+        List<List<Proposition>> cases = casesOfTheLine(Reads.TWO_NAMES);
+
+        assertTrue(cases.stream().anyMatch(one -> isTheCase(one, "C") && asksChain(one, "b")),
+                "C asks a chain of B");
+    }
+
+    /** Where a name stands beside them at the position, parts read through no name are not shown
+     *  to be of one element, and are left free of each other. */
+    @Test
+    void partsReadThroughNoNameBesideANamedOneAreLeftFreeOfEachOther() {
+        List<List<Proposition>> cases = casesOfTheLine(Reads.NO_NAME_BESIDE_A_NAME);
 
         assertTrue(cases.stream().anyMatch(one -> isTheCase(one, "C") && asksChain(one, "b")),
                 "C asks a chain of B");
