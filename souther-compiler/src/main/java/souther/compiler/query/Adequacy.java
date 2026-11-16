@@ -9565,11 +9565,28 @@ public final class Adequacy {
         public record WhatTheSearchSaid(Set<ObligationIdentity.OfACombinationOfDecisions> exist,
                                         Set<ObligationIdentity.OfACombinationOfDecisions> none) {
 
-            static final WhatTheSearchSaid NOTHING = new WhatTheSearchSaid(Set.of(), Set.of());
+            private static final WhatTheSearchSaid NOTHING =
+                    new WhatTheSearchSaid(Set.of(), Set.of());
 
             public WhatTheSearchSaid {
                 exist = Collections.unmodifiableSet(new LinkedHashSet<>(exist));
                 none = Collections.unmodifiableSet(new LinkedHashSet<>(none));
+            }
+
+            /** What the search said of one behavior's combinations, or nothing where it was not
+             *  asked. */
+            public static WhatTheSearchSaid of(Db db, String name, String behavior) {
+                WhatTheSearchSaid said = db.ask(new MeetingsSearchedFor(name, behavior)).value();
+                return said == null ? NOTHING : said;
+            }
+
+            /**
+             * Whether a row is owed for {@code meeting}: it is, unless the rules of its decisions
+             * leave no value. The one place that is asked, so that what a finding is raised for
+             * and what a page says are not two readings of it.
+             */
+            public boolean owesARow(ObligationIdentity.OfACombinationOfDecisions meeting) {
+                return !none.contains(meeting);
             }
         }
 
@@ -9698,11 +9715,9 @@ public final class Adequacy {
                 if (branch != null && branch.measured().made().isPresent()) {
                     out.addAll(armFindings(behavior.name(), branch.arms()));
                 }
-                MeetingsSearchedFor.WhatTheSearchSaid searched =
-                        db.ask(new MeetingsSearchedFor(name, behavior.name())).value();
                 combinationFindings(behavior.name(), CombinationCriterion.of(
                         meetings == null ? null : meetings.get(behavior.name()), divided),
-                        searched == null ? MeetingsSearchedFor.WhatTheSearchSaid.NOTHING : searched,
+                        MeetingsSearchedFor.WhatTheSearchSaid.of(db, name, behavior.name()),
                         answersNothing, out);
                 ReplacementEvidence rewrites =
                         replacements == null ? null : replacements.get(behavior.name());
@@ -9767,7 +9782,7 @@ public final class Adequacy {
                     for (ObligationIdentity.OfACombinationOfDecisions each
                             : meetings.notMadeByRows()) {
                         // The model leaves nothing to write a row for: counted, and nobody's work.
-                        if (searched.none().contains(each)) {
+                        if (!searched.owesARow(each)) {
                             continue;
                         }
                         // What this meeting's own reading went without, and not what the measure
