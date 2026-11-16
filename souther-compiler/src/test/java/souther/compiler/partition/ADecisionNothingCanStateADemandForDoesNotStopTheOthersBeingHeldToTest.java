@@ -15,7 +15,6 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -34,7 +33,6 @@ class ADecisionNothingCanStateADemandForDoesNotStopTheOthersBeingHeldToTest {
         HeldOutcome.Bringing read = new HeldOutcome.Bringing.Found(List.of(aWay()), Set.of());
 
         assertEquals(List.of(read), ReadableDemands.of(List.of(UNREAD, read)).readable());
-        assertFalse(ReadableDemands.of(List.of(UNREAD, read)).impossible());
     }
 
     @Test
@@ -46,13 +44,14 @@ class ADecisionNothingCanStateADemandForDoesNotStopTheOthersBeingHeldToTest {
         assertTrue(asked.readable().isEmpty());
     }
 
-    /** No value on a side one decision comes out on: no row held to the others is the combination. */
+    /** No value on a side one decision comes out on is read, and not left to the run: it is what
+     *  says no row holds the decisions together. */
     @Test
-    void noValueOnASideADecisionComesOutOnMakesTheCombinationImpossibleToHoldARowTo() {
+    void noValueOnASideADecisionComesOutOnIsReadBesideTheOthers() {
         HeldOutcome.Bringing read = new HeldOutcome.Bringing.Found(List.of(aWay()), Set.of());
+        HeldOutcome.Bringing none = new HeldOutcome.Bringing.NoValueCanStandThere();
 
-        assertTrue(ReadableDemands.of(List.of(read,
-                new HeldOutcome.Bringing.NoValueCanStandThere())).impossible());
+        assertEquals(List.of(read, none), ReadableDemands.of(List.of(read, none)).readable());
     }
 
     /** One way of holding a row, to a truth of {@code open}, over nothing on the way. */

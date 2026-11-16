@@ -11374,9 +11374,6 @@ public final class Generator {
         // ({@link ReadableDemands}). What the decisions that can be read ask is asked of every row
         // making the combination, so where they leave no value there is no such row.
         ReadableDemands asked = ReadableDemands.of(each);
-        if (asked.impossible()) {
-            return List.of(noValueHoldsThem());
-        }
         Set<CompositionBudget> cutShort = EnumSet.noneOf(CompositionBudget.class);
         cutShort.addAll(asked.cutShort());
         if (asked.readable().isEmpty()) {

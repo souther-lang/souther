@@ -14,14 +14,15 @@ import java.util.Set;
  * held to or not. Held to all of them or to none, as a row repaired past a guard is, a combination
  * with one decision this reads no demand for would never be looked for along the others.
  *
- * @param readable   what holds each decision a demand could be read for
- * @param cutShort   the figures that left the ways of holding a decision unlooked at, which is the
- *                   plan being cut short
- * @param impossible whether no value stands on the side a decision comes out on, which no row held
- *                   to what the decisions state can be
+ * <p>A decision no value stands on a side of is read all the same: it is the answer that no row
+ * holds the decisions together, and the parts held together say so.
+ *
+ * @param readable what holds each decision a demand could be read for, or that no value stands on
+ *                 the side it comes out on
+ * @param cutShort the figures that left the ways of holding a decision unlooked at, which is the
+ *                 plan being cut short
  */
-record ReadableDemands(List<HeldOutcome.Bringing> readable, Set<CompositionBudget> cutShort,
-                       boolean impossible) {
+record ReadableDemands(List<HeldOutcome.Bringing> readable, Set<CompositionBudget> cutShort) {
 
     ReadableDemands {
         readable = List.copyOf(readable);
@@ -32,16 +33,15 @@ record ReadableDemands(List<HeldOutcome.Bringing> readable, Set<CompositionBudge
     static ReadableDemands of(List<HeldOutcome.Bringing> each) {
         List<HeldOutcome.Bringing> readable = new ArrayList<>();
         Set<CompositionBudget> cutShort = EnumSet.noneOf(CompositionBudget.class);
-        boolean impossible = false;
         for (HeldOutcome.Bringing one : each) {
             switch (one) {
-                case HeldOutcome.Bringing.Found found -> readable.add(found);
+                case HeldOutcome.Bringing.Found _, HeldOutcome.Bringing.NoValueCanStandThere _ ->
+                        readable.add(one);
                 case HeldOutcome.Bringing.LeftUnlooked(Set<CompositionBudget> figures) ->
                         cutShort.addAll(figures);
-                case HeldOutcome.Bringing.NoValueCanStandThere _ -> impossible = true;
                 case HeldOutcome.Bringing.NothingFound _ -> { }
             }
         }
-        return new ReadableDemands(readable, cutShort, impossible);
+        return new ReadableDemands(readable, cutShort);
     }
 }
