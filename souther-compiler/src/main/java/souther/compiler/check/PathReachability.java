@@ -1112,26 +1112,13 @@ public final class PathReachability {
                 && LinearForm.atom(size).minus(LinearForm.constant(ExactRatio.of(BigInteger.ONE)))
                         instanceof ExactAnswer.Held<LinearForm<FactSubject>>(var overOne)) {
             List<NumericConstraint> carried = engine.terms().carriedBy(List.of(size));
-            Known knowing = carryingWhatTheSizeCarries(k, carried);
+            Known knowing = engine.carrying(k, carried);
             if (knowing.numbers().entails(overOne, Rel.LE)
                     || engine.terms().predicates().entailedInEveryCase(
                             new NumericConstraint(overOne, Rel.LE), knowing, carried)) {
                 walksHeldToOneAtMost.put(probe.get(), origin.get());
             }
         }
-    }
-
-    /**
-     * {@code k} with what the values {@code size} is reached from carry: a size relates to the
-     * counts of what it was made of, and those say what the declarations of the type guarantee.
-     */
-    private Known carryingWhatTheSizeCarries(Known k, List<NumericConstraint> carried) {
-        Known out = k;
-        for (NumericConstraint each : carried) {
-            out = out.taking(each.form(), each.rel(), Known.Held.OF_THE_VALUE,
-                    engine.terms().spacesOf(each.form()));
-        }
-        return out;
     }
 
     /**

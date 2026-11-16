@@ -474,6 +474,19 @@ final class Terms {
      */
     Terms(Of reading, RuleReadingContext ruleReading, ValueTemplates templates,
           ElementBindings elements, ReachabilityAnswers reachability) {
+        this(reading, ruleReading, templates, elements, reachability,
+                AnswersForEveryArgument.NONE);
+    }
+
+    /**
+     * The same, asking {@code closureAnswers} how many a closure answers at most for every
+     * argument it can be handed.
+     */
+    Terms(Of reading, RuleReadingContext ruleReading, ValueTemplates templates,
+          ElementBindings elements, ReachabilityAnswers reachability,
+          AnswersForEveryArgument closureAnswers) {
+        this.closureAnswers = Objects.requireNonNull(closureAnswers,
+                "how many a closure answers was asked of someone, or of nobody");
         this.templates = templates;
         this.walksWrittenDown = Objects.requireNonNull(elements,
                 "a tree's walks were said what of, or nothing was");
@@ -528,6 +541,10 @@ final class Terms {
 
     /** Whether a state reaches nothing, as the readers this lends itself to ask it. */
     private final ReachabilityAnswers reachability;
+
+    /** How many a closure answers at most for every argument, as the engine this reads for
+     *  works it out. */
+    private final AnswersForEveryArgument closureAnswers;
 
     /** What each template is called, by the reading it was asked for: named once however many
      *  builds of it there are. */
@@ -1276,7 +1293,8 @@ final class Terms {
         }
         Core.Block step = blockOf(call.args().get(0), at);
         FactSubject walked = sizeOfWhatItHolds(call.args().get(1), at);
-        OptionalLong most = step == null ? OptionalLong.empty() : mostAdded(step.body(), at);
+        OptionalLong most = step == null ? OptionalLong.empty()
+                : mostAdded(step.body(), step, at);
         LinearForm<FactSubject> over = most.isPresent() && walked != null
                 ? LinearForm.atom(walked).times(ExactRatio.of(most.getAsLong())).orNull() : null;
         LinearForm<FactSubject> form = over == null ? null
@@ -1285,29 +1303,33 @@ final class Terms {
     }
 
     /** The most a step adds to the list its walk grows in one application, or empty where that is
-     *  not written down: the most of the arms of a choice, and what each add writes out. */
-    private OptionalLong mostAdded(Core step, Denotations at) {
+     *  not written down: the most of the arms of a choice, and what each add writes out — or, where
+     *  an add writes out no list, what {@code closure} answers for every argument. */
+    private OptionalLong mostAdded(Core step, Core.Block closure, Denotations at) {
         return switch (Core.withoutStanding(step)) {
-            case Core.Call add when add.fn() == Core.Emitted.GROW_LIST ->
-                    mostWrittenCount(add.args().get(1), at);
-            case Core.If choice -> larger(mostAdded(choice.then(), at),
-                    mostAdded(choice.els(), at));
+            case Core.Call add when add.fn() == Core.Emitted.GROW_LIST -> {
+                OptionalLong written = mostWrittenCount(add.args().get(1), at);
+                yield written.isPresent() ? written
+                        : closureAnswers.mostOf(add.args().get(1), closure, at);
+            }
+            case Core.If choice -> larger(mostAdded(choice.then(), closure, at),
+                    mostAdded(choice.els(), closure, at));
             case Core.IfConstructed choice -> {
-                OptionalLong most = mostAdded(choice.then(), at);
+                OptionalLong most = mostAdded(choice.then(), closure, at);
                 for (Core.ElseArm arm : choice.els()) {
-                    most = larger(most, mostAdded(arm.body(), at));
+                    most = larger(most, mostAdded(arm.body(), closure, at));
                 }
                 yield most;
             }
             case Core.Match choice -> {
                 OptionalLong most = OptionalLong.of(0);
                 for (Core.Case arm : choice.cases()) {
-                    most = larger(most, mostAdded(arm.body(), at));
+                    most = larger(most, mostAdded(arm.body(), closure, at));
                 }
                 yield most;
             }
             case Core.LetIn bound -> grows(bound.value()) ? OptionalLong.empty()
-                    : mostAdded(bound.body(), at);
+                    : mostAdded(bound.body(), closure, at);
             case Core other -> grows(other) ? OptionalLong.empty() : OptionalLong.of(0);
         };
     }
@@ -3259,13 +3281,13 @@ final class Terms {
 
     /** The most elements the list {@code answer} is written with holds, where it is a list written
      *  out or a choice between them, or empty where it is anything else. */
-    private static OptionalLong mostWritten(Term answer) {
+    static OptionalLong mostWritten(Term answer) {
         return switch (answer.shape()) {
             case LIST -> OptionalLong.of(answer.parts().size());
             case EMPTY_LIST -> OptionalLong.of(0);
             case CHOICE -> larger(mostWritten(answer.parts().get(1)),
                     mostWritten(answer.parts().get(2)));
-            case ATTEMPTED -> {
+            case ATTEMPTED, MATCHED -> {
                 OptionalLong most = OptionalLong.of(0);
                 for (Term arm : answer.parts().subList(1, answer.parts().size())) {
                     most = larger(most, mostWritten(arm));

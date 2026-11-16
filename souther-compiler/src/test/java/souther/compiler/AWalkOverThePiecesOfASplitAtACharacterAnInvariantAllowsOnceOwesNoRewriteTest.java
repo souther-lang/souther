@@ -177,6 +177,151 @@ class AWalkOverThePiecesOfASplitAtACharacterAnInvariantAllowsOnceOwesNoRewriteTe
                         .contains(rewrite)).toList());
     }
 
+    private static final String CONTACTS = """
+            data Address = String
+                invariant String.matches("[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", value)
+
+            data Phone = String
+                invariant String.length(value) >= 1
+
+            data DomainName = String
+                invariant String.matches("[a-z0-9.]+", value)
+
+            data EmailOnly     = { email: Address }
+            data PhoneOnly     = { phone: Phone }
+            data EmailAndPhone = { email: Address, phone: Phone }
+            data ContactPoint  = EmailOnly | PhoneOnly | EmailAndPhone
+
+            let emailOf (reach: ContactPoint): List<Address> =
+                match reach with
+                    | EmailOnly { email }     -> [ email ]
+                    | EmailAndPhone { email } -> [ email ]
+                    | PhoneOnly               -> []
+
+            let domainOf (a: Address): List<DomainName> =
+                List.flatMap(d -> if DomainName(d) as name then [ name ] else [],
+                             List.drop(1, String.split("@", String.lowercase(a.value))))
+            """;
+
+    @Test
+    void aWalkOverTheListOfAMatchWhoseArmsHoldOneAtMostOwesNothing() {
+        assertEquals(List.of(), walkRewritesOwed(measured("""
+                module repro.arms.alone
+                %s
+                behavior sizes : (reach: ContactPoint) -> List<Int>
+                let sizes (reach) = List.map(e -> String.length(e.value), emailOf(reach))
+
+                example sizes
+                    | "one" : (EmailOnly { email = Address("a@b.c") }) -> [ 5 ]
+                """.formatted(CONTACTS))));
+    }
+
+    @Test
+    void aFlatMapWhoseClosureAnswersOneAtMostForEveryAddressOverOneAddressOwesNothing() {
+        assertEquals(List.of(), walkRewritesOwed(measured("""
+                module repro.closure
+                %s
+                behavior sizes : (a: Address) -> List<Int>
+                let sizes (a) =
+                    List.map(d -> String.length(d.value), List.flatMap(e -> domainOf(e), [ a ]))
+
+                example sizes
+                    | "one" : (Address("a@b.c")) -> [ 3 ]
+                """.formatted(CONTACTS))));
+    }
+
+    @Test
+    void aFlatMapThatAnswersOneElementForEachOfTheListOfAMatchOwesNothing() {
+        assertEquals(List.of(), walkRewritesOwed(measured("""
+                module repro.flatOverMatch
+                %s
+                behavior sizes : (reach: ContactPoint) -> List<Int>
+                let sizes (reach) =
+                    List.map(n -> n + 1, List.flatMap(e -> [ 1 ], emailOf(reach)))
+
+                example sizes
+                    | "none" : (PhoneOnly { phone = Phone("1") }) -> [ ]
+                """.formatted(CONTACTS))));
+    }
+
+    @Test
+    void aWalkOverWhatFlatMapAnswersOverTheListOfAMatchOwesNothing() {
+        assertEquals(List.of(), walkRewritesOwed(measured("""
+                module repro.domains
+                %s
+                let domainsOf (reach: ContactPoint): List<DomainName> =
+                    List.flatMap(e -> domainOf(e), emailOf(reach))
+
+                behavior sizes : (reach: ContactPoint) -> List<Int>
+                let sizes (reach) = List.map(d -> String.length(d.value), domainsOf(reach))
+
+                example sizes
+                    | "none" : (PhoneOnly { phone = Phone("1") }) -> [ ]
+                """.formatted(CONTACTS))));
+    }
+
+    @Test
+    void aMatchOneOfWhoseArmsHoldSeveralLeavesTheWalkOverItsFlatMapUndecided() {
+        assertEquals(List.of("fold_after_one_step", "fold_from_the_seed"),
+                walkRewritesOwed(measured("""
+                        module repro.arms.several
+                        %s
+                        let twiceOf (reach: ContactPoint): List<Address> =
+                            match reach with
+                                | EmailOnly { email }     -> [ email, email ]
+                                | EmailAndPhone { email } -> [ email ]
+                                | PhoneOnly               -> []
+
+                        behavior sizes : (reach: ContactPoint) -> List<Int>
+                        let sizes (reach) =
+                            List.map(n -> n + 1, List.flatMap(e -> [ 1 ], twiceOf(reach)))
+
+                        example sizes
+                            | "none" : (PhoneOnly { phone = Phone("1") }) -> [ ]
+                        """.formatted(CONTACTS))));
+    }
+
+    @Test
+    void aClosureThatAnswersSeveralForSomeArgumentLeavesTheWalkUndecided() {
+        assertEquals(List.of("fold_after_one_step", "fold_from_the_seed"),
+                walkRewritesOwed(measured("""
+                        module repro.closure.several
+                        %s
+                        let piecesOf (a: Address): List<String> =
+                            String.split("@", String.lowercase(a.value))
+
+                        behavior sizes : (a: Address) -> List<Int>
+                        let sizes (a) =
+                            List.map(s -> String.length(s),
+                                     List.flatMap(e -> piecesOf(e), [ a ]))
+
+                        example sizes
+                            | "one" : (Address("a@b.c")) -> [ 1, 3 ]
+                        """.formatted(CONTACTS))));
+    }
+
+    @Test
+    void aBoundTheTypeOfTheParameterGivesIsNotCarriedToAClosureOverAnotherType() {
+        assertEquals(List.of("fold_after_one_step", "fold_from_the_seed"),
+                walkRewritesOwed(measured("""
+                        module repro.closure.othertype
+                        %s
+                        data Loose = String
+                            invariant String.length(value) >= 1
+
+                        let looseDomainOf (a: Loose): List<String> =
+                            List.drop(1, String.split("@", String.lowercase(a.value)))
+
+                        behavior sizes : (a: Loose) -> List<Int>
+                        let sizes (a) =
+                            List.map(s -> String.length(s),
+                                     List.flatMap(e -> looseDomainOf(e), [ a ]))
+
+                        example sizes
+                            | "one" : (Loose("a@b")) -> [ 1 ]
+                        """.formatted(CONTACTS))));
+    }
+
     @Test
     void aPatternThatLetsTheSeparatorStandAsOftenAsItLikesLeavesBothRewritesOwed() {
         assertEquals(List.of("fold_after_one_step", "fold_from_the_seed"),
