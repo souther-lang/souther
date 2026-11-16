@@ -434,8 +434,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * reading, and an operation told by another is not one it is asked to get past.
          */
         static Working together(List<Working> readings) {
-            Working first = readings.getFirst();
-            return readings.stream().allMatch(first::equals) ? first : UNREAD;
+            Working first = readings.getFirst().notOnEveryRun();
+            // Whether every run reaches the relation is no part of what is told of it: readings
+            // that tell alike tell that, and the relation is on every run only if each is.
+            if (!readings.stream().allMatch(each -> each.notOnEveryRun().equals(first))) {
+                return UNREAD;
+            }
+            return readings.stream().allMatch(Working::onEveryRun) ? readings.getFirst() : first;
         }
 
         Working {

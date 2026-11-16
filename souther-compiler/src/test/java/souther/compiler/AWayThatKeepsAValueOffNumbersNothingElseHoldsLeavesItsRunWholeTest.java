@@ -75,6 +75,19 @@ class AWayThatKeepsAValueOffNumbersNothingElseHoldsLeavesItsRunWholeTest {
         assertFalse(human.isEmpty(), human);
     }
 
+    /** The key of a membership is chosen by a case, and the relation is read on each arm: one on
+     *  the arm the key comes from, and the same relation on every run. What the two readings tell
+     *  is alike, so it is told, and a run that works out the key's addition is asked to get past
+     *  it as in any other comparison. */
+    @Test
+    void aMembershipOfAValueChosenByACaseIsReadOverEveryValue() {
+        String human = report("", "hs: Set<Decimal>, d: Decimal",
+                "(hs, d) -> Set.contains(if d >= 3.0m then d + 1.0m else d, hs)");
+
+        assertFalse(notShownAt(human, "d"), human);
+        assertFalse(notShownAt(human, "hs[*]"), human);
+    }
+
     /** One value is kept off another that nothing else reads, so every value of the first has a
      *  partner that differs. */
     @Test
