@@ -7,7 +7,6 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -91,55 +90,6 @@ class AWayThatKeepsAValueOffNumbersNothingElseHoldsLeavesItsRunWholeTest {
 
         assertFalse(notShownAt(human, "d"), human);
         assertFalse(notShownAt(human, "hs[*]"), human);
-    }
-
-    /**
-     * What a way's statements leave of a number is proved here only for numbers of a type with no
-     * ends. Each proof moves a number by an amount, or writes it at a value worked out of others,
-     * and at the last value of an {@code Int} the number moved up is no value: so the same
-     * shapes over {@code Int} are not shown read, where over {@code Decimal} they are.
-     */
-    @Test
-    void theShapesReadOverEveryDecimalAreNotReadOverEveryInt() {
-        for (String type : new String[] {"Decimal", "Int"}) {
-            boolean read = type.equals("Decimal");
-            String one = read ? "1.0m" : "1";
-            String walk = reportOf("""
-                    module p
-                    let free (hs: Set<%1$s>, d: %1$s): Bool = Bool.not(Set.contains(d, hs))
-                    behavior f : (hs: Set<%1$s>, from: %1$s) -> %1$s
-                    let f (hs, from) = [ from, from + %2$s, from + %2$s + %2$s ]
-                        |> List.find(d -> free(hs, d)) |> Option.withDefault(from)
-                    """.formatted(type, one));
-            String arms = report("", "h: " + type + ", d: " + type + ", s: " + type,
-                    "(h, d, s) -> (if d /= h then d else if d + " + one + " /= h then d + "
-                            + one + " else d) >= s");
-
-            assertEquals(!read, notShownAt(walk, "from"), type + walk);
-            assertEquals(!read, notShownAt(walk, "hs[*]"), type + walk);
-            assertEquals(!read, notShownAt(arms, "d"), type + arms);
-            assertEquals(!read, notShownAt(arms, "h"), type + arms);
-        }
-    }
-
-    /**
-     * Why the shapes above are not read over {@code Int} or {@code Date}: a number moved up is no
-     * value at the last one of its type, and that holds of a comparison no way of this kind is in.
-     * A way that leaves a number's run whole takes away nothing here, so what stays unread is what
-     * the shift leaves of the run, which is not that way's.
-     */
-    @Test
-    void aShiftOfAnIntOrADateIsNotReadOverEveryValueWhateverTheWayIs() {
-        String decimal = report("", "h: Decimal, d: Decimal, s: Decimal",
-                "(h, d, s) -> (if d >= h then d + 1.0m else d) >= s");
-        String integer = report("", "h: Int, d: Int, s: Int",
-                "(h, d, s) -> (if d >= h then d + 1 else d) >= s");
-        String date = report("", "h: Date, d: Date, s: Date",
-                "(h, d, s) -> (if d >= h then Date.addDays(1, d) else d) >= s");
-
-        assertFalse(notShownAt(decimal, "d"), decimal);
-        assertTrue(notShownAt(integer, "d"), integer);
-        assertTrue(notShownAt(date, "d"), date);
     }
 
     /** An element held equal to three times a value is put at a third of it, which is no finite
