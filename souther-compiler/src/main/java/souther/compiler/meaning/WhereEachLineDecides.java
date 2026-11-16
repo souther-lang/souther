@@ -1911,19 +1911,23 @@ public final class WhereEachLineDecides {
 
     /**
      * Whether {@code cases}, held, asks which case one value of the row is. A value inside the
-     * elements or the keys of a container is one of them, and two parts asking it may ask it of two
-     * elements.
+     * elements or the keys of a container is one of them where nothing says which element, and
+     * two parts asking it may ask it of two elements.
      */
     private static boolean oneValueOfTheRow(Proposition.InCases cases) {
         return cases.holds() && aValueOfTheRow(cases.of());
     }
 
-    /** Whether {@code value} is one value of the row, and not one inside the elements or the keys
-     *  of a container. */
+    /**
+     * Whether {@code value} is one value of the row: one at no element or key of a container, or
+     * one an element read through a name stands for, which is one value wherever the name is read
+     * ({@link ValueIdentity.OfAnElement}).
+     */
     private static boolean aValueOfTheRow(DecisionSubject value) {
-        return value instanceof DecisionSubject.AnInput(TermPath at, var _)
-                && at.steps().stream().noneMatch(step -> step instanceof TermPath.Step.Element
-                        || step instanceof TermPath.Step.Key);
+        return value instanceof DecisionSubject.AnInput(TermPath at, var identity)
+                && (identity instanceof ValueIdentity.OfAnElement
+                || at.steps().stream().noneMatch(step -> step instanceof TermPath.Step.Element
+                        || step instanceof TermPath.Step.Key));
     }
 
     /**
