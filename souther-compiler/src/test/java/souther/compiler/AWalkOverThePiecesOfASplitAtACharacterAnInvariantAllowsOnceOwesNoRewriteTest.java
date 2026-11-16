@@ -246,7 +246,7 @@ class AWalkOverThePiecesOfASplitAtACharacterAnInvariantAllowsOnceOwesNoRewriteTe
 
     @Test
     void aWalkOverWhatFlatMapAnswersOverTheListOfAMatchOwesNothing() {
-        assertEquals(List.of(), walkRewritesOwed(measured("""
+        Compilation compilation = measured("""
                 module repro.domains
                 %s
                 let domainsOf (reach: ContactPoint): List<DomainName> =
@@ -257,7 +257,50 @@ class AWalkOverThePiecesOfASplitAtACharacterAnInvariantAllowsOnceOwesNoRewriteTe
 
                 example sizes
                     | "none" : (PhoneOnly { phone = Phone("1") }) -> [ ]
-                """.formatted(CONTACTS))));
+                """.formatted(CONTACTS));
+        assertEquals(List.of(), walkRewritesOwedOf("map", compilation));
+        assertEquals(List.of(), walkRewritesOwedOf("flatMap", compilation));
+    }
+
+    @Test
+    void aWalkOverTheListOfAMatchOnAFieldOfTheInputOwesNothing() {
+        Compilation compilation = measured("""
+                module repro.field
+
+                data OpportunityRequested = { closeDate: Date }
+                data OpportunityIntent = NoOpportunity | OpportunityRequested
+
+                data ConversionRequest = { convertedOn: Date, intent: OpportunityIntent }
+
+                let requestedCloseDate (intent: OpportunityIntent): List<Date> =
+                    match intent with
+                        | NoOpportunity                      -> []
+                        | OpportunityRequested { closeDate } -> [ closeDate ]
+
+                data CloseDateInPast = { requested: Date }
+                data ConversionBlocked = { reasons: List<CloseDateInPast> }
+                    invariant List.length(reasons) >= 1
+                data Converted = { on: Date }
+
+                let closeDateReasons (request: ConversionRequest): List<CloseDateInPast> =
+                    List.map(d -> CloseDateInPast { requested = d },
+                             List.filter(d -> Date.daysBetween(request.convertedOn, d) < 0,
+                                         requestedCloseDate(request.intent)))
+
+                behavior convert : (request: ConversionRequest) -> Converted | ConversionBlocked
+                    constructs Converted, ConversionBlocked, CloseDateInPast
+                let convert (request) =
+                    if ConversionBlocked { reasons = closeDateReasons(request) } as blocked
+                    then blocked
+                    else Converted { on = request.convertedOn }
+
+                example convert
+                    | "none" : (ConversionRequest { convertedOn = Date("2026-07-20"),
+                                                    intent = NoOpportunity })
+                        -> Converted { on = Date("2026-07-20") }
+                """);
+        assertEquals(List.of(), walkRewritesOwedOf("map", compilation));
+        assertEquals(List.of(), walkRewritesOwedOf("filter", compilation));
     }
 
     @Test

@@ -1056,9 +1056,20 @@ public final class PathReachability {
                 if (step != null) {
                     steps.add(step);
                 }
-                Walked body = walk(block.body(), new Walked(inside, here.decided(),
+                // What the closure is handed is a value of its parameter's type, and so holds what
+                // that type guarantees; entered as a location it is a place a size can be named
+                // of, and a list built from it is one value wherever the closure is read.
+                Known handed = inside;
+                Denotations within = at;
+                for (int each = 0; each < block.params().size(); each++) {
+                    PathEngine.Entered in = engine.enter(Terms.read(block.params().get(each),
+                            block.paramTypes().get(each), block.pos()), handed, within);
+                    handed = in.known();
+                    within = in.at();
+                }
+                Walked body = walk(block.body(), new Walked(handed, here.decided(),
                                 here.mayStop(), here.nothingAbove() && applied.isEmpty(), true,
-                                why, nothingReaches(inside)), at,
+                                why, nothingReaches(inside)), within,
                         reads.entering(new ScopeStep.Block(block), symbols, newtypes));
                 if (step != null) {
                     steps.removeLast();
