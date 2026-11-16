@@ -1800,7 +1800,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 entire.conditions(), null, entire.stating(), theWay.heldWhole(),
                 entire.narrowing(), false);
         WhatARelationLeavesUndivided.Independence apart = withThem.apartOnTheWay(entire.tying(),
-                declared.sources(), read, Set.of(), declared.carriers(), entire.along());
+                declared.sources(), read, Set.of(), entire.along());
         Map<NumericTerm, ExactRatio> out = new LinkedHashMap<>();
         for (int at = sides.size(); at < together.size(); at++) {
             boolean standsApart = true;
@@ -2049,25 +2049,28 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * What of {@code conditions} can tie one side to another: all of it, but for the
-     * disequalities that are not the line of the relation. Where the numbers are dense, a
-     * hyperplane taken out leaves both sides of the line open, so a disequality that is not the
-     * line takes nothing a side stands at. Which it is is judged once the equalities of the way
-     * are in, those it states and those its region holds ({@link #equalitiesHeldBy}): {@code
-     * h /= s} is the line of a relation between {@code d} and {@code s} where {@code d == h}.
+     * disequalities that are not the line of the relation, where the way moves as one
+     * ({@link #movesAsOne}). A hyperplane taken out of a region leaves both sides of a line open
+     * only where nothing else of the way narrows the region at some value: {@code h >= 0} and
+     * {@code h <= s} leave {@code h} nought at the one value {@code s} nought, where {@code d /= h}
+     * is the line of {@code d == s}. A way that moves as one is narrowed at no value that it is not
+     * at every other, and what is narrowed at every value is an equality its region holds. Which
+     * disequality is the line is judged once the equalities of the way are in, those it states and
+     * those its region holds ({@link #equalitiesHeldBy}): {@code h /= s} is the line of a relation
+     * between {@code d} and {@code s} where {@code d == h}.
      */
-    private List<OnAWay> tyingAmong(List<OnAWay> conditions, List<Carrier> carriers,
+    private List<OnAWay> tyingAmong(List<OnAWay> conditions, InputReading read,
                                     SearchRegion region) {
         TakenConstraint.Affine asked = askedAsAStatement();
         if (asked == null || conditions.stream().noneMatch(each -> each.disequality() != null)
-                || carriers.stream().anyMatch(each ->
-                        granularityOf(each) == Granularity.DISCRETE)) {
+                || !movesAsOne(conditions, read)) {
             return conditions;
         }
         Set<NumericTerm> numbers = new LinkedHashSet<>(asked.form().coefs().keySet());
         conditions.stream().filter(each -> each.disequality() != null)
                 .forEach(each -> numbers.addAll(each.disequality().form().coefs().keySet()));
         List<TakenConstraint.Affine> equalities = new ArrayList<>(equalitiesOf(conditions));
-        equalities.addAll(equalitiesHeldBy(region, numbers));
+        equalities.addAll(equalitiesHeldBy(region::projectionOf, numbers));
         List<Step> defined = stepsOf(equalities);
         return defined == null ? conditions : conditions.stream().filter(each ->
                 each.disequality() == null
@@ -2091,9 +2094,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                                    List<Source> sources,
                                                                    InputReading read,
                                                                    Set<Object> ignoring,
-                                                                   List<Carrier> carriers,
                                                                    SearchRegion region) {
-        List<OnAWay> tying = tyingAmong(conditions, carriers, region);
+        List<OnAWay> tying = tyingAmong(conditions, read, region);
         TiedOnTheWay tied = TiedOnTheWay.of(tying, read, ignoring);
         List<Set<Object>> tiedTo = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
@@ -2131,7 +2133,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 sources, carriers, entire.along(), entire.declared(), entire.conditions(), null,
                 entire.stating(), true, entire.narrowing(), false);
         WhatARelationLeavesUndivided.Independence independent =
-                apartOnTheWay(entire.tying(), sources, read, Set.of(), carriers, entire.along());
+                apartOnTheWay(entire.tying(), sources, read, Set.of(), entire.along());
         TheWay theWay = new TheWay(written, past, null, way.region(), false, true);
         WhatARelationLeavesUndivided.Operations operations = operationsOverTheSides(read,
                 entire.conditions(), true, totalsWrittenByOneElement(terms),
@@ -3243,7 +3245,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // the pair is asked whether the way ties them as well as whether the declarations do.
         Set<Object> roomy = room.rules();
         WhatARelationLeavesUndivided.Independence onTheWay =
-                apartOnTheWay(beside.tying(), sources, read, roomy, carriers, beside.along());
+                apartOnTheWay(beside.tying(), sources, read, roomy, beside.along());
         // A code point of the string the remainder's form is of stands apart from the form where
         // the format shows the form leaves every remainder whatever that code point is, and the
         // way states nothing of it that holds a string back: then all the way ties the two by is
@@ -7259,14 +7261,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * where it leaves the difference of two one value, that is the equality. {@code h >= s} and
      * {@code h <= s} leave {@code h - s} nought, and say {@code h == s}.
      */
-    static List<TakenConstraint.Affine> equalitiesHeldBy(SearchRegion region,
-                                                         Collection<NumericTerm> numbers) {
+    static List<TakenConstraint.Affine> equalitiesHeldBy(
+            Function<LinearForm<NumericTerm>, NumericDomain.FormProjection> projectionOf,
+            Collection<NumericTerm> numbers) {
         List<NumericTerm> in = List.copyOf(numbers);
         List<TakenConstraint.Affine> out = new ArrayList<>();
         for (int i = 0; i < in.size(); i++) {
             for (int j = i + 1; j < in.size(); j++) {
                 LinearForm<NumericTerm> difference = LinearForm.difference(in.get(i), in.get(j));
-                if (region.projectionOf(difference) instanceof NumericDomain.FormProjection
+                if (projectionOf.apply(difference) instanceof NumericDomain.FormProjection
                         .Within(NumericDomain.Bounds run) && run.min() != null && run.max() != null
                         && run.min().inclusive() && run.max().inclusive()
                         && run.min().at().equals(run.max().at())

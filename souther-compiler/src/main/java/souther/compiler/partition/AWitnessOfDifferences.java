@@ -18,7 +18,12 @@ import java.util.Set;
  *
  * <p>Asked of statements that are all differences of numbers, which no assignment is better than
  * another for: the first number is nought and the others are whole numbers and halves near it. A
- * way no such assignment meets is not shown to hold a row, which is not that it holds none.
+ * way no such assignment meets is not shown to hold a row, which is not that it holds none:
+ * {@code d - h == 9} holds a row, and none of these numbers makes it.
+ *
+ * <p><b>What is tried is how far this looks and no rule of what holds a row.</b> The numbers are
+ * where a search is made, so widening them shows rows more ways do and changes no answer a way
+ * was given; an answer here is that a row was found, and the absence of one says nothing.
  */
 final class AWitnessOfDifferences {
 

@@ -4,8 +4,11 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.partition.UndividedByARelation.OnAWay;
 
@@ -115,6 +118,37 @@ class ADisequalityTiesTheSidesOnlyWhereItIsTheLineOfTheRelationOnceTheEqualities
         var twiceDIsH = stepsOf(weighed(Rel.EQ, 0, D, 2, H, -1));
         assertEquals(List.of(weighed(Rel.GE, 0, H, 1, S, -1)), UndividedByARelation.reducedBy(
                 weighed(Rel.GE, 0, D, 2, S, -1), twiceDIsH));
+    }
+
+    private static NumericDomain.FormProjection projection(Endpoint least, Endpoint greatest) {
+        return new NumericDomain.FormProjection.Within(new NumericDomain.Bounds(least, greatest));
+    }
+
+    /** Where the region leaves the difference of two numbers one value, that is an equality of
+     *  the way ({@code h >= s} and {@code h <= s} leave {@code h - s} nought). */
+    @Test
+    void aDifferenceTheRegionLeavesOneValueIsAnEquality() {
+        assertEquals(List.of(affine(H, S, Rel.EQ)), UndividedByARelation.equalitiesHeldBy(
+                _ -> projection(Endpoint.inclusive(Count.of(0)), Endpoint.inclusive(Count.of(0))),
+                List.of(H, S)));
+        assertEquals(List.of(weighed(Rel.EQ, -2, H, 1, S, -1)),
+                UndividedByARelation.equalitiesHeldBy(_ -> projection(
+                        Endpoint.inclusive(Count.of(2)), Endpoint.inclusive(Count.of(2))),
+                        List.of(H, S)));
+    }
+
+    /** A difference left a run is no equality, nor one that has an end open, nor one the
+     *  region leaves nothing: {@code h >= 0} and {@code h <= s} leave {@code h - s} the values
+     *  below nought, and nought only where {@code s} is nought. */
+    @Test
+    void aDifferenceTheRegionLeavesARunOrNothingIsNoEquality() {
+        assertEquals(List.of(), UndividedByARelation.equalitiesHeldBy(
+                _ -> projection(null, Endpoint.inclusive(Count.of(0))), List.of(H, S)));
+        assertEquals(List.of(), UndividedByARelation.equalitiesHeldBy(
+                _ -> projection(Endpoint.inclusive(Count.of(0)), Endpoint.exclusive(Count.of(0))),
+                List.of(H, S)));
+        assertEquals(List.of(), UndividedByARelation.equalitiesHeldBy(
+                _ -> new NumericDomain.FormProjection.NothingIsLeft(), List.of(H, S)));
     }
 
     /** What the way states of numbers by an equality is taken; a disequality, or a statement of
