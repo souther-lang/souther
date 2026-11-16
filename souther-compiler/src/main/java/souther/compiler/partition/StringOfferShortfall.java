@@ -6,9 +6,10 @@ import souther.compiler.inputs.BlockReason;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.regex.PatternPlan;
 
-import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * What did not reach the values offered at a position, and what stopped each of them.
@@ -69,7 +70,12 @@ public record StringOfferShortfall(List<NotOffered> these) {
         return Optional.empty();
     }
 
-    /** This and {@code those} together, which is what a caller holding two readings has. */
+    /**
+     * This and {@code those} together, which is what a caller holding two readings has.
+     *
+     * <p>Each thing once, in the order it was met: two readings that were short of the same thing
+     * are short of one thing, and said twice it is a second fact where there is one.
+     */
     StringOfferShortfall and(StringOfferShortfall those) {
         if (those.isEmpty()) {
             return this;
@@ -77,9 +83,9 @@ public record StringOfferShortfall(List<NotOffered> these) {
         if (isEmpty()) {
             return those;
         }
-        List<NotOffered> out = new ArrayList<>(these);
+        Set<NotOffered> out = new LinkedHashSet<>(these);
         out.addAll(those.these());
-        return new StringOfferShortfall(out);
+        return new StringOfferShortfall(List.copyOf(out));
     }
 
     /**
