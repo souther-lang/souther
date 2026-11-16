@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * Which class each of a behavior's inputs fell in.
@@ -149,7 +150,7 @@ public final class InputClassifications {
             ids.add(each.id());
             answers.add(Recognitions.membershipOf(each.recognises(), value));
         }
-        return decided(axis.id(), ids, answers, !axis.leftOpenBy().isEmpty(), value);
+        return decided(axis.id(), ids, answers, () -> axis.outsideTheClasses(value), value);
     }
 
     /**
@@ -167,13 +168,13 @@ public final class InputClassifications {
      *
      * @param ids     what each class is called, in the order they were asked
      * @param answers what each of them made of the value, in the same order
-     * @param leavesValuesOpen whether a rule left some of the position's values in no class
-     *                ({@link Axis#leftOpenBy})
+     * @param outside what is owed of a value no class holds, which the axis says
+     *                ({@link Axis#outsideTheClasses}) and which is asked only when no class does
      * @param about   the value they were asked about, for the sentence a broken contract prints, and
      *                for nothing else. Null where a caller has none to name
      */
     static Classification decided(AxisId at, List<String> ids, List<Membership> answers,
-                                  boolean leavesValuesOpen, ObservedValue about) {
+                                  Supplier<Axis.Outside> outside, ObservedValue about) {
         if (ids.size() != answers.size()) {
             throw new IllegalArgumentException(
                     "one answer per class: " + ids.size() + " classes, " + answers.size());
@@ -221,19 +222,22 @@ public final class InputClassifications {
         if (incomplete != null) {
             return Classification.unreadable(incomplete, at.behavior(), at.term());
         }
-        // Every class read the value and none holds it. Where a rule left values open, the classes
-        // hold only the rest and this is one of those: which class it is in was not worked out,
-        // and the measure is short of it as of any value whose class nobody could say.
-        if (leavesValuesOpen) {
-            return Classification.unreadable(
+        // Every class read the value and none holds it. What the axis says of such a value is what
+        // follows: it is one a rule was shown on neither side of, whose class was not worked out and
+        // of which the measure is short as of any value whose class nobody could say; or it is one
+        // no run gets to a rule with, which is read and in no class, with nothing more to say of
+        // where it falls.
+        return switch (outside.get()) {
+            case OWED -> Classification.unreadable(
                     Incompleteness.Cause.of(Incompleteness.Code.VALUE_OUTSIDE_WHAT_WAS_SHOWN),
                     at.behavior(), at.term());
-        }
-        // Elsewhere `Axis` says it cannot happen: its classes are exhaustive over the position's
-        // values. So this is that contract broken rather than anything about the value, and saying
-        // it could not be read would be reporting a measurement failure for a defect in the
-        // partition.
-        throw new IllegalStateException("no class of " + at + " holds a value it read: " + about);
+            case NOTHING_OWED -> Classification.at(List.of(), null);
+            // `Axis` says it cannot happen: its classes hold what the rules leave. So this is that
+            // contract broken rather than anything about the value, and saying it could not be
+            // read would be reporting a measurement failure for a defect in the partition.
+            case NOT_AN_ANSWER -> throw new IllegalStateException(
+                    "no class of " + at + " holds a value it read: " + about);
+        };
     }
 
     private InputClassifications() {}

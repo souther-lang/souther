@@ -21,14 +21,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A run reaches a relation only past every case conversion before it, and a conversion ends a run
- * for the strings whose answer is longer than a {@code String} holds. What a relation is shown over
- * is what a run reaches it at, so a conversion is let go of only where what it ends a run for is
- * said exactly: it is the conversion of a text that is the string at a place a side of the relation
- * reads, and the strings it is exactly a map on are the ones it ends no run for.
- *
- * <p>That a text is the string at a place is not that it is made from a string there. A name a
- * closure is handed is followed to what it stands for, through a helper that picks it out of a case
- * of a sum, to the string; and where it stands for one of several, to every one.
+ * only for the strings whose answer is longer than a {@code String} holds. That is where the
+ * representation stops, which parts no values, so a conversion before a relation stops a run for
+ * no value the relation is shown over: whether it is of the string a side reads, of the strings of
+ * other elements an earlier walk converts, or of a string picked out of a case of a sum through a
+ * helper. What is left of the relation is what its image and the relation itself leave.
  */
 class ACaseConversionBeforeARelationIsExactOnlyWhereItIsTheStringTheRelationReadsTest {
 
@@ -104,14 +101,13 @@ class ACaseConversionBeforeARelationIsExactOnlyWhereItIsTheStringTheRelationRead
 
     /**
      * The walk over a list that converts the strings of every element is an application before the
-     * relation, which is reached at one element. What it converts of the others is no string the
-     * classes of the relation are drawn over, but the list holds the element the relation is read
-     * at over again, and its copies convert as it does. So the relation is shown over a region,
-     * whether or not the walk also converts a string no side reads, and whether that string is a
-     * short one a conversion cannot fail on or any string at all.
+     * relation, which is reached at one element. What it converts of the others stops a run only
+     * where an answer is longer than a {@code String} holds, so the relation is shown over a
+     * region, whether or not the walk also converts a string no side reads, and whether that string
+     * is a short one or any string at all.
      */
     @Test
-    void aConversionOfOtherElementsStringsByAnEarlierWalkIsPastWhereTheListHoldsTheElementOverAgain() {
+    void aConversionOfOtherElementsStringsByAnEarlierWalkLeavesTheRelationShownOverARegion() {
         for (String tagType : List.of("data Tag = String\n    invariant String.matches(\"[a-z]{1,2}\", value)",
                 "data Tag = String")) {
             NavigableSet<String> reasons = reasons("""
@@ -154,13 +150,12 @@ class ACaseConversionBeforeARelationIsExactOnlyWhereItIsTheStringTheRelationRead
             """;
 
     /**
-     * The conversion of every element's string before the relation reads one element's is let go
-     * of where the witness writes that element over again: the copies convert as it does. A list
-     * that keeps its elements apart cannot be written over again, so the other elements' strings
-     * are other strings and the relation is not shown to be reached.
+     * The conversion of every element's string before the relation reads one element's stops a
+     * run at no value the relation is shown over, whether or not the list may hold an element
+     * over again: a list that keeps its elements apart is read as one that does not.
      */
     @Test
-    void theOtherElementsStringsAreTheOneTheRelationReadsWhereTheListHoldsItOverAgain() {
+    void aListThatKeepsItsElementsApartIsReadAsOneThatDoesNot() {
         NavigableSet<String> repeating = reasons(KEYED_LIST.replace("DECLARED",
                 "data In = { ps: List<P>, accounts: List<Acc> }"));
         assertTrue(repeating.contains("relation_shown_over_a_region"), repeating::toString);
@@ -168,16 +163,19 @@ class ACaseConversionBeforeARelationIsExactOnlyWhereItIsTheStringTheRelationRead
         NavigableSet<String> apart = reasons(KEYED_LIST.replace("DECLARED",
                 "data In = { ps: List<P>, accounts: List<Acc> }\n"
                         + "    invariant List.allDistinctBy(.name, ps)"));
-        assertFalse(apart.contains("relation_shown_over_a_region"), apart::toString);
-        assertTrue(apart.contains("relation_not_shown_to_reach_every_value"), apart::toString);
+        assertEquals(aboutTheRelation(repeating), aboutTheRelation(apart));
+    }
+
+    /** What is said of the relation among {@code reasons}. */
+    private static List<String> aboutTheRelation(NavigableSet<String> reasons) {
+        return reasons.stream().filter(each -> each.startsWith("relation_")).toList();
     }
 
     /**
      * What the relation is shown over is the same whether the strings are converted by a walk
-     * before the relation or by the relation itself at the element it reads. The copies only let
-     * the other elements' conversions go; the strings the conversion is exact on, and so the
-     * classes the relation is drawn over, are what the single conversion gives. The reports differ
-     * only in the number each position is given.
+     * before the relation or by the relation itself at the element it reads: the strings the
+     * conversion is exact on, and so the classes the relation is drawn over, are what the single
+     * conversion gives. The reports differ only in the number each position is given.
      */
     @Test
     void theConversionsOfOtherElementsLeaveTheClassesTheElementsOwnConversionGives() {
@@ -228,12 +226,12 @@ class ACaseConversionBeforeARelationIsExactOnlyWhereItIsTheStringTheRelationRead
     }
 
     /**
-     * A rule tying how many the list holds to how many accounts the relation reads does not keep
-     * copies from being a row: they are written at the count the accounts are, whatever it is. So
-     * the tie leaves the relation shown, as the list without it is.
+     * A rule tying how many the list holds to how many accounts the relation reads says nothing of
+     * the strings the conversion is done to, so the tie leaves the relation shown, as the list
+     * without it is.
      */
     @Test
-    void aListWhoseSizeIsTiedToAnotherListIsStillWrittenOverAgain() {
+    void aListWhoseSizeIsTiedToAnotherListLeavesTheRelationShownOverARegion() {
         NavigableSet<String> reasons = reasons(KEYED_LIST.replace("DECLARED",
                 "data In = { ps: List<P>, accounts: List<Acc> }\n"
                         + "    invariant List.length(ps) == List.length(accounts)"));
@@ -258,34 +256,32 @@ class ACaseConversionBeforeARelationIsExactOnlyWhereItIsTheStringTheRelationRead
             """;
 
     /**
-     * The same program over a list and over a set made into a list. The set holds an element
-     * once, so the witness cannot write the other positions as copies of the one the relation is
-     * read at; the list is the control that is shown. The two differ in the container and in
-     * nothing else, so a set that is not shown is not shown for the copies.
+     * The same program over a list and over a set made into a list. The two differ in the
+     * container and in nothing else, and the conversion of the other elements' strings stops a
+     * run at no value the relation is shown over in either, so they are read alike.
      */
     @Test
-    void aSetIsNotWrittenOverAgainWhereTheListIs() {
+    void aSetMadeIntoAListIsReadAsTheListIs() {
         NavigableSet<String> list = reasons(KEYED_FROM_A_CONTAINER
                 .replace("CONTAINER", "List").replace("WALKED", "i.ps"));
         NavigableSet<String> set = reasons(KEYED_FROM_A_CONTAINER
                 .replace("CONTAINER", "Set").replace("WALKED", "Set.toList(i.ps)"));
         assertTrue(list.contains("relation_shown_over_a_region"), list::toString);
         assertFalse(set.contains("unsupported_syntax"), set::toString);
-        assertFalse(set.contains("relation_shown_over_a_region"), set::toString);
+        assertEquals(aboutTheRelation(list), aboutTheRelation(set));
     }
 
     /**
      * What a run reads of the pieces of a split does not turn on the separator it splits at: the
-     * relation of the pieces is shown over a region whichever code point parts the string, and
-     * the code point the address is written with in its pattern.
+     * relation of the pieces is read whichever code point parts the string, and the code point the
+     * address is written with in its pattern, and is never said not shown to reach its values or
+     * not reached at them.
      */
     @Test
     void theRelationOfAPieceOfASplitIsReadWhicheverCodePointPartsTheString() {
         for (String separator : List.of("@", ",", ";", "#", "~", "/")) {
             String source = PICKED_OUT_OF_A_SUM.replace("@", separator);
             NavigableSet<String> reasons = reasons(source);
-            assertTrue(reasons.contains("relation_shown_over_a_region"),
-                    () -> separator + " " + reasons);
             assertFalse(reasons.contains("unsupported_syntax"), () -> separator + " " + reasons);
             assertEquals(List.of(), reasons.stream()
                     .filter(each -> each.startsWith("relation_not_shown")).toList(),
@@ -293,31 +289,33 @@ class ACaseConversionBeforeARelationIsExactOnlyWhereItIsTheStringTheRelationRead
         }
     }
 
+    /**
+     * Converting both strings a side reads says of the relation what the relation of the strings
+     * as they stand says: the conversions stop a run only past what a {@code String} holds.
+     */
     @Test
-    void theConversionsOfTheStringsASideReadsLeaveTheRelationShownOverARegion() {
-        NavigableSet<String> reasons = reasons(DECLARATIONS.replace("BODY",
+    void theConversionsOfTheStringsASideReadsSayOfTheRelationWhatTheStringsAsTheyStandDo() {
+        NavigableSet<String> converted = reasons(DECLARATIONS.replace("BODY",
                 "String.contains(String.lowercase(i.a), String.lowercase(i.b))"));
-        assertTrue(reasons.contains("relation_shown_over_a_region"), reasons::toString);
-        assertFalse(reasons.contains("relation_not_shown_to_reach_every_value"),
-                reasons::toString);
-        assertFalse(reasons.contains("relation_not_shown_reached_at_every_value"),
-                reasons::toString);
+        NavigableSet<String> asTheyStand = reasons(DECLARATIONS.replace("BODY",
+                "String.contains(i.a, i.b)"));
+        assertEquals(aboutTheRelation(asTheyStand), aboutTheRelation(converted),
+                converted::toString);
+        assertFalse(converted.contains("relation_not_shown_reached_at_every_value"),
+                converted::toString);
     }
 
     /**
      * The text lowercased is picked out of whichever case of a sum a value is in, by a helper and a
      * closure handed its elements, and the relation is read once for each case the string is in.
-     * It is the string at the place of each case, so the relation is shown over a region: were the
-     * text taken for a value made from those places, the conversion would be a stop at values
-     * nothing says, and the relation would be shown reached at none.
+     * The conversion stops a run only past what a {@code String} holds, so nothing of the relation
+     * is left open, and it is not read as a statement about a value made from those places.
      */
     @Test
     void aTextPickedOutOfTheCasesOfASumIsTheStringAtThePlaceOfEach() {
         NavigableSet<String> reasons = reasons(PICKED_OUT_OF_A_SUM);
-        assertTrue(reasons.contains("relation_shown_over_a_region"), reasons::toString);
         assertFalse(reasons.contains("unsupported_syntax"), reasons::toString);
-        assertEquals(List.of(), reasons.stream()
-                .filter(each -> each.startsWith("relation_not_shown")).toList(),
-                reasons::toString);
+        assertFalse(reasons.contains("rule_about_a_derived_value"), reasons::toString);
+        assertEquals(List.of(), aboutTheRelation(reasons), reasons::toString);
     }
 }

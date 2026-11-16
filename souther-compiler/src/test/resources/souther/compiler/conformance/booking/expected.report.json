@@ -5526,7 +5526,18 @@
             "lowered" : 0
           }
         } ],
-        "caseExpansions" : [ ]
+        "caseExpansions" : [ ],
+        "stopsPastTheRepresentation" : [ {
+          "operation" : "String.uppercase",
+          "at" : {
+            "sourceId" : "5",
+            "line" : 15,
+            "column" : 32,
+            "writtenAt" : {
+              "kind" : "here"
+            }
+          }
+        } ]
       },
       "branch" : {
         "status" : "unavailable",

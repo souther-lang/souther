@@ -74,46 +74,47 @@ class AWalkOverAListAChoiceAnswersIsReadArmByArmTest {
     }
 
     /**
-     * A comparison inside a closure is reached only past what the run works out before the call
-     * applies the closure: the numbers from nought to the lead's code are more than a list holds
-     * where the code is past what a list holds, so no run with such a code gets to the screening,
-     * and the code is not shown to be compared at every value. Without them it is.
+     * A comparison inside a closure is reached past a range worked out before the call applies
+     * the closure: the numbers from nought to the lead's code are more than a list holds only
+     * where the code is past what a list holds, which is where a list stops and parts no codes.
+     * The code is compared at every value, and the range is said as a stop of its own.
      */
     @Test
-    void aComparisonInAClosureIsReachedOnlyPastWhatTheRunWorksOutBeforeIt() {
+    void aComparisonInAClosureIsReachedPastARangeWorkedOutBeforeIt() {
         PartitionEvidence padded = screened("let pad = List.rangeInclusive(0, lead.code)",
                 "[ lead.code ]");
-        assertEquals(List.of("contacts[*].code", "lead.code"),
-                notReachedAtEveryValue(padded), () -> padded.notRead().toString());
+        assertEquals(List.of(), notReachedAtEveryValue(padded), () -> padded.notRead().toString());
+        assertTrue(operationsStoppingPastTheRepresentation(padded).contains("List.rangeInclusive"),
+                padded.stopsPastTheRepresentation()::toString);
         PartitionEvidence one = screened("", "[ lead.code ]");
         assertEquals(List.of(), stopped(one), () -> one.notRead().toString());
     }
 
     /**
-     * The witness a join is shown to fit on holds as few contacts as the way lets it: a guard
-     * asking for two at least leaves one of two, which fits, and one asking for three at most
-     * leaves one, which fits as well. One asking for as many as a list holds, at least or
-     * exactly, leaves that many, and two codes keeping them all join past what a list holds.
+     * Whatever a guard holds the contacts to, two codes keeping all of them join to more than a
+     * list holds only where the join would be past what a list holds, which parts no values: a
+     * guard asking for as many as a list holds, at least or exactly, leaves the comparison
+     * reached at every value, as one asking for two at least or three at most does. The join is
+     * said as a stop of its own.
      */
     @Test
-    void theWitnessAJoinFitsOnHoldsAsFewAsTheWayLetsIt() {
-        PartitionEvidence two = screened("guard List.length(contacts) >= 2 else NoMatch",
-                "[ lead.code ]");
-        assertEquals(List.of(), notReachedAtEveryValue(two), () -> two.notRead().toString());
-        PartitionEvidence full = screened(
-                "guard List.length(contacts) >= 2147483647 else NoMatch",
-                "[ lead.code, lead.code ]");
-        assertEquals(List.of("contacts[*].code", "lead.code"), notReachedAtEveryValue(full),
-                () -> full.notRead().toString());
-        PartitionEvidence exactly = screened(
-                "guard List.length(contacts) == 2147483647 else NoMatch",
-                "[ lead.code, lead.code ]");
-        assertEquals(List.of("contacts[*].code", "lead.code"), notReachedAtEveryValue(exactly),
-                () -> exactly.notRead().toString());
-        PartitionEvidence atMost = screened("guard List.length(contacts) <= 3 else NoMatch",
-                "[ lead.code ]");
-        assertEquals(List.of(), notReachedAtEveryValue(atMost),
-                () -> atMost.notRead().toString());
+    void aJoinLeavesTheComparisonReachedWhateverTheGuardHoldsTheContactsTo() {
+        for (String guard : List.of("List.length(contacts) >= 2",
+                "List.length(contacts) >= 2147483647", "List.length(contacts) == 2147483647",
+                "List.length(contacts) <= 3")) {
+            PartitionEvidence evidence = screened("guard " + guard + " else NoMatch",
+                    "[ lead.code, lead.code ]");
+            assertEquals(List.of(), notReachedAtEveryValue(evidence),
+                    () -> guard + ": " + evidence.notRead());
+            assertTrue(operationsStoppingPastTheRepresentation(evidence).contains("List.flatMap"),
+                    () -> guard + ": " + evidence.stopsPastTheRepresentation());
+        }
+    }
+
+    private static List<String> operationsStoppingPastTheRepresentation(
+            PartitionEvidence evidence) {
+        return evidence.stopsPastTheRepresentation().stream()
+                .map(StopPastTheRepresentation::operation).toList();
     }
 
     /** Where a relation was read and a run may stop on the way to it. */

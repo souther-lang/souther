@@ -260,7 +260,12 @@ class ARewriteOfWhatKeepsSomePiecesIsToldByPiecesMeetingWhatTheBodyDemandsTest {
         assertEquals(false, told.isEmpty(),
                 () -> "`zz@cd` is `ZZ@CD` once made capitals, and `ZZ` is a part the books hold: "
                         + all);
+        // A row that holds the string `ZZ` in the books is one whose source the body parts into a
+        // string that holds `ZZ`; a row whose books hold another string is another row's matter.
         for (Replacements.Searched each : told) {
+            if (!each.inputs().getLast().contains("\"ZZ\"")) {
+                continue;
+            }
             List<String> parted = partedAs(CaseMapping.UPPERCASE, writtenOf(each), "@");
             assertEquals(true, parted.contains("ZZ"),
                     () -> "what the body parts holds the string the books hold: " + parted);

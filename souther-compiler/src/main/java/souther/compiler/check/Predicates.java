@@ -5,6 +5,7 @@ import souther.compiler.check.DischargeRules.Carrying;
 import souther.compiler.check.DischargeRules.Projection;
 import souther.compiler.semantics.ElementShape;
 import souther.compiler.check.DischargeRules.Source;
+import souther.compiler.numeric.CountDomain;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumberSpace;
@@ -32,6 +33,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -444,6 +446,27 @@ final class Predicates {
                 reached = true;
             }
             return reached;
+        }
+
+        /**
+         * The most the form every case came to can be, the most of the cases a run can reach:
+         * the cases are alternatives, so what holds of all of them is what holds of the largest.
+         * Empty where a case reaches no end, or none is reached.
+         */
+        OptionalLong mostIn(NumericDomain<FactSubject> d) {
+            long most = -1;
+            for (Case one : cases) {
+                NumericDomain<FactSubject> here = one.in(d);
+                if (here.isBottom()) {
+                    continue;
+                }
+                OptionalLong inThis = Predicates.mostIn(here, one.numeric().form());
+                if (inThis.isEmpty()) {
+                    return OptionalLong.empty();
+                }
+                most = Math.max(most, inThis.getAsLong());
+            }
+            return most < 0 ? OptionalLong.empty() : OptionalLong.of(most);
         }
 
         boolean refutedBy(NumericDomain<FactSubject> d) {
@@ -2175,12 +2198,52 @@ final class Predicates {
      * first and leave the second saying nothing.
      */
     private Piecewise piecewiseOf(NumericConstraint owed) {
-        if (chosenIn(owed.form(), List.of(), Set.of()) == null) {
+        return piecewiseOf(owed, List.of());
+    }
+
+    /** The same, where {@code given} says of the values inside the clause what is known of them
+     *  besides, so that a value only those name is read case by case as well. */
+    private Piecewise piecewiseOf(NumericConstraint owed, List<NumericConstraint> given) {
+        if (chosenIn(owed.form(), given, Set.of()) == null) {
             return null;
         }
         List<Case> cases = new ArrayList<>();
-        return expand(owed, owed.form(), List.of(), Set.of(), cases)
+        return expand(owed, owed.form(), given, Set.of(), cases)
                 ? new Piecewise(List.copyOf(cases)) : null;
+    }
+
+    /**
+     * Whether {@code owed} holds in every case of the values inside it that are each one of
+     * several, under what {@code k} holds ({@link #piecewiseOf}); false where it makes no cases.
+     */
+    boolean entailedInEveryCase(NumericConstraint owed, Known k, List<NumericConstraint> given) {
+        Piecewise cases = piecewiseOf(owed, given);
+        return cases != null && cases.entailedBy(k.numbers());
+    }
+
+    /**
+     * The most {@code form} can be under what {@code k} holds, or empty where no end is shown.
+     *
+     * <p>Read of the values as a whole and case by case ({@link #piecewiseOf}), each of which is a
+     * bound the same facts prove, so the answer is the least of the two. The number is what the
+     * domain says and not one of a list tried in turn: a bound the domain shows is a bound here.
+     */
+    OptionalLong mostOf(LinearForm<FactSubject> form, Known k, List<NumericConstraint> given) {
+        OptionalLong whole = mostIn(k.numbers(), form);
+        Piecewise cases = piecewiseOf(new NumericConstraint(form, Rel.LE), given);
+        OptionalLong byCases = cases == null ? OptionalLong.empty() : cases.mostIn(k.numbers());
+        return Terms.least(whole, byCases);
+    }
+
+    /** The most {@code form} can be in {@code d}, as a count, or empty where it has no end or
+     *  {@code d} holds no value at all. */
+    private static OptionalLong mostIn(NumericDomain<FactSubject> d, LinearForm<FactSubject> form) {
+        if (d.isBottom()) {
+            return OptionalLong.empty();
+        }
+        int most = CountDomain.mostFrom(d.boundsOf(form).max());
+        return most < 0 || most == Integer.MAX_VALUE ? OptionalLong.empty()
+                : OptionalLong.of(most);
     }
 
     /**

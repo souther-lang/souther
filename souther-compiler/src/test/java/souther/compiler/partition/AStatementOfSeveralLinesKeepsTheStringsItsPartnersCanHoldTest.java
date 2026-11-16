@@ -30,7 +30,7 @@ class AStatementOfSeveralLinesKeepsTheStringsItsPartnersCanHoldTest {
 
     private static final UndividedByARelation.StringsAPartnerCanHold PARTED_BY_T =
             UndividedByARelation.StringsAPartnerCanHold.unreached(ValueSet.ANY, ValueSet.NONE,
-                    null, "t");
+                    "t");
 
     private static ComparisonAssessment.AgainstAnotherValue partingS() {
         return againstS(Set.of(), Map.of(S, PARTED_BY_T));
