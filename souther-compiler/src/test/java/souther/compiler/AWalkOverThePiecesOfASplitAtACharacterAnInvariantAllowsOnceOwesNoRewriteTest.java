@@ -290,7 +290,8 @@ class AWalkOverThePiecesOfASplitAtACharacterAnInvariantAllowsOnceOwesNoRewriteTe
                 behavior convert : (request: ConversionRequest) -> Converted | ConversionBlocked
                     constructs Converted, ConversionBlocked, CloseDateInPast
                 let convert (request) =
-                    if ConversionBlocked { reasons = closeDateReasons(request) } as blocked
+                    if ConversionBlocked { reasons = closeDateReasons(request)
+                                                       ++ closeDateReasons(request) } as blocked
                     then blocked
                     else Converted { on = request.convertedOn }
 
