@@ -2372,12 +2372,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         List<Adequacy.DeclaredLine> lines = module.declaredLines();
         ObligationSummary<Adequacy.DeclaredDebt> account =
                 ObligationSummary.of(debts, each -> each.debt().owed());
-        if (!debts.isEmpty() || !lines.isEmpty() || !module.declaredExclusions().isEmpty()) {
-            out.append("  ")
-                    .append(DisplayColumns.padRight(page.say(new ReportMessage.Declarations()), 15))
-                    .append(page.say(new ReportMessage.BorderCounts(lines.size(),
-                            account.met().size() + "/" + account.counted())))
-                    .append(refuted(account, page)).append(NEW_LINE);
+        boolean counted = !debts.isEmpty() || !lines.isEmpty()
+                || !module.declaredExclusions().isEmpty();
+        WeakeningSet went = module.declarationsWeakenedBy();
+        // A heading wherever something is said under it. A reading that went without and found
+        // nothing owes no count, since nothing was found is not nothing is owed: the heading then
+        // says only whose account the lines under it are of, and not how many it holds.
+        if (counted || !went.isEmpty()) {
+            out.append("  ").append(counted
+                    ? DisplayColumns.padRight(page.say(new ReportMessage.Declarations()), 15)
+                    + page.say(new ReportMessage.BorderCounts(lines.size(),
+                            account.met().size() + "/" + account.counted()))
+                    + refuted(account, page)
+                    : page.say(new ReportMessage.Declarations())).append(NEW_LINE);
+            wentWithout(out, "      ", went, page);
         }
         // Every obligation the count holds and no row is at, so that the difference between the two
         // numbers is a difference a reader can walk. A point nobody can say is missed is not a gap
@@ -3288,7 +3296,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         marks);
                 decision(out, behavior, module.declaredIn(), page, onlyBy, marks);
                 replacement(out, behavior, module.module(), module.declaredIn(), page);
-                wentWithout(out, behavior.weakenedBy(), page);
+                wentWithout(out, "    ", behavior.weakenedBy(), page);
                 // Under the behavior it names, because a reason printed at the module's foot is
                 // read as belonging to whichever behavior came last. That was survivable while the
                 // only reasons naming one were rare; a position that could not be read is not.
@@ -3298,7 +3306,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         .toList(), page);
             }
             declared(out, module, page, module.owedByDeclarations().rulePlace(), marks);
-            wentWithout(out, module.declarationsWeakenedBy(), page);
             said(out, module.incompleteness().written().stream()
                     .filter(gap -> gap.fact().behavior().isEmpty()).toList(), page);
         }
@@ -5317,12 +5324,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * derivation, so a behavior's page and its document name the same things. A weakening that is
      * an observation gone missing is not said here: the page says it under the behavior it names,
      * as the reason it carries ({@link PublishedIncompleteness}).
+     *
+     * <p>Said under whatever the weakening is of, which is what {@code indent} places it under: a
+     * line that is not under the heading of its own account reads as the last behavior's.
      */
-    private static void wentWithout(StringBuilder out, WeakeningSet weakenedBy, Page page) {
+    private static void wentWithout(StringBuilder out, String indent, WeakeningSet weakenedBy,
+                                    Page page) {
         for (WeakeningVocabulary each : weakeningsSaid(weakenedBy).written()) {
             if (each instanceof WeakeningVocabulary.AWordOfThisDocuments said) {
-                out.append("    ? ").append(page.say(new ReportMessage.ThePartialMeasureWentWithout(
-                        phrase("weakening", said.word())))).append(NEW_LINE);
+                Message line = new ReportMessage.ThePartialMeasureWentWithout(
+                        phrase("weakening", said.word()));
+                out.append(indent).append("? ").append(page.say(line)).append(NEW_LINE);
             }
         }
     }
