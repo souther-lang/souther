@@ -2202,8 +2202,12 @@ public final class Generator {
             List<CameToNothing> cameToNothing = new ArrayList<>();
             for (CellSelection at : ways) {
                 List<Purpose> purpose = List.of(new Purpose.ForACombinationOfDecisions(asked.settled()));
+                // Every search made at this cell, in the order they are made: each is another way
+                // to a row for the same combination, so what they come to is said over all of them.
+                List<Witness> searches = new ArrayList<>();
                 Witness tried = witnessFor(axes, at, check, trial, claimed(at), purpose,
                         origins, references, answers);
+                searches.add(tried);
                 // Composed rows that ran and went elsewhere are not every row the cell holds: a cell
                 // says where a row is looked for, and a decision no class states (a relation between
                 // two positions) is not in it. Values chosen again within each candidate reach rows
@@ -2212,43 +2216,50 @@ public final class Generator {
                     List<Purpose> composedFor = new ArrayList<>(claimed(at).stream()
                             .map(Purpose.ForAnArm::new).map(Purpose.class::cast).toList());
                     composedFor.addAll(purpose);
-                    tried = after(tried, witnessFor(axes, at, check, trial, composedFor,
-                            (_, _) -> Acceptance.TAKEN, origins, references, answers));
+                    tried = witnessFor(axes, at, check, trial, composedFor,
+                            (_, _) -> Acceptance.TAKEN, origins, references, answers);
+                    searches.add(tried);
                 }
                 // And where that came to nothing, the relations the decisions state of the input's
                 // numbers are what a row is composed to meet: they are in no class, so no cell
                 // says where such a row is.
                 if (tried instanceof Witness.Exhausted || tried instanceof Witness.Limited) {
-                    tried = heldToTheDecisions(tried, axes, at, check, trial, purpose,
-                            holding, origins, references, answers);
+                    searches.addAll(heldToTheDecisions(tried, axes, at, check, trial, purpose,
+                            holding, origins, references, answers));
                 }
-                switch (tried) {
-                    case Witness.NoCombination none -> cameToNothing.add(
-                            CameToNothing.metNothing(new UnresolvedCombination(List.of(),
-                                    UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH, null,
-                                    Optional.of(none.said()))));
-                    // The word the search came to, and with it what the search met on the way.
-                    // What a reader does about a meeting nothing answered turns on whether a
-                    // number of this compiler's would have reached one.
-                    case Witness.Exhausted none -> cameToNothing.add(none.cameToNothing());
-                    // What ran out here is how many readings and runs one combination is given,
-                    // which is a walk of this compiler's over the readings rather than a figure
-                    // the composing of a row is held to — and whatever the candidates it did try
-                    // ran into, which is.
-                    case Witness.Limited none -> cameToNothing.add(none.cameToNothing());
-                    case Witness.Certified it -> {
-                        made = keep(composed, it.row());
-                        seenOf.putIfAbsent(made, it.by().seen());
+                for (Witness each : searches) {
+                    switch (each) {
+                        case Witness.NoCombination none -> cameToNothing.add(
+                                CameToNothing.metNothing(new UnresolvedCombination(List.of(),
+                                        UnresolvedCombination.Reason.ONE_POSITION_CANNOT_BE_BOTH,
+                                        null, Optional.of(none.said()))));
+                        // The word the search came to, and with it what the search met on the
+                        // way. What a reader does about a meeting nothing answered turns on
+                        // whether a number of this compiler's would have reached one.
+                        case Witness.Exhausted none -> cameToNothing.add(none.cameToNothing());
+                        // What ran out here is how many readings and runs one combination is
+                        // given, which is a walk of this compiler's over the readings rather than
+                        // a figure the composing of a row is held to — and whatever the
+                        // candidates it did try ran into, which is.
+                        case Witness.Limited none -> cameToNothing.add(none.cameToNothing());
+                        case Witness.Certified it -> {
+                            made = keep(composed, it.row());
+                            seenOf.putIfAbsent(made, it.by().seen());
+                        }
+                        // Composed and watched by nothing. A meeting is settled by the run, so a
+                        // row nothing saw make it is not an answer here, and what holds of the
+                        // candidates is what that word says: none of them was a witness. A
+                        // build that watches no run asks for none of these in the first place,
+                        // so this is the shape being right rather than a state a report is
+                        // written from.
+                        case Witness.Unconfirmed _ -> {
+                            unconfirmed = true;
+                            cameToNothing.add(CameToNothing.metNothing(new UnresolvedCombination(
+                                    List.of(), UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS)));
+                        }
                     }
-                    // Composed and watched by nothing. A meeting is settled by the run, so a row
-                    // nothing saw make it is not an answer here, and what holds of the candidates
-                    // is what that word says: none of them was a witness. A build that watches no
-                    // run asks for none of these in the first place, so this is the shape being
-                    // right rather than a state a report is written from.
-                    case Witness.Unconfirmed _ -> {
-                        unconfirmed = true;
-                        cameToNothing.add(CameToNothing.metNothing(new UnresolvedCombination(
-                                List.of(), UnresolvedCombination.Reason.NO_CERTIFIED_WITNESS)));
+                    if (made != null) {
+                        break;
                     }
                 }
                 if (made != null) {
@@ -11306,35 +11317,39 @@ public final class Generator {
     }
 
     /**
-     * What a search of {@code selection} came to, looked for again with a row held to what each
-     * of the decisions the selection claims asks of it, along every way of holding them together.
+     * What looking again at {@code selection} came to, with a row held to what each of the
+     * decisions the selection claims asks of it, along every way of holding them together: one
+     * search for each way, in the order they are looked along, ending at the first that finds a row.
      *
-     * <p>{@code tried} stands where nothing held shows a row: a way no row takes, or one this
-     * compiler has no demand to hold a row to, says nothing of whether the combination is made.
-     * A row is only ever taken by a run seen making the combination, as everywhere else.
+     * <p>Each is another way to a row for the same combination, so none of them stands for the
+     * rest and what they come to is said over all of them ({@link WaysOfAMeeting}). {@code tried}
+     * is what the search before them came to: a way no row takes, or one this compiler has no
+     * demand to hold a row to, says nothing of whether the combination is made. A row is only ever
+     * taken by a run seen making the combination, as everywhere else.
      *
-     * <p>A figure that cut the looking short is a figure the answer carries. Ways of holding the
-     * decisions that were left unlooked at may be the ones that make the combination, so where no
-     * row was found the search is said to have stopped, and at which figure.
+     * <p>A figure that cut the looking short is a search of its own that stopped: ways of holding
+     * the decisions that were left unlooked at may be the ones that make the combination, so it is
+     * said at which figure the plan was cut.
+     *
+     * @param tried what the search before these came to, which is what they are looked for after
      */
-    private static Witness heldToTheDecisions(Witness tried,
-                                              MeasuredInput.MeasuredAxes axes,
-                                              CellSelection selection, CandidateCheck check,
-                                              RunOnce trial, List<Purpose> purpose,
-                                              HeldOutcome.Of holding,
-                                              List<ResolvedOrigin> origins,
-                                              FixtureReferences references,
-                                              List<StoodInAnswer> answers) {
+    private static List<Witness> heldToTheDecisions(Witness tried,
+                                                    MeasuredInput.MeasuredAxes axes,
+                                                    CellSelection selection, CandidateCheck check,
+                                                    RunOnce trial, List<Purpose> purpose,
+                                                    HeldOutcome.Of holding,
+                                                    List<ResolvedOrigin> origins,
+                                                    FixtureReferences references,
+                                                    List<StoodInAnswer> answers) {
         List<HeldOutcome.Bringing> each = new ArrayList<>();
         for (ControlClaim claim : selection.claims()) {
             each.add(holding.at(claim.at()));
         }
         if (each.isEmpty()) {
-            return tried;
+            return List.of();
         }
         Set<CompositionBudget> cutShort = EnumSet.noneOf(CompositionBudget.class);
-        Witness result = tried;
-        Witness unconfirmed = null;
+        List<Witness> attempts = new ArrayList<>();
         switch (GoingOn.holdingTogether(each, _ -> true)) {
             // Nothing here holds a row to them. A figure that left a part unlooked at is what the
             // answer says; a reason alone is this compiler having no demand, which is no more
@@ -11352,65 +11367,20 @@ public final class Generator {
                     }
                     Witness found = witnessHeld(axes, selection, check, trial, composedFor,
                             (_, _) -> Acceptance.TAKEN, together, origins, references, answers);
-                    switch (found) {
-                        case Witness.Certified _ -> {
-                            return found;
-                        }
-                        // A row nothing could watch says nothing of the choices after it: whether
-                        // a later one is seen making the combination is for its run to say.
-                        case Witness.Unconfirmed _ -> {
-                            if (unconfirmed == null) {
-                                unconfirmed = found;
-                            }
-                        }
-                        case Witness.Exhausted _, Witness.Limited _, Witness.NoCombination _ ->
-                                result = after(result, found);
+                    attempts.add(found);
+                    // A row nothing could watch says nothing of the choices after it: whether a
+                    // later one is seen making the combination is for its run to say.
+                    if (found instanceof Witness.Certified) {
+                        return attempts;
                     }
                 }
             }
         }
         if (!cutShort.isEmpty()) {
-            result = after(result, new Witness.Limited(classesOf(tried), SearchShortfall.NONE,
-                    List.of(), false, cutShort));
+            attempts.add(new Witness.Limited(classesOf(tried), SearchShortfall.NONE, List.of(),
+                    false, cutShort));
         }
-        return unconfirmed != null ? unconfirmed : result;
-    }
-
-    /**
-     * What two searches for one combination, the second made after the first came to nothing, came
-     * to together: the second's word, or the first's where it was stopped, and what both found out
-     * and were stopped by.
-     *
-     * <p>The one place a search made again is joined with the one before it. A figure the first met
-     * is a number somebody can raise whichever search came after it, so the answer is what both
-     * came to and never the second.
-     */
-    private static Witness after(Witness first, Witness second) {
-        boolean bothCameToNothing = (first instanceof Witness.Exhausted
-                || first instanceof Witness.Limited)
-                && (second instanceof Witness.Exhausted || second instanceof Witness.Limited);
-        if (!bothCameToNothing) {
-            return second;
-        }
-        SearchStops both = stoppedOf(first).and(stoppedOf(second));
-        if (first instanceof Witness.Limited || second instanceof Witness.Limited) {
-            return new Witness.Limited(classesOf(second), both.found(), both.boundsReached(),
-                    both.metARunNothingWatched(), both.planCut());
-        }
-        Witness.Exhausted last = (Witness.Exhausted) second;
-        return new Witness.Exhausted(last.classes(), last.reason(), last.detail(), last.said(),
-                both.found());
-    }
-
-    /** What {@code search} found out and was stopped by, where it came to nothing. */
-    private static SearchStops stoppedOf(Witness search) {
-        return switch (search) {
-            case Witness.Limited it -> new SearchStops(it.found(), it.boundsReached(),
-                    it.metARunNothingWatched(), it.planCut());
-            case Witness.Exhausted it -> new SearchStops(it.found(), List.of(), false, Set.of());
-            case Witness.Certified _, Witness.Unconfirmed _, Witness.NoCombination _ ->
-                    new SearchStops(SearchShortfall.NONE, List.of(), false, Set.of());
-        };
+        return attempts;
     }
 
     /** The classes a search that came to nothing looked at. */

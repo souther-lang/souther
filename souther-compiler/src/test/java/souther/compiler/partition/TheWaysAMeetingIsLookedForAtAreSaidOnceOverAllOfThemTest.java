@@ -2,10 +2,14 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.execute.RunStop;
+
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
@@ -30,6 +34,12 @@ class TheWaysAMeetingIsLookedForAtAreSaidOnceOverAllOfThemTest {
                 CompositionShortfall.of(met), cut);
     }
 
+    private static CameToNothing came(Generator.UnresolvedCombination.Reason word,
+                                      BesideTheWord beside) {
+        return new CameToNothing(new Generator.UnresolvedCombination(List.of(), word, null,
+                Optional.empty(), beside), CompositionShortfall.NONE, Set.of());
+    }
+
     /** One way that proved nothing is enough to keep the answer from being a proof. */
     @Test
     void aProofIsSaidOnlyWhereEveryWayProvedIt() {
@@ -44,13 +54,13 @@ class TheWaysAMeetingIsLookedForAtAreSaidOnceOverAllOfThemTest {
     /** The first way's figure is not lost behind the last way's. */
     @Test
     void theFiguresEveryWayMetAreMet() {
-        CameToNothing first = came(UNTRIED, Set.of(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG),
+        CameToNothing first = came(UNTRIED, Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS),
                 Set.of());
-        CameToNothing last = came(UNTRIED, Set.of(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT),
+        CameToNothing last = came(UNTRIED, Set.of(CompositionBudget.PAIRINGS_BUILT_AT_ONCE),
                 Set.of());
 
-        assertEquals(Set.of(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG,
-                        CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT),
+        assertEquals(Set.of(CompositionBudget.ELEMENTS_A_PROPOSAL_HOLDS,
+                        CompositionBudget.PAIRINGS_BUILT_AT_ONCE),
                 Set.copyOf(WaysOfAMeeting.said(List.of(first, last)).met().figures()));
     }
 
@@ -60,14 +70,46 @@ class TheWaysAMeetingIsLookedForAtAreSaidOnceOverAllOfThemTest {
     void thePlanAWayWasCutShortIsCutShortInTheAnswerApartFromWhatWasMet() {
         CameToNothing cut = came(UNTRIED, Set.of(),
                 Set.of(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG));
-        CameToNothing met = came(UNTRIED, Set.of(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT),
+        CameToNothing met = came(UNTRIED, Set.of(CompositionBudget.PAIRINGS_BUILT_AT_ONCE),
                 Set.of());
 
         CameToNothing said = WaysOfAMeeting.said(List.of(cut, met));
 
         assertEquals(Set.of(CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG), said.planCut());
-        assertEquals(List.of(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT),
+        assertEquals(List.of(CompositionBudget.PAIRINGS_BUILT_AT_ONCE),
                 List.copyOf(said.met().figures()));
+    }
+
+    /** Whichever of the two says the word, what the other said beside its own is said too. */
+    @Test
+    void whatEveryWayWasShortOfOrStoppedAtIsSaid() {
+        WhereARunStopped here = new WhereARunStopped(new RunStop.AtAConstruction("m", "A",
+                Optional.empty(), 0, Optional.empty()), Optional.empty());
+        WhereARunStopped there = new WhereARunStopped(new RunStop.AtAConstruction("m", "B",
+                Optional.empty(), 1, Optional.empty()), Optional.empty());
+
+        CameToNothing said = WaysOfAMeeting.said(List.of(
+                came(UNTRIED, BesideTheWord.NOTHING.stopping(List.of(here))),
+                came(UNWITNESSED, BesideTheWord.NOTHING.stopping(List.of(there)))));
+
+        assertEquals(Set.of(here, there), Set.copyOf(said.why().beside().stopped()));
+    }
+
+    /** A figure one way met is the word's, though the way that says it is the one that met none:
+     *  it comes first in the order a report says them. */
+    @Test
+    void theWordIsTheOneForTheFiguresEveryWayMet() {
+        Generator.UnresolvedCombination.Reason silentWord =
+                Generator.UnresolvedCombination.Reason.NOTHING_COMPOSES_ONE;
+        Set<CompositionBudget> figures = Set.of(CompositionBudget.PAIRINGS_BUILT_AT_ONCE);
+        Generator.UnresolvedCombination.Reason forTheFigures =
+                Generator.UnresolvedCombination.Reason.wordFor(figures);
+        assertNotEquals(silentWord, forTheFigures, "or the figure changes no word");
+
+        CameToNothing said = WaysOfAMeeting.said(List.of(
+                came(silentWord, Set.of(), Set.of()), came(UNTRIED, figures, Set.of())));
+
+        assertEquals(forTheFigures, said.why().reason());
     }
 
     /** Two ways that say different words, in either order. */
