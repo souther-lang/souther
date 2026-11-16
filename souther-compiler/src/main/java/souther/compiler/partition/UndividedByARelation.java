@@ -2084,9 +2084,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 granularityOf(each) == Granularity.DISCRETE);
         // Where the numbers are dense, a hyperplane taken out leaves both sides of the line open,
         // so a disequality that is not the line's own ties no side to another.
-        List<OnAWay> tying = !dense ? conditions : conditions.stream().filter(each ->
-                each.disequality() == null || asked == null
-                        || keepsOffTheLineOf(each.disequality(), asked)).toList();
+        List<Step> defined = dense && asked != null ? stepsOf(conditions) : null;
+        List<OnAWay> tying = defined == null ? conditions : conditions.stream().filter(each ->
+                each.disequality() == null
+                        || keepsTheLine(each.disequality(), asked, defined)).toList();
         TiedOnTheWay tied = TiedOnTheWay.of(tying, read, ignoring);
         List<Set<Object>> tiedTo = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
@@ -7562,6 +7563,71 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : new TakenConstraint.Affine(new LinearForm<>(constant, coefs), relation);
     }
 
+    /** A number the way's equalities define, put in the terms of the others: the equality, which
+     *  has no other number it defines, the number, and what it is weighed. */
+    record Step(TakenConstraint.Affine definition, NumericTerm number, ExactRatio weighed) {}
+
+    /**
+     * The numbers the equalities of {@code conditions} define, in order, each put in the terms of
+     * the numbers no earlier one defines — or null where that is not worked out, which is not that
+     * there is none.
+     */
+    static List<Step> stepsOf(List<OnAWay> conditions) {
+        List<Step> steps = new ArrayList<>();
+        for (OnAWay each : conditions) {
+            TakenConstraint.Affine equality = each.whatStands() || each.elementsOf() != null
+                    ? null : each.affine();
+            if (equality == null || equality.rel() != Rel.EQ) {
+                continue;
+            }
+            List<TakenConstraint.Affine> reduced = reducedBy(equality, steps);
+            if (reduced == null) {
+                return null;
+            }
+            if (!reduced.isEmpty()) {
+                Map.Entry<NumericTerm, ExactRatio> first =
+                        reduced.getFirst().form().coefs().entrySet().iterator().next();
+                steps.add(new Step(reduced.getFirst(), first.getKey(), first.getValue()));
+            }
+        }
+        return steps;
+    }
+
+    /**
+     * {@code target} with each number {@code steps} define put in the terms of the others: itself
+     * as it comes to, nothing where it comes to a statement over no number that holds, or null
+     * where that is not worked out or the statement over none does not hold.
+     */
+    private static List<TakenConstraint.Affine> reducedBy(TakenConstraint.Affine target,
+                                                          List<Step> steps) {
+        List<TakenConstraint.Affine> now = List.of(target);
+        for (Step each : steps) {
+            now = withoutTheNumber(now, each.definition(), each.number(), each.weighed());
+            if (now == null || now.isEmpty()) {
+                return now;
+            }
+        }
+        return now;
+    }
+
+    /**
+     * Whether the disequality {@code kept} is the line {@code asked} draws once the numbers the
+     * way's equalities define are put in the terms of the others ({@code steps}): {@code h /= s}
+     * beside {@code d == h} keeps {@code d} off {@code s}, which a relation between those two
+     * draws its line at. True too where that is not worked out. A disequality that holds
+     * whatever the others are, or is another line, ties nothing: it takes one hyperplane out of
+     * a run with both sides open.
+     */
+    static boolean keepsTheLine(TakenConstraint.Affine kept, TakenConstraint.Affine asked,
+                                List<Step> steps) {
+        List<TakenConstraint.Affine> disequality = reducedBy(kept, steps);
+        List<TakenConstraint.Affine> line = reducedBy(asked, steps);
+        if (disequality == null || line == null || line.isEmpty()) {
+            return true;
+        }
+        return !disequality.isEmpty() && keepsOffTheLineOf(disequality.getFirst(), line.getFirst());
+    }
+
     /**
      * Whether {@code statement} holds the form {@code asked} is of unequal to nought: the same
      * numbers, each weighed the same times one number, the constant too, held apart from it.
@@ -7961,7 +8027,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (each.bySome() != null && terms.stream().allMatch(term ->
                     term.placesReadOff().stream().allMatch(place ->
                             place.isAtOrUnder(each.elementsOf().element()))
-                    || (heldEqualToOthers(each) && touches(term, each.positions())))) {
+                    || (heldEqualToOthers(each, read) && touches(term, each.positions())))) {
                 met.computeIfAbsent(each.elementsOf(), _ -> new ArrayList<>()).add(each);
             }
         }
@@ -8028,8 +8094,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     truthsWritten &= at.isAtOrUnder(container.element())
                             && !namedDownTo(at, deepest, read, null).isReadByARule()
                             && apartFrom.stream().noneMatch(at::bearsOn);
-                } else if (numberHeldEqualToOthers(each, container) != null) {
-                    pinned.add(numberHeldEqualToOthers(each, container));
+                } else if (numberHeldEqualToOthers(each, container, read) != null) {
+                    pinned.add(numberHeldEqualToOthers(each, container, read));
                 } else {
                     ofItsNumbers.add(each);
                 }
@@ -8062,18 +8128,31 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /** Whether {@code statement} asks some element of a container only to be equal to what is
      *  stated of other places, in every way it may be met. */
-    private static boolean heldEqualToOthers(OnAWay statement) {
+    private static boolean heldEqualToOthers(OnAWay statement, InputReading read) {
         return statement.bySome().ways().stream().allMatch(way -> way.stream().allMatch(demand ->
-                numberHeldEqualToOthers(demand, statement.elementsOf()) != null));
+                numberHeldEqualToOthers(demand, statement.elementsOf(), read) != null));
     }
 
     /**
      * The number of an element of {@code container} that {@code demand} holds equal to numbers of
      * places that are not under the element — {@code element == from + 1}, or the element the
-     * same as a value — or null where it asks anything else of it.
+     * same as a value — where it is written at that value wherever the others are
+     * ({@link #writtenWhereTheOthersPutIt}), or null where it asks anything else of it.
+     *
+     * <p>Only of a number of a type with no ends. Such a statement is taken for one that says
+     * nothing of the numbers it is stated against, and what is read after that rests on the others
+     * being free of it; at the end of a type with ends it is the number written at a value one
+     * past the end that is no value, and what is read of that is not proved here.
      */
     private static NumericTerm.FromOnePosition numberHeldEqualToOthers(
-            RowDemand.OfAnElement demand, TermPath container) {
+            RowDemand.OfAnElement demand, TermPath container, InputReading read) {
+        NumericTerm.FromOnePosition held = numberPutAtOthers(demand, container, read);
+        return held instanceof NumericTerm.ValueOf value
+                && takesNumbersWithoutEnds(sourceOf(value, read), read) ? held : null;
+    }
+
+    private static NumericTerm.FromOnePosition numberPutAtOthers(
+            RowDemand.OfAnElement demand, TermPath container, InputReading read) {
         return switch (demand) {
             case RowDemand.SameAs(Operand.At<TermPath>(var at))
                     when !at.isAtOrUnder(container.element()) ->
@@ -8091,7 +8170,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                 .filter(term -> !under.contains(term)).allMatch(term ->
                                         term.placesReadOff().stream().noneMatch(place ->
                                                 place.isAtOrUnder(container.element())))
-                        && under.getFirst() instanceof NumericTerm.FromOnePosition number
+                        && under.getFirst() instanceof NumericTerm.ValueOf number
+                        && writtenWhereTheOthersPutIt(form, number, read)
                         ? number : null;
             }
             default -> null;
@@ -8202,7 +8282,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     : NumericDomain.Bounds.OPEN, carriers.get(i));
             Way way = each.atOnePosition() == null || !heldWhole ? Way.TIES
                     : wayOf(each.atOnePosition(), withoutWhatRemovesNoValue(each.atOnePosition(),
-                            stating.get(i), conditions, region, read));
+                            stating.get(i), conditions, region, read, placesReadOff(places())));
             if (way == Way.UNTOUCHED && narrowedByTheRun.stream().anyMatch(past ->
                     past.terms().stream().anyMatch(term -> term.equals(each.atOnePosition())))) {
                 way = Way.NARROWED;
@@ -9643,7 +9723,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     .stream().filter(each -> !ofTheSides.contains(each.getKey())).toList();
             if (others.size() != 1 || !(others.getFirst().getKey()
                     instanceof NumericTerm.ValueOf number)
-                    || !isDefinedByTheSides(number, aboutEither, ofTheSides, way, read)) {
+                    || !isDefinedByTheSides(number, aboutEither, ofTheSides, way, read)
+                    || !writtenWhereTheOthersPutIt(definition.form(), number, read)) {
                 continue;
             }
             List<TakenConstraint.Affine> without = withoutTheNumber(out, definition, number,
@@ -9883,20 +9964,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                           List<OnAWay> stating,
                                                           List<OnAWay> conditions,
                                                           SearchRegion region,
-                                                          InputReading read) {
+                                                          InputReading read,
+                                                          Set<TermPath> readByTheRelation) {
         if (movesAsOne(conditions, region, read)) {
             return List.of();
         }
-        return stating.stream()
-                .filter(each -> !removesNoValue(term, each, conditions, region, read)).toList();
+        return stating.stream().filter(each -> !removesNoValue(term, each, conditions, region,
+                read, readByTheRelation)).toList();
     }
 
     /**
      * Whether every statement of the way holds of the numbers it names wherever they all move by
      * one amount, so that no value of any of them is taken out of its run: each is a relation over
-     * differences of numbers every value of whose type is held, and each disequality among them is
-     * one the region leaves a run on that has no end on some side. A row at one value of a
-     * number is then a row at every other, the others moved with it.
+     * differences of numbers, and each disequality among them is one the region leaves a run on
+     * that has no end on some side. A row at one value of a number is then a row at every other,
+     * the others moved with it.
+     *
+     * <p>That a number moved by an amount is still a value it takes is the type's, and it holds
+     * only for a type with no ends ({@link #takesNumbersWithoutEnds}): at the last value of a type
+     * with one, the number moved up is no value. And the way has a row to move: a region that
+     * holds nothing moves nothing.
      */
     private static boolean movesAsOne(List<OnAWay> conditions, SearchRegion region,
                                       InputReading read) {
@@ -9927,7 +10014,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return false;
             }
             Source source = sourceOf(number, read);
-            if (source == null || !source.takes().every() || source.named()) {
+            if (!takesNumbersWithoutEnds(source, read) || source.named()) {
                 return false;
             }
             for (NumericTerm other : moved) {
@@ -9939,7 +10026,43 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
             }
         }
-        return !moved.isEmpty();
+        return !moved.isEmpty() && region.projectionOf(moved.iterator().next())
+                instanceof NumericDomain.FormProjection.Within;
+    }
+
+    /**
+     * Whether the numbers {@code source} leaves are those of a type with no ends: a decimal or a
+     * ratio no rule is written on. A number of such a type moved by an amount, or written at a
+     * value worked out of others, is a value it takes; one of an {@code Int} or a date is not at
+     * the end of its type.
+     */
+    private static boolean takesNumbersWithoutEnds(Source source, InputReading read) {
+        RuleReadingSource rules = read.rules();
+        return source != null && source.takes() instanceof Takes.Every(Type type)
+                && TypeView.shapeOf(type, rules.inners(), rules.symbols(), rules.kinds(),
+                        rules.sums()) instanceof Shape.Scalar(Type.Prim prim)
+                && (prim == Type.Prim.DECIMAL || prim == Type.Prim.RATIONAL);
+    }
+
+    /**
+     * Whether {@code held}, a number an equality {@code form} holds equal to others, is written
+     * at the value the others put it at, wherever they are: the form asks the same value of it
+     * ({@code held == other}), which its type holds wherever the other's does; or its type has no
+     * ends and the form is {@code held} less or plus whole numbers, a value it takes. A form that
+     * weighs {@code held} otherwise ({@code 2 * held == other}) puts it at a value no whole number
+     * has, or none for a type that counts in whole steps.
+     */
+    private static boolean writtenWhereTheOthersPutIt(LinearForm<NumericTerm> form,
+                                                      NumericTerm.ValueOf held,
+                                                      InputReading read) {
+        if (form.coefs().size() == 2 && form.constant().isZero() && sumsToNothing(form)) {
+            return true;
+        }
+        ExactRatio weight = form.coefs().get(held);
+        return weight != null && takesNumbersWithoutEnds(sourceOf(held, read), read)
+                && (weight.equals(ExactRatio.ONE) || weight.equals(ExactRatio.ONE.negated()))
+                && form.constant().isWhole()
+                && form.coefs().values().stream().allMatch(ExactRatio::isWhole);
     }
 
     private static boolean sumsToNothing(LinearForm<NumericTerm> form) {
@@ -9963,15 +10086,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * no rule of the declarations reading it. A number kept off the term differs from each of its
      * values, as every element of a container does where the container is written of such
      * elements; and a number the term is kept equal to is the term's value, which the container
-     * holds where it may hold one element.
+     * holds where it may hold one element — and one more for each number of an element the
+     * relation reads ({@code readByTheRelation}), which is another element than the one the
+     * statement asks for.
      */
     private static boolean removesNoValue(NumericTerm.FromOnePosition term, OnAWay statement,
                                           List<OnAWay> conditions, SearchRegion region,
-                                          InputReading read) {
+                                          InputReading read, Set<TermPath> readByTheRelation) {
         boolean some = statement.bySome() != null;
         TermPath container = statement.elementsOf();
         Set<NumericTerm> kept = statement.whatStands() ? null
-                : numbersKeptBeside(term, statement, some ? Rel.EQ : Rel.NE);
+                : numbersKeptBeside(term, statement, some ? Rel.EQ : Rel.NE, read);
         if (kept == null || kept.isEmpty()) {
             return false;
         }
@@ -9986,9 +10111,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (!some) {
             return true;
         }
-        NumericDomain.Bounds held = howManyAreHeld(container, read, region, false, 1);
+        int needed = 1 + (int) readByTheRelation.stream()
+                .filter(place -> place.isAtOrUnder(container.element())).count();
+        NumericDomain.Bounds held = howManyAreHeld(container, read, region, false, needed);
         return held != null && held.meet(new NumericDomain.Bounds(
-                Endpoint.inclusive(Count.of(1)), null)).holdsAValue();
+                Endpoint.inclusive(Count.of(needed)), null)).holdsAValue();
     }
 
     /**
@@ -9998,7 +10125,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * where it states anything else of the term.
      */
     private static Set<NumericTerm> numbersKeptBeside(NumericTerm.FromOnePosition term,
-                                                      OnAWay statement, Rel rel) {
+                                                      OnAWay statement, Rel rel,
+                                                      InputReading read) {
         RowDemand.AnElementMeets meets = rel == Rel.EQ ? statement.bySome() : statement.byEvery();
         TermPath container = statement.elementsOf();
         if (meets == null) {
@@ -10012,8 +10140,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return null;
         }
         return switch (meets.ways().getFirst().getFirst()) {
+            // An equality is met by choosing the others, so each is written at the value the term
+            // puts it at ({@link #writtenWhereTheOthersPutIt}); a disequality is met by any other.
             case RowDemand.Relational(TakenConstraint.Affine(var form, var each, var _))
-                    when each == rel && form.coefs().containsKey(term) -> othersOf(form, term);
+                    when each == rel && form.coefs().containsKey(term)
+                    && (rel != Rel.EQ || othersOf(form, term).stream().allMatch(other ->
+                            other instanceof NumericTerm.ValueOf held
+                                    && writtenWhereTheOthersPutIt(form, held, read))) ->
+                    othersOf(form, term);
             case RowDemand.SameAs(Operand.At<TermPath>(var at))
                     when rel == Rel.EQ && term.equals(new NumericTerm.ValueOf(at)) ->
                     Set.of(new NumericTerm.ValueOf(container.element()));
@@ -11781,20 +11915,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return (int) Math.min(counted, Integer.MAX_VALUE);
         }
         boolean unwritten = !(TypeOps.outermost(each, rules.inners()) instanceof TypeOps.Unwrapped);
-        if (unwritten && aPointInTime(each, read)) {
-            return Integer.MAX_VALUE;
-        }
         return unwritten && withoutEnd(each, read) ? -1 : 1;
-    }
-
-    /** Whether the values of {@code type} are days, times or instants, each of which has more
-     *  distinct values between its ends than any count a container is asked to hold. */
-    private static boolean aPointInTime(Type type, InputReading read) {
-        RuleReadingSource rules = read.rules();
-        return TypeView.shapeOf(type, rules.inners(), rules.symbols(), rules.kinds(), rules.sums())
-                instanceof Shape.Scalar(Type.Prim prim)
-                && (prim == Type.Prim.DATE || prim == Type.Prim.TIME
-                        || prim == Type.Prim.DATETIME || prim == Type.Prim.INSTANT);
     }
 
     /**

@@ -7,6 +7,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -24,12 +25,16 @@ class AWayThatKeepsAValueOffNumbersNothingElseHoldsLeavesItsRunWholeTest {
     private static final String NOT_SHOWN = "not shown to reach every value";
 
     private static String report(String declarations, String parameters, String body) {
-        Compilation compilation = Compilation.ofSource("""
+        return reportOf("""
                 module p
                 %s
                 behavior f : (%s) -> Bool
                 let f = %s
-                """.formatted(declarations, parameters, body), "Main");
+                """.formatted(declarations, parameters, body));
+    }
+
+    private static String reportOf(String source) {
+        Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
@@ -86,6 +91,48 @@ class AWayThatKeepsAValueOffNumbersNothingElseHoldsLeavesItsRunWholeTest {
 
         assertFalse(notShownAt(human, "d"), human);
         assertFalse(notShownAt(human, "hs[*]"), human);
+    }
+
+    /**
+     * What a way's statements leave of a number is proved here only for numbers of a type with no
+     * ends. Each proof moves a number by an amount, or writes it at a value worked out of others,
+     * and at the last value of an {@code Int} the number moved up is no value: so the same
+     * shapes over {@code Int} are not shown read, where over {@code Decimal} they are.
+     */
+    @Test
+    void theShapesReadOverEveryDecimalAreNotReadOverEveryInt() {
+        for (String type : new String[] {"Decimal", "Int"}) {
+            boolean read = type.equals("Decimal");
+            String one = read ? "1.0m" : "1";
+            String walk = reportOf("""
+                    module p
+                    let free (hs: Set<%1$s>, d: %1$s): Bool = Bool.not(Set.contains(d, hs))
+                    behavior f : (hs: Set<%1$s>, from: %1$s) -> %1$s
+                    let f (hs, from) = [ from, from + %2$s, from + %2$s + %2$s ]
+                        |> List.find(d -> free(hs, d)) |> Option.withDefault(from)
+                    """.formatted(type, one));
+            String arms = report("", "h: " + type + ", d: " + type + ", s: " + type,
+                    "(h, d, s) -> (if d /= h then d else if d + " + one + " /= h then d + "
+                            + one + " else d) >= s");
+
+            assertEquals(!read, notShownAt(walk, "from"), type + walk);
+            assertEquals(!read, notShownAt(walk, "hs[*]"), type + walk);
+            assertEquals(!read, notShownAt(arms, "d"), type + arms);
+            assertEquals(!read, notShownAt(arms, "h"), type + arms);
+        }
+    }
+
+    /** A number weighed otherwise than once is put at a value no whole number has, and is not
+     *  taken for written wherever the others are, however it is stated. */
+    @Test
+    void anElementHeldEqualToTwiceAValueIsNotTakenForWrittenAtIt() {
+        String once = report("", "xs: List<Decimal>, d: Decimal, s: Decimal",
+                "(xs, d, s) -> (if List.any(e -> e == d, xs) then d else 0.0m) >= s");
+        String twice = report("", "xs: List<Decimal>, d: Decimal, s: Decimal",
+                "(xs, d, s) -> (if List.any(e -> 2.0m * e == d, xs) then d else 0.0m) >= s");
+
+        assertFalse(notShownAt(once, "d"), once);
+        assertTrue(notShownAt(twice, "d"), twice);
     }
 
     /** One value is kept off another that nothing else reads, so every value of the first has a
