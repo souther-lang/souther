@@ -113,6 +113,14 @@ final class IntrinsicNumericFacts {
         if (written.isPresent()) {
             out.add(new NumericConstraint(LinearForm.atomMinusConstant(atom,
                     ExactRatio.of(written.getAsLong())), Rel.EQ));
+        } else if (named != null) {
+            // A list that is one of several written out holds no more than the most of them, and
+            // which one it is is the path's to say.
+            OptionalLong most = Terms.mostWritten(named);
+            if (most.isPresent()) {
+                out.add(new NumericConstraint(LinearForm.atomMinusConstant(atom,
+                        ExactRatio.of(most.getAsLong())), Rel.LE));
+            }
         }
         return out;
     }
