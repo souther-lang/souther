@@ -273,10 +273,9 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
          */
         public void regionUndetermined(RuleCitation cited, ModelOccurrences readAt,
                                        FilingCoordinate at, List<ValuesWithin> open,
-                                       BlockReason.OperationsNotShown operations,
-                                       List<BlockReason.CodePointsLeftOpen> byCodePoints) {
+                                       BlockReason.OperationsNotShown operations) {
             BlockReason.RelationShownOverARegion why =
-                    BlockReason.RelationShownOverARegion.of(open, operations, byCodePoints);
+                    BlockReason.RelationShownOverARegion.of(open, operations);
             add(RuleWithoutALine.of(cited, readAt, at, why));
             asked(StandingQuestion.RegionUndetermined.of(cited, readAt, at, why));
         }

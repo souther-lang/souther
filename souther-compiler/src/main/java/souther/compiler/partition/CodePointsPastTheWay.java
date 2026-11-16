@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.inputs.BlockReason;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.semantics.CodePointClass;
 import souther.compiler.values.TextExtents;
@@ -59,29 +58,18 @@ record CodePointsPastTheWay(CodePointClass counted, LengthsPastTheWay.Lengths co
         return below == null ? above : above == null ? below : below.or(above);
     }
 
-    /**
-     * The strings no run gets to the relation with, as the numbers of the class they hold leave
-     * them open.
-     *
-     * @param strings the strings
-     * @param why     how few or how many of the class they hold
-     */
-    record Open(PatternPlan strings, BlockReason.CodePointsLeftOpen why) { }
-
-    /** The strings of the other counts, each as it is left open: those holding fewer of the class
-     *  than the least, and those holding more than the most. None where the strings of these
-     *  counts are all of them. */
-    List<Open> outside() {
-        List<Open> out = new ArrayList<>();
+    /** The strings no run gets to the relation with, which are those of the other counts: those
+     *  holding fewer of the class than the least, and those holding more than the most. None
+     *  where the strings of these counts are all of them. */
+    List<PatternPlan> outside() {
+        List<PatternPlan> out = new ArrayList<>();
         PatternPlan fewer = fewerThan();
         if (fewer != null) {
-            out.add(new Open(fewer, new BlockReason.CodePointsLeftOpen(counted,
-                    counts.least().longValueExact(), null)));
+            out.add(fewer);
         }
         PatternPlan more = moreThan();
         if (more != null) {
-            out.add(new Open(more, new BlockReason.CodePointsLeftOpen(counted, null,
-                    counts.most().longValueExact())));
+            out.add(more);
         }
         return out;
     }

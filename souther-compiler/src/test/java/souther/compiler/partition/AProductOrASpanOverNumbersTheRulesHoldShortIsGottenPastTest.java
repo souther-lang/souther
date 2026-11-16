@@ -124,14 +124,15 @@ class AProductOrASpanOverNumbersTheRulesHoldShortIsGottenPastTest {
         }
     }
 
-    /** With no greatest value, a product of {@code v} and itself and a span to it may each be
-     *  too large. */
+    /** With no greatest value, a product of {@code v} and itself may be past an {@code Int},
+     *  which is a value the type has no place for. A span to it longer than a list holds is
+     *  where the representation stops, which no class is drawn to, and is reached. */
     @Test
-    void aProductAndASpanOfANumberWithNoGreatestMayStopTheRun() {
-        for (String number : List.of("List.product([v, v])", "v * v",
-                "List.length(List.rangeInclusive(0, v))")) {
+    void aProductOfANumberWithNoGreatestMayStopTheRunAndASpanIsReached() {
+        for (String number : List.of("List.product([v, v])", "v * v")) {
             notShownReachedAtEveryValue("value >= 0", number);
         }
+        reachedAtEveryValue("value >= 0", "List.length(List.rangeInclusive(0, v))");
     }
 
     /**
@@ -161,12 +162,13 @@ class AProductOrASpanOverNumbersTheRulesHoldShortIsGottenPastTest {
     }
 
     /**
-     * A span from nought to a number past what a {@code List} holds stops the run there, and one
-     * from a number to itself less a hundred is a span of none.
+     * A span from nought to a number past what a {@code List} holds stops the run only where the
+     * representation does, and is reached at every value as one from a number to itself less a
+     * hundred, a span of none, is.
      */
     @Test
-    void theSpanStopsWhereItIsLongerThanAListHolds() {
-        notShownReachedAtEveryValue("value >= 0 && value <= 3000000000",
+    void aSpanIsReachedWhereverItsLengthIsHeld() {
+        reachedAtEveryValue("value >= 0 && value <= 3000000000",
                 "List.length(List.rangeInclusive(0, v))");
         reachedAtEveryValue("value >= 0 && value <= 3000000000",
                 "List.length(List.rangeInclusive(v, v - 100))");

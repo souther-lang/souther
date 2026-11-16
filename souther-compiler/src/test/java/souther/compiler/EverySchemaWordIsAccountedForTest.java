@@ -65,7 +65,6 @@ import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.RowFailure;
-import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.SourceConstruct;
@@ -1424,9 +1423,7 @@ class EverySchemaWordIsAccountedForTest {
                         new RuleReportAnchor.ByTheModuleThatWroteIt()),
                 ModelOccurrences.NONE, FilingCoordinate.at(TermPath.of("x")),
                 BlockReason.RelationShownOverARegion.of(
-                        List.of(ValuesWithin.longerThan(ValueSet.ANY, 1L)), List.of(),
-                        List.of(new BlockReason.CodePointsLeftOpen(
-                                new CodePointClass.NotWhitespace(), 1L, null))));
+                        List.of(ValuesWithin.longerThan(ValueSet.ANY, 1L)), List.of()));
     }
 
     /** A rule read far enough to say it restricts the values, and no further. */
