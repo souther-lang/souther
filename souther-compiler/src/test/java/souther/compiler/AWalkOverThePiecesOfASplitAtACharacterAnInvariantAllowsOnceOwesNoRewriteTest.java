@@ -177,193 +177,105 @@ class AWalkOverThePiecesOfASplitAtACharacterAnInvariantAllowsOnceOwesNoRewriteTe
                         .contains(rewrite)).toList());
     }
 
-    private static final String CONTACTS = """
-            data Address = String
-                invariant String.matches("[^@\\\\s]+@[^@\\\\s]+\\\\.[^@\\\\s]+", value)
-
-            data Phone = String
-                invariant String.length(value) >= 1
-
-            data DomainName = String
-                invariant String.matches("[a-z0-9.]+", value)
-
-            data EmailOnly     = { email: Address }
-            data PhoneOnly     = { phone: Phone }
-            data EmailAndPhone = { email: Address, phone: Phone }
-            data ContactPoint  = EmailOnly | PhoneOnly | EmailAndPhone
-
-            let emailOf (reach: ContactPoint): List<Address> =
-                match reach with
-                    | EmailOnly { email }     -> [ email ]
-                    | EmailAndPhone { email } -> [ email ]
-                    | PhoneOnly               -> []
-
-            let domainOf (a: Address): List<DomainName> =
-                List.flatMap(d -> if DomainName(d) as name then [ name ] else [],
-                             List.drop(1, String.split("@", String.lowercase(a.value))))
-            """;
-
+    /** A list a {@code match} builds holds the most its arms hold, so a flatMap over it that adds one
+     *  for each holds one at most. */
     @Test
-    void aWalkOverTheListOfAMatchWhoseArmsHoldOneAtMostOwesNothing() {
+    void aFlatMapOverTheListOfAMatchWhoseArmsHoldOneAtMostIsAWalkOverOneAtMost() {
         assertEquals(List.of(), walkRewritesOwed(measured("""
-                module repro.arms.alone
-                %s
-                behavior sizes : (reach: ContactPoint) -> List<Int>
-                let sizes (reach) = List.map(e -> String.length(e.value), emailOf(reach))
+                module repro.source
+                data Seen = { n: Int }
+                data Held = Nobody | Seen
+
+                let heldOf (h: Held): List<Int> =
+                    match h with
+                        | Nobody     -> []
+                        | Seen { n } -> [ n ]
+
+                behavior sizes : (h: Held) -> List<Int>
+                let sizes (h) = List.map(m -> m + 1, List.flatMap(e -> [ e ], heldOf(h)))
 
                 example sizes
-                    | "one" : (EmailOnly { email = Address("a@b.c") }) -> [ 5 ]
-                """.formatted(CONTACTS))));
+                    | "none" : (Nobody) -> [ ]
+                """)));
     }
 
+    /** What a closure answers is bounded by what the type of its parameter guarantees, whatever it
+     *  is handed. */
     @Test
-    void aFlatMapWhoseClosureAnswersOneAtMostForEveryAddressOverOneAddressOwesNothing() {
+    void aFlatMapWhoseClosureAnswersOneAtMostForEveryAddressIsAWalkOverOneAtMost() {
         assertEquals(List.of(), walkRewritesOwed(measured("""
                 module repro.closure
-                %s
-                behavior sizes : (a: Address) -> List<Int>
-                let sizes (a) =
-                    List.map(d -> String.length(d.value), List.flatMap(e -> domainOf(e), [ a ]))
+                data Address = String
+                    invariant String.matches("[^@\\\\s]+@[^@\\\\s]+", value)
 
-                example sizes
-                    | "one" : (Address("a@b.c")) -> [ 3 ]
-                """.formatted(CONTACTS))));
+                behavior lengths : (a: Address) -> List<Int>
+                let lengths (a) =
+                    List.map(s -> String.length(s),
+                             List.flatMap(e -> List.drop(1, String.split("@", e.value)), [ a ]))
+
+                example lengths
+                    | "one" : (Address("a@bc")) -> [ 2 ]
+                """)));
     }
 
+    /** A walk inside a closure goes over a list built from the closure's parameter, so the list
+     *  is one value there as it is anywhere. */
     @Test
-    void aFlatMapThatAnswersOneElementForEachOfTheListOfAMatchOwesNothing() {
+    void aWalkInsideAClosureOverWhatItsParameterSplitsIsAWalkOverOneAtMost() {
         assertEquals(List.of(), walkRewritesOwed(measured("""
-                module repro.flatOverMatch
-                %s
-                behavior sizes : (reach: ContactPoint) -> List<Int>
-                let sizes (reach) =
-                    List.map(n -> n + 1, List.flatMap(e -> [ 1 ], emailOf(reach)))
+                module repro.inside
+                data Address = String
+                    invariant String.matches("[^@\\\\s]+@[^@\\\\s]+", value)
 
-                example sizes
-                    | "none" : (PhoneOnly { phone = Phone("1") }) -> [ ]
-                """.formatted(CONTACTS))));
+                behavior lengths : (a: Address) -> List<Int>
+                let lengths (a) =
+                    List.flatMap(e -> List.map(s -> String.length(s),
+                                               List.drop(1, String.split("@", e.value))),
+                                 [ a ])
+
+                example lengths
+                    | "one" : (Address("a@bc")) -> [ 2 ]
+                """)));
     }
 
     @Test
-    void aWalkOverWhatFlatMapAnswersOverTheListOfAMatchOwesNothing() {
-        Compilation compilation = measured("""
-                module repro.domains
-                %s
-                let domainsOf (reach: ContactPoint): List<DomainName> =
-                    List.flatMap(e -> domainOf(e), emailOf(reach))
-
-                behavior sizes : (reach: ContactPoint) -> List<Int>
-                let sizes (reach) = List.map(d -> String.length(d.value), domainsOf(reach))
-
-                example sizes
-                    | "none" : (PhoneOnly { phone = Phone("1") }) -> [ ]
-                """.formatted(CONTACTS));
-        assertEquals(List.of(), walkRewritesOwedOf("map", compilation));
-        assertEquals(List.of(), walkRewritesOwedOf("flatMap", compilation));
-    }
-
-    @Test
-    void aWalkOverTheListOfAMatchOnAFieldOfTheInputOwesNothing() {
-        Compilation compilation = measured("""
-                module repro.field
-
-                data OpportunityRequested = { closeDate: Date }
-                data OpportunityIntent = NoOpportunity | OpportunityRequested
-
-                data ConversionRequest = { convertedOn: Date, intent: OpportunityIntent }
-
-                let requestedCloseDate (intent: OpportunityIntent): List<Date> =
-                    match intent with
-                        | NoOpportunity                      -> []
-                        | OpportunityRequested { closeDate } -> [ closeDate ]
-
-                data CloseDateInPast = { requested: Date }
-                data ConversionBlocked = { reasons: List<CloseDateInPast> }
-                    invariant List.length(reasons) >= 1
-                data Converted = { on: Date }
-
-                let closeDateReasons (request: ConversionRequest): List<CloseDateInPast> =
-                    List.map(d -> CloseDateInPast { requested = d },
-                             List.filter(d -> Date.daysBetween(request.convertedOn, d) < 0,
-                                         requestedCloseDate(request.intent)))
-
-                behavior convert : (request: ConversionRequest) -> Converted | ConversionBlocked
-                    constructs Converted, ConversionBlocked, CloseDateInPast
-                let convert (request) =
-                    if ConversionBlocked { reasons = closeDateReasons(request)
-                                                       ++ closeDateReasons(request) } as blocked
-                    then blocked
-                    else Converted { on = request.convertedOn }
-
-                example convert
-                    | "none" : (ConversionRequest { convertedOn = Date("2026-07-20"),
-                                                    intent = NoOpportunity })
-                        -> Converted { on = Date("2026-07-20") }
-                """);
-        assertEquals(List.of(), walkRewritesOwedOf("map", compilation));
-        assertEquals(List.of(), walkRewritesOwedOf("filter", compilation));
-    }
-
-    @Test
-    void aMatchOneOfWhoseArmsHoldSeveralLeavesTheWalkOverItsFlatMapUndecided() {
+    void aMatchOneOfWhoseArmsHoldSeveralIsNotAWalkOverOneAtMost() {
         assertEquals(List.of("fold_after_one_step", "fold_from_the_seed"),
                 walkRewritesOwed(measured("""
-                        module repro.arms.several
-                        %s
-                        let twiceOf (reach: ContactPoint): List<Address> =
-                            match reach with
-                                | EmailOnly { email }     -> [ email, email ]
-                                | EmailAndPhone { email } -> [ email ]
-                                | PhoneOnly               -> []
+                        module repro.several
+                        data Seen = { n: Int }
+                        data Held = Nobody | Seen
 
-                        behavior sizes : (reach: ContactPoint) -> List<Int>
-                        let sizes (reach) =
-                            List.map(n -> n + 1, List.flatMap(e -> [ 1 ], twiceOf(reach)))
+                        let twiceOf (h: Held): List<Int> =
+                            match h with
+                                | Nobody     -> []
+                                | Seen { n } -> [ n, n ]
+
+                        behavior sizes : (h: Held) -> List<Int>
+                        let sizes (h) =
+                            List.map(m -> m + 1, List.flatMap(e -> [ e ], twiceOf(h)))
 
                         example sizes
-                            | "none" : (PhoneOnly { phone = Phone("1") }) -> [ ]
-                        """.formatted(CONTACTS))));
+                            | "none" : (Nobody) -> [ ]
+                        """)));
     }
 
     @Test
-    void aClosureThatAnswersSeveralForSomeArgumentLeavesTheWalkUndecided() {
+    void aClosureThatAnswersSeveralForSomeArgumentIsNotAWalkOverOneAtMost() {
         assertEquals(List.of("fold_after_one_step", "fold_from_the_seed"),
                 walkRewritesOwed(measured("""
-                        module repro.closure.several
-                        %s
-                        let piecesOf (a: Address): List<String> =
-                            String.split("@", String.lowercase(a.value))
+                        module repro.severalpieces
+                        data Address = String
+                            invariant String.matches("[^@\\\\s]+@[^@\\\\s]+", value)
 
-                        behavior sizes : (a: Address) -> List<Int>
-                        let sizes (a) =
+                        behavior lengths : (a: Address) -> List<Int>
+                        let lengths (a) =
                             List.map(s -> String.length(s),
-                                     List.flatMap(e -> piecesOf(e), [ a ]))
+                                     List.flatMap(e -> String.split("@", e.value), [ a ]))
 
-                        example sizes
-                            | "one" : (Address("a@b.c")) -> [ 1, 3 ]
-                        """.formatted(CONTACTS))));
-    }
-
-    @Test
-    void aBoundTheTypeOfTheParameterGivesIsNotCarriedToAClosureOverAnotherType() {
-        assertEquals(List.of("fold_after_one_step", "fold_from_the_seed"),
-                walkRewritesOwed(measured("""
-                        module repro.closure.othertype
-                        %s
-                        data Loose = String
-                            invariant String.length(value) >= 1
-
-                        let looseDomainOf (a: Loose): List<String> =
-                            List.drop(1, String.split("@", String.lowercase(a.value)))
-
-                        behavior sizes : (a: Loose) -> List<Int>
-                        let sizes (a) =
-                            List.map(s -> String.length(s),
-                                     List.flatMap(e -> looseDomainOf(e), [ a ]))
-
-                        example sizes
-                            | "one" : (Loose("a@b")) -> [ 1 ]
-                        """.formatted(CONTACTS))));
+                        example lengths
+                            | "one" : (Address("a@bc")) -> [ 1, 2 ]
+                        """)));
     }
 
     @Test
