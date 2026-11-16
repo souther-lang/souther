@@ -4,6 +4,7 @@ import souther.compiler.types.BinOp;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.core.Core;
 import souther.compiler.coverage.CoverageSites;
+import souther.compiler.diag.Citation;
 import souther.compiler.flow.Arrival;
 import souther.compiler.flow.Paths;
 import souther.compiler.flow.ValueArrivals;
@@ -49,7 +50,7 @@ final class Meetings {
 
     private final List<Interaction> found = new ArrayList<>();
 
-    private final List<WhyNotJoined> notJoined = new ArrayList<>();
+    private final List<UnjoinedMeeting> notJoined = new ArrayList<>();
 
     /** The elements a call adds up that a comparison keeps. */
     private final KeptElements keptElements;
@@ -91,7 +92,7 @@ final class Meetings {
                     .map(operand -> outcomesOf(operand, reading)).toList());
             WhyNotJoined why = whyNotOffered(operands);
             if (why != null) {
-                notJoined.add(why);
+                notJoined.add(unjoined(why, node));
                 return;
             }
             for (Reached each : operands) {
@@ -109,7 +110,7 @@ final class Meetings {
                 // Met once however many ways reach it: it is a place in the body that was not read,
                 // and the ways in say nothing more about that.
                 case KeptElements.Read.NotJoined(var why) -> {
-                    notJoined.add(why);
+                    notJoined.add(unjoined(why, node));
                     return;
                 }
                 case KeptElements.Read.Factors found -> factors.addAll(found.each());
@@ -139,7 +140,7 @@ final class Meetings {
         List<Factor> apart = new ArrayList<>(new LinkedHashSet<>(factors));
         if (apart.size() > 1) {
             if (plan.mayRepeat(node)) {
-                notJoined.add(WhyNotJoined.THE_MEETING_IS_IN_CODE_RUN_AGAIN);
+                notJoined.add(unjoined(WhyNotJoined.THE_MEETING_IS_IN_CODE_RUN_AGAIN, node));
             } else if (reaches.isEmpty()) {
                 found.add(Interaction.reachedSomeWay(apart));
             } else {
@@ -160,10 +161,14 @@ final class Meetings {
         return List.copyOf(found);
     }
 
-    /** The sums of kept elements the walk met and could not join to evaluations, each with the
-     *  reason, in the order it met them. They are meetings the measure did not ask about. */
-    List<WhyNotJoined> notJoined() {
+    /** The meetings the walk met and could not join to evaluations, each with the reason and where
+     *  it is written, in the order it met them. They are meetings the measure did not ask about. */
+    List<UnjoinedMeeting> notJoined() {
         return List.copyOf(notJoined);
+    }
+
+    private static UnjoinedMeeting unjoined(WhyNotJoined why, Core node) {
+        return new UnjoinedMeeting(why, Citation.of(node.pos()));
     }
 
     /**

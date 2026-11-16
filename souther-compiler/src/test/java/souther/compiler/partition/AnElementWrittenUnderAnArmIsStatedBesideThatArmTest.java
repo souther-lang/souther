@@ -15,6 +15,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.PartedString;
 import souther.compiler.meaning.PieceWitness;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
@@ -53,7 +54,7 @@ class AnElementWrittenUnderAnArmIsStatedBesideThatArmTest {
                                  String.split("@", s)))) >= 1""";
 
     private static Proposition.InTheStrings held(PieceWitness of, String text) {
-        return new Proposition.InTheStrings(new Proposition.InTheStrings.Strings.OfAPiece(of),
+        return new Proposition.InTheStrings(new Proposition.InTheStrings.Strings.OfAPiece(of, Optional.empty()),
                 new StringsLanguage(PatternMeaning.text(text)), true);
     }
 
@@ -209,33 +210,25 @@ class AnElementWrittenUnderAnArmIsStatedBesideThatArmTest {
     }
 
     /**
-     * What is said of where a piece comes from is one thing: statements that disagree are about
-     * no piece, and nothing is taken of it.
+     * Where a piece comes from is what a statement about it states, and it is the one place that
+     * says it: two statements under one witness over two strings are two statements, so a reader
+     * of one is never given the other's string.
      */
     @Test
-    void statementsThatDisagreeOnWhereAPieceComesFromGiveNoString() {
+    void statementsOverTwoStringsUnderOneWitnessAreTwoStatements() {
         PieceWitness piece = at(0, 0);
-        Derivation.APieceInALanguage fromS = held(piece, "ab", "s");
-        Derivation.APieceInALanguage fromT = held(piece, "ab", "t");
-        PartedStringsOfThePieces agreed = PartedStringsOfThePieces.of(List.of(fromS, fromS));
-        assertEquals(fromS.parted(), agreed.of(piece));
-        PartedStringsOfThePieces disagreed = PartedStringsOfThePieces.of(List.of(fromS, fromT));
-        assertEquals(Optional.empty(), disagreed.of(piece));
-    }
+        Proposition fromS = held(piece, "ab", "s").conclusion(null);
+        Proposition fromT = held(piece, "ab", "t").conclusion(null);
 
-    /** Pieces at one depth that are two statements' keep each its own string. */
-    @Test
-    void piecesAtOneDepthKeepTheStringsOfTheirOwnStatements() {
-        PartedStringsOfThePieces strings = PartedStringsOfThePieces.of(List.of(
-                held(at(0, 0), "ab", "s"), held(at(0, 1), "12", "t")));
-        assertEquals(held(at(0, 0), "ab", "s").parted(), strings.of(at(0, 0)));
-        assertEquals(held(at(0, 1), "12", "t").parted(), strings.of(at(0, 1)));
+        assertEquals(fromS, held(piece, "ab", "s").conclusion(null));
+        assertNotEquals(fromS, fromT);
+        assertNotEquals(fromS.spelling(), fromT.spelling());
     }
 
     private static Derivation.APieceInALanguage held(PieceWitness of, String text, String string) {
         return new Derivation.APieceInALanguage(new StringsLanguage(PatternMeaning.text(text)),
                 "String.matches", text, of, Optional.of(
-                        new Derivation.APieceInALanguage.PartedString(TermPath.of(string),
+                        new PartedString(TermPath.of(string),
                                 CaseMapping.NONE, '@', 0, OptionalLong.empty())));
     }
 

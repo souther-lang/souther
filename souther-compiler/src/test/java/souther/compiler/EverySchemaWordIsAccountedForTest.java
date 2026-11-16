@@ -63,6 +63,7 @@ import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.TraversalDirection;
 import souther.compiler.reading.PathAccess;
+import souther.compiler.reading.WhyNotJoined;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.RowFailure;
 import souther.compiler.semantics.HowAClosureIsApplied;
@@ -655,6 +656,11 @@ class EverySchemaWordIsAccountedForTest {
                     List.of("$defs", "decision", "properties", "statementsNoRowIsIn", "items",
                             "properties", "cases", "items"),
                     CaseOfAStatement.Step.class, CaseOfAStatement.Way.class),
+            // Why a meeting of the body's decisions could not be joined to what a run records.
+            new Vocabulary("interaction.meetingsNotJoined[].why",
+                    List.of("$defs", "interaction", "properties", "meetingsNotJoined", "items",
+                            "properties", "why"),
+                    WhyNotJoined.class),
             // Why a weight of a derived value is undecided, as far as the weights' own reading
             // says.
             new Vocabulary("partition.weights[].undecidedBecause",

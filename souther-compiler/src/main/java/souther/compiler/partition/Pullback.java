@@ -98,6 +98,7 @@ import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.GivenTotals;
 import souther.compiler.meaning.Derivation.ALawJoinsWithoutWhatImpliesAnother.Disjunct;
 import souther.compiler.meaning.HowTheElementsAreAsked;
+import souther.compiler.meaning.PartedString;
 import souther.compiler.meaning.PieceDemand;
 import souther.compiler.meaning.PieceWitness;
 import souther.compiler.meaning.MeaningsOfABody.Meaning;
@@ -4534,8 +4535,26 @@ final class Pullback {
      * piece is of ({@link #piecesInAWindow}).
      */
     private Pieces pieceThatIs(Core e, InputReads at, Function<Denotation, Pieces> held) {
+        Denotation standing = at.standing(e, read.rules().symbols(), read.rules().newtypes());
+        InputReads.PickedAtAnIndex picked = standing.at().pickedAtAnIndex(standing.value());
+        if (picked != null) {
+            return pieceAt(picked, held);
+        }
         Denotation whole = theContainerOfTheElement(e, at);
         return whole == null ? null : piecesOfTheElementsOf(whole, held);
+    }
+
+    /**
+     * The pieces the element {@code picked} names is one of: the window of the one piece at its
+     * index among the pieces the list holds — or null where the list is no pieces of a string.
+     */
+    private Pieces pieceAt(InputReads.PickedAtAnIndex picked, Function<Denotation, Pieces> held) {
+        Pieces inner = held.apply(picked.list());
+        if (inner == null) {
+            return null;
+        }
+        PieceWindow window = inner.window().dropping(picked.index()).taking(1);
+        return window.isSaidInInts() ? inner.through(window) : null;
     }
 
     /**
@@ -4871,12 +4890,12 @@ final class Pullback {
      * or the one it is made of by case conversions, and what they make of it — or none where it is
      * made of anything else.
      */
-    private Optional<Derivation.APieceInALanguage.PartedString> partedStringOf(Pieces piece) {
+    private Optional<PartedString> partedStringOf(Pieces piece) {
         Core string = piece.split().args().get(piece.parted().string().position());
         Quantity quantity = valueOfTheInput(string, piece.at());
         ConvertedText text = quantity == null ? null : ConvertedText.of(quantity);
         return text == null || piece.separator().isEmpty() ? Optional.empty()
-                : Optional.of(new Derivation.APieceInALanguage.PartedString(
+                : Optional.of(new PartedString(
                         text.place().subjectPath(), text.through(), piece.separator().getAsInt(),
                         piece.window().from(), piece.window().until()));
     }
@@ -6925,7 +6944,7 @@ final class Pullback {
             Proposition.Some some = null;
             for (Proposition part : parts) {
                 if (part instanceof Proposition.InTheStrings(
-                        Proposition.InTheStrings.Strings.OfAPiece(PieceWitness of),
+                        Proposition.InTheStrings.Strings.OfAPiece(PieceWitness of, var _),
                         StringsLanguage accepts, boolean inIt, var _)
                         && of.equals(within) && inIt && language == null) {
                     language = accepts;
@@ -6964,7 +6983,7 @@ final class Pullback {
                                                 Proposition element, Derivation answered) {
             if (pieces.separator().isEmpty()
                     || !(element instanceof Proposition.InTheStrings(
-                            Proposition.InTheStrings.Strings.OfAPiece(PieceWitness of),
+                            Proposition.InTheStrings.Strings.OfAPiece(PieceWitness of, var _),
                             StringsLanguage piece, boolean inIt, var _))
                     || !of.equals(within)
                     || !(subjectOf(pieces.split().args().get(pieces.parted().string().position()),
@@ -16730,9 +16749,15 @@ final class Pullback {
         }
     }
 
-    /** {@code e}, which nothing here reads the meaning of. */
+    /**
+     * {@code e}, which nothing here reads the meaning of — and what its operation's owner says of
+     * it, where it is a string held to a predicate: the statement stays with the part, whatever
+     * stopped the reading of the call.
+     */
     private Derivation unread(Core e, InputReads reads, WhyUnread why) {
-        return leaf(new Derivation.Stopped(why, fixed(e, reads)), e, reads);
+        AnOperationApplied applied = AnOperationApplied.of(Core.withoutStanding(e));
+        return leaf(new Derivation.Stopped(why, fixed(e, reads),
+                applied == null ? Optional.empty() : couldBeSaid(applied, e, reads)), e, reads);
     }
 
     /**
