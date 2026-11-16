@@ -772,6 +772,42 @@ public sealed interface ReportMessage extends Message {
 
     record MeetingsNotWalked(int count) implements ReportMessage, Prose {}
 
+    record MeetingNotJoined(int number, Message at) implements ReportMessage, Prose {}
+
+    record TheElementIsKeptBySeveralTruths() implements ReportMessage, Prose {}
+
+    record TheElementIsKeptByWhatIsNoTruthAboutIt() implements ReportMessage, Prose {}
+
+    record TheElementIsKeptByATestWhoseOutcomeIsNotWorkedOut() implements ReportMessage, Prose {}
+
+    record WhatKeepsTheElementIsNotOneComparison() implements ReportMessage, Prose {}
+
+    record WhatAnElementIsWorthIsDecidedBeyondWhatIsRead() implements ReportMessage, Prose {}
+
+    record WhichEvaluationIsTheElementsIsNotSaid() implements ReportMessage, Prose {}
+
+    record TheComparisonAsksWhichCaseAValueIs() implements ReportMessage, Prose {}
+
+    record TheComparisonIsOfANumberNoInputHolds() implements ReportMessage, Prose {}
+
+    record NoRunIsRecordedAtTheComparison() implements ReportMessage, Prose {}
+
+    record TheDecisionIsOfAVisitPastThoseRecorded() implements ReportMessage, Prose {}
+
+    record TheElementsAreNotOneClosureAppliedToEach() implements ReportMessage, Prose {}
+
+    record TwoElementsOfOneApplicationDisagree() implements ReportMessage, Prose {}
+
+    record TheComparisonThatRunsIsNotHeldOnce() implements ReportMessage, Prose {}
+
+    record TheContainerHoldsMoreElementsThanAreWrittenOut() implements ReportMessage, Prose {}
+
+    record TheMeetingIsInCodeARunMayComeBackTo() implements ReportMessage, Prose {}
+
+    record AnOperandIsSettledByAWayNoRunIsSeenTaking() implements ReportMessage, Prose {}
+
+    record AnOperandHasMoreWaysThanAreRead() implements ReportMessage, Prose {}
+
     record InteractionCombinations(String combinations) implements ReportMessage, Prose {}
 
     record InteractionCombinationsUncounted(int count, Message why)

@@ -199,9 +199,9 @@ public final class CoverageRead {
      *                     budget over these takes them in this order, so which of them a budget that
      *                     runs out reaches is said by where the meeting is written and not by which
      *                     way round a fork above it a row goes
-     * @param notJoined    the sums of kept elements the walk met and could not join to the
-     *                     evaluations of the comparison that keeps them, each with why, in the order
-     *                     it met them. Meetings all the same, and ones nothing was asked about
+     * @param unjoined     the meetings the walk met and could not join to what a run records, each
+     *                     with why and where it is written, in the order it met them. Meetings all
+     *                     the same, and ones nothing was asked about
      * @param arms         one answer per arm of the behavior, by the number the plan gave it. Total
      *                     over the plan's arms: a key that is not there is not a thing to interpret,
      *                     because there is no such key.
@@ -249,7 +249,7 @@ public final class CoverageRead {
      *                       say it is
      */
     public record Read(List<Interaction> interactions,
-                       List<WhyNotJoined> notJoined,
+                       List<UnjoinedMeeting> unjoined,
                        java.util.SequencedMap<ArmProbe, PathAccess> arms,
                        List<WayIn> taken,
                        List<WayIn> answeredBy,
@@ -261,7 +261,7 @@ public final class CoverageRead {
         public Read {
             piecesAttempted = List.copyOf(piecesAttempted);
             interactions = List.copyOf(interactions);
-            notJoined = List.copyOf(notJoined);
+            unjoined = List.copyOf(unjoined);
             taken = List.copyOf(taken);
             answeredBy = List.copyOf(answeredBy);
             Map<WayIn, Set<WrittenWithout>> copied = new LinkedHashMap<>();
@@ -292,6 +292,11 @@ public final class CoverageRead {
                             + " that says where its block goes on: " + each);
                 }
             }
+        }
+
+        /** Why each of the meetings {@link #unjoined} could not be joined, in the same order. */
+        public List<WhyNotJoined> notJoined() {
+            return unjoined.stream().map(UnjoinedMeeting::why).toList();
         }
 
         /** How arm {@code probe} is reached, by the number the plan gave it. */

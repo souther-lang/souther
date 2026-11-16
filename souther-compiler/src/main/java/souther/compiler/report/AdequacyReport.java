@@ -171,6 +171,8 @@ import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.partition.WhichLine;
 import souther.compiler.partition.WhyKept;
 import souther.compiler.reading.PathAccess;
+import souther.compiler.reading.UnjoinedMeeting;
+import souther.compiler.reading.WhyNotJoined;
 import souther.compiler.query.ArmCoverage;
 import souther.compiler.query.ArmObligation;
 import souther.compiler.query.ArmSummary;
@@ -5001,6 +5003,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 .orElseGet(() -> new ReportMessage.InteractionCombinationsUncounted(
                         meetings.counted(), ReasonProse.of(meetings.made().why()).sentence())))
                 + held);
+        // The meetings no combination is asked of, each by where it is written and why, since the
+        // count beside them says nothing of what is left unmeasured.
+        int number = 0;
+        for (UnjoinedMeeting each : meetings.asked().notJoined()) {
+            number++;
+            out.append("      ? ").append(page.say(new ReportMessage.MeetingNotJoined(number,
+                    new ReportMessage.AtAPlace(each.at().said(page.rendering(), declaredIn)))))
+                    .append(NEW_LINE);
+            out.append("          · ").append(page.say(whyNotJoined(each.why())))
+                    .append(NEW_LINE);
+        }
         for (UnobservedGroup group : behavior.unobserved()) {
             decidedTogether(out, group, declaredIn, page);
             for (UnobservedChoices missing : group.choices()) {
@@ -5250,6 +5263,41 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         new ReportMessage.NoRowCanBeAskedForTheOthers())).append(NEW_LINE);
             }
         }
+    }
+
+    /** Why a meeting could not be joined to what a run records, in the words the page says it. */
+    private static Message whyNotJoined(WhyNotJoined why) {
+        return switch (why) {
+            case KEPT_BY_SEVERAL -> new ReportMessage.TheElementIsKeptBySeveralTruths();
+            case KEPT_BY_ANOTHER_KIND ->
+                    new ReportMessage.TheElementIsKeptByWhatIsNoTruthAboutIt();
+            case KEPT_BY_A_TEST_NOT_WORKED_OUT ->
+                    new ReportMessage.TheElementIsKeptByATestWhoseOutcomeIsNotWorkedOut();
+            case NOT_ONE_COMPARISON -> new ReportMessage.WhatKeepsTheElementIsNotOneComparison();
+            case A_VALUE_CHOICE_NOT_READ ->
+                    new ReportMessage.WhatAnElementIsWorthIsDecidedBeyondWhatIsRead();
+            case A_VALUE_CHOICE_NOT_NUMBERED ->
+                    new ReportMessage.WhichEvaluationIsTheElementsIsNotSaid();
+            case A_COMPARISON_OF_CASES -> new ReportMessage.TheComparisonAsksWhichCaseAValueIs();
+            case A_NUMBER_NO_INPUT_HOLDS ->
+                    new ReportMessage.TheComparisonIsOfANumberNoInputHolds();
+            case NO_RUN_IS_RECORDED_AT_IT -> new ReportMessage.NoRunIsRecordedAtTheComparison();
+            case MORE_VISITS_THAN_ARE_RECORDED ->
+                    new ReportMessage.TheDecisionIsOfAVisitPastThoseRecorded();
+            case NOT_ONE_CLOSURE -> new ReportMessage.TheElementsAreNotOneClosureAppliedToEach();
+            case AN_APPLICATION_SAID_TWO_THINGS ->
+                    new ReportMessage.TwoElementsOfOneApplicationDisagree();
+            case NOT_ONE_COMPARISON_THAT_RUNS ->
+                    new ReportMessage.TheComparisonThatRunsIsNotHeldOnce();
+            case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT ->
+                    new ReportMessage.TheContainerHoldsMoreElementsThanAreWrittenOut();
+            case THE_MEETING_IS_IN_CODE_RUN_AGAIN ->
+                    new ReportMessage.TheMeetingIsInCodeARunMayComeBackTo();
+            case AN_OUTCOME_NO_RUN_IS_SEEN_TAKING ->
+                    new ReportMessage.AnOperandIsSettledByAWayNoRunIsSeenTaking();
+            case AN_OPERAND_HAS_MORE_WAYS_THAN_ARE_READ ->
+                    new ReportMessage.AnOperandHasMoreWaysThanAreRead();
+        };
     }
 
     /** What a statement that lacks cases is, in the places an author wrote and nothing else. */
@@ -10208,6 +10256,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         ObjectNode out = into.putObject("interaction");
         measured(out.putObject("coverage"), meetings.made());
         out.put("groupsNotMeasured", meetings.asked().notMeasured().size());
+        if (!meetings.asked().notJoined().isEmpty()) {
+            ArrayNode unjoined = out.putArray("meetingsNotJoined");
+            for (UnjoinedMeeting each : meetings.asked().notJoined()) {
+                ObjectNode one = unjoined.addObject();
+                one.put("why", word(each.why()));
+                PublishedAt.of(each.at()).ifPresent(place -> at(one.putObject("at"), place, sources));
+            }
+        }
         ArrayNode all = out.putArray("obligations");
         Optional<InteractionEvidence.RowsMeeting> met = meetings.made().made();
         if (met.isPresent()) {

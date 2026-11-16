@@ -7,6 +7,8 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Weakening;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -43,7 +45,7 @@ class ElementsKeptByArmsOfOneChoiceAreOneDecisionTest {
                     | "phone" : (PhoneOnly { phone = "p" }) -> false
                 """);
 
-        assertEquals(0, behavior.evidence().interaction().asked().notJoined(),
+        assertEquals(List.of(), behavior.evidence().interaction().asked().notJoined(),
                 "one match is one decision, so there is nothing that was not joined");
         assertFalse(behavior.weakenedBy().causes().stream()
                         .anyMatch(Weakening.MeetingsNotJoined.class::isInstance),

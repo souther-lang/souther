@@ -108,7 +108,7 @@ class TheSameTotalInAGuardIsAskedTheSameWhicheverWayItIsWrittenTest {
             InteractionEvidence evidence = behavior.evidence().interaction();
             return new Asked(evidence.counted(), evidence.asked().read(),
                     evidence.asked().unconfirmed().size(), evidence.asked().notMeasured().size(),
-                    evidence.asked().notJoined(), behavior.status());
+                    evidence.asked().notJoined().size(), behavior.status());
         }
     }
 
