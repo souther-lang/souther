@@ -474,13 +474,14 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "says a way past a guard whose search was refused a run, or whose choices past"
                             + " the first were more than the ones the guard's ways share, was cut"
                             + " short under the figure, beside the row that goes out"),
-            Map.entry("souther.compiler.partition.Generator$GoingOn#wayOn("
-                            + "Lsouther/compiler/coverage/AlignedObservation;Ljava/util/List;"
-                            + "Ljava/util/Set;)"
+            Map.entry("souther.compiler.partition.Generator$GoingOn#holdingTogether("
+                            + "Ljava/util/List;Ljava/util/function/Predicate;"
+                            + "Lsouther/compiler/inputs/SearchRegion;)"
                             + "Lsouther/compiler/partition/Generator$GoingOn$WayPastTheGuard;",
-                    "holds a way past a guard to no more of the ways its parts can be held along"
-                            + " than the figure, and hands the figure on with the way, which says"
-                            + " it was cut short there"),
+                    "holds the parts of a way, a way past a guard or the decisions of a"
+                            + " combination, to no more of the ways they can be held along than"
+                            + " the figure, and hands the figure on with the way, which says it was"
+                            + " cut short there"),
             // The ways under the cases of a sum a container, or a requirement at a name the cases
             // share, is written: one walk hands them over, and says the figure where it stopped,
             // which both roads a row is composed on carry with what the ways tried came to — rows
