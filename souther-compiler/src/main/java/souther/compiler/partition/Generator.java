@@ -11345,12 +11345,21 @@ public final class Generator {
         for (ControlClaim claim : selection.claims()) {
             each.add(holding.at(claim.at()));
         }
-        if (each.isEmpty()) {
+        // Held to what can be read of the decisions, and the rest left to the classes and the run
+        // ({@link ReadableDemands}). No value on a side a decision comes out on says nothing more
+        // than what was already found.
+        ReadableDemands asked = ReadableDemands.of(each);
+        if (asked.impossible()) {
             return List.of();
         }
         Set<CompositionBudget> cutShort = EnumSet.noneOf(CompositionBudget.class);
+        cutShort.addAll(asked.cutShort());
+        if (asked.readable().isEmpty()) {
+            return cutShort.isEmpty() ? List.of() : List.of(new Witness.Limited(classesOf(tried),
+                    SearchShortfall.NONE, List.of(), false, cutShort));
+        }
         List<Witness> attempts = new ArrayList<>();
-        switch (GoingOn.holdingTogether(each, _ -> true)) {
+        switch (GoingOn.holdingTogether(asked.readable(), _ -> true)) {
             // Nothing here holds a row to them. A figure that left a part unlooked at is what the
             // answer says; a reason alone is this compiler having no demand, which is no more
             // than what was already found.
