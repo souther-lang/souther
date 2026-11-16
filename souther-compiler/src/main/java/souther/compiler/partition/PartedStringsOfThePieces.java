@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.PartedString;
 import souther.compiler.meaning.PieceWitness;
 
 import java.util.HashMap;
@@ -22,23 +23,23 @@ final class PartedStringsOfThePieces {
 
     static final PartedStringsOfThePieces NONE = new PartedStringsOfThePieces(Map.of());
 
-    private final Map<PieceWitness, Derivation.APieceInALanguage.PartedString> known;
+    private final Map<PieceWitness, PartedString> known;
 
     private PartedStringsOfThePieces(
-            Map<PieceWitness, Derivation.APieceInALanguage.PartedString> known) {
+            Map<PieceWitness, PartedString> known) {
         this.known = known;
     }
 
     /** What the statements holding pieces to a language say of where the pieces come from. */
     static PartedStringsOfThePieces of(List<Derivation.APieceInALanguage> held) {
-        Map<PieceWitness, Derivation.APieceInALanguage.PartedString> known = new HashMap<>();
+        Map<PieceWitness, PartedString> known = new HashMap<>();
         Set<PieceWitness> contradicted = new HashSet<>();
         for (Derivation.APieceInALanguage each : held) {
             if (each.parted().isEmpty()) {
                 continue;
             }
-            Derivation.APieceInALanguage.PartedString said = each.parted().get();
-            Derivation.APieceInALanguage.PartedString before =
+            PartedString said = each.parted().get();
+            PartedString before =
                     known.putIfAbsent(each.within(), said);
             if (before != null && !before.equals(said)) {
                 contradicted.add(each.within());
@@ -49,7 +50,7 @@ final class PartedStringsOfThePieces {
     }
 
     /** The string {@code piece} is a piece of, where the statements agree on it. */
-    Optional<Derivation.APieceInALanguage.PartedString> of(PieceWitness piece) {
+    Optional<PartedString> of(PieceWitness piece) {
         return Optional.ofNullable(known.get(piece));
     }
 }

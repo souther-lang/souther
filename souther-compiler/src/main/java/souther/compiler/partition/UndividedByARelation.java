@@ -52,7 +52,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
-import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.PartedString;
 import souther.compiler.meaning.PieceWitness;
 import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
@@ -4576,12 +4576,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (run == null || piece == null || piece.within().isEmpty()
                 || run.partedStrings().isEmpty()
                 || !(run.statement() instanceof Proposition.InTheStrings(
-                        Proposition.InTheStrings.Strings.OfAPiece(PieceWitness within), var _, var _,
+                        Proposition.InTheStrings.Strings.OfAPiece(PieceWitness within, var _), var _, var _,
                         var _))
                 || !within.equals(piece.within().get())) {
             return false;
         }
-        Derivation.APieceInALanguage.PartedString parted = run.partedStrings().get();
+        PartedString parted = run.partedStrings().get();
         ConvertedText whole = piece.whole();
         return whole != null && whole.through().equals(parted.conversion())
                 && whole.place().subjectPath().equals(parted.string())

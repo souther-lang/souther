@@ -15,6 +15,7 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.PartedString;
 import souther.compiler.meaning.PieceWitness;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
@@ -53,7 +54,7 @@ class AnElementWrittenUnderAnArmIsStatedBesideThatArmTest {
                                  String.split("@", s)))) >= 1""";
 
     private static Proposition.InTheStrings held(PieceWitness of, String text) {
-        return new Proposition.InTheStrings(new Proposition.InTheStrings.Strings.OfAPiece(of),
+        return new Proposition.InTheStrings(new Proposition.InTheStrings.Strings.OfAPiece(of, Optional.empty()),
                 new StringsLanguage(PatternMeaning.text(text)), true);
     }
 
@@ -235,7 +236,7 @@ class AnElementWrittenUnderAnArmIsStatedBesideThatArmTest {
     private static Derivation.APieceInALanguage held(PieceWitness of, String text, String string) {
         return new Derivation.APieceInALanguage(new StringsLanguage(PatternMeaning.text(text)),
                 "String.matches", text, of, Optional.of(
-                        new Derivation.APieceInALanguage.PartedString(TermPath.of(string),
+                        new PartedString(TermPath.of(string),
                                 CaseMapping.NONE, '@', 0, OptionalLong.empty())));
     }
 

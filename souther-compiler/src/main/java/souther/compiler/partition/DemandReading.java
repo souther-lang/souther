@@ -19,6 +19,7 @@ import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.Derivation;
+import souther.compiler.meaning.PartedString;
 import souther.compiler.meaning.PieceWitness;
 import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
@@ -311,7 +312,7 @@ final class DemandReading {
     /** The same, over the pieces of the string {@code parted} says. */
     private static Read forTheRun(Proposition stated, RowDemand.NoComposer why,
                                   List<WhyUnread> past,
-                                  Optional<Derivation.APieceInALanguage.PartedString> parted) {
+                                  Optional<PartedString> parted) {
         return new Read.Demands(new RowDemand.ForTheRun(stated, why, past, parted));
     }
 
@@ -567,7 +568,7 @@ final class DemandReading {
         }
 
         /** The string the piece {@code within} is a piece of, where it is read to be of one. */
-        Optional<Derivation.APieceInALanguage.PartedString> partedStringOfThePiece(
+        Optional<PartedString> partedStringOfThePiece(
                 PieceWitness within) {
             return partedStrings.of(within);
         }
@@ -1800,7 +1801,7 @@ final class DemandReading {
             // A piece held to a language depends on the string it is a piece of, which the
             // proposition does not say and the way the piece was read does.
             case Proposition.InTheStrings(
-                    Proposition.InTheStrings.Strings.OfAPiece(PieceWitness within), var _, var _,
+                    Proposition.InTheStrings.Strings.OfAPiece(PieceWitness within, var _), var _, var _,
                     var _) ->
                     List.of(forTheRun(stated, RowDemand.NoComposer.A_STRING_IN_A_LANGUAGE,
                             List.of(), projection.partedStringOfThePiece(within)));

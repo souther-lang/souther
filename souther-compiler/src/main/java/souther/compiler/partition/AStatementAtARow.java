@@ -13,6 +13,7 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.OnOneElement;
+import souther.compiler.meaning.PartedString;
 import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
@@ -226,9 +227,14 @@ final class AStatementAtARow {
                     && (same.otherSubject() == null
                             || same.otherSubject() instanceof DecisionSubject.AnInput);
             // A row writes the string at a position, and whether it is one of a language's is
-            // read off that string. A piece of a split string is no position's.
+            // read off that string. So is a piece of it, where the pieces held are the one piece
+            // at an index: the row's string is parted and the piece there is read. Which of
+            // several pieces a statement is about is the quantifier's and no row's.
             case Proposition.InTheStrings(Proposition.InTheStrings.Strings.AtAPosition _,
                                           StringsLanguage _, boolean _, Spelling _) -> true;
+            case Proposition.InTheStrings(Proposition.InTheStrings.Strings.OfAPiece(
+                    var _, Optional<PartedString> parted), StringsLanguage _, boolean _,
+                    Spelling _) -> onePieceOf(parted) != null;
             case Proposition.LastToHold _ -> true;
             case Proposition.All _, Proposition.Any _, Proposition.WhereItAnswers _,
                  Proposition.SoManyHold _, Proposition.OfTheWays _, Proposition.Some _ ->
@@ -239,6 +245,7 @@ final class AStatementAtARow {
                         WhatTheDeclarationsLeave.ofTheInput(affine.form()) != null
                         || productIn(affine) != null
                         || pieceMembershipIn(affine) != null
+                        || thePieceBeingAValueIn(affine) != null
                         || remainderByAnInputIn(affine) != null
                         || remainderOfADividendIn(affine) != null
                         || (countIn(affine) instanceof Quantity count
@@ -414,6 +421,50 @@ final class AStatementAtARow {
                 && OneRelation.OnPieceMembership.readsARow(among) ? among : null;
     }
 
+    /**
+     * A string of the input being the piece of another that stands at one index: what
+     * {@code affine} weighs where it weighs those two as equal and nothing else; its denial is the
+     * same relation not holding.
+     * Said as a membership of the one piece ({@link OneRelation.OnPieceMembership}), which is
+     * nothing there where the row's string has no piece at the index.
+     *
+     * @param piece the piece, whose window of pieces is the one piece
+     * @param value the string of the input it is held against
+     */
+    record PieceBeingAValue(Quantity.APieceOf piece, Quantity value) {
+
+        /** The numbers the two strings are made of, in the order of the input. */
+        List<NumericTerm> terms() {
+            return NumericTerms.inOrder(List.of(ConvertedText.of(value).place(),
+                    ConvertedText.of(piece.string()).place()));
+        }
+    }
+
+    /** The one piece {@code affine} holds a string against as equal or not, or null. */
+    static PieceBeingAValue thePieceBeingAValueIn(Relation.Affine affine) {
+        Map<Quantity, ExactRatio> coefs = affine.form().coefs();
+        if (coefs.size() != 2 || !affine.form().constant().isZero()
+                || affine.proposition() != Rel.EQ) {
+            return null;
+        }
+        Quantity.APieceOf piece = null;
+        Quantity value = null;
+        for (Quantity each : coefs.keySet()) {
+            if (each instanceof Quantity.APieceOf found) {
+                piece = found;
+            } else {
+                value = each;
+            }
+        }
+        return piece != null && value != null
+                && coefs.get(piece).negated().equals(coefs.get(value))
+                && piece.among() == piece.from() + 1
+                && piece.separator().isPresent()
+                && ValueName.Stdlib.operation("String", "split").equals(piece.operation())
+                && ConvertedText.of(piece.string()) != null && ConvertedText.of(value) != null
+                ? new PieceBeingAValue(piece, value) : null;
+    }
+
     /** The one product {@code affine} weighs where it weighs one and nothing else, or null. */
     static Quantity.ProductOfTwo productIn(Relation.Affine affine) {
         return affine.form().coefs().size() == 1
@@ -474,6 +525,9 @@ final class AStatementAtARow {
                                      boolean _, Spelling _) -> List.of(at);
             case Proposition.InTheStrings(Proposition.InTheStrings.Strings.AtAPosition(
                     TermPath at, var _), StringsLanguage _, boolean _, Spelling _) -> List.of(at);
+            case Proposition.InTheStrings(Proposition.InTheStrings.Strings.OfAPiece(
+                    var _, Optional<PartedString> parted), StringsLanguage _, boolean _, Spelling _)
+                    when onePieceOf(parted) != null -> List.of(parted.get().string());
             case Proposition.SameValue same when askable(same) -> same.otherSubject() == null
                     ? List.of(same.one().inputPosition())
                     : List.of(same.one().inputPosition(), same.otherSubject().inputPosition());
@@ -583,6 +637,8 @@ final class AStatementAtARow {
                         } else if (pieceMembershipIn(affine)
                                 instanceof Quantity.IsAmongThePieces membership) {
                             into.addAll(membership.positionsItIsMadeOf());
+                        } else if (thePieceBeingAValueIn(affine) instanceof PieceBeingAValue one) {
+                            into.addAll(one.terms());
                         } else if (productIn(affine) instanceof Quantity.ProductOfTwo product) {
                             into.addAll(product.factors());
                         } else if (remainderByAnInputIn(affine)
@@ -1411,6 +1467,10 @@ final class AStatementAtARow {
                                 .orElseGet(() -> new Said.NotRead(Set.of(ReadingGap.NO_VALUE))));
                         case TextAtARow.Unsaid(Said said) -> heldAs(holds, said);
                     };
+            case Proposition.InTheStrings(Proposition.InTheStrings.Strings.OfAPiece(
+                    var _, Optional<PartedString> parted), StringsLanguage language,
+                    boolean holds, Spelling _) when onePieceOf(parted) != null ->
+                    heldAs(holds, theOnePieceIn(parted.get(), language, row));
             case Proposition.All _ -> joined(node.parts().stream()
                     .map(each -> at(each, row, answered, numbered)).toList(), true);
             case Proposition.Any _ -> joined(node.parts().stream()
@@ -1818,6 +1878,38 @@ final class AStatementAtARow {
             case ValuesAtARow.CouldNotTell(var why) -> new Said.NotRead(why);
             case ValuesAtARow.NoneHere _ -> Said.NOTHING_THERE;
         };
+    }
+
+    /** {@code parted} where it says the one piece at an index of a string, or null. */
+    private static PartedString onePieceOf(Optional<PartedString> parted) {
+        return parted.isPresent() && parted.get().isOnePiece() ? parted.get() : null;
+    }
+
+    /**
+     * What {@code row} says of the one piece {@code parted} names being one of the strings of
+     * {@code language}: its string worked out as the run time works it out
+     * ({@link BoundUnderEvaluation#mapped}) and parted as the run time parts it
+     * ({@link BoundUnderEvaluation#parted}). Nothing there where the string has fewer pieces, so
+     * the piece is in no language and out of none.
+     */
+    private static Said theOnePieceIn(PartedString parted, StringsLanguage language,
+                                      BorderQuantity.Observation row) {
+        TextAtARow text = textAt(parted.string(), row);
+        if (!(text instanceof TextAtARow.Written(String whole))) {
+            return unsaid(text);
+        }
+        String converted = BoundUnderEvaluation.mapped(parted.conversion(), whole);
+        if (converted == null) {
+            return new Said.NotRead(Set.of(ReadingGap.NO_VALUE));
+        }
+        List<String> pieces = BoundUnderEvaluation.parted(converted, parted.separator());
+        if (parted.from() >= pieces.size()) {
+            return Said.NOTHING_THERE;
+        }
+        return Recognizer.recognizes(language, language.meaning(),
+                        pieces.get(Math.toIntExact(parted.from())))
+                .<Said>map(Said.Is::new)
+                .orElseGet(() -> new Said.NotRead(Set.of(ReadingGap.NO_VALUE)));
     }
 
     /** The string a row put at a position, or why a reader has none to read. */
@@ -2321,7 +2413,8 @@ final class AStatementAtARow {
          */
         record OnPieceMembership(ConvertedText value, ConvertedText string, int separator,
                                  int from, int among, ExactRatio weight, ExactRatio constant,
-                                 Rel rel, List<NumericTerm> terms) implements OneRelation {
+                                 Rel rel, boolean ofTheOnePiece, List<NumericTerm> terms)
+                implements OneRelation {
 
             /** Whether the strings of {@code membership} are ones a row is read at. */
             static boolean readsARow(Quantity.IsAmongThePieces membership) {
@@ -2337,8 +2430,21 @@ final class AStatementAtARow {
                         ConvertedText.of(membership.string()),
                         membership.separator().getAsInt(), membership.from(), membership.among(),
                         affine.form().coefs().get(membership), affine.form().constant(),
-                        affine.proposition(),
+                        affine.proposition(), false,
                         NumericTerms.inOrder(membership.positionsItIsMadeOf()));
+            }
+
+            /**
+             * The one piece at an index held against a string as equal or not: the membership of
+             * the string among the pieces from that index to the next, weighed to come to nought
+             * where it is, and nothing there where the row's string has no piece at the index.
+             */
+            static OnPieceMembership ofThePiece(Relation.Affine affine, PieceBeingAValue one) {
+                Quantity.APieceOf piece = one.piece();
+                return new OnPieceMembership(ConvertedText.of(one.value()),
+                        ConvertedText.of(piece.string()), piece.separator().getAsInt(),
+                        piece.from(), piece.among(), ExactRatio.ONE, ExactRatio.ONE.negated(),
+                        affine.proposition(), true, one.terms());
             }
 
             /** The positions whose strings a row is read at. */
@@ -2363,6 +2469,9 @@ final class AStatementAtARow {
                     return new Said.NotRead(Set.of(ReadingGap.NO_VALUE));
                 }
                 List<String> pieces = BoundUnderEvaluation.parted(converted, separator);
+                if (ofTheOnePiece && from >= pieces.size()) {
+                    return Said.NOTHING_THERE;
+                }
                 int until = among > 0 ? Math.min(among, pieces.size()) : pieces.size();
                 boolean found = from < until && pieces.subList(from, until).contains(needle);
                 ExactAnswer<ExactRatio> sum =
@@ -2608,6 +2717,8 @@ final class AStatementAtARow {
                         ofAProduct(affine, productIn(affine), behavior, quantities);
                 case Relation.Affine affine when pieceMembershipIn(affine) != null ->
                         OnPieceMembership.of(affine, pieceMembershipIn(affine));
+                case Relation.Affine affine when thePieceBeingAValueIn(affine) != null ->
+                        OnPieceMembership.ofThePiece(affine, thePieceBeingAValueIn(affine));
                 case Relation.Affine affine when remainderByAnInputIn(affine) != null ->
                         ofARemainderByAnInput(affine, remainderByAnInputIn(affine), behavior,
                                 quantities);
