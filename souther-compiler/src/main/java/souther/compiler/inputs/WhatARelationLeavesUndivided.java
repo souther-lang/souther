@@ -16,6 +16,7 @@ import souther.compiler.numeric.WholeNumberSet;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -656,11 +657,6 @@ public final class WhatARelationLeavesUndivided {
                         if (leftBelow) {
                             out.add(new Line(run.from().inclusive() ? Rel.GE : Rel.GT,
                                     run.from().at()));
-                        }
-                        // A run with no upper end covers everything above it, so no run after it
-                        // is above it and no line is drawn there.
-                        if (run.to() == null) {
-                            break;
                         }
                         // Above it, values it leaves, or the next run settling it the other way.
                         if (leftAbove || after != null) {
@@ -2424,9 +2420,12 @@ public final class WhatARelationLeavesUndivided {
     /** {@code runs} in order of their values, each joined to the one beside it where the two
      *  settle the relation the same way. */
     private static List<SettledRun> inOrder(List<SettledRun> runs, boolean whole) {
+        // By where each starts, and of two starting at one number the one taking it in first: a
+        // run from a number and one from just above it are not alike, and no run starts above one
+        // that has no end.
         List<SettledRun> sorted = new ArrayList<>(runs);
-        sorted.sort((one, two) -> one.from() == null ? (two.from() == null ? 0 : -1)
-                : two.from() == null ? 1 : one.from().at().compareTo(two.from().at()));
+        sorted.sort(Comparator.comparing(SettledRun::from,
+                Comparator.nullsFirst(EachWayItComesOut::byStart)));
         List<SettledRun> out = new ArrayList<>();
         for (SettledRun each : sorted) {
             SettledRun last = out.isEmpty() ? null : out.getLast();
