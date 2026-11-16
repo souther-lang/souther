@@ -185,9 +185,7 @@ public final class BehaviorSetStatements {
      *
      * @param notShown the plan for the strings shown on neither side, or null where every string
      *                 is shown on one
-     * @param trueUpTo the most code points a value of {@code whenTrue} is shown to hold the rule
-     *                 at, or null where every one of them is
-     * @param heldTo   the lengths a value of {@code whenTrue} or {@code notShown} is held to, as
+     * @param heldTo the lengths a value of {@code whenTrue} or {@code notShown} is held to, as
      *                 numbers, and every other length being the false side's; null where the plans
      *                 hold every length they name
      * @param shownAt  the lengths a value of {@code whenTrue} is shown to hold the rule at, and
@@ -195,27 +193,26 @@ public final class BehaviorSetStatements {
      *                 shown at every length
      * @param notReached the strings of the lengths no run gets to the relation at, which are on
      *                 neither side
+     * @param notCounted the plans for the strings holding so few or so many code points of a class
+     *                 that no run gets to the relation with them, which are on neither side as
+     *                 those of {@code notReached} are, and are built with the rest of the
+     *                 position's plans
      */
     private record Asked(PredicateOrigin by, PredicateStatement states,
                          NumericTerm.FromOnePosition term,
                          AdmittedPlan whenTrue, AdmittedPlan whenFalse,
-                         AdmittedPlan notShown, Long trueUpTo,
+                         AdmittedPlan notShown,
                          LengthRuns heldTo, LengthRuns shownAt,
                          List<ValuesWithin> notReached,
-                         BlockReason.OperationsNotShown operations, List<CountedOpen> notCounted) {
+                         BlockReason.OperationsNotShown operations,
+                         List<AdmittedPlan> notCounted) {
 
         Asked(PredicateOrigin by, PredicateStatement states, NumericTerm.FromOnePosition term,
               AdmittedPlan whenTrue, AdmittedPlan whenFalse) {
-            this(by, states, term, whenTrue, whenFalse, null, null, null, null, List.of(),
-                    BlockReason.OperationsNotShown.NONE, List.of());
+            this(by, states, term, whenTrue, whenFalse, null, null, null,
+                    List.of(), BlockReason.OperationsNotShown.NONE, List.of());
         }
     }
-
-    /**
-     * The strings holding so few or so many code points of a class that no run gets to the
-     * relation with them, waiting to be built with the rest of the position's plans.
-     */
-    private record CountedOpen(AdmittedPlan strings, BlockReason.CodePointsLeftOpen why) {}
 
     /**
      * What {@code read} states, built under {@code allowance}.
@@ -321,7 +318,7 @@ public final class BehaviorSetStatements {
                 : AdmittedPlan.meeting(List.of(AdmittedPlan.of(mayBe),
                         canBe.isEmpty() ? AdmittedPlan.ANY : AdmittedPlan.without(canBe)));
         return new Asked(each.by(), each.states(), each.term(), shown,
-                AdmittedPlan.without(mayBe), notShown, null, null, null, List.of(),
+                AdmittedPlan.without(mayBe), notShown, null, null, List.of(),
                 BlockReason.OperationsNotShown.NONE, List.of());
     }
 
@@ -368,7 +365,7 @@ public final class BehaviorSetStatements {
             // A string of a length the run does not get to the equality at is on neither side,
             // whichever it would be on.
             List<ValuesWithin> notReached = List.of();
-            List<CountedOpen> notCounted = List.of();
+            List<AdmittedPlan> notCounted = List.of();
             AdmittedPlan reaching = AdmittedPlan.ANY;
             if (strings.reached() != null) {
                 PatternPlan reached = strings.reached().strings();
@@ -378,11 +375,15 @@ public final class BehaviorSetStatements {
                 reaching = new AdmittedPlan.Pattern(reached);
                 shown = AdmittedPlan.meeting(List.of(shown, reaching));
                 whenFalse = AdmittedPlan.meeting(List.of(whenFalse, reaching));
+                // What is left open is asked only of the strings a run gets to the equality with:
+                // one it does not get there with is no string the relation leaves unshown.
+                if (!notShown.equals(AdmittedPlan.NONE)) {
+                    notShown = AdmittedPlan.meeting(List.of(notShown, reaching));
+                }
                 switch (strings.reached()) {
                     case LengthRuns runs -> notReached = runs.outside();
                     case CodePointsPastTheWay counts -> notCounted = counts.outside().stream()
-                            .map(open -> new CountedOpen(new AdmittedPlan.Pattern(open.strings()),
-                                    open.why())).toList();
+                            .<AdmittedPlan>map(AdmittedPlan.Pattern::new).toList();
                 }
             }
             // The partner is the other side's only at the lengths a run gets to the equality with
@@ -409,8 +410,7 @@ public final class BehaviorSetStatements {
             }
             asked.add(new Asked(each.by(), each.states(), each.term(),
                     shown, whenFalse, notShown.equals(AdmittedPlan.NONE) ? null : notShown,
-                    strings.upTo(), heldTo, strings.shownAt(), notReached, strings.operations(),
-                    notCounted));
+                    heldTo, strings.shownAt(), notReached, strings.operations(), notCounted));
         }
         List<ClassingBlocker> blocked = new ArrayList<>();
         List<StandingQuestion.NothingClassifiesIt> nothingClassifies = new ArrayList<>();
@@ -445,7 +445,7 @@ public final class BehaviorSetStatements {
             if (each.notShown() != null) {
                 plans.add(each.notShown());
             }
-            each.notCounted().forEach(open -> plans.add(open.strings()));
+            plans.addAll(each.notCounted());
         }
         Map<NumericTerm.FromOnePosition, Realizations> answers = new LinkedHashMap<>();
         byTerm.forEach((term, plans) ->
@@ -710,49 +710,30 @@ public final class BehaviorSetStatements {
                         }
                     }
                 }
-                // Each run of the lengths the true side is shown at, cut where it is not shown to
-                // hold the rule any longer: what is past that is the side's, and open.
-                List<ValuesWithin> whenTrue = new ArrayList<>();
-                List<ValuesWithin> pasts = new ArrayList<>();
-                for (ValuesWithin run : shown.over(holding)) {
-                    ValuesWithin past = pastWhatIsShown(run, each.trueUpTo());
-                    if (past == null) {
-                        whenTrue.add(run);
-                        continue;
-                    }
-                    pasts.add(past);
-                    if (past.shortest() != run.shortest()) {
-                        whenTrue.add(new ValuesWithin(run.values(), run.shortest(),
-                                past.shortest() - 1));
+                // The true side is its strings at each run of the lengths it is shown at.
+                List<ValuesWithin> trueRegions = shown.over(holding);
+                List<ValuesWithin> failing = new ArrayList<>();
+                ValueSet whenFalse = built.of(each.whenFalse());
+                if (each.heldTo() == null) {
+                    failing.add(ValuesWithin.all(whenFalse));
+                } else {
+                    for (ValuesWithin run : each.heldTo().outside()) {
+                        failing.add(run.over(ValueSet.ANY));
                     }
                 }
+                // The strings of the lengths no run gets to the relation at, and those of the counts
+                // it does not: a length bounds none of the second, so they are the whole of each.
+                List<ValuesWithin> notReached = new ArrayList<>(each.notReached());
+                each.notCounted().forEach(
+                        plan -> notReached.add(ValuesWithin.all(built.of(plan))));
                 statements.add(new RuleEvidence.BySet(new SetStatement(each.term(),
-                        whenTrue.isEmpty()
+                        trueRegions.isEmpty()
                                 ? ValuesAtLengths.of(ValuesWithin.all(ValueSet.NONE))
-                                : ValuesAtLengths.atAnyOf(holding, whenTrue),
-                        each.heldTo() == null ? ValuesAtLengths.all(built.of(each.whenFalse()))
-                                : ValuesAtLengths.atAnyOf(ValueSet.ANY, each.heldTo().outside()),
-                        each.states(), each.by(), notShown,
-                        pasts, each.notReached(),
-                        each.operations(),
-                        each.notCounted().stream().map(open -> new SetStatement.NotCounted(
-                                built.of(open.strings()), open.why())).toList())));
+                                : new ValuesAtLengths(trueRegions),
+                        new ValuesAtLengths(failing),
+                        each.states(), each.by(), notShown, notReached, each.operations())));
             }
         }
-    }
-
-    /**
-     * The values of {@code shown} longer than {@code upTo}, which a side is not shown to hold at;
-     * or null where there are none, so that a side the same with and without the length is one
-     * value ({@link ValuesWithin#upTo}).
-     */
-    private static ValuesWithin pastWhatIsShown(ValuesWithin shown, Long upTo) {
-        if (upTo == null || (shown.longest() != null && shown.longest() <= upTo)) {
-            return null;
-        }
-        ValuesWithin past = new ValuesWithin(shown.values(),
-                Math.max(shown.shortest(), upTo + 1), shown.longest());
-        return past.shownToHoldNone() ? null : past;
     }
 
     /**

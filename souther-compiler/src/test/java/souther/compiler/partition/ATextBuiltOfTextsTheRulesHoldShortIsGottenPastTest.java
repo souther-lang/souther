@@ -15,18 +15,15 @@ import souther.compiler.values.TextExtents;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A run to an equality over {@code v} builds a text of {@code v} on the way, which stops a run only
- * where that text, or one built on the way to it, is longer than a {@code String} holds. Where the
- * rules hold {@code v} short enough that none can be, it gets past at every value and the equality
- * is read at every value of {@code v}; one code point longer and it is not shown to.
- *
- * <p>Each pair is the longest {@code v} the bound ({@link TextsBuilt}) says every text fits at,
- * and one past it. With the length of a {@code String} {@code L}, two joined texts in canonical
- * form adding at most three code points, and a text growing at most four times once put in it:
- * {@code v ++ v} fits while {@code 2n + 3 <= L}.
+ * where that text, or one built on the way to it, is longer than a {@code String} holds. That is
+ * where the representation stops, which parts no values: the run is taken to get past the building
+ * whatever the rules hold {@code v} and the texts beside it to, the equality is read at every value
+ * of {@code v}, and the building is said once as a stop of its own.
  */
 class ATextBuiltOfTextsTheRulesHoldShortIsGottenPastTest {
 
@@ -54,12 +51,16 @@ class ATextBuiltOfTextsTheRulesHoldShortIsGottenPastTest {
         return " invariant String.length(value) <= " + codePoints;
     }
 
-    /** Why {@code v} is not read, each reason once in the order the report gives them. */
-    private static List<String> whyVIsNotRead(String source) {
+    /** The report of {@code source}, as a person's program reads it. */
+    private static JsonNode report(String source) {
         Compilation model = ACompiledModel.measured(source,
                 Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
-        JsonNode report = new ObjectMapper().readTree(AdequacyReport.of(model)
+        return new ObjectMapper().readTree(AdequacyReport.of(model)
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
+    }
+
+    /** Why {@code v} is not read, each reason once in the order the report gives them. */
+    private static List<String> whyVIsNotRead(JsonNode report) {
         List<String> out = new ArrayList<>();
         for (JsonNode module : report.path("modules")) {
             for (JsonNode behavior : module.path("behaviors")) {
@@ -74,55 +75,57 @@ class ATextBuiltOfTextsTheRulesHoldShortIsGottenPastTest {
         return out;
     }
 
+    /** The operations the report says a run stops at only past what the representation holds. */
+    private static List<String> stopsPastTheRepresentation(JsonNode report) {
+        List<String> out = new ArrayList<>();
+        for (JsonNode module : report.path("modules")) {
+            for (JsonNode behavior : module.path("behaviors")) {
+                for (JsonNode each : behavior.path("partition")
+                        .path("stopsPastTheRepresentation")) {
+                    out.add(each.path("operation").asString());
+                }
+            }
+        }
+        return out;
+    }
+
     private static void reachedAtEveryValue(String source) {
-        List<String> why = whyVIsNotRead(source);
+        List<String> why = whyVIsNotRead(report(source));
         assertTrue(why.contains(READ) && !why.contains(NOT_SHOWN_REACHED),
                 () -> source + " " + why);
     }
 
-    private static void notShownReachedAtEveryValue(String source) {
-        List<String> why = whyVIsNotRead(source);
-        assertTrue(why.contains(NOT_SHOWN_REACHED), () -> source + " " + why);
-    }
-
-    /** Fits up to {@code longest} code points of {@code v} and not one past it. */
-    private static void fitsUpTo(long longest, String text) {
-        reachedAtEveryValue(model(atMost(longest), text));
-        notShownReachedAtEveryValue(model(atMost(longest + 1), text));
-    }
-
-    /** Two texts joined, by the operator and by the operation: {@code 2n + 3}, and
-     *  {@code n + 2 + 3} beside a text written out. A text no rule holds may be too long. */
+    /**
+     * Two texts joined, copies, joins of a list, texts built of built texts, reversals,
+     * replacements and padding: each is read at every value of {@code v}, however long the rules
+     * let {@code v} be, as long as a {@code String} holds or with no rule at all.
+     */
     @Test
-    void twoTextsJoinedFitWhereTheyAndASeamDo() {
-        fitsUpTo((L - 3) / 2, "v ++ v");
-        fitsUpTo(L - 5, "String.append(v, \"ab\")");
-        notShownReachedAtEveryValue(model("", "v ++ \"ab\""));
-    }
-
-    /** Copies and a join of a list written out: three copies are {@code 3n} and two seams, two
-     *  texts with a separator {@code 2n + 1} and a seam on each side of it. A list no rule holds
-     *  may hold as many texts as a list does, each as long as a {@code String}. */
-    @Test
-    void copiesAndJoinsFitWhereTheTextsAndTheirSeamsDo() {
-        fitsUpTo((L - 6) / 3, "String.repeat(3, v)");
-        fitsUpTo((L - 6) / 3, "String.concat([v, v, v])");
-        fitsUpTo((L - 7) / 2, "String.join(\",\", [v, v])");
-        notShownReachedAtEveryValue(model(atMost(10), "String.concat(ns) ++ v"));
+    void aTextBuiltOfVIsGottenPastWhateverTheRulesHoldVTo() {
+        for (String text : List.of("v ++ v", "String.append(v, \"ab\")", "v ++ \"ab\"",
+                "String.repeat(3, v)", "String.concat([v, v, v])", "String.join(\",\", [v, v])",
+                "String.concat(ns) ++ v", "(v ++ v) ++ v", "v ++ (if up then v else \"x\")",
+                "String.lowercase(v) ++ \"x\"", "String.reverse(v)",
+                "String.replace(\"a\", \"bb\", v)", "String.padLeft(10, \"0\", v)",
+                "String.padRight(" + (L / 68 + 1) + ", \"0\", v)")) {
+            for (String rule : List.of("", atMost(10), atMost(L))) {
+                reachedAtEveryValue(model(rule, text));
+            }
+        }
     }
 
     /**
-     * A list of the input held to three texts and no shorter ones: each may be as long as a
-     * {@code String}, so the join is not shown to fit however short {@code v} is. A rule on how
-     * many the list holds bounds the texts it holds no further.
+     * A join of a list of the input is gotten past whether the list's texts are held to a length
+     * or only how many it holds is, and a list held to a few texts of any length is read as one
+     * whose texts are held to ten.
      */
     @Test
-    void aJoinOfAListHeldToAFewTextsOfAnyLengthIsNotShownToFit() {
+    void aJoinOfAListIsGottenPastWhateverTheListsTextsAreHeldTo() {
         String joined = """
                 module held
 
                 data V = String invariant String.length(value) <= %s
-                data Ws = List<String> invariant List.length(value) <= 3
+                data Ws = List<String> invariant %s
 
                 behavior f : (v: V, ns: List<String>, ws: Ws) -> Bool
                 let f (V(v), ns, Ws(ws)) = {
@@ -130,64 +133,19 @@ class ATextBuiltOfTextsTheRulesHoldShortIsGottenPastTest {
                     List.any(own -> own == v, ns) || String.length(m) > 0
                 }
                 """;
-        notShownReachedAtEveryValue(joined.formatted(10));
+        for (String rule : List.of("List.length(value) <= 3",
+                "List.length(value) <= 3 && List.all(s -> String.length(s) <= 10, value)")) {
+            for (long longest : List.of(10L, L)) {
+                reachedAtEveryValue(joined.formatted(longest, rule));
+            }
+        }
     }
 
-    /**
-     * The same list with each text held to ten code points: the join is three texts of ten, two
-     * separators, and the four times a text grows once put in canonical form, so
-     * {@code 3 * 10 + 2 + 4 * 3 + n + 3} fits where {@code v} holds {@code n} — and one past it does
-     * not. Written on the elements by the rule that states it of each of them, and on the element's
-     * own type, the same.
-     */
+    /** The building is said once, of the operation that builds the text. */
     @Test
-    void aJoinOfAListWhoseTextsAreHeldToTenFitsWhereThatSumDoes() {
-        String joined = """
-                module held
-
-                data V = String invariant String.length(value) <= %s
-                data Ws = List<String> invariant
-                    List.length(value) <= 3 && List.all(s -> String.length(s) <= 10, value)
-
-                behavior f : (v: V, ns: List<String>, ws: Ws) -> Bool
-                let f (V(v), ns, Ws(ws)) = {
-                    let m = String.join(",", ws) ++ v
-                    List.any(own -> own == v, ns) || String.length(m) > 0
-                }
-                """;
-        long longest = L - (3 * 10 + 2 + 4 * 3 + 3);
-        reachedAtEveryValue(joined.formatted(longest));
-        notShownReachedAtEveryValue(joined.formatted(longest + 1));
-    }
-
-    /** What a text built of texts is handed may itself be built, chosen or converted: each is as
-     *  long as its own account says at most. */
-    @Test
-    void aTextBuiltOfBuiltTextsFitsWhereWhatItIsHandedDoes() {
-        fitsUpTo((L - 6) / 3, "(v ++ v) ++ v");
-        fitsUpTo((L - 3) / 2, "v ++ (if up then v else \"x\")");
-        fitsUpTo((L - 4) / 4, "String.lowercase(v) ++ \"x\"");
-    }
-
-    /**
-     * A reversal and a replacement are put in canonical form whole, which makes a text at most
-     * four times as long: {@code 4n}, and with each code point replaced by two, {@code 8n}.
-     */
-    @Test
-    void aTextPutInCanonicalFormWholeFitsWhereFourTimesItDoes() {
-        fitsUpTo(L / 4, "String.reverse(v)");
-        fitsUpTo(L / 8, "String.replace(\"a\", \"bb\", v)");
-    }
-
-    /**
-     * Padding is of the width and the pad, and not of the text, which is answered as it is where
-     * it is that wide already: a width of ten gets past whatever {@code v} is. The join is at most
-     * four times seventeen times the width.
-     */
-    @Test
-    void paddingFitsWhereTheWidthDoes() {
-        reachedAtEveryValue(model("", "String.padLeft(10, \"0\", v)"));
-        reachedAtEveryValue(model("", "String.padRight(" + L / 68 + ", \"0\", v)"));
-        notShownReachedAtEveryValue(model("", "String.padRight(" + (L / 68 + 1) + ", \"0\", v)"));
+    void theOperationBuildingTheTextIsSaidAsAStop() {
+        assertEquals(List.of("++"), stopsPastTheRepresentation(report(model("", "v ++ v"))));
+        assertEquals(List.of("String.reverse"),
+                stopsPastTheRepresentation(report(model("", "String.reverse(v)"))));
     }
 }

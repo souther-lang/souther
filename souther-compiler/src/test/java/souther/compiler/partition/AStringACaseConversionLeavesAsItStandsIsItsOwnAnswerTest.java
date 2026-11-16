@@ -133,35 +133,16 @@ class AStringACaseConversionLeavesAsItStandsIsItsOwnAnswerTest {
         assertEquals("́", BoundUnderEvaluation.mapped(both, "́"));
     }
 
-    /** A run gets past a conversion at the strings it is exactly a map on and at the strings it
-     *  leaves as they stand, whose answer is the string and is no longer; not at one whose answer
-     *  is longer than it. */
-    @Test
-    void aRunGetsPastAConversionAtTheStringsItLeavesAsTheyStand() {
-        Language past = CaseMaps.gottenPastExactly(CaseMapping.LOWERCASE, METER);
-        assertTrue(past.has("abc"));
-        assertTrue(past.has("́"));
-        assertFalse(past.has("İ"));
-        CaseMapping both = new CaseMapping.Lowercase(CaseMapping.UPPERCASE);
-        Language pastBoth = CaseMaps.gottenPastExactly(both, METER);
-        assertTrue(pastBoth.has("abc"));
-        assertTrue(pastBoth.has("́"));
-        assertFalse(pastBoth.has("ß"));
-    }
-
     /**
-     * A witness holds a string chosen from the strings the conversion is exactly a map on, so each
-     * must be a value; the strings a run is shown to get past it at hold sequences that are no
-     * value, and are not chosen from.
+     * The strings a witness is chosen from are values, so a string is chosen from the strings the
+     * conversion is exactly a map on, which hold no sequence that is no value.
      */
     @Test
-    void theStringsAWitnessIsChosenFromAreAllValuesAndTheOnesAGetPastIsShownAtAreNot() {
+    void theStringsAWitnessIsChosenFromAreAllValues() {
         for (CaseMapping mapping : List.of(CaseMapping.LOWERCASE, CaseMapping.UPPERCASE)) {
             Language chosenFrom = CaseMaps.of(mapping).strings(METER);
             Language noValue = Language.EVERY_STRING.heldAsWritten().language(METER).not(METER);
             assertTrue(chosenFrom.and(noValue, METER).isEmpty(), mapping.toString());
-            Language past = CaseMaps.gottenPastExactly(mapping, METER);
-            assertFalse(past.and(noValue, METER).isEmpty(), mapping.toString());
         }
     }
 

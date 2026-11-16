@@ -615,15 +615,14 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 "List.any(i -> i.q / i.p >= 0 && i.p >= i.r, xs)"), "4:50"));    }
 
     /**
-     * A join of collections the relation does not read is asked of the witness as well: a run
-     * stopped there reaches the relation at no value. Two lists a rule holds long enough together
-     * that the join doubling both never fits are not cut down apart from each other, so the
-     * relation in the walk of a third is not shown reached. Without the rule they hold nothing on
-     * the witness, the join fits, and it relates; and a join of the two lists the walk reads
-     * itself, held past what a list holds together, is not reached either.
+     * A join of collections stops a run only where it would hold more elements than a list holds,
+     * which parts no values: two lists a rule holds long enough together that the join doubling
+     * both never fits leave the relation in the walk of a third reached at every value, as they do
+     * without the rule; and so does a join of the two lists the walk reads itself, held past what
+     * a list holds together. The joins are said as stops of their own.
      */
     @Test
-    void collectionsARuleHoldsTogetherAreNotCutDownApart() {
+    void aJoinPastWhatAListHoldsLeavesTheRelationReachedWhateverARuleHoldsTheListsTo() {
         String model = """
                 module w1
                 data Bundles = { xs: List<Int>, ys: List<Int>, zs: List<Int> }
@@ -636,12 +635,15 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 """;
         String doubled = "List.append(b.xs, b.xs), List.append(b.ys, b.ys)";
         String together = "    invariant List.length(xs) + List.length(ys) >= %s";
-        assertEquals(Map.of("b.zs[*]", NOT_REACHED, "n", NOT_REACHED), leftIn(model.formatted(
-                together.formatted("2147483647"), doubled, "b.zs"), "7:21"));
+        String heldTogether = model.formatted(together.formatted("2147483647"), doubled, "b.zs");
+        assertEquals(Map.of("b.zs[*]", RELATES, "n", RELATES), leftIn(heldTogether, "7:21"));
         assertEquals(Map.of("b.zs[*]", RELATES, "n", RELATES),
                 leftIn(model.formatted("", doubled, "b.zs"), "7:21"));
-        assertEquals(NOT_REACHED, leftIn(model.formatted(together.formatted("2147483648"),
+        assertEquals(RELATES, leftIn(model.formatted(together.formatted("2147483648"),
                 "b.xs, b.ys", "b.xs"), "7:21").get("b.xs[*]"));
+        assertEquals(List.of("List.append"), measured(heldTogether).db()
+                .ask(new Adequacy.Coverage("w1")).value().get("m").stopsPastTheRepresentation()
+                .stream().map(StopPastTheRepresentation::operation).distinct().toList());
     }
 
     /**

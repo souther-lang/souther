@@ -68,13 +68,21 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
         return measured(MODEL, total);
     }
 
+    /**
+     * The report of the total written in {@code model}, where each part stands left out, and
+     * without the line naming the operations that stop a run only past what the representation
+     * holds: a range and a list written out are one total, and only the range is an operation
+     * that builds a list.
+     */
     private static String measured(String model, String total) {
         Compilation compilation = Compilation.ofSource(model.formatted(total), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
-                .replaceAll("\\d+:\\d+", "");
+                .lines().filter(line -> !line.contains("a run stops only where"))
+                .map(line -> line.replaceAll("\\d+:\\d+", ""))
+                .reduce("", (all, line) -> all + line + "\n");
     }
 
     @Test

@@ -137,7 +137,8 @@ final class Classing {
     private static AsASet asASet(RuleEvidence evidence, Carrier carrier) {
         return switch (evidence) {
             case RuleEvidence.BySet(SetStatement it) ->
-                    new AsASet(it.whenTrue(), it.whenFalse(), it.statement());
+                    new AsASet(it.whenTrue(), it.whenFalse(), it.statement(),
+                            new ValuesAtLengths(it.notReached()));
             case RuleEvidence.Singles(GuardThresholds.Guards.Singled it) -> {
                 if (carrier instanceof Carrier.Whole && wholeOf(it.value()) != null) {
                     // A whole number singled out is the one number and every other.
@@ -194,9 +195,17 @@ final class Classing {
      * @param whenTrue  the values shown on the side the rule holds on, a length and all: what is
      *                  asked of that side is asked of the length as well
      * @param whenFalse the values shown on the other side, a length and all
+     * @param notReached the values no run gets to the rule with: the rule is on neither side of
+     *                  them, and says nothing of them, which is a third thing to be and not a hole
+     *                  between the two. Nothing for a distinction that is reached by every value
      */
     private record AsASet(ValuesAtLengths whenTrue, ValuesAtLengths whenFalse,
-                          PredicateStatement states) {}
+                          PredicateStatement states, ValuesAtLengths notReached) {
+
+        AsASet(ValuesAtLengths whenTrue, ValuesAtLengths whenFalse, PredicateStatement states) {
+            this(whenTrue, whenFalse, states, new ValuesAtLengths(List.of()));
+        }
+    }
 
     /**
      * What the rules of one position came to: the classes, and the rules that make none.
@@ -215,12 +224,23 @@ final class Classing {
      *                 class holds; none where every rule shows every value on one. Carried by
      *                 every answer, the classes composed or not: it is what the rules left, and
      *                 is owed a question however the classes came out
+     * @param keptFromBy the rules that keep some of the position's values from themselves: no run
+     *                 gets to the rule with them ({@link SetStatement#notReached}). A row may hold
+     *                 one: it is in no class and the rule owes a question of it no more than
+     *                 any other. Carried by the classes that were composed, which hold only what a
+     *                 run gets to the rules with
      */
-    record Result(Classed classed, List<Disposed> forEach, List<LeftOpen> leftOpen) {
+    record Result(Classed classed, List<Disposed> forEach, List<LeftOpen> leftOpen,
+                  List<RuleEvidenceOrigin> keptFromBy) {
 
         Result {
             forEach = List.copyOf(forEach);
             leftOpen = List.copyOf(leftOpen);
+            keptFromBy = List.copyOf(keptFromBy);
+        }
+
+        Result(Classed classed, List<Disposed> forEach, List<LeftOpen> leftOpen) {
+            this(classed, forEach, leftOpen, List.of());
         }
 
         /** The rules the classes were made out of. */
@@ -467,10 +487,9 @@ final class Classing {
         if (cells.isEmpty() && !open.isEmpty()) {
             return notComposed(mine, told, BlockReason.RelationShownOverARegion.of(
                     open.stream().flatMap(each -> each.open().stream()).toList(),
-                    open.stream().map(LeftOpen::operations)
+                    open.stream().map(each -> each.statement().operations())
                             .reduce(BlockReason.OperationsNotShown.NONE,
-                                    BlockReason.OperationsNotShown::and),
-                    open.stream().flatMap(each -> each.byCodePoints().stream()).toList()), open);
+                                    BlockReason.OperationsNotShown::and)), open);
         }
         List<PartitionClass> out = new ArrayList<>();
         for (Cell cell : cells) {
@@ -485,37 +504,42 @@ final class Classing {
         }
         // The classes are sets, so everything that went into them went into them — a value singled
         // out of a string is one of these classes rather than a cut beside them.
-        return new Result(new Classed.Composed(out), filled(mine, told, Outcome.DIVIDED), open);
+        List<RuleEvidenceOrigin> kept = new ArrayList<>();
+        for (RuleEvidence each : mine) {
+            if (each instanceof RuleEvidence.BySet set) {
+                Worked<List<ValuesWithin>> none =
+                        heldOf(term, admits, set.states().notReached(), allowance);
+                if (none.refused() != null) {
+                    return notComposed(mine, told, new BlockReason.BehaviorDistinctionsTooCostly(
+                            ofTheDistinctions(none.refused())), open);
+                }
+                if (!none.answer().isEmpty() && !kept.contains(set.states().origin())) {
+                    kept.add(set.states().origin());
+                }
+            }
+        }
+        return new Result(new Classed.Composed(out), filled(mine, told, Outcome.DIVIDED), open,
+                kept);
     }
 
     /**
      * The values of a position one rule shows on neither of its sides, which no class holds: the
-     * strings it shows nothing of for its operations, those longer than the other side is written
-     * round, and those of lengths no run gets to it at ({@link SetStatement#leftOpen}), each met
-     * with what the position holds.
+     * strings it shows nothing of for its operations ({@link SetStatement#notShown}), each met
+     * with what the position holds. The values no run gets to the rule with are not among them:
+     * the rule is asked of the values it is reached with, and no row can put one of the others
+     * to it.
      *
      * @param statement the rule
      * @param open      the values left open, each as long as it is left open at; none of them
      *                  shown to hold nothing
-     * @param forTheOperations whether some of {@code open} are open for the rule's operations
-     *                  ({@link SetStatement#notShown}), which a reader is then told beside them
      */
-    record LeftOpen(SetStatement statement, List<ValuesWithin> open, boolean forTheOperations,
-                    List<BlockReason.CodePointsLeftOpen> byCodePoints) {
+    record LeftOpen(SetStatement statement, List<ValuesWithin> open) {
 
         LeftOpen {
-            if (statement == null || open == null || byCodePoints == null
-                    || (open.isEmpty() && byCodePoints.isEmpty())) {
+            if (statement == null || open == null || open.isEmpty()) {
                 throw new IllegalArgumentException("a rule leaves some values of a position open");
             }
             open = List.copyOf(open);
-            byCodePoints = List.copyOf(byCodePoints);
-        }
-
-        /** The operations the values open are open for: the rule's, where some are open for
-         *  them, and none otherwise. */
-        BlockReason.OperationsNotShown operations() {
-            return forTheOperations ? statement.operations() : BlockReason.OperationsNotShown.NONE;
         }
     }
 
@@ -526,35 +550,12 @@ final class Classing {
     private static Worked<LeftOpen> leftOpen(NumericTerm.FromOnePosition term, ValueSet admits,
                                              SetStatement statement,
                                              Allowance<NumericTerm.FromOnePosition> allowance) {
-        List<ValuesWithin> open = new ArrayList<>();
-        Worked<List<ValuesWithin>> forTheOperations =
-                heldOf(term, admits, statement.notShown(), allowance);
-        if (forTheOperations.refused() != null) {
-            return Worked.refusedAt(forTheOperations.refused());
+        Worked<List<ValuesWithin>> open = heldOf(term, admits, statement.notShown(), allowance);
+        if (open.refused() != null) {
+            return Worked.refusedAt(open.refused());
         }
-        open.addAll(forTheOperations.answer());
-        List<ValuesWithin> otherwise = new ArrayList<>(statement.pastWhatIsWritten());
-        otherwise.addAll(statement.notReached());
-        Worked<List<ValuesWithin>> forAnotherReason =
-                heldOf(term, admits, otherwise, allowance);
-        if (forAnotherReason.refused() != null) {
-            return Worked.refusedAt(forAnotherReason.refused());
-        }
-        open.addAll(forAnotherReason.answer());
-        List<BlockReason.CodePointsLeftOpen> byCodePoints = new ArrayList<>();
-        for (SetStatement.NotCounted each : statement.notCounted()) {
-            Allowance.Composed held =
-                    allowance.meet(Sameness.Block.of(term), admits, each.values());
-            if (held.gaveUp()) {
-                return Worked.refusedAt(held.refused());
-            }
-            if (!ValuesWithin.all(held.set()).shownToHoldNone()) {
-                byCodePoints.add(each.why());
-            }
-        }
-        return Worked.to(open.isEmpty() && byCodePoints.isEmpty() ? null
-                : new LeftOpen(statement, open, !forTheOperations.answer().isEmpty(),
-                        byCodePoints));
+        return Worked.to(open.answer().isEmpty() ? null
+                : new LeftOpen(statement, open.answer()));
     }
 
     /** Each of {@code open} met with what {@code term} holds, leaving out those shown to hold
@@ -673,18 +674,16 @@ final class Classing {
     private static Worked<Telling> tellsApart(NumericTerm.FromOnePosition term, ValueSet admits,
                                               AsASet said, LeftOpen open,
                                               Allowance<NumericTerm.FromOnePosition> allowance) {
-        Allowance.Composed yes =
-                allowance.meet(Sameness.Block.of(term), admits, said.whenTrue().values());
-        if (yes.gaveUp()) {
+        Worked<ValuesAtLengths> yes = heldBy(term, admits, said.whenTrue(), allowance);
+        if (yes.refused() != null) {
             return Worked.refusedAt(yes.refused());
         }
-        Allowance.Composed no =
-                allowance.meet(Sameness.Block.of(term), admits, said.whenFalse().values());
-        if (no.gaveUp()) {
+        Worked<ValuesAtLengths> no = heldBy(term, admits, said.whenFalse(), allowance);
+        if (no.refused() != null) {
             return Worked.refusedAt(no.refused());
         }
-        ValuesAtLengths holding = said.whenTrue().over(yes.set());
-        ValuesAtLengths failing = said.whenFalse().over(no.set());
+        ValuesAtLengths holding = yes.answer();
+        ValuesAtLengths failing = no.answer();
         if (open == null && (holding.shownToHoldNone() || failing.shownToHoldNone())) {
             return Worked.to(Telling.NOTHING_APART);
         }
@@ -693,6 +692,23 @@ final class Classing {
         }
         return Worked.to(open != null && settled(holding) && settled(failing)
                 ? Telling.OVER_WHAT_WAS_SHOWN : Telling.UNSETTLED);
+    }
+
+    /** Each region of {@code side} met with what the position holds; or the limit the allowance
+     *  refused a meet at. */
+    private static Worked<ValuesAtLengths> heldBy(
+            NumericTerm.FromOnePosition term, ValueSet admits, ValuesAtLengths side,
+            Allowance<NumericTerm.FromOnePosition> allowance) {
+        List<ValuesWithin> held = new ArrayList<>();
+        for (ValuesWithin each : side.pieces()) {
+            Allowance.Composed met =
+                    allowance.meet(Sameness.Block.of(term), admits, each.values());
+            if (met.gaveUp()) {
+                return Worked.refusedAt(met.refused());
+            }
+            held.add(each.over(met.set()));
+        }
+        return Worked.to(new ValuesAtLengths(held));
     }
 
     /** Whether {@code side} is shown to hold a value or shown to hold none. */
@@ -728,7 +744,7 @@ final class Classing {
     record Cell(ValuesAtLengths values, List<Answered> under) {
 
         Cell {
-            if (values == null || values.values().isEmpty()) {
+            if (values == null || values.pieces().isEmpty()) {
                 throw new IllegalArgumentException(
                         "a class of a position holds a value; an empty one is no class of it");
             }
@@ -736,15 +752,25 @@ final class Classing {
         }
 
         /** The same cell, with one more rule coming out {@code holding} and what that leaves. */
-        Cell and(ValuesAtLengths narrowed, PredicateStatement states, boolean holding) {
+        Cell and(ValuesAtLengths narrowed, PredicateStatement states, Boolean holding) {
             List<Answered> wider = new ArrayList<>(under);
             wider.add(new Answered(states, holding));
             return new Cell(narrowed, wider);
         }
+
+        /** Whether some rule is asked of the values of this cell: one no rule gets to is no
+         *  class, since nothing is said of it. */
+        boolean isAskedBySome() {
+            return under.stream().anyMatch(each -> each.holds() != null);
+        }
     }
 
-    /** One of a position's rules, and whether a value in the cell satisfies it. */
-    record Answered(PredicateStatement states, boolean holds) {
+    /**
+     * One of a position's rules, and whether a value in the cell satisfies it: it does, or it
+     * does not, or no run gets to the rule with it ({@code null}), and the rule says nothing of
+     * the cell.
+     */
+    record Answered(PredicateStatement states, Boolean holds) {
 
         Answered {
             if (states == null) {
@@ -775,14 +801,27 @@ final class Classing {
         for (AsASet each : said) {
             List<Cell> narrower = new ArrayList<>();
             for (Cell cell : cells) {
-                for (boolean holding : new boolean[] {true, false}) {
-                    ValuesAtLengths side = holding ? each.whenTrue() : each.whenFalse();
-                    Allowance.Composed met = allowance.meet(Sameness.Block.of(term),
-                            cell.values().values(), side.values());
-                    if (met.gaveUp()) {
-                        return Worked.refusedAt(met.refused());
+                // The rule is true of the cell, false of it, or not got to with it. Each of the
+                // three is a region of the position the rule is asked about, so a value one rule
+                // does not get to is still divided by the rules that do.
+                for (Boolean holding : new Boolean[] {true, false, null}) {
+                    ValuesAtLengths side = holding == null ? each.notReached()
+                            : holding ? each.whenTrue() : each.whenFalse();
+                    if (side.shownToHoldNone()) {
+                        continue;
                     }
-                    ValuesAtLengths both = cell.values().meeting(side, met.set());
+                    List<ValuesWithin> shared = new ArrayList<>();
+                    for (ValuesWithin inCell : cell.values().pieces()) {
+                        for (ValuesWithin onSide : side.pieces()) {
+                            Allowance.Composed met = allowance.meet(Sameness.Block.of(term),
+                                    inCell.values(), onSide.values());
+                            if (met.gaveUp()) {
+                                return Worked.refusedAt(met.refused());
+                            }
+                            shared.add(inCell.meeting(onSide, met.set()));
+                        }
+                    }
+                    ValuesAtLengths both = new ValuesAtLengths(shared);
                     if (both.shownToHoldAValue()) {
                         narrower.add(cell.and(both, each.states(), holding));
                     } else if (!both.shownToHoldNone()) {
@@ -793,7 +832,29 @@ final class Classing {
             }
             cells = narrower;
         }
-        return Worked.to(cells);
+        // The values no rule gets to are in no class: nothing is said of them.
+        return Worked.to(ofOneMeaning(cells.stream().filter(Cell::isAskedBySome).toList()));
+    }
+
+    /**
+     * {@code cells} with those that say the same made one.
+     *
+     * <p>A class is named by what it means, and what a cell means is the rules asked of it and how
+     * each came out: a rule it is not got to with says nothing. So two cells that differ only by
+     * which rule they are not got to with, the same relation written on two paths, mean one thing
+     * and are one class of the values of both. Left apart they would carry one name, and a row
+     * placed in the class by that name could not be told from a row in the other.
+     */
+    private static List<Cell> ofOneMeaning(List<Cell> cells) {
+        Map<String, Cell> byMeaning = new LinkedHashMap<>();
+        for (Cell each : cells) {
+            byMeaning.merge(said(each, "x"), each, (one, other) -> {
+                List<ValuesWithin> pieces = new ArrayList<>(one.values().pieces());
+                pieces.addAll(other.values().pieces());
+                return new Cell(new ValuesAtLengths(pieces), one.under());
+            });
+        }
+        return List.copyOf(byMeaning.values());
     }
 
     /**
@@ -872,6 +933,7 @@ final class Classing {
      */
     private static String said(Cell cell, String subject) {
         return cell.under().stream()
+                .filter(each -> each.holds() != null)
                 .map(each -> each.holds() ? each.states().saidOf(subject)
                         : each.states().deniedOf(subject))
                 .reduce((one, other) -> one + " and " + other).orElseThrow();
@@ -887,7 +949,8 @@ final class Classing {
         if (orders == null || !(carrier instanceof Carrier.Whole)) {
             return null;
         }
-        WholeNumberSet numbers = ValueSet.wholeNumbersOf(cell.values().values());
+        WholeNumberSet numbers = ValueSet.wholeNumbersOf(
+                cell.values().pieces().getFirst().values());
         if (numbers == null || within == null) {
             return numbers;
         }
