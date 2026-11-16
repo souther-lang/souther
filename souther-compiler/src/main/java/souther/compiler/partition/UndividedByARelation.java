@@ -7258,8 +7258,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * as it comes to, nothing where it comes to a statement over no number that holds, or null
      * where that is not worked out or the statement over none does not hold.
      */
-    private static List<TakenConstraint.Affine> reducedBy(TakenConstraint.Affine target,
-                                                          List<Step> steps) {
+    static List<TakenConstraint.Affine> reducedBy(TakenConstraint.Affine target,
+                                                  List<Step> steps) {
         List<TakenConstraint.Affine> now = List.of(target);
         for (Step each : steps) {
             now = withoutTheNumber(now, each.definition(), each.number(), each.weighed());
