@@ -1056,9 +1056,23 @@ public final class PathReachability {
                 if (step != null) {
                     steps.add(step);
                 }
-                Walked body = walk(block.body(), new Walked(inside, here.decided(),
+                // What a walk hands its closure, as the last parameter, is a value of that
+                // parameter's type, and so holds what the type guarantees; entered as a location it
+                // is a place a size can be named of, and a list built from it is one value wherever
+                // the closure is read. The parameters before it carry what the walk has built so
+                // far, which no list inside the closure is built from.
+                Known handed = inside;
+                Denotations within = at;
+                if (!block.params().isEmpty()) {
+                    int element = block.params().size() - 1;
+                    PathEngine.Entered in = engine.enter(Terms.read(block.params().get(element),
+                            block.paramTypes().get(element), block.pos()), handed, within);
+                    handed = in.known();
+                    within = in.at();
+                }
+                Walked body = walk(block.body(), new Walked(handed, here.decided(),
                                 here.mayStop(), here.nothingAbove() && applied.isEmpty(), true,
-                                why, nothingReaches(inside)), at,
+                                why, nothingReaches(inside)), within,
                         reads.entering(new ScopeStep.Block(block), symbols, newtypes));
                 if (step != null) {
                     steps.removeLast();
@@ -1112,26 +1126,13 @@ public final class PathReachability {
                 && LinearForm.atom(size).minus(LinearForm.constant(ExactRatio.of(BigInteger.ONE)))
                         instanceof ExactAnswer.Held<LinearForm<FactSubject>>(var overOne)) {
             List<NumericConstraint> carried = engine.terms().carriedBy(List.of(size));
-            Known knowing = carryingWhatTheSizeCarries(k, carried);
+            Known knowing = engine.carrying(k, carried);
             if (knowing.numbers().entails(overOne, Rel.LE)
                     || engine.terms().predicates().entailedInEveryCase(
                             new NumericConstraint(overOne, Rel.LE), knowing, carried)) {
                 walksHeldToOneAtMost.put(probe.get(), origin.get());
             }
         }
-    }
-
-    /**
-     * {@code k} with what the values {@code size} is reached from carry: a size relates to the
-     * counts of what it was made of, and those say what the declarations of the type guarantee.
-     */
-    private Known carryingWhatTheSizeCarries(Known k, List<NumericConstraint> carried) {
-        Known out = k;
-        for (NumericConstraint each : carried) {
-            out = out.taking(each.form(), each.rel(), Known.Held.OF_THE_VALUE,
-                    engine.terms().spacesOf(each.form()));
-        }
-        return out;
     }
 
     /**
