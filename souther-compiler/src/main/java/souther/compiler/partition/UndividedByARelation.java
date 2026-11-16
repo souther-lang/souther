@@ -3783,7 +3783,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (piece != null || past.narrowing().stream().anyMatch(constraint ->
                 constraint.terms().stream().anyMatch(term -> term.isReadOffAPlaceBearingOn(mine)
                         || term.isReadOffAPlaceBearingOn(theirs)))) {
-            return leavesTheStringsOf(mine, theirs, written, past.narrowing(), piece)
+            return leavesTheStringsOf(mine, theirs, written, past, declined, read, piece)
                     ? RoomOnTheWay.UNTOUCHED : null;
         }
         List<TakenConstraint> system = new ArrayList<>();
@@ -4621,28 +4621,42 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * place nor one that holds a place or is held by it. Where {@code theirs} is the string a piece is of, a statement that the string holds
      * the separators the piece's index needs is one the piece's strings already stand on.
      *
+     * <p>A statement that some element of a container is the piece holds the piece to the strings
+     * of the elements ({@link #theLanguageTheWayHoldsThePieceTo}). One that no element is, or that
+     * every element is something, leaves the strings alone only where a row holds the container
+     * empty ({@link #metByTheContainerHeldEmpty}); otherwise it takes some string of the sides
+     * away, or is not shown not to.
+     *
      * @param piece the piece the partner is, or null where it is the strings at {@code theirs}
      */
     private static boolean leavesTheStringsOf(TermPath mine, TermPath theirs,
                                               List<OnAWay> written,
-                                              List<TakenConstraint> narrowing,
+                                              DemandReading.Answered past,
+                                              Optional<Set<String>> declined, InputReading read,
                                               PiecesOfAString piece) {
         for (OnAWay each : written) {
             boolean saysNothingOfValues = each.whatStands() && each.relation() == null
                     && each.elementsOf() == null;
             if (!saysNothingOfValues && !holdsTheSeparatorsOf(each, piece)
                     && !holdsThePieceToALanguage(each, piece)
-                    && elementThePieceIsAmong(each.statedOfTheRun(), piece) == null
-                    && !askedOfEveryElementOfAnUnreachedContainer(each, written, mine, theirs)
+                    && !(someElementIsThePiece(each, piece))
+                    && !metByTheContainerHeldEmpty(each, written, mine, theirs, past, declined,
+                            read)
                     && (reaches(each, mine) || reaches(each, theirs)
                     || (each.elementsOf() != null && (each.elementsOf().bearsOn(mine)
                             || each.elementsOf().bearsOn(theirs))))) {
                 return false;
             }
         }
-        return narrowing.stream().noneMatch(constraint -> constraint.terms().stream()
+        return past.narrowing().stream().noneMatch(constraint -> constraint.terms().stream()
                 .anyMatch(term -> term.isReadOffAPlaceBearingOn(mine)
                         || term.isReadOffAPlaceBearingOn(theirs)));
+    }
+
+    /** Whether {@code statement} says some element of a container is {@code piece}. */
+    private static boolean someElementIsThePiece(OnAWay statement, PiecesOfAString piece) {
+        return elementThePieceIsAmong(statement.statedOfTheRun(), piece) != null
+                && ((Proposition.Some) statement.statedOfTheRun()).holds();
     }
 
     /**
@@ -5402,11 +5416,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /** Empties {@code container} where some row holds it with none and it is apart from
          *  everything the row fixes ({@link #apart}), and leaves the row as it is otherwise. */
         void empty(TermPath container) {
-            if (fewestTakenFrom(howManyAreHeld(container, read, region), BigInteger.ZERO)
-                    .equals(Optional.of(BigInteger.ZERO))
-                    && apart(container, place, read)
-                    && place.containersHoldingIt().stream()
-                            .allMatch(holder -> apart(container, holder, read))
+            if (canBeHeldEmptyApartFrom(container, List.of(place), read, region)
                     && standsInside.stream().allMatch(each -> apart(container, each, read))
                     && emptied.stream().allMatch(each -> apart(container, each, read))) {
                 emptied.add(container);
@@ -7486,10 +7496,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (first == null || second == null) {
             return false;
         }
-        // The side that is an element of the container, where one of them is and not both: an
-        // element that is in another case than that side's is one the relation is not read at.
-        boolean firstIn = first.subjectPath().bearsOn(statement.elementsOf());
-        boolean secondIn = second.subjectPath().bearsOn(statement.elementsOf());
+        // The side that is a value of one element of the container, where one of them is and not
+        // both: an element that is in a case excluding the case that side is under is one the
+        // relation is not read at.
+        TermPath container = statement.elementsOf();
+        boolean firstIn = first.subjectPath().toTheElementsOf(container)
+                == TermPath.ToTheElements.INSIDE_ONE;
+        boolean secondIn = second.subjectPath().toTheElementsOf(container)
+                == TermPath.ToTheElements.INSIDE_ONE;
         TermPath elementSide = firstIn == secondIn ? null
                 : firstIn ? first.subjectPath() : second.subjectPath();
         for (List<RowDemand.AskedOfAnElement> way : every.asAsked()) {
@@ -7505,7 +7519,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                 affine.form().coefs().get(second).negated()) == 0) {
                     apart = true;
                 } else if (asked instanceof RowDemand.InCases(TermPath position, var _)
-                        && elementSide != null && !position.bearsOn(elementSide)) {
+                        && elementSide != null
+                        && position.toTheElementsOf(container)
+                                == TermPath.ToTheElements.INSIDE_ONE
+                        && position.excludesTheCasesOf(elementSide)) {
                     apart = true;
                 }
             }
@@ -7517,29 +7534,69 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * Whether {@code statement} asks something of every element of a container that stands apart
-     * from the strings at {@code mine} and {@code theirs}, and that nothing else of the way
-     * reaches: the container held empty meets it whatever those strings are.
+     * The container {@code statement} says no element of meets something, or every element of
+     * meets something, or null where it says neither: what an empty container meets, and what any
+     * container is held to meeting by nothing but its elements.
      */
-    private static boolean askedOfEveryElementOfAnUnreachedContainer(
-            OnAWay statement, List<OnAWay> written, TermPath mine, TermPath theirs) {
-        TermPath container = statement.elementsOf();
-        if (container == null || statement.byEvery() == null || statement.bySome() != null
-                || container.bearsOn(mine) || container.bearsOn(theirs)) {
+    private static TermPath containerHeldAgainstItsElements(OnAWay statement) {
+        if (statement.elementsOf() != null && statement.byEvery() != null
+                && statement.bySome() == null) {
+            return statement.elementsOf();
+        }
+        return statement.statedOfTheRun() instanceof Proposition.Some(
+                DecisionSubject.AnInput(TermPath at, var _), var _, boolean holds, var _)
+                && !holds ? at : null;
+    }
+
+    /**
+     * Whether {@code statement}, that no element of a container is something or that every one is,
+     * is met by a row holding the container empty beside any strings at {@code mine} and
+     * {@code theirs}, so that it takes none of them away.
+     *
+     * <p>A witness, and shown only where every part of it is: the declarations leave a row with
+     * the container empty and apart from the strings ({@link #canBeHeldEmptyApartFrom}); no
+     * other statement of the way asks anything of the container, a count of it or of what it
+     * holds among them, or of a string of the pieces of one apart from it; and the relation is
+     * not read inside it, since a row with it empty gets to no relation read at an element.
+     * Where the way declined a name the container may hold, the row is not one the way leaves.
+     */
+    private static boolean metByTheContainerHeldEmpty(OnAWay statement, List<OnAWay> written,
+                                                      TermPath mine, TermPath theirs,
+                                                      DemandReading.Answered past,
+                                                      Optional<Set<String>> declined,
+                                                      InputReading read) {
+        TermPath container = containerHeldAgainstItsElements(statement);
+        if (container == null || container.bearsOn(mine) || container.bearsOn(theirs)
+                || !past.relationStands().known() || declined.isEmpty()
+                || declined.get().contains(container.head())
+                || past.relationStands().containers().stream().anyMatch(container::bearsOn)
+                || !canBeHeldEmptyApartFrom(container, List.of(mine, theirs), read,
+                        read.quantities().region())) {
             return false;
         }
         for (OnAWay other : written) {
-            boolean saysNothingOfValues = other.whatStands() && other.relation() == null
-                    && other.elementsOf() == null;
             boolean ofAStringApart = other.ofThePieces() != null
                     && other.ofThePieces().partedStrings().isPresent()
                     && !other.ofThePieces().partedStrings().get().string().bearsOn(container);
-            if (other != statement && !saysNothingOfValues && !ofAStringApart
-                    && reaches(other, container)) {
+            if (other != statement && !ofAStringApart && reaches(other, container)) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * Whether some row in {@code region} holds {@code container} with no entry and holds each of
+     * {@code places}, and the containers each is at, apart from it: no rule ties the container to
+     * any of them, so that what it holds is no matter to what they do.
+     */
+    private static boolean canBeHeldEmptyApartFrom(TermPath container, List<TermPath> places,
+                                                   InputReading read, SearchRegion region) {
+        return fewestTakenFrom(howManyAreHeld(container, read, region), BigInteger.ZERO)
+                .equals(Optional.of(BigInteger.ZERO))
+                && places.stream().allMatch(place -> apart(container, place, read)
+                        && place.containersHoldingIt().stream()
+                                .allMatch(holder -> apart(container, holder, read)));
     }
 
     private static boolean holdsApartFromNought(TakenConstraint.Affine affine,
