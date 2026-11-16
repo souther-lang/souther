@@ -89,9 +89,8 @@ class AStringBesideAPieceOfItIsReadWhereTheWayStatesTheTwoTest {
                 invariant String.length(value) >= 1
 
             data EmailOnly = { email: Email }
-            data PhoneOnly = { phone: Phone }
             data EmailAndPhone = { email: Email, phone: Phone }
-            data ContactPoint = EmailOnly | PhoneOnly | EmailAndPhone
+            data ContactPoint = EmailOnly | EmailAndPhone
 
             data Account = { id: AccountId, domain: Domain? }
 
@@ -101,7 +100,6 @@ class AStringBesideAPieceOfItIsReadWhereTheWayStatesTheTwoTest {
                 match reach with
                     | EmailOnly { email }     -> [ email ]
                     | EmailAndPhone { email } -> [ email ]
-                    | PhoneOnly               -> []
 
             let domainOf (email: Email): List<Domain> =
                 match List.get(1, String.split("@", String.lowercase(email.value))) with
@@ -121,7 +119,6 @@ class AStringBesideAPieceOfItIsReadWhereTheWayStatesTheTwoTest {
                 match reach with
                     | EmailOnly { email = own }     -> own == email
                     | EmailAndPhone { email = own } -> own == email
-                    | PhoneOnly                     -> false
 
             let emailMatches (reach: ContactPoint, contacts: List<Contact>): List<Contact> =
                 List.flatMap(e -> List.filter(c -> reachHasEmail(e, c.reach), contacts),
@@ -131,11 +128,8 @@ class AStringBesideAPieceOfItIsReadWhereTheWayStatesTheTwoTest {
                     contacts: List<Contact>) -> Int
                 constructs Domain
             let screen (reach, accounts, contacts) = {
-                guard List.length(emailOf(reach)) >= 1 else 0
-                let matchedAccounts = List.distinct(List.map(a -> a.id,
-                    domainMatches(reach, accounts)))
-                let matchedContacts = List.distinct(List.map(c -> c.id,
-                    emailMatches(reach, contacts)))
+                let matchedAccounts = domainMatches(reach, accounts)
+                let matchedContacts = emailMatches(reach, contacts)
                 guard List.length(matchedAccounts) + List.length(matchedContacts) >= 1 else 0
                 1
             }
