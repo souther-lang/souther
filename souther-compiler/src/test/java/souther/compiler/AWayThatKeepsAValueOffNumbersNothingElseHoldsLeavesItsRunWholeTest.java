@@ -122,6 +122,26 @@ class AWayThatKeepsAValueOffNumbersNothingElseHoldsLeavesItsRunWholeTest {
         }
     }
 
+    /**
+     * Why the shapes above are not read over {@code Int} or {@code Date}: a number moved up is no
+     * value at the last one of its type, and that holds of a comparison no way of this kind is in.
+     * A way that leaves a number's run whole takes away nothing here, so what stays unread is what
+     * the shift leaves of the run, which is not that way's.
+     */
+    @Test
+    void aShiftOfAnIntOrADateIsNotReadOverEveryValueWhateverTheWayIs() {
+        String decimal = report("", "h: Decimal, d: Decimal, s: Decimal",
+                "(h, d, s) -> (if d >= h then d + 1.0m else d) >= s");
+        String integer = report("", "h: Int, d: Int, s: Int",
+                "(h, d, s) -> (if d >= h then d + 1 else d) >= s");
+        String date = report("", "h: Date, d: Date, s: Date",
+                "(h, d, s) -> (if d >= h then Date.addDays(1, d) else d) >= s");
+
+        assertFalse(notShownAt(decimal, "d"), decimal);
+        assertTrue(notShownAt(integer, "d"), integer);
+        assertTrue(notShownAt(date, "d"), date);
+    }
+
     /** An element held equal to three times a value is put at a third of it, which is no finite
      *  decimal where the value is one: so it is not written wherever the value is, and the element
      *  held equal to the value is. */
