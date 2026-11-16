@@ -31,6 +31,10 @@ import souther.compiler.types.ValueName;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -269,13 +273,28 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
+    /** What the report says of the relation, apart from the other things it says of the rules. */
+    private static List<String> aboutTheRelation(String json) {
+        Matcher found = Pattern.compile("\"reason\"\\s*:\\s*\"(relation_[a-z_]+)\"").matcher(json);
+        Set<String> out = new TreeSet<>();
+        while (found.find()) {
+            out.add(found.group(1));
+        }
+        return List.copyOf(out);
+    }
+
+    private static final String AS_THEY_STAND =
+            "List.any(p -> String.contains(i.businessCase, p.value), i.points)";
+
     /**
-     * The statement is read to the end, whichever way it is written: each string is parted by the
-     * strings the other can come to, and the strings the lowercase is not exactly a map on are
-     * said to be left open. The report does not say the relation is not shown to reach the values.
+     * The statement is read to the end, whichever way it is written, and not as a statement about
+     * a value made from the strings. The lowercase stops a run only where its answer is longer
+     * than a {@code String} holds, so the report says of the relation what it says of the
+     * relation of the strings as they stand.
      */
     @Test
-    void theReportOfARelationBetweenStringsSaysItIsShownOverARegion() {
+    void theReportOfARelationBetweenConvertedStringsSaysWhatItSaysOfTheStringsAsTheyStand() {
+        List<String> asTheyStand = aboutTheRelation(reported(AS_THEY_STAND));
         for (String body : List.of(
                 "List.any(p -> String.contains(String.lowercase(i.businessCase),"
                         + " String.lowercase(p.value)), i.points)",
@@ -288,38 +307,34 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
             assertFalse(json.contains("unsupported_syntax"), () -> "read to the end: " + body);
             assertFalse(json.contains("rule_about_a_derived_value"),
                     () -> "not about a derived value: " + body);
-            assertFalse(json.contains("relation_not_shown_to_reach_every_value"),
-                    () -> "both strings are parted: " + body);
-            assertTrue(json.contains("relation_shown_over_a_region"),
-                    () -> "said shown over a region: " + body);
+            assertEquals(asTheyStand, aboutTheRelation(json), body);
         }
     }
 
-    /** The report names the function whose image over the strings is not shown, whichever case
-     *  mapping it is, and says nothing of the other. */
+    /** The report names the conversion a run stops at past what a {@code String} holds,
+     *  whichever case mapping it is, and says nothing of the other. */
     @Test
-    void theReportNamesTheFunctionWhoseImageIsNotShown() {
+    void theReportNamesTheConversionARunStopsAtAndNoOther() {
         String lower = reported("List.any(p -> String.contains(String.lowercase(i.businessCase),"
                 + " String.lowercase(p.value)), i.points)");
         String upper = reported("List.any(p -> String.contains(String.uppercase(i.businessCase),"
                 + " String.uppercase(p.value)), i.points)");
-        assertTrue(lower.contains("imagesNotShown"), lower);
-        assertTrue(lower.contains("lowercase"), "lowercase is named");
+        assertTrue(lower.contains("\"operation\" : \"String.lowercase\""), lower);
         assertFalse(lower.contains("uppercase"), "only the function applied is named");
-        assertTrue(upper.contains("uppercase"), "uppercase is named");
+        assertTrue(upper.contains("\"operation\" : \"String.uppercase\""), upper);
         assertFalse(upper.contains("lowercase"), "only the function applied is named");
     }
 
-    /** startsWith, endsWith and contains are three relations, and each is read to the end. */
+    /** startsWith, endsWith and contains are three relations, and each is read to the end, as
+     *  the same relation of the strings as they stand is. */
     @Test
     void everySpellingOfTheRelationIsReadToTheEnd() {
         for (String function : List.of("contains", "startsWith", "endsWith")) {
             String json = reported("List.any(p -> String." + function
                     + "(String.lowercase(i.businessCase), String.lowercase(p.value)), i.points)");
-            assertFalse(json.contains("relation_not_shown_to_reach_every_value"),
-                    () -> function + " is read");
-            assertTrue(json.contains("relation_shown_over_a_region"),
-                    () -> function + " is shown over a region");
+            assertFalse(json.contains("unsupported_syntax"), () -> function + " is read");
+            assertEquals(aboutTheRelation(reported("List.any(p -> String." + function
+                    + "(i.businessCase, p.value), i.points)")), aboutTheRelation(json), function);
         }
     }
 
@@ -349,9 +364,8 @@ class AStringInsideAnotherIsReadAsARelationBetweenItsTwoStringsTest {
     /**
      * The places a side is made of are all of them places the run reads, and each the place of an
      * argument the side was read at: never a union of the places of several ways a value may have
-     * been made. What leaves a place out of the places a run that reaches the relation stands at
-     * ({@link WhereARunReachingARelationStands}) rests on this, so it is held here, where the
-     * sides are made, and not only where it is used.
+     * been made. What a reader of the relation's places asks of them rests on this, so it is held
+     * here, where the sides are made, and not only where it is used.
      */
     @Test
     void aSideIsMadeOfTheEveryPlaceItIsReadAtAndNoPlaceItMayHaveComeFrom() {

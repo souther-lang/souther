@@ -89,6 +89,7 @@ class EveryTableThatOutlivesACompilationSaysWhatItTurnsOnTest {
             Map.entry("souther.compiler.inputs.TermPath#FILED", SHARES),
             Map.entry("souther.compiler.inputs.RepresentationBounds#UP_TO", OF_ITS_KEY),
             Map.entry("souther.compiler.partition.CaseMaps#MADE", OF_ITS_KEY),
+            Map.entry("souther.compiler.partition.CaseMaps#ANSWERED", OF_ITS_KEY),
             Map.entry("souther.compiler.partition.MonthsAndDaysOfOneDate#EVERY_YEAR", OF_ITS_KEY),
             Map.entry("souther.compiler.partition.DatesThatStandInEveryYear#KNOWN", OF_ITS_KEY),
             Map.entry("souther.compiler.partition.YearsAWayAllows#CLASSES", OF_ITS_KEY),

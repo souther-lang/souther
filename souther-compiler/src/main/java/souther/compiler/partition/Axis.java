@@ -2,13 +2,17 @@ package souther.compiler.partition;
 
 import souther.compiler.check.NumberAt;
 import souther.compiler.check.NarrowedBounds;
+import souther.compiler.inputs.Membership;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenAs;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * One measure a model makes of a number of its input: the classes it divides that number into, and
@@ -48,7 +52,8 @@ import java.util.List;
  *                number read from a run of a container has no such place, so it draws a line without
  *                dividing anything and never arrives here
  * @param classes exclusive over the term's values, and exhaustive over them but for what
- *                {@code leftOpenBy} leaves; or empty where the model does not divide them
+ *                {@code leftOpenBy} leaves and what {@code keptFromBy} keeps from a rule, which no
+ *                run gets to it with; or empty where the model does not divide them
  * @param cuts    the values the classes meet at, each carrying every rule that drew it there
  * @param divides which rules the classes were composed out of, each with which reading of it this
  *                is. The other half of what {@code cuts} is for a line: what a class is made of is
@@ -69,14 +74,86 @@ import java.util.List;
  *                here, which no class holds; empty where the classes hold every value. A value
  *                no class holds is one of those, and which class it is in is not worked out —
  *                where this is empty, no such value is, and one would be a broken partition
+ * @param keptFromBy the rules each kept some of the values here from itself: no run gets to the
+ *                rule with them, a guard keeps them away. A value a row holds that no class holds is
+ *                in no class and is owed nothing by such a rule — it is asked of the values a run
+ *                gets to it with. Where both this and {@code leftOpenBy} are empty, a value in no
+ *                class is a broken partition
+ * @param openAt  what {@code leftOpenBy} leaves open, as the values a rule was shown on neither
+ *                side of. A value in one of these is owed a question, and a value in no class and in
+ *                none of these is not: see {@link #outsideTheClasses}
  */
 public record Axis(AxisId id, NumericTerm.FromOnePosition term,
                    List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
                    List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed,
-                   List<RuleEvidenceOrigin> leftOpenBy) {
+                   List<RuleEvidenceOrigin> leftOpenBy, List<RuleEvidenceOrigin> keptFromBy,
+                   List<Recognition> openAt) {
+
+    /**
+     * What is owed of a value that is in none of the classes. Decided by the axis, which holds what
+     * every rule left out of them, and by nothing that reads a row.
+     */
+    public enum Outside {
+        /** The value is one a rule was shown on neither side of: which class it is in was not
+         *  worked out, and the measure is short of it. */
+        OWED,
+        /** The value is one no run gets to a rule with, or to any: it is read, it is in no class,
+         *  and nothing is owed of it. */
+        NOTHING_OWED,
+        /** Nothing the rules left out of the classes holds it: the partition is broken. */
+        NOT_AN_ANSWER
+    }
+
+    public Axis(AxisId id, NumericTerm.FromOnePosition term,
+                List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
+                List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed,
+                List<RuleEvidenceOrigin> leftOpenBy, List<RuleEvidenceOrigin> keptFromBy) {
+        this(id, term, classes, divides, cuts, parted, narrowed, leftOpenBy, keptFromBy,
+                List.of());
+    }
+
+    public Axis(AxisId id, NumericTerm.FromOnePosition term,
+                List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
+                List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed,
+                List<RuleEvidenceOrigin> leftOpenBy) {
+        this(id, term, classes, divides, cuts, parted, narrowed, leftOpenBy, List.of());
+    }
+
+    /**
+     * What is owed of {@code value}, which no class holds.
+     *
+     * <p>Asked of the values a rule was shown on neither side of first: a value there is owed
+     * whatever else keeps values from the rules, because it is one a run gets to the rule with. A
+     * value no rule leaves open is in no class for being kept from them, and is owed nothing —
+     * where some rule keeps values from itself. Where the rules say neither, the classes were to
+     * hold it.
+     */
+    public Outside outsideTheClasses(ObservedValue value) {
+        for (Recognition each : openAt) {
+            if (Recognitions.membershipOf(each, value) instanceof Membership.Match) {
+                return Outside.OWED;
+            }
+        }
+        if (!keptFromBy.isEmpty()) {
+            return Outside.NOTHING_OWED;
+        }
+        return leftOpenBy.isEmpty() ? Outside.NOT_AN_ANSWER : Outside.OWED;
+    }
 
     public Axis {
+        openAt = List.copyOf(openAt);
+        keptFromBy = List.copyOf(keptFromBy);
         classes = List.copyOf(classes);
+        // A class is told from another by its identity: a row is placed in the class of that name,
+        // and coverage counts the classes by it. Two classes under one name are one to every
+        // reader, and the values of one would be taken for the values of the other.
+        Set<String> named = new HashSet<>();
+        for (PartitionClass one : classes) {
+            if (!named.add(one.id())) {
+                throw new IllegalArgumentException(
+                        "`" + id + "` has two classes called `" + one.id() + "`");
+            }
+        }
         divides = List.copyOf(divides);
         cuts = List.copyOf(cuts);
         parted = List.copyOf(parted);
@@ -179,8 +256,27 @@ public record Axis(AxisId id, NumericTerm.FromOnePosition term,
                           List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
                           List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed,
                           List<RuleEvidenceOrigin> leftOpenBy) {
+        return of(behavior, term, classes, divides, cuts, parted, narrowed, leftOpenBy, List.of());
+    }
+
+    /** The same, with the rules that keep some of the number's values from themselves. */
+    public static Axis of(String behavior, NumericTerm.FromOnePosition term,
+                          List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
+                          List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed,
+                          List<RuleEvidenceOrigin> leftOpenBy,
+                          List<RuleEvidenceOrigin> keptFromBy) {
+        return of(behavior, term, classes, divides, cuts, parted, narrowed, leftOpenBy,
+                keptFromBy, List.of());
+    }
+
+    /** The same, with what the rules left open as the values they were shown on neither side of. */
+    public static Axis of(String behavior, NumericTerm.FromOnePosition term,
+                          List<PartitionClass> classes, List<RuleEvidenceOrigin> divides,
+                          List<Cut> cuts, List<Parting> parted, NarrowedBounds narrowed,
+                          List<RuleEvidenceOrigin> leftOpenBy,
+                          List<RuleEvidenceOrigin> keptFromBy, List<Recognition> openAt) {
         return new Axis(AxisId.of(behavior, term), term, classes, divides, cuts, parted, narrowed,
-                leftOpenBy);
+                leftOpenBy, keptFromBy, openAt);
     }
 
 

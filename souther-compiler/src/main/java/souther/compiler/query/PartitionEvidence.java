@@ -25,6 +25,7 @@ import souther.compiler.partition.InputUse;
 import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.partition.ReportedReason;
 import souther.compiler.partition.RuleEvidenceOrigin;
+import souther.compiler.partition.StopPastTheRepresentation;
 import souther.compiler.partition.UndividedPosition;
 import souther.compiler.partition.WhereARunStopped;
 import souther.compiler.partition.WhyKept;
@@ -82,6 +83,9 @@ import java.util.Set;
  * @param caseExpansions what each rule's line not worked out because its cases were too many was
  *                     told of those cases: no measure, and nothing any measure went without, but
  *                     what a reader is told beside the finding about that line
+ * @param stopsPastTheRepresentation the operations of the body that end a run only past what a
+ *                     {@code String} or a collection holds, which the classes are drawn without:
+ *                     no measure, and said once each
  */
 public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 PairSpace pairs,
@@ -92,7 +96,24 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                 List<Unanswered> unanswered,
                                 List<Incompleteness> whyUnclassified,
-                                List<CasesExpandedAtARule> caseExpansions) implements RuleCitations {
+                                List<CasesExpandedAtARule> caseExpansions,
+                                List<StopPastTheRepresentation> stopsPastTheRepresentation)
+        implements RuleCitations {
+
+    /** The same, with no operation that ends a run only past the representation. */
+    public PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
+                             PairSpace pairs,
+                             List<UndividedPosition> notDerivable,
+                             List<RuleWithoutALine> rulesWithoutALine,
+                             List<RuleWhereARunMayStop> rulesWhereARunMayStop,
+                             List<PositionReadingBlocked> blocked,
+                             List<PositionValuesNotSeparated> notSeparated,
+                             List<Unanswered> unanswered,
+                             List<Incompleteness> whyUnclassified,
+                             List<CasesExpandedAtARule> caseExpansions) {
+        this(partitioned, pairs, notDerivable, rulesWithoutALine, rulesWhereARunMayStop, blocked,
+                notSeparated, unanswered, whyUnclassified, caseExpansions, List.of());
+    }
 
     /** The same, with no rule's cases told of. */
     public PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
@@ -163,6 +184,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         unanswered = List.copyOf(unanswered);
         whyUnclassified = List.copyOf(whyUnclassified);
         caseExpansions = List.copyOf(caseExpansions);
+        stopsPastTheRepresentation = List.copyOf(stopsPastTheRepresentation);
     }
 
     /**

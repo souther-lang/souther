@@ -4,6 +4,7 @@ import net.unit8.notation199x.pattern.Meter;
 
 import souther.compiler.regex.CodeMap;
 import souther.compiler.regex.Language;
+import souther.compiler.regex.StringsInNormalFormC;
 import souther.compiler.semantics.CaseMapping;
 
 /**
@@ -51,8 +52,11 @@ final class WhatAConversionAnswers {
         // conversion that is every string of the side.
         Language standing = CaseMaps.answeredAsTheyStand(through, partner, meter);
         if (through.equals(CaseMapping.NONE)) {
-            Language held = partner.heldAsWritten().language(meter);
-            return held == null ? null : new WhatAConversionAnswers(held, standing, partner);
+            // The strings shown to be values of the side, which a string is made from; what may be
+            // is every string of it.
+            StringsInNormalFormC.Values values = StringsInNormalFormC.of(partner, meter);
+            return values == null ? null
+                    : new WhatAConversionAnswers(values.surely(), standing, partner);
         }
         CodeMap map = CaseMaps.of(through);
         Language exact = map.strings(meter);
@@ -61,11 +65,15 @@ final class WhatAConversionAnswers {
         Language values = within == null ? null : map.answersTo(within, meter);
         // A string outside the map that is left as it stands is its own answer, which is among
         // the strings left standing. Only a string of neither kind is answered with what nothing
-        // here works out, and every code point of that is one the outermost conversion leaves.
+        // here works out, and every code point of that is one the outermost conversion leaves. The
+        // string is not the empty one, which is exact, and its answer has a code point where none
+        // is answered with nothing.
         Language answeredUnseen = outside == null || standing == null ? outside
                 : outside.and(standing.not(meter), meter);
         Language left = answeredUnseen == null || answeredUnseen.isEmpty() ? null
-                : CodeMap.stringsOf(map.leftAlone(), meter);
+                : map.answersEveryCodePointWithSome()
+                        ? CodeMap.nonemptyStringsOf(map.leftAlone(), meter)
+                        : CodeMap.stringsOf(map.leftAlone(), meter);
         Language shown = values == null || standing == null ? values : values.or(standing, meter);
         Language may = shown == null || outside == null ? null
                 : left == null ? shown : shown.or(left, meter);

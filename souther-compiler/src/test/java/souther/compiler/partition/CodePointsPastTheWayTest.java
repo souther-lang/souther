@@ -107,18 +107,14 @@ class CodePointsPastTheWayTest {
         }
     }
 
-    /** The strings short of the least and those past the most are told apart, each with the
-     *  bound it is open for, so that a reader is told which. */
+    /** The strings short of the least and those past the most are two sets, the first the
+     *  strings holding fewer than the least and the second those holding more than the most. */
     @Test
     void theStringsOutsideAreToldApartByWhichEndTheyAreShortOf() {
-        List<CodePointsPastTheWay.Open> open = counted(NOT_WHITESPACE, 2, 5).outside();
+        List<PatternPlan> open = counted(NOT_WHITESPACE, 2, 5).outside();
         assertEquals(2, open.size());
-        assertEquals(2L, open.get(0).why().fewerThan());
-        assertNull(open.get(0).why().moreThan());
-        assertEquals(5L, open.get(1).why().moreThan());
-        assertNull(open.get(1).why().fewerThan());
-        Language fewer = compiled(open.get(0).strings());
-        Language more = compiled(open.get(1).strings());
+        Language fewer = compiled(open.get(0));
+        Language more = compiled(open.get(1));
         for (String string : strings(4)) {
             long many = held(NOT_WHITESPACE, string);
             assertEquals(many < 2, fewer.has(string), string);
@@ -210,15 +206,14 @@ class CodePointsPastTheWayTest {
         CodePointsPastTheWay reached = counted(NOT_WHITESPACE, 1, null);
         CodePointsPastTheWay held = counted(NOT_WHITESPACE, 2, null);
         UndividedByARelation.StringsAPartnerCanHold shown =
-                new UndividedByARelation.StringsAPartnerCanHold(ValueSet.ANY, ValueSet.ANY, null,
+                new UndividedByARelation.StringsAPartnerCanHold(ValueSet.ANY, ValueSet.ANY,
                         null, reached, held, "b",
                         BlockReason.OperationsNotShown.ofImages(List.of("String.uppercase")));
 
         UndividedByARelation.StringsAPartnerCanHold other =
-                shown.showing(ValueSet.NONE, ValueSet.ANY, 3L);
+                shown.showing(ValueSet.NONE, ValueSet.ANY);
 
         assertEquals(ValueSet.NONE, other.canBe());
-        assertEquals(3L, other.upTo());
         assertEquals(reached, other.reached());
         assertEquals(held, other.partnerHeldTo());
         assertEquals("b", other.partner());

@@ -68,12 +68,19 @@ class AComparisonOverAListAFlatMapOrAFilterAnsweredIsReadTest {
         return out.getFirst();
     }
 
+    /**
+     * The report of {@code source}, without the line naming the operations that stop a run only
+     * past what the representation holds: a flatMap whose step is a map and a list written out are
+     * one list, and only the flatMap is an operation that builds a list.
+     */
     private static String measured(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
-                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()))
+                .lines().filter(line -> !line.contains("a run stops only where"))
+                .reduce("", (all, line) -> all + line + "\n");
     }
 
     private static List<String> notRead(String report) {

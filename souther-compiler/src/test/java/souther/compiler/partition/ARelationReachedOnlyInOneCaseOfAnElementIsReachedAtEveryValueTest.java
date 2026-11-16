@@ -165,19 +165,19 @@ class ARelationReachedOnlyInOneCaseOfAnElementIsReachedAtEveryValueTest {
     }
 
     /**
-     * A list of one element meets a rule that keeps elements apart, and no other rule that has the
-     * call in it: a rule saying they are not apart, or apart or many, or apart and at least two,
-     * is met by no list of one, or by one only because of what else it says. The run is then not
-     * shown to get to the comparison for the mails it reads.
+     * The only operation on the way to the comparison that may stop a run is the flatMap, and it
+     * stops one only where what it makes would hold more elements than a list can, which parts no
+     * values. So whatever a rule on the contacts says beside the call, met by a list of one or
+     * not, the run is not held to get past the flatMap, and the comparison is reached at every
+     * value of the mails it reads.
      */
     @Test
-    void aRuleThatReadsTheCallButDoesNotNeedItTrueLeavesTheRunNotShownToGetThere() {
-        List<String> stopped = List.of("contacts[*].reach@ByMail.email", "reach@ByMail.email");
-        assertEquals(stopped, notReachedAtEveryValue("throughNotApart"),
-                "the elements are held not to be apart, which a list of one is");
-        assertEquals(stopped, notReachedAtEveryValue("throughApartOrMany"),
+    void aRuleOnTheListLeavesTheComparisonReachedWhateverItSaysBesideTheCall() {
+        assertEquals(List.of(), notReachedAtEveryValue("throughNotApart"),
+                "the elements are held not to be apart, which a list of one is not");
+        assertEquals(List.of(), notReachedAtEveryValue("throughApartOrMany"),
                 "the call is one way to meet the rule and not the only one");
-        assertEquals(stopped, notReachedAtEveryValue("throughApartAndTwo"),
+        assertEquals(List.of(), notReachedAtEveryValue("throughApartAndTwo"),
                 "a list of one holds fewer than the rule asks");
         assertEquals(List.of(), notReachedAtEveryValue("throughApartAndFew"),
                 "the call is needed and the rest of the rule is met by a list of one");

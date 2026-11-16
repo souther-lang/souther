@@ -320,16 +320,16 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                     if a == b then Yes else No
                 }
                 """.formatted(ANSWER)));
-        // A relation shown over the values it can be shown over: a word with no bound on its
-        // length is the second piece of a pair as far as a pair can be written round it, and the
-        // longest words are shown neither way.
+        // A relation shown over the values it can be shown over: a word of any code points is the
+        // second piece of a pair, but one holding a code point that is no stable starter is shown
+        // neither way.
         out.put(UndividedPosition.Reason.RELATION_SHOWN_OVER_A_REGION, of("""
                 module m
                 %s
                 data Pair = String
-                    invariant String.matches("[a-z]+:[a-z]+", value)
+                    invariant String.matches("[^:]+:[^:]+", value)
                 data Word = String
-                    invariant String.matches("[a-z0-9]+", value)
+                    invariant String.matches("[^:]+", value)
                 behavior f : (p: Pair, w: Word) -> Answer
                 let f (p, w) =
                     match List.get(1, String.split(":", p.value)) with

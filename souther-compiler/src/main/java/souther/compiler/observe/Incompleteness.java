@@ -177,8 +177,8 @@ public record Incompleteness(Code code, Target target, Optional<Citation> at,
          *
          * <p>Not {@link #VALUE_UNREADABLE}: the value came back whole, and every class read it.
          * What stopped is the rule, which was shown over some of the values the position holds
-         * and not this one — a string past the longest one an address is written round, or one
-         * whose code points normalization leaves apart — and the report says which rule that is.
+         * and not this one — a string of a length no run gets to the rule at, or one whose code
+         * points normalization leaves apart — and the report says which rule that is.
          */
         VALUE_OUTSIDE_WHAT_WAS_SHOWN(false);
 

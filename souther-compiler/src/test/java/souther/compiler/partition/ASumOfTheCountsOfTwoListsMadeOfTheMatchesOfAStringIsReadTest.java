@@ -127,13 +127,21 @@ class ASumOfTheCountsOfTwoListsMadeOfTheMatchesOfAStringIsReadTest {
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE));
     }
 
+    /**
+     * Each count alone and their sum leave the address read over every value: the lowercase on
+     * the way to the domains stops a run only where its answer is longer than a {@code String}
+     * holds, which is said of the lowercase and leaves no address open.
+     */
     @Test
     void theSumIsReadAsEachCountAloneIs() {
         for (String guard : List.of("List.length(matchedAccounts) >= 1",
                 "List.length(matchedContacts) >= 1", THE_SUM)) {
             String report = json(source(guard));
-            assertTrue(report.contains("relation_shown_over_a_region"), () -> guard + report);
+            assertFalse(report.contains("relation_shown_over_a_region"), () -> guard + report);
             assertFalse(report.contains("relation_not_shown_to_reach_every_value"),
+                    () -> guard + report);
+            assertTrue(report.contains("\"stopsPastTheRepresentation\"")
+                    && report.contains("\"operation\" : \"String.lowercase\""),
                     () -> guard + report);
         }
     }
