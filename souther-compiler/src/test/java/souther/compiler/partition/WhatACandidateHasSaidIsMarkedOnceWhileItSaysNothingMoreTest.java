@@ -75,7 +75,7 @@ class WhatACandidateHasSaidIsMarkedOnceWhileItSaysNothingMoreTest {
                 trial -> trial.restatedAs(() -> null),
                 trial -> trial.readOnAnArm(relation, new Pullback.OnThisArm(() ->
                         AffineReading.WorkedOut.ofWhatIsToldOf(UndividedByARelation.Working.UNREAD),
-                        List.of())),
+                        List.of(), false)),
                 trial -> trial.tell(relation, UndividedByARelation.Working.UNREAD));
     }
 

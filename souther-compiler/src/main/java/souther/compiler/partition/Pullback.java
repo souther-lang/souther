@@ -3215,7 +3215,7 @@ final class Pullback {
         UndividedByARelation.Working workingOf(Relation relation) {
             UndividedByARelation.Working told = relations == null ? null : relations.get(relation);
             List<OnThisArm> arms = onTheArms(relation);
-            if (told != null || arms.isEmpty()) {
+            if (told != null || arms.isEmpty() || !arms.stream().allMatch(OnThisArm::tellsEvery)) {
                 return told;
             }
             return UndividedByARelation.Working.together(
@@ -3244,9 +3244,13 @@ final class Pullback {
      *                   out only when asked
      * @param beforeTheFork what every run works out before it takes the arm, the nearest choice
      *                   first
+     * @param decided    whether the arm was taken where the choice it belongs to was read as a
+     *                   fork, so that what decided it is {@code beforeTheFork}: an arm read any
+     *                   other way is taken after what nothing here says, and what a row taking it
+     *                   gets past is not told
      */
     record OnThisArm(Supplier<AffineReading.WorkedOut> worksOut,
-                     List<UndividedByARelation.Working> beforeTheFork) {
+                     List<UndividedByARelation.Working> beforeTheFork, boolean decided) {
 
         /** What a row taking the arm gets past: what the arm works out, after what decided it. */
         UndividedByARelation.Working toGetPast() {
@@ -3255,6 +3259,16 @@ final class Pullback {
                 told = told.after(earlier);
             }
             return told;
+        }
+
+        /**
+         * Whether what a row taking the arm gets past is told in full: the arm was decided by a
+         * fork, and what it works out and what decided it are every operation that can stop a run.
+         * Where something is left untold, a row is not shown to get past what it leaves, and the
+         * relation is read as it is where nothing was said of the arm.
+         */
+        boolean tellsEvery() {
+            return decided && toGetPast().exact();
         }
 
         StopEvidence stops() {
@@ -13544,7 +13558,8 @@ final class Pullback {
         Trial theRule = concluded != null ? concluded : trial();
         Once<AffineReading.WorkedOut> worksOut =
                 new Once<>(() -> worksOut(theRule, arithmeticOf(stated, there)));
-        OnThisArm arm = new OnThisArm(worksOut, List.copyOf(beforeTheFork));
+        OnThisArm arm = new OnThisArm(worksOut, List.copyOf(beforeTheFork),
+                !beforeTheFork.isEmpty() && !restatingAQuotient);
         for (Relation each : Meaning.relationsReadIn(read)) {
             trial().readOnAnArm(each, arm);
         }
