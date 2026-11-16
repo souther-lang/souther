@@ -4986,9 +4986,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *
      * <p>The count and the gaps beside it.
      *
-     * <p>The meetings the measure would not walk are said beside the count rather than folded into
-     * it. What they hold is combinations nobody counted, and a reader told only the ratio would
-     * take a behavior measured in part for one measured in full.
+     * <p>The meetings the measure would not walk, and the ones it could not join to what a run
+     * records, are said beside the count rather than folded into it. Each of the second is then
+     * said under it by where it is written and why. What they hold is combinations nobody
+     * counted, and a reader told only the ratio would take a behavior measured in part for one
+     * measured in full.
      *
      * <p>Every group that has combinations no row makes is said once, as what it is made of, and
      * under it the sets of its choices that no row makes, one to a line the way an arm or a
@@ -5006,22 +5008,29 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                              SourceId declaredIn, Page page,
                              MarksWritten marks) {
         Optional<InteractionEvidence.RowsMeeting> made = meetings.made().made();
-        String held = meetings.asked().notMeasured().isEmpty() ? ""
-                : "   " + page.say(new ReportMessage.MeetingsNotWalked(
-                        meetings.asked().notMeasured().size()));
+        // What the count leaves out, by both ways a meeting is left out of it.
+        StringBuilder held = new StringBuilder();
+        if (!meetings.asked().notMeasured().isEmpty()) {
+            held.append("   ").append(page.say(new ReportMessage.MeetingsNotWalked(
+                    meetings.asked().notMeasured().size())));
+        }
+        if (!meetings.asked().notJoined().isEmpty()) {
+            held.append("   ").append(page.say(new ReportMessage.MeetingsNotJoined(
+                    meetings.asked().notJoined().size())));
+        }
         measureLine(out, new ReportMessage.Interaction(), page, page.say(made
                 .<Message>map(rows -> new ReportMessage.InteractionCombinations(
                         rows.met().size() + "/" + meetings.counted()))
                 .orElseGet(() -> new ReportMessage.InteractionCombinationsUncounted(
                         meetings.counted(), ReasonProse.of(meetings.made().why()).sentence())))
-                + held);
+                + held.toString());
         // The meetings no combination is asked of, each by where it is written and why, since the
         // count beside them says nothing of what is left unmeasured.
         int number = 0;
         for (UnjoinedMeeting each : meetings.asked().notJoined()) {
             number++;
-            out.append("      ? ").append(page.say(new ReportMessage.MeetingNotJoined(number,
-                    new ReportMessage.AtAPlace(each.at().said(page.rendering(), declaredIn)),
+            out.append("      ? ").append(page.say(new ReportMessage.TheMeetingIsNotJoined(number,
+                    whereWritten(each.at(), page, declaredIn),
                     phrase("not-joined", each.why())))).append(NEW_LINE);
         }
         for (UnobservedGroup group : behavior.unobserved()) {
@@ -5243,7 +5252,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             number++;
             Citation written = each.at().map(places.places()::get).orElse(null);
             Message at = written == null ? new ReportMessage.Nothing()
-                    : new ReportMessage.AtAPlace(written.said(page.rendering(), declaredIn));
+                    : whereWritten(written, page, declaredIn);
             Message of = ofWhat(each, at);
             out.append("      ? ").append(page.say(each.unseen().isEmpty()
                     ? new ReportMessage.NoRowCanBeAskedAbout(number, of)
@@ -5276,6 +5285,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
+     * Where code is written, as a clause of a line about it.
+     *
+     * <p>Chosen by what the citation says. A place the code is written at is "written at"; code
+     * that is written elsewhere than where this compile met it has a citation that names where it
+     * is and the call it was reached at, and "written at" before that reads the call as the place
+     * the code is.
+     */
+    static Message whereWritten(Citation at, Page page, SourceId declaredIn) {
+        String place = at.said(page.rendering(), declaredIn);
+        return at instanceof Citation.Elsewhere
+                ? new ReportMessage.InAPlace(place) : new ReportMessage.AtAPlace(place);
+    }
+
+    /**
      * The catalog's phrase for one value of an enum, found under {@code kind.<family>.} by the
      * value's name.
      *
@@ -5284,8 +5307,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * each family to having one for every value.
      */
     static Localizable phrase(String family, Enum<?> value) {
-        return Localizable.of("kind." + family + "."
-                + value.name().toLowerCase(Locale.ROOT).replace('_', '-'));
+        return Localizable.of("kind." + family + "." + word(value).replace('_', '-'));
     }
 
     /**
@@ -10270,7 +10292,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             for (UnjoinedMeeting each : meetings.asked().notJoined()) {
                 ObjectNode one = unjoined.addObject();
                 one.put("why", word(each.why()));
-                PublishedAt.of(each.at()).ifPresent(place -> at(one.putObject("at"), place, sources));
+                PublishedAt.of(each.at()).ifPresent(place -> at(one, place, sources));
             }
         }
         ArrayNode all = out.putArray("obligations");

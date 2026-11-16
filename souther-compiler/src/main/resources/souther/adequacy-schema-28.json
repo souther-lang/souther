@@ -7638,6 +7638,9 @@
                 "no_row_came_back",
                 "the_rows_carry_no_account"
               ]
+            },
+            "weakening": {
+              "$ref": "#/$defs/weakening"
             }
           }
         },
