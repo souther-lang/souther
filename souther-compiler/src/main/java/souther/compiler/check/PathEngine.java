@@ -29,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -140,7 +141,8 @@ final class PathEngine {
                Terms.Of reading, ValueTemplates templates, ElementBindings elements) {
         this.symbols = ruleReading.source().symbols();
         this.ruleReading = ruleReading;
-        this.terms = new Terms(reading, ruleReading, templates, elements, reachability);
+        this.terms = new Terms(reading, ruleReading, templates, elements, reachability,
+                this::mostAnsweredForEveryArgument);
         this.clauses = terms.clauses();
         this.predicates = terms.predicates();
         this.verdicts = new ConstructionVerdicts(ruleReading.source().kinds(),
@@ -783,6 +785,46 @@ final class PathEngine {
     private boolean isACheckedProducer(Core e) {
         return e instanceof Core.Call call && call.fn() instanceof Core.Reached reached
                 && reached.denotes() instanceof ValueName.Behavior;
+    }
+
+    /**
+     * {@code k} with what the values {@code carried} was read from carry: a size relates to the
+     * counts of what it was made of, and those say what the declarations of the type guarantee.
+     */
+    Known carrying(Known k, List<NumericConstraint> carried) {
+        Known out = k;
+        for (NumericConstraint each : carried) {
+            out = out.taking(each.form(), each.rel(), Known.Held.OF_THE_VALUE,
+                    terms.spacesOf(each.form()));
+        }
+        return out;
+    }
+
+    /**
+     * The most elements {@code answer}, the list {@code closure} answers, holds for every value of
+     * the type of its parameter ({@link AnswersForEveryArgument}).
+     *
+     * <p>Read of the parameter entered on its own, knowing what its type guarantees and nothing a
+     * path to an application of the closure says, so the bound is the closure's and not an
+     * application's. What the size of the answer carries is taken in on top of that, as a walk
+     * taking in the size of a list it goes over does.
+     */
+    private OptionalLong mostAnsweredForEveryArgument(Core answer, Core.Block closure,
+                                                      Denotations at) {
+        if (closure.params().isEmpty()) {
+            return OptionalLong.empty();
+        }
+        int element = closure.params().size() - 1;
+        Core.Read parameter = Terms.read(closure.params().get(element),
+                closure.paramTypes().get(element), closure.pos());
+        Entered entered = enter(parameter, nothingKnown(), at);
+        FactSubject size = terms.sizeOfWhatItHolds(answer, entered.at());
+        if (size == null) {
+            return OptionalLong.empty();
+        }
+        List<NumericConstraint> carried = terms.carriedBy(List.of(size));
+        return predicates.mostOf(LinearForm.atom(size), carrying(entered.known(), carried),
+                carried);
     }
 
     /**
