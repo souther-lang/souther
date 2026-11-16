@@ -59,6 +59,8 @@ class AMeetingNotJoinedSaysWhyAndWhereOnThePageTest {
         assertTrue(human.contains("meeting 1 is not joined to what a run records"), human);
         assertTrue(human.contains("which of its evaluations is the element's is not known"), human);
         assertTrue(human.contains("written at"), human);
+        assertTrue(human.contains("partial: a meeting of the body's decisions was not joined"),
+                "and the behavior says what it went without: " + human);
     }
 
     @Test

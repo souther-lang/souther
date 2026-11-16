@@ -95,6 +95,7 @@ import souther.compiler.partition.RoleAnswer;
 import souther.compiler.partition.RuleEvidenceOrigin;
 import souther.compiler.partition.UndividedPosition;
 import souther.compiler.diag.Citation;
+import souther.compiler.diag.Localizable;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRendering;
@@ -173,7 +174,6 @@ import souther.compiler.partition.WhichLine;
 import souther.compiler.partition.WhyKept;
 import souther.compiler.reading.PathAccess;
 import souther.compiler.reading.UnjoinedMeeting;
-import souther.compiler.reading.WhyNotJoined;
 import souther.compiler.query.ArmCoverage;
 import souther.compiler.query.ArmObligation;
 import souther.compiler.query.ArmSummary;
@@ -3288,6 +3288,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         marks);
                 decision(out, behavior, module.declaredIn(), page, onlyBy, marks);
                 replacement(out, behavior, module.module(), module.declaredIn(), page);
+                wentWithout(out, behavior.weakenedBy(), page);
                 // Under the behavior it names, because a reason printed at the module's foot is
                 // read as belonging to whichever behavior came last. That was survivable while the
                 // only reasons naming one were rare; a position that could not be read is not.
@@ -3297,6 +3298,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         .toList(), page);
             }
             declared(out, module, page, module.owedByDeclarations().rulePlace(), marks);
+            wentWithout(out, module.declarationsWeakenedBy(), page);
             said(out, module.incompleteness().written().stream()
                     .filter(gap -> gap.fact().behavior().isEmpty()).toList(), page);
         }
@@ -5019,10 +5021,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         for (UnjoinedMeeting each : meetings.asked().notJoined()) {
             number++;
             out.append("      ? ").append(page.say(new ReportMessage.MeetingNotJoined(number,
-                    new ReportMessage.AtAPlace(each.at().said(page.rendering(), declaredIn)))))
-                    .append(NEW_LINE);
-            out.append("          · ").append(page.say(whyNotJoined(each.why())))
-                    .append(NEW_LINE);
+                    new ReportMessage.AtAPlace(each.at().said(page.rendering(), declaredIn)),
+                    phrase("not-joined", each.why())))).append(NEW_LINE);
         }
         for (UnobservedGroup group : behavior.unobserved()) {
             decidedTogether(out, group, declaredIn, page);
@@ -5275,39 +5275,34 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
     }
 
-    /** Why a meeting could not be joined to what a run records, in the words the page says it. */
-    private static Message whyNotJoined(WhyNotJoined why) {
-        return switch (why) {
-            case KEPT_BY_SEVERAL -> new ReportMessage.TheElementIsKeptBySeveralTruths();
-            case KEPT_BY_ANOTHER_KIND ->
-                    new ReportMessage.TheElementIsKeptByWhatIsNoTruthAboutIt();
-            case KEPT_BY_A_TEST_NOT_WORKED_OUT ->
-                    new ReportMessage.TheElementIsKeptByATestWhoseOutcomeIsNotWorkedOut();
-            case NOT_ONE_COMPARISON -> new ReportMessage.WhatKeepsTheElementIsNotOneComparison();
-            case A_VALUE_CHOICE_NOT_READ ->
-                    new ReportMessage.WhatAnElementIsWorthIsDecidedBeyondWhatIsRead();
-            case A_VALUE_CHOICE_NOT_NUMBERED ->
-                    new ReportMessage.WhichEvaluationIsTheElementsIsNotSaid();
-            case A_COMPARISON_OF_CASES -> new ReportMessage.TheComparisonAsksWhichCaseAValueIs();
-            case A_NUMBER_NO_INPUT_HOLDS ->
-                    new ReportMessage.TheComparisonIsOfANumberNoInputHolds();
-            case NO_RUN_IS_RECORDED_AT_IT -> new ReportMessage.NoRunIsRecordedAtTheComparison();
-            case MORE_VISITS_THAN_ARE_RECORDED ->
-                    new ReportMessage.TheDecisionIsOfAVisitPastThoseRecorded();
-            case NOT_ONE_CLOSURE -> new ReportMessage.TheElementsAreNotOneClosureAppliedToEach();
-            case AN_APPLICATION_SAID_TWO_THINGS ->
-                    new ReportMessage.TwoElementsOfOneApplicationDisagree();
-            case NOT_ONE_COMPARISON_THAT_RUNS ->
-                    new ReportMessage.TheComparisonThatRunsIsNotHeldOnce();
-            case MORE_ELEMENTS_THAN_ARE_WRITTEN_OUT ->
-                    new ReportMessage.TheContainerHoldsMoreElementsThanAreWrittenOut();
-            case THE_MEETING_IS_IN_CODE_RUN_AGAIN ->
-                    new ReportMessage.TheMeetingIsInCodeARunMayComeBackTo();
-            case AN_OUTCOME_NO_RUN_IS_SEEN_TAKING ->
-                    new ReportMessage.AnOperandIsSettledByAWayNoRunIsSeenTaking();
-            case AN_OPERAND_HAS_MORE_WAYS_THAN_ARE_READ ->
-                    new ReportMessage.AnOperandHasMoreWaysThanAreRead();
-        };
+    /**
+     * The catalog's phrase for one value of an enum, found under {@code kind.<family>.} by the
+     * value's name.
+     *
+     * <p>A phrase is one entry per value and no code, so a value that is added is a phrase to
+     * write and nothing else to touch; {@code EveryWordOfThePageHasAPhraseInEveryCatalogTest} holds
+     * each family to having one for every value.
+     */
+    static Localizable phrase(String family, Enum<?> value) {
+        return Localizable.of("kind." + family + "."
+                + value.name().toLowerCase(Locale.ROOT).replace('_', '-'));
+    }
+
+    /**
+     * One line for each thing a partial measure went without, said in a sentence.
+     *
+     * <p>The words are the ones the document's {@code weakening} array carries, from the same
+     * derivation, so a behavior's page and its document name the same things. A weakening that is
+     * an observation gone missing is not said here: the page says it under the behavior it names,
+     * as the reason it carries ({@link PublishedIncompleteness}).
+     */
+    private static void wentWithout(StringBuilder out, WeakeningSet weakenedBy, Page page) {
+        for (WeakeningVocabulary each : weakeningsSaid(weakenedBy).written()) {
+            if (each instanceof WeakeningVocabulary.AWordOfThisDocuments said) {
+                out.append("    ? ").append(page.say(new ReportMessage.ThePartialMeasureWentWithout(
+                        phrase("weakening", said.word())))).append(NEW_LINE);
+            }
+        }
     }
 
     /** What a statement that lacks cases is, in the places an author wrote and nothing else. */
@@ -11437,12 +11432,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * arrived at them. The page says them in the same order, so the two never differ.
      */
     private static List<String> weakeningWords(WeakeningSet weakenedBy) {
+        return weakeningsSaid(weakenedBy).written().stream().map(AdequacyReport::word).toList();
+    }
+
+    /** The same, as the vocabulary each word is written in, for a surface that says more than the
+     *  word. */
+    private static CanonicalSelection<WeakeningVocabulary> weakeningsSaid(
+            WeakeningSet weakenedBy) {
         List<WeakeningVocabulary> said = new ArrayList<>();
         for (Weakening each : weakenedBy.causes()) {
             said.add(vocabularyOf(each));
         }
-        return PublicationOrders.WEAKENING_WORDS.keep(said).written().stream()
-                .map(AdequacyReport::word).toList();
+        return PublicationOrders.WEAKENING_WORDS.keep(said);
     }
 
     /**
