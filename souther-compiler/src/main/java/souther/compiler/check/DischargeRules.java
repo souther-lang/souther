@@ -412,6 +412,14 @@ final class DischargeRules {
                 : new Source(CallArguments.of(built.from(), call), built.shape(), built.size());
     }
 
+    /** The container {@code applied} built its result from, or null where the check has no rule
+     *  about what the operation keeps. */
+    static Source builtFrom(AnOperationApplied applied) {
+        BuiltFrom<DeclaredArgument> built = facts().buildsItsResultFrom(applied.operation());
+        Core container = built == null ? null : applied.argument(built.from());
+        return container == null ? null : new Source(container, built.shape(), built.size());
+    }
+
     /**
      * The containers {@code e}'s result is no smaller than, in the order the rule names them.
      *
@@ -420,7 +428,11 @@ final class DischargeRules {
      * true of the operator.
      */
     static List<Core> noSmallerThan(Core standing) {
-        AnOperationApplied applied = AnOperationApplied.of(standing);
+        return noSmallerThan(AnOperationApplied.of(standing));
+    }
+
+    /** The same, of an application however it was found. */
+    static List<Core> noSmallerThan(AnOperationApplied applied) {
         if (applied == null) {
             return List.of();
         }

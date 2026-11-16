@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import net.unit8.notation199x.pattern.CodePoints;
 import net.unit8.notation199x.pattern.PatternMeaning;
 import souther.compiler.check.Derivation.HoldsSomethingWhere.Holding;
 import souther.compiler.core.Core;
@@ -7,8 +8,10 @@ import souther.compiler.core.Kernel;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.regex.OccurrencesInAPattern;
 import souther.compiler.regex.WhatAStringSaysOfItsLength;
 import souther.compiler.semantics.AnswerAspect;
+import souther.compiler.semantics.CodePointClass;
 import souther.compiler.semantics.LawNumber;
 import souther.compiler.semantics.LawProposition;
 import souther.compiler.semantics.LawSubject;
@@ -46,7 +49,17 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     private final Terms terms;
     private final ElementsWrittenOut.Reading<Denotations> elements;
 
+    /** The call {@code applied} is, as the term its answer is named by, or null where it is not
+     *  named: what a number of the call is named by is then read off its parts, and not off the
+     *  expressions they were written as, which an environment spells in its own way. */
+    private final Term call;
+
     private LawOverAtoms(AnOperationApplied applied, Denotations at, Terms terms) {
+        this(applied, at, terms, null);
+    }
+
+    private LawOverAtoms(AnOperationApplied applied, Denotations at, Terms terms, Term call) {
+        this.call = call;
         this.applied = applied;
         this.at = at;
         this.terms = terms;
@@ -60,6 +73,12 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
      */
     static Holding whereItHolds(AnOperationApplied applied, AnswerAspect aspect, Denotations at,
                                 Terms terms) {
+        return whereItHolds(applied, aspect, at, terms, null);
+    }
+
+    /** The same, of the call named by {@code call} where it is one ({@link #call}). */
+    static Holding whereItHolds(AnOperationApplied applied, AnswerAspect aspect, Denotations at,
+                                Terms terms, Term call) {
         if (applied == null) {
             return null;
         }
@@ -68,7 +87,7 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
                         OperationLaw.Observation<DeclaredArgument>(
                                 AnswerAspect stated, LawProposition<DeclaredArgument> law),
                         var _) && stated == aspect
-                ? LawAtACall.of(law, new LawOverAtoms(applied, at, terms)) : null;
+                ? LawAtACall.of(law, new LawOverAtoms(applied, at, terms, call)) : null;
         return read == null || namesNothing(read) ? null : read;
     }
 
@@ -109,11 +128,16 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
      * it in other cases ({@link #sizeInCases}), or names a number this cannot.
      */
     static Sized sizeOf(AnOperationApplied applied, Denotations at, Terms terms) {
+        return sizeOf(applied, at, terms, null);
+    }
+
+    /** The same, of the call named by {@code call} where it is one ({@link #call}). */
+    static Sized sizeOf(AnOperationApplied applied, Denotations at, Terms terms, Term call) {
         OperationLaw.Size<DeclaredArgument> law = sizeLawOf(applied);
         if (law == null) {
             return null;
         }
-        LawOverAtoms reading = new LawOverAtoms(applied, at, terms);
+        LawOverAtoms reading = new LawOverAtoms(applied, at, terms, call);
         LinearForm<LawNumber<DeclaredArgument>> unconditional = law.unconditional();
         if (unconditional == null) {
             return reading.byAValueHeldOnce(law.cases());
@@ -275,12 +299,12 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
      * may lie.
      */
     static Derivation.Chosen sizeInCases(AnOperationApplied applied, Denotations at,
-                                         Terms terms) {
+                                         Terms terms, Term call) {
         OperationLaw.Size<DeclaredArgument> law = sizeLawOf(applied);
         if (law == null || law.unconditional() != null) {
             return null;
         }
-        LawOverAtoms reading = new LawOverAtoms(applied, at, terms);
+        LawOverAtoms reading = new LawOverAtoms(applied, at, terms, call);
         if (reading.byAValueHeldOnce(law.cases()) != null) {
             return null;
         }
@@ -574,13 +598,37 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
      * length is left out.
      */
     private Holding accepting(PatternMeaning meaning) {
-        FactSubject count = countOf(applied.args().get(
-                StringPredicates.of(Kernel.STRING_MATCHES).subject()));
+        Core string = applied.args().get(StringPredicates.of(Kernel.STRING_MATCHES).subject());
+        FactSubject count = countOf(string);
         WhatAStringSaysOfItsLength.Sides<FactSubject> said = count == null
                 ? WhatAStringSaysOfItsLength.Sides.nothing()
                 : WhatAStringSaysOfItsLength.inALanguage(count, meaning);
+        List<Holding> ifHolds = new ArrayList<>(standing(said.ifHolds()));
+        ifHolds.addAll(occurrencesIn(string, meaning));
         return new Holding.Unnamed(new Holding.Unnamed.Of.APattern(meaning),
-                standing(said.ifHolds()), standing(said.ifDenied()));
+                ifHolds, standing(said.ifDenied()));
+    }
+
+    /**
+     * The most times each code point the pattern writes out stands in {@code string}, where the
+     * pattern is accepted: a ceiling on how many of its code points are that one, wherever the
+     * pattern has one ({@link OccurrencesInAPattern}).
+     */
+    private List<Holding> occurrencesIn(Core string, PatternMeaning meaning) {
+        List<Holding> out = new ArrayList<>();
+        if (string == null || NumericMeasures.takenOf(Core.withoutStanding(string).type(),
+                terms.newtypeInners()) == null) {
+            return out;
+        }
+        OccurrencesInAPattern.writtenOutWithACeiling(meaning).forEach((codePoint, most) -> {
+            FactSubject standing = terms.codePointsAtomFor(string,
+                    CodePointClass.of(CodePoints.of(codePoint)), at);
+            if (standing != null) {
+                out.add(new Holding.Stands(LinearForm.atomMinusConstant(standing,
+                        ExactRatio.of(most)), Rel.LE));
+            }
+        });
+        return out;
     }
 
     /** How many code points the argument {@code subject} names holds, or null where it names no
@@ -606,7 +654,7 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
             }
             case LawNumber.SizeOf<DeclaredArgument>(
                     LawSubject.Argument<DeclaredArgument>(DeclaredArgument which)) -> {
-                FactSubject count = countOf(applied.argument(which));
+                FactSubject count = countOfPart(which);
                 yield count == null ? null : LinearForm.atom(count);
             }
             case LawNumber.HowManyMeet<DeclaredArgument> meet -> howManyMeet(meet);
@@ -642,7 +690,7 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
             return null;
         }
         if (statesAFailing(asked)) {
-            FactSubject all = countOf(container);
+            FactSubject all = countOfPart(meet.container());
             LinearForm<FactSubject> meeting = all == null ? null
                     : howManyMeet(new LawNumber.HowManyMeet<>(meet.container(), asked.denied()));
             return meeting == null ? null : LinearForm.atom(all).minus(meeting).orNull();
@@ -663,6 +711,13 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
     private LinearForm<FactSubject> comingOut(DeclaredArgument named, Core container,
                                               LawSubject<DeclaredArgument> of,
                                               AnswerAspect aspect) {
+        // Named by the parts of the call's term where they can, which every route that reaches the
+        // call reads alike, and by the expressions it was handed where they cannot.
+        LinearForm<FactSubject> byTheTerms = holdingSomethingByTheTerms(named, container, of,
+                aspect);
+        if (byTheTerms != null) {
+            return byTheTerms;
+        }
         return switch (of) {
             case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument element)
                     when element.equals(named) ->
@@ -673,6 +728,35 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
             }
             default -> null;
         };
+    }
+
+    /** How many elements of {@code container}, the argument {@code named}, hold something — each
+     *  itself, or what the closure answers of each — named by the parts of the call's term, or null
+     *  where {@code aspect} asks anything else or a part is not named. */
+    private LinearForm<FactSubject> holdingSomethingByTheTerms(DeclaredArgument named,
+                                                              Core container,
+                                                              LawSubject<DeclaredArgument> of,
+                                                              AnswerAspect aspect) {
+        Term whole = partOfTheCall(named);
+        DeclaredArgument by = switch (of) {
+            case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(DeclaredArgument closure) ->
+                    closure;
+            default -> null;
+        };
+        Term closure = by == null ? null : partOfTheCall(by);
+        boolean eachItself = of instanceof LawSubject.ElementOf<DeclaredArgument>(
+                DeclaredArgument element) && element.equals(named);
+        // A closure the call was not handed is no reason to count each element: what counts what
+        // the closure answers is read of the closure, and of nothing else.
+        boolean closureIsHanded = by == null || applied.argument(by) != null;
+        if (aspect != AnswerAspect.EMPTINESS || whole == null || !closureIsHanded
+                || !(eachItself || closure != null)) {
+            return null;
+        }
+        return terms.howManyHoldSomething(whole, closure,
+                NumericMeasures.takenOf(Core.withoutStanding(container).type(),
+                        terms.newtypeInners()),
+                terms.elementMeasureOf(container, by == null ? null : applied.argument(by), at));
     }
 
     /** Whether {@code asked} states that something does not hold, so that what meets it is what
@@ -758,14 +842,54 @@ final class LawOverAtoms implements LawAtACall.Reading<Denotations, Holding, Lin
         }
         return atom(switch (of) {
             case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument element)
-                    when element.equals(sum.container()) ->
-                    terms.sumOfSizesAtomFor(container, null, at);
+                    when element.equals(sum.container()) -> sumOfSizes(container, sum.container(),
+                    null);
             case LawSubject.WhatTheClosureAnswers<DeclaredArgument>(DeclaredArgument closure) -> {
                 Core given = applied.argument(closure);
-                yield given == null ? null : terms.sumOfSizesAtomFor(container, given, at);
+                yield given == null ? null
+                        : sumOfSizes(container, sum.container(), closure);
             }
             default -> null;
         });
+    }
+
+    /** The atom of the sum of the sizes of what the elements of {@code container} hold, or of what
+     *  the closure {@code by} answers of each: named by the parts of the call where it is named, so
+     *  that it is the atom the call's own term makes of them. */
+    private FactSubject sumOfSizes(Core container, DeclaredArgument containerArgument,
+                                   DeclaredArgument by) {
+        Term whole = partOfTheCall(containerArgument);
+        Term closure = by == null ? null : partOfTheCall(by);
+        if (whole != null && (by == null || closure != null)) {
+            return terms.sumOfSizesAtomOf(whole, closure,
+                    NumericMeasures.takenOf(Core.withoutStanding(container).type(),
+                            terms.newtypeInners()),
+                    terms.elementMeasureOf(container, by == null ? null : applied.argument(by),
+                            at));
+        }
+        return terms.sumOfSizesAtomFor(container, by == null ? null : applied.argument(by), at);
+    }
+
+    /** How many {@code argument} holds, named by the part of the call's term it stands at where the
+     *  call is named, and by the expression it was handed otherwise. */
+    private FactSubject countOfPart(DeclaredArgument argument) {
+        Core handed = applied.argument(argument);
+        Term part = partOfTheCall(argument);
+        if (handed == null || part == null) {
+            return countOf(handed);
+        }
+        ValueName counts = NumericMeasures.takenOf(Core.withoutStanding(handed).type(),
+                terms.newtypeInners());
+        return counts == null ? null : terms.sizeAtomOf(counts, part, handed, at);
+    }
+
+    /** The part of the call's term that {@code argument} stands at, or null where the call is not
+     *  named or is another call. */
+    private Term partOfTheCall(DeclaredArgument argument) {
+        int position = CallArguments.positionOf(argument, applied.operation());
+        return call == null || !applied.operation().equals(call.calledOperation())
+                || position < 0 || position >= call.parts().size() ? null
+                : call.parts().get(position);
     }
 
     @Override

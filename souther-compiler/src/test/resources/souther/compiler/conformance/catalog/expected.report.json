@@ -11414,6 +11414,12 @@
             } ]
           },
           "taken" : true
+        } ],
+        "statementsNoRowIsIn" : [ {
+          "statement" : "reachable zone from zone through [zones] [!Affine[form=LinearForm[constant=-3, coefs={zone.count=1}], proposition=GE]] none below [!Affine[form=LinearForm[constant=0, coefs={List.length(zone.zones)=1}], proposition=GT]]",
+          "kind" : "a_node_a_search_reaches",
+          "notAskable" : false,
+          "cases" : [ "nowhere_at_a_leaf" ]
         } ]
       },
       "replacement" : {
