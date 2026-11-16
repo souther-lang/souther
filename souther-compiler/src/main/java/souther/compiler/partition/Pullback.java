@@ -1058,8 +1058,8 @@ final class Pullback {
         }
         List<StopEvidence.OnAnArm> out = new ArrayList<>();
         for (Meaning.ReadOnAnArm each : stated.meaning().relationsDownTheArms()) {
-            for (Supplier<StopEvidence> stops : theRule.onTheArms(each.relation())) {
-                out.add(new StopEvidence.OnAnArm(each.reached(), stops.get()));
+            for (OnThisArm arm : theRule.onTheArms(each.relation())) {
+                out.add(new StopEvidence.OnAnArm(each.reached(), arm.stops()));
             }
         }
         return List.copyOf(out);
@@ -3109,7 +3109,7 @@ final class Pullback {
 
         /** What a run taking an arm of a choice works out there, by each relation the comparison
          *  was read as with the choice standing as that arm ({@link Pullback#readOnAnArm}). */
-        private Map<Relation, List<Supplier<StopEvidence>>> onTheArms;
+        private Map<Relation, List<OnThisArm>> onTheArms;
 
         // The maps and lists of a candidate are made when the candidate first says something into
         // them: most say nothing, and an identity map holds a table before it holds anything.
@@ -3183,17 +3183,17 @@ final class Pullback {
             return restated == null ? List.of() : restated;
         }
 
-        void readOnAnArm(Relation relation, Supplier<StopEvidence> stops) {
+        void readOnAnArm(Relation relation, OnThisArm arm) {
             marked = null;
             if (onTheArms == null) {
                 onTheArms = new LinkedHashMap<>();
             }
-            onTheArms.computeIfAbsent(relation, _ -> new ArrayList<>()).add(stops);
+            onTheArms.computeIfAbsent(relation, _ -> new ArrayList<>()).add(arm);
         }
 
         /** What runs taking the arms {@code relation} was read on work out there; none where it
          *  was read on no arm. */
-        List<Supplier<StopEvidence>> onTheArms(Relation relation) {
+        List<OnThisArm> onTheArms(Relation relation) {
             return onTheArms == null ? List.of() : onTheArms.getOrDefault(relation, List.of());
         }
 
@@ -3207,9 +3207,19 @@ final class Pullback {
                     : UndividedByARelation.Working.together(List.of(already, told)));
         }
 
-        /** What the candidate says of the rows of {@code relation}, or null where it says none. */
+        /**
+         * What the candidate says of the rows of {@code relation}, or null where it says none: what
+         * it was told of the relation, and otherwise what a run taking the arm the relation was
+         * read on gets past, together where it was read on several.
+         */
         UndividedByARelation.Working workingOf(Relation relation) {
-            return relations == null ? null : relations.get(relation);
+            UndividedByARelation.Working told = relations == null ? null : relations.get(relation);
+            List<OnThisArm> arms = onTheArms(relation);
+            if (told != null || arms.isEmpty()) {
+                return told;
+            }
+            return UndividedByARelation.Working.together(
+                    arms.stream().map(OnThisArm::toGetPast).toList());
         }
 
         /** The relations the candidate kept under this one read, held as this one's. What it
@@ -3220,9 +3230,35 @@ final class Pullback {
                 kept.relations.forEach(this::tell);
             }
             if (kept.onTheArms != null) {
-                kept.onTheArms.forEach((relation, stops) -> stops.forEach(each ->
+                kept.onTheArms.forEach((relation, arms) -> arms.forEach(each ->
                         readOnAnArm(relation, each)));
             }
+        }
+    }
+
+    /**
+     * What a comparison read with a choice standing as one of its arms works out, off the one
+     * reading of its arithmetic: what a run taking the arm gets past, and where it stops.
+     *
+     * @param worksOut   what the comparison works out with the choice standing as the arm; worked
+     *                   out only when asked
+     * @param beforeTheFork what every run works out before it takes the arm, the nearest choice
+     *                   first
+     */
+    record OnThisArm(Supplier<AffineReading.WorkedOut> worksOut,
+                     List<UndividedByARelation.Working> beforeTheFork) {
+
+        /** What a row taking the arm gets past: what the arm works out, after what decided it. */
+        UndividedByARelation.Working toGetPast() {
+            UndividedByARelation.Working told = worksOut.get().toGetPast().notOnEveryRun();
+            for (UndividedByARelation.Working earlier : beforeTheFork) {
+                told = told.after(earlier);
+            }
+            return told;
+        }
+
+        StopEvidence stops() {
+            return worksOut.get().stops();
         }
     }
 
@@ -13506,10 +13542,11 @@ final class Pullback {
         StatedComparison stated = armsOfAComparison.peek();
         Trial concluded = triedAndConcluded.get(read);
         Trial theRule = concluded != null ? concluded : trial();
-        Once<StopEvidence> stops = new Once<>(() ->
-                worksOut(theRule, arithmeticOf(stated, there)).stops());
+        Once<AffineReading.WorkedOut> worksOut =
+                new Once<>(() -> worksOut(theRule, arithmeticOf(stated, there)));
+        OnThisArm arm = new OnThisArm(worksOut, List.copyOf(beforeTheFork));
         for (Relation each : Meaning.relationsReadIn(read)) {
-            trial().readOnAnArm(each, stops);
+            trial().readOnAnArm(each, arm);
         }
         return read;
     }
