@@ -1056,14 +1056,17 @@ public final class PathReachability {
                 if (step != null) {
                     steps.add(step);
                 }
-                // What the closure is handed is a value of its parameter's type, and so holds what
-                // that type guarantees; entered as a location it is a place a size can be named
-                // of, and a list built from it is one value wherever the closure is read.
+                // What a walk hands its closure, as the last parameter, is a value of that
+                // parameter's type, and so holds what the type guarantees; entered as a location it
+                // is a place a size can be named of, and a list built from it is one value wherever
+                // the closure is read. The parameters before it carry what the walk has built so
+                // far, which no list inside the closure is built from.
                 Known handed = inside;
                 Denotations within = at;
-                for (int each = 0; each < block.params().size(); each++) {
-                    PathEngine.Entered in = engine.enter(Terms.read(block.params().get(each),
-                            block.paramTypes().get(each), block.pos()), handed, within);
+                if (!block.params().isEmpty()) {
+                    int element = block.params().size() - 1;
+                    PathEngine.Entered in = engine.enter(Terms.read(block.params().get(element),
+                            block.paramTypes().get(element), block.pos()), handed, within);
                     handed = in.known();
                     within = in.at();
                 }
