@@ -260,18 +260,17 @@ class AWalkOverThePiecesOfASplitAtACharacterAnInvariantAllowsOnceOwesNoRewriteTe
         assertEquals(List.of("fold_after_one_step", "fold_from_the_seed"),
                 walkRewritesOwed(measured("""
                         module repro.guarded
-                        let widened (b: Int, x: Int): List<Int> =
-                            List.flatMap(e -> if b > 0 then [ e ] else [ e, e ], [ x ])
-
-                        behavior sizes : (x: Int, b: Int) -> List<Int>
+                        behavior sizes : (x: Int, b: Bool) -> List<Int>
                         let sizes (x, b) =
-                            if b > 0
-                            then List.map(y -> y + 1, widened(b, x))
-                            else List.map(y -> y + 2, widened(b, x))
+                            if b
+                            then List.map(y -> y + 1,
+                                          List.flatMap(e -> if b then [ e ] else [ e, e ], [ x ]))
+                            else List.map(y -> y + 2,
+                                          List.flatMap(e -> if b then [ e ] else [ e, e ], [ x ]))
 
                         example sizes
-                            | "up" : (1, 1) -> [ 2 ]
-                            | "down" : (1, 0) -> [ 3, 3 ]
+                            | "up" : (1, true) -> [ 2 ]
+                            | "down" : (1, false) -> [ 3, 3 ]
                         """)));
     }
 
