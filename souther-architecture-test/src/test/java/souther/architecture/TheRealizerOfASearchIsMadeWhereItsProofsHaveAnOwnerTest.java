@@ -52,7 +52,7 @@ class TheRealizerOfASearchIsMadeWhereItsProofsHaveAnOwnerTest {
                     + "Lsouther/compiler/partition/MeasuredInput;"
                     + "Lsouther/compiler/partition/MeasuredInput$Lines;Ljava/util/List;"
                     + "Lsouther/compiler/partition/ReachingCuts;"
-                    + "Lsouther/compiler/coverage/ControlPlace$Outcome;)"
+                    + "Lsouther/compiler/coverage/ControlPlace$Outcome;Z)"
                     + "Lsouther/compiler/partition/HeldOutcome$Bringing;",
             "souther/compiler/query/Coverages#searched("
                     + "Lsouther/compiler/query/LineReadings;"

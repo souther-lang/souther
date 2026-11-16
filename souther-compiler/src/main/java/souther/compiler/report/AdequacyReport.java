@@ -1465,6 +1465,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
         Set<ObligationIdentity.OfACombinationOfDecisions> made =
                 meetings.made().made().orElseThrow().met();
+        Adequacy.MeetingsSearchedFor.WhatTheSearchSaid searched =
+                Adequacy.MeetingsSearchedFor.WhatTheSearchSaid.of(compilation.db(), module,
+                        behavior);
         DecisionRuleReading.Places places = placesFor(compilation.db(), module, behavior);
         Object madeState = new Object();
         List<UnobservedGroup> out = new ArrayList<>();
@@ -1480,6 +1483,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     states.add(null);
                 } else if (made.contains(each)) {
                     states.add(madeState);
+                } else if (!searched.owesARow(each)) {
+                    // The rules of its decisions leave no value: no combination, and the measure
+                    // raises no finding of it ({@link Adequacy.MeetingsSearchedFor}).
+                    states.add(null);
                 } else {
                     // A combination of the body no row made has the finding that says so: the
                     // measure raises one for every combination it states that the rows did not
