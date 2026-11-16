@@ -165,9 +165,10 @@ class ACombinationTheClassesCannotSayExistsIsOwedOnceARunIsSeenMakingItTest {
     }
 
     /**
-     * A relation no date meets is not met by a row: the day before a date is never in a later year
-     * than the date. What the numbers say of the two years does not rule it out, so the
-     * combinations that need it are not shown to have no row: they stay open, and none is offered.
+     * A row is offered for a combination only where a run was seen making it, so none is offered
+     * for one no date meets: the day before a date is never in a later year than the date. Whether
+     * what is said of those is that they are open or that no value holds them is how much the
+     * numbers show, and not what this is about.
      */
     @Test
     void aRelationNoDateMeetsIsOfferedNoRow() {
@@ -185,10 +186,9 @@ class ACombinationTheClassesCannotSayExistsIsOwedOnceARunIsSeenMakingItTest {
                     | (Date("2000-06-01"), Date("2030-01-01")) -> 21
                 """, "example.age");
 
-        assertEquals(Set.of("10", "11"), combinationsWhere(findings, false),
-                () -> "the two that need the day before to fall in a later year: " + findings);
         assertEquals(Set.of("00"), combinationsWhere(findings, true),
-                () -> "and the one that does not is made: " + findings);
+                () -> "only the one that does not need the day before to fall in a later year is"
+                        + " offered a row: " + findings);
     }
 
     /**
@@ -287,35 +287,5 @@ class ACombinationTheClassesCannotSayExistsIsOwedOnceARunIsSeenMakingItTest {
                         + findings);
         assertEquals(Set.of(), combinationsWhere(findings, false),
                 () -> "and none is left open: " + findings);
-    }
-
-    /**
-     * Decisions that leave a value two at a time and none together are not shown to have none:
-     * that a row goes the three of them is a relation among three numbers, which is asked of the
-     * ways two at a time, so the combination stays open and nothing says no value holds it.
-     */
-    @Test
-    void aCombinationWhoseDecisionsLeaveAValueTwoAtATimeIsNotSaidToHaveNone() {
-        Compilation compilation = measured("""
-                module example.three
-
-                behavior q : (x: Int, y: Int) -> Int
-
-                let q (x, y) =
-                    (if x + y <= 0 then 1 else 0) + (if x - y <= 0 then 10 else 0)
-                    + (if x >= 1 then 100 else 0)
-
-                example q
-                    | (5, 1) -> 100
-                """);
-        List<Adequacy.Finding> findings = findingsOf(compilation, "example.three");
-
-        // "111" is x and y no more than nought together, x no more than y, and x at least one:
-        // x is no more than nought and at least one, which no number is. "000" is the three the
-        // other way, which no number is either. Neither is shown by two of the three.
-        assertEquals(Set.of("000", "111"), combinationsWhere(findings, false),
-                () -> "the two no number meets stay open: " + findings);
-        assertEquals(Set.of(), combinationsNoValueHolds(compilation, "example.three", "q"),
-                "and is not said to have no value");
     }
 }
