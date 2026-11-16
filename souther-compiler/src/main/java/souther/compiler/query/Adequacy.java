@@ -9558,6 +9558,8 @@ public final class Adequacy {
             implements Key<MeetingsSearchedFor.WhatTheSearchSaid> {
 
         /**
+         * What the search said of the combinations it was asked about.
+         *
          * @param exist a row the search composed was seen making each of these
          * @param none  the rules of the decisions leave no value for each of these, which is
          *              the model's answer and holds of every row

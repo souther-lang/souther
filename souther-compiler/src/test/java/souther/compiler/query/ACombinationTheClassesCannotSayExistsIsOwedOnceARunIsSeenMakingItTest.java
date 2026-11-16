@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.partition.ObligationIdentity;
 import souther.compiler.reading.Condition;
 import souther.compiler.report.AdequacyReport;
 
@@ -46,9 +47,12 @@ class ACombinationTheClassesCannotSayExistsIsOwedOnceARunIsSeenMakingItTest {
      * holding. Never by how many findings there are, which two different combinations share.
      */
     private static String combinationOf(Adequacy.Finding finding) {
-        About.ACombinationNoRowMakes about = (About.ACombinationNoRowMakes) finding.about();
+        return combinationOf(((About.ACombinationNoRowMakes) finding.about()).combination());
+    }
+
+    private static String combinationOf(ObligationIdentity.OfACombinationOfDecisions combination) {
         Map<Integer, Integer> byOrdinal = new TreeMap<>();
-        for (Condition each : about.combination().settled()) {
+        for (Condition each : combination.settled()) {
             switch (each) {
                 // A comparison coming out one way.
                 case Condition.Side side -> byOrdinal.put(side.statedAt().origin().ordinal(),
@@ -60,6 +64,15 @@ class ACombinationTheClassesCannotSayExistsIsOwedOnceARunIsSeenMakingItTest {
             }
         }
         return byOrdinal.values().stream().map(String::valueOf).collect(Collectors.joining());
+    }
+
+    /** The combinations of {@code behavior} the search proved no value holds. */
+    private static Set<String> combinationsNoValueHolds(Compilation compilation, String module,
+                                                         String behavior) {
+        return Adequacy.MeetingsSearchedFor.WhatTheSearchSaid
+                .of(compilation.db(), module, behavior).none().stream()
+                .map(ACombinationTheClassesCannotSayExistsIsOwedOnceARunIsSeenMakingItTest::combinationOf)
+                .collect(Collectors.toCollection(TreeSet::new));
     }
 
     /** The combinations among {@code findings} that are {@code established}, or are not. */
@@ -235,6 +248,11 @@ class ACombinationTheClassesCannotSayExistsIsOwedOnceARunIsSeenMakingItTest {
         assertEquals(Set.of(), combinationsWhere(findings, false),
                 () -> "and the two none holds are not left open: " + findings);
 
+        // They are absent because the search proved no value holds them, and not for want of a
+        // finding: it names exactly those two.
+        assertEquals(Set.of("010", "011"),
+                combinationsNoValueHolds(compilation, "example.dep", "q"));
+
         // And the page says what the findings say: the choices no row makes are the ones the
         // measure raised a finding of, and the two none holds are not among them.
         int said = AdequacyReport.of(compilation).modules().getFirst().behaviors().getFirst()
@@ -269,5 +287,35 @@ class ACombinationTheClassesCannotSayExistsIsOwedOnceARunIsSeenMakingItTest {
                         + findings);
         assertEquals(Set.of(), combinationsWhere(findings, false),
                 () -> "and none is left open: " + findings);
+    }
+
+    /**
+     * Decisions that leave a value two at a time and none together are not shown to have none:
+     * that a row goes the three of them is a relation among three numbers, which is asked of the
+     * ways two at a time, so the combination stays open and nothing says no value holds it.
+     */
+    @Test
+    void aCombinationWhoseDecisionsLeaveAValueTwoAtATimeIsNotSaidToHaveNone() {
+        Compilation compilation = measured("""
+                module example.three
+
+                behavior q : (x: Int, y: Int) -> Int
+
+                let q (x, y) =
+                    (if x + y <= 0 then 1 else 0) + (if x - y <= 0 then 10 else 0)
+                    + (if x >= 1 then 100 else 0)
+
+                example q
+                    | (5, 1) -> 100
+                """);
+        List<Adequacy.Finding> findings = findingsOf(compilation, "example.three");
+
+        // "111" is x and y no more than nought together, x no more than y, and x at least one:
+        // x is no more than nought and at least one, which no number is. "000" is the three the
+        // other way, which no number is either. Neither is shown by two of the three.
+        assertEquals(Set.of("000", "111"), combinationsWhere(findings, false),
+                () -> "the two no number meets stay open: " + findings);
+        assertEquals(Set.of(), combinationsNoValueHolds(compilation, "example.three", "q"),
+                "and is not said to have no value");
     }
 }

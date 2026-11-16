@@ -4683,15 +4683,20 @@ public final class Generator {
             }
             Set<CompositionBudget> cutShort = EnumSet.noneOf(CompositionBudget.class);
             cutShort.addAll(together.cutShort());
-            // Only the ways that leave a value beside the other parts are looked along; where a
-            // part has none left and every way it had was looked at, no row goes that way.
-            List<List<HeldOutcome>> parts =
-                    WaysThatLeaveAValueBesideTheRest.of(together.parts(), declarations);
-            if (parts.stream().anyMatch(List::isEmpty)) {
-                return cutShort.isEmpty()
-                        ? WayPastTheGuard.Unheld.because(
-                                RepairShortfall.Barrier.NO_VALUE_CAN_GO_THAT_WAY)
-                        : new WayPastTheGuard.Unheld(Set.of(), cutShort);
+            // Only the ways that leave a value beside the other parts are looked along.
+            List<List<HeldOutcome>> parts;
+            switch (WaysThatLeaveAValueBesideTheRest.of(together.parts(), cutShort,
+                    held -> HeldOutcome.along(held, declarations)
+                            instanceof Reachability.Reaching)) {
+                case WaysThatLeaveAValueBesideTheRest.Beside.NoneHolds _ -> {
+                    return WayPastTheGuard.Unheld.because(
+                            RepairShortfall.Barrier.NO_VALUE_CAN_GO_THAT_WAY);
+                }
+                case WaysThatLeaveAValueBesideTheRest.Beside.NotEveryWayWasLookedAt(
+                        var figures) -> {
+                    return new WayPastTheGuard.Unheld(Set.of(), figures);
+                }
+                case WaysThatLeaveAValueBesideTheRest.Beside.Remaining(var left) -> parts = left;
             }
             OneOfEach.Taken<HeldOutcome> choices = OneOfEach.ofEachPart(parts,
                     CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum());
