@@ -172,9 +172,8 @@ class AWalkOverThePiecesOfASplitAtACharacterAnInvariantAllowsOnceOwesNoRewriteTe
                 example sizes
                     | "both" : (EmailAndPhone { email = Address("a@b.c"), phone = Phone("1") }) -> [ 3 ]
                 """);
-        assertEquals(List.of(), walkRewritesOwedOf("flatMap", compilation).stream()
-                .filter(rewrite -> !List.of("fold_after_one_step", "fold_from_the_seed")
-                        .contains(rewrite)).toList());
+        assertEquals(List.of(), walkRewritesOwedOf("flatMap", compilation));
+        assertEquals(List.of(), walkRewritesOwedOf("map", compilation));
     }
 
     /** A list a {@code match} builds holds the most its arms hold, so a flatMap over it that adds one
@@ -254,22 +253,60 @@ class AWalkOverThePiecesOfASplitAtACharacterAnInvariantAllowsOnceOwesNoRewriteTe
     }
 
     /** What a guard says where the closure is applied is the application's, not the closure's: the
-     *  same closure applied elsewhere is not held to it. */
+     *  same closure applied where the guard fails answers two, and the walk over it is the walk
+     *  of every place it stands at. */
     @Test
     void aClosureThatAnswersOneOnlyWhereAGuardHoldsIsNotAWalkOverOneAtMost() {
         assertEquals(List.of("fold_after_one_step", "fold_from_the_seed"),
                 walkRewritesOwed(measured("""
                         module repro.guarded
+                        let widened (b: Int, x: Int): List<Int> =
+                            List.flatMap(e -> if b > 0 then [ e ] else [ e, e ], [ x ])
+
                         behavior sizes : (x: Int, b: Int) -> List<Int>
                         let sizes (x, b) =
                             if b > 0
-                            then List.map(y -> y + 1,
-                                          List.flatMap(e -> if b > 0 then [ e ] else [ e, e ], [ x ]))
-                            else []
+                            then List.map(y -> y + 1, widened(b, x))
+                            else List.map(y -> y + 2, widened(b, x))
 
                         example sizes
-                            | "one" : (1, 1) -> [ 2 ]
+                            | "up" : (1, 1) -> [ 2 ]
+                            | "down" : (1, 0) -> [ 3, 3 ]
                         """)));
+    }
+
+    /** The bound a type leaves is the type's: one closure body over a parameter of the type that
+     *  lets the separator stand once and over one that lets it stand as often as it likes, in the
+     *  one compilation. */
+    @Test
+    void theSameClosureOverTwoTypesIsHeldToOneAtMostOverOnlyTheStricter() {
+        Compilation compilation = measured("""
+                module repro.types
+                data Strict = String
+                    invariant String.matches("[^@\\\\s]+@[^@\\\\s]+", value)
+
+                data Loose = String
+                    invariant String.length(value) >= 1
+
+                behavior strictLengths : (a: Strict) -> List<Int>
+                let strictLengths (a) =
+                    List.map(s -> String.length(s),
+                             List.flatMap(e -> List.drop(1, String.split("@", e.value)), [ a ]))
+
+                behavior looseLengths : (a: Loose) -> List<Int>
+                let looseLengths (a) =
+                    List.map(s -> String.length(s),
+                             List.flatMap(e -> List.drop(1, String.split("@", e.value)), [ a ]))
+
+                example strictLengths
+                    | "one" : (Strict("a@bc")) -> [ 2 ]
+
+                example looseLengths
+                    | "two" : (Loose("a@b@cd")) -> [ 1, 2 ]
+                """);
+        assertEquals(List.of(), walkRewritesOwedOf("strictLengths", "map", compilation));
+        assertEquals(List.of("fold_after_one_step", "fold_from_the_seed"),
+                walkRewritesOwedOf("looseLengths", "map", compilation));
     }
 
     @Test
@@ -332,13 +369,13 @@ class AWalkOverThePiecesOfASplitAtACharacterAnInvariantAllowsOnceOwesNoRewriteTe
     }
 
     @Test
-    void aSeparatorOfSeveralCodePointsSaysNothingOfTheCount() {
+    void aSeparatorOfSeveralCodePointsAnAddressMayRepeatIsNotAWalkOverOneAtMost() {
         assertEquals(List.of("fold_after_one_step", "fold_from_the_seed"),
                 walkRewritesOwed(measured("""
                         module repro.longer
 
                         data Address = String
-                            invariant String.matches("[^@\\\\s]+@[^@\\\\s]+", value)
+                            invariant String.length(value) >= 1
 
                         behavior lengths : (a: Address) -> List<Int>
                         let lengths (a) =
@@ -346,7 +383,7 @@ class AWalkOverThePiecesOfASplitAtACharacterAnInvariantAllowsOnceOwesNoRewriteTe
                                      List.drop(1, String.split("@@", a.value)))
 
                         example lengths
-                            | "one" : (Address("a@bc")) -> [ ]
+                            | "two" : (Address("a@@b@@c")) -> [ 1, 1 ]
                         """)));
     }
 
@@ -407,9 +444,22 @@ class AWalkOverThePiecesOfASplitAtACharacterAnInvariantAllowsOnceOwesNoRewriteTe
 
     /** The same, of the walk of the library operation {@code definition} names. */
     private static List<String> walkRewritesOwedOf(String definition, Compilation compilation) {
-        JsonNode replacement = JSON.readTree(AdequacyReport.of(compilation)
+        return walkRewritesOwedOf(null, definition, compilation);
+    }
+
+    /** The same, of the behavior called {@code behavior}, or of the first where it is null. */
+    private static List<String> walkRewritesOwedOf(String behavior, String definition,
+                                                   Compilation compilation) {
+        JsonNode behaviors = JSON.readTree(AdequacyReport.of(compilation)
                         .json(SourceRendering.namedByIdentity(compilation.texts())))
-                .get("modules").get(0).get("behaviors").get(0).get("replacement");
+                .get("modules").get(0).get("behaviors");
+        JsonNode replacement = null;
+        for (JsonNode each : behaviors) {
+            if (behavior == null || each.get("name").asString().equals(behavior)) {
+                replacement = each.get("replacement");
+                break;
+            }
+        }
         List<String> owed = new ArrayList<>();
         for (JsonNode each : replacement.get("obligations")) {
             JsonNode id = each.get("obligationId");

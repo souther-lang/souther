@@ -1365,8 +1365,12 @@ final class Terms {
      * not ask.
      */
     private OptionalLong mostHeldBy(Core answer, Core.Block closure, Denotations at) {
+        OptionalLong counted = mostWrittenCount(answer, at);
+        if (counted.isPresent() && counted.getAsLong() <= 1) {
+            return counted;
+        }
         Term written = bodyKey(answer, at);
-        OptionalLong most = least(mostWrittenCount(answer, at),
+        OptionalLong most = least(counted,
                 written == null ? OptionalLong.empty() : mostWritten(written));
         if (most.isPresent() && most.getAsLong() <= 1) {
             return most;
