@@ -6664,6 +6664,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                      InputReading read,
                                                      List<RemainderCoverage.Proof> narrowingsMet) {
         List<OnAWay> out = new ArrayList<>(conditions);
+        // The statements of one remainder are met together or not at all, and what is asked of them
+        // is the same for each while nothing was taken away: a family that was not met is not asked
+        // again for its next statement.
+        Map<OnAWay, Integer> notMetWith = new IdentityHashMap<>();
         for (OnAWay each : conditions) {
             TakenConstraint.Affine affine = each.affine();
             if (affine != null && affine.rel() == Rel.NE && affine.form().coefs().keySet()
@@ -6672,7 +6676,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                     narrowingsMet))) {
                 out.remove(each);
             }
-            if (each.onARemainder() != null && out.contains(each)) {
+            Integer asked = notMetWith.get(each);
+            if (each.onARemainder() != null && (asked == null || asked != out.size())
+                    && out.contains(each)) {
                 List<OnAWay> together = out.stream()
                         .filter(other -> sameRemainder(each, other)).toList();
                 if (allowTogether(together) && each.onARemainder().dividend().coefs().keySet()
@@ -6680,6 +6686,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                 freeToMeet(term, each, out, declined, past, read,
                                         narrowingsMet))) {
                     out.removeAll(together);
+                } else {
+                    together.forEach(one -> notMetWith.put(one, out.size()));
                 }
             }
         }
