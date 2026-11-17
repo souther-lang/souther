@@ -84,13 +84,14 @@ final class ReadingsChosenOneBesideAnother {
      * bounds what the derivations cost. What was found stands and nothing is said of the pairs
      * past it, which is the answer of a reader that says only what it is shown.
      *
-     * <p>The most one case asked, of the models measured, is 81 pairs: a search over four days
-     * through a helper that says whether a day is a business day, each day with a comparison of
-     * its weekday and of the holidays. The figure is about fifty times that, and a pair asks
-     * what the parts one alternative holds and the other does not were made by, so asking all of
-     * them costs no more than a few hundred thousand of those.
+     * <p>A pair costs about a microsecond, measured by execution samples over alternatives of
+     * eight parts each: two hundred and sixty thousand of them are some fifth of a second, which
+     * is what one case may spend, and is the pairs of about seven hundred alternatives each told
+     * apart from the others. The most one case asked, of the models measured, is 81 pairs: a
+     * search over four days through a helper that says whether a day is a business day, each
+     * day with a comparison of its weekday and of the holidays.
      */
-    static final int PAIRS_ASKED_OF_ALTERNATIVES = 1 << 12;
+    static final int PAIRS_ASKED_OF_ALTERNATIVES = 1 << 18;
 
     /**
      * The same, asking no more than {@code mostPairs} pairs of alternatives what tells them
