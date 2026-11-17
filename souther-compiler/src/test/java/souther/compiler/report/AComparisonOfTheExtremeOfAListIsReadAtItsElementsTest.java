@@ -60,16 +60,23 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
     }
 
     /**
-     * The greatest at or below a number is every element, and the least is some element. The
-     * default stands where the list is empty, and is taken so that it answers what that form
-     * answers of an empty list: {@code all} holds of none and {@code any} fails of none.
+     * Each relation of an end with a number, beside the {@code List.all} or {@code List.any} it
+     * comes to: the greatest at or below a number is every element, at or above it some element,
+     * and the least the other way round. Which of the two is a polarity one inversion turns, and
+     * each relation is a case of it. The default stands where the list is empty, and is taken so
+     * that it answers what that form answers of an empty list: {@code all} holds of none and
+     * {@code any} fails of none.
      */
-    @ParameterizedTest(name = "{0} <= 10 is List.{1}")
-    @CsvSource({"max, all, 0", "min, any, 100"})
-    void anEndDrawsTheLinesOfEveryOrSomeElement(String end, String quantifier, int dflt) {
-        String equivalent = ofACondition("List." + quantifier + "(d -> d <= 10, ds)");
+    @ParameterizedTest(name = "{0} {1} 10 is List.{2}")
+    @CsvSource({
+            "max, <=, all, 0", "max, <, all, 0", "max, >=, any, 0", "max, >, any, 0",
+            "min, <=, any, 100", "min, <, any, 100", "min, >=, all, 100", "min, >, all, 100"})
+    void anEndDrawsTheLinesOfEveryOrSomeElement(String end, String relation, String quantifier,
+                                                int dflt) {
+        String equivalent = ofACondition("List." + quantifier + "(d -> d " + relation
+                + " 10, ds)");
         String viaDefault = ofACondition("Option.withDefault(" + dflt + ", List." + end
-                + "(ds)) <= 10");
+                + "(ds)) " + relation + " 10");
 
         assertDrawsAtTheElements(viaDefault);
         assertEquals(linesDrawn(equivalent), linesDrawn(viaDefault), viaDefault);
@@ -102,11 +109,11 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
         assertTrue(linesDrawn(report).isEmpty(), report);
     }
 
-    @ParameterizedTest(name = "max {0} 10")
-    @CsvSource({"==", "/="})
-    void equalityAndDifferenceAreComposedOfTheTwoEnds(String relation) {
-        assertDrawsAtTheElements(ofACondition("Option.withDefault(0, List.max(ds)) " + relation
-                + " 10"));
+    @ParameterizedTest(name = "{0} {1} 10")
+    @CsvSource({"max, ==", "max, /=", "min, ==", "min, /="})
+    void equalityAndDifferenceAreComposedOfTheTwoEnds(String end, String relation) {
+        assertDrawsAtTheElements(ofACondition("Option.withDefault(0, List." + end + "(ds)) "
+                + relation + " 10"));
     }
 
     @Test
