@@ -610,7 +610,7 @@ public final class GuardThresholds {
     }
 
     /** {@code came} said of the places a value came from, each place filed once whichever way the
-     *  reading named it, and a container and its elements one place: there is one word for it. */
+     *  reading named it: there is one word for a place. */
     private static void filedWhereItCameFrom(
             PathResolution came,
             SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
@@ -623,7 +623,7 @@ public final class GuardThresholds {
 
     private static void filedOnce(TermPath at, BlockReason.RuleReadingStopped why,
                                   SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
-        if (out.keySet().stream().noneMatch(each -> each.path().bearsOn(at))) {
+        if (out.keySet().stream().noneMatch(each -> each.path().equals(at))) {
             out.put(FilingCoordinate.at(at), why);
         }
     }

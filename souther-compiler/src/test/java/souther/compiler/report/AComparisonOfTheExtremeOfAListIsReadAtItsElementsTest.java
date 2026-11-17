@@ -181,6 +181,52 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
         }
     }
 
+    private static boolean saysNotReadAt(String report, String place) {
+        return report.lines().anyMatch(line -> line.contains("· not read:")
+                && line.contains("about `" + place + "`"));
+    }
+
+    /** A value a {@code let} binds reaches the answer through the name the body reads it by. */
+    @Test
+    void aValueALetBindsIsSaidUnreadWhereTheBodyReadsItByItsName() {
+        String report = reading("""
+                module m
+
+                behavior role : (ds: List<Int>, es: List<Int>) -> Int
+                let role (ds, es) = if (match List.max(ds) with | None -> false | Some a -> ({ let used = (match List.max(es) with | None -> 0 | Some b -> b)
+                    Int.abs(used) + a }) <= 10) then 1 else 2
+                """);
+
+        assertTrue(saysNotReadAt(report, "es[*]"), report);
+        assertTrue(saysNotReadAt(report, "ds[*]"), report);
+    }
+
+    /** What an attempted construction was made of is what its name stands for in the arm it
+     *  succeeds into. */
+    @Test
+    void whatAnAttemptedConstructionWasMadeOfIsSaidUnreadWhereItsNameIsRead() {
+        String report = reading("""
+                module m
+
+                data Small = Int
+                    invariant value >= 0
+
+                behavior role : (ds: List<Int>) -> Int
+                let role (ds) = if (match List.max(ds) with | None -> false | Some a -> (if Small(a) as n then Int.abs(n.value) else 0) <= 10) then 1 else 2
+                """);
+
+        assertTrue(saysNotReadAt(report, "ds[*]"), report);
+    }
+
+    /** A container and the elements of it are two places, and each is said where it is. */
+    @Test
+    void aContainerAndItsElementsAreSaidUnreadEachWhereItIs() {
+        String report = ofACondition("(match List.max(ds) with | None -> 0 | Some m -> m + 1) <= 10");
+
+        assertTrue(saysNotReadAt(report, "ds"), report);
+        assertTrue(saysNotReadAt(report, "ds[*]"), report);
+    }
+
     /**
      * A chain of names each made of the one before twice has as many ways through as it has links
      * to the power of two, and is read link by link: a value made of a payload by thirty such

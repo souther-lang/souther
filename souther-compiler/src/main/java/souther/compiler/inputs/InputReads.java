@@ -2959,6 +2959,17 @@ public final class InputReads {
         return symbols == null ? there : there.choosing(decidedBy, symbols, newtypes);
     }
 
+    /**
+     * The reading a child is read in, {@code step} being the way from its parent into it
+     * ({@link ScopeStep#forEachChild}), in the names {@code at}: the reading at {@code at} itself
+     * where the declarations of this input carry no symbols to enter a step under.
+     */
+    InputReads insideStep(BindingEnvironment at, ScopeStep step, DeclarationNewtypes newtypes) {
+        InputReads there = withNames(at);
+        Symbols symbols = declared.symbols();
+        return symbols == null ? there : there.entering(step, symbols, newtypes);
+    }
+
     /** Whether a name was given a value on the way to this reading ({@link #handedOver}). */
     boolean hasGiven() {
         return !applied.given().isEmpty();

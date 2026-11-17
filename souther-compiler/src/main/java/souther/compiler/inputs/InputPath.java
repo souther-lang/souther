@@ -4,6 +4,7 @@ import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.BoundOperationFacts;
 import souther.compiler.check.CallArguments;
 import souther.compiler.check.Choice;
+import souther.compiler.check.ScopeStep;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DefaultBoundOperationFacts;
@@ -311,23 +312,43 @@ final class InputPath {
     private PathResolution named(Core e, BindingEnvironment names) {
         PathResolution named = nameOf(e, names);
         return asked == ElementQuestion.WHAT_IT_IS_MADE_OF
-                && named instanceof PathResolution.NotAPosition ? madeOfTheParts(e, names) : named;
+                && named instanceof PathResolution.NotAPosition && !addsNothingOfItsParts(e)
+                ? madeOfTheParts(e, names) : named;
     }
 
     /**
-     * The places the parts of {@code e} came from, together: those of every arm for a choice, read
-     * in the names inside it ({@link #armsOf}), and of every child otherwise.
+     * Whether what {@code e} is made of adds nothing to {@link #nameOf}: it has read {@code e}
+     * through to the part that is its value, or {@code e} is a function, which is how an operation
+     * works what it is given out and no part of what it answers. The elements a function is handed
+     * are the container's, which the container says.
+     */
+    private static boolean addsNothingOfItsParts(Core e) {
+        return switch (Core.withoutStanding(e)) {
+            case Core.LetIn _, Core.Widen _, Core.FieldAccess _, Core.FieldProjection _,
+                 Core.Block _ -> true;
+            default -> false;
+        };
+    }
+
+    /**
+     * The places the parts of {@code e} came from, together, each part read in the names it is
+     * read in ({@link ScopeStep#forEachChild}). Of a node that chooses or binds, only the parts
+     * entered through a step are its value: the arms of a choice and the body of a {@code let}.
+     * What decides an arm, and what a {@code let} binds, reach the answer through the names the
+     * arm or the body reads, which that step makes.
      */
     private PathResolution madeOfTheParts(Core e, BindingEnvironment names) {
         Core bare = Core.withoutStanding(e);
+        boolean decidesOrBinds = bare instanceof Core.If || bare instanceof Core.Match
+                || bare instanceof Core.IfConstructed || bare instanceof Core.LetIn;
         List<PathResolution> parts = new ArrayList<>();
-        List<Arm> arms = armsOf(bare, names);
-        if (arms != null) {
-            arms.forEach(arm -> parts.add(
-                    under(arm.reads(), () -> partOf(arm.body(), arm.names()))));
-        } else {
-            Core.forEachChild(bare, part -> parts.add(partOf(part, names)));
-        }
+        ScopeStep.forEachChild(bare, (part, step) -> {
+            if (decidesOrBinds && step instanceof ScopeStep.Same) {
+                return;
+            }
+            InputReads inside = reads.insideStep(names, step, newtypes);
+            parts.add(under(inside, () -> partOf(part, inside.names())));
+        });
         return PathResolution.madeOf(parts);
     }
 
