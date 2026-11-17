@@ -69,6 +69,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.IntSupplier;
@@ -2300,26 +2301,40 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
         /** The same, of a node worked out of {@code operands}. */
         List<Integer> workedOutOf(List<Core> operands) {
-            List<Integer> out = new ArrayList<>();
+            Set<Integer> out = new TreeSet<>();
             for (Core operand : operands) {
                 Core bare = Core.withoutStanding(operand);
                 if (bare instanceof Core.Read name && carriedAfter.get(name.binding())
                         instanceof List<Integer> given) {
-                    for (int each : given) {
-                        out.add(each);
-                        out.addAll(operations.get(each).after());
-                    }
+                    given.reversed().forEach(each -> include(out, each));
                     continue;
                 }
                 for (int i = at.size() - 1; i >= 0; i--) {
                     if (at.get(i) == bare) {
-                        out.add(i);
-                        out.addAll(operations.get(i).after());
+                        include(out, i);
                         break;
                     }
                 }
             }
-            return out;
+            return List.copyOf(out);
+        }
+
+        /**
+         * {@code operation} and what it is worked out after, into {@code out}. What an operation
+         * is worked out after is every operation before it, those of its own operands included,
+         * so one already in {@code out} has had what it is after put there too, and is not
+         * expanded again: the operations a name was given, taken last first, are put in at the
+         * cost of what they come to and not of what each is after.
+         */
+        private void include(Set<Integer> out, int operation) {
+            if (out.add(operation)) {
+                List<Integer> after = operations.get(operation).after();
+                out.addAll(after);
+                long[] counting = INCLUDED;
+                if (counting != null) {
+                    counting[0] += 1 + after.size();
+                }
+            }
         }
 
 
@@ -2363,6 +2378,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         }
         return together;
     }
+
+    /** Where a test counts the operations put into what an operation is worked out after, and
+     *  null everywhere else. What a long chain costs is not something an answer says. */
+    static long[] INCLUDED;
 
     /**
      * What a run works out evaluating {@code expression}, every operation of whole numbers in the

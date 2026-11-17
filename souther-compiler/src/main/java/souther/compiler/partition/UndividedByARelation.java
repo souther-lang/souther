@@ -239,7 +239,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         List<Integer> after) {
 
         IntOperation {
-            after = List.copyOf(new TreeSet<>(after));
+            after = isAscending(after) ? List.copyOf(after) : List.copyOf(new TreeSet<>(after));
+        }
+
+        /** Whether every index comes after the one before it, which is what the set of them
+         *  held in order is: a set already so is held as it is. */
+        private static boolean isAscending(List<Integer> indices) {
+            for (int i = 1; i < indices.size(); i++) {
+                if (indices.get(i - 1) >= indices.get(i)) {
+                    return false;
+                }
+            }
+            return true;
         }
 
         /** An operation over numbers of the input alone. */
