@@ -1279,8 +1279,8 @@ public final class GuardThresholds {
     private static List<BehaviorSetStatements.Partnered> stringsPartnersCanHold(
             String behavior, ModelOccurrence stated, SourceConstructOrigin wrote,
             RuleReportAnchor anchor, ComparisonAssessment read, int first) {
-        Map<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold> partnered =
-                switch (read) {
+        Map<NumericTerm.FromOnePosition, List<UndividedByARelation.StringsAPartnerCanHold>>
+                partnered = switch (read) {
                     case ComparisonAssessment.AcrossPositions across ->
                             across.left().partnered();
                     case ComparisonAssessment.AgainstAnotherValue against -> against.partnered();
@@ -1290,16 +1290,19 @@ public final class GuardThresholds {
         // The numbers an equality between two numbers is true at are told from the rest as the
         // strings are: the values the partner can come to, and those it never does. Shown at every
         // length, since a number has none.
-        Map<NumericTerm.FromOnePosition, BehaviorSetStatements.PartnerHolds> told =
-                new LinkedHashMap<>(partnered);
+        Map<NumericTerm.FromOnePosition, List<BehaviorSetStatements.PartnerHolds>> told =
+                new LinkedHashMap<>();
+        partnered.forEach((term, ways) -> told.put(term, List.copyOf(ways)));
         if (read instanceof ComparisonAssessment.AcrossPositions across) {
-            told.putAll(across.left().numbersPartnered());
+            across.left().numbersPartnered().forEach((term, numbers) ->
+                    told.put(term, List.of(numbers)));
         }
         List<BehaviorSetStatements.Partnered> out = new ArrayList<>();
-        told.forEach((term, holds) -> out.add(new BehaviorSetStatements.Partnered(
-                new PredicateOrigin(new PredicateOccurrence(first + out.size()),
-                        new RuleRef.Comparison(behavior, wrote), anchor, Optional.of(stated)),
-                term, holds)));
+        told.forEach((term, ways) -> ways.forEach(holds -> out.add(
+                new BehaviorSetStatements.Partnered(
+                        new PredicateOrigin(new PredicateOccurrence(first + out.size()),
+                                new RuleRef.Comparison(behavior, wrote), anchor,
+                                Optional.of(stated)), term, holds))));
         return out;
     }
 

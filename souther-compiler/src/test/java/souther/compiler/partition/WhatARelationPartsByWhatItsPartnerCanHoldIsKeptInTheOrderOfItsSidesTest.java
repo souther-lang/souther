@@ -29,11 +29,12 @@ class WhatARelationPartsByWhatItsPartnerCanHoldIsKeptInTheOrderOfItsSidesTest {
 
     private static final int MANY = 40;
 
-    private static Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> said(int pair) {
-        Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> out = new LinkedHashMap<>();
+    private static Map<NumericTerm.FromOnePosition, List<StringsAPartnerCanHold>> said(int pair) {
+        Map<NumericTerm.FromOnePosition, List<StringsAPartnerCanHold>> out =
+                new LinkedHashMap<>();
         for (int side = 0; side < 2; side++) {
             out.put(new NumericTerm.ValueOf(TermPath.of("p" + pair + "s" + side)),
-                    StringsAPartnerCanHold.unreached(ValueSet.ANY, "partner" + side));
+                    List.of(StringsAPartnerCanHold.unreached(ValueSet.ANY, "partner" + side)));
         }
         return out;
     }
@@ -41,7 +42,7 @@ class WhatARelationPartsByWhatItsPartnerCanHoldIsKeptInTheOrderOfItsSidesTest {
     @Test
     void thePositionsComeBackInTheOrderTheyWereSaidIn() {
         for (int pair = 0; pair < MANY; pair++) {
-            Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> said = said(pair);
+            Map<NumericTerm.FromOnePosition, List<StringsAPartnerCanHold>> said = said(pair);
             WhatItLeaves leaves = new WhatItLeaves(Set.of(), Map.of(), true, Set.of(), Set.of(),
                     Set.of(), said);
 
@@ -53,7 +54,7 @@ class WhatARelationPartsByWhatItsPartnerCanHoldIsKeptInTheOrderOfItsSidesTest {
     @Test
     void whatIsKeptAlongBothWaysIsInTheSameOrder() {
         for (int pair = 0; pair < MANY; pair++) {
-            Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> said = said(pair);
+            Map<NumericTerm.FromOnePosition, List<StringsAPartnerCanHold>> said = said(pair);
             WhatItLeaves one = new WhatItLeaves(Set.of(), Map.of(), true, Set.of(), Set.of(),
                     Set.of(), said);
 

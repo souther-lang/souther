@@ -720,7 +720,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param partnered  each string position the relation is shown to part by the strings its
      *                   partner can hold, and those strings: the values there some value of the
      *                   partner equals, and the rest, which no value of it does. In the order of
-     *                   the relation's sides
+     *                   the relation's sides. Rows that come along different ways may leave a
+     *                   position's partner different strings, and each way's strings are kept as a
+     *                   way of their own, the strings of ways that show the same said once
      * @param gettingThere for some of {@code mayStopBefore}, what a search for a row getting to
      *                   the relation showed there ({@link GettingThere}): the values a row built
      *                   and run got there at, which are reached, and where the runs of the rows
@@ -731,7 +733,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         boolean rowsArrive, Set<Figure> stoppedAt,
                         Set<WhereARunStopped> rowsStopped,
                         Set<FilingCoordinate> mayStopBefore,
-                        Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> partnered,
+                        Map<NumericTerm.FromOnePosition, List<StringsAPartnerCanHold>> partnered,
                         Map<FilingCoordinate, GettingThere> gettingThere,
                         Map<NumericTerm.FromOnePosition, NumbersAPartnerCanHold> numbersPartnered) {
 
@@ -768,7 +770,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                      boolean rowsArrive, Set<Figure> stoppedAt,
                      Set<WhereARunStopped> rowsStopped,
                      Set<FilingCoordinate> mayStopBefore,
-                     Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> partnered) {
+                     Map<NumericTerm.FromOnePosition, List<StringsAPartnerCanHold>> partnered) {
             this(undivided, settled, rowsArrive, stoppedAt, rowsStopped, mayStopBefore, partnered,
                     Map.of());
         }
@@ -778,7 +780,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                      boolean rowsArrive, Set<Figure> stoppedAt,
                      Set<WhereARunStopped> rowsStopped,
                      Set<FilingCoordinate> mayStopBefore,
-                     Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> partnered,
+                     Map<NumericTerm.FromOnePosition, List<StringsAPartnerCanHold>> partnered,
                      Map<FilingCoordinate, GettingThere> gettingThere) {
             this(undivided, settled, rowsArrive, stoppedAt, rowsStopped, mayStopBefore, partnered,
                     gettingThere, Map.of());
@@ -840,7 +842,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * at, which are figures this stopped at.
          */
         private WhatItLeaves partnered(Partnering partnering) {
-            Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> strings = partnering.strings();
+            Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> held = partnering.strings();
+            Map<NumericTerm.FromOnePosition, List<StringsAPartnerCanHold>> strings =
+                    new LinkedHashMap<>();
+            held.forEach((term, one) -> strings.put(term, List.of(one)));
             Set<Figure> stopped = new LinkedHashSet<>(stoppedAt);
             stopped.addAll(partnering.stoppedAt());
             Set<FilingCoordinate> parted = new LinkedHashSet<>();
@@ -891,6 +896,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     partnered, reached, numbersPartnered);
         }
 
+        /** Whether the position of {@code term} is shown undivided, at every value getting to the
+         *  relation. */
+        private boolean leavesWholeAndUndivided(NumericTerm.FromOnePosition term) {
+            FilingCoordinate at = FilingCoordinate.of(term);
+            return undivided.contains(at) && !mayStopBefore.contains(at);
+        }
+
         /** What both this and {@code other} show, for rows that may come along either: a place
          *  shown one way along one and another way along the other is shown nothing of. A way no
          *  row comes along adds no row, so it adds nothing to what the other shows. */
@@ -922,14 +934,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Map<FilingCoordinate, GettingThere> reached = new LinkedHashMap<>(gettingThere);
             other.gettingThere.forEach((at, there) -> reached.merge(at, there, GettingThere::and));
             reached.keySet().retainAll(stops);
-            // Strings a partner can hold are the classes of the position, and a position parted
-            // one way along one way and another along the other is parted by neither.
-            Map<NumericTerm.FromOnePosition, StringsAPartnerCanHold> alikeStrings =
+            // The strings a partner can hold are the classes of the position along each way. A
+            // position parted along both ways is parted each way's own, those of ways that show
+            // the same strings said once; a way that leaves the position undivided at every value
+            // parts it by nothing and takes none of the other way's classes away; and a position
+            // one way shows nothing of is parted by neither.
+            Map<NumericTerm.FromOnePosition, List<StringsAPartnerCanHold>> alikeStrings =
                     new LinkedHashMap<>();
-            partnered.forEach((term, strings) -> {
-                StringsAPartnerCanHold theirs = other.partnered.get(term);
-                if (strings.showsTheStringsOf(theirs)) {
-                    alikeStrings.put(term, strings.orAnother(theirs));
+            partnered.forEach((term, ways) -> {
+                List<StringsAPartnerCanHold> theirs = other.partnered.get(term);
+                if (theirs != null) {
+                    alikeStrings.put(term, StringsAPartnerCanHold.joined(ways, theirs));
+                } else if (other.leavesWholeAndUndivided(term)) {
+                    alikeStrings.put(term, ways);
+                }
+            });
+            other.partnered.forEach((term, ways) -> {
+                if (!partnered.containsKey(term) && leavesWholeAndUndivided(term)) {
+                    alikeStrings.put(term, ways);
                 }
             });
             // The same of the numbers: parted by one way and not by the other is parted by neither.
@@ -1152,6 +1174,29 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return new StringsAPartnerCanHold(named.canBe, named.mayBe,
                     named.shownAt, named.reached, named.partnerHeldTo, named.partner,
                     operations.and(other.operations));
+        }
+
+        /**
+         * Each way of parting a position in {@code ways} and in {@code more}, the ways that show
+         * the same strings said once as the partner of either.
+         */
+        static List<StringsAPartnerCanHold> joined(List<StringsAPartnerCanHold> ways,
+                                                    List<StringsAPartnerCanHold> more) {
+            List<StringsAPartnerCanHold> out = new ArrayList<>(ways);
+            for (StringsAPartnerCanHold each : more) {
+                int alike = -1;
+                for (int i = 0; i < out.size() && alike < 0; i++) {
+                    if (out.get(i).showsTheStringsOf(each)) {
+                        alike = i;
+                    }
+                }
+                if (alike < 0) {
+                    out.add(each);
+                } else {
+                    out.set(alike, out.get(alike).orAnother(each));
+                }
+            }
+            return out;
         }
     }
 
@@ -3241,10 +3286,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled =
                 new LinkedHashMap<>();
-        if (decided.noRowArrives()) {
+        if (decided.noRowArrives() || noStringIsThePieceTheWayHolds(written)
+                || noStringIsWithoutTheSeparatorTheWayCounts(written, read)) {
             return WhatItLeaves.ofAWayNoRowComesAlong(places());
         }
-        if (decided.relationIsDecided()) {
+        if (decided.relationIsDecided() || written.stream().anyMatch(each ->
+                asStated != null ? keepsEveryElementOffTheLineOf(each, asStated)
+                        : keepsEveryElementApartFromTheTwoStrings(each))) {
             out.addAll(places());
             return new WhatItLeaves(out, settled);
         }
@@ -3618,7 +3666,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             // The pieces that reach the relation are those the way holds to a language, where it
             // does: the strings are shown as that parts the pieces, and a string whose pieces are
             // none of that language is not one the run gets to the relation with.
-            PiecesOfAString pieceOfTheWay = here.piece() != null ? here.piece() : there.piece();
+            // Where neither side is a piece the way may still hold a piece of one of the strings to
+            // a language: that string is then the one the pieces are of.
+            PiecesOfAString held = here.piece() == null && there.piece() == null
+                    ? piecesTheWayHolds(written, mine.subjectPath(), theirs.subjectPath()) : null;
+            PiecesOfAString pieceOfTheWay = here.piece() != null ? here.piece()
+                    : there.piece() != null ? there.piece() : held;
             boolean heldToALanguage = pieceOfTheWay != null && written.stream()
                     .anyMatch(each -> holdsThePieceToALanguage(each, pieceOfTheWay));
             Language ofThePieces = heldToALanguage
@@ -3626,8 +3679,23 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (heldToALanguage && ofThePieces == null) {
                 continue;
             }
+            boolean heldHere = held != null
+                    && held.place().subjectPath().equals(mine.subjectPath());
+            boolean heldThere = held != null && !heldHere;
             ValuesWithin partnerOfThis = theirStrings;
             LengthRuns partnerLengths = theirLengths;
+            if (ofThePieces != null && heldThere) {
+                Language partner = languageOf(theirStrings.values());
+                Language wholes = partner == null ? null : stringsWithAPieceIn(ofThePieces, held,
+                        PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
+                Language both = wholes == null ? null : partner.and(wholes,
+                        PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
+                if (both == null) {
+                    continue;
+                }
+                partnerOfThis = ValuesWithin.all(ValueSet.matching(both));
+                partnerLengths = LengthRuns.EVERY;
+            }
             if (ofThePieces != null && here.piece() != null) {
                 Language partner = languageOf(theirStrings.values());
                 Language both = partner == null ? null : partner.and(ofThePieces,
@@ -3640,8 +3708,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             StringsAPartnerCanHold strings = partnerCanHold(at == 0, here, there, partnerOfThis,
                     partnerLengths, mineHolds, called);
-            if (strings != null && ofThePieces != null) {
-                strings = heldTo(strings, ofThePieces, here.piece());
+            if (strings != null && ofThePieces != null && !heldThere) {
+                strings = heldTo(strings, ofThePieces, heldHere ? held : here.piece());
             }
             if (room.counts() != null && room.counts().strings() == null) {
                 continue;
@@ -3681,6 +3749,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         });
         return new Partnering(out, accountedFor, stoppedAt);
+    }
+
+    /** The strings the values at {@code path} are, or null where they are not worked out. */
+    private Language stringsAt(TermPath path, InputReading read) {
+        StringsHeld.Held held = stringsHeldAt(path, read);
+        if (held == null) {
+            return null;
+        }
+        ValueSet set = held.lengths().isEvery() ? held.within().values()
+                : StringsHeld.asOneSet(held, PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter());
+        return set == null ? null : languageOf(set);
     }
 
     /**
@@ -3771,7 +3850,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (piece != null || past.narrowing().stream().anyMatch(constraint ->
                 constraint.terms().stream().anyMatch(term -> term.isReadOffAPlaceBearingOn(mine)
                         || term.isReadOffAPlaceBearingOn(theirs)))) {
-            return leavesTheStringsOf(mine, theirs, written, past.narrowing(), piece)
+            return leavesTheStringsOf(mine, theirs, written, past, declined, read, piece)
                     ? RoomOnTheWay.UNTOUCHED : null;
         }
         List<TakenConstraint> system = new ArrayList<>();
@@ -3935,6 +4014,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         NumericTerm.ValueOf second = placeOf(sides.get(1));
         PiecesOfAString piece = sides.get(0).piece() != null ? sides.get(0).piece()
                 : sides.get(1).piece();
+        if (piece == null && first != null && second != null) {
+            piece = piecesTheWayHolds(written, first.subjectPath(), second.subjectPath());
+        }
         return first == null || second == null ? null
                 : roomOnTheWay(first.subjectPath(), second.subjectPath(), written, past,
                         declined, read, piece);
@@ -4606,23 +4688,35 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * place nor one that holds a place or is held by it. Where {@code theirs} is the string a piece is of, a statement that the string holds
      * the separators the piece's index needs is one the piece's strings already stand on.
      *
+     * <p>A statement that some element of a container is the piece takes the piece's values from
+     * the strings of the elements, and is no statement the strings are left alone by: where it
+     * is beside a statement holding the piece to a language, the two are met together
+     * ({@link #theLanguageTheWayHoldsThePieceTo}), and by itself it stops the reading. One that
+     * no element is, or that every element is something, leaves the strings alone only where a
+     * row holds the container empty ({@link #metByTheContainerHeldEmpty}); otherwise it takes
+     * some string of the sides away, or is not shown not to.
+     *
      * @param piece the piece the partner is, or null where it is the strings at {@code theirs}
      */
     private static boolean leavesTheStringsOf(TermPath mine, TermPath theirs,
                                               List<OnAWay> written,
-                                              List<TakenConstraint> narrowing,
+                                              DemandReading.Answered past,
+                                              Optional<Set<String>> declined, InputReading read,
                                               PiecesOfAString piece) {
         for (OnAWay each : written) {
             boolean saysNothingOfValues = each.whatStands() && each.relation() == null
                     && each.elementsOf() == null;
             if (!saysNothingOfValues && !holdsTheSeparatorsOf(each, piece)
                     && !holdsThePieceToALanguage(each, piece)
+                    && !metByTheContainerHeldEmpty(each, written, mine, theirs, past, declined,
+                            read)
                     && (reaches(each, mine) || reaches(each, theirs)
-                    || each.elementsOf() != null)) {
+                    || (each.elementsOf() != null && (each.elementsOf().bearsOn(mine)
+                            || each.elementsOf().bearsOn(theirs))))) {
                 return false;
             }
         }
-        return narrowing.stream().noneMatch(constraint -> constraint.terms().stream()
+        return past.narrowing().stream().noneMatch(constraint -> constraint.terms().stream()
                 .anyMatch(term -> term.isReadOffAPlaceBearingOn(mine)
                         || term.isReadOffAPlaceBearingOn(theirs)));
     }
@@ -4659,6 +4753,23 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
+     * The strings that have a piece in {@code onThePieces}, where the pieces are those of what the
+     * conversion makes of the string — or null past the allowance.
+     *
+     * <p>The pieces are the converted string's, so the strings with one in the language are the
+     * ones the conversion makes strings with one: those it is exactly a map on, and no more. Every
+     * other string is left in the open, where the conversion's image is not shown.
+     */
+    private static Language stringsWithAPieceIn(Language onThePieces, PiecesOfAString pieces,
+                                                Meter meter) {
+        Language having = StringsOfAPiece.wholesWithAPieceInWindow(onThePieces,
+                pieces.separator(), pieces.window().from(), pieces.until(), meter);
+        CaseMapping conversion = pieces.whole().through();
+        return having == null ? null : conversion.equals(CaseMapping.NONE)
+                ? having : CaseMaps.of(conversion).stringsConvertedInto(having, meter);
+    }
+
+    /**
      * {@code strings}, shown as the pieces that reach the relation being in {@code onThePieces}
      * parts them — or null where that is not shown.
      *
@@ -4683,14 +4794,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return canBeInIt == null || mayBeInIt == null ? null
                     : strings.showing(ValueSet.matching(canBeInIt), ValueSet.matching(mayBeInIt));
         }
-        Language having = StringsOfAPiece.wholesWithAPieceInWindow(onThePieces,
-                pieces.separator(), pieces.window().from(), pieces.until(), meter);
-        // The pieces are the converted string's, so the strings with one in the language are the
-        // ones the conversion makes strings with one: those it is exactly a map on, and no more.
-        // Every other string is left in the open, where the conversion's image is not shown.
-        CaseMapping conversion = pieces.whole().through();
-        Language ofTheString = having == null ? null : conversion.equals(CaseMapping.NONE)
-                ? having : CaseMaps.of(conversion).stringsConvertedInto(having, meter);
+        Language ofTheString = stringsWithAPieceIn(onThePieces, pieces, meter);
         Language reached = ofTheString == null ? null : ofTheString.not(meter);
         Language open = reached == null ? null : mayBe.or(reached, meter);
         return open == null ? null
@@ -4698,15 +4802,163 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
+     * The piece of a string at {@code one} or {@code other} that a statement of the way holds to a
+     * language, as the statement says which piece it is; null where the way holds none, or holds
+     * pieces of more than one kind, which is no piece to ask the strings of.
+     */
+    private static PiecesOfAString piecesTheWayHolds(List<OnAWay> written, TermPath one,
+                                                      TermPath other) {
+        PiecesOfAString found = null;
+        for (OnAWay each : written) {
+            PiecesOfAString piece = pieceHeldBy(each);
+            if (piece == null || (!piece.place().subjectPath().equals(one)
+                    && !piece.place().subjectPath().equals(other))) {
+                continue;
+            }
+            if (found == null) {
+                found = piece;
+            } else if (!found.equals(piece)) {
+                return null;
+            }
+        }
+        return found;
+    }
+
+    /** The piece {@code statement} holds to a language, or null where it holds none. */
+    private static PiecesOfAString pieceHeldBy(OnAWay statement) {
+        RowDemand.ForTheRun run = statement.ofThePieces();
+        return run == null || run.partedStrings().isEmpty()
+                || !(run.statement() instanceof Proposition.InTheStrings(
+                        Proposition.InTheStrings.Strings.OfAPiece(PieceWitness within, var _),
+                        var _, var _, var _))
+                ? null : PiecesOfAString.heldBy(run.partedStrings().get(), within);
+    }
+
+    /**
+     * Whether the statements of the way hold one piece to no string at all, which no row is past:
+     * the piece is in a language and in what is outside it.
+     */
+    private static boolean noStringIsThePieceTheWayHolds(List<OnAWay> written) {
+        for (OnAWay each : written) {
+            PiecesOfAString piece = pieceHeldBy(each);
+            if (piece != null) {
+                Language language = theLanguageTheWayHoldsThePieceTo(written, piece);
+                if (language != null && language.isEmpty()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether a statement of the way says a string holds no separator, and no string the
+     * declarations leave at that position is without one: no row is past it.
+     *
+     * <p>Only the statement that the separators counted are fewer than one, where the conversion
+     * leaves the separator alone wherever it stands, so that what it makes of a string holds every
+     * one the string does ({@link CaseMaps#leftAloneEverywhere}), and every string the declarations
+     * leave there holds one.
+     */
+    private boolean noStringIsWithoutTheSeparatorTheWayCounts(List<OnAWay> written,
+                                                              InputReading read) {
+        Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
+        for (OnAWay each : written) {
+            TakenConstraint.Affine affine = each.affine();
+            if (affine == null || affine.rel() != Rel.LT || affine.form().coefs().size() != 1
+                    || affine.form().constant().compareTo(ExactRatio.of(-1)) != 0) {
+                continue;
+            }
+            Map.Entry<NumericTerm, ExactRatio> only =
+                    affine.form().coefs().entrySet().iterator().next();
+            if (!(only.getKey() instanceof NumericTerm.CodePointClassCount count)
+                    || only.getValue().compareTo(ExactRatio.ONE) != 0
+                    || count.counted().held().size() != 1) {
+                continue;
+            }
+            int separator = count.counted().held().least();
+            if (!CaseMaps.leftAloneEverywhere(count.through()).test(separator)) {
+                continue;
+            }
+            Language holding = CodeMap.stringsHolding(CodePoints.of(separator), meter);
+            Language declared = stringsAt(count.position(), read);
+            Language without = holding == null || declared == null ? null
+                    : declared.and(holding.not(meter), meter);
+            if (without != null && without.isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The position of the elements {@code stated} says some element of a container has {@code
+     * piece} equal to the value of, or none has, or null where it states anything else.
+     *
+     * <p>Only that: some element present and equal to the piece, in the words the way is written
+     * in. What it leaves the piece is {@link #theLanguageTheWayHoldsThePieceTo}'s to say.
+     */
+    private static TermPath elementThePieceIsAmong(Proposition stated, PiecesOfAString piece) {
+        if (piece == null || piece.within().isEmpty()
+                || !(stated instanceof Proposition.Some(var _, Proposition ofTheElement, var _,
+                        var _))
+                || !(ofTheElement instanceof Proposition.All(List<Proposition> parts, var _,
+                        var _))) {
+            return null;
+        }
+        TermPath element = null;
+        for (Proposition part : parts) {
+            if (part instanceof Proposition.Present) {
+                continue;
+            }
+            if (element != null
+                    || !(part instanceof Proposition.Compared(
+                            Relation.Affine(LinearForm<Quantity> form, Rel rel), boolean holds,
+                            var _, var _))
+                    || !holds || rel != Rel.EQ || !form.constant().equals(ExactRatio.ZERO)
+                    || form.coefs().size() != 2) {
+                return null;
+            }
+            for (Map.Entry<Quantity, ExactRatio> side : form.coefs().entrySet()) {
+                if (side.getKey() instanceof Quantity.APieceOf apiece
+                        && apiece.within().equals(piece.within().get())
+                        && piece.equals(PiecesOfAString.of(apiece))) {
+                    Quantity other = form.coefs().keySet().stream()
+                            .filter(each -> each != apiece).findFirst().orElseThrow();
+                    if (other instanceof DecisionAtom.OfTheInput(NumericTerm.ValueOf place, var _)
+                            && form.coefs().get(other).equals(side.getValue().negated())) {
+                        element = place.subjectPath();
+                    }
+                }
+            }
+            if (element == null) {
+                return null;
+            }
+        }
+        return element;
+    }
+
+    /**
      * The strings the pieces that reach the relation are, as the statements of the way that hold
      * {@code piece} to a language have them — every string where it holds it to none, and null
      * where the machine for them is more than a piece's allowance.
+     *
+     * <p>A statement that some element of a container is the piece holds it to the strings of
+     * the elements, which is no language this works out: null. One that none is leaves the piece
+     * as it is, which it does only where a row holds the container empty
+     * ({@link #metByTheContainerHeldEmpty}), as the reading of the strings has already asked.
      */
-    private static Language theLanguageTheWayHoldsThePieceTo(List<OnAWay> written,
-                                                             PiecesOfAString piece) {
+    private static Language theLanguageTheWayHoldsThePieceTo(
+            List<OnAWay> written, PiecesOfAString piece) {
         Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
         Language out = Language.EVERY_STRING;
         for (OnAWay each : written) {
+            if (elementThePieceIsAmong(each.statedOfTheRun(), piece) != null) {
+                if (((Proposition.Some) each.statedOfTheRun()).holds()) {
+                    return null;
+                }
+                continue;
+            }
             if (!holdsThePieceToALanguage(each, piece)) {
                 continue;
             }
@@ -5218,11 +5470,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /** Empties {@code container} where some row holds it with none and it is apart from
          *  everything the row fixes ({@link #apart}), and leaves the row as it is otherwise. */
         void empty(TermPath container) {
-            if (fewestTakenFrom(howManyAreHeld(container, read, region), BigInteger.ZERO)
-                    .equals(Optional.of(BigInteger.ZERO))
-                    && apart(container, place, read)
-                    && place.containersHoldingIt().stream()
-                            .allMatch(holder -> apart(container, holder, read))
+            if (canBeHeldEmptyApartFrom(container, List.of(place), read, region)
                     && standsInside.stream().allMatch(each -> apart(container, each, read))
                     && emptied.stream().allMatch(each -> apart(container, each, read))) {
                 emptied.add(container);
@@ -7349,7 +7597,190 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * Whether {@code statement} holds the form {@code asked} is of unequal to nought: the same
+     * Whether {@code statement} says every element of a container holds the form {@code asked} is
+     * of unequal to nought: the relation is then false wherever it is read at an element.
+     */
+    private static boolean keepsEveryElementOffTheLineOf(OnAWay statement,
+                                                         TakenConstraint.Affine asked) {
+        return keepsOffTheLineOf(affineEveryElementMeets(statement), asked);
+    }
+
+    /** What {@code statement} asks every element of a container to meet, where that is one
+     *  relation held against nought; null otherwise. */
+    private static TakenConstraint.Affine affineEveryElementMeets(OnAWay statement) {
+        RowDemand.AnElementMeets every = statement.byEvery();
+        return statement.elementsOf() != null && every != null && every.asAsked().size() == 1
+                && every.asAsked().get(0).size() == 1
+                && every.asAsked().get(0).get(0) instanceof RowDemand.Relational(
+                        TakenConstraint constraint)
+                && constraint instanceof TakenConstraint.Affine affine ? affine : null;
+    }
+
+    /**
+     * Whether {@code statement} says every element of a container holds the two strings this
+     * relation holds equal apart: it is then false wherever it is read at an element.
+     */
+    private boolean keepsEveryElementApartFromTheTwoStrings(OnAWay statement) {
+        RowDemand.AnElementMeets every = statement.byEvery();
+        if (statement.elementsOf() == null || every == null || kind != Kind.AFFINE
+                || relation != Rel.EQ || sides.size() != 2 || constant == null
+                || !constant.isZero()
+                || sides.get(0).weight().compareTo(sides.get(1).weight().negated()) != 0) {
+            return false;
+        }
+        for (Side each : sides) {
+            if (each.piece() != null || each.text() != null) {
+                return false;
+            }
+        }
+        NumericTerm.ValueOf first = placeOf(sides.get(0));
+        NumericTerm.ValueOf second = placeOf(sides.get(1));
+        if (first == null || second == null) {
+            return false;
+        }
+        // The side that is a value of one element of the container, where one of them is and not
+        // both: an element that is in a case excluding the case that side is under is one the
+        // relation is not read at.
+        TermPath container = statement.elementsOf();
+        boolean firstIn = first.subjectPath().toTheElementsOf(container)
+                == TermPath.ToTheElements.INSIDE_ONE;
+        boolean secondIn = second.subjectPath().toTheElementsOf(container)
+                == TermPath.ToTheElements.INSIDE_ONE;
+        TermPath elementSide = firstIn == secondIn ? null
+                : firstIn ? first.subjectPath() : second.subjectPath();
+        for (List<RowDemand.AskedOfAnElement> way : every.asAsked()) {
+            boolean apart = false;
+            for (RowDemand.AskedOfAnElement asked : way) {
+                if (asked instanceof RowDemand.Relational(TakenConstraint constraint)
+                        && constraint instanceof TakenConstraint.Affine affine
+                        && affine.rel() == Rel.NE && affine.form().constant().isZero()
+                        && affine.form().coefs().size() == 2
+                        && affine.form().coefs().containsKey(first)
+                        && affine.form().coefs().containsKey(second)
+                        && affine.form().coefs().get(first).compareTo(
+                                affine.form().coefs().get(second).negated()) == 0) {
+                    apart = true;
+                } else if (asked instanceof RowDemand.InCases(TermPath position, var _)
+                        && elementSide != null
+                        && position.toTheElementsOf(container)
+                                == TermPath.ToTheElements.INSIDE_ONE
+                        && position.excludesTheCasesOf(elementSide)) {
+                    apart = true;
+                }
+            }
+            if (!apart) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The container {@code statement} says no element of meets something, or every element of
+     * meets something, or null where it says neither: what an empty container meets, and what any
+     * container is held to meeting by nothing but its elements.
+     */
+    private static TermPath containerHeldAgainstItsElements(OnAWay statement) {
+        if (statement.elementsOf() != null && statement.byEvery() != null
+                && statement.bySome() == null) {
+            return statement.elementsOf();
+        }
+        return statement.statedOfTheRun() instanceof Proposition.Some(
+                DecisionSubject.AnInput(TermPath at, var _), var _, boolean holds, var _)
+                && !holds ? at : null;
+    }
+
+    /**
+     * Whether {@code statement}, that no element of a container is something or that every one is,
+     * is met by a row holding the container empty beside any strings at {@code mine} and
+     * {@code theirs}, so that it takes none of them away.
+     *
+     * <p>A witness, and shown only where every part of it is: the declarations leave a row with
+     * the container empty and apart from the strings ({@link #canBeHeldEmptyApartFrom}); no
+     * other statement of the way asks anything of the container, a count of it or of what it
+     * holds among them, or of a string of the pieces of one apart from it; and the relation is
+     * not read inside it, since a row with it empty gets to no relation read at an element.
+     * Where the way declined a name the container may hold, the row is not one the way leaves.
+     * And the row is one the run to the relation leaves: what the run holds the container to
+     * ({@link #regionTheRunLeavesTheContainer}) is what the declarations leave it narrowed by.
+     */
+    private static boolean metByTheContainerHeldEmpty(OnAWay statement, List<OnAWay> written,
+                                                      TermPath mine, TermPath theirs,
+                                                      DemandReading.Answered past,
+                                                      Optional<Set<String>> declined,
+                                                      InputReading read) {
+        TermPath container = containerHeldAgainstItsElements(statement);
+        if (container == null || container.bearsOn(mine) || container.bearsOn(theirs)
+                || !past.relationStands().known() || declined.isEmpty()
+                || declined.get().contains(container.head())
+                || past.relationStands().containers().stream().anyMatch(container::bearsOn)) {
+            return false;
+        }
+        SearchRegion region = regionTheRunLeavesTheContainer(container, past, read);
+        if (region == null
+                || !canBeHeldEmptyApartFrom(container, List.of(mine, theirs), read, region)) {
+            return false;
+        }
+        for (OnAWay other : written) {
+            boolean ofAStringApart = other.ofThePieces() != null
+                    && other.ofThePieces().partedStrings().isPresent()
+                    && !other.ofThePieces().partedStrings().get().string().bearsOn(container);
+            if (other != statement && !ofAStringApart && reaches(other, container)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The region the run to the relation leaves {@code container}: what the declarations leave it,
+     * narrowed by what the run narrows of how many it holds; or null where the run holds it to
+     * something this does not say — an operator on what no place holds, or a tie or an operator
+     * owed a proof that reads it ({@link DemandReading.Answered#tiedOrOwed}), the applications
+     * before the relation's included — or the narrowing leaves it no value.
+     *
+     * <p>The same terms a number is free to be chosen on ({@link #valuesFreeToChoose}): a row that
+     * is a witness is a row the run gets to the relation on, and the declarations alone are not
+     * what it holds the container to.
+     */
+    private static SearchRegion regionTheRunLeavesTheContainer(TermPath container,
+                                                               DemandReading.Answered past,
+                                                               InputReading read) {
+        if (past.unsaidOrOwedOnWhatNoPlaceHolds()) {
+            return null;
+        }
+        for (Set<TermPath> ties : past.tiedOrOwed()) {
+            if (touchesAny(ties, List.of(container))) {
+                return null;
+            }
+        }
+        List<TakenConstraint> ofIt = past.narrowing().stream().filter(each ->
+                each.terms().stream().anyMatch(term ->
+                        term.isReadOffAPlaceBearingOn(container))).toList();
+        SearchRegion region = read.quantities().region();
+        if (ofIt.isEmpty()) {
+            return region;
+        }
+        SearchRegion narrowed = TakenConstraint.narrowedBy(ofIt, region);
+        return narrowed.emptiness().isPresent() ? null : narrowed;
+    }
+
+    /**
+     * Whether some row in {@code region} holds {@code container} with no entry and holds each of
+     * {@code places}, and the containers each is at, apart from it: no rule ties the container to
+     * any of them, so that what it holds is no matter to what they do.
+     */
+    private static boolean canBeHeldEmptyApartFrom(TermPath container, List<TermPath> places,
+                                                   InputReading read, SearchRegion region) {
+        return fewestTakenFrom(howManyAreHeld(container, read, region), BigInteger.ZERO)
+                .equals(Optional.of(BigInteger.ZERO))
+                && places.stream().allMatch(place -> apart(container, place, read)
+                        && place.containersHoldingIt().stream()
+                                .allMatch(holder -> apart(container, holder, read)));
+    }
+
+    /**
+     * Whether {@code affine} holds the form {@code asked} is of unequal to nought: the same
      * numbers, each weighed the same times one number, the constant too, held apart from it.
      */
     private static boolean keepsOffTheLineOf(TakenConstraint.Affine affine,
