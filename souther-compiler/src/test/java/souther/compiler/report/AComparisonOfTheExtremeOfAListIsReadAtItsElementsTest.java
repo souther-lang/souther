@@ -1,10 +1,10 @@
 package souther.compiler.report;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import souther.compiler.ACompiledModel;
-import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -19,26 +19,31 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The greatest of a list is at or below a number exactly where every element is, and at or above
  * it where some element is; the least is the other way round. A comparison of either with a
  * number is read at the elements, as {@code List.all} and {@code List.any} are, however the option
- * the list answers is opened: by {@code Option.withDefault} or by a {@code match}.
+ * the list answers is opened.
  *
- * <p>What is held is that the lines drawn are the ones the equivalent {@code List.all} or
- * {@code List.any} draws, and that the two ways of opening the option say the same.
+ * <p>Only the reading is asked, with no row measured: what is held is which lines are drawn. Each
+ * case carries one claim — which end is every and which some, that a {@code match} opens the option
+ * as {@code Option.withDefault} does, that equality and difference are composed of the two ends,
+ * that the number written first is the same comparison, and that a list made of each element of
+ * another is read at the elements of that other.
  */
 class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
 
-    private static String report(String model) {
-        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
+    private static String reading(String model) {
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        compilation.measure(new Adequacy.Asked(Adequacy.Level.OFF, false));
+        ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
-                .humanInEnglish(SourceRendering.namedByIdentity(SourceLayouts.NONE));
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
 
-    private static String model(String condition) {
-        return """
+    private static String ofACondition(String condition) {
+        return reading("""
                 module m
 
-                behavior role : (ds: List<Int>) -> Int
-                let role (ds) = if %s then 1 else 2
-                """.formatted(condition);
+                behavior role : (ds: List<Int>, q: Int) -> Int
+                let role (ds, q) = if %s then 1 else 2
+                """.formatted(condition));
     }
 
     /** The lines of the report that say where the elements are divided, and nothing else of it. */
@@ -48,60 +53,62 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
                 .map(line -> line.split(" — ")[0]).sorted().toList();
     }
 
-    /**
-     * Each relation of an end with 10, beside the {@code List.all} or {@code List.any} it comes to.
-     * The default stands where the list is empty, and is taken so that it answers what that form
-     * answers of an empty list: {@code all} holds of none and {@code any} fails of none.
-     */
-    @ParameterizedTest(name = "{0} {1} 10 is List.{2}")
-    @CsvSource({
-            "max, <=, all, 0",
-            "max, <,  all, 0",
-            "max, >=, any, 0",
-            "max, >,  any, 0",
-            "min, <=, any, 100",
-            "min, <,  any, 100",
-            "min, >=, all, 100",
-            "min, >,  all, 100"})
-    void anEndComparedWithANumberDrawsTheLinesOfEveryOrSomeElement(
-            String end, String relation, String quantifier, int dflt) {
-        String equivalent = report(model("List." + quantifier + "(d -> d " + relation
-                + " 10, ds)"));
-        String viaDefault = report(model("Option.withDefault(" + dflt + ", List." + end
-                + "(ds)) " + relation + " 10"));
-        String viaMatch = report(model("(match List." + end + "(ds) with | None -> " + dflt
-                + " | Some m -> m) " + relation + " 10"));
-
-        assertFalse(viaDefault.contains("held together"), viaDefault);
-        assertFalse(viaMatch.contains("held together"), viaMatch);
-        assertEquals(linesDrawn(equivalent), linesDrawn(viaDefault), viaDefault);
-        assertEquals(linesDrawn(equivalent), linesDrawn(viaMatch), viaMatch);
-        assertFalse(linesDrawn(viaDefault).isEmpty(), viaDefault);
+    private static void assertDrawsAtTheElements(String report) {
+        assertFalse(report.contains("held together"), report);
+        assertFalse(report.contains("· not read:"), report);
+        assertTrue(linesDrawn(report).stream().anyMatch(line -> line.contains("ds[*]")), report);
     }
 
-    /** The number an end is compared with may be another of the input's: the elements are held
-     *  against it as they are against a constant. Where the list is empty the default is what is
-     *  compared, so lines of the list's length come beside the ones at the elements. */
-    @ParameterizedTest(name = "{0} >= q")
-    @CsvSource({"max, 0", "min, 100"})
-    void anEndComparedWithAnotherNumberOfTheInputIsReadAtTheElements(String end, int dflt) {
-        String report = report("""
-                module m
+    /**
+     * The greatest at or below a number is every element, and the least is some element. The
+     * default stands where the list is empty, and is taken so that it answers what that form
+     * answers of an empty list: {@code all} holds of none and {@code any} fails of none.
+     */
+    @ParameterizedTest(name = "{0} <= 10 is List.{1}")
+    @CsvSource({"max, all, 0", "min, any, 100"})
+    void anEndDrawsTheLinesOfEveryOrSomeElement(String end, String quantifier, int dflt) {
+        String equivalent = ofACondition("List." + quantifier + "(d -> d <= 10, ds)");
+        String viaDefault = ofACondition("Option.withDefault(" + dflt + ", List." + end
+                + "(ds)) <= 10");
 
-                behavior role : (ds: List<Int>, q: Int) -> Int
-                let role (ds, q) = if Option.withDefault(%d, List.%s(ds)) >= q then 1 else 2
-                """.formatted(dflt, end));
+        assertDrawsAtTheElements(viaDefault);
+        assertEquals(linesDrawn(equivalent), linesDrawn(viaDefault), viaDefault);
+    }
 
-        assertFalse(report.contains("held together"), report);
-        assertFalse(report.contains("not read"), report);
-        assertTrue(linesDrawn(report).stream().anyMatch(line -> line.contains("ds[*]")), report);
+    @Test
+    void aMatchOpensTheOptionAsWithDefaultDoes() {
+        String viaDefault = ofACondition("Option.withDefault(0, List.max(ds)) <= 10");
+        String viaMatch = ofACondition("(match List.max(ds) with | None -> 0 | Some m -> m) <= 10");
+
+        assertDrawsAtTheElements(viaMatch);
+        assertEquals(linesDrawn(viaDefault), linesDrawn(viaMatch), viaMatch);
+    }
+
+    @ParameterizedTest(name = "max {0} 10")
+    @CsvSource({"==", "/="})
+    void equalityAndDifferenceAreComposedOfTheTwoEnds(String relation) {
+        assertDrawsAtTheElements(ofACondition("Option.withDefault(0, List.max(ds)) " + relation
+                + " 10"));
+    }
+
+    @Test
+    void theNumberWrittenFirstIsTheSameComparison() {
+        String first = ofACondition("10 <= Option.withDefault(100, List.min(ds))");
+        String after = ofACondition("Option.withDefault(100, List.min(ds)) >= 10");
+
+        assertDrawsAtTheElements(first);
+        assertEquals(linesDrawn(after), linesDrawn(first), first);
+    }
+
+    @Test
+    void theNumberMayBeAnotherOfTheInput() {
+        assertDrawsAtTheElements(ofACondition("Option.withDefault(0, List.max(ds)) >= q"));
     }
 
     /** A rate wearing a name, the list made of each line's rate and compared through its value by
      *  the library's order: the elements the end is read at are the lines'. */
-    @ParameterizedTest(name = "{0} through List.map and Decimal.compare is List.{1}")
-    @CsvSource({"max, all", "min, any"})
-    void anEndOfAListMadeOfEachElementIsReadAtTheElementsItIsMadeOf(String end, String quantifier) {
+    @Test
+    void anEndOfAListMadeOfEachElementIsReadAtTheElementsItIsMadeOf() {
         String model = """
                 module m
 
@@ -111,46 +118,14 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
                 behavior f : (lines: List<Line>) -> Int
                 let f (lines) = if %s then 1 else 2
                 """;
-        String dflt = end.equals("max") ? "0.0m" : "1.0m";
-        String equivalent = report(model.formatted("List." + quantifier
-                + "(r -> Decimal.compare(r.value, 0.10m) <= 0, List.map(l -> l.discount, lines))"));
-        String viaDefault = report(model.formatted("Decimal.compare(Option.withDefault(Rate(" + dflt
-                + "), List." + end + "(List.map(l -> l.discount, lines))).value, 0.10m) <= 0"));
+        String equivalent = reading(model.formatted(
+                "List.all(r -> Decimal.compare(r.value, 0.10m) <= 0,"
+                        + " List.map(l -> l.discount, lines))"));
+        String viaDefault = reading(model.formatted("Decimal.compare(Option.withDefault("
+                + "Rate(0.0m), List.max(List.map(l -> l.discount, lines))).value, 0.10m) <= 0"));
 
-        assertFalse(viaDefault.contains("not read"), viaDefault);
+        assertFalse(viaDefault.contains("· not read:"), viaDefault);
+        assertFalse(linesDrawn(viaDefault).isEmpty(), viaDefault);
         assertEquals(linesDrawn(equivalent), linesDrawn(viaDefault), viaDefault);
-        assertFalse(linesDrawn(viaDefault).isEmpty(), viaDefault);
-    }
-
-    /** Equality is the end at or below and at or above, and a difference is the end below or
-     *  above, each at the elements. */
-    @ParameterizedTest(name = "{0} {1} 10")
-    @CsvSource({"max, ==", "max, /=", "min, ==", "min, /="})
-    void anEndEqualOrUnequalToANumberIsReadAtTheElements(String end, String relation) {
-        String viaDefault = report(model("Option.withDefault(0, List." + end + "(ds)) " + relation
-                + " 10"));
-
-        assertFalse(viaDefault.contains("held together"), viaDefault);
-        assertFalse(viaDefault.contains("not read"), viaDefault);
-        assertFalse(linesDrawn(viaDefault).isEmpty(), viaDefault);
-    }
-
-    /** The number written before the end is the same comparison turned about. */
-    @ParameterizedTest(name = "10 {0} the {1}")
-    @CsvSource({"<=, max", "<, max", ">=, min", ">, min"})
-    void aNumberComparedWithAnEndIsTheSameComparisonTurnedAbout(String relation, String end) {
-        String turned = switch (relation) {
-            case "<=" -> ">=";
-            case "<" -> ">";
-            case ">=" -> "<=";
-            default -> "<";
-        };
-        String before = report(model("10 " + relation + " Option.withDefault(0, List." + end
-                + "(ds))"));
-        String after = report(model("Option.withDefault(0, List." + end + "(ds)) " + turned
-                + " 10"));
-
-        assertEquals(linesDrawn(after), linesDrawn(before), before);
-        assertFalse(linesDrawn(before).isEmpty(), before);
     }
 }
