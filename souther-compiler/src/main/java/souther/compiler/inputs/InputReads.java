@@ -2201,7 +2201,9 @@ public final class InputReads {
                     standingFor(name, answered, newtypes);
             case WhatItHolds.AnElement(Denotation element) -> standingFor(name, element, newtypes);
             case WhatItHolds.AtAnIndex(PickedAtAnIndex element) -> picking(name, element);
-            case WhatItHolds.AnElementOf _ -> this;
+            case WhatItHolds.AnElementOf(Denotation call) -> new InputReads(
+                    names.opening(name, new ElementOpened(call, new EnteredArm(name))),
+                    alternatives, declared, dependencies, applied);
             case WhatItHolds.Unsaid _ -> this;
         };
     }

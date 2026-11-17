@@ -151,6 +151,7 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
             "List.max(ds) | m + 1 <= 10",
             "List.max(ds) | m * 2 <= 10",
             "List.min(ds) | Int.abs(m) >= 10",
+            "Option.map(v -> v + 1, List.max(ds)) | m <= 10",
             "List.find(x -> x > q, ds) | m + 1 <= 10",
             "List.get(q, ds) | m + 1 <= 10"})
     void aValueWorkedOutOfAPayloadIsSaidNotReadAtTheElements(String call, String comparison) {

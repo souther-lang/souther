@@ -667,7 +667,7 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "partition/ComparisonReadings", "buildsAValue", "(" + core + ")Z",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "partition/GuardThresholds", "cameFromThroughWhatItIsMadeOf",
-                "(" + core + reads + "L" + c + "check/DeclarationNewtypes;)L" + c
+                "(" + core + reads + "L" + c + "inputs/InputReading;)L" + c
                 + "inputs/PathResolution;", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         row(out, c + "partition/GuardThresholds", "throughEachValue", "(" + core + reads + "L"
                 + c + "check/Symbols;L" + c + "check/DeclarationNewtypes;L" + c

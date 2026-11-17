@@ -588,9 +588,9 @@ public final class GuardThresholds {
      * be. Answered alike, a rule about an element of a container would be reported as one about a
      * value somebody computed, and an author would go looking for the operation to invert.
      */
-    static void cameFrom(StatedComparison comparison, InputReads reads,
-                         DeclarationNewtypes newtypes,
+    static void cameFrom(StatedComparison comparison, InputReads reads, InputReading read,
                          SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
+        DeclarationNewtypes newtypes = read.newtypes();
         // A side that names a position is the values there, and what the rule is about at that
         // position is that place's to say: where a value came from is asked of a side that names
         // none, which is the only side it is a different question about. A side that may stand
@@ -604,23 +604,40 @@ public final class GuardThresholds {
         // worked out of one that came from somewhere came from there as well.
         if (out.isEmpty()) {
             sides.forEach(side -> filedWhereItCameFrom(
-                    cameFromThroughWhatItIsMadeOf(side, reads, newtypes), out));
+                    cameFromThroughWhatItIsMadeOf(side, reads, read), out));
         }
     }
 
     private static PathResolution cameFromThroughWhatItIsMadeOf(Core side, InputReads reads,
-                                                                DeclarationNewtypes newtypes) {
+                                                                InputReading read) {
         Core bare = Core.withoutStanding(side);
         for (Core each : Core.subexpressionsAt(bare)) {
-            PathResolution came = reads.cameFrom(each, newtypes);
+            PathResolution came = reads.cameFrom(each, read.newtypes());
             if (!(came instanceof PathResolution.NotAPosition)) {
                 return came;
             }
         }
-        List<PathResolution> parts = new ArrayList<>();
-        Core.forEachChild(bare, part ->
-                parts.add(cameFromThroughWhatItIsMadeOf(part, reads, newtypes)));
-        return PathResolution.madeOf(parts);
+        // A name stands for what it was bound to, read where it was bound.
+        if (bare instanceof Core.Read) {
+            Denotation stood = reads.standing(bare, read.symbols(), read.newtypes());
+            if (!(Core.withoutStanding(stood.value()) instanceof Core.Read)) {
+                return cameFromThroughWhatItIsMadeOf(stood.value(), stood.at(), read);
+            }
+        }
+        // What a value is made of: for a choice, the values of its arms and not what decides the
+        // arm.
+        List<Core> made = new ArrayList<>();
+        switch (bare) {
+            case Core.If choice -> made.addAll(List.of(choice.then(), choice.els()));
+            case Core.Match match -> match.cases().forEach(arm -> made.add(arm.body()));
+            case Core.IfConstructed choice -> {
+                made.add(choice.then());
+                choice.els().forEach(arm -> made.add(arm.body()));
+            }
+            default -> Core.forEachChild(bare, made::add);
+        }
+        return PathResolution.madeOf(made.stream()
+                .map(part -> cameFromThroughWhatItIsMadeOf(part, reads, read)).toList());
     }
 
     private static void filedWhereItCameFrom(
