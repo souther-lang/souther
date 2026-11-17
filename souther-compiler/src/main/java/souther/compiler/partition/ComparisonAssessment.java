@@ -12,6 +12,7 @@ import souther.compiler.core.Core;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.EachWayItComesOut;
 import souther.compiler.inputs.EmptyInput;
 import souther.compiler.inputs.InputReading;
@@ -2891,43 +2892,55 @@ sealed interface ComparisonAssessment {
         return readsAnswer(e, answer, null, List.of());
     }
 
-    /** {@link #readsAnswer(Core, BindingId, InputReads, List)} where no arm opened a name. */
-    static boolean readsAnswer(Core e, BindingId answer, InputReads reads) {
-        return readsAnswer(e, answer, reads, List.of());
-    }
-
     /**
-     * {@link #readsAnswer(Core, BindingId)} where the names in force are known: a name that is
-     * another name for the answer — the parameter of a helper the clause called with it, or what a
-     * {@code let} gave it to — is a read of the answer, and the one place that decides
-     * {@link AnswerDependent} says so for both of the readers that ask.
+     * {@link #readsAnswer(Core, BindingId)} where the names in force are known: a value is made of
+     * the answer where what it is made of reads the answer, however many names stand between.
      *
-     * <p>And a name an arm opened out of a value is made of that value: {@code own} of
-     * {@code match value.domain with Some own} is a read of the answer. That is a dependence and
-     * not an identity, so it is asked here and never of {@link InputReads#namedBy}.
+     * <p>A name stands for an expression — what a {@code let} gave it, what a call handed the
+     * parameter of the helper — and not only for another name, so the answer is looked for in that
+     * expression, read where it was written ({@link InputReads#handedOver}). {@code own} of
+     * {@code let own = a.name} is made of the answer when {@code a} is the answer handed to a
+     * helper, as is a parameter bound to {@code value.name}.
+     *
+     * <p>And a name an arm of a {@code match} gave to a value made of what it matched
+     * ({@code Some own}, {@code Active as s}) is made of the scrutinee. That is a dependence and not
+     * an identity, so it is held beside the names and never answered by {@link InputReads}.
      *
      * @param reads  what the names stand for, or null where there are none to look through
-     * @param opened the names the arms above {@code e} opened
+     * @param opened the names the arms above {@code e} gave
      */
     static boolean readsAnswer(Core e, BindingId answer, InputReads reads,
                                List<ClauseStatements.Opened> opened) {
         if (answer == null) {
             return false;
         }
-        if (e instanceof Core.Read read) {
-            BindingId named = reads == null ? read.binding() : reads.namedBy(read.binding());
-            if (answer.equals(read.binding()) || answer.equals(named)) {
+        if (Core.withoutStanding(e) instanceof Core.Read read) {
+            if (answer.equals(read.binding())) {
+                return true;
+            }
+            Core stands = read;
+            InputReads where = reads;
+            if (reads != null) {
+                Denotation handed = reads.handedOver(read);
+                stands = handed.value();
+                where = handed.at();
+            }
+            if (!(stands instanceof Core.Read name)) {
+                return readsAnswer(stands, answer, where, opened);
+            }
+            if (answer.equals(name.binding())) {
                 return true;
             }
             for (ClauseStatements.Opened each : opened) {
-                if (each.name().equals(read.binding()) || each.name().equals(named)) {
+                if (each.name().equals(name.binding())) {
                     List<ClauseStatements.Opened> rest = new ArrayList<>(opened);
                     rest.remove(each);
-                    if (readsAnswer(each.from(), answer, reads, rest)) {
+                    if (readsAnswer(each.from().value(), answer, each.from().at(), rest)) {
                         return true;
                     }
                 }
             }
+            return false;
         }
         boolean[] found = {false};
         Core.forEachChild(e, child -> found[0] |= readsAnswer(child, answer, reads, opened));

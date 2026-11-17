@@ -8,6 +8,7 @@ import souther.compiler.check.RuleRef;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.ApplicationOrigin;
@@ -63,14 +64,15 @@ final class ClauseStatements {
     record Stated(ClauseStatementId id, Statement statement) {}
 
     /**
-     * A name an arm of a {@code match} opened out of {@code from}: what an optional holds, said as
-     * the name {@code Some own} gives it.
+     * A name an arm of a {@code match} gave to a value made of what it matched: what an optional
+     * holds ({@code Some own}), or the case the arm selected ({@code Active as s}).
      *
-     * <p>Not another name for {@code from} — {@link InputReads#namedBy} answers that, and the
-     * payload is not the optional — but a value made of it, so a statement over the name is about
-     * whatever {@code from} is about.
+     * <p>Not another name for the scrutinee — what a name stands for is {@link InputReads}' answer,
+     * and the payload is not the optional — but a value made of it, so a statement over the name is
+     * about whatever the scrutinee is about. The scrutinee travels with the reading it was written
+     * in, which is not the one the arm's body is read in.
      */
-    record Opened(BindingId name, Core from) {}
+    record Opened(BindingId name, Denotation from) {}
 
     /**
      * One of the things a clause states, said as the kind of rule it is.
@@ -161,10 +163,10 @@ final class ClauseStatements {
             if (only != null) {
                 out.add(new Statement.NotRead(match.scrutinee(), reads, opened));
                 List<Opened> within = opened;
-                if (only.binder() != null && only.binder().binding() != null
-                        && only.binding() instanceof Core.ArmBinding.Payload) {
+                if (only.binder() != null && only.binder().binding() != null) {
                     within = new ArrayList<>(opened);
-                    within.add(new Opened(only.binder().binding(), match.scrutinee()));
+                    within.add(new Opened(only.binder().binding(),
+                            new Denotation(match.scrutinee(), reads)));
                 }
                 walk(only.body(),
                         reads.choosing(Choice.Decides.ofCase(match, only), symbols, newtypes),

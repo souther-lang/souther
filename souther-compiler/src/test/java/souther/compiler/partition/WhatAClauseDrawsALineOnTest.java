@@ -513,6 +513,105 @@ class WhatAClauseDrawsALineOnTest {
         assertEquals(List.of(), clauses.noLine().reported());
     }
 
+    /**
+     * A value made of the answer is the answer's, whichever way it was got to.
+     *
+     * <p>Each spelling is one way a name comes to stand for something made of the answer, and each
+     * must read as the rule written out reads: a name given to a field of it, a field handed to a
+     * helper as an argument, the case an arm selected of it, and a name given to what was matched.
+     */
+    @Test
+    void whatIsMadeOfTheAnswerIsTheAnswerWhicheverWayItIsGotTo() {
+        String model = """
+                module g
+
+                data Active = { label: String }
+                data Inactive
+                data Status = Active | Inactive
+                data Account = { name: String, status: Status }
+                data AccountNotFound
+
+                let same (x: String, y: String): Bool = x == y
+
+                %s
+
+                behavior find : (name: String) -> Account | AccountNotFound
+                    ensures Account -> %s
+                """;
+        Map<String, String[]> spellings = new java.util.LinkedHashMap<>();
+        spellings.put("a name for a field", new String[] {"""
+                let h (name: String, a: Account): Bool = {
+                    let own = a.name
+                    own == name
+                }
+                """, "h(name, value)"});
+        spellings.put("a field handed over", new String[] {"", "same(name, value.name)"});
+        spellings.put("a case selected", new String[] {"""
+                let h (name: String, a: Account): Bool =
+                    match a.status with
+                        | Active as s -> s.label == name
+                        | Inactive -> false
+                """, "h(name, value)"});
+        spellings.put("a name for what was matched", new String[] {"""
+                let h (name: String, a: Account): Bool = {
+                    let st = a.status
+                    match st with
+                        | Active as s -> s.label == name
+                        | Inactive -> false
+                }
+                """, "h(name, value)"});
+        List<String> unread = new java.util.ArrayList<>();
+        spellings.forEach((how, parts) -> {
+            EnsuresThresholds.Clauses clauses = drawn(model.formatted(parts[0], parts[1]), "find");
+            if (!clauses.noLine().reported().isEmpty()
+                    || !clauses.noLine().unclassified().isEmpty()) {
+                unread.add(how + ": " + clauses.noLine().unclassified());
+            }
+        });
+        assertEquals(List.of(), unread);
+    }
+
+    /**
+     * And the same spellings over an input are about the input: what makes a value the answer's is
+     * what it is made of, so a name given to a field of an input, or the case selected of one, is
+     * not mistaken for the answer.
+     */
+    @Test
+    void whatIsMadeOfAnInputIsNotTheAnswer() {
+        String model = """
+                module g
+
+                data Active = { label: String }
+                data Inactive
+                data Status = Active | Inactive
+                data Account = { name: String, status: Status }
+                data AccountNotFound
+
+                %s
+
+                behavior find : (name: String, other: Account) -> Account | AccountNotFound
+                    ensures Account -> %s
+                """;
+        assertEquals(saidOf(drawn(model.formatted("", "other.name == name"), "find")),
+                saidOf(drawn(model.formatted("""
+                        let h (name: String, a: Account): Bool = {
+                            let own = a.name
+                            own == name
+                        }
+                        """, "h(name, other)"), "find")),
+                "a name for a field");
+        EnsuresThresholds.Clauses selected = drawn(model.formatted("""
+                let h (name: String, a: Account): Bool =
+                    match a.status with
+                        | Active as s -> s.label == name
+                        | Inactive -> false
+                """, "h(name, other)"), "find");
+        assertEquals(List.of("other.status"),
+                selected.noLine().unclassified().stream()
+                        .map(each -> each.at().toString()).toList(),
+                "the selection stays a statement about the input it selects on");
+    }
+
     /** A helper that hands the answer on to another is as much a name for it as the first. */
     @Test
     void aNameForTheAnswerThroughTwoHelpersIsStillTheAnswer() {
