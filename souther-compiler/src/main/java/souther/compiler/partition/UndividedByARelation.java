@@ -10598,7 +10598,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return true;
         }
         ExactRatio weight = form.coefs().get(held);
-        return weight != null && takesNumbersWithoutEnds(sourceOf(held, read), read)
+        return weight != null
                 && (weight.equals(ExactRatio.ONE) || weight.equals(ExactRatio.ONE.negated()))
                 && form.constant().isWhole()
                 && form.coefs().values().stream().allMatch(ExactRatio::isWhole);

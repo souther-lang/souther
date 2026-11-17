@@ -152,10 +152,10 @@ class AMembershipOfANumberIsTheRelationAComparisonOfItStatesTest {
         // with: the comparison of {@code d} with a holiday comes out false there whatever
         // {@code d} is, and the line is drawn where that starts. The later candidates still meet
         // those holidays, each on the lines already drawn. A calendar may hold several holidays,
-        // and the two dates before the last are each one only a later candidate meets, so each
-        // is a line of its own.
+        // and each of the last three dates is one only a later candidate meets, so each is a
+        // line of its own.
         Map<String, LocalDate> pastEveryCandidate = new TreeMap<>();
-        for (int past = 0; past < 2; past++) {
+        for (int past = 0; past < 3; past++) {
             LocalDate day = LocalDate.MAX.minusDays(2 - past);
             pastEveryCandidate.put("cal.holidays[*] " + day, day);
         }
