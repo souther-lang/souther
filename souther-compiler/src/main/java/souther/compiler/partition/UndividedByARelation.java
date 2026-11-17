@@ -4621,11 +4621,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * place nor one that holds a place or is held by it. Where {@code theirs} is the string a piece is of, a statement that the string holds
      * the separators the piece's index needs is one the piece's strings already stand on.
      *
-     * <p>A statement that some element of a container is the piece holds the piece to the strings
-     * of the elements ({@link #theLanguageTheWayHoldsThePieceTo}). One that no element is, or that
-     * every element is something, leaves the strings alone only where a row holds the container
-     * empty ({@link #metByTheContainerHeldEmpty}); otherwise it takes some string of the sides
-     * away, or is not shown not to.
+     * <p>A statement that some element of a container is the piece takes the piece's values from
+     * the strings of the elements, and is no statement the strings are left alone by: where it
+     * is beside a statement holding the piece to a language, the two are met together
+     * ({@link #theLanguageTheWayHoldsThePieceTo}), and by itself it stops the reading. One that
+     * no element is, or that every element is something, leaves the strings alone only where a
+     * row holds the container empty ({@link #metByTheContainerHeldEmpty}); otherwise it takes
+     * some string of the sides away, or is not shown not to.
      *
      * @param piece the piece the partner is, or null where it is the strings at {@code theirs}
      */
@@ -4639,7 +4641,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     && each.elementsOf() == null;
             if (!saysNothingOfValues && !holdsTheSeparatorsOf(each, piece)
                     && !holdsThePieceToALanguage(each, piece)
-                    && !(someElementIsThePiece(each, piece))
                     && !metByTheContainerHeldEmpty(each, written, mine, theirs, past, declined,
                             read)
                     && (reaches(each, mine) || reaches(each, theirs)
@@ -4651,12 +4652,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return past.narrowing().stream().noneMatch(constraint -> constraint.terms().stream()
                 .anyMatch(term -> term.isReadOffAPlaceBearingOn(mine)
                         || term.isReadOffAPlaceBearingOn(theirs)));
-    }
-
-    /** Whether {@code statement} says some element of a container is {@code piece}. */
-    private static boolean someElementIsThePiece(OnAWay statement, PiecesOfAString piece) {
-        return elementThePieceIsAmong(statement.statedOfTheRun(), piece) != null
-                && ((Proposition.Some) statement.statedOfTheRun()).holds();
     }
 
     /**
@@ -7559,6 +7554,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * holds among them, or of a string of the pieces of one apart from it; and the relation is
      * not read inside it, since a row with it empty gets to no relation read at an element.
      * Where the way declined a name the container may hold, the row is not one the way leaves.
+     * And the row is one the run to the relation leaves: what the run holds the container to
+     * ({@link #regionTheRunLeavesTheContainer}) is what the declarations leave it narrowed by.
      */
     private static boolean metByTheContainerHeldEmpty(OnAWay statement, List<OnAWay> written,
                                                       TermPath mine, TermPath theirs,
@@ -7569,9 +7566,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (container == null || container.bearsOn(mine) || container.bearsOn(theirs)
                 || !past.relationStands().known() || declined.isEmpty()
                 || declined.get().contains(container.head())
-                || past.relationStands().containers().stream().anyMatch(container::bearsOn)
-                || !canBeHeldEmptyApartFrom(container, List.of(mine, theirs), read,
-                        read.quantities().region())) {
+                || past.relationStands().containers().stream().anyMatch(container::bearsOn)) {
+            return false;
+        }
+        SearchRegion region = regionTheRunLeavesTheContainer(container, past, read);
+        if (region == null
+                || !canBeHeldEmptyApartFrom(container, List.of(mine, theirs), read, region)) {
             return false;
         }
         for (OnAWay other : written) {
@@ -7583,6 +7583,39 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return true;
+    }
+
+    /**
+     * The region the run to the relation leaves {@code container}: what the declarations leave it,
+     * narrowed by what the run narrows of how many it holds; or null where the run holds it to
+     * something this does not say — an operator on what no place holds, or a tie or an operator
+     * owed a proof that reads it ({@link DemandReading.Answered#tiedOrOwed}), the applications
+     * before the relation's included — or the narrowing leaves it no value.
+     *
+     * <p>The same terms a number is free to be chosen on ({@link #valuesFreeToChoose}): a row that
+     * is a witness is a row the run gets to the relation on, and the declarations alone are not
+     * what it holds the container to.
+     */
+    private static SearchRegion regionTheRunLeavesTheContainer(TermPath container,
+                                                               DemandReading.Answered past,
+                                                               InputReading read) {
+        if (past.unsaidOrOwedOnWhatNoPlaceHolds()) {
+            return null;
+        }
+        for (Set<TermPath> ties : past.tiedOrOwed()) {
+            if (touchesAny(ties, List.of(container))) {
+                return null;
+            }
+        }
+        List<TakenConstraint> ofIt = past.narrowing().stream().filter(each ->
+                each.terms().stream().anyMatch(term ->
+                        term.isReadOffAPlaceBearingOn(container))).toList();
+        SearchRegion region = read.quantities().region();
+        if (ofIt.isEmpty()) {
+            return region;
+        }
+        SearchRegion narrowed = TakenConstraint.narrowedBy(ofIt, region);
+        return narrowed.emptiness().isPresent() ? null : narrowed;
     }
 
     /**

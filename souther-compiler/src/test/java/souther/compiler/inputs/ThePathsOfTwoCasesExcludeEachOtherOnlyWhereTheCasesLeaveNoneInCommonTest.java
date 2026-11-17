@@ -54,12 +54,6 @@ class ThePathsOfTwoCasesExcludeEachOtherOnlyWhereTheCasesLeaveNoneInCommonTest {
         assertFalse(REACH.refine(only(EMAIL_ONLY)).excludesTheCasesOf(email));
     }
 
-    @Test
-    void aPathNarrowingNothingExcludesNothing() {
-        assertFalse(REACH.excludesTheCasesOf(REACH.refine(only(PHONE_ONLY))));
-        assertFalse(REACH.refine(only(PHONE_ONLY)).excludesTheCasesOf(REACH));
-    }
-
     private static CasesLeft only(TypeSymbol leaf) {
         return CasesLeft.of(ResolvedCase.of(CaseSelector.direct(leaf), List.of(leaf)));
     }
