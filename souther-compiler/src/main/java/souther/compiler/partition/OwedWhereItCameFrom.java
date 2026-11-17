@@ -3,9 +3,7 @@ package souther.compiler.partition;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.MadeFrom;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.inputs.ValuesAt;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -43,29 +41,5 @@ record OwedWhereItCameFrom(List<TermPath> places, BlockReason.RuleReadingStopped
                     new BlockReason.RuleAboutADerivedValue());
             case MadeFrom.FromOne _, MadeFrom.FromNothing _ -> null;
         };
-    }
-
-    /**
-     * What a value that may stand at one of several places is owed, said by where it stands and by
-     * where it came from together, or null where it stands at no one of several.
-     *
-     * <p>The places it may stand at are the position's, with their fields. What it was made out of
-     * beyond those is the origin's ({@link MadeFrom#placesBeyond}): a name a block was handed over
-     * a container the input holds and over one made of another is at the first on one run and made
-     * of the second on the next, and the rule is owed at both. Taken from the position alone, the
-     * second is left out.
-     */
-    static OwedWhereItCameFrom ofSeveral(ValuesAt stands, MadeFrom cameFrom) {
-        if (!(stands instanceof ValuesAt.MayStandAt(var among))) {
-            return null;
-        }
-        List<TermPath> places = new ArrayList<>(among);
-        for (TermPath beyond : cameFrom.placesBeyond(stands)) {
-            if (!places.contains(beyond)) {
-                places.add(beyond);
-            }
-        }
-        return new OwedWhereItCameFrom(places,
-                new BlockReason.RuleAboutAnElementOfSeveralContainers());
     }
 }

@@ -13,9 +13,7 @@ import java.util.Objects;
  * this. The step into a field is the walk's own, taken where it reads the position, so no step is
  * offered on the answer.
  *
- * <p>Made from the answer of the walk after a position by {@link InputReads}, which owns it. The
- * answer of an expression that is also made out of other places is said beside {@link MadeFrom},
- * and {@link MadeFrom#placesBeyond} is what the two say together.
+ * <p>Made from the answer of the walk after a position by {@link InputReads}, which owns it.
  */
 public sealed interface ValuesAt {
 
@@ -46,14 +44,5 @@ public sealed interface ValuesAt {
                         "a value that may stand somewhere may stand at some place");
             }
         }
-    }
-
-    /** Every place the expression stands at on some run; none for {@link NotAPosition}. */
-    default List<TermPath> places() {
-        return switch (this) {
-            case At(var at) -> List.of(at);
-            case MayStandAt(var among) -> among;
-            case NotAPosition _ -> List.of();
-        };
     }
 }

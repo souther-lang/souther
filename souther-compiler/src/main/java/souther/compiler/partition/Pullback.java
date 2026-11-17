@@ -2868,16 +2868,11 @@ final class Pullback {
         }
         switch (reads.pathOf(operand, read.rules().newtypes())) {
             case ValuesAt.At(TermPath path) -> operated.unsaidAt.add(path);
-            case ValuesAt.MayStandAt stands -> {
-                // Where it may stand, and what it was made out of beyond that: a name handed over
-                // a container the input holds and over one made of another stops a run on both.
-                operated.unsaidAt.addAll(stands.among());
-                operated.unsaidAt.addAll(reads.cameFrom(operand, read.rules().newtypes())
-                        .placesBeyond(stands));
-            }
             default -> {
                 // A value made from positions stands at none, and is as much theirs: it stops a
-                // run on what they hold.
+                // run on what they hold. So does a name that may stand at one of several places,
+                // which is theirs and which a block handed to a walk over a list made of another
+                // is made of as well: where it came from says every one.
                 MadeFrom made = reads.cameFrom(operand, read.rules().newtypes());
                 if (!(made instanceof MadeFrom.FromNothing)) {
                     operated.unsaidAt.addAll(made.places());

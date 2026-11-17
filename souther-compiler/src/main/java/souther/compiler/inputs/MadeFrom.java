@@ -19,10 +19,11 @@ import java.util.Objects;
  * an element is not a field of the element. A reader that wants a place a rule is drawn at asks
  * {@link InputReads#pathOf} ({@link ValuesAt}).
  *
- * <p><b>The two are said together by a reader whose expression stands at one of several places.</b>
- * What it stands at is the position's to say, and what it was made out of beyond that is this
- * answer's ({@link #placesBeyond}). Either alone leaves out the other: a reader that took only the
- * places the expression may stand at left out every container the same name was made of.
+ * <p>The walk crosses every edge the walk after a position crosses, and the edges where elements
+ * are made of others as well. So the places an expression stands at are among the places here, and
+ * a reader that needs where a rule about it is owed asks this answer: one that took the position
+ * alone, for an expression that may stand at one of several places, left out every container the
+ * same name was made of.
  *
  * <p>Made from the answer of those walks by {@link InputReads}, which owns them.
  */
@@ -70,19 +71,6 @@ public sealed interface MadeFrom {
 
     /** The values came from no place the walk follows. */
     record FromNothing() implements MadeFrom {}
-
-    /**
-     * The places the values came from that what stands says nothing of: those no place of
-     * {@code stands} is at or under. A place the expression stands at is said, with its field, by
-     * the position; what came from the whole of a container the expression stands at an element of
-     * is the same container, and adds nothing.
-     */
-    default List<TermPath> placesBeyond(ValuesAt stands) {
-        List<TermPath> said = stands.places();
-        return places().stream()
-                .filter(each -> said.stream().noneMatch(there -> there.isAtOrUnder(each)))
-                .toList();
-    }
 
     /** Every place the values came from on some run, once each; none for {@link FromNothing}. */
     default List<TermPath> places() {

@@ -447,6 +447,25 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
                         }"""));
     }
 
+    /**
+     * And where the list is made of the same input the closure is handed directly, the value came
+     * from one place on either run, which is a value somebody computed and not an element of one of
+     * several containers.
+     */
+    @Test
+    void aSharedClosureOverAListMadeOfTheSameInputCameFromOnePlace() {
+        assertEquals(List.of("xs[*].age RuleAboutADerivedValue"),
+                withoutALine("""
+                        data Person = { age: Int }
+
+                        behavior pick : (xs: List<Person>) -> Low | High
+                        let pick (xs) = {
+                            let adult = (p) -> p.age > 18
+                            let zs = List.map((y) -> Person { age = y.age + 1 }, xs)
+                            if List.any(adult, xs) && List.any(adult, zs) then High else Low
+                        }"""));
+    }
+
     /** And over a list that keeps the elements it is made of, the second is the same place with its
      *  field, which the position says. */
     @Test
