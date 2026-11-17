@@ -588,7 +588,7 @@ public final class GuardThresholds {
      * value somebody computed, and an author would go looking for the operation to invert.
      */
     static void cameFrom(StatedComparison comparison, InputReads reads,
-                         DeclarationNewtypes newtypes, boolean ofAStoppedReading,
+                         DeclarationNewtypes newtypes,
                          SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
         for (Core side : List.of(comparison.left(), comparison.right())) {
             // A side that names a position is the values there, and what the rule is about at that
@@ -598,33 +598,36 @@ public final class GuardThresholds {
             if (reads.pathOf(side, newtypes) instanceof PathResolution.At) {
                 continue;
             }
-            // Where a side's values came from, and where that says nowhere and the reading
-            // stopped, what the side is made of: a value worked out of ones that came from
-            // somewhere came from there as well, and a rule a reading could not follow is about
-            // them and not about nothing. A comparison read to the end that cuts nothing is
-            // answered by what it says, and is not asked what its sides are made of.
-            PathResolution came = reads.cameFrom(side, newtypes);
-            filedWhereItCameFrom(ofAStoppedReading && came instanceof PathResolution.NotAPosition
-                    ? reads.madeOf(side, newtypes) : came, out);
+            // Where a side's values came from, and nothing where they came from nowhere.
+            filedWhereItCameFrom(reads.cameFrom(side, newtypes), out);
         }
     }
 
-    /** {@code came} said of the places a value came from, each place filed once whichever way the
-     *  reading named it: there is one word for a place. */
+    /**
+     * Where the sides of a comparison a reading stopped at and filed nowhere came from, through
+     * what each is made of: a value worked out of ones that came from somewhere came from there as
+     * well, and a rule no reading followed is about them and not about nothing. Asked of the side
+     * whose own origin says none, beside {@link #cameFrom}; for a reading that has filed a place
+     * already, what it filed is what says where it stopped.
+     */
+    static void cameFromThroughWhatTheSidesAreMadeOf(
+            StatedComparison comparison, InputReads reads, DeclarationNewtypes newtypes,
+            SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
+        for (Core side : List.of(comparison.left(), comparison.right())) {
+            if (!(reads.pathOf(side, newtypes) instanceof PathResolution.At)
+                    && reads.cameFrom(side, newtypes) instanceof PathResolution.NotAPosition) {
+                filedWhereItCameFrom(reads.madeOf(side, newtypes), out);
+            }
+        }
+    }
+
     private static void filedWhereItCameFrom(
             PathResolution came,
             SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
         if (came instanceof PathResolution.At(var at)) {
-            filedOnce(at, new BlockReason.RuleAboutADerivedValue(), out);
+            out.putIfAbsent(FilingCoordinate.at(at), new BlockReason.RuleAboutADerivedValue());
         } else if (OwedWhereItCameFrom.ofSeveral(came) instanceof OwedWhereItCameFrom owed) {
-            owed.places().forEach(each -> filedOnce(each, owed.why(), out));
-        }
-    }
-
-    private static void filedOnce(TermPath at, BlockReason.RuleReadingStopped why,
-                                  SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
-        if (out.keySet().stream().noneMatch(each -> each.path().equals(at))) {
-            out.put(FilingCoordinate.at(at), why);
+            owed.places().forEach(each -> out.putIfAbsent(FilingCoordinate.at(each), owed.why()));
         }
     }
 

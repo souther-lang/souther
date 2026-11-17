@@ -2140,7 +2140,13 @@ sealed interface ComparisonAssessment {
             PlacesStopped filed, WhereAReadingStopped where, StatedComparison comparison,
             InputReads reads, DeclarationNewtypes newtypes, boolean ofAStoppedReading) {
         SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why = filed.reasons();
-        GuardThresholds.cameFrom(comparison, reads, newtypes, ofAStoppedReading, why);
+        GuardThresholds.cameFrom(comparison, reads, newtypes, why);
+        // A reading that stopped and filed nowhere is no rule about nothing: that is a comparison
+        // of constants, and a rule whose values nothing followed is about where they came from.
+        // One that filed a place has said where it stopped, and that place says all of it.
+        if (ofAStoppedReading && filed.isEmpty()) {
+            GuardThresholds.cameFromThroughWhatTheSidesAreMadeOf(comparison, reads, newtypes, why);
+        }
         PlacesStopped places = filed.alsoFiledAt(why);
         return places.isEmpty() ? new NoInput() : new Unread(places, where);
     }

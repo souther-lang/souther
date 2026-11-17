@@ -1779,7 +1779,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
             SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> from =
                     new LinkedHashMap<>();
-            GuardThresholds.cameFrom(comparison, reads, read.newtypes(), true, from);
+            GuardThresholds.cameFrom(comparison, reads, read.newtypes(), from);
             from.replaceAll((place, was) -> decided);
             return new Read.Stopped(from, WhereAReadingStopped.ELSEWHERE);
         }
@@ -1809,7 +1809,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // that does, and the statement's own reason is taken only where it says more.
         SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out =
                 new LinkedHashMap<>();
-        GuardThresholds.cameFrom(comparison, reads, read.newtypes(), true, out);
+        GuardThresholds.cameFrom(comparison, reads, read.newtypes(), out);
         out.replaceAll((at, was) -> was instanceof BlockReason.RuleAboutADerivedValue
                 && saysMoreThanAPartNotRead(why) ? why : was);
         return new Read.Stopped(out, WhereAReadingStopped.ELSEWHERE);

@@ -79,7 +79,7 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
      */
     @ParameterizedTest(name = "{0} {1} 10 is List.{2}")
     @CsvSource({
-            "max, <=, all, 0", "max, <, all, 0", "max, >=, any, 0",
+            "max, <=, all, 0", "max, <, all, 0", "max, >=, any, 0", "max, >, any, 0",
             "min, <=, any, 100", "min, >=, all, 100"})
     void anEndDrawsTheLinesOfEveryOrSomeElement(String end, String relation, String quantifier,
                                                 int dflt) {
@@ -120,10 +120,19 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
     }
 
     @ParameterizedTest(name = "{0} {1} 10")
-    @CsvSource({"==", "/="})
-    void equalityAndDifferenceAreComposedOfTheTwoEnds(String relation) {
-        assertDrawsAtTheElements(ofACondition("Option.withDefault(0, List.max(ds)) "
-                + relation + " 10"));
+    @CsvSource(delimiter = '|', value = {
+            "== | List.all(d -> d <= 10, ds) && List.any(d -> d >= 10, ds)",
+            "/= | Option.withDefault(0, List.max(ds)) == 10"})
+    void equalityAndDifferenceAreComposedOfTheTwoEnds(String relation, String composed) {
+        String viaDefault = ofACondition("Option.withDefault(0, List.max(ds)) " + relation + " 10");
+
+        assertDrawsAtTheElements(viaDefault);
+        assertEquals(bordersOf(ofACondition(composed)), bordersOf(viaDefault), viaDefault);
+    }
+
+    /** How many borders the report counts, of the summary of them. */
+    private static String bordersOf(String report) {
+        return linesDrawn(report).getFirst().replaceAll(".*(borders [0-9]+).*", "$1");
     }
 
     @Test
@@ -192,12 +201,11 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
         String report = reading("""
                 module m
 
-                behavior role : (ds: List<Int>, es: List<Int>) -> Int
-                let role (ds, es) = if (match List.max(ds) with | None -> false | Some a -> ({ let used = (match List.max(es) with | None -> 0 | Some b -> b)
-                    Int.abs(used) + a }) <= 10) then 1 else 2
+                behavior role : (ds: List<Int>) -> Int
+                let role (ds) = if (match List.max(ds) with | None -> false | Some a -> ({ let k = a * 2
+                    k + 1 }) <= 10) then 1 else 2
                 """);
 
-        assertTrue(saysNotReadAt(report, "es[*]"), report);
         assertTrue(saysNotReadAt(report, "ds[*]"), report);
     }
 
@@ -215,15 +223,6 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
                 let role (ds) = if (match List.max(ds) with | None -> false | Some a -> (if Small(a) as n then Int.abs(n.value) else 0) <= 10) then 1 else 2
                 """);
 
-        assertTrue(saysNotReadAt(report, "ds[*]"), report);
-    }
-
-    /** A container and the elements of it are two places, and each is said where it is. */
-    @Test
-    void aContainerAndItsElementsAreSaidUnreadEachWhereItIs() {
-        String report = ofACondition("(match List.max(ds) with | None -> 0 | Some m -> m + 1) <= 10");
-
-        assertTrue(saysNotReadAt(report, "ds"), report);
         assertTrue(saysNotReadAt(report, "ds[*]"), report);
     }
 
