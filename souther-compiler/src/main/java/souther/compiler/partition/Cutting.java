@@ -1607,7 +1607,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // numbers: what an application stating it is ({@link #ofAnApplication}).
             case Proposition.All _, Proposition.Any _, Proposition.SoManyHold _,
                  Proposition.Some _, Proposition.InCases _, Proposition.Truth _,
-                 Proposition.Present _, Proposition.WhereItAnswers _
+                 Proposition.Present _, Proposition.InTheStrings _,
+                 Proposition.WhereItAnswers _
                     when statesNoRelation(asLinesAre) -> new Read.StatesNoRelation();
             // A statement read where an operation in it answers is the lines of what it states,
             // each deciding only where the operation answers ({@link WhereEachLineDecides}).
@@ -2567,6 +2568,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             case Proposition.InCases cases -> cases.of() instanceof DecisionSubject.AnInput;
             case Proposition.Truth truth -> truth.of() instanceof DecisionSubject.AnInput;
             case Proposition.Present present -> present.of() instanceof DecisionSubject.AnInput;
+            case Proposition.InTheStrings strings ->
+                    strings.of() instanceof Proposition.InTheStrings.Strings.AtAPosition;
             // Which strings a string is one of is read where the rules about a position's strings
             // are, and is no line of numbers. Of the elements of a container it is the same
             // statement of each element, so that some element is in a language is no more a
@@ -2585,8 +2588,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             // as what it is ({@link #readOnce}). And which strings a string is one of, which is
             // read where the rules about a position's strings are, and is no line of numbers.
             case Proposition.Always _, Proposition.Compared _, Proposition.SameValue _,                 Proposition.StringInside _, Proposition.Unread _, Proposition.LastToHold _,
-                 Proposition.OnAnApplication _, Proposition.SomeReachable _,
-                 Proposition.InTheStrings _ -> false;
+                 Proposition.OnAnApplication _, Proposition.SomeReachable _ -> false;
             case Proposition.Carried carried -> throw carried.handedToAReader();
         };
     }
