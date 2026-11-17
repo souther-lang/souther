@@ -615,15 +615,14 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 "List.any(i -> i.q / i.p >= 0 && i.p >= i.r, xs)"), "4:50"));    }
 
     /**
-     * A join of collections the relation does not read is asked of the witness as well: a run
-     * stopped there reaches the relation at no value. Two lists a rule holds long enough together
-     * that the join doubling both never fits are not cut down apart from each other, so the
-     * relation in the walk of a third is not shown reached. Without the rule they hold nothing on
-     * the witness, the join fits, and it relates; and a join of the two lists the walk reads
-     * itself, held past what a list holds together, is not reached either.
+     * A join of collections stops a run only where it would hold more elements than a list holds,
+     * which parts no values: two lists a rule holds long enough together that the join doubling
+     * both never fits leave the relation in the walk of a third reached at every value, as they do
+     * without the rule; and so does a join of the two lists the walk reads itself, held past what
+     * a list holds together. The joins are said as stops of their own.
      */
     @Test
-    void collectionsARuleHoldsTogetherAreNotCutDownApart() {
+    void aJoinPastWhatAListHoldsLeavesTheRelationReachedWhateverARuleHoldsTheListsTo() {
         String model = """
                 module w1
                 data Bundles = { xs: List<Int>, ys: List<Int>, zs: List<Int> }
@@ -636,12 +635,15 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 """;
         String doubled = "List.append(b.xs, b.xs), List.append(b.ys, b.ys)";
         String together = "    invariant List.length(xs) + List.length(ys) >= %s";
-        assertEquals(Map.of("b.zs[*]", NOT_REACHED, "n", NOT_REACHED), leftIn(model.formatted(
-                together.formatted("2147483647"), doubled, "b.zs"), "7:21"));
+        String heldTogether = model.formatted(together.formatted("2147483647"), doubled, "b.zs");
+        assertEquals(Map.of("b.zs[*]", RELATES, "n", RELATES), leftIn(heldTogether, "7:21"));
         assertEquals(Map.of("b.zs[*]", RELATES, "n", RELATES),
                 leftIn(model.formatted("", doubled, "b.zs"), "7:21"));
-        assertEquals(NOT_REACHED, leftIn(model.formatted(together.formatted("2147483648"),
+        assertEquals(RELATES, leftIn(model.formatted(together.formatted("2147483648"),
                 "b.xs, b.ys", "b.xs"), "7:21").get("b.xs[*]"));
+        assertEquals(List.of("List.append"), measured(heldTogether).db()
+                .ask(new Adequacy.Coverage("w1")).value().get("m").stopsPastTheRepresentation()
+                .stream().map(StopPastTheRepresentation::operation).distinct().toList());
     }
 
     /**
@@ -2436,14 +2438,15 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * they stand, and only how far apart they are settles it. A date and a count of days are not
      * moved together: a count past the days from the first date to the last or short of those to
      * the first settles the comparison, which is where the dates stop and no line the model
-     * draws, so the count is read; the days to a date past which no count runs are not shown.
+     * draws, so the count is read; every date has a count either side of its days from the
+     * first, so the date is related to the count and no date is parted.
      */
     @Test
     void twoValuesADayApartRelateEachOther() {
         assertEquals(Map.of("a", RELATES, "b", RELATES),
                 left("a: Date, b: Date", "data Unused = Int", "Date.daysBetween(a, b) == 1",
                         "4:39"));
-        assertEquals(Map.of("a", NOT_SHOWN, "n", RELATES),
+        assertEquals(Map.of("a", RELATES, "n", RELATES),
                 left("a: Date, n: Int", "data Unused = Int",
                         "Date.daysBetween(Date(\"2026-01-01\"), a) <= n", "4:56"));
     }
@@ -2530,14 +2533,15 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
-     * No two dates are ten trillion days apart, so the comparison holds for none of them; and
-     * four hundred billion days apart are only dates nearer the two ends than the middle is.
-     * Three hundred billion days leave the middle date partners either side.
+     * No two dates are ten trillion days apart, so the comparison holds for none of them, and
+     * every date has a row at it: they are related and nothing parts them. The same holds past
+     * four hundred billion days. Three hundred billion days leave the middle date partners
+     * either side.
      */
     @Test
     void aDifferenceHasToBeOneTheMiddleOfTheTypeReachesBothWays() {
         for (String apart : List.of("10000000000000", "400000000000")) {
-            assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
+            assertEquals(Map.of("a", RELATES, "b", RELATES),
                     left("a: Date, b: Date", "data Unused = Int",
                             "Date.daysBetween(a, b) > " + apart, "4:39"), apart);
         }
@@ -2626,7 +2630,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("a", RELATES, "b", RELATES),
                 left("a: Date, b: Date", "data Unused = Int",
                         "if " + apart + " >= 0 then " + apart + " <= 14 else false", "4:75"));
-        assertEquals(Map.of("a", NOT_SHOWN, "b", NOT_SHOWN),
+        assertEquals(Map.of("a", RELATES),
                 left("a: Date, b: Date", "data Unused = Int",
                         "if a >= Date(\"2020-01-01\") then " + apart + " <= 14 else false",
                         "4:71"));
@@ -3267,7 +3271,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("level", RELATES, "cap", RELATES),
                 left("level: Level, cap: Level", declarations,
                         "if level >= Low then level == cap else false", "4:49"));
-        assertEquals(Map.of("level", RELATES, "cap", NOT_SHOWN),
+        assertEquals(Map.of("level", RELATES),
                 left("level: Level, cap: Level", declarations,
                         "if level >= Mid then level == cap else false", "4:49"));
     }

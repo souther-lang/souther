@@ -16,11 +16,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * How far apart two dates are, held against a number the input states, parts none of the three
  * places.
  *
- * <p>The number is held at one value it takes, and the rows with it there are rows of the model: a
- * date left either way among them is left either way. That is read only where the number stands
- * apart from both dates and nothing the way states bears on it — the controls below hold each of
- * the two, since a number tied to a date or narrowed on the way may not take the value it was
- * held at.
+ * <p>Dates are values spaced a day apart, so a date is left either way where some value of the
+ * number puts the difference at both sides of it. A number tied to the dates by a rule, or narrowed
+ * on the way, still takes such values, and the controls below hold each of the two.
  */
 class ADifferenceHeldAgainstAThresholdIsReadWithTheThresholdHeldStillTest {
 
@@ -60,16 +58,17 @@ class ADifferenceHeldAgainstAThresholdIsReadWithTheThresholdHeldStillTest {
     }
 
     @Test
-    void aThresholdTiedToTheDatesByARuleIsNotHeldStill() {
-        assertEquals(1, relatingTwoValues("tied"),
-                "the number is kept within how many dates there are, so it is not apart from them:"
-                        + " only the number is read, as it was");
+    void aThresholdTiedToTheDatesByARuleLeavesAllThreePlacesUndivided() {
+        assertEquals(3, relatingTwoValues("tied"),
+                "the number is kept within how many dates there are, and each date is still at"
+                        + " both sides of some value of it");
     }
 
     @Test
-    void aThresholdTheWayNarrowsIsNotHeldStill() {
-        assertEquals(1, relatingTwoValues("narrowed"),
-                "only the number is read, as it was: the way keeps it from the value held");
+    void aThresholdTheWayNarrowsLeavesAllThreePlacesUndivided() {
+        assertEquals(3, relatingTwoValues("narrowed"),
+                "the way keeps the number to seven or more, and each date is still at both sides"
+                        + " of some value of it");
     }
 
     /** How many places a rule of {@code behavior} is said to leave undivided by relating two

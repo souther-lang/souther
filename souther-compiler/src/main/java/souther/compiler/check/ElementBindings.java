@@ -717,7 +717,10 @@ public record ElementBindings(Map<BindingId, List<HeldIn>> containers,
         }
         ValueName operation = call.declared().operation();
         Combinators.Handed handed = Combinators.handedTo(operation, call.args(), blockOf);
-        return handed != null && answersOnePerElementOf(operation, handed.container(), call.args())
+        if (handed == null) {
+            return null;
+        }
+        return answersOnePerElementOf(operation, handed.container(), call.args())
                 ? new StepOnEachElement(handed.step(), handed.element(), handed.container())
                 : null;
     }

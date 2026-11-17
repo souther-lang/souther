@@ -9,7 +9,6 @@ import souther.compiler.observe.Figure;
 import souther.compiler.observe.RunSensitivity;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.partition.WhereARunStopped;
-import souther.compiler.semantics.CodePointClass;
 import souther.compiler.values.TextExtents;
 import net.unit8.notation199x.pattern.Meter;
 
@@ -347,9 +346,7 @@ public sealed interface BlockReason {
                                 ((RelationNotShownWhereTheSearchStopped) other).stoppedAt());
                 case RelationShownOverARegion(boolean atAnyLength, Long longerThan,
                                               Long shorterThan,
-                                              List<String> imagesNotShown,
-                                              List<String> notShownGottenPast,
-                                              List<CodePointsLeftOpen> byCodePoints) -> {
+                                              List<String> imagesNotShown) -> {
                     RelationShownOverARegion them = (RelationShownOverARegion) other;
                     int byLength = Boolean.compare(atAnyLength, them.atAnyLength());
                     if (byLength != 0) {
@@ -372,28 +369,7 @@ public sealed interface BlockReason {
                             yield byName;
                         }
                     }
-                    if (imagesNotShown.size() != theirs.size()) {
-                        yield Integer.compare(imagesNotShown.size(), theirs.size());
-                    }
-                    List<String> theirPast = them.notShownGottenPast();
-                    for (int i = 0; i < Math.min(notShownGottenPast.size(), theirPast.size());
-                            i++) {
-                        int byName = notShownGottenPast.get(i).compareTo(theirPast.get(i));
-                        if (byName != 0) {
-                            yield byName;
-                        }
-                    }
-                    if (notShownGottenPast.size() != theirPast.size()) {
-                        yield Integer.compare(notShownGottenPast.size(), theirPast.size());
-                    }
-                    List<CodePointsLeftOpen> theirCounts = them.byCodePoints();
-                    for (int i = 0; i < Math.min(byCodePoints.size(), theirCounts.size()); i++) {
-                        int byCount = byCodePoints.get(i).compareTo(theirCounts.get(i));
-                        if (byCount != 0) {
-                            yield byCount;
-                        }
-                    }
-                    yield Integer.compare(byCodePoints.size(), theirCounts.size());
+                    yield Integer.compare(imagesNotShown.size(), theirs.size());
                 }
                 case RelationRowsNotShownComputed(NumberRegion numbers) -> numbers.compareTo(
                         ((RelationRowsNotShownComputed) other).numbers());
@@ -1546,10 +1522,11 @@ public sealed interface BlockReason {
      * classes it draws here are shown over some of the values, and the rest are shown on neither
      * side of it.
      *
-     * <p>Under {@code a.domain == d} with {@code d} the domain of an address, a domain is shown to
-     * be one some address has where an address can be written round it within the longest
-     * {@code String}, and a domain no address has is shown that whatever its length. The longest
-     * domains are neither, and no class here holds them.
+     * <p>Under {@code a.domain == d} with {@code d} the domain of an address, a domain an address
+     * held as written has is shown to be one some address has, and a domain no address has is
+     * shown that whatever its length. A domain an address has only through a code point
+     * normalization changes is neither, and no class here holds it; nor does one of a length no
+     * run gets to the relation at.
      *
      * <p>Apart from {@link RelationNotShownToReachEveryValue}, which leaves the position no class
      * of the rule's. Here the classes stand over what was shown, and what this says is where the
@@ -1575,40 +1552,17 @@ public sealed interface BlockReason {
      *                    the strings they are not exact on, and the strings of a length the
      *                    partner is not held to, which they may lengthen or shorten into one. None
      *                    where the values left open are left for another reason
-     * @param notShownGottenPast the operations of the library a run gets to the relation past only
-     *                    where it is shown to: a case conversion ends a run where its answer is
-     *                    longer than a {@code String} holds, and the strings it is not shown to
-     *                    end none for are left open, at the lengths the region says. None where
-     *                    the values left open are left for another reason
      */
     record RelationShownOverARegion(boolean atAnyLength, Long longerThan, Long shorterThan,
-                                    List<String> imagesNotShown, List<String> notShownGottenPast,
-                                    List<CodePointsLeftOpen> byCodePoints)
+                                    List<String> imagesNotShown)
             implements RuleReadingStopped {
 
         public RelationShownOverARegion {
-            if (!atAnyLength && longerThan == null && shorterThan == null
-                    && byCodePoints.isEmpty()) {
+            if (!atAnyLength && longerThan == null && shorterThan == null) {
                 throw new IllegalArgumentException("a relation shown over a region leaves some"
                         + " values open");
             }
             imagesNotShown = imagesNotShown.stream().distinct().sorted().toList();
-            notShownGottenPast = notShownGottenPast.stream().distinct().sorted().toList();
-            byCodePoints = byCodePoints.stream().distinct().sorted().toList();
-        }
-
-        /** The same, where no value is left open for an operation the run is not shown to get
-         *  past. */
-        public RelationShownOverARegion(boolean atAnyLength, Long longerThan, Long shorterThan,
-                                        List<String> imagesNotShown,
-                                        List<CodePointsLeftOpen> byCodePoints) {
-            this(atAnyLength, longerThan, shorterThan, imagesNotShown, List.of(), byCodePoints);
-        }
-
-        /** The same, with no values left open for how many code points of a class they hold. */
-        public RelationShownOverARegion(boolean atAnyLength, Long longerThan, Long shorterThan,
-                                        List<String> imagesNotShown) {
-            this(atAnyLength, longerThan, shorterThan, imagesNotShown, List.of());
         }
 
         /** Values open for being long, or open at any length. */
@@ -1642,15 +1596,7 @@ public sealed interface BlockReason {
          *  open for ({@code imagesNotShown}). */
         public static RelationShownOverARegion of(List<ValuesWithin> open,
                                                   List<String> imagesNotShown) {
-            return of(open, imagesNotShown, List.of());
-        }
-
-        /** The same, with the values left open for how many code points of a class they hold
-         *  ({@code byCodePoints}), which no length bounds. */
-        public static RelationShownOverARegion of(List<ValuesWithin> open,
-                                                  List<String> imagesNotShown,
-                                                  List<CodePointsLeftOpen> byCodePoints) {
-            return of(open, OperationsNotShown.ofImages(imagesNotShown), byCodePoints);
+            return of(open, OperationsNotShown.ofImages(imagesNotShown));
         }
 
         /**
@@ -1661,8 +1607,7 @@ public sealed interface BlockReason {
          * fewest, is open at those lengths for the conversion's image.
          */
         public static RelationShownOverARegion of(List<ValuesWithin> open,
-                                                  OperationsNotShown operations,
-                                                  List<CodePointsLeftOpen> byCodePoints) {
+                                                  OperationsNotShown operations) {
             boolean atAnyLength = open.stream()
                     .anyMatch(each -> each.shortest() == 0 && each.longest() == null);
             Long longerThan = open.stream().filter(each -> each.shortest() > 0)
@@ -1671,87 +1616,43 @@ public sealed interface BlockReason {
                     .filter(each -> each.shortest() == 0 && each.longest() != null)
                     .map(each -> each.longest() + 1).max(Long::compare).orElse(null);
             return new RelationShownOverARegion(atAnyLength, longerThan, shorterThan,
-                    operations.images(), operations.gottenPast(), byCodePoints);
+                    operations.images());
         }
     }
 
     /**
      * The operations of the library values of a place were left open for, each as the library
-     * names it, by why: one whose image over the strings of a side is shown only where it is
-     * exact, and one a run gets to the relation past only where it is shown to. Two answers and
-     * not one list, because what a reader can do about each differs — an image is a question of
-     * what the library states of the operation, and getting past one is a question of the strings
-     * it is handed — and a reason named for the one is no reason for the other.
+     * names it: those whose image over the strings of a side is shown only where it is exact.
      *
-     * @param images     the operations whose image is not shown
-     * @param gottenPast the operations a run is not shown to get past
+     * <p>Where an operation ends a run only past what a {@code String} holds is no reason a value
+     * is open: that is where the representation stops, which no class is drawn to.
+     *
+     * @param images the operations whose image is not shown
      */
-    public record OperationsNotShown(List<String> images, List<String> gottenPast) {
+    public record OperationsNotShown(List<String> images) {
 
-        /** None of either. */
-        public static final OperationsNotShown NONE = new OperationsNotShown(List.of(), List.of());
+        /** None. */
+        public static final OperationsNotShown NONE = new OperationsNotShown(List.of());
 
         public OperationsNotShown {
             images = images.stream().distinct().sorted().toList();
-            gottenPast = gottenPast.stream().distinct().sorted().toList();
         }
 
-        /** The operations {@code images} as ones whose image is not shown, and none other. */
+        /** The operations {@code images} as ones whose image is not shown. */
         public static OperationsNotShown ofImages(List<String> images) {
-            return new OperationsNotShown(images, List.of());
+            return new OperationsNotShown(images);
         }
 
-        /** These and {@code other}'s, each by its own why. */
+        /** These and {@code other}'s. */
         public OperationsNotShown and(OperationsNotShown other) {
             List<String> allImages = new ArrayList<>(images);
             allImages.addAll(other.images);
-            List<String> allPast = new ArrayList<>(gottenPast);
-            allPast.addAll(other.gottenPast);
-            return new OperationsNotShown(allImages, allPast);
+            return new OperationsNotShown(allImages);
         }
 
         /** These, and {@code operations} as ones whose image is not shown. */
         public OperationsNotShown andImagesOf(List<String> operations) {
             return and(ofImages(operations));
-        }
-
-        /** These, and {@code operations} as ones a run is not shown to get past. */
-        public OperationsNotShown andNotGottenPast(List<String> operations) {
-            return and(new OperationsNotShown(List.of(), operations));
-        }
-    }
-
-    /**
-     * Values left open for how many code points of a class they hold: those holding fewer than
-     * {@code fewerThan} of them, or more than {@code moreThan}. A bound on how many and not on
-     * the values, as {@link RelationShownOverARegion} says of lengths.
-     *
-     * @param counted  the code points counted
-     * @param fewerThan the values holding fewer than this many are open; null where none are
-     *                 for holding few
-     * @param moreThan the values holding more than this many are open; null where none are for
-     *                 holding many
-     */
-    record CodePointsLeftOpen(CodePointClass counted, Long fewerThan, Long moreThan)
-            implements Comparable<CodePointsLeftOpen> {
-
-        public CodePointsLeftOpen {
-            Objects.requireNonNull(counted, "the code points counted");
-            if ((fewerThan == null) == (moreThan == null)) {
-                throw new IllegalArgumentException(
-                        "values are open for holding fewer than so many, or more than so many");
-            }
-        }
-
-        @Override
-        public int compareTo(CodePointsLeftOpen other) {
-            int byClass = counted.toString().compareTo(other.counted.toString());
-            if (byClass != 0) {
-                return byClass;
-            }
-            int byFewer = Comparator.nullsFirst(Long::compare).compare(fewerThan, other.fewerThan);
-            return byFewer != 0 ? byFewer
-                    : Comparator.nullsFirst(Long::compare).compare(moreThan, other.moreThan);
         }
     }
 

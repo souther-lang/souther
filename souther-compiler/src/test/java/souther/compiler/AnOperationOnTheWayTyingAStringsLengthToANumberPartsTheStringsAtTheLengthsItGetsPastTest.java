@@ -12,7 +12,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -26,8 +25,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>A way that holds the length of a string against a number the row writes — states a sum of
  * the two, or works one out that must stay within its type — is no reason to give the equality up:
  * for each length there may be a number that gets past, and the strings of a length none does for
- * are shown on neither side, whichever they would be on. A number the declarations tie to nothing
- * else is taken out of what the way says; one the way holds apart from a value is not.
+ * are none the equality is asked of: no run gets to it with them, so they are in no class of it
+ * and are not left open by it. Where the run stops on the way, the stop is said once, where it
+ * stops. A number the declarations tie to nothing else is taken out of what the way says; one the
+ * way holds apart from a value is not.
  */
 class AnOperationOnTheWayTyingAStringsLengthToANumberPartsTheStringsAtTheLengthsItGetsPastTest {
 
@@ -203,20 +204,20 @@ class AnOperationOnTheWayTyingAStringsLengthToANumberPartsTheStringsAtTheLengths
     /**
      * The number is held to the three greatest {@code Int}s, so the sum stays within the type
      * only for a string of one or two code points: a longer string has no number that gets a run
-     * past the addition. The strings it has are the classes, and the longer ones are open.
+     * past the addition. The strings it has are the classes, and the longer ones are none the
+     * equality is asked of.
      */
     @Test
-    void aNumberNearTheGreatestLeavesTheShortStringsPartedAndTheLongOnesOpen() {
+    void aNumberNearTheGreatestLeavesTheShortStringsPartedAndNoneOfTheLongOnes() {
         Compilation compilation = measured(NUMBER.formatted(
                 "invariant value >= 9223372036854775805", "String.length(b.value) + n.value > 0"));
         PartitionEvidence evidence = evidenceOf(compilation);
 
         assertEquals(List.of(), stringsNotShownToReachEveryValue(evidence));
-        assertEquals(List.of("b"), shownOverARegion(evidence));
+        assertEquals(List.of(), shownOverARegion(evidence));
         assertEquals(List.of("a: x can be b", "a: x is never b"), classesOf(evidence, "a").get("a"));
         assertEquals(List.of("b: x can be a", "b: x is never a"), classesOf(evidence, "b").get("b"));
-        assertTrue(Pattern.compile("\"longerThan\"\\s*:\\s*2\\b").matcher(json(compilation)).find(),
-                json(compilation));
+        assertFalse(json(compilation).contains("leftOpen"), json(compilation));
     }
 
     private static final String ORIENTED = """
@@ -260,10 +261,9 @@ class AnOperationOnTheWayTyingAStringsLengthToANumberPartsTheStringsAtTheLengths
                 PartitionEvidence evidence = evidenceOf(compilation);
                 String shape = ties + " over " + languages;
 
-                assertEquals(List.of("b"), shownOverARegion(evidence), shape);
+                assertEquals(List.of(), shownOverARegion(evidence), shape);
                 assertEquals(List.of(), stringsNotShownToReachEveryValue(evidence), shape);
-                assertTrue(Pattern.compile("\"longerThan\"\\s*:\\s*2\\b")
-                        .matcher(json(compilation)).find(), shape);
+                assertFalse(json(compilation).contains("leftOpen"), shape);
             }
         }
     }
@@ -299,11 +299,8 @@ class AnOperationOnTheWayTyingAStringsLengthToANumberPartsTheStringsAtTheLengths
                 }
                 """);
 
-        assertEquals(List.of("b"), shownOverARegion(evidenceOf(compilation)));
-        assertTrue(Pattern.compile("\"longerThan\"\\s*:\\s*1\\b").matcher(json(compilation)).find(),
-                json(compilation));
-        assertTrue(Pattern.compile("\"shorterThan\"\\s*:\\s*1\\b").matcher(json(compilation)).find(),
-                json(compilation));
+        assertEquals(List.of(), shownOverARegion(evidenceOf(compilation)));
+        assertFalse(json(compilation).contains("leftOpen"), json(compilation));
     }
 
     /**
@@ -396,18 +393,18 @@ class AnOperationOnTheWayTyingAStringsLengthToANumberPartsTheStringsAtTheLengths
 
     /**
      * The number is held to at most five, so the sum is above ten only for a string of six code
-     * points or more: a shorter string has no number that gets a run past the guard.
+     * points or more: a shorter string has no number that gets a run past the guard, and is none
+     * the equality is asked of.
      */
     @Test
-    void aNumberHeldFromAboveLeavesTheShortStringsOpen() {
+    void aNumberHeldFromAboveLeavesTheShortStringsToTheGuard() {
         Compilation compilation = measured(NUMBER.formatted("invariant value <= 5",
                 "String.length(b.value) + n.value > 10"));
         PartitionEvidence evidence = evidenceOf(compilation);
 
         assertEquals(List.of(), stringsNotShownToReachEveryValue(evidence));
-        assertEquals(List.of("b"), shownOverARegion(evidence));
-        assertTrue(Pattern.compile("\"shorterThan\"\\s*:\\s*6\\b").matcher(json(compilation)).find(),
-                json(compilation));
+        assertEquals(List.of(), shownOverARegion(evidence));
+        assertFalse(json(compilation).contains("leftOpen"), json(compilation));
     }
 
     /** The lengths that get past are all the lengths: nothing is left open. */

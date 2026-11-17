@@ -37,7 +37,11 @@ import souther.compiler.check.RuleRef;
 import souther.compiler.numeric.Towards;
 import souther.compiler.partition.AuthoredLine;
 import souther.compiler.partition.BorderObligationPoint;
+import souther.compiler.partition.StopPastTheRepresentation;
 import souther.compiler.partition.BorderQuantity;
+import souther.compiler.meaning.Proposition;
+import souther.compiler.partition.CaseOfAStatement;
+import souther.compiler.partition.CasesTheRowsTook;
 import souther.compiler.partition.LinearQuantity;
 import souther.compiler.partition.AuthoredPlacement;
 import souther.compiler.partition.BoundHeldIn;
@@ -91,6 +95,7 @@ import souther.compiler.partition.RoleAnswer;
 import souther.compiler.partition.RuleEvidenceOrigin;
 import souther.compiler.partition.UndividedPosition;
 import souther.compiler.diag.Citation;
+import souther.compiler.diag.Localizable;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRendering;
@@ -168,6 +173,7 @@ import souther.compiler.partition.WhereNothingIsAnswered;
 import souther.compiler.partition.WhichLine;
 import souther.compiler.partition.WhyKept;
 import souther.compiler.reading.PathAccess;
+import souther.compiler.reading.UnjoinedMeeting;
 import souther.compiler.query.ArmCoverage;
 import souther.compiler.query.ArmObligation;
 import souther.compiler.query.ArmSummary;
@@ -1162,7 +1168,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     reported,
                     armPlaces(compilation, branch),
                     conditionPlaces(compilation, name, linesOf(read), requirements, reported,
-                            partition == null ? List.of() : partition.caseExpansions()),
+                            partition == null ? List.of() : partition.caseExpansions(),
+                            decisions == null ? null : decisions.get(behavior.name())),
                     rulePlaces(compilation, citedBy(evidence, reported)),
                     partPlaces(compilation, partition, reported,
                             evidence.account() == null ? List.of()
@@ -1200,7 +1207,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 // under are the debts' rather than any behavior's.
                 new DeclarationsShown(declared,
                         conditionPlaces(compilation, name, declaredLines(declared), Map.of(),
-                                List.of(), List.of()),
+                                List.of(), List.of(), null),
                         rulePlaces(compilation, citedByDeclarations(declared, owed)),
                         rowPlaces),
                 Adequacy.ToldApart.of(compilation.db(), name));
@@ -1458,6 +1465,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
         Set<ObligationIdentity.OfACombinationOfDecisions> made =
                 meetings.made().made().orElseThrow().met();
+        Adequacy.MeetingsSearchedFor.WhatTheSearchSaid searched =
+                Adequacy.MeetingsSearchedFor.WhatTheSearchSaid.of(compilation.db(), module,
+                        behavior);
         DecisionRuleReading.Places places = placesFor(compilation.db(), module, behavior);
         Object madeState = new Object();
         List<UnobservedGroup> out = new ArrayList<>();
@@ -1473,6 +1483,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     states.add(null);
                 } else if (made.contains(each)) {
                     states.add(madeState);
+                } else if (!searched.owesARow(each)) {
+                    // The rules of its decisions leave no value: no combination, and the measure
+                    // raises no finding of it ({@link Adequacy.MeetingsSearchedFor}).
+                    states.add(null);
                 } else {
                     // A combination of the body no row made has the finding that says so: the
                     // measure raises one for every combination it states that the rows did not
@@ -2003,8 +2017,23 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static ConditionsShown conditionPlaces(
             Compilation compilation, String module, List<BorderAssessment> lines,
             Map<DecisionRule, SettledAcross> settled, List<ReportedFinding> reported,
-            List<CasesExpandedAtARule> expanded) {
+            List<CasesExpandedAtARule> expanded, DecisionEvidence decision) {
         Map<ConditionReportAnchor, Citation> places = new LinkedHashMap<>();
+        // And where the conditions are written that a statement of the decision lacks cases of,
+        // which the decision's line says by where, since the statement itself is spelled by the
+        // compiler and not by the author.
+        if (decision != null) {
+            decision.took().made().ifPresent(rows -> {
+                for (CasesTheRowsTook.StatementShort lacking : rows.lacking()) {
+                    lacking.at().ifPresent(anchor -> {
+                        Citation at = Sites.placeIfKnown(compilation.db(), anchor);
+                        if (at != null) {
+                            places.putIfAbsent(anchor, at);
+                        }
+                    });
+                }
+            });
+        }
         // What a search for a rule of the decision was arrived at without, which is named on the
         // decision's own line and is about the same conditions the points below name. Every
         // search's, and not the ones a page prints: which of them is worth a sentence is decided
@@ -2350,12 +2379,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         List<Adequacy.DeclaredLine> lines = module.declaredLines();
         ObligationSummary<Adequacy.DeclaredDebt> account =
                 ObligationSummary.of(debts, each -> each.debt().owed());
-        if (!debts.isEmpty() || !lines.isEmpty() || !module.declaredExclusions().isEmpty()) {
-            out.append("  ")
-                    .append(DisplayColumns.padRight(page.say(new ReportMessage.Declarations()), 15))
-                    .append(page.say(new ReportMessage.BorderCounts(lines.size(),
-                            account.met().size() + "/" + account.counted())))
-                    .append(refuted(account, page)).append(NEW_LINE);
+        boolean counted = !debts.isEmpty() || !lines.isEmpty()
+                || !module.declaredExclusions().isEmpty();
+        WeakeningSet went = module.declarationsWeakenedBy();
+        // A heading wherever something is said under it. A reading that went without and found
+        // nothing owes no count, since nothing was found is not nothing is owed: the heading then
+        // says only whose account the lines under it are of, and not how many it holds.
+        if (counted || !went.isEmpty()) {
+            out.append("  ").append(counted
+                    ? DisplayColumns.padRight(page.say(new ReportMessage.Declarations()), 15)
+                    + page.say(new ReportMessage.BorderCounts(lines.size(),
+                            account.met().size() + "/" + account.counted()))
+                    + refuted(account, page)
+                    : page.say(new ReportMessage.Declarations())).append(NEW_LINE);
+            wentWithout(out, "      ", went, page);
         }
         // Every obligation the count holds and no row is at, so that the difference between the two
         // numbers is a difference a reader can walk. A point nobody can say is missed is not a gap
@@ -3266,6 +3303,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         marks);
                 decision(out, behavior, module.declaredIn(), page, onlyBy, marks);
                 replacement(out, behavior, module.module(), module.declaredIn(), page);
+                wentWithout(out, "    ", behavior.weakenedBy(), page);
                 // Under the behavior it names, because a reason printed at the module's foot is
                 // read as belonging to whichever behavior came last. That was survivable while the
                 // only reasons naming one were rare; a position that could not be read is not.
@@ -3993,6 +4031,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         String.valueOf(tilt.position()), String.valueOf(tilt.into().left())));
             }
         }
+        weightsNotDecided(out, behavior.weights(), page);
         // Every obligation the count holds and no row is at, said here or under the findings below:
         // a point nobody can say is missed is not a gap and is no finding, and left to the number
         // alone a reader is told a difference with nothing under it to act on.
@@ -4143,6 +4182,74 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             case THE_CLASS_AT_THE_LINE_HOLDS_ONE_VALUE ->
                     new ReportMessage.TheClassAtTheLineHoldsOneValue();
         };
+    }
+
+    /**
+     * The weights the rows leave neither fixed nor shown unfixed, with what each went without.
+     *
+     * <p>One entry for the positions of a computation that went without the same things, and the
+     * positions under it: a comparison weighing many positions in several places has the same
+     * reason at every one, and one entry per position would write it as many times. The reasons are
+     * the weight's own and what the borders of the computation went without, which the weight
+     * carries as the borders said it.
+     *
+     * <p>The form a position is said to weigh into is the widest of the forms it is in, which is
+     * the one {@link ReportMessage.NoRowFixesTheWeight} names for a weight no row shows, so the
+     * two lines about one position name one form. A position in two forms is one entry under that
+     * form and not one under each.
+     */
+    static void weightsNotDecided(StringBuilder out, List<TiltOfADerivedValue> weights,
+                                  Page page) {
+        for (TiltOfADerivedValue each : weights) {
+            Map<UndecidedWeighing, List<NumericTerm>> together = new LinkedHashMap<>();
+            each.positions().forEach((position, standing) -> {
+                if (standing instanceof TiltOfADerivedValue.Standing.Undecided it) {
+                    together.computeIfAbsent(
+                            new UndecidedWeighing(each.widestWith(position), it),
+                            _ -> new ArrayList<>()).add(position);
+                }
+            });
+            together.forEach((weighing, positions) -> {
+                out.append("      ? ").append(page.say(new ReportMessage.TheWeightsAreNotDecided(
+                        String.valueOf(weighing.into().left())))).append(NEW_LINE);
+                for (NumericTerm position : positions) {
+                    out.append("          · ").append(position).append(NEW_LINE);
+                }
+                for (Weakening.AWeightNotDecided.Why why : weighing.standing().own().written()) {
+                    out.append("          ").append(page.say(new ReportMessage.TheyAreNotDecidedBecause(
+                            switch (why) {
+                                case NO_BORDER_OF_IT_WAS_READ ->
+                                        new ReportMessage.NoBorderOfTheComputationWasRead();
+                                case A_BORDER_WAS_NOT_READ_IN_FULL ->
+                                        new ReportMessage.ABorderOfTheComputationWasNotReadInFull();
+                                case A_RUN_WAS_NOT_WATCHED ->
+                                        new ReportMessage.ARowOfTheComputationWasNotWatched();
+                                case THE_ARITHMETIC_GAVE_OUT ->
+                                        new ReportMessage.TheArithmeticGaveOutOnAChangedWeight();
+                            }))).append(NEW_LINE);
+                }
+                // What the borders went without, in the words the document publishes for it. The
+                // borders say it themselves under the line they are at, so what is said here is
+                // that the weight waits on them.
+                if (!weighing.standing().carried().isEmpty()) {
+                    out.append("          ").append(page.say(new ReportMessage.TheyAreNotDecidedBecause(
+                            new ReportMessage.TheBordersOfTheComputationWentWithout(String.join(", ",
+                                    weakeningWords(weighing.standing().carried())))))).append(NEW_LINE);
+                }
+            });
+        }
+    }
+
+    /**
+     * Positions that are weighed into one value and are undecided for the same things.
+     *
+     * <p>Keyed by the weighing and by the standing itself, which is what the reasons are asked of.
+     * A computation holds several weighings, and a position is weighed into one of them: positions
+     * of different weighings are not one group however alike their reasons read, and neither are
+     * two whose borders went without different things.
+     */
+    private record UndecidedWeighing(LinearQuantity into,
+                                     TiltOfADerivedValue.Standing.Undecided standing) {
     }
 
     /**
@@ -4327,6 +4434,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                             copy).calls(), page, declaredIn), page))))
                             .append(NEW_LINE);
                 }
+            }
+            // And where a run stops only past what the representation holds: said once, of each
+            // operation, and of no relation it comes before.
+            if (!partition.stopsPastTheRepresentation().isEmpty()) {
+                noted(out, page, new ReportMessage.StopsOnlyPastWhatARepresentationHolds(
+                        String.join(", ", partition.stopsPastTheRepresentation().stream()
+                                .map(each -> each.operation() + "@"
+                                        + writtenAtSaid(each.at(), rendering, declaredIn))
+                                .toList())));
             }
         }
         // And a position whose rules this reading never arrived at, which names no rule because
@@ -4884,9 +5000,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *
      * <p>The count and the gaps beside it.
      *
-     * <p>The meetings the measure would not walk are said beside the count rather than folded into
-     * it. What they hold is combinations nobody counted, and a reader told only the ratio would
-     * take a behavior measured in part for one measured in full.
+     * <p>The meetings the measure would not walk, and the ones it could not join to what a run
+     * records, are said beside the count rather than folded into it. Each of the second is then
+     * said under it by where it is written and why. What they hold is combinations nobody
+     * counted, and a reader told only the ratio would take a behavior measured in part for one
+     * measured in full.
      *
      * <p>Every group that has combinations no row makes is said once, as what it is made of, and
      * under it the sets of its choices that no row makes, one to a line the way an arm or a
@@ -4904,15 +5022,31 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                              SourceId declaredIn, Page page,
                              MarksWritten marks) {
         Optional<InteractionEvidence.RowsMeeting> made = meetings.made().made();
-        String held = meetings.asked().notMeasured().isEmpty() ? ""
-                : "   " + page.say(new ReportMessage.MeetingsNotWalked(
-                        meetings.asked().notMeasured().size()));
+        // What the count leaves out, by both ways a meeting is left out of it.
+        StringBuilder held = new StringBuilder();
+        if (!meetings.asked().notMeasured().isEmpty()) {
+            held.append("   ").append(page.say(new ReportMessage.MeetingsNotWalked(
+                    meetings.asked().notMeasured().size())));
+        }
+        if (!meetings.asked().notJoined().isEmpty()) {
+            held.append("   ").append(page.say(new ReportMessage.MeetingsNotJoined(
+                    meetings.asked().notJoined().size())));
+        }
         measureLine(out, new ReportMessage.Interaction(), page, page.say(made
                 .<Message>map(rows -> new ReportMessage.InteractionCombinations(
                         rows.met().size() + "/" + meetings.counted()))
                 .orElseGet(() -> new ReportMessage.InteractionCombinationsUncounted(
                         meetings.counted(), ReasonProse.of(meetings.made().why()).sentence())))
-                + held);
+                + held.toString());
+        // The meetings no combination is asked of, each by where it is written and why, since the
+        // count beside them says nothing of what is left unmeasured.
+        int number = 0;
+        for (UnjoinedMeeting each : meetings.asked().notJoined()) {
+            number++;
+            out.append("      ? ").append(page.say(new ReportMessage.TheMeetingIsNotJoined(number,
+                    whereWritten(each.at(), page, declaredIn),
+                    phrase("not-joined", each.why())))).append(NEW_LINE);
+        }
         for (UnobservedGroup group : behavior.unobserved()) {
             decidedTogether(out, group, declaredIn, page);
             for (UnobservedChoices missing : group.choices()) {
@@ -5104,6 +5238,134 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         noInputTakes(out, behavior, decision, page, declaredIn);
         everyRunStops(out, behavior, decision, page, declaredIn);
         undecided(out, behavior, decision, page, declaredIn);
+        casesNoRowWasIn(out, behavior.conditionPlaces(), took, declaredIn, page);
+    }
+
+    /**
+     * What each statement of the decision lacks: the cases of a thing no row was seen in, and the
+     * statements no row can be asked about, each under a numbered line.
+     *
+     * <p>Every rule can be taken and the decision still be partial: the weakening says a case of a
+     * statement inside a rule has no row, and a reader told only that the rules are all taken has
+     * nothing to go on. The two are said apart because they are acted on apart — a row answers the
+     * first, and the second waits for this compiler to read further. The number is the entry's
+     * place in the document's {@code statementsNoRowIsIn}.
+     */
+    private static void casesNoRowWasIn(StringBuilder out, ConditionsShown places,
+                                        Measure<DecisionEvidence.RowsPlaced> took,
+                                        SourceId declaredIn, Page page) {
+        Optional<DecisionEvidence.RowsPlaced> made = took.made();
+        if (made.isEmpty()) {
+            return;
+        }
+        // Said by where the condition is written, which is what an author can open. Numbered as
+        // well, in the order the reading met them and the document's array holds them, for the
+        // statements there is no such place for.
+        int number = 0;
+        for (CasesTheRowsTook.StatementShort each : made.get().lacking()) {
+            number++;
+            Citation written = each.at().map(places.places()::get).orElse(null);
+            Message at = written == null ? new ReportMessage.Nothing()
+                    : whereWritten(written, page, declaredIn);
+            Message of = ofWhat(each, at);
+            out.append("      ? ").append(page.say(each.unseen().isEmpty()
+                    ? new ReportMessage.NoRowCanBeAskedAbout(number, of)
+                    : new ReportMessage.NoRowIsInTheseCases(number, of))).append(NEW_LINE);
+            for (CaseOfAStatement unseen : each.unseen()) {
+                out.append("          · ").append(page.say(switch (unseen) {
+                    case CaseOfAStatement.Search search -> switch (search.step()) {
+                        case AT_THE_NODE -> new ReportMessage.TheSearchFindsItAtTheNode();
+                        case BELOW_IT -> new ReportMessage.TheSearchFindsItBelowTheNode();
+                        case NOWHERE_AT_A_LEAF ->
+                                new ReportMessage.TheSearchComesBackEmptyAtANodeWithNothingBelow();
+                        case NOWHERE_BELOW ->
+                                new ReportMessage.TheSearchComesBackEmptyFromEveryNodeBelow();
+                    };
+                    case CaseOfAStatement.KeyOrder order -> switch (order.way()) {
+                        case HOLDS_BY_THE_LAST ->
+                                new ReportMessage.TheStatementHoldsByTheLastElementOfAKey();
+                        case FAILS_BY_THE_LAST ->
+                                new ReportMessage.TheStatementFailsByTheLastElementOfAKey();
+                    };
+                })).append(NEW_LINE);
+            }
+            // The statement's other cases, which no row can be asked for: said under the cases
+            // that can, since it is one statement with both to act on.
+            if (each.notAskable() && !each.unseen().isEmpty()) {
+                out.append("          · ").append(page.say(
+                        new ReportMessage.NoRowCanBeAskedForTheOthers())).append(NEW_LINE);
+            }
+        }
+    }
+
+    /**
+     * Where code is written, as a clause of a line about it.
+     *
+     * <p>Chosen by what the citation says. A place the code is written at is "written at"; code
+     * that is written elsewhere than where this compile met it has a citation that names where it
+     * is and the call it was reached at, and "written at" before that reads the call as the place
+     * the code is.
+     */
+    static Message whereWritten(Citation at, Page page, SourceId declaredIn) {
+        String place = at.said(page.rendering(), declaredIn);
+        return at instanceof Citation.Elsewhere
+                ? new ReportMessage.InAPlace(place) : new ReportMessage.AtAPlace(place);
+    }
+
+    /**
+     * The catalog's phrase for one value of an enum, found under {@code kind.<family>.} by the
+     * value's name.
+     *
+     * <p>A phrase is one entry per value and no code, so a value that is added is a phrase to
+     * write and nothing else to touch; {@code EveryWordOfThePageHasAPhraseInEveryCatalogTest} holds
+     * each family to having one for every value.
+     */
+    static Localizable phrase(String family, Enum<?> value) {
+        return Localizable.of("kind." + family + "." + word(value).replace('_', '-'));
+    }
+
+    /**
+     * One line for each thing a partial measure went without, said in a sentence.
+     *
+     * <p>The words are the ones the document's {@code weakening} array carries, from the same
+     * derivation, so a behavior's page and its document name the same things. A weakening that is
+     * an observation gone missing is not said here: the page says it under the behavior it names,
+     * as the reason it carries ({@link PublishedIncompleteness}).
+     *
+     * <p>Said under whatever the weakening is of, which is what {@code indent} places it under: a
+     * line that is not under the heading of its own account reads as the last behavior's.
+     */
+    private static void wentWithout(StringBuilder out, String indent, WeakeningSet weakenedBy,
+                                    Page page) {
+        for (WeakeningVocabulary each : weakeningsSaid(weakenedBy).written()) {
+            if (each instanceof WeakeningVocabulary.AWordOfThisDocuments said) {
+                Message line = new ReportMessage.ThePartialMeasureWentWithout(
+                        phrase("weakening", said.word()));
+                out.append(indent).append("? ").append(page.say(line)).append(NEW_LINE);
+            }
+        }
+    }
+
+    /** What a statement that lacks cases is, in the places an author wrote and nothing else. */
+    private static Message ofWhat(CasesTheRowsTook.StatementShort lacking, Message at) {
+        if (!lacking.unseen().isEmpty()) {
+            return switch (lacking.unseen().getFirst()) {
+                case CaseOfAStatement.Search search -> ofASearch(search.statement(), at);
+                case CaseOfAStatement.KeyOrder order -> new ReportMessage.OfAnOrder(
+                        order.container().toString(), order.position().toString(), at);
+            };
+        }
+        return switch (lacking.kind()) {
+            case A_NODE_A_SEARCH_REACHES -> lacking.statement()
+                    instanceof Proposition.SomeReachable search
+                    ? ofASearch(search, at) : new ReportMessage.OfASearchNoPlaceIsSaidOf();
+            case THE_ORDER_OF_A_REPEATED_KEY -> new ReportMessage.OfAnOrderNoPlaceIsSaidOf();
+        };
+    }
+
+    private static Message ofASearch(Proposition.SomeReachable search, Message at) {
+        return new ReportMessage.OfASearch(search.writtenAt().toString(),
+                String.join(".", search.through()), at);
     }
 
     /**
@@ -6769,6 +7031,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                  List<WhereARunStopped> runsStopped) {
     }
 
+    /** Where {@code at} is written, as a page says a place: the source and line and column a
+     *  reader is sent to, or where the layouts put it where it is out of sight. */
+    private static String writtenAtSaid(SourcePos at, SourceRendering rendering,
+                                        SourceId declaredIn) {
+        return PublishedAt.of(Citation.of(at))
+                .map(place -> PlaceProse.said(place, rendering, declaredIn))
+                .orElseGet(() -> String.valueOf(rendering.layouts().resolve(at)));
+    }
+
     /**
      * What each construction on the way to a rule asks of a run, as the human report says it after
      * the rule: where the construction is written and what the numbers it is made of have to be.
@@ -6782,9 +7053,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         }
         List<String> each = new ArrayList<>();
         for (WhatAConstructionAsks one : asks) {
-            String at = PublishedAt.of(Citation.of(one.at()))
-                    .map(place -> PlaceProse.said(place, rendering, declaredIn))
-                    .orElseGet(() -> String.valueOf(rendering.layouts().resolve(one.at())));
+            String at = writtenAtSaid(one.at(), rendering, declaredIn);
             each.add(page.say(one.asks() instanceof WhatAConstructionAsks.Never
                     ? new ReportMessage.ConstructionNeverPassed(one.construction(), at)
                     : new ReportMessage.ConstructionAsks(one.construction(), at,
@@ -6867,25 +7136,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             left.put("shorterThan", open.shorterThan());
         }
         left.put("atAnyLength", open.atAnyLength());
-        if (!open.byCodePoints().isEmpty()) {
-            ArrayNode counted = left.putArray("codePoints");
-            for (BlockReason.CodePointsLeftOpen each : open.byCodePoints()) {
-                ObjectNode entry = counted.addObject();
-                codePointClass(entry, each.counted());
-                if (each.fewerThan() != null) {
-                    entry.put("fewerThan", each.fewerThan());
-                } else {
-                    entry.put("moreThan", each.moreThan());
-                }
-            }
-        }
         if (!open.imagesNotShown().isEmpty()) {
             ArrayNode names = left.putArray("imagesNotShown");
             open.imagesNotShown().forEach(names::add);
-        }
-        if (!open.notShownGottenPast().isEmpty()) {
-            ArrayNode names = left.putArray("notShownGottenPast");
-            open.notShownGottenPast().forEach(names::add);
         }
     }
 
@@ -7039,6 +7292,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     case TiltOfADerivedValue.Standing.NotShown _ -> "not_shown";
                     case TiltOfADerivedValue.Standing.Undecided _ -> "undecided";
                 });
+                // Why, beside the word: the weight's own reasons, and what the borders of the
+                // computation went without as they said it. Either may be absent, never both.
+                if (standing instanceof TiltOfADerivedValue.Standing.Undecided undecided) {
+                    if (!undecided.own().isEmpty()) {
+                        ArrayNode own = one.putArray("undecidedBecause");
+                        undecided.own().written().forEach(why -> own.add(word(why)));
+                    }
+                    weakening(one, undecided.carried());
+                }
             });
         }
     }
@@ -9335,6 +9597,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             caseExpansionRow(expanded.addObject(), told.get(at), numbered.get(at), places,
                     parts, sources);
         }
+        // And where a run stops only past what the representation holds, once each, where there
+        // is any.
+        if (!partition.stopsPastTheRepresentation().isEmpty()) {
+            ArrayNode stops = out.putArray("stopsPastTheRepresentation");
+            for (StopPastTheRepresentation each : partition.stopsPastTheRepresentation()) {
+                ObjectNode one = stops.addObject();
+                one.put("operation", each.operation());
+                // Where a reader can be sent: a place the sources lay out at a line.
+                PublishedAt.of(Citation.of(each.at()))
+                        .filter(place -> sources.layouts().resolve(place.at()) != null)
+                        .ifPresent(place -> at(one, place, sources));
+            }
+        }
     }
 
     /** One rule's line and what one of its cases was, as a row of {@code caseExpansions}. */
@@ -9882,6 +10157,29 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         .sorted(WhereARunStopped.IN_A_STEADY_ORDER).toList(), sources);
             }
         }
+        placed.ifPresent(rows -> statementsNoRowIsIn(out, rows));
+    }
+
+    /**
+     * The statements of the decision that lack cases, which are what
+     * `reachable_node_cases_unmeasured` and `keyed_overwrite_cases_unmeasured` stand for, in the
+     * order the page numbers them. Absent where there are none.
+     */
+    private static void statementsNoRowIsIn(ObjectNode into, DecisionEvidence.RowsPlaced rows) {
+        if (rows.lacking().isEmpty()) {
+            return;
+        }
+        ArrayNode all = into.putArray("statementsNoRowIsIn");
+        for (CasesTheRowsTook.StatementShort each : rows.lacking()) {
+            ObjectNode one = all.addObject();
+            one.put("statement", each.what());
+            one.put("kind", word(each.kind()));
+            one.put("notAskable", each.notAskable());
+            if (!each.unseen().isEmpty()) {
+                ArrayNode cases = one.putArray("cases");
+                each.unseen().forEach(unseen -> cases.add(word(unseen.side())));
+            }
+        }
     }
 
     /**
@@ -10008,6 +10306,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         ObjectNode out = into.putObject("interaction");
         measured(out.putObject("coverage"), meetings.made());
         out.put("groupsNotMeasured", meetings.asked().notMeasured().size());
+        if (!meetings.asked().notJoined().isEmpty()) {
+            ArrayNode unjoined = out.putArray("meetingsNotJoined");
+            for (UnjoinedMeeting each : meetings.asked().notJoined()) {
+                ObjectNode one = unjoined.addObject();
+                one.put("why", word(each.why()));
+                PublishedAt.of(each.at()).ifPresent(place -> at(one, place, sources));
+            }
+        }
         ArrayNode all = out.putArray("obligations");
         Optional<InteractionEvidence.RowsMeeting> met = meetings.made().made();
         if (met.isPresent()) {
@@ -11155,17 +11461,30 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         if (weakenedBy.isEmpty()) {
             return;
         }
+        ArrayNode out = of.putArray("weakening");
+        weakeningWords(weakenedBy).forEach(out::add);
+    }
+
+    /**
+     * The words of a set of weakenings, once each and in the order the words are published in.
+     *
+     * <p>The same order whichever readers found which weakenings. What a consumer compares against
+     * the last run is the array of these, so the order it comes out in may not be the order a walk
+     * arrived at them. The page says them in the same order, so the two never differ.
+     */
+    private static List<String> weakeningWords(WeakeningSet weakenedBy) {
+        return weakeningsSaid(weakenedBy).written().stream().map(AdequacyReport::word).toList();
+    }
+
+    /** The same, as the vocabulary each word is written in, for a surface that says more than the
+     *  word. */
+    private static CanonicalSelection<WeakeningVocabulary> weakeningsSaid(
+            WeakeningSet weakenedBy) {
         List<WeakeningVocabulary> said = new ArrayList<>();
         for (Weakening each : weakenedBy.causes()) {
             said.add(vocabularyOf(each));
         }
-        ArrayNode out = of.putArray("weakening");
-        // In the order the words are published in, which is the same one whichever readers found
-        // which weakenings. What a consumer compares against the last run is this array, so the
-        // order it comes out in may not be the order a walk arrived at them.
-        for (WeakeningVocabulary each : PublicationOrders.WEAKENING_WORDS.keep(said).written()) {
-            out.add(word(each));
-        }
+        return PublicationOrders.WEAKENING_WORDS.keep(said);
     }
 
     /**
@@ -11610,11 +11929,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         return leftOpen.map(BlockReason.RelationShownOverARegion::imagesNotShown)
                 .filter(names -> !names.isEmpty())
                 .map(names -> page.say(new ReportMessage.TheImageIsNotShown(
-                        String.join(", ", names))))
-                .orElse("")
-                + leftOpen.map(BlockReason.RelationShownOverARegion::notShownGottenPast)
-                .filter(names -> !names.isEmpty())
-                .map(names -> page.say(new ReportMessage.NotShownGottenPast(
                         String.join(", ", names))))
                 .orElse("");
     }

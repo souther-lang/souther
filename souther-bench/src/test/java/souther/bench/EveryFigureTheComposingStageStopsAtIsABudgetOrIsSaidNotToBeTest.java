@@ -77,6 +77,11 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             Map.entry("souther.compiler.partition.Pullback.MOST_STEPS_TO_A_MONTH",
                     "how deep a date written as moves of another is followed, which bounds the"
                             + " expression and claims nothing of the model"),
+            // A way over more numbers than this is not asked for a row made of numbers that meet
+            // it, and nothing is then claimed of them; the numbers tried are each of a way that
+            // states at most this many, so no search stops at it.
+            Map.entry("souther.compiler.partition.AWitnessOfDifferences.MOST_NUMBERS",
+                    "how many numbers a way may state for a row to be made of them by trying"),
 
             // A distance no assignment reaches, which a position with no class to move to is at.
             Map.entry("souther.compiler.partition.NearestAssignments.UNREACHABLE",

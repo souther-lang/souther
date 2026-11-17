@@ -20,7 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * ends no run for.
  *
  * <p>Here the address a first list converts is not what the second list's relation reads, and the
- * second list's domains are still reached at every value. Where the address is tied by a rule to
+ * second list's domains are still reached at every value, so the relation is not said to be
+ * shown only where a run gets to it. Where the address is tied by a rule to
  * the string the relation reads, or holds no string the conversion is a map on, they are not.
  */
 class AConversionOfAStringNoSideReadsLeavesTheRelationReachedTest {
@@ -88,7 +89,6 @@ class AConversionOfAStringNoSideReadsLeavesTheRelationReachedTest {
     @Test
     void anAddressConvertedBeforeIsNoStopOfTheRelationReadElsewhere() {
         String report = reasons("data Address = String", "");
-        assertTrue(report.contains("relation_shown_over_a_region"), report);
         assertFalse(report.contains("relation_not_shown_to_reach_every_value"), report);
     }
 
@@ -118,7 +118,6 @@ class AConversionOfAStringNoSideReadsLeavesTheRelationReachedTest {
         String alike = reasons("""
                 data Address = String
                     invariant String.matches("[a-z]+", value)""", "", AND_UPPERCASED);
-        assertTrue(alike.contains("relation_shown_over_a_region"), alike);
         assertFalse(alike.contains("relation_not_shown_to_reach_every_value"), alike);
     }
 

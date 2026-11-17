@@ -428,7 +428,7 @@
       }
     },
     "ruleStoppedReadingReason": {
-      "description": "A rule this compiler read and could not use, which is what both surfaces below share. Such a rule is at a position — so a position's reading is short of it — and it is a shortfall about the rule, so a question the rule raised stands on it. Written once because the two surfaces really do share it, and not because their vocabularies happen to look alike. `exact_values_too_costly` is what a reader is told where working the values out was more than this compiler does. It is one published word over two facts this compiler tells apart: one rule names a set of strings whose machine it will not make, which is about that rule; or every rule was made into the set it names and what those come to between them was not, which is about the answer and names no rule. Sharing a word is not sharing a capability — what a document may say about the second is not what it may say about the first — so a reader is told what stopped and never which rule to go and change, and which of the two it was stays this compiler's question. Schema 22 had `pattern_too_deeply_nested`, for a pattern nested more deeply than the reading goes; a document of that version may carry that word, nothing writes it now, and such a pattern is refused where it is checked, so no document is written of a program holding one. Schema 23 wrote `rule_about_an_element_of_several_sequences` where this writes `rule_about_an_element_of_several_containers`: the element it is about is a map's key or value as well as a list's or a set's element, and the word says so. `line_at_a_number_no_ratio_holds` is a line with no place, and `line_side_not_worked_out` is a line that is placed with a value beside it this compiler could not write out — two facts that call for looking at different things in the rule. `several_lines_in_one_rule` is a rule whose meaning was read in full and is several lines held together, where those lines are not drawn: what a closure states on each application it is handed, a statement one of whose relations is about something no row writes, or a clause, which has nowhere to hold where each of its lines decides what the clause comes to; nothing about what it states is unknown, so it is not `unsupported_syntax`. `relation_not_shown_to_reach_every_value` is a rule whose meaning was read in full and that relates the value at the position to another value nothing showed reaches every value there — the length of a string against a number that may be below nought, a value against what an operation answers of another — so some values at the position may settle the rule whatever the other holds, and which ones is not worked out; it is not `rule_relating_two_values`, which says the rule leaves every value at the position open. `relation_not_shown_reached_at_every_value` is a rule whose meaning was read in full and that relates the value at the position to another value, where a run may stop on the way to the rule on values this compiler does not say — an operator worked out before it on a value the rule reads — so not every value at the position is shown to get to the rule; it is not `relation_not_shown_to_reach_every_value`, where every value at the position gets to the rule and the other side is what falls short, so a reader looks at what the run works out before the rule and not at the other side. The same word is written where the rule relates numbers of a term and the relation settles some of them by the ends of its terms in runs where no row is shown computed: what falls short is then those numbers, which the `numbersNotShownComputed` beside the entry says, and no class is drawn over them. `relation_shown_over_a_region` is a rule whose meaning was read in full and that relates the value at the position to another value, whose classes there hold the values the relation was shown over and no others: the rest are shown on neither side of it, and the `leftOpen` beside the entry says which — those longer than a number of code points, past which nothing here wrote the other value out within the longest string or no value of the numbers the way ties their length to gets a run past an operation to the relation, those shorter than a number of code points for the second of those, and those the other side holds only through a code point normalization changes. It is not `relation_not_shown_to_reach_every_value`, which leaves the position no class of the rule's. `rule_relating_elements` is a rule recognised as saying how the elements of the container at the position stand to each other — no two of them alike, as a whole or at a field — where which containers it leaves is not worked out: a container composed at the position keeps it, and a container saying one element twice is still among what the position is taken to hold, so it is neither `unsupported_syntax` nor a rule read to the end. `unread_alternative_of_a_choice` is a rule offering an alternative this compiler does not read, where what the rule leaves at the position is what its alternatives leave together — its own word beside `unsupported_syntax` because the rule written at the position was read and places what it places, so an author told that one would rewrite a clause that is not the difficulty and the branch beside it would stand as unread as it was. `rule_meaning_not_read` is a rule placed at the position, a part of whose meaning this compiler did not read where that part is neither a form nothing takes apart, which is `unsupported_syntax`, nor what an operation answered, which is `rule_about_a_derived_value` — which case a called behavior answers, a clause of an invariant an attempt checks, a step of the reading not yet written, or more readings than this compiler makes — so where a line would fall is not known. `non_affine_product` is a rule whose comparison is over a product of two values neither of which is a constant, and `non_constant_divisor` one over a quotient by a value that is not a constant: the comparison depends on the position and on another number, nothing was made out of the position, and no line over them is one this compiler says — so neither is `rule_about_a_derived_value`, where there is an operation to read the rule back through. `non_constant_remainder_divisor` is the same for a remainder by a value that is not a constant, which has no period for a line over the values to be drawn at.",
+      "description": "A rule this compiler read and could not use, which is what both surfaces below share. Such a rule is at a position — so a position's reading is short of it — and it is a shortfall about the rule, so a question the rule raised stands on it. Written once because the two surfaces really do share it, and not because their vocabularies happen to look alike. `exact_values_too_costly` is what a reader is told where working the values out was more than this compiler does. It is one published word over two facts this compiler tells apart: one rule names a set of strings whose machine it will not make, which is about that rule; or every rule was made into the set it names and what those come to between them was not, which is about the answer and names no rule. Sharing a word is not sharing a capability — what a document may say about the second is not what it may say about the first — so a reader is told what stopped and never which rule to go and change, and which of the two it was stays this compiler's question. Schema 22 had `pattern_too_deeply_nested`, for a pattern nested more deeply than the reading goes; a document of that version may carry that word, nothing writes it now, and such a pattern is refused where it is checked, so no document is written of a program holding one. Schema 23 wrote `rule_about_an_element_of_several_sequences` where this writes `rule_about_an_element_of_several_containers`: the element it is about is a map's key or value as well as a list's or a set's element, and the word says so. `line_at_a_number_no_ratio_holds` is a line with no place, and `line_side_not_worked_out` is a line that is placed with a value beside it this compiler could not write out — two facts that call for looking at different things in the rule. `several_lines_in_one_rule` is a rule whose meaning was read in full and is several lines held together, where those lines are not drawn: what a closure states on each application it is handed, a statement one of whose relations is about something no row writes, or a clause, which has nowhere to hold where each of its lines decides what the clause comes to; nothing about what it states is unknown, so it is not `unsupported_syntax`. `relation_not_shown_to_reach_every_value` is a rule whose meaning was read in full and that relates the value at the position to another value nothing showed reaches every value there — the length of a string against a number that may be below nought, a value against what an operation answers of another — so some values at the position may settle the rule whatever the other holds, and which ones is not worked out; it is not `rule_relating_two_values`, which says the rule leaves every value at the position open. `relation_not_shown_reached_at_every_value` is a rule whose meaning was read in full and that relates the value at the position to another value, where a run may stop on the way to the rule on values this compiler does not say — an operator worked out before it on a value the rule reads — so not every value at the position is shown to get to the rule; it is not `relation_not_shown_to_reach_every_value`, where every value at the position gets to the rule and the other side is what falls short, so a reader looks at what the run works out before the rule and not at the other side. The same word is written where the rule relates numbers of a term and the relation settles some of them by the ends of its terms in runs where no row is shown computed: what falls short is then those numbers, which the `numbersNotShownComputed` beside the entry says, and no class is drawn over them. `relation_shown_over_a_region` is a rule whose meaning was read in full and that relates the value at the position to another value, whose classes there hold the values the relation was shown over and no others: the rest are shown on neither side of it, and the `leftOpen` beside the entry says which — those longer than a number of code points, past which no value of the numbers the way ties their length to gets a run past an operation to the relation, those shorter than a number of code points for the same, and those the other side holds only through a code point normalization changes. It is not `relation_not_shown_to_reach_every_value`, which leaves the position no class of the rule's. `rule_relating_elements` is a rule recognised as saying how the elements of the container at the position stand to each other — no two of them alike, as a whole or at a field — where which containers it leaves is not worked out: a container composed at the position keeps it, and a container saying one element twice is still among what the position is taken to hold, so it is neither `unsupported_syntax` nor a rule read to the end. `unread_alternative_of_a_choice` is a rule offering an alternative this compiler does not read, where what the rule leaves at the position is what its alternatives leave together — its own word beside `unsupported_syntax` because the rule written at the position was read and places what it places, so an author told that one would rewrite a clause that is not the difficulty and the branch beside it would stand as unread as it was. `rule_meaning_not_read` is a rule placed at the position, a part of whose meaning this compiler did not read where that part is neither a form nothing takes apart, which is `unsupported_syntax`, nor what an operation answered, which is `rule_about_a_derived_value` — which case a called behavior answers, a clause of an invariant an attempt checks, a step of the reading not yet written, or more readings than this compiler makes — so where a line would fall is not known. `non_affine_product` is a rule whose comparison is over a product of two values neither of which is a constant, and `non_constant_divisor` one over a quotient by a value that is not a constant: the comparison depends on the position and on another number, nothing was made out of the position, and no line over them is one this compiler says — so neither is `rule_about_a_derived_value`, where there is an operation to read the rule back through. `non_constant_remainder_divisor` is the same for a remainder by a value that is not a constant, which has no period for a line over the values to be drawn at.",
       "enum": [
         "unsupported_syntax",
         "unsupported_domain",
@@ -7197,6 +7197,68 @@
             }
           }
         },
+        "statementsNoRowIsIn": {
+          "type": "array",
+          "minItems": 1,
+          "description": "The statements of the decision that lack cases, which are what `reachable_node_cases_unmeasured` and `keyed_overwrite_cases_unmeasured` stand for: every rule can be taken and a statement inside one of them still have a case no row is in, or be one no row can be asked about. One entry for each thing the cases are cases of, in the order the page numbers them from 1. Absent where there are none.",
+          "items": {
+            "type": "object",
+            "required": [
+              "statement",
+              "kind",
+              "notAskable"
+            ],
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "notAskable": {
+                      "const": false
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "cases"
+                  ]
+                }
+              }
+            ],
+            "properties": {
+              "statement": {
+                "type": "string",
+                "description": "What the cases are cases of, as the compiler spells it: a search, or the order of one container's key under a statement. What tells two of the same shape apart."
+              },
+              "kind": {
+                "enum": [
+                  "a_node_a_search_reaches",
+                  "the_order_of_a_repeated_key"
+                ]
+              },
+              "notAskable": {
+                "type": "boolean",
+                "description": "Whether some case it draws is one no row can be asked for, which leaves the decision partial all the same: what answers it is this compiler reading further, and no row. One statement may have cases no row was seen in and cases no row can be asked for, which is one entry; with no `cases` it is so entirely."
+              },
+              "cases": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "description": "The cases no row was seen in. For a search the node meets what it asks (`at_the_node`), does not and one below does (`below_it`), does not and has nothing below (`nowhere_at_a_leaf`), or does not and every node below comes back empty (`nowhere_below`); for the order of a key the statement holds with the last element of a key and fails with an earlier one (`holds_by_the_last`), or the other way round (`fails_by_the_last`). Absent where every case it draws is one no row can be asked for.",
+                "items": {
+                  "enum": [
+                    "at_the_node",
+                    "below_it",
+                    "nowhere_at_a_leaf",
+                    "nowhere_below",
+                    "holds_by_the_last",
+                    "fails_by_the_last"
+                  ]
+                }
+              }
+            }
+          }
+        },
         "waysUndecided": {
           "type": "array",
           "minItems": 1,
@@ -7576,6 +7638,9 @@
                 "no_row_came_back",
                 "the_rows_carry_no_account"
               ]
+            },
+            "weakening": {
+              "$ref": "#/$defs/weakening"
             }
           }
         },
@@ -7583,6 +7648,47 @@
           "type": "integer",
           "minimum": 0,
           "description": "How many groups of this body's decisions were wider than the measure walks. What they hold is combinations nobody counted, so a consumer reading the entries below as the whole of what the body has is told here that it is not."
+        },
+        "meetingsNotJoined": {
+          "type": "array",
+          "minItems": 1,
+          "description": "The meetings of this body's decisions that could not be joined to what a run records, so no combination of them is asked of the rows and the measure is partial by `meetings_not_joined`. One entry for each meeting, in the order the walk met them, which is the order the page numbers them from 1. Absent where there are none.",
+          "items": {
+            "type": "object",
+            "required": [
+              "why"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "why": {
+                "type": "string",
+                "enum": [
+                  "kept_by_several",
+                  "kept_by_another_kind",
+                  "kept_by_a_test_not_worked_out",
+                  "not_one_comparison",
+                  "a_value_choice_not_read",
+                  "a_value_choice_not_numbered",
+                  "a_comparison_of_cases",
+                  "a_number_no_input_holds",
+                  "no_run_is_recorded_at_it",
+                  "more_visits_than_are_recorded",
+                  "not_one_closure",
+                  "an_application_said_two_things",
+                  "not_one_comparison_that_runs",
+                  "more_elements_than_are_written_out",
+                  "the_meeting_is_in_code_run_again",
+                  "an_outcome_no_run_is_seen_taking",
+                  "an_operand_has_more_ways_than_are_read"
+                ],
+                "description": "Why the meeting could not be joined."
+              },
+              "at": {
+                "$ref": "#/$defs/at",
+                "description": "Where the meeting is written. Absent where no place can be said."
+              }
+            }
+          }
         },
         "obligations": {
           "type": "array",
@@ -8191,6 +8297,24 @@
                   "undecided"
                 ],
                 "description": "`shown`: the rows beside the borders of the computation fix the weight of this position, which is where some row fails a computation weighing it one more and some row fails one weighing it one less. `not_shown`: they do not, so rows that fix it are owed and a finding names it. `undecided`: nothing was read against the computation, a border of it was not read and the rest leave the weight unfixed, or the exact arithmetic gave out on a row, which is no claim that the rows fix nothing and is no finding."
+              },
+              "undecidedBecause": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "description": "Why an `undecided` weight is, as far as the weights' own reading says: `no_border_of_it_was_read` (no border of the computation was read against the rows), `a_border_was_not_read_in_full`, `a_run_was_not_watched` (a row was left out because nothing watched its run) and `the_arithmetic_gave_out` (a model's own decimals put a changed weight out of the exact arithmetic's reach). Absent where the weight is not `undecided` or went without only what its borders did, which `weakening` says.",
+                "items": {
+                  "enum": [
+                    "no_border_of_it_was_read",
+                    "a_border_was_not_read_in_full",
+                    "a_run_was_not_watched",
+                    "the_arithmetic_gave_out"
+                  ]
+                }
+              },
+              "weakening": {
+                "$ref": "#/$defs/weakening",
+                "description": "What the borders of the computation went without, which the weight is undecided for as they said it. Absent where there is none."
               }
             }
           }
@@ -8789,7 +8913,7 @@
                         "longerThan": {
                           "type": "integer",
                           "minimum": 0,
-                          "description": "The fewest code points less one an open value of a bounded length has: some values longer than this may be in no class, because nothing here wrote the other value out round them within the longest string, because no value of the other numbers the way ties their length to gets a run past it to the relation, or because the other value is held to no more code points than this and is derived through a function that may lengthen it (`imagesNotShown`), and none shorter is open for that. Absent where no value is open for being long."
+                          "description": "The fewest code points less one an open value of a bounded length has: some values longer than this may be in no class, because no value of the other numbers the way ties their length to gets a run past it to the relation, or because the other value is held to no more code points than this and is derived through a function that may lengthen it (`imagesNotShown`), and none shorter is open for that. Absent where no value is open for being long."
                         },
                         "shorterThan": {
                           "type": "integer",
@@ -8808,63 +8932,6 @@
                             "type": "string"
                           },
                           "description": "The functions of the library the other value is derived through whose image over the strings of the position is not shown, so the values they take it to are not among those the classes hold. Present where some of the values open are open for them, at the lengths `longerThan`, `shorterThan` and `atAnyLength` say: a value of a length the other value is not held to may still be what such a function takes one of its values to, lengthened or shortened, and is open for that. Sorted."
-                        },
-                        "notShownGottenPast": {
-                          "type": "array",
-                          "minItems": 1,
-                          "uniqueItems": true,
-                          "items": {
-                            "type": "string"
-                          },
-                          "description": "The functions of the library a run gets to the relation past, each ending a run where its answer has more code points than a String holds, that are not shown to answer within that for some strings of the position: those strings are not among those the classes hold. Present where some of the values open are open for them, at the lengths `longerThan`, `shorterThan` and `atAnyLength` say. Sorted."
-                        },
-                        "codePoints": {
-                          "type": "array",
-                          "minItems": 1,
-                          "uniqueItems": true,
-                          "description": "The values left open for how many of their code points are in a class, which no length bounds: a run that gets to the relation holds some of the class in the string, so the values holding fewer than `fewerThan` of them, or more than `moreThan`, are shown on neither side. Absent where no value is open for that, and sorted.",
-                          "items": {
-                            "type": "object",
-                            "required": [
-                              "class"
-                            ],
-                            "additionalProperties": false,
-                            "properties": {
-                              "class": {
-                                "enum": [
-                                  "not_whitespace",
-                                  "not_whitespace_nor_equal_to",
-                                  "one_of"
-                                ]
-                              },
-                              "separator": {
-                                "type": "integer",
-                                "minimum": 0
-                              },
-                              "ranges": {
-                                "type": "array",
-                                "items": {
-                                  "type": "array",
-                                  "minItems": 2,
-                                  "maxItems": 2,
-                                  "items": {
-                                    "type": "integer",
-                                    "minimum": 0
-                                  }
-                                }
-                              },
-                              "fewerThan": {
-                                "type": "integer",
-                                "minimum": 1,
-                                "description": "Values holding fewer than this many code points of the class are open."
-                              },
-                              "moreThan": {
-                                "type": "integer",
-                                "minimum": 0,
-                                "description": "Values holding more than this many code points of the class are open."
-                              }
-                            }
-                          }
                         }
                       }
                     },
@@ -9092,6 +9159,28 @@
               "sentTo": {
                 "$ref": "#/$defs/at",
                 "description": "Where inside the rule a reader goes, for an entry about a part of it rather than about the whole. `rule` beside this sends them to the rule, which is the whole answer wherever what they lift is the rule; an end a choice left open is lifted at the `||`, and the clause `rule` names reads perfectly well; where the arithmetic stopped, it is the call the arithmetic failed to take apart, which is where lifting begins. Absent where the rule is the whole of it, and absent where the part is in a text this document cannot point at. Part of what tells two entries apart: two choices of one clause agree about the position, the rule and the reason, so without this the second was a repeat of the first."
+              }
+            }
+          }
+        },
+        "stopsPastTheRepresentation": {
+          "type": "array",
+          "minItems": 1,
+          "description": "The operations of the body that end a run only where an answer would be longer than a String holds or a collection would hold more elements than one holds, each once. Where the representation stops is no distinction a model made, so the classes of every position are drawn as though a run gets past these, and no value is open for them; this is where a reader is told that a run stops there. Absent where there is none.",
+          "items": {
+            "type": "object",
+            "required": [
+              "operation"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "operation": {
+                "type": "string",
+                "description": "The operation as the library names it, or the operator as it is written."
+              },
+              "at": {
+                "$ref": "#/$defs/at",
+                "description": "Where it is written, present where a reader can be sent there."
               }
             }
           }

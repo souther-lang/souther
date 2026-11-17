@@ -57,6 +57,11 @@ class ACandidateTheChoiceKeepsMeetsTheCachedPartsOfItsOwnTest {
         }
 
         @Override
+        public int requiredInputsHash(Integer inputs) {
+            return inputs.hashCode();
+        }
+
+        @Override
         public Integer guards() {
             return 0;
         }

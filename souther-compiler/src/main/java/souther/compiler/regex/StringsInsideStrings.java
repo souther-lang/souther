@@ -84,6 +84,36 @@ public final class StringsInsideStrings {
     }
 
     /**
+     * Every string that is a string of {@code language} once stable starters are written after
+     * it, or null past what {@code meter} allows. The strings of the language are among them, with
+     * nothing written.
+     *
+     * <p>A stable starter written after a string composes with nothing of it and is put in no
+     * other order, so the string with it is in Normalization Form C exactly where the string is:
+     * a value is inside some value of the language wherever it is among these.
+     *
+     * <p>Where {@code through} is a conversion done to the string and to what it is inside, only
+     * the starters it cuts at are written ({@link ConversionAnswers#cutsAt}): the conversion of
+     * the string with them is the conversion of the string with them after it, so the converted
+     * string is inside that as well.
+     *
+     * @param through the conversion done to both, or null where none is
+     */
+    public static Language extendedByStableStarters(Language language, ConversionAnswers through,
+                                                    Meter meter) {
+        Automaton machine = language.machine();
+        BitSet live = LiveStates.of(machine, over -> {
+            CodePoints starters = StableStarters.within(over);
+            return through == null ? !starters.isEmpty() : through.cutsAtOneOf(starters);
+        });
+        List<List<Automaton.Step>> steps = new ArrayList<>();
+        for (int state = 0; state < machine.size(); state++) {
+            steps.add(machine.stepsFrom(state));
+        }
+        return Language.canonical(Automaton.madeOf(steps, live), meter);
+    }
+
+    /**
      * Every string that has some string of {@code inner} inside it where {@code where} says, or
      * null past what {@code meter} allows.
      */

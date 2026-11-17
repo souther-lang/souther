@@ -136,14 +136,21 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
      *                       placed was evidence of, in the order the reading met them. What a row
      *                       is to be looked for is told by these, and the kinds no row can be asked
      *                       about are not among them
+     * @param lacking        what each statement of the decision still lacks, grouped as the reading
+     *                       that held the cases groups it ({@link CasesTheRowsTook#statementsShort}):
+     *                       the cases of each thing no row was seen in, and the cases no row can be
+     *                       asked for, which leave the decision partial all the same — what
+     *                       answers them is a wider reading, and no row
      */
     public record RowsPlaced(int rowsRead, Map<DecisionRule, RowWitnesses> taken, int rowsPlaced,
                              int rowsNotPlaced, int rowsNotWatched,
                              Map<DecisionRule, RowWitnesses> wentAgainst,
-                             List<CaseOfAStatement> unseenCases) {
+                             List<CaseOfAStatement> unseenCases,
+                             List<CasesTheRowsTook.StatementShort> lacking) {
 
         public RowsPlaced {
             unseenCases = List.copyOf(unseenCases);
+            lacking = List.copyOf(lacking);
             // Sealed and not only copied. What the account answers about a behavior is read off
             // this — which rules were covered, which were not — and a map a caller can add to is a
             // value whose answers change after it was made.
@@ -179,6 +186,7 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
         public boolean everyRowWasWatched() {
             return rowsNotWatched == 0;
         }
+
     }
 
     /**
@@ -517,7 +525,7 @@ public record DecisionEvidence(DecisionReading read, Measure<RowsPlaced> took,
         RowsPlaced made =
                 new RowsPlaced(rows.size(), RowWitnesses.Gathering.done(took), placed, notPlaced,
                         notWatched, RowWitnesses.Gathering.done(wentAgainst),
-                        List.copyOf(cases.unseenCases()));
+                        List.copyOf(cases.unseenCases()), cases.statementsShort());
         // A row this reading could not place says what stopped it, and a row nothing watched says
         // what the run went without. Where something is left either leaves the placement partial,
         // and neither may arrive as a complete reading of the rows.

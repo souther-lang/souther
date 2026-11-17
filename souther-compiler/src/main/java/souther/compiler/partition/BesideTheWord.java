@@ -49,6 +49,25 @@ public record BesideTheWord(SequencedMap<TermPath, StringOfferShortfall> shortOf
         return new BesideTheWord(shortOf, both);
     }
 
+    /**
+     * What two answers say beside a word, together: where an offer was short of a rule in either,
+     * short of both, and where the runs of either stopped.
+     *
+     * <p>One answer over several searches says what every one of them said beside its word. Kept
+     * as the first's, an offer another search was short of is a search said to be complete.
+     */
+    public BesideTheWord and(BesideTheWord other) {
+        if (other.isEmpty()) {
+            return this;
+        }
+        if (isEmpty()) {
+            return other;
+        }
+        SequencedMap<TermPath, StringOfferShortfall> both = new LinkedHashMap<>(shortOf);
+        other.shortOf().forEach((at, gap) -> both.merge(at, gap, StringOfferShortfall::and));
+        return new BesideTheWord(both, new ArrayList<>(stopped)).stopping(other.stopped());
+    }
+
     /** Whether there is nothing beside the word. */
     public boolean isEmpty() {
         return shortOf.isEmpty() && stopped.isEmpty();

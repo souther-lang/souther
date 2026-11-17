@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import java.math.BigInteger;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.IntPredicate;
@@ -11,16 +10,16 @@ import net.unit8.notation199x.pattern.Meter;
 
 import souther.compiler.evaluate.BoundUnderEvaluation;
 import souther.compiler.regex.CodeMap;
+import souther.compiler.regex.ConversionAnswers;
 import souther.compiler.regex.Language;
 import souther.compiler.semantics.CaseMapping;
-import souther.compiler.values.TextExtents;
 
 /**
  * A case conversion as the map on code points it is exactly one for ({@link CodeMap}), worked out
  * from the run time's own conversion the first time a conversion is asked of, and kept for the
  * rest: the map is a fact of the language and not of the model being read.
  */
-final class CaseMaps {
+public final class CaseMaps {
 
     private static final Map<CaseMapping, CodeMap> MADE = new ConcurrentHashMap<>();
 
@@ -51,6 +50,25 @@ final class CaseMaps {
             }
         }
         return had;
+    }
+
+    private static final Map<CaseMapping, ConversionAnswers> ANSWERED = new ConcurrentHashMap<>();
+
+    /**
+     * What {@code mapping} answers of each code point, read against the language a question is
+     * about ({@link ConversionAnswers}), or null where it is made of more than one conversion: what
+     * the second is handed is an answer of the first, which holds code points a question's
+     * language does not, so its answers are not said code point by code point.
+     */
+    static ConversionAnswers answers(CaseMapping mapping) {
+        return mapping instanceof CaseMapping.None || mapping.doneSoFar().size() != 1 ? null
+                : answersOf(mapping);
+    }
+
+    /** What {@code mapping} answers of each code point, of however many conversions it is made. */
+    private static ConversionAnswers answersOf(CaseMapping mapping) {
+        return ANSWERED.computeIfAbsent(mapping, each -> ConversionAnswers.of(of(each),
+                text -> BoundUnderEvaluation.mapped(each, text)));
     }
 
     /**
@@ -89,6 +107,17 @@ final class CaseMaps {
         return alone == null ? null : over.and(alone, meter);
     }
 
+    /**
+     * Whether what {@code mapping} answers of a string holds {@code codePoint} no more times than
+     * the string does: the conversion leaves it, sends no other code point of its map to it,
+     * answers no code point outside its map with it alone or beside a letter —
+     * {@code ŉ} is answered {@code ʼN} in uppercase — and it is no composite a normalization could
+     * make of two code points answered apart ({@link ConversionAnswers#keepsSeparator}).
+     */
+    public static boolean makesNoOccurrenceOf(CaseMapping mapping, int codePoint) {
+        return answersOf(mapping).keepsSeparator(codePoint);
+    }
+
     /** The one conversion done last of what {@code mapping} makes of a string, done alone. */
     private static CaseMapping lastDone(CaseMapping mapping) {
         return switch (mapping) {
@@ -115,71 +144,6 @@ final class CaseMaps {
         Language standing = converted == null ? null : answeredAsTheyStand(mapping, answers, meter);
         Language joined = standing == null ? null : converted.or(standing, meter);
         return joined == null ? converted : joined;
-    }
-
-    /**
-     * The strings a run is shown to get past {@code mapping} at: the strings it is exactly a map
-     * on, and the strings it leaves as they stand ({@link #answeredAsTheyStand}), whose answer is
-     * the string itself and so is no longer than it. Every other string may stop the run there,
-     * by the answer being longer than a {@code String} holds.
-     *
-     * <p>Asked whether the run gets past at a string, which is a question of a value: the second
-     * kind holds sequences that are no value. A string a witness holds is chosen from
-     * {@link CodeMap#strings}, which is values alone.
-     *
-     * @return the strings, or null past what {@code meter} allows
-     */
-    static Language gottenPastExactly(CaseMapping mapping, Meter meter) {
-        Language exact = of(mapping).strings(meter);
-        Language standing = exact == null ? null
-                : answeredAsTheyStand(mapping, Language.EVERY_STRING, meter);
-        Language joined = standing == null ? null : exact.or(standing, meter);
-        return joined == null ? exact : joined;
-    }
-
-    /**
-     * A length up to which a run is shown to get past {@code mapping} at every string, whatever
-     * code points it holds: at a string of no more code points than this, none of its conversions
-     * answers more than a {@code String} holds.
-     *
-     * <p>A bound and not the longest such length: a longer string may be gotten past as well, and
-     * nothing here says one is not. A conversion's answer, in every canonical form, holds no more
-     * code points than the text it is handed times what the run time's tables say one code point
-     * comes to at most ({@link CaseConversion.Growth}), as written or decomposed. So a text of no
-     * more than a {@code String} holds over that converts and is canonicalized within it, and of
-     * conversions done in turn the factors multiply: each is handed what the one before answered.
-     * The code points that come to the most in one conversion need not be the ones that do in the
-     * next, so the product is a bound on what the conversions in turn make of a code point and may
-     * be more than any comes to.
-     */
-    static long gottenPastAtEveryStringUpTo(CaseMapping mapping) {
-        return switch (mapping) {
-            case CaseMapping.None _ -> TextExtents.LONGEST_STRING;
-            case CaseMapping.Lowercase(CaseMapping of) ->
-                    gottenPastAtEveryStringUpTo(of) / most(CaseConversion.lowercaseGrowth());
-            case CaseMapping.Uppercase(CaseMapping of) ->
-                    gottenPastAtEveryStringUpTo(of) / most(CaseConversion.uppercaseGrowth());
-        };
-    }
-
-    /**
-     * A bound on the code points the conversions {@code mapping} is made of answer of a text of
-     * at most {@code codePoints}: that many times what each says one code point comes to at most,
-     * for the reason {@link #gottenPastAtEveryStringUpTo} gives.
-     */
-    static BigInteger answerBound(CaseMapping mapping, BigInteger codePoints) {
-        return switch (mapping) {
-            case CaseMapping.None _ -> codePoints;
-            case CaseMapping.Lowercase(CaseMapping of) -> answerBound(of, codePoints)
-                    .multiply(BigInteger.valueOf(most(CaseConversion.lowercaseGrowth())));
-            case CaseMapping.Uppercase(CaseMapping of) -> answerBound(of, codePoints)
-                    .multiply(BigInteger.valueOf(most(CaseConversion.uppercaseGrowth())));
-        };
-    }
-
-    /** The most code points one code point comes to in a conversion's answer, in any form. */
-    private static long most(CaseConversion.Growth growth) {
-        return Math.max(growth.mapped(), growth.decomposed());
     }
 
     /**

@@ -365,7 +365,7 @@ sealed interface ComparisonAssessment {
                                Set<FilingCoordinate> mayStopBefore,
                                Map<FilingCoordinate, Set<NumberRegion>> noRowShownComputed,
                                Map<NumericTerm.FromOnePosition,
-                                       UndividedByARelation.StringsAPartnerCanHold> partnered,
+                                       List<UndividedByARelation.StringsAPartnerCanHold>> partnered,
                                Map<FilingCoordinate, UndividedByARelation.GettingThere> gettingThere)
             implements ComparisonAssessment {
 
@@ -401,7 +401,7 @@ sealed interface ComparisonAssessment {
                             Set<FilingCoordinate> mayStopBefore,
                             Map<FilingCoordinate, Set<NumberRegion>> noRowShownComputed,
                             Map<NumericTerm.FromOnePosition,
-                                    UndividedByARelation.StringsAPartnerCanHold> partnered) {
+                                    List<UndividedByARelation.StringsAPartnerCanHold>> partnered) {
             this(filedAt, relations, undivided, settling, beside, stoppedAt, rowsStopped,
                     mayStopBefore, noRowShownComputed, partnered, Map.of());
         }
@@ -489,28 +489,29 @@ sealed interface ComparisonAssessment {
          * where every relation about its place shows it parted by the same strings.
          */
         private static Map<NumericTerm.FromOnePosition,
-                UndividedByARelation.StringsAPartnerCanHold> partedByTheirPartners(
+                List<UndividedByARelation.StringsAPartnerCanHold>> partedByTheirPartners(
                 List<Set<FilingCoordinate>> about,
                 List<UndividedByARelation.WhatItLeaves> leaves) {
-            Map<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold> out =
-                    new LinkedHashMap<>();
+            Map<NumericTerm.FromOnePosition, List<UndividedByARelation.StringsAPartnerCanHold>>
+                    out = new LinkedHashMap<>();
             for (UndividedByARelation.WhatItLeaves each : leaves) {
-                each.partnered().forEach((term, strings) -> {
+                each.partnered().forEach((term, ways) -> {
                     FilingCoordinate at = FilingCoordinate.of(term);
-                    boolean alike = true;
-                    UndividedByARelation.StringsAPartnerCanHold named = strings;
+                    boolean every = true;
+                    List<UndividedByARelation.StringsAPartnerCanHold> kept = new ArrayList<>();
                     for (int i = 0; i < leaves.size(); i++) {
                         if (about.get(i).contains(at)) {
-                            UndividedByARelation.StringsAPartnerCanHold theirs =
+                            List<UndividedByARelation.StringsAPartnerCanHold> theirs =
                                     leaves.get(i).partnered().get(term);
-                            alike &= strings.showsTheStringsOf(theirs);
-                            if (alike) {
-                                named = named.orAnother(theirs);
+                            every &= theirs != null;
+                            if (every) {
+                                kept = UndividedByARelation.StringsAPartnerCanHold.joined(kept,
+                                        theirs);
                             }
                         }
                     }
-                    if (alike) {
-                        out.putIfAbsent(term, named);
+                    if (every) {
+                        out.putIfAbsent(term, kept);
                     }
                 });
             }
@@ -793,20 +794,25 @@ sealed interface ComparisonAssessment {
         }
 
         /**
-         * Each string position some part shows parted by the strings its partner can hold, where
-         * every part about its place that parts it shows it parted by the same strings, and every
-         * part is a relation to another value or says nothing of any value. A relation parts the
-         * strings of a position whichever case of the statement a row is in: what a case decides
-         * is which lines part what settles it. A part that leaves the place undivided parts it by
-         * nothing, as does one that says nothing of any value — a line the statement never turns
-         * on, a relation no row takes the way to a case of, or a line or relation or stop no row
-         * arrives at — and what the other parts part it by does not contradict that.
+         * Each string position some part shows parted by the strings its partner can hold, and
+         * each way it is parted, where every part about its place parts it or leaves it undivided,
+         * and every part is a relation to another value, a line on a number, or says nothing of
+         * any value. A relation parts the strings of a position whichever case of the statement a
+         * row is in: what a case decides is which lines part what settles it. Parts that part a
+         * place by different strings part it each its own way, as separate comparisons do; parts
+         * that part it by the same strings part it one way. A part that leaves the place
+         * undivided parts it by nothing, as does one that says nothing of any value — a line the
+         * statement never turns on, a relation no row takes the way to a case of, or a line or
+         * relation or stop no row arrives at — and what the other parts part it by does not
+         * contradict that. So does a line on a number that is not the place's own: it parts the
+         * values of that number and none of the strings.
          */
-        Map<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold> partnered() {
+        Map<NumericTerm.FromOnePosition, List<UndividedByARelation.StringsAPartnerCanHold>>
+                partnered() {
             List<Set<FilingCoordinate>> about = new ArrayList<>();
             List<Set<FilingCoordinate>> undivided = new ArrayList<>();
-            List<Map<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold>>
-                    each = new ArrayList<>();
+            List<Map<NumericTerm.FromOnePosition,
+                    List<UndividedByARelation.StringsAPartnerCanHold>>> each = new ArrayList<>();
             for (Part part : parts) {
                 switch (part.line()) {
                     case AgainstAnotherValue relation -> {
@@ -821,38 +827,59 @@ sealed interface ComparisonAssessment {
                     }
                     case TurnsNothing _, RelationTurnsNothing _, NothingArrivesAtItsLine _,
                          NothingArrivesAtItsRelation _, NothingArrivesAtItsStop _ -> { }
+                    case AtAPosition line -> {
+                        about.add(Set.copyOf(line.cutting().over()));
+                        undivided.add(Set.of());
+                        each.add(Map.of());
+                    }
                     default -> {
                         return Map.of();
                     }
                 }
             }
-            Map<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold> out =
-                    new LinkedHashMap<>();
-            for (Map<NumericTerm.FromOnePosition, UndividedByARelation.StringsAPartnerCanHold>
-                    one : each) {
-                one.forEach((term, strings) -> {
-                    FilingCoordinate at = FilingCoordinate.of(term);
-                    boolean alike = true;
-                    UndividedByARelation.StringsAPartnerCanHold named = strings;
-                    for (int i = 0; i < each.size(); i++) {
-                        if (about.get(i).contains(at)) {
-                            UndividedByARelation.StringsAPartnerCanHold theirs =
-                                    each.get(i).get(term);
-                            if (theirs == null && undivided.get(i).contains(at)) {
-                                continue;
-                            }
-                            alike &= strings.showsTheStringsOf(theirs);
-                            if (alike) {
-                                named = named.orAnother(theirs);
-                            }
+            Map<NumericTerm.FromOnePosition, List<UndividedByARelation.StringsAPartnerCanHold>>
+                    out = new LinkedHashMap<>();
+            for (Map<NumericTerm.FromOnePosition,
+                    List<UndividedByARelation.StringsAPartnerCanHold>> one : each) {
+                for (NumericTerm.FromOnePosition term : one.keySet()) {
+                    if (!out.containsKey(term)) {
+                        List<UndividedByARelation.StringsAPartnerCanHold> kinds =
+                                partingsOf(term, about, undivided, each);
+                        if (kinds != null) {
+                            out.put(term, kinds);
                         }
                     }
-                    if (alike) {
-                        out.putIfAbsent(term, named);
-                    }
-                });
+                }
             }
             return out;
+        }
+
+        /**
+         * Each way the parts about {@code term}'s place part it, the parts parting it by the same
+         * strings said once, or null where some part about the place neither parts it nor leaves
+         * it undivided.
+         */
+        private static List<UndividedByARelation.StringsAPartnerCanHold> partingsOf(
+                NumericTerm.FromOnePosition term, List<Set<FilingCoordinate>> about,
+                List<Set<FilingCoordinate>> undivided,
+                List<Map<NumericTerm.FromOnePosition,
+                        List<UndividedByARelation.StringsAPartnerCanHold>>> each) {
+            FilingCoordinate at = FilingCoordinate.of(term);
+            List<UndividedByARelation.StringsAPartnerCanHold> kinds = new ArrayList<>();
+            for (int i = 0; i < each.size(); i++) {
+                if (!about.get(i).contains(at)) {
+                    continue;
+                }
+                List<UndividedByARelation.StringsAPartnerCanHold> theirs = each.get(i).get(term);
+                if (theirs == null) {
+                    if (undivided.get(i).contains(at)) {
+                        continue;
+                    }
+                    return null;
+                }
+                kinds = UndividedByARelation.StringsAPartnerCanHold.joined(kinds, theirs);
+            }
+            return kinds;
         }
 
         /**
@@ -869,37 +896,36 @@ sealed interface ComparisonAssessment {
          * {@code c} below nought. Joined, the two come out either way below nought and only
          * holding from nought up, and the line at nought parts the two.
          *
-         * <p>Only where the statement is plainly its arms: the parts that answer for an arm are
-         * the answers of two arms of one choice, each read in one case, and the two cases a
-         * condition and its denial, so that every row is in one of them and none in both. More
-         * arms, or arms written inside arms, are not joined here. Each arm says how
-         * it comes out as it was read along the ways to its own case ({@link Part#comesOut}), so
-         * of the rows that take it and of no other: what one arm shows is never lent to the
-         * values of the other. A place an arm says nothing of, a value neither way is shown at,
-         * or a change no line is drawn at leaves the place as each arm alone leaves it.
+         * <p>The parts that answer for an arm are the lines under arms none of which only selects,
+         * at however many choices: a row that takes all of a line's arms has the statement come
+         * out as that line does. Each arm says how it comes out as it was read along the ways to
+         * its own case ({@link Part#comesOut}), so of the rows that take it and of no other: what
+         * one arm shows is never lent to the values of the other. A place an arm says nothing of,
+         * a value neither way is shown at, or a change no line is drawn at leaves the place as
+         * each arm alone leaves it.
+         *
+         * <p>Where the arms are the two of one choice, each read in one case, and the two cases a
+         * condition and its denial, every row is in one of them and none in both: a way is never
+         * reached where no arm reaches it, and the values no arm holds are none. Past that, the
+         * arms read are not every one, and a row may take one nobody read. A way is then reached
+         * where some arm reaches it, which no other arm takes back, and is shown nowhere else: the
+         * arms show a place only where they reach both ways at every number.
          */
         Set<FilingCoordinate> shownByItsArms() {
-            List<Part> arms = new ArrayList<>();
-            WrittenChoice choice = null;
-            for (Part part : parts) {
-                WrittenChoice answered = choiceAnsweredBy(part.id());
-                if (answered == null) {
-                    continue;
-                }
-                if (choice != null && !choice.equals(answered)) {
-                    return Set.of();
-                }
-                choice = answered;
-                arms.add(part);
-            }
-            if (arms.size() != 2 || !inACaseAndItsDenial(arms.get(0), arms.get(1))) {
+            List<Part> arms = parts.stream()
+                    .filter(part -> part.id().line().line().answersUnderArms()).toList();
+            if (arms.isEmpty()) {
                 return Set.of();
             }
+            boolean every = arms.size() == 2 && inACaseAndItsDenial(arms.get(0), arms.get(1))
+                    && choiceAnsweredBy(arms.get(0).id()) != null
+                    && Objects.equals(choiceAnsweredBy(arms.get(0).id()),
+                            choiceAnsweredBy(arms.get(1).id()));
             Set<FilingCoordinate> out = new LinkedHashSet<>();
             for (Part arm : arms) {
                 arm.comesOut().keySet().forEach(term -> {
                     FilingCoordinate at = FilingCoordinate.of(term);
-                    if (!out.contains(at) && armsShow(at, arms)) {
+                    if (!out.contains(at) && armsShow(at, arms, every)) {
                         out.add(at);
                     }
                 });
@@ -932,7 +958,7 @@ sealed interface ComparisonAssessment {
          * and is then in what each arm was read along, and the line it draws is one of the
          * statement's.
          */
-        private boolean armsShow(FilingCoordinate at, List<Part> arms) {
+        private boolean armsShow(FilingCoordinate at, List<Part> arms, boolean every) {
             List<EachWayItComesOut> alternatives = new ArrayList<>();
             List<ExactCut> drawn = new ArrayList<>();
             for (Part part : parts) {
@@ -945,13 +971,18 @@ sealed interface ComparisonAssessment {
                         its = each.getValue();
                     }
                 }
-                if (its == null) {
+                if (its != null) {
+                    alternatives.add(its);
+                } else if (every) {
                     return false;
                 }
-                alternatives.add(its);
+            }
+            if (alternatives.isEmpty()) {
+                return false;
             }
             EachWayItComesOut joined = EachWayItComesOut.eitherOf(alternatives);
-            if (joined == null || !joined.showsEveryValue()) {
+            if (joined == null || !(every ? joined.showsEveryValue()
+                    : joined.reachesEveryNumberBothWays())) {
                 return false;
             }
             for (ExactCut turn : joined.whereItTurns()) {

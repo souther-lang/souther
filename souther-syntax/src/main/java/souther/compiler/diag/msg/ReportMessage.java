@@ -1,5 +1,7 @@
 package souther.compiler.diag.msg;
 
+import souther.compiler.diag.Localizable;
+
 /**
  * The lines of the examples report a person reads, and the parts of those lines.
  *
@@ -246,6 +248,20 @@ public sealed interface ReportMessage extends Message {
     record ARowAtWould(String input) implements ReportMessage, Prose {}
 
     record NoRowFixesTheWeight(String position, String into) implements ReportMessage, Prose {}
+
+    record TheWeightsAreNotDecided(String into) implements ReportMessage, Prose {}
+
+    record TheyAreNotDecidedBecause(Message why) implements ReportMessage, Prose {}
+
+    record NoBorderOfTheComputationWasRead() implements ReportMessage, Prose {}
+
+    record ABorderOfTheComputationWasNotReadInFull() implements ReportMessage, Prose {}
+
+    record ARowOfTheComputationWasNotWatched() implements ReportMessage, Prose {}
+
+    record TheArithmeticGaveOutOnAChangedWeight() implements ReportMessage, Prose {}
+
+    record TheBordersOfTheComputationWentWithout(String words) implements ReportMessage, Prose {}
 
     /** A point of a line some rule drew, by its role, which side of the line, and the rule. */
     record PointOfALine(String role, Message side, String rule) implements ReportMessage, Prose {}
@@ -494,6 +510,9 @@ public sealed interface ReportMessage extends Message {
 
     record DividedNoWay(String position) implements ReportMessage, Prose {}
 
+    record StopsOnlyPastWhatARepresentationHolds(String operations)
+            implements ReportMessage, Prose {}
+
     record RuleNotRead(String rule, Message why, Message stopped, Message runs, Message shown,
                        String at, String calls, Message sentTo) implements ReportMessage, Prose {}
 
@@ -556,8 +575,6 @@ public sealed interface ReportMessage extends Message {
     record AndTheAnswerAtItsPosition(Message why) implements ReportMessage, Prose {}
 
     record TheImageIsNotShown(String names) implements ReportMessage, Prose {}
-
-    record NotShownGottenPast(String names) implements ReportMessage, Prose {}
 
     record NoRowShownComputedIn(String numbers) implements ReportMessage, Prose {}
 
@@ -758,6 +775,19 @@ public sealed interface ReportMessage extends Message {
 
     record MeetingsNotWalked(int count) implements ReportMessage, Prose {}
 
+    /** How many meetings no combination of which is asked of the rows, beside the count of those
+     *  that are. */
+    record MeetingsNotJoined(int count) implements ReportMessage, Prose {}
+
+    /** One such meeting: where it is written, and why not, the reason being a phrase of the
+     *  catalog's {@code kind.not-joined} family. */
+    record TheMeetingIsNotJoined(int number, Message at, Localizable why)
+            implements ReportMessage, Prose {}
+
+    /** One thing a partial measure went without, a phrase of the catalog's
+     *  {@code kind.weakening} family. */
+    record ThePartialMeasureWentWithout(Localizable cause) implements ReportMessage, Prose {}
+
     record InteractionCombinations(String combinations) implements ReportMessage, Prose {}
 
     record InteractionCombinationsUncounted(int count, Message why)
@@ -808,6 +838,39 @@ public sealed interface ReportMessage extends Message {
     record NothingCouldShowARowAtADecisionRule(Message cameTo) implements ReportMessage, Prose {}
 
     record NotComposedAgainst(String what) implements ReportMessage, Prose {}
+
+    record NoRowIsInTheseCases(int number, Message of) implements ReportMessage, Prose {}
+
+    record NoRowCanBeAskedAbout(int number, Message of) implements ReportMessage, Prose {}
+
+    record NoRowCanBeAskedForTheOthers() implements ReportMessage, Prose {}
+
+    record OfASearch(String from, String through, Message at) implements ReportMessage, Prose {}
+
+    record AtAPlace(String place) implements ReportMessage, Prose {}
+
+    /** The same for code written elsewhere than where it was reached, which the place says by the
+     *  name it is reached by and the call it was reached at. */
+    record InAPlace(String place) implements ReportMessage, Prose {}
+
+    record OfASearchNoPlaceIsSaidOf() implements ReportMessage, Prose {}
+
+    record OfAnOrder(String container, String position, Message at)
+            implements ReportMessage, Prose {}
+
+    record OfAnOrderNoPlaceIsSaidOf() implements ReportMessage, Prose {}
+
+    record TheSearchFindsItAtTheNode() implements ReportMessage, Prose {}
+
+    record TheSearchFindsItBelowTheNode() implements ReportMessage, Prose {}
+
+    record TheSearchComesBackEmptyAtANodeWithNothingBelow() implements ReportMessage, Prose {}
+
+    record TheSearchComesBackEmptyFromEveryNodeBelow() implements ReportMessage, Prose {}
+
+    record TheStatementHoldsByTheLastElementOfAKey() implements ReportMessage, Prose {}
+
+    record TheStatementFailsByTheLastElementOfAKey() implements ReportMessage, Prose {}
 
     record NoInputTakesOneWay() implements ReportMessage, Prose {}
 

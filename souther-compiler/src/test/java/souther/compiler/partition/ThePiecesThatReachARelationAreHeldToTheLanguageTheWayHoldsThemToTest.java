@@ -140,15 +140,17 @@ class ThePiecesThatReachARelationAreHeldToTheLanguageTheWayHoldsThemToTest {
     }
 
     /**
-     * What the conversion makes of a string is not shown for every string, and the report says
-     * so of the string the pieces are of: the classes are drawn over the strings it is shown for.
+     * What the conversion makes of some strings is longer than a string holds, which the run does
+     * not get past. That is where a {@code String} stops, not a class of the strings the pieces
+     * are of: the report says it once, of the conversion, and of no value of {@code s}.
      */
     @Test
-    void theImageOfAConversionNotShownIsSaidOfTheStringTheClassesAreOver() {
+    void whereAConversionMayStopIsSaidOfTheConversionAndNotOfTheString() {
         String report = reportOf(LOWERED);
-        assertTrue(report.lines().anyMatch(line -> line.contains(
-                "which class this rule puts some values in at s")
-                && line.contains("the image of String.lowercase not shown")), report);
+        assertTrue(report.lines().anyMatch(line -> line.contains("a run stops only where")
+                && line.contains("String.lowercase@")), report);
+        assertTrue(report.lines().noneMatch(line -> line.contains("which class this rule puts")
+                && line.contains("String.lowercase")), report);
     }
 
     /**

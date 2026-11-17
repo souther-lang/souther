@@ -4783,7 +4783,7 @@
   }, {
     "module" : "conformance.shipping",
     "status" : "partial",
-    "weakening" : [ "rule_unread", "rewrite_undecided" ],
+    "weakening" : [ "rewrite_undecided" ],
     "incompleteness" : [ ],
     "declarations" : [ {
       "owners" : [ {
@@ -5748,7 +5748,7 @@
       } ],
       "rowsThatDoNotHold" : [ ],
       "status" : "partial",
-      "weakening" : [ "rule_unread", "rewrite_undecided" ],
+      "weakening" : [ "rewrite_undecided" ],
       "signature" : {
         "status" : "complete",
         "output" : {
@@ -5785,12 +5785,10 @@
       },
       "partition" : {
         "axesMeasure" : {
-          "status" : "partial",
-          "weakening" : [ "rule_unread" ]
+          "status" : "complete"
         },
         "boundariesMeasure" : {
-          "status" : "partial",
-          "weakening" : [ "rule_unread" ]
+          "status" : "complete"
         },
         "axes" : [ {
           "axis" : "出荷する/指示.重量",
@@ -5831,47 +5829,6 @@
           "status" : "complete",
           "covered" : [ "Time.hour(指示.集荷時刻): 0 <= x < 12", "Time.hour(指示.集荷時刻): 12 <= x <= 23" ],
           "unclassifiedRows" : 0
-        } ],
-        "unanswered" : [ {
-          "at" : "指示.締切",
-          "rule" : "comparison@2:55:57",
-          "ruleId" : {
-            "kind" : "comparison",
-            "declaredIn" : "conformance.shipping",
-            "definition" : "急ぎか",
-            "behavior" : "出荷する",
-            "ordinal" : 3,
-            "lowered" : 0
-          },
-          "question" : "notDetermined",
-          "subject" : {
-            "kind" : "filedAt",
-            "path" : "指示.締切",
-            "measure" : "DateTime.toDate(指示.締切)"
-          },
-          "stopped" : [ {
-            "reason" : "relation_not_shown_to_reach_every_value"
-          } ]
-        }, {
-          "at" : "指示.受付日",
-          "rule" : "comparison@2:55:57",
-          "ruleId" : {
-            "kind" : "comparison",
-            "declaredIn" : "conformance.shipping",
-            "definition" : "急ぎか",
-            "behavior" : "出荷する",
-            "ordinal" : 3,
-            "lowered" : 0
-          },
-          "question" : "notDetermined",
-          "subject" : {
-            "kind" : "filedAt",
-            "path" : "指示.受付日",
-            "measure" : "指示.受付日"
-          },
-          "stopped" : [ {
-            "reason" : "relation_not_shown_to_reach_every_value"
-          } ]
         } ],
         "claimsOffAxis" : [ ],
         "boundaries" : [ {
@@ -7236,7 +7193,7 @@
         "notDerivable" : [ "指示.品目", "指示.記録時刻" ],
         "notRead" : [ {
           "position" : "DateTime.toDate(指示.締切)",
-          "reason" : "relation_not_shown_to_reach_every_value",
+          "reason" : "rule_relating_two_values",
           "rule" : "comparison@2:55:57",
           "ruleId" : {
             "kind" : "comparison",
@@ -7248,7 +7205,7 @@
           }
         }, {
           "position" : "指示.受付日",
-          "reason" : "relation_not_shown_to_reach_every_value",
+          "reason" : "rule_relating_two_values",
           "rule" : "comparison@2:55:57",
           "ruleId" : {
             "kind" : "comparison",
@@ -7855,7 +7812,7 @@
           "ordinal" : 3,
           "lowered" : 0
         },
-        "reason" : "relation_not_shown_to_reach_every_value"
+        "reason" : "rule_relating_two_values"
       }, {
         "kind" : "partition_not_read",
         "disposition" : "reported",
@@ -7868,31 +7825,7 @@
           "ordinal" : 3,
           "lowered" : 0
         },
-        "reason" : "relation_not_shown_to_reach_every_value"
-      }, {
-        "kind" : "rule_unaccounted",
-        "disposition" : "reported",
-        "subject" : "comparison@2:55:57 — what this rule states about DateTime.toDate(指示.締切)",
-        "ruleId" : {
-          "kind" : "comparison",
-          "declaredIn" : "conformance.shipping",
-          "definition" : "急ぎか",
-          "behavior" : "出荷する",
-          "ordinal" : 3,
-          "lowered" : 0
-        }
-      }, {
-        "kind" : "rule_unaccounted",
-        "disposition" : "reported",
-        "subject" : "comparison@2:55:57 — what this rule states about 指示.受付日",
-        "ruleId" : {
-          "kind" : "comparison",
-          "declaredIn" : "conformance.shipping",
-          "definition" : "急ぎか",
-          "behavior" : "出荷する",
-          "ordinal" : 3,
-          "lowered" : 0
-        }
+        "reason" : "rule_relating_two_values"
       } ]
     }, {
       "name" : "送料を出す",
@@ -11414,6 +11347,12 @@
             } ]
           },
           "taken" : true
+        } ],
+        "statementsNoRowIsIn" : [ {
+          "statement" : "reachable zone from zone through [zones] [!Affine[form=LinearForm[constant=-3, coefs={zone.count=1}], proposition=GE]] none below [!Affine[form=LinearForm[constant=0, coefs={List.length(zone.zones)=1}], proposition=GT]]",
+          "kind" : "a_node_a_search_reaches",
+          "notAskable" : false,
+          "cases" : [ "nowhere_at_a_leaf" ]
         } ]
       },
       "replacement" : {

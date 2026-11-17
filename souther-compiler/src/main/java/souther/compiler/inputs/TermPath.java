@@ -788,6 +788,21 @@ public record TermPath(String head, List<Step> steps) {
     }
 
     /**
+     * Whether the cases this path requires of some value and the cases {@code other} requires of
+     * it leave it none in common: a row where the value is what one asks for is no row where it is
+     * what the other does, so no value stands at both. {@code x@Hospital.code} and
+     * {@code x@Station.code} are so, and {@code x@Station.code} and {@code x.name} are not,
+     * whether or not they are the same place — the steps going to places apart is no case
+     * excluding another ({@link #bearsOn} is false for both).
+     *
+     * <p>True only where it is shown. Cases that may leave a value none in common through a name
+     * the cases of a sum share, which a path cannot tell ({@link Cases}), are not.
+     */
+    public boolean excludesTheCasesOf(TermPath other) {
+        return casesBeside(other) == Cases.EXCLUDE;
+    }
+
+    /**
      * Whether one of this path and {@code other} stands at, under or around the other as the value
      * is reached: the cases each requires holding together, as {@link #bearsOn} asks, and the steps
      * that go somewhere one within the other. Two that leave some value no case in common are two

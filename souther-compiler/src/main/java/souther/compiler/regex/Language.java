@@ -415,11 +415,25 @@ public final class Language {
      *
      * <p>Agrees with {@link #equals} both ways, being read off the same canonical table, and unlike
      * {@link #hashCode} it says which of two unequal ones comes first without ever saying that of
-     * two equal ones. Costs nothing to ask: the machine it reads was built when the language was.
+     * two equal ones. The machine it reads was built when the language was, and the table is
+     * written out once, the first time it is asked, and then appended as it was: a language is
+     * ordered against many others, and writing the table out walks all of it.
      */
     public void writtenInto(StringBuilder out) {
-        machine.writtenInto(out);
+        String text = written;
+        if (text == null) {
+            StringBuilder table = new StringBuilder();
+            machine.writtenInto(table);
+            text = table.toString();
+            written = text;
+        }
+        out.append(text);
     }
+
+    /** What {@link #writtenInto} writes, or null before it was first asked. A string is complete
+     *  once another thread can see it, so two that ask at once write the same text twice and
+     *  keep either. */
+    private String written;
 
     @Override
     public String toString() {

@@ -46,7 +46,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
-import java.util.OptionalLong;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.ToIntFunction;
@@ -3161,33 +3160,13 @@ public sealed interface Derivation {
      * @param operation what the model calls the predicate, as an author writes it
      * @param written   the text the author wrote in it, which is what a class the statement makes
      *                  is called by
-     * @param parted    where the piece comes from, which the proposition about it does not say:
+     * @param parted    where the piece comes from, which the proposition about it says as well:
      *                  the string it is a piece of, how it was parted and which of its pieces
      *                  were held — or none where the string stands at no one position
      */
     record APieceInALanguage(StringsLanguage accepts, String operation, String written,
                              PieceWitness within, Optional<PartedString> parted)
             implements Derivation {
-
-        /**
-         * The string a piece is a piece of, as the pieces of it were taken.
-         *
-         * @param string     the position of the string, or of the one it is made of
-         * @param conversion what the string is made of that one by, none where it is that one
-         * @param separator  the code point it is parted at
-         * @param from       the index of the first piece held
-         * @param until      the index the pieces held stop before, or none where they run to the
-         *                   last
-         */
-        public record PartedString(TermPath string, CaseMapping conversion, int separator,
-                                   long from, OptionalLong until) {
-
-            public PartedString {
-                Objects.requireNonNull(string, "the string stands at some position");
-                Objects.requireNonNull(conversion, "the string is converted or it is not");
-                Objects.requireNonNull(until, "the pieces stop somewhere or run to the last");
-            }
-        }
 
         public APieceInALanguage {
             Objects.requireNonNull(accepts, "a piece is held to some predicate");
@@ -3200,7 +3179,7 @@ public sealed interface Derivation {
         @Override
         public Proposition conclusion(Conclusion numbering) {
             return new Proposition.InTheStrings(
-                    new Proposition.InTheStrings.Strings.OfAPiece(within), accepts, true);
+                    new Proposition.InTheStrings.Strings.OfAPiece(within, parted), accepts, true);
         }
     }
 

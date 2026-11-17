@@ -83,7 +83,6 @@ import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.OnePerElement;
 import souther.compiler.inputs.PathResolution;
-import souther.compiler.inputs.Position;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
@@ -100,6 +99,7 @@ import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.GivenTotals;
 import souther.compiler.meaning.Derivation.ALawJoinsWithoutWhatImpliesAnother.Disjunct;
 import souther.compiler.meaning.HowTheElementsAreAsked;
+import souther.compiler.meaning.PartedString;
 import souther.compiler.meaning.PieceDemand;
 import souther.compiler.meaning.PieceWitness;
 import souther.compiler.meaning.MeaningsOfABody.Meaning;
@@ -160,7 +160,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 import souther.compiler.types.ValueName;
 import souther.compiler.values.Operand;
-import souther.compiler.values.TextExtents;
 import souther.compiler.values.Value;
 
 import java.math.BigDecimal;
@@ -473,8 +472,11 @@ final class Pullback {
     private final Deque<Trial> underTrial = new ArrayDeque<>();
     /** What each candidate that concluded something said, by what it concluded. */
     private final Map<Derivation, Trial> triedAndConcluded = new IdentityHashMap<>();
-    /** What decided the arms being read, outermost first: worked out before any arm is. */
-    private final Deque<UndividedByARelation.Working> beforeTheFork = new ArrayDeque<>();
+    /** What decided each choice whose arms are being read, nearest first: what every run works out
+     *  before it takes an arm, or nothing where the choice was read other than as a fork, which
+     *  tells nothing of what decides its arms ({@link #whatDecidedTheArm}). */
+    private final Deque<Optional<UndividedByARelation.Working>> decidingTheArms =
+            new ArrayDeque<>();
     /** The comparisons whose arms are being read, innermost first: what a run taking an arm
      *  works out is read off the innermost ({@link #readOnAnArm}). */
     private final Deque<StatedComparison> armsOfAComparison = new ArrayDeque<>();    /**
@@ -1061,8 +1063,8 @@ final class Pullback {
         }
         List<StopEvidence.OnAnArm> out = new ArrayList<>();
         for (Meaning.ReadOnAnArm each : stated.meaning().relationsDownTheArms()) {
-            for (Supplier<StopEvidence> stops : theRule.onTheArms(each.relation())) {
-                out.add(new StopEvidence.OnAnArm(each.reached(), stops.get()));
+            for (OnThisArm arm : theRule.onTheArms(each.relation())) {
+                out.add(new StopEvidence.OnAnArm(each.reached(), arm.stops()));
             }
         }
         return List.copyOf(out);
@@ -1283,11 +1285,11 @@ final class Pullback {
             }
             case Core.Match match -> {
                 return madeBy(match,
-                        armsOf(match, reads, (body, inside) -> observe(body, asked, inside)));
+                        armsOfAMatch(match, reads, (body, inside) -> observe(body, asked, inside)));
             }
             case Core.IfConstructed attempt -> {
-                return madeBy(attempt,
-                        armsOf(attempt, reads, (body, inside) -> observe(body, asked, inside)));
+                return madeBy(attempt, armsOfAnAttempt(attempt, reads,
+                        (body, inside) -> observe(body, asked, inside)));
             }
             default -> { }
         }
@@ -2195,7 +2197,7 @@ final class Pullback {
         if (always) {
             return new GetsPast.Always();
         }
-        return WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e);
+        return WorkedOutToReachIt.completionOfARowsRun(e);
     }
 
     /**
@@ -2271,12 +2273,12 @@ final class Pullback {
      * multiplied out exactly ({@link GetsPast.WhereTheProductFits}) — and the number it comes to,
      * before it is held to anything, lies there whatever its operands are ({@link #exactRangeOf}).
      * A total of what an element meets is a count, which comes to no more than a list holds: it
-     * is an {@code Int} on every run. And a span between two numbers that answers where it is no
-     * longer than a collection holds ({@link GetsPast.WhereTheSpanFits}), where the greatest its
-     * last number comes to less the least its first comes to leaves it no longer
-     * ({@link #theSpanFits}). A whole-number quotient that stops only on the least {@code Int}
-     * divided by minus one ({@link GetsPast.WhereTheQuotientFits}), where what it divides never
-     * comes to the least or what it divides by never to minus one ({@link #theQuotientFits}). A
+     * is an {@code Int} on every run. And an operation that ends a run only past what a
+     * {@code String} or a collection holds, on every run of a row
+     * ({@link WorkedOutToReachIt#completionOfARowsRun}). A whole-number quotient that stops only
+     * on the least {@code Int} divided by minus one ({@link GetsPast.WhereTheQuotientFits}), where
+     * what it divides never comes to the least or what it divides by never to minus one
+     * ({@link #theQuotientFits}). A
      * whole number made of a number only where it is whole
      * ({@link GetsPast.WhereTheWholeNumberFits}), where every whole number the number comes to is
      * an {@code Int} ({@link #theWholeNumberFits}).
@@ -2286,11 +2288,11 @@ final class Pullback {
      * whatever {@code m - k} is, and {@code m - k} may still pass one.
      */
     private boolean comesToWhereItAnswers(Core e, InputReads reads) {
+        if (WorkedOutToReachIt.completionOfARowsRun(e) instanceof GetsPast.Always) {
+            return true;
+        }
         if (Core.withoutStanding(e) instanceof Core.PreservedCall call) {
             GetsPast completion = WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call);
-            if (completion instanceof GetsPast.WhereTheSpanFits(int from, int to)) {
-                return theSpanFits(call, from, to, reads);
-            }
             if (completion instanceof GetsPast.WhereTheQuotientFits(int dividend, int divisor)) {
                 return theQuotientFits(call, dividend, divisor, reads);
             }
@@ -2298,50 +2300,9 @@ final class Pullback {
                 return theWholeNumberFits(call, operand, reads);
             }
         }
-        if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(e)
-                instanceof GetsPast.WhereTheTextBuiltFits(var built)) {
-            return theTextBuiltFits(e, built, reads);
-        }
         WhereAnOperatorAnswers.WhereItsExactValueIsHeld held = whereItsNumberIsHeld(e);
         FormRange range = held == null ? null : exactRangeOf(e, reads);
         return range != null && range.liesWithin(held.least(), held.greatest());
-    }
-
-    /**
-     * Whether the whole numbers from the operand of {@code call} at {@code from} to the one at
-     * {@code to}, both included, are no more than a collection holds ({@link GetsPast#MOST_ELEMENTS})
-     * on every run that works it out: the greatest the last less the first comes to is less than
-     * that. A first number above the last is a span of none, which is no longer either.
-     *
-     * <p>Of the two numbers as one difference where the arithmetic composes both, so that ends
-     * written of the same number take each other in ({@code List.rangeInclusive(v, v + 3)} is four
-     * whatever {@code v} is); and of the greatest the last comes to less the least the first comes
-     * to ({@link #exactRangeOf}), which holds whatever either is written as. The two are met.
-     */
-    private boolean theSpanFits(Core.PreservedCall call, int from, int to, InputReads reads) {
-        if (from >= call.args().size() || to >= call.args().size()) {
-            return false;
-        }
-        Core first = call.args().get(from);
-        Core last = call.args().get(to);
-        FormRange apart = FormRange.combined(BinOp.SUB, exactRangeOf(last, reads),
-                exactRangeOf(first, reads));
-        FormRange together = null;
-        // One reading for both ends, so that they are held to the elements together: two names for
-        // two elements of one container are one position, and their difference is no span of none.
-        AffineForms.Reading<Quantity, InputReads> ends =
-                quantities(null, null, elementsOfAForm());
-        if (AffineForms.outcome(last, reads, ends)
-                instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var ofTheLast)
-                && AffineForms.outcome(first, reads, ends)
-                        instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var ofTheFirst)
-                && ofTheLast.minus(ofTheFirst)
-                        instanceof ExactAnswer.Held<LinearForm<Quantity>>(var difference)) {
-            together = rangeOfAComposedForm(difference, reads, new HashMap<>());
-        }
-        FormRange span = apart == null ? together : together == null ? apart : apart.meet(together);
-        return span != null && span.greatest().compareTo(
-                ExactRatio.of(GetsPast.MOST_ELEMENTS.subtract(BigInteger.ONE))) <= 0;
     }
 
     /**
@@ -2381,224 +2342,6 @@ final class Pullback {
         return least.compareTo(greatest) > 0
                 || (least.compareTo(ofAnInt.least()) >= 0
                         && greatest.compareTo(ofAnInt.greatest()) <= 0);
-    }
-
-    /**
-     * Whether every text {@code e} builds of texts ({@link GetsPast.WhereTheTextBuiltFits}) is no
-     * longer than a {@code String} holds on every run that works it out, from what each operand
-     * is at most ({@link TextsBuilt}).
-     */
-    private boolean theTextBuiltFits(Core e, GetsPast.TextBuilt built, InputReads reads) {
-        List<Core> operands = operandsOfABuilding(e);
-        return operands != null
-                && TextsBuilt.fits(TextsBuilt.of(built,
-                        ceilingsOf(operands, reads, new HashMap<>())));
-    }
-
-    /** The operands of {@code e} in the order its account of where it answers counts them, or
-     *  null where it is no call or operator. */
-    private static List<Core> operandsOfABuilding(Core e) {
-        return switch (Core.withoutStanding(e)) {
-            case Core.Call call -> call.args();
-            case Core.PreservedCall call -> call.args();
-            case Core.Binary joined -> List.of(joined.left(), joined.right());
-            default -> null;
-        };
-    }
-
-    /**
-     * What each of {@code operands} is at most on every run that works it out: a text by
-     * {@link #mostCodePointsOf}, a list of texts by {@link #mostTextsOf} and
-     * {@link #mostCodePointsOfEach}, and an {@code Int} by the greatest it comes to
-     * ({@link #exactRangeOf}). {@code known} holds what is worked out of each text met.
-     */
-    private TextsBuilt.Ceilings ceilingsOf(List<Core> operands, InputReads reads,
-                                           Map<Denotation, BigInteger> known) {
-        return new OperandCeilings(operands, reads, known);
-    }
-
-    /** {@link #ceilingsOf}: what each of {@code operands}, read in {@code reads}, is at most. */
-    private final class OperandCeilings implements TextsBuilt.Ceilings {
-
-        private final List<Core> operands;
-        private final InputReads reads;
-        private final Map<Denotation, BigInteger> known;
-
-        OperandCeilings(List<Core> operands, InputReads reads, Map<Denotation, BigInteger> known) {
-            this.operands = operands;
-            this.reads = reads;
-            this.known = known;
-        }
-
-        @Override
-        public BigInteger codePoints(int operand) {
-            return mostCodePointsOf(operands.get(operand), reads, known);
-        }
-
-        @Override
-        public BigInteger elements(int operand) {
-            return mostTextsOf(operands.get(operand), reads);
-        }
-
-        @Override
-        public BigInteger codePointsOfEach(int operand) {
-            return mostCodePointsOfEach(operands.get(operand), reads, known);
-        }
-
-        @Override
-        public BigInteger number(int operand) {
-            FormRange range = exactRangeOf(operands.get(operand), reads);
-            return range == null ? null : range.greatest().floor().orNull();
-        }
-    }
-
-    /**
-     * The most code points the text {@code e} holds on every run that works it out: the least of
-     * what its declarations leave it ({@link #declaredMostCodePointsOf}) and what it is shown to
-     * be built as. A text written out is as long as it is; a choice is no longer than its longest
-     * arm; a text built of texts, or converted, is no longer than its account says of what it is
-     * handed ({@link TextsBuilt}, {@link CaseMaps#answerBound}). Followed through the names it
-     * stands for.
-     */
-    private BigInteger mostCodePointsOf(Core e, InputReads reads, Map<Denotation, BigInteger> known) {
-        Denotation standing = reads.standing(e, read.rules().symbols(), read.rules().newtypes());
-        BigInteger already = known.get(standing);
-        if (already != null) {
-            return already;
-        }
-        BigInteger declared = declaredMostCodePointsOf(standing.value());
-        BigInteger ofTheInput = mostCodePointsOfTheInputAt(standing);
-        if (ofTheInput != null) {
-            declared = declared.min(ofTheInput);
-        }
-        BigInteger shown = shownMostCodePointsOf(standing.value(), standing.at(), known);
-        BigInteger most = shown == null ? declared : shown.min(declared);
-        known.put(standing, most);
-        return most;
-    }
-
-    /** What {@link #mostCodePointsOf} reads off how {@code value} is built, or null where it is
-     *  built in no way read here. */
-    private BigInteger shownMostCodePointsOf(Core value, InputReads at,
-                                             Map<Denotation, BigInteger> known) {
-        Core here = Core.withoutStanding(value);
-        if (here instanceof Core.Str text) {
-            return BigInteger.valueOf(text.value().codePointCount(0, text.value().length()));
-        }
-        if (here instanceof Core.If || here instanceof Core.Match
-                || here instanceof Core.IfConstructed) {
-            BigInteger longest = BigInteger.ZERO;
-            for (Choice.Arm arm : Choice.of(here).arms()) {
-                longest = longest.max(mostCodePointsOf(arm.answers(), at.choosing(arm.decidedBy(),
-                        read.rules().symbols(), read.rules().newtypes()), known));
-            }
-            return longest;
-        }
-        if (WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(here)
-                instanceof GetsPast.WhereTheTextBuiltFits(var built)) {
-            List<Core> operands = operandsOfABuilding(here);
-            return operands == null ? null
-                    : TextsBuilt.of(built, ceilingsOf(operands, at, known)).answer();
-        }
-        if (AnOperationApplied.of(here) instanceof AnOperationApplied applied
-                && applied.args().size() == 1
-                && CaseMapping.applying(applied.operation(), CaseMapping.NONE)
-                        instanceof CaseMapping conversion) {
-            return CaseMaps.answerBound(conversion,
-                    mostCodePointsOf(applied.args().getFirst(), at, known));
-        }
-        return null;
-    }
-
-    /** The most code points the string a text read off the input holds, as the place it stands
-     *  at says ({@link StringsHeld#lengthBoundAt}), or null where that is not said. */
-    private BigInteger mostCodePointsOfTheInputAt(Denotation text) {
-        return mostAtThePlacesOf(text, place -> place, StringsHeld::lengthBoundAt);
-    }
-
-    /**
-     * The most {@code ceilingAt} says at the place {@code value}, read off the input, stands at,
-     * or at what {@code step} takes from there: the greatest of the places it may stand at, or
-     * null where it stands at none or some place says nothing.
-     */
-    private BigInteger mostAtThePlacesOf(Denotation value, UnaryOperator<TermPath> step,
-                                         Function<Position, BigInteger> ceilingAt) {
-        List<TermPath> places = switch (value.at().pathOf(value.value(), read.rules().newtypes())) {
-            case PathResolution.At(TermPath path) -> List.of(path);
-            case PathResolution.MayStandAt(List<TermPath> among) -> among;
-            default -> List.of();
-        };
-        BigInteger greatest = null;
-        for (TermPath place : places) {
-            Position at = read.domain().at(step.apply(place));
-            BigInteger bound = at == null ? null : ceilingAt.apply(at);
-            if (bound == null) {
-                return null;
-            }
-            greatest = greatest == null ? bound : greatest.max(bound);
-        }
-        return greatest;
-    }
-
-    /** The most code points a text of {@code e}'s type holds: what its type's own rules leave it,
-     *  and no more than a {@code String} holds. */
-    private BigInteger declaredMostCodePointsOf(Core e) {
-        return mostOf(DeclaredBounds.countsHeld(e.type(), read.ruleReading(), null),
-                BigInteger.valueOf(TextExtents.LONGEST_STRING));
-    }
-
-    /** The least of {@code one} and {@code other}, either of which may be none. */
-    private static BigInteger leastOf(BigInteger one, BigInteger other) {
-        return one == null ? other : other == null ? one : one.min(other);
-    }
-
-    /** The most {@code counts} leave, no more than {@code ceiling}: {@code Integer.MAX_VALUE} is
-     *  the rules capping it in no way ({@link DeclaredBounds.CountRange}). */
-    private static BigInteger mostOf(DeclaredBounds.CountRange counts, BigInteger ceiling) {
-        return counts.most() == Integer.MAX_VALUE ? ceiling
-                : BigInteger.valueOf(counts.most()).min(ceiling);
-    }
-
-    /**
-     * The most texts the list {@code e} holds on every run that works it out: as many as it is
-     * written out with; or the least of what the place it is read off says
-     * ({@link HowManyAPlaceHolds}), what its type's own rules leave it, and what a collection
-     * holds.
-     */
-    private BigInteger mostTextsOf(Core e, InputReads reads) {
-        Denotation container = reads.standing(e, read.rules().symbols(), read.rules().newtypes());
-        if (WrittenOutElements.of(container, read.rules().symbols(), read.rules().newtypes())
-                instanceof WrittenOutElements.Walked.Each each) {
-            return BigInteger.valueOf(each.asWritten().size());
-        }
-        return leastOf(mostAtThePlacesOf(container, place -> place, HowManyAPlaceHolds::atMost),
-                mostOf(DeclaredBounds.countsHeld(container.value().type(), read.ruleReading(),
-                        null), GetsPast.MOST_ELEMENTS));
-    }
-
-    /** The most code points each text the list {@code e} holds holds on every run that works it
-     *  out: the longest it is written out with; or the least of what the place of its elements
-     *  says ({@link StringsHeld#lengthBoundAt}) and what the type of its texts leaves each. */
-    private BigInteger mostCodePointsOfEach(Core e, InputReads reads,
-                                            Map<Denotation, BigInteger> known) {
-        Denotation container = reads.standing(e, read.rules().symbols(), read.rules().newtypes());
-        if (WrittenOutElements.of(container, read.rules().symbols(), read.rules().newtypes())
-                instanceof WrittenOutElements.Walked.Each each) {
-            BigInteger longest = BigInteger.ZERO;
-            for (ReadMeaning.Occurrence element : each.asWritten()) {
-                longest = longest.max(mostCodePointsOf(element.value().value(),
-                        element.value().at(), known));
-            }
-            return longest;
-        }
-        BigInteger ofItsType = TypeView.shapeOf(container.value().type(), read.rules().inners(),
-                read.rules().symbols(), read.rules().kinds(), read.rules().sums())
-                instanceof Shape.Sequence(var _, Type texts)
-                ? mostOf(DeclaredBounds.countsHeld(texts, read.ruleReading(), null),
-                        BigInteger.valueOf(TextExtents.LONGEST_STRING))
-                : BigInteger.valueOf(TextExtents.LONGEST_STRING);
-        return leastOf(mostAtThePlacesOf(container, TermPath::element, StringsHeld::lengthBoundAt),
-                ofItsType);
     }
 
     /** The least and the greatest an {@code Int} holds, which a whole number made of a number
@@ -3371,7 +3114,7 @@ final class Pullback {
 
         /** What a run taking an arm of a choice works out there, by each relation the comparison
          *  was read as with the choice standing as that arm ({@link Pullback#readOnAnArm}). */
-        private Map<Relation, List<Supplier<StopEvidence>>> onTheArms;
+        private Map<Relation, List<OnThisArm>> onTheArms;
 
         // The maps and lists of a candidate are made when the candidate first says something into
         // them: most say nothing, and an identity map holds a table before it holds anything.
@@ -3445,17 +3188,17 @@ final class Pullback {
             return restated == null ? List.of() : restated;
         }
 
-        void readOnAnArm(Relation relation, Supplier<StopEvidence> stops) {
+        void readOnAnArm(Relation relation, OnThisArm arm) {
             marked = null;
             if (onTheArms == null) {
                 onTheArms = new LinkedHashMap<>();
             }
-            onTheArms.computeIfAbsent(relation, _ -> new ArrayList<>()).add(stops);
+            onTheArms.computeIfAbsent(relation, _ -> new ArrayList<>()).add(arm);
         }
 
         /** What runs taking the arms {@code relation} was read on work out there; none where it
          *  was read on no arm. */
-        List<Supplier<StopEvidence>> onTheArms(Relation relation) {
+        List<OnThisArm> onTheArms(Relation relation) {
             return onTheArms == null ? List.of() : onTheArms.getOrDefault(relation, List.of());
         }
 
@@ -3469,9 +3212,19 @@ final class Pullback {
                     : UndividedByARelation.Working.together(List.of(already, told)));
         }
 
-        /** What the candidate says of the rows of {@code relation}, or null where it says none. */
+        /**
+         * What the candidate says of the rows of {@code relation}, or null where it says none: what
+         * it was told of the relation, and otherwise what a run taking the arm the relation was
+         * read on gets past, together where it was read on several.
+         */
         UndividedByARelation.Working workingOf(Relation relation) {
-            return relations == null ? null : relations.get(relation);
+            UndividedByARelation.Working told = relations == null ? null : relations.get(relation);
+            List<OnThisArm> arms = onTheArms(relation);
+            if (told != null || arms.isEmpty() || !arms.stream().allMatch(OnThisArm::tellsEvery)) {
+                return told;
+            }
+            return UndividedByARelation.Working.together(
+                    arms.stream().map(OnThisArm::toGetPast).toList());
         }
 
         /** The relations the candidate kept under this one read, held as this one's. What it
@@ -3482,9 +3235,47 @@ final class Pullback {
                 kept.relations.forEach(this::tell);
             }
             if (kept.onTheArms != null) {
-                kept.onTheArms.forEach((relation, stops) -> stops.forEach(each ->
+                kept.onTheArms.forEach((relation, arms) -> arms.forEach(each ->
                         readOnAnArm(relation, each)));
             }
+        }
+    }
+
+    /**
+     * What a comparison read with a choice standing as one of its arms works out, off the one
+     * reading of its arithmetic: what a run taking the arm gets past, and where it stops.
+     *
+     * @param worksOut   what the comparison works out with the choice standing as the arm; worked
+     *                   out only when asked
+     * @param decidedBy  what every run works out before it takes the arm, the nearest choice
+     *                   first: what decided the arm. None where the arm's choice was not read as a
+     *                   fork, which is taken after what nothing here says, so that what a row
+     *                   taking it gets past is not told
+     */
+    record OnThisArm(Supplier<AffineReading.WorkedOut> worksOut,
+                     List<UndividedByARelation.Working> decidedBy) {
+
+        /** What a row taking the arm gets past: what the arm works out, after what decided it. */
+        UndividedByARelation.Working toGetPast() {
+            UndividedByARelation.Working told = worksOut.get().toGetPast().notOnEveryRun();
+            for (UndividedByARelation.Working earlier : decidedBy) {
+                told = told.after(earlier);
+            }
+            return told;
+        }
+
+        /**
+         * Whether what a row taking the arm gets past is told in full: something decided the arm,
+         * and what it works out and what decided it are every operation that can stop a run.
+         * Where something is left untold, a row is not shown to get past what it leaves, and the
+         * relation is read as it is where nothing was said of the arm.
+         */
+        boolean tellsEvery() {
+            return !decidedBy.isEmpty() && toGetPast().exact();
+        }
+
+        StopEvidence stops() {
+            return worksOut.get().stops();
         }
     }
 
@@ -3840,9 +3631,29 @@ final class Pullback {
      * InputReads#whetherEveryRowTakes}); one a row controls is a case the row writes at its position
      * or stands the dependency in with.
      */
-    private Derivation.MatchArms armsOf(Core.Match match, InputReads reads,
+    private Derivation.MatchArms armsOf(Optional<UndividedByARelation.Working> decidedBy,
+                                        Core.Match match, InputReads reads,
                                         BiFunction<Core, InputReads, Derivation> states) {
+        // Which case a run takes is settled before it takes an arm, as the condition of an if is:
+        // read in the layers around the choice, and not in the one for its arms.
         List<Derivation> selections = selectionsOf(match, reads);
+        return decidingTheArms(decidedBy, () -> armsOfAMatch(match, reads, selections, states));
+    }
+
+    /**
+     * The arms of {@code match}, read for what a condition states of them. No layer is added to
+     * what decides the arms ({@link #decidingTheArms}): these are no arms of the comparison being
+     * asked, and a layer is part of the state a reading kept to be taken again is keyed by, so one
+     * here would make every reading of a {@code match} another.
+     */
+    private Derivation.MatchArms armsOfAMatch(Core.Match match, InputReads reads,
+                                              BiFunction<Core, InputReads, Derivation> states) {
+        return armsOfAMatch(match, reads, selectionsOf(match, reads), states);
+    }
+
+    private Derivation.MatchArms armsOfAMatch(Core.Match match, InputReads reads,
+                                              List<Derivation> selections,
+                                              BiFunction<Core, InputReads, Derivation> states) {
         boolean ofAnEntry = reads.holdsAnEntryLookedUp(match.scrutinee(),
                 read.rules().symbols(), read.rules().newtypes());
         List<Derivation.MatchArms.Arm> arms = new ArrayList<>();
@@ -3862,9 +3673,22 @@ final class Pullback {
      * The arms of {@code attempt}, an attempt to build a value, each read as {@code states} reads
      * what the arm answers where it is taken: where the value was built, and where it was not.
      */
-    private Derivation.MatchArms armsOf(Core.IfConstructed attempt, InputReads reads,
+    private Derivation.MatchArms armsOf(Optional<UndividedByARelation.Working> decidedBy,
+                                        Core.IfConstructed attempt, InputReads reads,
                                         BiFunction<Core, InputReads, Derivation> states) {
         List<Derivation> taken = attempted(attempt, reads);
+        return decidingTheArms(decidedBy, () -> armsOfAnAttempt(attempt, reads, taken, states));
+    }
+
+    /** The same of an attempt to build a value, with no layer added ({@link #armsOfAMatch}). */
+    private Derivation.MatchArms armsOfAnAttempt(Core.IfConstructed attempt, InputReads reads,
+                                                 BiFunction<Core, InputReads, Derivation> states) {
+        return armsOfAnAttempt(attempt, reads, attempted(attempt, reads), states);
+    }
+
+    private Derivation.MatchArms armsOfAnAttempt(Core.IfConstructed attempt, InputReads reads,
+                                                 List<Derivation> taken,
+                                                 BiFunction<Core, InputReads, Derivation> states) {
         List<Choice.Arm> arms = Choice.of(attempt).arms();
         List<Derivation.MatchArms.Arm> out = new ArrayList<>();
         for (int i = 0; i < arms.size(); i++) {
@@ -4746,8 +4570,26 @@ final class Pullback {
      * piece is of ({@link #piecesInAWindow}).
      */
     private Pieces pieceThatIs(Core e, InputReads at, Function<Denotation, Pieces> held) {
+        Denotation standing = at.standing(e, read.rules().symbols(), read.rules().newtypes());
+        InputReads.PickedAtAnIndex picked = standing.at().pickedAtAnIndex(standing.value());
+        if (picked != null) {
+            return pieceAt(picked, held);
+        }
         Denotation whole = theContainerOfTheElement(e, at);
         return whole == null ? null : piecesOfTheElementsOf(whole, held);
+    }
+
+    /**
+     * The pieces the element {@code picked} names is one of: the window of the one piece at its
+     * index among the pieces the list holds — or null where the list is no pieces of a string.
+     */
+    private Pieces pieceAt(InputReads.PickedAtAnIndex picked, Function<Denotation, Pieces> held) {
+        Pieces inner = held.apply(picked.list());
+        if (inner == null) {
+            return null;
+        }
+        PieceWindow window = inner.window().dropping(picked.index()).taking(1);
+        return window.isSaidInInts() ? inner.through(window) : null;
     }
 
     /**
@@ -5083,12 +4925,12 @@ final class Pullback {
      * or the one it is made of by case conversions, and what they make of it — or none where it is
      * made of anything else.
      */
-    private Optional<Derivation.APieceInALanguage.PartedString> partedStringOf(Pieces piece) {
+    private Optional<PartedString> partedStringOf(Pieces piece) {
         Core string = piece.split().args().get(piece.parted().string().position());
         Quantity quantity = valueOfTheInput(string, piece.at());
         ConvertedText text = quantity == null ? null : ConvertedText.of(quantity);
         return text == null || piece.separator().isEmpty() ? Optional.empty()
-                : Optional.of(new Derivation.APieceInALanguage.PartedString(
+                : Optional.of(new PartedString(
                         text.place().subjectPath(), text.through(), piece.separator().getAsInt(),
                         piece.window().from(), piece.window().until()));
     }
@@ -7137,7 +6979,7 @@ final class Pullback {
             Proposition.Some some = null;
             for (Proposition part : parts) {
                 if (part instanceof Proposition.InTheStrings(
-                        Proposition.InTheStrings.Strings.OfAPiece(PieceWitness of),
+                        Proposition.InTheStrings.Strings.OfAPiece(PieceWitness of, var _),
                         StringsLanguage accepts, boolean inIt, var _)
                         && of.equals(within) && inIt && language == null) {
                     language = accepts;
@@ -7176,7 +7018,7 @@ final class Pullback {
                                                 Proposition element, Derivation answered) {
             if (pieces.separator().isEmpty()
                     || !(element instanceof Proposition.InTheStrings(
-                            Proposition.InTheStrings.Strings.OfAPiece(PieceWitness of),
+                            Proposition.InTheStrings.Strings.OfAPiece(PieceWitness of, var _),
                             StringsLanguage piece, boolean inIt, var _))
                     || !of.equals(within)
                     || !(subjectOf(pieces.split().args().get(pieces.parted().string().position()),
@@ -8182,7 +8024,7 @@ final class Pullback {
                                 asTheElement(container, iff.els(), stands.at(), compared)));
                     }
                     case Core.Match match -> {
-                        return madeBy(match, armsOf(match, stands.at(), (body, inside) ->
+                        return madeBy(match, armsOfAMatch(match, stands.at(), (body, inside) ->
                                 asTheElement(container, body, inside, compared)));
                     }
                     default -> { }
@@ -11889,7 +11731,7 @@ final class Pullback {
                         InputReads application = element.at();
                         // The arms are alternatives: each reads the element from where the ones
                         // before it stood, and none from what another arm met.
-                        Derivation byArm = byItsCases(chosen, at, arm -> {
+                        Derivation byArm = byItsCases(chosen, at, Optional.empty(), arm -> {
                             elementsMet.rewind(beforeTheElement);
                             return sumOfKept(total, ways, decided, next,
                                     new Denotation(element.value(),
@@ -12110,6 +11952,11 @@ final class Pullback {
                                   boolean askedAggregates, int consulted) {
             return READING_STATE.sameInputsBut(then, now, askedAggregates, null,
                     CONTENT_ASKED[consulted]);
+        }
+
+        @Override
+        public int requiredInputsHash(ReadingState.Inputs inputs) {
+            return READING_STATE.requiredInputsHash(inputs);
         }
 
         @Override
@@ -13568,14 +13415,39 @@ final class Pullback {
         };
     }
 
-    /** {@code reading}, with {@code before} worked out by every run before it takes an arm. */
-    private <T> T underTheFork(UndividedByARelation.Working before, Supplier<T> reading) {
-        beforeTheFork.push(before);
+    /**
+     * {@code reading} of the arms of a choice, with what decided them: {@code before}, what every
+     * run works out before it takes an arm, or nothing where the choice is not read as a fork.
+     * Every reader of the arms of a choice the comparison asked is read through says it, so that
+     * none is read without ({@link #armsOf}, {@link #byItsCases}). A reading of what a condition
+     * states of a choice's arms adds none: the layers are state a kept reading is keyed by
+     * ({@link ReadingRoles}), and one on every such reading keeps none from being taken again.
+     */
+    private <T> T decidingTheArms(Optional<UndividedByARelation.Working> before,
+                                  Supplier<T> reading) {
+        decidingTheArms.push(before);
         try {
             return reading.get();
         } finally {
-            beforeTheFork.pop();
+            decidingTheArms.pop();
         }
+    }
+
+    /**
+     * What every run works out before it takes the arm being read, the nearest choice first — or
+     * nothing where the arm is no arm of a choice read as a fork, or any choice around it was read
+     * otherwise: a run taking the arm is then decided by something not told, and what it gets past
+     * is not.
+     */
+    private List<UndividedByARelation.Working> whatDecidedTheArm() {
+        List<UndividedByARelation.Working> out = new ArrayList<>();
+        for (Optional<UndividedByARelation.Working> each : decidingTheArms) {
+            if (each.isEmpty()) {
+                return List.of();
+            }
+            out.add(each.get());
+        }
+        return out;
     }
 
     /**
@@ -13585,7 +13457,8 @@ final class Pullback {
      * written works out the operations of whichever arm is taken.
      */
     private void tellWhatItWorksOut(Derivation cut, UndividedByARelation.Working working) {
-        if (beforeTheFork.isEmpty() || restatingAQuotient
+        List<UndividedByARelation.Working> decided = whatDecidedTheArm();
+        if (decided.isEmpty() || restatingAQuotient
                 || !(Derivation.readOff(cut) instanceof Derivation.AComparisonRead)) {
             return;
         }
@@ -13596,7 +13469,7 @@ final class Pullback {
             return;
         }
         UndividedByARelation.Working told = working.notOnEveryRun();
-        for (UndividedByARelation.Working earlier : beforeTheFork) {
+        for (UndividedByARelation.Working earlier : decided) {
             told = told.after(earlier);
         }
         trial().tell(said, told);
@@ -13763,10 +13636,12 @@ final class Pullback {
         StatedComparison stated = armsOfAComparison.peek();
         Trial concluded = triedAndConcluded.get(read);
         Trial theRule = concluded != null ? concluded : trial();
-        Once<StopEvidence> stops = new Once<>(() ->
-                worksOut(theRule, arithmeticOf(stated, there)).stops());
+        Once<AffineReading.WorkedOut> worksOut =
+                new Once<>(() -> worksOut(theRule, arithmeticOf(stated, there)));
+        OnThisArm arm = new OnThisArm(worksOut,
+                restatingAQuotient ? List.of() : whatDecidedTheArm());
         for (Relation each : Meaning.relationsReadIn(read)) {
-            trial().readOnAnArm(each, stops);
+            trial().readOnAnArm(each, arm);
         }
         return read;
     }
@@ -13851,11 +13726,11 @@ final class Pullback {
                 // Taken as the if itself and not as whatever stood for it here: a name for the
                 // choice read again elsewhere on this reading is the same choice, taken.
                 Core choice = choiceAt.value();
-                yield new Derivation.AComparisonOfAChoice(madeBy(iff, underTheFork(
-                        AffineReading.workingOfWhatDecides(iff, choiceAt.at(), read),
-                        () -> armsOf(iff, choiceAt.at(), condition, left,
-                                arm -> readOnAnArm(again.apply(on -> on.taking(choice, arm, 1)),
-                                        reads.taking(choice, arm, 1))))));
+                yield new Derivation.AComparisonOfAChoice(madeBy(iff, armsOf(
+                        Optional.of(AffineReading.workingOfWhatDecides(iff, choiceAt.at(), read)),
+                        iff, choiceAt.at(), condition, left,
+                        arm -> readOnAnArm(again.apply(on -> on.taking(choice, arm, 1)),
+                                reads.taking(choice, arm, 1)))));
             }
             case Inside.AChoice(Denotation chosen) -> {
                 int arms = Choice.of(Core.withoutStanding(chosen.value())).arms().size();
@@ -13864,12 +13739,11 @@ final class Pullback {
                     yield partOf(at, new Derivation.Stopped(past, fixed));
                 }
                 Core choice = chosen.value();
-                yield new Derivation.AComparisonOfAChoice(underTheFork(
-                        AffineReading.workingOfWhatDecides(
-                                Core.withoutStanding(chosen.value()), chosen.at(), read),
-                        () -> byItsCases(chosen, at,
-                                arm -> readOnAnArm(again.apply(on -> on.taking(choice, arm, arms)),
-                                        reads.taking(choice, arm, arms)))));
+                yield new Derivation.AComparisonOfAChoice(byItsCases(chosen, at,
+                        Optional.of(AffineReading.workingOfWhatDecides(
+                                Core.withoutStanding(chosen.value()), chosen.at(), read)),
+                        arm -> readOnAnArm(again.apply(on -> on.taking(choice, arm, arms)),
+                                reads.taking(choice, arm, arms))));
             }
             case Inside.ACall(Core call, ValueName.Behavior behavior, Denotation body) ->
                     new Derivation.ABehaviorsBody(behavior,
@@ -13898,7 +13772,8 @@ final class Pullback {
                     Derivation before = ending;
                     Derivation condition = observe(step.cond(), AnswerAspect.TRUTH, application);
                     ArmsLeft left = armsLeftBy(condition);
-                    Derivation chosen = madeBy(step, armsOf(step, application, condition, left,
+                    Derivation chosen = madeBy(step, armsOf(Optional.empty(), step, application,
+                            condition, left,
                             arm -> Core.withoutStanding(arm.value()) instanceof Core.Read name
                                     && name.binding().equals(carried) ? before
                                     : again.apply(on -> on.taking(walk, arm, candidates))));
@@ -16546,12 +16421,14 @@ final class Pullback {
             }
         }
         Derivation byLeft = left.whole() == null ? null : byItsCases(left.whole(), at,
+                Optional.empty(),
                 side -> readOnAnArm(comparedCase(ASide.of(side), right, states, at),
                         takenAs(left.whole(), side)));
         if (byLeft != null) {
             return byLeft;
         }
         Derivation byRight = right.whole() == null ? null : byItsCases(right.whole(), at,
+                Optional.empty(),
                 side -> readOnAnArm(comparedCase(left, ASide.of(side), states, at),
                         takenAs(right.whole(), side)));
         if (byRight != null) {
@@ -16824,15 +16701,16 @@ final class Pullback {
      * An {@code if} decided by {@code condition}, with {@code compared} read of what each arm a run
      * takes answers, the way narrowed to that arm while it is read.
      */
-    private Derivation armsOf(Core.If iff, InputReads where, Derivation condition, ArmsLeft left,
+    private Derivation armsOf(Optional<UndividedByARelation.Working> decidedBy, Core.If iff,
+                              InputReads where, Derivation condition, ArmsLeft left,
                               Function<Denotation, Derivation> compared) {
-        return new Derivation.IfThenElse(condition,
+        return decidingTheArms(decidedBy, () -> new Derivation.IfThenElse(condition,
                 left.thenTaken() ? along(left.then(),
                         () -> compared.apply(new Denotation(iff.then(), where)))
                         : new Derivation.NoRunTakesIt(),
                 left.otherwiseTaken() ? along(left.otherwise(),
                         () -> compared.apply(new Denotation(iff.els(), where)))
-                        : new Derivation.NoRunTakesIt());
+                        : new Derivation.NoRunTakesIt()));
     }
 
     /** {@code reading} read with the way left as {@code there}, or as it was where that is null. */
@@ -16855,8 +16733,12 @@ final class Pullback {
      *
      * @param at the comparison the choice is a side of, where it is a part of a larger condition:
      *           how the arguments of an operation stand is a part read off it
+     * @param decidedBy what every run works out before it takes an arm, where the choice is read
+     *           as a fork — and none where nothing of what decides its arms is told
+     *           ({@link #whatDecidedTheArm})
      */
     private Derivation byItsCases(Denotation side, Denotation at,
+                                  Optional<UndividedByARelation.Working> decidedBy,
                                   Function<Denotation, Derivation> compared) {
         Denotation chosen = chosenAt(side);
         if (chosen == null) {
@@ -16867,13 +16749,14 @@ final class Pullback {
         Derivation choice = switch (node) {
             case Core.If iff -> {
                 Derivation condition = observe(iff.cond(), AnswerAspect.TRUTH, where);
-                yield armsOf(iff, where, condition, armsLeftBy(condition), compared);
+                yield armsOf(decidedBy, iff, where, condition, armsLeftBy(condition), compared);
             }
-            case Core.Match match -> armsOf(match, where,
+            case Core.Match match -> armsOf(decidedBy, match, where,
                     (body, inside) -> compared.apply(new Denotation(body, inside)));
-            case Core.IfConstructed attempt -> armsOf(attempt, where,
+            case Core.IfConstructed attempt -> armsOf(decidedBy, attempt, where,
                     (body, inside) -> compared.apply(new Denotation(body, inside)));
-            case Core e -> ofAnOperationsCases(e, Choice.of(e), where, at, compared);
+            case Core e -> decidingTheArms(decidedBy,
+                    () -> ofAnOperationsCases(e, Choice.of(e), where, at, compared));
         };
         return choice == null ? null : madeBy(node, choice);
     }
@@ -17106,9 +16989,15 @@ final class Pullback {
         }
     }
 
-    /** {@code e}, which nothing here reads the meaning of. */
+    /**
+     * {@code e}, which nothing here reads the meaning of — and what its operation's owner says of
+     * it, where it is a string held to a predicate: the statement stays with the part, whatever
+     * stopped the reading of the call.
+     */
     private Derivation unread(Core e, InputReads reads, WhyUnread why) {
-        return leaf(new Derivation.Stopped(why, fixed(e, reads)), e, reads);
+        AnOperationApplied applied = AnOperationApplied.of(Core.withoutStanding(e));
+        return leaf(new Derivation.Stopped(why, fixed(e, reads),
+                applied == null ? Optional.empty() : couldBeSaid(applied, e, reads)), e, reads);
     }
 
     /**

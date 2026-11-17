@@ -973,6 +973,24 @@ class ARelationIsSettledOnlyWhereEveryValueTheOthersMayHoldIsOnOneSideTest {
         assertEquals(List.of(), settled.lines());
     }
 
+    /**
+     * {@code x /= y} with {@code y} always one: it holds below one and above it and fails at one.
+     * The run above one starts at the number the run at one starts at, without taking it in, so it
+     * stands after it; no run follows the one that has no end. The lines are the two edges of the
+     * value one, which no other run is above.
+     */
+    @Test
+    void aRunFromJustAboveAValueStandsAfterTheRunAtTheValue() {
+        Leaves.Settled settled = denseAgainstOne(1, Rel.NE);
+
+        assertEquals(List.of(true, false, true),
+                settled.runs().stream().map(SettledRun::holds).toList());
+        assertNull(settled.runs().getFirst().from());
+        assertNull(settled.runs().getLast().to());
+        assertEquals(List.of(new Line(Rel.LT, ExactRatio.ONE), new Line(Rel.LE, ExactRatio.ONE)),
+                settled.lines());
+    }
+
     /** The relation turned round holds at every decimal, and parts nothing. */
     @Test
     void aNumberNoDecimalIsIsNoValueTheRelationFailsAtEither() {
