@@ -242,6 +242,10 @@ public final class TheChoicesACaseIsMadeOf {
         /** The steps of the derivation being walked, each once: the ones {@link #concluding}
          *  answers for. */
         private Set<Derivation> inThisRoot;
+        /** The parts a quantifier is taken apart into as the lines are read, by its spelling: the
+         *  same quantifier is concluded under many derivations, and what is made of it is the
+         *  same for each. */
+        private final Map<Spelling, Map<Spelling, Proposition>> liftedParts = new HashMap<>();
         /** What {@link #heldUnder} answered, by the step. */
         private Map<Derivation, Set<Spelling>> held;
         private Map<Derivation, Set<Spelling>> under;
@@ -387,7 +391,8 @@ public final class TheChoicesACaseIsMadeOf {
          * is known to have made is made by nothing here, and is counted as such.
          */
         private void saidOfOneQuantifier(Proposition.Some some) {
-            WhereEachLineDecides.partsHeldBy(WhereEachLineDecides.lifted(some))
+            liftedParts.computeIfAbsent(some.spelling(),
+                            _ -> WhereEachLineDecides.partsHeldBy(WhereEachLineDecides.lifted(some)))
                     .forEach((spelling, part) -> {
                         if (!split.contains(spelling) || !(part instanceof Proposition.Some said)) {
                             return;
