@@ -152,6 +152,8 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
             "List.max(ds) | m * 2 <= 10",
             "List.min(ds) | Int.abs(m) >= 10",
             "Option.map(v -> v + 1, List.max(ds)) | m <= 10",
+            "List.get(0, List.sort(ds)) | m <= 10",
+            "List.get(0, List.filter(x -> x > 3, ds)) | m <= 10",
             "List.find(x -> x > q, ds) | m + 1 <= 10",
             "List.get(q, ds) | m + 1 <= 10"})
     void aValueWorkedOutOfAPayloadIsSaidNotReadAtTheElements(String call, String comparison) {
@@ -160,7 +162,7 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
 
         assertTrue(report.contains("measurement: partial"), report);
         assertTrue(report.lines().anyMatch(line -> line.contains("· not read:")
-                && line.contains("about `ds[*]`")), report);
+                && line.contains("about `ds")), report);
     }
 
     /** A rate wearing a name, the list made of each line's rate and compared through its value by

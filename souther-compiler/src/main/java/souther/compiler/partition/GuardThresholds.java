@@ -617,6 +617,13 @@ public final class GuardThresholds {
                 return came;
             }
         }
+        // An element an index picked of a list that is no position of the input came from that
+        // list. Of a list that is one, it is the element there, which the rows measure.
+        InputReads.PickedAtAnIndex picked = reads.pickedAtAnIndex(bare);
+        if (picked != null && !(reads.pathOf(picked.list().value(), read.newtypes())
+                instanceof PathResolution.At)) {
+            return cameFromThroughWhatItIsMadeOf(picked.list().value(), picked.list().at(), read);
+        }
         // A name stands for what it was bound to, read where it was bound.
         if (bare instanceof Core.Read) {
             Denotation stood = reads.standing(bare, read.symbols(), read.newtypes());
