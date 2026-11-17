@@ -124,13 +124,6 @@ class AMembershipBesideARemainderOfTwoDatesIsReadTest {
                 "hs[*]"));
     }
 
-    /** Two numbers the elements are read at are not chosen for one another. */
-    @Test
-    void twoNumbersTheSidesReadAreNotKeptTogether() {
-        assertEquals(List.of(NOT_SHOWN), reasonsAt("a: Int, d: Int, e: Int, hs: Set<Int>",
-                "Int.floorMod(a - d - e, 7) >= 1 && Bool.not(Set.contains(d + e, hs))", "hs[*]"));
-    }
-
     /** Nor is a remainder taken away from a run that works the same numbers out otherwise. */
     @Test
     void aProductOfTheSameNumbersTheRunWorksOutKeepsTheirTie() {

@@ -6539,9 +6539,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (mine == null) {
             return false;
         }
-        int kept = 0;
-        NumericTerm keptTerm = null;
-        WholeEnds keptEnds = null;
+        Map<NumericTerm, WholeEnds> kept = new LinkedHashMap<>();
         Map<NumericTerm, WholeEnds> atNought = new LinkedHashMap<>();
         for (Map.Entry<NumericTerm, ExactRatio> each : on.dividend().coefs().entrySet()) {
             if (each.getKey().equals(free)) {
@@ -6566,7 +6564,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             BigInteger by = wholeNumberOf(each.getValue());
             if (!readBySides(other) || by == null || by.abs().compareTo(BigInteger.ONE) != 0
-                    || ++kept > 1 || !(read.quantities().region().projectionOf(other)
+                    || !(read.quantities().region().projectionOf(other)
                             instanceof NumericDomain.FormProjection.Within(
                                     NumericDomain.Bounds run))) {
                 return false;
@@ -6575,10 +6573,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (ends == null || ends.low() == null || ends.high() == null) {
                 return false;
             }
-            keptTerm = other;
-            keptEnds = ends;
+            kept.put(other, ends);
         }
-        NumbersChosen candidate = new NumbersChosen(free, mine, keptTerm, keptEnds, atNought);
+        NumbersChosen candidate = new NumbersChosen(free, mine, kept, atNought);
         Optional<Coverage> shown = candidate.coverage(on.dividend(), divisor, weight,
                 past.narrowing(), least, greatest);
         shown.ifPresent(narrowingsMet::add);
@@ -6592,8 +6589,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * proposes and nothing it says is believed: {@link #coverage} is the only way to a
      * {@link Coverage}.
      */
-    record NumbersChosen(NumericTerm free, WholeEnds freeEnds, NumericTerm kept,
-                         WholeEnds keptEnds, Map<NumericTerm, WholeEnds> atNought) {
+    record NumbersChosen(NumericTerm free, WholeEnds freeEnds, Map<NumericTerm, WholeEnds> kept,
+                         Map<NumericTerm, WholeEnds> atNought) {
 
         /**
          * What this shows, or empty where it shows nothing: every number set at nought is one
@@ -6610,33 +6607,186 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     return Optional.empty();
                 }
             }
-            BigInteger by = kept == null ? BigInteger.ZERO : wholeNumberOf(dividend.coefs().get(kept));
-            if (by == null) {
+            BigInteger[] sum = sumOfTheKept(dividend);
+            if (sum == null) {
                 return Optional.empty();
             }
-            BigInteger keptLow = BigInteger.ZERO;
-            BigInteger keptHigh = BigInteger.ZERO;
-            if (kept != null) {
-                if (keptEnds == null || keptEnds.low() == null || keptEnds.high() == null) {
-                    return Optional.empty();
-                }
-                keptLow = by.signum() > 0 ? keptEnds.low() : keptEnds.high().negate();
-                keptHigh = by.signum() > 0 ? keptEnds.high() : keptEnds.low().negate();
-            }
-            if (!windowHoldsEveryRemainder(weight, freeEnds, keptLow, keptHigh, BigInteger.ZERO,
-                    divisor, least, greatest)) {
+            BigInteger[] range = keptSumWithin(narrowing, dividend, sum);
+            if (!windowHoldsEveryRemainder(weight, freeEnds, range[0], range[1],
+                    BigInteger.ZERO, divisor, least, greatest)) {
                 return Optional.empty();
             }
             List<TakenConstraint.Affine> held = new ArrayList<>();
-            if (!meetsWhatTheRunNarrows(narrowing, dividend, free, kept, keptEnds,
-                    atNought.keySet(), freeEnds, least, greatest, held)) {
+            if (!meetsWhatTheRunNarrows(narrowing, dividend, least, greatest, held)) {
                 return Optional.empty();
             }
-            Set<NumericTerm> keptTerms = new LinkedHashSet<>();
-            if (kept != null) {
-                keptTerms.add(kept);
+            return Optional.of(new Coverage(kept.keySet(), held));
+        }
+
+        /** The least and the greatest the kept part of the form comes to over the boxes the kept
+         *  numbers' runs are, or null where a kept number weighs more than one or has no end. */
+        private BigInteger[] sumOfTheKept(LinearForm<NumericTerm> dividend) {
+            BigInteger low = BigInteger.ZERO;
+            BigInteger high = BigInteger.ZERO;
+            for (Map.Entry<NumericTerm, WholeEnds> each : kept.entrySet()) {
+                BigInteger by = wholeNumberOf(dividend.coefs().get(each.getKey()));
+                WholeEnds ends = each.getValue();
+                if (by == null || by.abs().compareTo(BigInteger.ONE) != 0 || ends.low() == null
+                        || ends.high() == null) {
+                    return null;
+                }
+                low = low.add(by.signum() > 0 ? ends.low() : ends.high().negate());
+                high = high.add(by.signum() > 0 ? ends.high() : ends.low().negate());
             }
-            return Optional.of(new Coverage(keptTerms, held));
+            return new BigInteger[] {low, high};
+        }
+
+        /**
+         * {@code sum} narrowed by what the run narrows of the kept numbers alone, where it is the
+         * kept part of the form that is narrowed: {@code d + n} held inside the {@code Int}s keeps
+         * the kept part there. Such a narrowing is a premise, a row the kept numbers do not have,
+         * and stays in the region; narrowings it does not read as the kept part leave the range
+         * as it was, which is wider than the rows.
+         */
+        private BigInteger[] keptSumWithin(List<TakenConstraint> narrowing,
+                                           LinearForm<NumericTerm> dividend, BigInteger[] sum) {
+            BigInteger low = sum[0];
+            BigInteger high = sum[1];
+            for (TakenConstraint each : narrowing) {
+                if (!(each instanceof TakenConstraint.Affine(var form, var rel, var _))
+                        || kept.isEmpty() || !form.coefs().keySet().equals(kept.keySet())
+                        || rel == Rel.EQ || rel == Rel.NE) {
+                    continue;
+                }
+                BigInteger constant = wholeNumberOf(form.constant());
+                BigInteger lambda = null;
+                for (NumericTerm term : kept.keySet()) {
+                    BigInteger onTerm = wholeNumberOf(form.coefs().get(term));
+                    BigInteger inForm = wholeNumberOf(dividend.coefs().get(term));
+                    BigInteger ratio = onTerm == null || inForm == null ? null
+                            : onTerm.multiply(inForm);
+                    if (ratio == null || ratio.abs().compareTo(BigInteger.ONE) != 0
+                            || (lambda != null && !lambda.equals(ratio))) {
+                        lambda = null;
+                        break;
+                    }
+                    lambda = ratio;
+                }
+                if (lambda == null || constant == null) {
+                    continue;
+                }
+                // lambda * sum + constant rel 0, as a bound on the sum.
+                boolean upper = (rel == Rel.LE || rel == Rel.LT) == (lambda.signum() > 0);
+                boolean strict = rel == Rel.LT || rel == Rel.GT;
+                BigInteger bound = lambda.signum() > 0 ? constant.negate() : constant;
+                if (strict) {
+                    bound = upper ? bound.subtract(BigInteger.ONE) : bound.add(BigInteger.ONE);
+                }
+                if (upper) {
+                    high = high.min(bound);
+                } else {
+                    low = low.max(bound);
+                }
+            }
+            return new BigInteger[] {low, high};
+        }
+
+        /**
+         * Whether every number the run narrows that names a number chosen holds where the numbers
+         * are put, which is an obligation of this proof and is left out of the region when it
+         * holds. A narrowing of the kept numbers alone is no obligation: it is a premise.
+         *
+         * <p>One that names the free number is of the form brought to a remainder, whole, or of
+         * the free number alone; a prefix of the form that is neither is not a thing this proof
+         * looks at, and is not met.
+         */
+        private boolean meetsWhatTheRunNarrows(List<TakenConstraint> narrowing,
+                                               LinearForm<NumericTerm> dividend,
+                                               BigInteger least, BigInteger greatest,
+                                               List<TakenConstraint.Affine> held) {
+            Set<NumericTerm> chosen = new LinkedHashSet<>(atNought.keySet());
+            chosen.add(free);
+            for (TakenConstraint each : narrowing) {
+                if (each.terms().stream().noneMatch(chosen::contains)) {
+                    continue;
+                }
+                if (!(each instanceof TakenConstraint.Affine(var form, var rel, var _))
+                        || form.coefs().keySet().stream().anyMatch(term ->
+                                !chosen.contains(term) && !kept.containsKey(term))) {
+                    return false;
+                }
+                BigInteger constant = wholeNumberOf(form.constant());
+                BigInteger onFree = form.coefs().containsKey(free)
+                        ? wholeNumberOf(form.coefs().get(free)) : BigInteger.ZERO;
+                if (constant == null || onFree == null) {
+                    return false;
+                }
+                BigInteger low = constant;
+                BigInteger high = constant;
+                if (onFree.signum() == 0) {
+                    for (Map.Entry<NumericTerm, WholeEnds> term : kept.entrySet()) {
+                        BigInteger by = form.coefs().containsKey(term.getKey())
+                                ? wholeNumberOf(form.coefs().get(term.getKey()))
+                                : BigInteger.ZERO;
+                        WholeEnds ends = term.getValue();
+                        if (by == null || (by.signum() != 0
+                                && (ends.low() == null || ends.high() == null))) {
+                            return false;
+                        }
+                        low = low.add(by.signum() == 0 ? BigInteger.ZERO : by.signum() > 0
+                                ? by.multiply(ends.low()) : by.multiply(ends.high()));
+                        high = high.add(by.signum() == 0 ? BigInteger.ZERO : by.signum() > 0
+                                ? by.multiply(ends.high()) : by.multiply(ends.low()));
+                    }
+                } else {
+                    BigInteger weightOfFree = wholeNumberOf(dividend.coefs().get(free));
+                    boolean namesKept = form.coefs().keySet().stream().anyMatch(kept::containsKey);
+                    if (weightOfFree == null) {
+                        return false;
+                    }
+                    if (namesKept) {
+                        BigInteger lambda = onFree.multiply(weightOfFree);
+                        if (lambda.abs().compareTo(BigInteger.ONE) != 0
+                                || !form.coefs().keySet().containsAll(kept.keySet())) {
+                            return false;
+                        }
+                        for (NumericTerm term : kept.keySet()) {
+                            BigInteger onTerm = wholeNumberOf(form.coefs().get(term));
+                            BigInteger inForm = wholeNumberOf(dividend.coefs().get(term));
+                            if (onTerm == null || inForm == null
+                                    || !onTerm.equals(lambda.multiply(inForm))) {
+                                return false;
+                            }
+                        }
+                        low = low.add(lambda.multiply(lambda.signum() > 0 ? least : greatest));
+                        high = high.add(lambda.multiply(lambda.signum() > 0 ? greatest : least));
+                    } else {
+                        if (freeEnds.low() == null || freeEnds.high() == null) {
+                            return false;
+                        }
+                        low = low.add(onFree.signum() > 0 ? onFree.multiply(freeEnds.low())
+                                : onFree.multiply(freeEnds.high()));
+                        high = high.add(onFree.signum() > 0 ? onFree.multiply(freeEnds.high())
+                                : onFree.multiply(freeEnds.low()));
+                    }
+                }
+                if (!holdsEverywhere(low, high, rel)) {
+                    return false;
+                }
+                held.add((TakenConstraint.Affine) each);
+            }
+            return true;
+        }
+
+        private static boolean holdsEverywhere(BigInteger low, BigInteger high, Rel rel) {
+            return switch (rel) {
+                case GE -> low.signum() >= 0;
+                case GT -> low.signum() > 0;
+                case LE -> high.signum() <= 0;
+                case LT -> high.signum() < 0;
+                case EQ -> low.signum() == 0 && high.signum() == 0;
+                case NE -> low.signum() > 0 || high.signum() < 0;
+            };
         }
     }
 
@@ -6647,100 +6797,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * constraints this lets a reader leave out.
      */
     record Coverage(Set<NumericTerm> kept, List<TakenConstraint.Affine> narrowingsHeld) {}
-
-    /**
-     * Whether every number the run narrows ({@link DemandReading.Answered#narrowing}) holds for
-     * the values the witness chooses: the numbers in {@code atNought} at nought, the kept number
-     * anywhere in its run, and the free number where the window of
-     * {@link #windowHoldsEveryRemainder} puts it.
-     *
-     * <p>A narrowing is what the program's own arithmetic asks of a row to be worked out, so this
-     * is the witness checked in the order the program works the operations out. One that names a
-     * number nothing here chooses is not met. One of the kept number alone holds at both ends of
-     * its run, and one of the form this witness brings to a remainder holds where the form is
-     * inside the type, which the window keeps it.
-     */
-    private static boolean meetsWhatTheRunNarrows(List<TakenConstraint> narrowing,
-                                                  LinearForm<NumericTerm> dividend,
-                                                  NumericTerm free, NumericTerm kept,
-                                                  WholeEnds keptEnds, Set<NumericTerm> atNought,
-                                                  WholeEnds mine,
-                                                  BigInteger least, BigInteger greatest,
-                                                  List<TakenConstraint.Affine> verified) {
-        Set<NumericTerm> chosen = new LinkedHashSet<>(atNought);
-        chosen.add(free);
-        if (kept != null) {
-            chosen.add(kept);
-        }
-        for (TakenConstraint each : narrowing) {
-            if (!(each instanceof TakenConstraint.Affine affine)) {
-                return false;
-            }
-            LinearForm<NumericTerm> form = affine.form();
-            Rel rel = affine.rel();
-            if (form.coefs().keySet().stream().noneMatch(chosen::contains)) {
-                continue;
-            }
-            verified.add(affine);
-            BigInteger constant = wholeNumberOf(form.constant());
-            BigInteger onFree = wholeNumberOf(form.coefs().get(free));
-            BigInteger onKept = kept == null ? null : wholeNumberOf(form.coefs().get(kept));
-            if (constant == null || form.coefs().keySet().stream().anyMatch(term ->
-                    !chosen.contains(term) || (!term.equals(free) && !term.equals(kept)
-                            && !atNought.contains(term)))) {
-                return false;
-            }
-            if (onFree == null || onFree.signum() == 0) {
-                if (kept == null || onKept == null || keptEnds == null) {
-                    if (!holdsOf(constant, rel)) {
-                        return false;
-                    }
-                    continue;
-                }
-                if (!holdsOf(onKept.multiply(keptEnds.low()).add(constant), rel)
-                        || !holdsOf(onKept.multiply(keptEnds.high()).add(constant), rel)) {
-                    return false;
-                }
-                continue;
-            }
-            if (kept == null || !form.coefs().containsKey(kept)) {
-                if (mine.low() == null || mine.high() == null
-                        || !holdsOf(onFree.multiply(mine.low()).add(constant), rel)
-                        || !holdsOf(onFree.multiply(mine.high()).add(constant), rel)) {
-                    return false;
-                }
-                continue;
-            }
-            BigInteger weightOfFree = wholeNumberOf(dividend.coefs().get(free));
-            BigInteger weightOfKept = kept == null ? BigInteger.ZERO
-                    : wholeNumberOf(dividend.coefs().get(kept));
-            if (weightOfFree == null || weightOfKept == null || (onKept == null && kept != null)) {
-                return false;
-            }
-            BigInteger lambda = onFree.multiply(weightOfFree);
-            if (lambda.abs().compareTo(BigInteger.ONE) != 0
-                    || (kept != null && !onKept.equals(lambda.multiply(weightOfKept)))) {
-                return false;
-            }
-            if (!holdsOf(lambda.multiply(least).add(constant), rel)
-                    || !holdsOf(lambda.multiply(greatest).add(constant), rel)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static boolean holdsOf(BigInteger value, Rel rel) {
-        int sign = value.signum();
-        return switch (rel) {
-            case GE -> sign >= 0;
-            case GT -> sign > 0;
-            case LE -> sign <= 0;
-            case LT -> sign < 0;
-            case EQ -> sign == 0;
-            case NE -> sign != 0;
-        };
-    }
 
     /** Whether a side of the relation reads a place {@code number} is read off. */
     private boolean readBySides(NumericTerm.FromOnePosition number) {
