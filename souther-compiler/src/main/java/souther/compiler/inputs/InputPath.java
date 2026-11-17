@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Supplier;
-import java.util.function.UnaryOperator;
 
 /**
  * Which position of a behavior's input an expression names, and that it names none where it names
@@ -94,9 +93,6 @@ final class InputPath {
      *  origin of what no reader of positions follows is being found, and not in an expression a
      *  rule is written about ({@link #partOf}). */
     private boolean aPositionIsAnOrigin;
-    /** Whether the payload of a call that answers an element is read as the element, by a walk
-     *  after the position the very values stand at ({@link #keepsItsFields}). */
-    private boolean payloadsAreElements;
     /** The direction a walk after the order must come out walking ({@link TraversalDirection});
      *  the other questions say nothing of it. */
     private final TraversalDirection arrivingAs;
@@ -141,7 +137,6 @@ final class InputPath {
         there.walking = walking;
         there.followed = followed;
         there.aPositionIsAnOrigin = aPositionIsAnOrigin;
-        there.payloadsAreElements = payloadsAreElements;
         return wanted == null ? there.named(given.value(), given.at().names())
                 : there.heldAt(given.value(), wanted, given.at().names());
     }
@@ -304,13 +299,6 @@ final class InputPath {
         };
     }
 
-    /** Whether the payload of a call that answers an element of a container is that element: where
-     *  a value came from is asked of it, and so is whether its fields are the element's
-     *  ({@link #keepsItsFields}). */
-    private boolean readsAPayloadAsAnElement() {
-        return asksWhereItCameFrom() || payloadsAreElements;
-    }
-
     /** Whether the question in hand is where a value came from, however far it follows it. */
     private boolean asksWhereItCameFrom() {
         return asked == ElementQuestion.VALUE_ORIGIN || asked == ElementQuestion.WHAT_IT_IS_MADE_OF;
@@ -407,7 +395,7 @@ final class InputPath {
         return switch (e) {
             // A name an arm opened a lookup's answer under, where nothing else says what it is,
             // holds one of the map's values, and came from wherever those did.
-            case Core.Read r when readsAPayloadAsAnElement()
+            case Core.Read r when asksWhereItCameFrom()
                     && names.openedBy(r.binding()) instanceof InputReads.LookupOpened opened
                     && names.roleOf(r.binding()) instanceof BindingRole.Unknown
                     && AnOperationApplied.of(opened.lookup()) instanceof AnOperationApplied looked
@@ -415,7 +403,7 @@ final class InputPath {
                     heldAt(looked.args().get(1), new Wanted.APart(HeldIn.Part.ELEMENT), names);
             // The payload of a call that answers an element of a container is one of that
             // container's elements, and came from wherever they did.
-            case Core.Read r when readsAPayloadAsAnElement()
+            case Core.Read r when asksWhereItCameFrom()
                     && names.openedBy(r.binding()) instanceof InputReads.ElementOpened opened
                     && AnOperationApplied.of(opened.call().value()) instanceof AnOperationApplied answered
                     && DefaultBoundOperationFacts.get().answersAnElementOf(answered.operation())
@@ -460,7 +448,12 @@ final class InputPath {
             // A field of what the target stands at, at every place the target stands. Where the
             // field is not a step of a path — a newtype's own value is the value under it — the
             // place is the target's, which is the step this takes there.
-            case Core.FieldAccess fa -> deeperWhereItsFieldsAre(fa.target(), names,
+            // What a value was made of is where it came from, and a field of a value is no field of
+            // what it came from: a record made of each element of a list is no element, and has
+            // fields the element has none of. So what a field of it was made of is what it was.
+            case Core.FieldAccess fa when asked == ElementQuestion.WHAT_IT_IS_MADE_OF ->
+                    named(fa.target(), names);
+            case Core.FieldAccess fa -> named(fa.target(), names).deeper(
                     // Asked of {@link Location}, which owns the rule, from the answer this walk was
                     // handed. Whether a name wears one value was settled when the module was
                     // indexed, so a path through a field does not turn on what the declaration
@@ -623,45 +616,20 @@ final class InputPath {
         if (reduced != null) {
             return reduced;
         }
-        boolean fieldsFollow = keepsItsFields(from, names);
         PathResolution at = named(from, names);
+        // What a value was made of is where it came from, and a field of it is no field of that
+        // ({@link #nameOf} says so of one field).
+        if (asked == ElementQuestion.WHAT_IT_IS_MADE_OF) {
+            return at;
+        }
         Type read = from.type();
         for (int i = next; i < steps.size(); i++) {
             Core.FieldProjection.Step step = steps.get(i);
-            if (fieldsFollow) {
-                at = at.deeper(Location.isStep(read, step.field(), newtypes)
-                        ? base -> base.then(step.field()) : base -> base);
-            }
+            at = at.deeper(Location.isStep(read, step.field(), newtypes)
+                    ? base -> base.then(step.field()) : base -> base);
             read = step.type();
         }
         return at;
-    }
-
-    /** What {@code target} was answered, at the field {@code step} says of it where its fields
-     *  follow ({@link #keepsItsFields}), and as it was answered where they do not. */
-    private PathResolution deeperWhereItsFieldsAre(Core target, BindingEnvironment names,
-                                                   UnaryOperator<TermPath> step) {
-        PathResolution answered = named(target, names);
-        return keepsItsFields(target, names) ? answered.deeper(step) : answered;
-    }
-
-    /**
-     * Whether a field of {@code target} is where the answer for {@code target} has it. Under
-     * {@link ElementQuestion#WHAT_IT_IS_MADE_OF} an answer is where a value came from, and a field
-     * is read at it only where the value is the very values of a position: the walk after which
-     * position they stand at, which crosses what hands the elements on as they are and no
-     * operation that makes others of them, finds one ({@link ElementQuestion#NAMED_POSITION}).
-     * Where a value came from ({@link ElementQuestion#VALUE_ORIGIN}) is no such answer: a record
-     * made of each element of a list came from it and is no element, and has fields the element
-     * has none of.
-     */
-    private boolean keepsItsFields(Core target, BindingEnvironment names) {
-        if (asked != ElementQuestion.WHAT_IT_IS_MADE_OF) {
-            return true;
-        }
-        InputPath standing = new InputPath(newtypes, ElementQuestion.NAMED_POSITION, reads);
-        standing.payloadsAreElements = true;
-        return !(standing.named(target, names) instanceof PathResolution.NotAPosition);
     }
 
     /**
