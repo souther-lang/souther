@@ -96,6 +96,11 @@ public final class WhatABodyReads {
     /**
      * {@code from}, and every name {@code e} binds to a value that reads one of them: what a read
      * of any of these reads of {@code from}, through the names inside {@code e} as well.
+     *
+     * <p>A name is bound to a value by a {@code let}, and by an arm of a {@code match} that names
+     * what it matched — the payload of {@code Some own}, the case of {@code Active as s}. The arm's
+     * name is made of the scrutinee and is not another name for it, so it is here and a reader
+     * that wants identity asks the reading of the names.
      */
     public static Set<BindingId> namesMadeOf(Core e, Set<BindingId> from) {
         Set<BindingId> out = new HashSet<>(from);
@@ -111,6 +116,17 @@ public final class WhatABodyReads {
                 out.add(let.binder().binding());
             }
             madeOf(let.body(), out);
+            return;
+        }
+        if (e instanceof Core.Match match) {
+            madeOf(match.scrutinee(), out);
+            boolean ofIt = anyOf(match.scrutinee(), out);
+            for (Core.Case arm : match.cases()) {
+                if (ofIt && arm.binder() != null && arm.binder().binding() != null) {
+                    out.add(arm.binder().binding());
+                }
+                madeOf(arm.body(), out);
+            }
             return;
         }
         Core.forEachChild(e, child -> madeOf(child, out));

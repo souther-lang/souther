@@ -13375,8 +13375,8 @@ final class Pullback {
      *  {@code fork} is no {@code match} or {@code if}. */
     private static boolean decidedByWhatItCarried(Core fork, BindingId carried) {
         return switch (Core.withoutStanding(fork)) {
-            case Core.If iff -> ComparisonAssessment.readsAnswer(iff.cond(), carried);
-            case Core.Match match -> ComparisonAssessment.readsAnswer(match.scrutinee(), carried);
+            case Core.If iff -> WhatABodyReads.binding(iff.cond(), carried);
+            case Core.Match match -> WhatABodyReads.binding(match.scrutinee(), carried);
             default -> true;
         };
     }
@@ -14484,8 +14484,8 @@ final class Pullback {
         Core selected = keptThen ? step.els() : step.then();
         if (keptThen == keptElse || !WhatARunMayEndFor.of(step.cond()).endsNone()
                 || !WhatARunMayEndFor.of(selected).endsNone()
-                || ComparisonAssessment.readsAnswer(step.cond(), carried)
-                || ComparisonAssessment.readsAnswer(selected, carried)) {
+                || WhatABodyReads.binding(step.cond(), carried)
+                || WhatABodyReads.binding(selected, carried)) {
             return null;
         }
         Denotation container = call.at().standing(walk.container(), read.rules().symbols(),

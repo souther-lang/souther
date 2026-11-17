@@ -205,6 +205,14 @@ public final class CasesLeft {
         };
     }
 
+    /**
+     * Whether this is exactly {@code one}, as {@code of(one).equals(this)} answers, without making
+     * the set to ask it of. A reading asks it for each root it stands under.
+     */
+    public boolean isExactly(Refinement one) {
+        return atoms.size() == 1 && atoms.get(0).equals(one);
+    }
+
     @Override
     public boolean equals(Object other) {
         return other instanceof CasesLeft that && atoms.equals(that.atoms);

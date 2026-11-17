@@ -236,8 +236,10 @@ record StructuralContext(Requirements refinements, Set<TermPath> nonEmptyContain
             case RootOpening.Taken _ -> true;
             // Asked of what is kept rather than of every assumption made anew: a reading asks this
             // for each root it stands under, and one sum has one case taken in at most.
-            case RootOpening.Refined it -> CasesLeft.of(it.crossing().branch())
-                    .equals(refinements.refinements().get(it.crossing().sum()));
+            case RootOpening.Refined it -> {
+                CasesLeft kept = refinements.refinements().get(it.crossing().sum());
+                yield kept != null && kept.isExactly(it.crossing().branch());
+            }
             case RootOpening.Inside it -> nonEmptyContainers.contains(it.container());
         };
     }

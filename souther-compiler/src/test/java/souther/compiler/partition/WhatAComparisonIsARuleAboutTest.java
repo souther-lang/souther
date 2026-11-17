@@ -25,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -70,7 +71,8 @@ class WhatAComparisonIsARuleAboutTest {
         Read read = read(params, clause, refusedWith);
         return ComparisonAssessment.of("f", read.comparison().stated(),
                 Citation.of(read.binary().pos()), read.reading(), read.reads(),
-                ClosureApplications.OUTSIDE, read.rule(), Arrivals.inTheTree(read.binary()), false,
+                ClosureApplications.OUTSIDE, Set.of(read.rule()),
+                Arrivals.inTheTree(read.binary()), false,
                 WhatConditionsState.of(read.reading()), Optional.empty(),
                 ComparisonWitnesses.AtAComparison.NONE);
     }
