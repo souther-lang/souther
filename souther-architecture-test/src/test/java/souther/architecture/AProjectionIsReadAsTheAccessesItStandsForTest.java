@@ -308,6 +308,16 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 Reading.ONE_ACCESS,
                 "asks of one access the construction it is read off and the parts of it other"
                         + " than the field it reads");
+        row(out, c + "check/ValueStanding", "followedFrom", "(" + core + "L" + c
+                + "check/ValueStanding$Standing;Ljava/util/Set;)V", Reading.STRUCTURE,
+                "asks which names an expression reads and what each stands for, which no name read"
+                        + " off a value adds to: the base of a projection is the one child there is"
+                        + " to go down to");
+        row(out, c + "partition/ComparisonReadings", "readsWhole",
+                "(L" + c + "types/BindingId;" + core + "Ljava/util/Set;)Z", Reading.STRUCTURE,
+                "asks which fields of a name an expression reads, and whether it reads the name"
+                        + " itself: a projection's base is the one child there is to go down to, and"
+                        + " a name read there is read whole, the answer that says more");
         row(out, c + "check/ElementsApart", "readOff", "(" + core + "L" + c
                 + "check/DeclarationNewtypes;)L" + c + "check/ElementsApart$ReadOff;",
                 Reading.NAMES, READS_THE_NAMES);

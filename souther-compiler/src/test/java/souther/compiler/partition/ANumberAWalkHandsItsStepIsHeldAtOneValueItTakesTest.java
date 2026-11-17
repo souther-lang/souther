@@ -98,6 +98,56 @@ class ANumberAWalkHandsItsStepIsHeldAtOneValueItTakesTest {
     }
 
     /**
+     * The made date a field of a record the {@code map} builds, the field made of a date the step
+     * names: the date the comparison reads through the field is the one the step worked out, and
+     * what working it out may stop a run at is the relation's.
+     */
+    @Test
+    void aDateTheWalkMadeIsReadThroughTheFieldOfARecordItBuilds() {
+        assertEquals(List.of(), unread("""
+                module demo
+
+                data R = { nominal: Date, landed: Date }
+
+                behavior f : (holidays: Set<Date>, from: Date, n: Int) -> Bool
+                    constructs R
+
+                let f (holidays, from, n) =
+                    List.rangeInclusive(0, n)
+                        |> List.map(k -> {
+                            let moved = Date.addDays(k, from)
+                            R { nominal = moved, landed = moved }
+                        })
+                        |> List.any(v -> Set.contains(v.landed, holidays))
+                """));
+    }
+
+    /**
+     * A field of the record the comparison does not read is worked out beside the one it does, and
+     * what working it out may stop a run at is the run's, not the relation's: the date moved by
+     * nought is one a calendar's end can stop, and no line the comparison states.
+     */
+    @Test
+    void aFieldTheComparisonDoesNotReadKeepsWhatWorkingItOutMayStop() {
+        assertEquals(List.of("from", "holidays[*]"), unread("""
+                module demo
+
+                data R = { nominal: Date, landed: Date }
+
+                behavior f : (holidays: Set<Date>, from: Date, n: Int) -> Bool
+                    constructs R
+
+                let f (holidays, from, n) =
+                    List.rangeInclusive(0, n)
+                        |> List.map(k -> {
+                            let moved = Date.addDays(k, from)
+                            R { nominal = Date.addDays(0, from), landed = moved }
+                        })
+                        |> List.any(v -> Set.contains(v.landed, holidays))
+                """));
+    }
+
+    /**
      * The sum made before the comparison is read as the one written in it: what the comparison
      * reads of the value is its own arithmetic whether the value is made in the step that compares
      * it or in one before.
