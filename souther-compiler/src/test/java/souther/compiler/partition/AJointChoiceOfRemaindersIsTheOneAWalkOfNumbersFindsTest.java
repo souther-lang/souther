@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -14,15 +15,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Some statements of remainders by one divisor, moved by a number that lies from nought up to
  * {@code days}, are met by some whole numbers exactly where {@link JointResidues} gives a choice
- * that needs the number no further than {@code days}. Worked out by trying every whole number the
- * form and the number can be, for each bound the number may lie up to.
+ * that needs the number no further than {@code days}; and the choice it gives meets every
+ * statement. Worked out by trying every whole number the form and the number can be, for each bound
+ * the number may lie up to, in {@link BigInteger} so that what is tried overflows nowhere.
+ *
+ * <p>The weights and shifts are any {@code int}, the extremes among them: a statement is of a
+ * remainder, and what a weight comes to modulo the divisor is what matters, which a sum in
+ * {@code int} does not keep.
  */
 class AJointChoiceOfRemaindersIsTheOneAWalkOfNumbersFindsTest {
 
-    private static final int[] DIVISORS = {2, 3, 4, 5, 7};
+    private static final int[] DIVISORS = {2, 3, 4, 5, 7, 64};
+
+    private static final int[] EXTREMES = {0, 1, 2, -1, -2, Integer.MAX_VALUE, Integer.MIN_VALUE,
+            Integer.MAX_VALUE - 1, Integer.MIN_VALUE + 1};
 
     @Test
-    void aChoiceIsGivenExactlyWhereSomeWholeNumbersMeetEveryStatement() {
+    void aChoiceIsGivenExactlyWhereSomeWholeNumbersMeetEveryStatementAndMeetsThem() {
         Random random = new Random(3264);
         int met = 0;
         int none = 0;
@@ -39,11 +48,16 @@ class AJointChoiceOfRemaindersIsTheOneAWalkOfNumbersFindsTest {
                 if (allowed.isEmpty()) {
                     allowed.add(random.nextInt(divisor));
                 }
-                statements.add(new JointResidues.Statement(random.nextInt(divisor),
-                        random.nextInt(3) == 0 ? 0 : 1 + random.nextInt(2), allowed));
+                statements.add(new JointResidues.Statement(anInt(random), anInt(random), allowed));
             }
             JointResidues.Answer answer = JointResidues.least(divisor, statements);
-            for (int days = 0; days <= 2 * divisor; days++) {
+            if (answer instanceof JointResidues.Choice choice) {
+                assertTrue(meetsEvery(divisor, statements, BigInteger.valueOf(choice.x()),
+                        BigInteger.valueOf(choice.least())),
+                        "the choice meets every statement: " + choice + " " + statements);
+            }
+            int bound = divisor == 64 ? 2 : 2 * divisor;
+            for (int days = 0; days <= bound; days++) {
                 boolean some = someWholeNumbersMeetEvery(divisor, statements, days);
                 boolean given = answer instanceof JointResidues.Choice choice
                         && choice.least() <= days;
@@ -71,22 +85,38 @@ class AJointChoiceOfRemaindersIsTheOneAWalkOfNumbersFindsTest {
                 instanceof JointResidues.Choice);
     }
 
+    private static int anInt(Random random) {
+        return switch (random.nextInt(3)) {
+            case 0 -> EXTREMES[random.nextInt(EXTREMES.length)];
+            case 1 -> random.nextInt();
+            default -> random.nextInt(7);
+        };
+    }
+
     private static boolean someWholeNumbersMeetEvery(int divisor,
                                                      List<JointResidues.Statement> statements,
                                                      int days) {
         // The form is any whole number, and the number any from nought to days.
         for (int form = -3 * divisor; form <= 3 * divisor; form++) {
             for (int n = 0; n <= days; n++) {
-                boolean every = true;
-                for (JointResidues.Statement each : statements) {
-                    every &= each.allowed().contains(Math.floorMod(
-                            form + each.onTheNumber() * n + each.shift(), divisor));
-                }
-                if (every) {
+                if (meetsEvery(divisor, statements, BigInteger.valueOf(form),
+                        BigInteger.valueOf(n))) {
                     return true;
                 }
             }
         }
         return false;
+    }
+
+    private static boolean meetsEvery(int divisor, List<JointResidues.Statement> statements,
+                                      BigInteger form, BigInteger n) {
+        for (JointResidues.Statement each : statements) {
+            BigInteger sum = form.add(BigInteger.valueOf(each.onTheNumber()).multiply(n))
+                    .add(BigInteger.valueOf(each.shift()));
+            if (!each.allowed().contains(sum.mod(BigInteger.valueOf(divisor)).intValueExact())) {
+                return false;
+            }
+        }
+        return true;
     }
 }

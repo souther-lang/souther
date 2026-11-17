@@ -45,6 +45,15 @@ class AProvenRemainderCoverageHoldsWhenEveryRowIsTriedTest {
             if (proof.isPresent()) {
                 shown++;
                 assertTrue(instance.holdsAtEveryRow(), instance.toString());
+                // What the claim takes out of the region is what names a number chosen and nothing
+                // else: a narrowing of the numbers the claim is about is a premise, and stays.
+                for (TakenConstraint each : proof.get().narrowingsMet()) {
+                    assertTrue(each.terms().stream().anyMatch(term -> term.equals(instance.pivot())
+                            || (instance.others().containsKey(term)
+                                    && instance.others().get(term).chosenAtNought())),
+                            "a narrowing taken out names a number chosen: " + each + " "
+                                    + instance);
+                }
             }
         }
         // A proof that shows nothing is true of everything.

@@ -1845,7 +1845,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 entire.conditions(), null, entire.stating(), theWay.heldWhole(),
                 entire.narrowing(), false);
         WhatARelationLeavesUndivided.Independence apart = withThem.apartOnTheWay(entire.tying(),
-                declared.sources(), read, Set.of(), entire.along());
+                declared.sources(), read, Set.of(), entire.along(), entire.onTheWay());
         Map<NumericTerm, ExactRatio> out = new LinkedHashMap<>();
         for (int at = sides.size(); at < together.size(); at++) {
             boolean standsApart = true;
@@ -2133,18 +2133,44 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * pair, whether it was worked out and what it came to: each term asked of is asked beside
      * every other, and the terms are those of the one relation.
      *
+     * <p>What the run narrows on its way to the relation ties the sides it names together too: a
+     * row with both at their ends is no row where the sum of them is past the type, so each side
+     * may take every value and the pair still not. What the relation's own operations ask of every
+     * row is asked of the pair there ({@link WhatARelationLeavesUndivided.Operations}) and is no
+     * tie here.
+     *
      * @param conditions what the way states that ties anything: {@link WayRead#tying}
+     * @param runNarrows what the operators of the run narrow before the relation
+     *                   ({@link WayRead#onTheWay})
      */
     private WhatARelationLeavesUndivided.Independence apartOnTheWay(List<OnAWay> conditions,
                                                                    List<Source> sources,
                                                                    InputReading read,
                                                                    Set<Object> ignoring,
-                                                                   SearchRegion region) {
+                                                                   SearchRegion region,
+                                                                   List<TakenConstraint>
+                                                                           runNarrows) {
         List<OnAWay> tying = tyingAmong(conditions, read, region);
         TiedOnTheWay tied = TiedOnTheWay.of(tying, read, ignoring);
         List<Set<Object>> tiedTo = new ArrayList<>();
         for (int i = 0; i < sides.size(); i++) {
             tiedTo.add(tiedTo(i, tied, tying, sources, read, ignoring));
+        }
+        for (TakenConstraint each : runNarrows) {
+            if (each instanceof TakenConstraint.Affine(var form, var rel, var _)
+                    && endsAnOperationOfTheRelation(form, rel)) {
+                continue;
+            }
+            List<Integer> named = new ArrayList<>();
+            for (int i = 0; i < sides.size(); i++) {
+                if (sides.get(i).number() != null
+                        && each.terms().contains(sides.get(i).number())) {
+                    named.add(i);
+                }
+            }
+            if (named.size() > 1) {
+                named.forEach(at -> tiedTo.get(at).add(each));
+            }
         }
         int count = sides.size();
         BitSet worked = new BitSet(count * count);
@@ -2178,7 +2204,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 sources, carriers, entire.along(), entire.declared(), entire.conditions(), null,
                 entire.stating(), true, entire.narrowing(), false);
         WhatARelationLeavesUndivided.Independence independent =
-                apartOnTheWay(entire.tying(), sources, read, Set.of(), entire.along());
+                apartOnTheWay(entire.tying(), sources, read, Set.of(), entire.along(),
+                        entire.onTheWay());
         TheWay theWay = new TheWay(written, past, null, way.region(), false, true);
         WhatARelationLeavesUndivided.Operations operations = operationsOverTheSides(read,
                 entire.conditions(), true, totalsWrittenByOneElement(terms),
@@ -3300,7 +3327,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // the pair is asked whether the way ties them as well as whether the declarations do.
         Set<Object> roomy = room.rules();
         WhatARelationLeavesUndivided.Independence onTheWay =
-                apartOnTheWay(beside.tying(), sources, read, roomy, beside.along());
+                apartOnTheWay(beside.tying(), sources, read, roomy, beside.along(),
+                        beside.onTheWay());
         // A code point of the string the remainder's form is of stands apart from the form where
         // the format shows the form leaves every remainder whatever that code point is, and the
         // way states nothing of it that holds a string back: then all the way ties the two by is
@@ -8489,7 +8517,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     : null;
             if (realizes == null && heldWhole && source != null
                     && each.number() instanceof NumericTerm.ValueOf value) {
-                realizes = asARelationReadsIt(wholeRunWithTheRestAtNought(value, source,
+                realizes = asARelationReadsIt(runTheBoundsOnASumLeave(value, source,
                         narrowedByTheRun, conditions, read), carriers.get(i));
             }
             Takes takes = source != null && way == Way.UNTOUCHED
@@ -9820,7 +9848,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             NumericDomain.Bounds run = realized(value, sources.get(held), region, Way.TIES);
             if (run == null) {
-                run = wholeRunWithTheRestAtNought(value, sources.get(held), way.narrowing(),
+                run = runTheBoundsOnASumLeave(value, sources.get(held), way.narrowing(),
                         way.conditions(), read);
             }
             ExactRatio at = run == null || !run.holdsAValue() ? null
@@ -10688,21 +10716,23 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The run of every value of {@code value}, shown by choosing the other numbers the run
-     * narrows it with at nought, or null where that is not shown.
+     * The run of the values {@code value} takes in some row, where what the run narrows of it is
+     * bounds on one form of it and others, or null where that is not shown.
      *
-     * <p>For each value of {@code value} the numbers named beside it are chosen, and the choice
-     * is nought for each, so what the run narrows ({@code d + n} held inside the {@code Int}s) is
-     * obligations on the one value: each holds with the others at nought wherever the value is in
-     * its type. The others are numbers nothing else holds: no statement of the way turns on
-     * them, no declaration or rule names them, and nought is a value they take. A statement
-     * that moves {@code value} or any of them is no such nothing, and the claim is not made.
+     * <p>The others the form holds are quantified away: for a value, some values of them bring the
+     * form to a place between its ends, and what they weigh together takes every whole number
+     * between the least and the greatest they can, each weighed one. So the run of the value is
+     * the interval the ends of the form leave once the others' least and greatest are taken from
+     * them, inside the type. The others are numbers nothing else holds: no statement of the way
+     * turns on them and no declaration or rule names them. A statement that moves {@code value}
+     * or any of them is no such nothing, and the claim is not made.
      *
-     * <p>This is the claim for {@code value} alone. It says nothing of the others' runs, nor of
-     * the values of {@code value} and an other together: the relation that reads the sides asks
-     * each of those for itself.
+     * <p>This is a claim for {@code value} alone: of the values it takes, and not of the values
+     * it takes with another at once. Two numbers a bound holds together each take their run and
+     * the pair does not take every pair of them, so a reader that puts the runs of the sides
+     * together asks the pair apart ({@link #apartOnTheWay}).
      */
-    private static NumericDomain.Bounds wholeRunWithTheRestAtNought(
+    private static NumericDomain.Bounds runTheBoundsOnASumLeave(
             NumericTerm.ValueOf value, Source source, List<TakenConstraint> narrowing,
             List<OnAWay> conditions, InputReading read) {
         if (!source.takes().every() || source.named()) {
@@ -10723,7 +10753,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         others.remove(value);
         for (NumericTerm other : others) {
             if (!(other instanceof NumericTerm.FromOnePosition number)
-                    || !nothingHoldsBut(number, conditions, read)) {
+                    || !heldByNothingButItsType(number, conditions, read)) {
                 return null;
             }
         }
@@ -10812,17 +10842,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /** Whether {@code number} is held by nothing but the type: no statement of the way turns on
-     *  it, no rule or declaration names it, and nought is a value it takes. */
-    private static boolean nothingHoldsBut(NumericTerm.FromOnePosition number,
-                                           List<OnAWay> conditions, InputReading read) {
+     *  it, no rule or declaration names it, and it takes every value its type holds. */
+    private static boolean heldByNothingButItsType(NumericTerm.FromOnePosition number,
+                                                   List<OnAWay> conditions, InputReading read) {
         Source source = sourceOf(number, read);
         TermOrders orders = read.quantities().ordersOf(number);
-        if (source == null || source.named() || !source.takes().every() || orders == null) {
-            return false;
-        }
-        WholeEnds ends = wholeEndsOf(orders.answered().whereItStops());
-        if (ends == null || (ends.low() != null && ends.low().signum() > 0)
-                || (ends.high() != null && ends.high().signum() < 0)) {
+        if (source == null || source.named() || !source.takes().every() || orders == null
+                || wholeEndsOf(orders.answered().whereItStops()) == null) {
             return false;
         }
         for (OnAWay statement : conditions) {

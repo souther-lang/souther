@@ -69,10 +69,15 @@ final class JointResidues {
         return new None();
     }
 
+    /**
+     * Whether every statement is met at the remainders {@code x} and {@code n}. The sum is worked
+     * out in {@code long}: a shift and a weight are any {@code int}, and the product of one with a
+     * remainder, up to the most divisor searched, lies far inside a {@code long}.
+     */
     private static boolean meetsEvery(int divisor, List<Statement> statements, int x, int n) {
         for (Statement each : statements) {
-            int left = Math.floorMod(x + each.onTheNumber() * n + each.shift(), divisor);
-            if (!each.allowed().contains(left)) {
+            long sum = (long) x + (long) each.onTheNumber() * n + each.shift();
+            if (!each.allowed().contains((int) Math.floorMod(sum, (long) divisor))) {
                 return false;
             }
         }

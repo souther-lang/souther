@@ -148,6 +148,24 @@ class AMembershipBesideARemainderOfTwoDatesIsReadTest {
         }
     }
 
+    /**
+     * The first sum of the form stops a run where {@code d + n} is past the type, so with both
+     * numbers sides of a relation each takes every value and the pair does not: {@code d} at the
+     * greatest {@code Int} is held to {@code n} at nought or below, and {@code d == n} comes out
+     * true there at no row. What each side takes is no claim of the pair, and the relation is not
+     * read as if every pair was there.
+     */
+    @Test
+    void twoSidesTheRunsFirstSumStopsOverAreNotReadAsIfEveryPairOfThemWasThere() {
+        for (String relation : List.of("d == n", "d < n")) {
+            for (String at : List.of("d", "n")) {
+                assertFalse(reasonsAt("d: Int, n: Int, s: Int, hs: Set<Int>",
+                        "Int.floorMod(d + n - s, 7) >= 1 && " + relation, at).contains(READ),
+                        relation + " " + at);
+            }
+        }
+    }
+
     /** The other held off nought at an end of its type is not one the choice sets at nought. */
     @Test
     void aSumWhoseOtherNumberCannotBeNoughtIsNotShownToTakeEveryValue() {
