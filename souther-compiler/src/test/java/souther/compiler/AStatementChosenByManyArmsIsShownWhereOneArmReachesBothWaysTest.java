@@ -1,0 +1,118 @@
+package souther.compiler;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.diag.SourceRendering;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
+/**
+ * A statement chosen among more than two arms, or among arms written inside arms, comes out each
+ * way at a value where some arm does: a row that takes the arm has the statement come out as the
+ * arm's relation does. What it never says is that no arm reaches a way, which is a claim about the
+ * rows of arms nobody read.
+ */
+class AStatementChosenByManyArmsIsShownWhereOneArmReachesBothWaysTest {
+
+    private static final String NOT_SHOWN = "not shown to reach every value";
+
+    private static String report(String body) {
+        Compilation compilation = Compilation.ofSource("""
+                module p
+                behavior f : (h: Decimal, d: Decimal, s: Decimal) -> Bool
+                let f (h, d, s) = %s
+                """.formatted(body), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        return AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    private static boolean notShownAt(String human, String place) {
+        return human.lines().anyMatch(line -> line.contains(NOT_SHOWN)
+                && line.contains("about `" + place + "`"));
+    }
+
+    /** The first arm keeps {@code d} off {@code h}, so reaches every {@code s} both ways; the
+     *  third arm, past {@code d == h} and {@code d + 1 == h}, is one no row takes. */
+    @Test
+    void aValueChosenByACaseAndItsDenialInsideAnotherIsComparedOverEveryValue() {
+        String human = report(
+                "(if d /= h then d else if d + 1.0m /= h then d + 1.0m else d) >= s");
+
+        assertFalse(notShownAt(human, "d"), human);
+        assertFalse(notShownAt(human, "s"), human);
+        assertFalse(notShownAt(human, "h"), human);
+    }
+
+    /** The way to the comparison states only differences ({@code d /= h}, {@code d == h}), and a
+     *  row moved by one amount in every number it names meets them as it did: a value of
+     *  {@code d} or of {@code s} is taken by a row wherever it is. */
+    @Test
+    void aWayStatingOnlyDifferencesTakesNoValueOfTheNumbersItNames() {
+        String human = report("([ d, d + 1.0m ] |> List.find(x -> x /= h)"
+                + " |> Option.withDefault(d)) >= s");
+
+        assertFalse(notShownAt(human, "d"), human);
+        assertFalse(notShownAt(human, "s"), human);
+        assertFalse(notShownAt(human, "h"), human);
+    }
+
+    /** A number the way holds equal to one of the sides ({@code d == from}) is that side, and
+     *  what the way states of it is stated of the side: {@code d /= from + 1} says nothing of
+     *  {@code from}, so the relation between {@code from} and {@code h} is read over every
+     *  value. */
+    @Test
+    void aNumberTheWayHoldsEqualToASideStatesNothingOfItsOwn() {
+        Compilation compilation = Compilation.ofSource("""
+                module p
+                behavior f : (from: Decimal, h: Decimal, d: Decimal) -> Bool
+                let f (from, h, d) = (List.find(x -> x - h > 0.0m, [ from, from + 1.0m ])
+                    |> Option.withDefault(from)) == d
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        String human = AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+
+        assertFalse(notShownAt(human, "from"), human);
+        assertFalse(notShownAt(human, "h"), human);
+    }
+
+    /** A walk over candidates that skips each one a set holds: a candidate is reached only past
+     *  the earlier ones being in the set, which asks the set for an element equal to a value and
+     *  is met by an element written at that value, whatever it is. So the membership of each
+     *  candidate is read over every value of {@code from} and of the set's elements. */
+    @Test
+    void aWalkPastCandidatesASetHoldsReadsEachMembershipOverEveryValue() {
+        Compilation compilation = Compilation.ofSource("""
+                module p
+                import List ( find )
+                let free (hs: Set<Decimal>, d: Decimal): Bool = Bool.not(Set.contains(d, hs))
+                behavior f : (hs: Set<Decimal>, from: Decimal) -> Decimal
+                let f (hs, from) = [ from, from + 1.0m, from + 2.0m ]
+                    |> find(d -> free(hs, d)) |> Option.withDefault(from)
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        String human = AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+
+        assertFalse(notShownAt(human, "from"), human);
+        assertFalse(notShownAt(human, "hs[*]"), human);
+    }
+
+    /** The same with a third arm a row can take. */
+    @Test
+    void aThirdArmARowCanTakeChangesNothingOfWhatTheFirstReaches() {
+        String human = report(
+                "(if d /= h then d else if d + 5.0m /= h then d + 1.0m else d + 2.0m) >= s");
+
+        assertFalse(notShownAt(human, "d"), human);
+        assertFalse(notShownAt(human, "s"), human);
+        assertFalse(notShownAt(human, "h"), human);
+    }
+}

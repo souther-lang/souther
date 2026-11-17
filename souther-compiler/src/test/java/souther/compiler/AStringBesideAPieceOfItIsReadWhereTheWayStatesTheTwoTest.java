@@ -10,6 +10,7 @@ import souther.compiler.report.AdequacyReport;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * A count over what a lookup built from the domain part of an address and from the address
@@ -153,5 +154,24 @@ class AStringBesideAPieceOfItIsReadWhereTheWayStatesTheTwoTest {
     @Test
     void everyPlaceTheCountNamesIsReadWhereTheLookupsAreMadeOfASum() {
         assertEquals(List.of(), unreadIn(OF_A_SUM));
+    }
+
+    /**
+     * The plain module with a division by how many contacts there are. A run that gets to the
+     * comparisons only with some contact is no run a statement about every contact is met on by
+     * holding the contacts empty, so the strings are not left alone by it and the places stay
+     * unread: the pair of {@link #everyPlaceTheCountNamesIsReadWhereTheWayStatesThePiece}, where
+     * the contacts may be none.
+     */
+    private static final String WITH_SOME_CONTACT = SOURCE
+            .replace("let found = matches(email, accounts)",
+                    "let share = 100 / List.length(contacts)\n"
+                            + "                let found = matches(email, accounts)")
+            .replace("guard List.length(found) + List.length(people) >= 1 else 0",
+                    "guard List.length(found) + List.length(people) + share >= 1 else 0");
+
+    @Test
+    void aContainerTheRunHoldsToSomeEntryIsNoWitnessThatLeavesTheStringsAlone() {
+        assertFalse(unreadIn(WITH_SOME_CONTACT).isEmpty());
     }
 }
