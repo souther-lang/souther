@@ -9915,10 +9915,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (each.terms().stream().noneMatch(ofTheSides::contains)) {
                 continue;
             }
-            // A third side is held at a value: what the run narrows of it with the others is
-            // narrowed of the two with that value put in.
             LinearForm<NumericTerm> form = each instanceof TakenConstraint.Affine affine
-                    ? withTheHeldSidesAt(affine.form(), pair.standing()) : null;
+                    ? affine.form() : null;
             Rel rel = each instanceof TakenConstraint.Affine affine ? affine.rel() : null;
             if (form != null && (holdsOverTheWholeTypeOfItsNumbers(form, rel, read)
                     || endsAnOperationOfTheRelation(form, rel))) {
@@ -9994,27 +9992,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     : by.multiply(ends.low()));
         }
         return RemainderCoverage.holdsEverywhere(low, high, rel);
-    }
-
-    /**
-     * {@code form} with each number {@code standing} holds at a value put there: the value
-     * weighed is added to the constant, and the number leaves the form. Null where the form is
-     * not worked out.
-     */
-    private static LinearForm<NumericTerm> withTheHeldSidesAt(LinearForm<NumericTerm> form,
-                                                              Map<Object, ExactRatio> standing) {
-        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
-        ExactRatio constant = form.constant();
-        for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
-            ExactRatio at = standing.get(each.getKey());
-            if (at == null) {
-                coefs.put(each.getKey(), each.getValue());
-                continue;
-            }
-            ExactRatio weighed = at.times(each.getValue()).orNull();
-            constant = weighed == null || constant == null ? null : constant.plus(weighed).orNull();
-        }
-        return constant == null ? null : new LinearForm<>(constant, coefs);
     }
 
     /**
