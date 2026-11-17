@@ -60,7 +60,6 @@ final class ReadingsChosenOneBesideAnother {
 
     private ReadingsChosenOneBesideAnother() {
     }
-
     /**
      * The readings of each group {@code cases} choose among one beside another reading of the same
      * group, in the order the groups are first found.
@@ -179,16 +178,23 @@ final class ReadingsChosenOneBesideAnother {
                             past.computeIfAbsent(again, _ -> new ArrayList<>()).add(place));
                 }
                 past.forEach((again, those) -> {
-                    if (those.size() > 1) {
-                        List<Set<Proposition>> theirs = those.stream()
-                                .map(at -> alternatives.get(at).held()).toList();
-                        Set<Proposition> alikeThere = alike(theirs);
-                        BitSet by = new BitSet();
-                        theirs.forEach(each -> by.or(readingsOf.apply(apart(each, alikeThere))));
-                        BitSet inner = new BitSet();
-                        inner.set(again);
-                        madeTogether(byGroup(by, groupOf), byGroup(inner, groupOf), mayBeOne,
-                                found);
+                    BitSet inner = new BitSet();
+                    inner.set(again);
+                    Map<G, BitSet> after = byGroup(inner, groupOf);
+                    // Two of the alternatives the choice follows, told apart by what each holds
+                    // on every way that the other does not: a pair is a choice of its own, and
+                    // the readings that tell it apart are all that can be said to tell it apart.
+                    // Taken together, the readings that tell some pair apart would stand in the way
+                    // of a pair another reading alone tells apart.
+                    for (int first = 0; first < those.size(); first++) {
+                        for (int second = first + 1; second < those.size(); second++) {
+                            Set<Proposition> one = alternatives.get(those.get(first)).held();
+                            Set<Proposition> other = alternatives.get(those.get(second)).held();
+                            Set<Proposition> alikeThere = alike(List.of(one, other));
+                            BitSet by = readingsOf.apply(apart(one, alikeThere));
+                            by.or(readingsOf.apply(apart(other, alikeThere)));
+                            madeTogether(byGroup(by, groupOf), after, mayBeOne, found);
+                        }
                     }
                 });
                 return new Chosen(ways, chosen, alike);

@@ -138,6 +138,45 @@ class ReadingsChosenOneBesideAnotherTest {
     }
 
     /**
+     * Three alternatives each followed by the same choice of {@code h2}: told apart by {@code h1}
+     * where the first two are compared, and by {@code h2} only where the third is one of the two.
+     * Some two of them are told apart by {@code h1} alone, and the choice after them is of
+     * {@code h2}, so the two readings multiply there however the third is told apart.
+     */
+    @Test
+    void twoAlternativesToldApartByAnotherReadingMultiplyWithTheChoiceAfterThemWhateverTheThirdIs() {
+        DecidingCase.Cases next = anyOf(one("h2a"), one("h2b"));
+        assertEquals(Map.of("H", List.of("h1", "h2")), found(anyOf(
+                together(one("h1a"), next),
+                together(one("h1b"), next),
+                together(one("h2c"), next))));
+    }
+
+    /**
+     * The reading the choice after the alternatives is of tells the two alternatives apart too:
+     * one reading may tell both choices apart, and nothing is said, however the readings are
+     * counted off the alternatives.
+     */
+    @Test
+    void theReadingTheChoiceAfterIsOfTellingTheAlternativesApartIsNotSaidToMultiply() {
+        DecidingCase.Cases next = anyOf(one("h2a"), one("h2b"));
+        assertEquals(Map.of(), found(anyOf(
+                together(one("h1a"), next),
+                together(one("h2c"), next))));
+    }
+
+    /** Alternatives told apart by the reading {@code h0} and a choice after them of {@code h1},
+     *  which may be one reading: nothing is said of any two of them. */
+    @Test
+    void alternativesToldApartByAReadingTheChoiceAfterMayBeAreNotSaidToMultiply() {
+        DecidingCase.Cases next = anyOf(one("h1a"), one("h1b"));
+        assertEquals(Map.of(), found(anyOf(
+                together(one("h0a"), next),
+                together(not("h0a"), next),
+                together(one("h0a"), one("ga"), next))));
+    }
+
+    /**
      * Chosen on whether a part holds, and again on another part of the same reading inside one
      * side, as a walk that reaches the next candidate past every way the one before it fails.
      */
