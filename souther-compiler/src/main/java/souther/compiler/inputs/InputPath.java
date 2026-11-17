@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
 /**
  * Which position of a behavior's input an expression names, and that it names none where it names
@@ -448,7 +449,7 @@ final class InputPath {
             // A field of what the target stands at, at every place the target stands. Where the
             // field is not a step of a path — a newtype's own value is the value under it — the
             // place is the target's, which is the step this takes there.
-            case Core.FieldAccess fa -> named(fa.target(), names).deeper(
+            case Core.FieldAccess fa -> deeperWhereItsFieldsAre(fa.target(), names,
                     // Asked of {@link Location}, which owns the rule, from the answer this walk was
                     // handed. Whether a name wears one value was settled when the module was
                     // indexed, so a path through a field does not turn on what the declaration
@@ -611,15 +612,39 @@ final class InputPath {
         if (reduced != null) {
             return reduced;
         }
+        boolean fieldsFollow = keepsItsFields(from, names);
         PathResolution at = named(from, names);
         Type read = from.type();
         for (int i = next; i < steps.size(); i++) {
             Core.FieldProjection.Step step = steps.get(i);
-            at = at.deeper(Location.isStep(read, step.field(), newtypes)
-                    ? base -> base.then(step.field()) : base -> base);
+            if (fieldsFollow) {
+                at = at.deeper(Location.isStep(read, step.field(), newtypes)
+                        ? base -> base.then(step.field()) : base -> base);
+            }
             read = step.type();
         }
         return at;
+    }
+
+    /** What {@code target} was answered, at the field {@code step} says of it where its fields
+     *  follow ({@link #keepsItsFields}), and as it was answered where they do not. */
+    private PathResolution deeperWhereItsFieldsAre(Core target, BindingEnvironment names,
+                                                   UnaryOperator<TermPath> step) {
+        PathResolution answered = named(target, names);
+        return keepsItsFields(target, names) ? answered.deeper(step) : answered;
+    }
+
+    /**
+     * Whether a field of {@code target} is where the answer for {@code target} has it. Under
+     * {@link ElementQuestion#WHAT_IT_IS_MADE_OF} an answer is where a value came from, and a field
+     * is read at it only where the value is one the walk after where a value came from
+     * ({@link ElementQuestion#VALUE_ORIGIN}) follows: a record made out of an element of a list is
+     * no element, and has fields the element has none of.
+     */
+    private boolean keepsItsFields(Core target, BindingEnvironment names) {
+        return asked != ElementQuestion.WHAT_IT_IS_MADE_OF
+                || !(new InputPath(newtypes, ElementQuestion.VALUE_ORIGIN, reads)
+                        .named(target, names) instanceof PathResolution.NotAPosition);
     }
 
     /**

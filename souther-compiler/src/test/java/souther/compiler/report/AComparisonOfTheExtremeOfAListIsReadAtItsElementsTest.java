@@ -195,6 +195,22 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
                 && line.contains("about `" + place + "`"));
     }
 
+    /** A field of a payload that is an element of a list of records is the field of the
+     *  elements, which is where it is said. */
+    @Test
+    void aFieldOfAnElementAPayloadIsIsSaidUnreadAtThatFieldOfTheElements() {
+        String report = reading("""
+                module m
+
+                data Box = { amount: Int }
+
+                behavior role : (bs: List<Box>) -> Int
+                let role (bs) = if (match List.find(b -> b.amount > 3, bs) with | None -> false | Some m -> m.amount + 1 <= 10) then 1 else 2
+                """);
+
+        assertTrue(saysNotReadAt(report, "bs[*].amount"), report);
+    }
+
     /** A value a {@code let} binds reaches the answer through the name the body reads it by. */
     @Test
     void aValueALetBindsIsSaidUnreadWhereTheBodyReadsItByItsName() {
