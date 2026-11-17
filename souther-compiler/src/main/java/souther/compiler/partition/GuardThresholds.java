@@ -13,7 +13,6 @@ import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.StatedComparison;
-import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.RuleAt;
 import souther.compiler.check.ValueStanding;
 import souther.compiler.check.RuleCitation;
@@ -79,7 +78,6 @@ import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.stream.Stream;
 
 /**
  * The values a behavior's body compares its inputs against.
@@ -376,7 +374,9 @@ public final class GuardThresholds {
                                                     .orElseGet(() -> arrived.relationsRead()
                                                             .stream().anyMatch(UndividedByARelation
                                                                     ::aRunMayStopOverABoundValue)))
-                                    || worksOutWhatMayEndARunBesideWhatIsTold(each)
+                                    || each.stopsIn().map(stops -> !stops.noRunMayStopAnywhere()
+                                            && stops.aRunMayStopIn(read,
+                                            regionsOf(beforeIt))).orElse(false)
                                     || aRunTakingAnArmMayStop(each, each.onTheArms(), null, read,
                                             arrivals, wayToACase, aCase)
                                     || each.worksOutOnEach().map(applications -> applications
@@ -1294,25 +1294,6 @@ public final class GuardThresholds {
             }
         }
         return false;
-    }
-
-    /**
-     * Whether a comparison some operation of which no reading told works out, on the way to its
-     * answer, an operation known to end a run for some reason ({@link WhatARunMayEndFor}). What
-     * the readings leave untold is no word on whether a run stops, so what the comparison's own
-     * tree says is asked, and a run that reaches it may stop. Where what it works out is not
-     * known ({@link WhatARunMayEndFor.Endings.NotKnown}) nothing is said.
-     */
-    private static boolean worksOutWhatMayEndARunBesideWhatIsTold(
-            ComparisonReadings.Reading each) {
-        boolean someUntold = each.stopsIn().map(stops -> !stops.exact()).orElse(false)
-                || each.worksOutOnEach().map(applications -> applications.stream()
-                        .anyMatch(one -> !one.stops().exact())).orElse(false);
-        return someUntold
-                && each.statement() instanceof ComparisonReadings.Stated.AComparison(
-                        StatedComparison comparison)
-                && Stream.of(comparison.left(), comparison.right())
-                        .anyMatch(WhatARunMayEndFor::someKnownEndingBeneath);
     }
 
     /** The region {@code way} leaves, or none where nothing reaches along it. */

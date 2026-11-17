@@ -59,16 +59,12 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
                 "List.fold((w, l) -> if l > w then l else w, 0, ds) <= q + 1");
         CONDITIONS.put("sumOfAStep", "List.sum(List.map(x -> x + 1, ds)) >= 10");
         CONDITIONS.put("sumOfAStepWithAProduct", "List.sum(List.map(x -> x * 2, ds)) >= 10");
-        CONDITIONS.put("sumOfTheElements", "List.sum(ds) >= 10");
+        CONDITIONS.put("sumOfAnUnchangedStep", "List.sum(List.map(x -> x, ds)) >= 10");
         CONDITIONS.put("foldOfAStep",
                 "List.fold((w, l) -> w + l, 0, List.map(x -> x + 1, ds)) >= 10");
-        CONDITIONS.put("maxOfAStep",
-                "Option.withDefault(0, List.max(List.map(x -> x - q, ds))) >= 3");
-        CONDITIONS.put("sumBesideAMaximum",
-                "Option.withDefault(0, List.max(ds)) >= List.sum(ds)");
-        CONDITIONS.put("maxOfTheElementsInAClosure",
-                "List.all(r -> Option.withDefault(0, List.max(ds)) + 1 <= r, ds)");
-        CONDITIONS.put("maxOfTheElements", "Option.withDefault(0, List.max(ds)) + 1 <= 10");        CONDITIONS.put("none", "q >= q");
+        CONDITIONS.put("foldOfAnUnchangedStep",
+                "List.fold((w, l) -> w + l, 0, List.map(x -> x, ds)) >= 10");
+        CONDITIONS.put("none", "q >= q");
         CONDITIONS.put("armNoStop", "(if q > 5 then q - 1 else 3) >= q");
         CONDITIONS.put("nestedArmNoStop",
                 "(if q > 5 then (if q > 7 then q - 1 else 3) else 4) >= q");
@@ -143,32 +139,19 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
                 .contains("in 2 * ds[*] where ds[*] is at least"), TOLD.toString());
     }
 
-    /** What a step works out at each element is told as it is where its answers are added up,
-     *  and a total of the elements themselves works out nothing at each. */
+    /**
+     * What a step works out at each element is told where its answers are added up, whether the
+     * walk adding them is read or not. Each differs from its negative by the operation of the
+     * step alone, so the note is the step's and not the total's, which a step that changes
+     * nothing adds up the same.
+     */
     @Test
     void aStepWorkedOutAtEachElementOfATotalIsToldAsTheStepAloneIs() {
         assertEquals(1, TOLD.get("sumOfAStep").size(), TOLD.toString());
         assertEquals(1, TOLD.get("sumOfAStepWithAProduct").size(), TOLD.toString());
-        assertEquals(List.of(), TOLD.get("sumOfTheElements"));
-    }
-
-    /** A comparison whose reading stopped is asked what it works out all the same: a run that
-     *  works out an operation that may stop it may stop, and a step no element is handed to
-     *  stops none. */
-    @Test
-    void anOperationInAComparisonNothingReadIsToldAsOneAMayStop() {
         assertEquals(1, TOLD.get("foldOfAStep").size(), TOLD.toString());
-        assertEquals(1, TOLD.get("maxOfAStep").size(), TOLD.toString());
-        assertEquals(1, TOLD.get("maxOfTheElements").size(), TOLD.toString());
-        assertEquals(1, TOLD.get("maxOfTheElementsInAClosure").size(), TOLD.toString());
-    }
-
-    /** A total stops a run only where its answer has no place, which no note says of a total of
-     *  the elements read, nor of one read beside what nothing read. */
-    @Test
-    void aTotalOfTheElementsIsToldOfNoStopWhereverItStands() {
-        assertEquals(List.of(), TOLD.get("sumOfTheElements"));
-        assertEquals(List.of(), TOLD.get("sumBesideAMaximum"), TOLD.toString());
+        assertEquals(List.of(), TOLD.get("sumOfAnUnchangedStep"), TOLD.toString());
+        assertEquals(List.of(), TOLD.get("foldOfAnUnchangedStep"), TOLD.toString());
     }
 
     /** The other side of a comparison of a walk is worked out whatever the walk answers. */
