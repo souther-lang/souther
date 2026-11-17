@@ -794,6 +794,16 @@ sealed interface ComparisonAssessment {
                     : CaseExpansion.Counted.attributedTo(counted, derivedBy);
         }
 
+        /**
+         * What each line read all the same, at a cost, was told of its cases: the helper whose
+         * readings the cases choose among one beside another, where the statement's derivations
+         * show it.
+         */
+        @Override
+        public List<CaseExpansion.CostlyCase> costlyReadings() {
+            return CaseExpansion.Counted.costly(countedWorkedOut(), derivedBy);
+        }
+
         /** The cases of these lines that were worked out all the same, each as it was counted. */
         @Override
         public List<CaseExpansion.Counted> countedWorkedOut() {
@@ -2549,10 +2559,22 @@ sealed interface ComparisonAssessment {
     }
 
     /**
+     * What a reader telling an author where a model is dear to read is told of the cases of a line
+     * that was read all the same ({@link #countedWorkedOut}): the helper whose readings the cases
+     * choose among one beside another, and where it was read. Beside what each place is left with
+     * and never in it, and no reason a line was not worked out: none for a line whose cases were
+     * not past the figure, or whose choices multiply no helper's readings.
+     */
+    default List<CaseExpansion.CostlyCase> costlyReadings() {
+        return List.of();
+    }
+
+    /**
      * How many ways each case of a line whose cases were more ways of choosing one than are taken
      * apart stood for, where every one of them was worked out all the same, by what the numbers
      * leave of the ways. What asking them cost, which is no part of why a line was or was not
-     * read, and is kept as it was counted: nothing is read off the derivations for it.
+     * read, and is kept as it was counted ({@link #costlyReadings} reads what made the parts of
+     * the cases where a reader asks for it).
      */
     default List<CaseExpansion.Counted> countedWorkedOut() {
         return List.of();

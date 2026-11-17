@@ -127,9 +127,10 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
             // is. The same rule reaches a consumer under the position as well, and the two are one
             // piece of news only while both are handles.
             REPORT + "#causes",
-            // The rule a line of which was not worked out for its many cases, beside what those
-            // cases were: the same rule the partition's own entries name for why.
-            REPORT + "#caseExpansionRow",
+            // The rule a line of which was not worked out for its many cases, or was read all the
+            // same at a cost, beside what those cases were or the helper they choose among: the
+            // same rule the partition's own entries name for why.
+            REPORT + "#caseRowOf",
             REPORT + "#finding",
             REPORT + "#obligations",
             // The rule a run of a row stopped at, beside the combination no row was found for: the

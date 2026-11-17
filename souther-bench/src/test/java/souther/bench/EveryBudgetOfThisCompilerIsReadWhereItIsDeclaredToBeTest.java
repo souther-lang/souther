@@ -1051,12 +1051,13 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "walks the denials of a statement as far as the readings figure to name the"
                             + " column it and its denial are, and hands back none past it, for the"
                             + " condition to be a column said not read at it"),
-            Map.entry("souther.compiler.meaning.TheWholeNumbersAListStartsWith#of("
+            Map.entry("souther.compiler.meaning.TheWholeNumbersAListStartsWith#planFor("
                             + "Lsouther/compiler/meaning/Proposition;)"
-                            + "Lsouther/compiler/meaning/TheWholeNumbersAListStartsWith$Read;",
-                    "reads a comparison on no element of a list of whole numbers where its"
+                            + "Lsouther/compiler/meaning/TheWholeNumbersAListStartsWith$Plan;",
+                    "plans a comparison on no element of a list of whole numbers where its"
                             + " divisors come round in more elements than the readings figure, and"
-                            + " hands that over for the comparison to be said not read at it"),
+                            + " the plan hands that over as what it reads, for the comparison to be"
+                            + " said not read at it"),
             Map.entry("souther.compiler.partition.DecisionReading#<clinit>()V",
                     "how many paths through one body a decision is read for"),
             Map.entry("souther.compiler.partition.WaysNoInputTakes#<init>()V",

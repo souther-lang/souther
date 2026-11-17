@@ -16,10 +16,12 @@ import souther.compiler.types.ValueName;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -134,6 +136,46 @@ class TheFirstElementsOfAListStandForEveryElementOfItTest {
             }
         }
         assertTrue(read > 0 && refused > 0, read + " read, " + refused + " refused");
+    }
+
+    /**
+     * A part of a statement is read on the elements the statement's list starts with as the
+     * statement is, which is what a reader that finds where a part of the cases was made asks: the
+     * plan of the statement ({@link TheWholeNumbersAListStartsWith#planFor}) read of the statement
+     * is its reading, and every part that reading comes to is one a conjunct of the statement
+     * comes to read of the same plan.
+     */
+    @Test
+    void thePartsAStatementComesToOnTheFirstElementsAreThoseItsConjunctsComeToThere() {
+        Random random = new Random(2939);
+        int compared = 0;
+        for (int drawn = 0; drawn < 60; drawn++) {
+            Proposition stated = statement(random, 3);
+            TheWholeNumbersAListStartsWith.Plan plan = TheWholeNumbersAListStartsWith
+                    .planFor(stated);
+            assertEquals(TheWholeNumbersAListStartsWith.of(stated), plan.on(stated),
+                    () -> stated.spelling().toString());
+            if (!(stated instanceof Proposition.All all)
+                    || !(plan.on(stated) instanceof TheWholeNumbersAListStartsWith.Read.OnEach(
+                            var whole))) {
+                continue;
+            }
+            Set<Spelling> ofTheWhole = new LinkedHashSet<>();
+            whole.forEach(one -> ofTheWhole.addAll(WhereEachLineDecides.partsJoinedBy(one.stated())));
+            Set<Spelling> ofTheConjuncts = new LinkedHashSet<>();
+            for (Proposition conjunct : all.parts()) {
+                if (plan.on(conjunct) instanceof TheWholeNumbersAListStartsWith.Read.OnEach(
+                        var each)) {
+                    each.forEach(one -> ofTheConjuncts.addAll(
+                            WhereEachLineDecides.partsJoinedBy(one.stated())));
+                }
+            }
+            compared++;
+            assertTrue(ofTheConjuncts.containsAll(ofTheWhole), () -> stated.spelling()
+                    + ": the whole comes to " + ofTheWhole + " and its conjuncts to "
+                    + ofTheConjuncts);
+        }
+        assertTrue(compared > 3, compared + " statements compared");
     }
 
     private static Proposition statement(Random random, int depth) {

@@ -170,6 +170,16 @@ public final class WhereEachLineDecides {
     }
 
     /**
+     * {@code stated} with every quantifier in it said the way the lines are read ({@link Lifting}),
+     * or {@code stated} itself where the steps ran out and nothing is taken apart: the form the
+     * parts a quantifier makes are told apart in.
+     */
+    static Proposition lifted(Proposition stated) {
+        Proposition lifted = new Lifting().of(stated);
+        return lifted == null ? stated : lifted;
+    }
+
+    /**
      * {@code cases} less each that is proved to hold no row on each side of {@code line}
      * ({@link NoCaseCrosses}): a line decides in none of those, and asking them is what a line
      * decides nowhere in costs.
@@ -648,9 +658,23 @@ public final class WhereEachLineDecides {
 
         private int left = CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.maximum();
 
+        /** What each statement met was said as, by the statement itself: one that stands in
+         *  several places is said once, so the work is as many as there are statements and not
+         *  as many as the ways down to them. */
+        private final Map<Proposition, Optional<Proposition>> said = new IdentityHashMap<>();
+
         /** {@code stated}, every quantifier in it said this way — itself where none has a part to
          *  say outside, and null where the steps ran out. */
         Proposition of(Proposition stated) {
+            Optional<Proposition> known = said.get(stated);
+            if (known == null) {
+                known = Optional.ofNullable(ofAnew(stated));
+                said.put(stated, known);
+            }
+            return known.orElse(null);
+        }
+
+        private Proposition ofAnew(Proposition stated) {
             return switch (stated) {
                 case Proposition.All all -> {
                     List<Proposition> parts = each(all.parts());

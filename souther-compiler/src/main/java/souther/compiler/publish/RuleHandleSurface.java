@@ -47,6 +47,10 @@ public enum RuleHandleSurface {
     CASE_EXPANSION_RULE("/$defs/partition/properties/caseExpansions/items/properties/rule",
             "rule", Carries.THE_HANDLE_ALONE),
 
+    /** The rule whose line was read at a cost, beside the helper its cases choose among. */
+    COSTLY_READING_RULE("/$defs/partition/properties/costlyReadings/items/properties/rule",
+            "rule", Carries.THE_HANDLE_ALONE),
+
     /** The rule that drew the line a point is owed for. */
     OBLIGATION_RULE("/$defs/obligations/items/properties/rule",
             "rule", Carries.THE_HANDLE_ALONE),

@@ -562,6 +562,9 @@ public sealed interface ReportMessage extends Message {
     record CaseExpansion(String rule, String line, String cutAt, String arms, int ordinal, int of,
                          String calls, String cameTo) implements ReportMessage, Prose {}
 
+    record CostlyReading(String rule, String line, String cutAt, String arms, String calls,
+                         String helpers) implements ReportMessage, Prose {}
+
     record PositionNotRead(String at, Message why, Message stopped)
             implements ReportMessage, Prose {}
 
