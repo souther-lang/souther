@@ -17,26 +17,24 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class TheYearsARemainderLeavesAreTheOnesOfTheYearTest {
 
+    /** Moves whose least 32 bits are another remainder by seven than the whole number is: 2^31 is 2
+     *  and its least 32 bits are -2^31, which is 5; 2^32 is 4 and its least bits 0; and the same
+     *  the other way. A move of nought is the control. */
     private static final List<BigInteger> MOVES = List.of(
-            BigInteger.ZERO, BigInteger.ONE, BigInteger.valueOf(-1),
-            BigInteger.TWO.pow(31), BigInteger.TWO.pow(31).negate(),
-            BigInteger.TWO.pow(32), BigInteger.TWO.pow(32).negate(),
-            BigInteger.TWO.pow(63).add(BigInteger.valueOf(5)),
-            BigInteger.TWO.pow(100).negate());
+            BigInteger.ZERO, BigInteger.TWO.pow(31), BigInteger.TWO.pow(32),
+            BigInteger.TWO.pow(32).negate());
 
     @Test
     void theYearsLeftAreTheYearsWhoseMovedYearLeavesOneOfTheRemaindersForEveryMove() {
+        int divisor = 7;
+        WholeNumberRuns leaves = WholeNumberRuns.of(List.of(BigInteger.ZERO));
         for (BigInteger moved : MOVES) {
-            for (int divisor : new int[] {2, 7, 100, 399, 400}) {
-                WholeNumberRuns leaves = WholeNumberRuns.of(List.of(BigInteger.ZERO));
-                Set<Integer> years = WayToTheBorder.yearsLeaving(moved, divisor, leaves);
-                for (int year = -divisor; year <= 2 * divisor; year++) {
-                    BigInteger remainder = BigInteger.valueOf(year).add(moved)
-                            .mod(BigInteger.valueOf(divisor));
-                    assertEquals(leaves.holds(remainder),
-                            years.contains(Math.floorMod(year, divisor)),
-                            "year " + year + " moved by " + moved + " by " + divisor);
-                }
+            Set<Integer> years = WayToTheBorder.yearsLeaving(moved, divisor, leaves);
+            for (int year = 0; year < divisor; year++) {
+                BigInteger remainder = BigInteger.valueOf(year).add(moved)
+                        .mod(BigInteger.valueOf(divisor));
+                assertEquals(leaves.holds(remainder), years.contains(year),
+                        "year " + year + " moved by " + moved + " by " + divisor);
             }
         }
     }

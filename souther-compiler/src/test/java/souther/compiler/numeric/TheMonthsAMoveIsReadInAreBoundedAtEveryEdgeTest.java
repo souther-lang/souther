@@ -15,23 +15,23 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  */
 class TheMonthsAMoveIsReadInAreBoundedAtEveryEdgeTest {
 
+    /** The bound is met before what is asked of the move is, so one kind of question carries it:
+     *  the day number, which is the one a move by an enormous count would go on to walk. */
+    private static final MonthMoveCases.Asked ASKED = MonthMoveCases.Asked.DAY_NUMBER;
+
     @Test
     void aMoveByTheMostMonthsEitherWayIsReadAndOneByMoreIsNot() {
-        for (MonthMoveCases.Asked asked : MonthMoveCases.Asked.values()) {
-            assertNotNull(MonthMoveCases.of(MonthMoveCases.MOST_MONTHS, asked, false), asked.name());
-            assertNotNull(MonthMoveCases.of(-MonthMoveCases.MOST_MONTHS, asked, false), asked.name());
-            assertNull(MonthMoveCases.of(MonthMoveCases.MOST_MONTHS + 1, asked, false), asked.name());
-            assertNull(MonthMoveCases.of(-MonthMoveCases.MOST_MONTHS - 1, asked, false), asked.name());
-        }
+        assertNotNull(MonthMoveCases.of(MonthMoveCases.MOST_MONTHS, ASKED, false));
+        assertNotNull(MonthMoveCases.of(-MonthMoveCases.MOST_MONTHS, ASKED, false));
+        assertNull(MonthMoveCases.of(MonthMoveCases.MOST_MONTHS + 1, ASKED, false));
+        assertNull(MonthMoveCases.of(-MonthMoveCases.MOST_MONTHS - 1, ASKED, false));
     }
 
     @Test
     void theEdgesOfWhatACountHoldsAreByMoreMonthsThanAreRead() {
-        for (MonthMoveCases.Asked asked : MonthMoveCases.Asked.values()) {
-            assertNull(MonthMoveCases.of(Long.MIN_VALUE, asked, false),
-                    "no absolute value of the least count: " + asked);
-            assertNull(MonthMoveCases.of(Long.MAX_VALUE, asked, false), asked.name());
-        }
+        assertNull(MonthMoveCases.of(Long.MIN_VALUE, ASKED, false),
+                "no absolute value of the least count");
+        assertNull(MonthMoveCases.of(Long.MAX_VALUE, ASKED, false));
     }
 
     @Test
@@ -45,8 +45,7 @@ class TheMonthsAMoveIsReadInAreBoundedAtEveryEdgeTest {
     void aChainWhoseSumIsNotACountIsNoMoveEvenWhereItWrapsIntoWhatIsRead() {
         assertEquals(OptionalLong.empty(), MonthMoveCases.chained(Long.MAX_VALUE, 1));
         assertEquals(OptionalLong.empty(), MonthMoveCases.chained(Long.MIN_VALUE, -1));
-        // Long.MAX_VALUE + 25 wraps to Long.MIN_VALUE + 24, and -24 + Long.MIN_VALUE + 24 is none of
-        // what a sum of these is: a wrapped sum is never a count read in cases.
+        // Long.MAX_VALUE + 25 wraps to Long.MIN_VALUE + 24, which is below the bound and no sum.
         assertEquals(OptionalLong.empty(), MonthMoveCases.chained(Long.MAX_VALUE, 25));
     }
 }

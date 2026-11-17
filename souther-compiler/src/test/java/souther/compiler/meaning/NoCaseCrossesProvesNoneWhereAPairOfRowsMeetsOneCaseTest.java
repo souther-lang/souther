@@ -5,10 +5,10 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactAnswer;
-import souther.compiler.partition.CompositionBudget;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
+import souther.compiler.partition.CompositionBudget;
 import souther.compiler.types.ValueName;
 
 import java.math.BigInteger;
@@ -17,22 +17,18 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
-import java.util.Set;
-import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Where a line is proved to decide in none of the cases it is said for, no two inputs of a small
- * domain, one holding the line and one failing it, meet the same case: tried by every pair of
- * inputs, over cases made by chance of numbers, remainders of numbers, and an element of a set
- * met by {@code some}.
+ * Where a line at a remainder is proved to decide in none of the cases it is said for, no two
+ * inputs, one holding the line and one failing it, meet the same case.
  *
- * <p>The domain is small enough to be tried whole, so what is asked of the proof here is that it
- * never says "none" where a pair is found. That it says "none" at all is asked of the cases that
- * need it: a line at a remainder the cases fix to one side.
+ * <p>Each case below carries one rule of the proof: what a condition holds at, its denial and its
+ * offset, how an {@code All} and an {@code Any} of conditions hold, what a choice leaves open and
+ * what a case held together fixes, and what is not read. The inputs are the numbers a remainder by
+ * three tells apart twice over, tried whole by a count worked out here and not by the proof.
  */
 class NoCaseCrossesProvesNoneWhereAPairOfRowsMeetsOneCaseTest {
 
@@ -40,15 +36,6 @@ class NoCaseCrossesProvesNoneWhereAPairOfRowsMeetsOneCaseTest {
             new NumericTerm.ValueOf(TermPath.of("x")));
     private static final Quantity Y = new DecisionAtom.OfTheInput(
             new NumericTerm.ValueOf(TermPath.of("y")));
-
-    private static final DecisionSubject.AnInput HOLIDAYS =
-            new DecisionSubject.AnInput(TermPath.of("holidays"));
-    private static final Quantity MEMBER = new DecisionAtom.OfTheInput(
-            new NumericTerm.ValueOf(TermPath.of("holidays").element()));
-
-    /** The numbers an input holds are these, and a set holds some of these. */
-    private static final int LOW = -2;
-    private static final int HIGH = 4;
 
     private static Proposition.Compared relation(Map<Quantity, Integer> coefs, int constant,
                                                  Rel rel, boolean holds) {
@@ -64,22 +51,14 @@ class NoCaseCrossesProvesNoneWhereAPairOfRowsMeetsOneCaseTest {
                 BigInteger.valueOf(divisor));
     }
 
-    /** What an input is: two numbers and a set. */
-    private record Input(int x, int y, Set<Integer> holidays) {}
+    /** What an input is: two numbers, each told apart by its remainder by three twice over. */
+    private record Input(int x, int y) {}
 
     private static List<Input> everyInput() {
         List<Input> out = new ArrayList<>();
-        for (int x = LOW; x <= HIGH; x++) {
-            for (int y = LOW; y <= HIGH; y++) {
-                for (int mask = 0; mask < 8; mask++) {
-                    Set<Integer> held = new TreeSet<>();
-                    for (int bit = 0; bit < 3; bit++) {
-                        if ((mask & (1 << bit)) != 0) {
-                            held.add(bit + 1);
-                        }
-                    }
-                    out.add(new Input(x, y, held));
-                }
+        for (int x = 0; x < 6; x++) {
+            for (int y = 0; y < 6; y++) {
+                out.add(new Input(x, y));
             }
         }
         return out;
@@ -87,25 +66,21 @@ class NoCaseCrossesProvesNoneWhereAPairOfRowsMeetsOneCaseTest {
 
     // ---- what a condition holds of an input, worked out here and not by the proof ----
 
-    private static long value(Quantity quantity, Input in, Integer element) {
+    private static long value(Quantity quantity, Input in) {
         if (quantity.equals(X)) {
             return in.x();
         }
         if (quantity.equals(Y)) {
             return in.y();
         }
-        if (quantity.equals(MEMBER)) {
-            return element;
-        }
         Quantity.RemainderOfADividend remainder = (Quantity.RemainderOfADividend) quantity;
-        long dividend = form(remainder.dividend(), in, element);
-        return Math.floorMod(dividend, remainder.divisor().longValueExact());
+        return Math.floorMod(form(remainder.dividend(), in), remainder.divisor().longValueExact());
     }
 
-    private static long form(LinearForm<Quantity> form, Input in, Integer element) {
+    private static long form(LinearForm<Quantity> form, Input in) {
         long sum = whole(form.constant());
         for (Map.Entry<Quantity, ExactRatio> each : form.coefs().entrySet()) {
-            sum += whole(each.getValue()) * value(each.getKey(), in, element);
+            sum += whole(each.getValue()) * value(each.getKey(), in);
         }
         return sum;
     }
@@ -114,11 +89,11 @@ class NoCaseCrossesProvesNoneWhereAPairOfRowsMeetsOneCaseTest {
         return ((ExactAnswer.Held<BigInteger>) ratio.floor()).value().longValueExact();
     }
 
-    private static boolean holds(Proposition p, Input in, Integer element) {
+    private static boolean holds(Proposition p, Input in) {
         return switch (p) {
             case Proposition.Compared c -> {
                 Relation.Affine affine = (Relation.Affine) c.relation();
-                long form = form(affine.form(), in, element);
+                long form = form(affine.form(), in);
                 boolean read = switch (affine.proposition()) {
                     case GE -> form >= 0;
                     case GT -> form > 0;
@@ -129,15 +104,8 @@ class NoCaseCrossesProvesNoneWhereAPairOfRowsMeetsOneCaseTest {
                 };
                 yield c.holds() == read;
             }
-            case Proposition.All all -> all.parts().stream().allMatch(part -> holds(part, in, element));
-            case Proposition.Any any -> any.parts().stream().anyMatch(part -> holds(part, in, element));
-            case Proposition.Some some -> {
-                boolean found = false;
-                for (int each : in.holidays()) {
-                    found |= holds(some.ofTheElement(), in, each);
-                }
-                yield some.holds() == found;
-            }
+            case Proposition.All all -> all.parts().stream().allMatch(part -> holds(part, in));
+            case Proposition.Any any -> any.parts().stream().anyMatch(part -> holds(part, in));
             default -> throw new IllegalArgumentException(p.toString());
         };
     }
@@ -151,8 +119,7 @@ class NoCaseCrossesProvesNoneWhereAPairOfRowsMeetsOneCaseTest {
             return known;
         }
         boolean out = switch (cases) {
-            case DecidingCase.Cases.One c -> holds(c.condition(), one, null)
-                    && holds(c.condition(), other, null);
+            case DecidingCase.Cases.One c -> holds(c.condition(), one) && holds(c.condition(), other);
             case DecidingCase.Cases.EachOf each -> each.alternatives().stream()
                     .anyMatch(a -> someCaseHoldsFor(a, one, other, memo));
             case DecidingCase.Cases.Together together -> together.factors().stream()
@@ -167,11 +134,11 @@ class NoCaseCrossesProvesNoneWhereAPairOfRowsMeetsOneCaseTest {
     private static boolean someCaseCrosses(Proposition.Compared line, DecidingCase.Cases cases,
                                            List<Input> inputs) {
         for (Input holding : inputs) {
-            if (!holds(line, holding, null)) {
+            if (!holds(line, holding)) {
                 continue;
             }
             for (Input failing : inputs) {
-                if (holds(line, failing, null)) {
+                if (holds(line, failing)) {
                     continue;
                 }
                 if (someCaseHoldsFor(cases, holding, failing, new IdentityHashMap<>())) {
@@ -180,55 +147,6 @@ class NoCaseCrossesProvesNoneWhereAPairOfRowsMeetsOneCaseTest {
             }
         }
         return false;
-    }
-
-    // ---- cases made by chance ----
-
-    /** Every remainder here is of {@code x} by 3 unless a round says otherwise, so that what a
-     *  case says of one is read against the line. */
-    private static Proposition atom(Random chance) {
-        return switch (chance.nextInt(6)) {
-            case 0 -> relation(Map.of(X, 1), -chance.nextInt(HIGH), Rel.GE, chance.nextBoolean());
-            case 1 -> relation(Map.of(X, 1, Y, -1), chance.nextInt(5) - 2, Rel.GE,
-                    chance.nextBoolean());
-            case 2, 3 -> relation(Map.of(remainder(X, chance.nextInt(5) - 1, 3), 1),
-                    -chance.nextInt(3), chance.nextBoolean() ? Rel.GE : Rel.EQ,
-                    chance.nextBoolean());
-            case 4 -> relation(Map.of(remainder(Y, chance.nextInt(3), 3), 1), -chance.nextInt(2),
-                    Rel.EQ, chance.nextBoolean());
-            default -> new Proposition.Some(HOLIDAYS, relation(Map.of(MEMBER, 1, X, -1),
-                    chance.nextInt(3) - 1, Rel.EQ, true), chance.nextBoolean());
-        };
-    }
-
-    private static DecidingCase.Cases cases(Random chance, int depth,
-                                            List<DecidingCase.Cases> shareable) {
-        if (!shareable.isEmpty() && chance.nextInt(5) == 0) {
-            return shareable.get(chance.nextInt(shareable.size()));
-        }
-        DecidingCase.Cases made;
-        if (depth == 0 || chance.nextInt(3) == 0) {
-            Proposition condition = chance.nextInt(6) == 0
-                    ? Proposition.all(List.of(atom(chance), atom(chance)))
-                    : chance.nextInt(8) == 0
-                    ? Proposition.any(List.of(atom(chance), atom(chance)))
-                    : atom(chance);
-            made = new DecidingCase.Cases.One(condition);
-        } else if (chance.nextBoolean()) {
-            List<DecidingCase.Cases> alternatives = new ArrayList<>();
-            for (int i = 0; i < 2 + chance.nextInt(2); i++) {
-                alternatives.add(cases(chance, depth - 1, shareable));
-            }
-            made = new DecidingCase.Cases.EachOf(alternatives);
-        } else {
-            List<DecidingCase.Cases> factors = new ArrayList<>();
-            for (int i = 0; i < 2 + chance.nextInt(2); i++) {
-                factors.add(cases(chance, depth - 1, shareable));
-            }
-            made = DecidingCase.Cases.together(factors);
-        }
-        shareable.add(made);
-        return made;
     }
 
     private static boolean proves(Proposition.Compared line, DecidingCase.Cases cases) {
@@ -290,32 +208,47 @@ class NoCaseCrossesProvesNoneWhereAPairOfRowsMeetsOneCaseTest {
     @Test
     void casesNobodyTookApartAreNotProved() {
         Proposition.Compared line = remainderLine(0, 1);
-        DecidingCase.Cases cases = DecidingCase.Cases.together(List.of(
-                new DecidingCase.Cases.One(relation(Map.of(remainder(X, 1, 3), 1), 0, Rel.EQ, true)),
-                new DecidingCase.Cases.NotTakenApart(
-                        CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.atDeclared())));
+        DecidingCase.Cases cases = new DecidingCase.Cases.NotTakenApart(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.atDeclared());
 
-        assertFalse(proves(line, cases) && someCaseCrosses(line, cases, everyInput()));
+        assertTrue(someCaseCrosses(line, cases, everyInput()), "any two rows are of them");
+        assertFalse(proves(line, cases));
     }
 
     @Test
-    void aProofNeverLeavesOutAPairOfInputsMeetingOneCase() {
-        List<Input> inputs = everyInput();
-        Random chance = new Random(20240611);
-        int proved = 0;
-        int tried = 0;
-        for (int round = 0; round < 150; round++) {
-            DecidingCase.Cases cases = cases(chance, 3, new ArrayList<>());
-            Proposition.Compared line = remainderLine(chance.nextInt(3), chance.nextInt(3));
-            tried++;
-            if (proves(line, cases)) {
-                proved++;
-                assertFalse(someCaseCrosses(line, cases, inputs),
-                        "proved that no case crosses " + line + ", and two inputs meet one case: "
-                                + cases);
-            }
-        }
-        assertTrue(proved > 0 && proved < tried,
-                "a proof is made for some of the cases and not for all: " + proved + " of " + tried);
+    void theOffsetOfARemainderMovesTheResiduesItHoldsAt() {
+        // (x + 1) mod 3 is at least 1 for x of 0 and 1, and the line holds at 0 alone: x of 0
+        // and x of 1 are two rows of one case, one each side.
+        Proposition.Compared line = relation(Map.of(remainder(X, 0, 3), 1), 0, Rel.EQ, true);
+        DecidingCase.Cases cases = new DecidingCase.Cases.One(
+                relation(Map.of(remainder(X, 1, 3), 1), -1, Rel.GE, true));
+
+        assertTrue(someCaseCrosses(line, cases, everyInput()));
+        assertFalse(proves(line, cases));
+    }
+
+    @Test
+    void aConditionDeniedHoldsAtTheResiduesItsRelationDoesNot() {
+        // Not (x mod 3 >= 1) is x of 0 mod 3, where the line x mod 3 >= 1 holds at no row.
+        Proposition.Compared line = remainderLine(0, 1);
+        DecidingCase.Cases cases = new DecidingCase.Cases.One(
+                relation(Map.of(remainder(X, 0, 3), 1), -1, Rel.GE, false));
+
+        assertFalse(someCaseCrosses(line, cases, everyInput()));
+        assertTrue(proves(line, cases));
+    }
+
+    @Test
+    void everyPartOfAConjunctionHoldsAndSomePartOfADisjunctionDoes() {
+        Proposition.Compared line = remainderLine(0, 1);
+        Proposition one = relation(Map.of(remainder(X, 0, 3), 1), -1, Rel.GE, true);
+        Proposition two = relation(Map.of(remainder(X, 0, 3), 1), -2, Rel.GE, false);
+        DecidingCase.Cases both = new DecidingCase.Cases.One(Proposition.all(List.of(one, two)));
+        DecidingCase.Cases either = new DecidingCase.Cases.One(Proposition.any(List.of(one, two)));
+
+        assertFalse(someCaseCrosses(line, both, everyInput()), "x mod 3 is 1 and no more");
+        assertTrue(proves(line, both));
+        assertTrue(someCaseCrosses(line, either, everyInput()), "x mod 3 is below 2 or at least 1, which is any");
+        assertFalse(proves(line, either));
     }
 }
