@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
@@ -150,19 +151,26 @@ class AMembershipOfANumberIsTheRelationAComparisonOfItStatesTest {
         // candidate is {@code d}, so a holiday on the last three dates is one no row compares it
         // with: the comparison of {@code d} with a holiday comes out false there whatever
         // {@code d} is, and the line is drawn where that starts. The later candidates still meet
-        // those holidays, each on the lines already drawn.
-        String pastEveryCandidate = "cal.holidays[*] " + LocalDate.MAX.minusDays(2);
+        // those holidays, each on the lines already drawn. A calendar may hold several holidays,
+        // and the two dates before the last are each one only a later candidate meets, so each
+        // is a line of its own.
+        Map<String, LocalDate> pastEveryCandidate = new TreeMap<>();
+        for (int past = 0; past < 2; past++) {
+            LocalDate day = LocalDate.MAX.minusDays(2 - past);
+            pastEveryCandidate.put("cal.holidays[*] " + day, day);
+        }
         Set<String> everyLine = new TreeSet<>(everyCandidate);
         everyLine.addAll(holidaysOfEveryCandidate);
-        everyLine.add(pastEveryCandidate);
+        everyLine.addAll(pastEveryCandidate.keySet());
         assertEquals(everyLine, linesOf(withHolidays));
         Pattern candidate = Pattern.compile(
                 "Int\\.floorMod\\(-cal\\.aSunday \\+ d(?: \\+ (\\d))?, 7\\) (\\d)");
         List<String> reachedPastAClosedDay = new ArrayList<>();
         Pattern holidayOf = Pattern.compile("d cal\\.holidays\\[\\*](?: - (\\d))?");
         everyRowAt(withHolidays, (line, row) -> {
-            if (line.equals(pastEveryCandidate)) {
-                return dates(field(row.getFirst(), "holidays")).contains(LocalDate.MAX.minusDays(2));
+            if (pastEveryCandidate.containsKey(line)) {
+                return dates(field(row.getFirst(), "holidays"))
+                        .contains(pastEveryCandidate.get(line));
             }
             Matcher holiday = holidayOf.matcher(line);
             if (holiday.matches()) {

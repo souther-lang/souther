@@ -8574,16 +8574,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * same as a value — where it is written at that value wherever the others are
      * ({@link #writtenWhereTheOthersPutIt}), or null where it asks anything else of it.
      *
-     * <p>Only of a number of a type with no ends. Such a statement is taken for one that says
-     * nothing of the numbers it is stated against, and what is read after that rests on the others
-     * being free of it; at the end of a type with ends it is the number written at a value one
-     * past the end that is no value, and what is read of that is not proved here.
+     * <p>Such a statement is taken for one that says nothing of the numbers it is stated
+     * against, and what is read after that rests on the others being free of it. At the end of a
+     * type with ends a number moved by a constant is written at a value one past the end that is
+     * no value, so only the same value is written there ({@link #writtenWhereTheOthersPutIt}).
      */
     private static NumericTerm.FromOnePosition numberHeldEqualToOthers(
             RowDemand.OfAnElement demand, TermPath container, InputReading read) {
         NumericTerm.FromOnePosition held = numberPutAtOthers(demand, container, read);
-        return held instanceof NumericTerm.ValueOf value
-                && takesNumbersWithoutEnds(sourceOf(value, read), read) ? held : null;
+        return held instanceof NumericTerm.ValueOf ? held : null;
     }
 
     private static NumericTerm.FromOnePosition numberPutAtOthers(
@@ -10164,10 +10163,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<ExactRatio> holes = new ArrayList<>();
         List<TakenConstraint.Affine> stated = new ArrayList<>();
         for (OnAWay each : aboutEither) {
-            if (each.affine() == null) {
+            TakenConstraint.Affine says = each.affine() != null ? each.affine()
+                    : each.disequality();
+            if (says == null) {
                 return null;
             }
-            stated.add(each.affine());
+            stated.add(says);
         }
         for (TakenConstraint.Affine affine : withoutWhatTheSidesDefine(stated, aboutEither,
                 ofTheSides, way, read)) {
@@ -12592,7 +12593,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return (int) Math.min(counted, Integer.MAX_VALUE);
         }
         boolean unwritten = !(TypeOps.outermost(each, rules.inners()) instanceof TypeOps.Unwrapped);
-        return unwritten && withoutEnd(each, read) ? -1 : 1;
+        return unwritten && moreThanAContainerCounts(each, read) ? -1 : 1;
+    }
+
+    /**
+     * Whether the values of {@code type}, as far as its rules leave them, are more than a
+     * container counts: those with no end, and a date, a date and time or an instant, whose ends
+     * are further apart than the sizes a container has.
+     */
+    private static boolean moreThanAContainerCounts(Type type, InputReading read) {
+        RuleReadingSource rules = read.rules();
+        return withoutEnd(type, read)
+                || (TypeView.shapeOf(type, rules.inners(), rules.symbols(), rules.kinds(),
+                        rules.sums()) instanceof Shape.Scalar(Type.Prim prim)
+                && (prim == Type.Prim.DATE || prim == Type.Prim.DATETIME
+                        || prim == Type.Prim.INSTANT));
     }
 
     /**
