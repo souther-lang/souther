@@ -32,6 +32,9 @@ public enum DocumentPart {
     /** What a rule's line not worked out because its cases were too many was told of them. */
     CASE_EXPANSIONS("caseExpansions", "/$defs/partition/properties/caseExpansions"),
 
+    /** The helper the cases of a rule's line read at a cost choose among. */
+    COSTLY_READINGS("costlyReadings", "/$defs/partition/properties/costlyReadings"),
+
     /** The lines a behavior's rules drew. */
     BOUNDARIES("boundaries", "/$defs/partition/properties/boundaries"),
 

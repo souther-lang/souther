@@ -86,6 +86,11 @@ import java.util.Set;
  * @param stopsPastTheRepresentation the operations of the body that end a run only past what a
  *                     {@code String} or a collection holds, which the classes are drawn without:
  *                     no measure, and said once each
+ * @param costlyReadings what each rule's line that was read all the same, at a cost, was told of
+ *                     its cases: the helper whose readings they choose among one beside another,
+ *                     and where it was read. Beside {@code caseExpansions} and not among them,
+ *                     which say why a line was not read: no measure, and no reason, only where a
+ *                     model is dear to read
  */
 public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 PairSpace pairs,
@@ -97,8 +102,26 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 List<Unanswered> unanswered,
                                 List<Incompleteness> whyUnclassified,
                                 List<CasesExpandedAtARule> caseExpansions,
-                                List<StopPastTheRepresentation> stopsPastTheRepresentation)
+                                List<StopPastTheRepresentation> stopsPastTheRepresentation,
+                                List<CasesExpandedAtARule> costlyReadings)
         implements RuleCitations {
+
+    /** The same, with no rule's line read at a cost told of. */
+    public PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
+                             PairSpace pairs,
+                             List<UndividedPosition> notDerivable,
+                             List<RuleWithoutALine> rulesWithoutALine,
+                             List<RuleWhereARunMayStop> rulesWhereARunMayStop,
+                             List<PositionReadingBlocked> blocked,
+                             List<PositionValuesNotSeparated> notSeparated,
+                             List<Unanswered> unanswered,
+                             List<Incompleteness> whyUnclassified,
+                             List<CasesExpandedAtARule> caseExpansions,
+                             List<StopPastTheRepresentation> stopsPastTheRepresentation) {
+        this(partitioned, pairs, notDerivable, rulesWithoutALine, rulesWhereARunMayStop, blocked,
+                notSeparated, unanswered, whyUnclassified, caseExpansions,
+                stopsPastTheRepresentation, List.of());
+    }
 
     /** The same, with no operation that ends a run only past the representation. */
     public PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
@@ -185,6 +208,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
         whyUnclassified = List.copyOf(whyUnclassified);
         caseExpansions = List.copyOf(caseExpansions);
         stopsPastTheRepresentation = List.copyOf(stopsPastTheRepresentation);
+        costlyReadings = List.copyOf(costlyReadings);
     }
 
     /**

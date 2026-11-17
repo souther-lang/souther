@@ -146,6 +146,32 @@ public record CaseExpansion(Which which, String line, String cutAt, CameTo cameT
             }
             return List.copyOf(out);
         }
+
+        /**
+         * Each of {@code counted} that was worked out all the same and whose choices multiply the
+         * readings of some helper, in order, with what made its parts read off
+         * {@code derivedBy}. What a reader is told of such a case is that helper and where it was
+         * read, and no count: the line was read, and what the case cost is no reason it was not.
+         * A case that was not worked out, or whose choices multiply no helper's readings, is told
+         * of nothing here.
+         */
+        public static List<CaseExpansion> costly(List<Counted> counted,
+                                                 List<Derivation> derivedBy) {
+            List<Counted> read = counted.stream().filter(Counted::workedOut).toList();
+            if (read.isEmpty()) {
+                return List.of();
+            }
+            List<Attribution> made = TheChoicesACaseIsMadeOf.of(
+                    read.stream().map(each -> each.asked().standsFor()).toList(), derivedBy);
+            List<CaseExpansion> out = new ArrayList<>();
+            for (int at = 0; at < read.size(); at++) {
+                if (made.get(at) instanceof Attributed attributed
+                        && !attributed.multiplied().isEmpty()) {
+                    out.add(read.get(at).attributed(made.get(at)));
+                }
+            }
+            return List.copyOf(out);
+        }
     }
 
     /** What the parts a case is taken apart on came from, or why that was not said. */

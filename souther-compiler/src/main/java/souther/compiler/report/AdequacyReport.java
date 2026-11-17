@@ -2251,6 +2251,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     take.accept(rule.sentTo());
                 }
             });
+            // And each construct a line read at a cost names a helper's readings at.
+            partition.costlyReadings().forEach(each -> each.readings().forEach(reading -> {
+                if (reading.cameTo().attributed()
+                        instanceof CaseExpansion.Attributed attributed) {
+                    attributed.constructsNamed().forEach(
+                            construct -> whereItIsWritten(construct).ifPresent(take));
+                }
+            }));
             // And each construct a count of a line's cases says made its parts.
             partition.caseExpansions().forEach(each -> each.readings().forEach(reading -> {
                 if (reading.cameTo().attributed()
@@ -4433,6 +4441,28 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                     copy -> calledAt(callsAt(behavior.conditionPlaces().copies(),
                                             copy).calls(), page, declaredIn), page))))
                             .append(NEW_LINE);
+                }
+            }
+            // And, for a rule a line of which was read all the same at a cost, the helper its
+            // cases choose among: a line of its own, since it is no reason the line was not read.
+            for (CasesExpandedAtARule each : partition.costlyReadings()) {
+                for (CasesExpandedAtARule.Reading reading : each.readings()) {
+                    if (!(reading.cameTo().attributed()
+                            instanceof CaseExpansion.Attributed attributed)) {
+                        continue;
+                    }
+                    String helpers = String.join("", attributed.multiplied().stream()
+                            .map(helper -> multipliedHelperSaid(helper, construct ->
+                                    writtenInSaid(construct, parts, page, declaredIn),
+                                    copy -> calledAt(callsAt(behavior.conditionPlaces().copies(),
+                                            copy).calls(), page, declaredIn), page))
+                            .toList());
+                    out.append("      ").append(page.say(new ReportMessage.CostlyReading(
+                            cited(each.cited(), page, declaredIn, places), each.line(),
+                            each.cutAt(), armsSaid(each.which().line().written(), page),
+                            inCopies(reading.readAt(), behavior.conditionPlaces().copies(),
+                                    page, declaredIn),
+                            helpers))).append(NEW_LINE);
                 }
             }
             // And where a run stops only past what the representation holds: said once, of each
@@ -9597,6 +9627,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             caseExpansionRow(expanded.addObject(), told.get(at), numbered.get(at), places,
                     parts, sources);
         }
+        // And, where a line was read all the same at a cost, the helper its cases choose among:
+        // beside the entries above, which say why a line was not read, and written only where
+        // there is one.
+        if (!partition.costlyReadings().isEmpty()) {
+            DocumentArray costly = DocumentPart.COSTLY_READINGS.putArray(out);
+            for (CasesExpandedAtARule each : partition.costlyReadings()) {
+                costlyReadingRow(costly.addObject(), each, places, parts, sources);
+            }
+        }
         // And where a run stops only past what the representation holds, once each, where there
         // is any.
         if (!partition.stopsPastTheRepresentation().isEmpty()) {
@@ -9638,6 +9677,33 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             ArrayNode copies = one.putArray("readAt");
             reading.readAt().forEach(copy -> copyId(copies.addObject(), copy));
             caseExpansion(one.putObject("caseExpansion"), reading.cameTo(), parts, sources);
+        }
+    }
+
+    /** One rule's line read at a cost and the helpers its cases choose among, as a row of
+     *  {@code costlyReadings}. */
+    private static void costlyReadingRow(DocumentItem row, CasesExpandedAtARule each,
+                                         PublishedRuleHandle.WhereARuleIs places,
+                                         WhereAPartIs parts, DocumentSources sources) {
+        ObjectNode said = row.node();
+        RuleHandleSurface.COSTLY_READING_RULE.put(row,
+                PublishedRuleHandle.of(handle(each.cited(), places), places),
+                sources.rendering(), null);
+        ruleId(said.putObject("ruleId"), each.rule());
+        said.put("line", each.line());
+        said.put("cutAt", each.cutAt());
+        ArrayNode arms = said.putArray("arms");
+        each.which().line().written().arms().forEach(arm -> writtenArm(arms.addObject(), arm));
+        ArrayNode readings = said.putArray("readings");
+        for (CasesExpandedAtARule.Reading reading : each.readings()) {
+            ObjectNode one = readings.addObject();
+            ArrayNode copies = one.putArray("readAt");
+            reading.readAt().forEach(copy -> copyId(copies.addObject(), copy));
+            ArrayNode helpers = one.putArray("helpers");
+            if (reading.cameTo().attributed() instanceof CaseExpansion.Attributed attributed) {
+                attributed.multiplied().forEach(helper ->
+                        multipliedHelper(helpers.addObject(), helper, parts, sources));
+            }
         }
     }
 

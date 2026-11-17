@@ -1368,6 +1368,8 @@ public final class GuardThresholds {
         read.whatEachPlaceIsLeftWith().forEach(left -> left.filedIn(cited, readAt, out));
         // And, beside what a line not worked out leaves, what its cases were.
         read.caseExpansions().forEach(each -> out.expanded(cited, readAt, each));
+        // And, beside what a line read at a cost leaves, which helper its cases choose among.
+        read.costlyReadings().forEach(each -> out.costly(cited, readAt, each));
     }
 
     /** How a row meets a line a body's condition drew, which is a guard's own answer: what it takes

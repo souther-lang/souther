@@ -181,7 +181,32 @@ public final class Partitions {
                                StringsReached strings,
                                List<DerivedValue.Replaced> replaced,
                                List<CasesExpandedAtARule> caseExpansions,
-                               ReadingsReadOn readOn) {
+                               ReadingsReadOn readOn,
+                               List<CasesExpandedAtARule> costlyReadings) {
+
+        /** The same, with no rule's line read at a cost told of. */
+        public Partitioning(List<PositionMeasurements> measurements,
+                            List<StandingQuestion> unanswered,
+                            Set<NumericTerm> uncertain,
+                            List<RuleWithoutALine> rulesWithoutALine,
+                            List<RuleWhereARunMayStop> rulesWhereARunMayStop,
+                            List<PositionValuesNotSeparated> notSeparated,
+                            List<Border> between,
+                            Map<AxisId, List<Border>> along,
+                            ReachingCuts reaching,
+                            MeasureClosure.OfThePartition partitionClosure,
+                            MeasureClosure.OfTheBorder borderClosure,
+                            EmptyInput inputIsEmpty,
+                            WhereTheOperationsStand operationsStanding,
+                            StringsReached strings,
+                            List<DerivedValue.Replaced> replaced,
+                            List<CasesExpandedAtARule> caseExpansions,
+                            ReadingsReadOn readOn) {
+            this(measurements, unanswered, uncertain, rulesWithoutALine, rulesWhereARunMayStop,
+                    notSeparated, between, along, reaching, partitionClosure, borderClosure,
+                    inputIsEmpty, operationsStanding, strings, replaced, caseExpansions, readOn,
+                    List.of());
+        }
 
         /** The same, with no line read on an application of a closure. */
         public Partitioning(List<PositionMeasurements> measurements,
@@ -232,6 +257,7 @@ public final class Partitions {
             java.util.Objects.requireNonNull(readOn, "read on some applications, or on none");
             replaced = List.copyOf(replaced);
             caseExpansions = List.copyOf(caseExpansions);
+            costlyReadings = List.copyOf(costlyReadings);
             measurements = List.copyOf(measurements);
             unanswered = List.copyOf(unanswered);
             uncertain = java.util.Set.copyOf(uncertain);
@@ -1280,6 +1306,7 @@ public final class Partitions {
         RulesWithNoLine.Gathered found = new RulesWithNoLine.Gathered();
         found.addAll(base.rulesWithoutALine());
         base.caseExpansions().forEach(found::expanded);
+        base.costlyReadings().forEach(found::costly);
         found.addAll(rulesWithoutALine);
         unclassifiedIn(base.unanswered(), found);
         RulesWithNoLine gathered = found.found();
@@ -1399,7 +1426,9 @@ public final class Partitions {
                 found.found().expanded(),
                 // And which applications read each line, by its origin, as the reading that drew
                 // the lines told it.
-                readOn);
+                readOn,
+                // And, beside the lines read at a cost, which helper their cases choose among.
+                found.found().costly());
     }
 
     /**
