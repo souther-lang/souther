@@ -377,7 +377,8 @@ public final class GuardThresholds {
                                                             .stream().anyMatch(UndividedByARelation
                                                                     ::aRunMayStopOverABoundValue)))
                                     || worksOutWhatMayEndARunWhereUnread(each, admitted.read())
-                                    || each.stopsIn().map(stops -> stops.aRunMayStopIn(read,
+                                    || each.stopsIn().map(stops -> !stops.noRunMayStopAnywhere()
+                                            && stops.aRunMayStopIn(read,
                                             regionsOf(beforeIt))).orElse(false)
                                     || aRunTakingAnArmMayStop(each, each.onTheArms(), null, read,
                                             arrivals, wayToACase, aCase)
