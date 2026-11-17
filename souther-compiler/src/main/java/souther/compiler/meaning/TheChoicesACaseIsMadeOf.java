@@ -362,13 +362,22 @@ public final class TheChoicesACaseIsMadeOf {
                 if (concluded == null) {
                     continue;
                 }
-                for (Proposition form : formsPutOn(concluded)) {
-                    for (Proposition quantified : WhereEachLineDecides.partsHeldBy(form).values()) {
-                        if (quantified instanceof Proposition.Some some) {
-                            saidOfOneQuantifier(some);
+                // A quantifier is said where it is first concluded, and not again by every step
+                // above it that holds it.
+                Set<Spelling> first = new HashSet<>(heldUnder(step));
+                WrittenLines.premisesOf(step).forEach(each -> first.removeAll(heldUnder(each)));
+                if (first.isEmpty()) {
+                    continue;
+                }
+                WhereEachLineDecides.partsHeldBy(concluded).forEach((spelling, part) -> {
+                    if (first.contains(spelling) && part instanceof Proposition.Some) {
+                        for (Proposition form : formsPutOn(part)) {
+                            if (form instanceof Proposition.Some some) {
+                                saidOfOneQuantifier(some);
+                            }
                         }
                     }
-                }
+                });
             }
         }
 
