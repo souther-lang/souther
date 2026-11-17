@@ -41,6 +41,9 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         CONDITIONS.put("written", "List.all(r -> r >= 4, [q + 1, 3])");
         CONDITIONS.put("arm", "(if q > 5 then q + 1 else 3) >= q");
         CONDITIONS.put("ruleSays", "(q + 1) / 2 >= 3");
+        CONDITIONS.put("armInAClosure", "List.all(r -> (if r > 5 then q + 1 else 3) >= q, ds)");
+        CONDITIONS.put("armInAClosureNoStop",
+                "List.all(r -> (if q > 5 then q - 1 else 3) >= r, ds)");
         CONDITIONS.put("nestedArm", "(if q > 5 then (if q > 7 then q + 1 else 3) else 4) >= q");
         CONDITIONS.put("armOfARule", "(if q > 5 then Int.max(q + 1, 3) else 4) >= q");
         CONDITIONS.put("composed",
@@ -85,6 +88,13 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         assertEquals(1, TOLD.get("ruleSays").size(), TOLD.toString());
     }
 
+    /** A closure is applied to each element, and what a run works out on an arm it takes there
+     *  is worked out wherever that application is made. */
+    @Test
+    void anOperationInAnArmOfAChoiceInAClosureIsToldAsOneAMayStop() {
+        assertEquals(1, TOLD.get("armInAClosure").size(), TOLD.toString());
+    }
+
     /** What a rule kept of an arm is kept through the rules read inside it, as many deep as the
      *  choices are. */
     @Test
@@ -113,6 +123,7 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         assertEquals(List.of(), TOLD.get("none"));
         assertEquals(List.of(), TOLD.get("armNoStop"));
         assertEquals(List.of(), TOLD.get("nestedArmNoStop"));
+        assertEquals(List.of(), TOLD.get("armInAClosureNoStop"));
     }
 
     /** The notes of each behavior, each of the conditions read once, as the model says them. */
