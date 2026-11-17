@@ -6917,7 +6917,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * The same, where {@code byTheRun} says whether the numbers the run narrows move the values:
      * not, the values are those the declarations leave, and the caller holds the narrowings to
-     * the values it chooses ({@link #meetsWhatTheRunNarrows}).
+     * the values it chooses ({@link RemainderCoverage}).
      */
     private NumericDomain.Bounds valuesFreeToChoose(NumericTerm.FromOnePosition number,
                                                     OnAWay statement, List<OnAWay> conditions,
