@@ -16313,12 +16313,14 @@ final class Pullback {
     private AnEndOfAContainer endOfAContainer(Core value, InputReads reads) {
         // The value is the payload of the call an arm opened, a name that is no expression.
         if (!(Core.withoutStanding(value) instanceof Core.Read name) || name.binding() == null
-                || reads.elementOpenedBy(name.binding()) == null
-                || !(Core.withoutStanding(reads.elementOpenedBy(name.binding()).call().value())
-                        instanceof Core.PreservedCall call)) {
+                || reads.elementOpenedBy(name.binding()) == null) {
             return null;
         }
-        InputReads where = reads.elementOpenedBy(name.binding()).call().at();
+        Denotation opened = reads.elementOpenedBy(name.binding()).call();
+        if (!(Core.withoutStanding(opened.value()) instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        InputReads where = opened.at();
         AnOperationApplied applied = AnOperationApplied.of(call);
         if (applied == null) {
             return null;

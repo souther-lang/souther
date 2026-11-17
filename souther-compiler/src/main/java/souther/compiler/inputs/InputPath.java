@@ -285,11 +285,6 @@ final class InputPath {
                     && AnOperationApplied.of(opened.lookup()) instanceof AnOperationApplied looked
                     && looked.args().size() == 2 ->
                     heldAt(looked.args().get(1), new Wanted.APart(HeldIn.Part.ELEMENT), names);
-            // What the name is, asked once, and the step that answers is the answer. An element is
-            // answered by the container it came from even where that container is at no position:
-            // the value a rewrite left under such a name is what the walk before it made of an
-            // element, and reaching a position through it would put a line at a place whose values
-            // are not the ones a rule about the name is about.
             // The payload of a call that answers an element of a container is one of that
             // container's elements, and came from wherever they did.
             case Core.Read r when asked == ElementQuestion.VALUE_ORIGIN
@@ -299,6 +294,11 @@ final class InputPath {
                             instanceof DeclaredArgument container
                     && answered.argument(container) != null ->
                     heldAt(answered.argument(container), new Wanted.APart(HeldIn.Part.ELEMENT), names);
+            // What the name is, asked once, and the step that answers is the answer. An element is
+            // answered by the container it came from even where that container is at no position:
+            // the value a rewrite left under such a name is what the walk before it made of an
+            // element, and reaching a position through it would put a line at a place whose values
+            // are not the ones a rule about the name is about.
             case Core.Read r -> switch (names.roleOf(r.binding())) {
                 case BindingRole.Root(var stands) -> new PathResolution.At(stands);
                 case BindingRole.Element _ -> elementOf(r.binding(), names);

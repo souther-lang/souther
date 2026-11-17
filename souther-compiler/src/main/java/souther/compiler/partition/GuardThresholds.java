@@ -603,13 +603,18 @@ public final class GuardThresholds {
         // Where that says nowhere at all, the comparison is not thereby about nothing: a value
         // worked out of one that came from somewhere came from there as well.
         if (out.isEmpty()) {
+            // Each name is followed once however many times it is read: a chain of names each
+            // made of the one before twice is read as often as it is long, not as often as it
+            // has ways through.
+            Map<BindingId, PathResolution> followed = new HashMap<>();
             sides.forEach(side -> filedWhereItCameFrom(
-                    cameFromThroughWhatItIsMadeOf(side, reads, read), out));
+                    cameFromThroughWhatItIsMadeOf(side, reads, read, followed), out));
         }
     }
 
-    private static PathResolution cameFromThroughWhatItIsMadeOf(Core side, InputReads reads,
-                                                                InputReading read) {
+    private static PathResolution cameFromThroughWhatItIsMadeOf(
+            Core side, InputReads reads, InputReading read,
+            Map<BindingId, PathResolution> followed) {
         Core bare = Core.withoutStanding(side);
         for (Core each : Core.subexpressionsAt(bare)) {
             PathResolution came = reads.cameFrom(each, read.newtypes());
@@ -622,13 +627,22 @@ public final class GuardThresholds {
         InputReads.PickedAtAnIndex picked = reads.pickedAtAnIndex(bare);
         if (picked != null && !(reads.pathOf(picked.list().value(), read.newtypes())
                 instanceof PathResolution.At)) {
-            return cameFromThroughWhatItIsMadeOf(picked.list().value(), picked.list().at(), read);
+            return cameFromThroughWhatItIsMadeOf(picked.list().value(), picked.list().at(), read,
+                    followed);
         }
         // A name stands for what it was bound to, read where it was bound.
-        if (bare instanceof Core.Read) {
+        if (bare instanceof Core.Read name && name.binding() != null) {
+            PathResolution done = followed.get(name.binding());
+            if (done != null) {
+                return done;
+            }
             Denotation stood = reads.standing(bare, read.symbols(), read.newtypes());
             if (!(Core.withoutStanding(stood.value()) instanceof Core.Read)) {
-                return cameFromThroughWhatItIsMadeOf(stood.value(), stood.at(), read);
+                followed.put(name.binding(), new PathResolution.NotAPosition());
+                PathResolution came = cameFromThroughWhatItIsMadeOf(stood.value(), stood.at(),
+                        read, followed);
+                followed.put(name.binding(), came);
+                return came;
             }
         }
         // What a value is made of: for a choice, the values of its arms and not what decides the
@@ -644,7 +658,7 @@ public final class GuardThresholds {
             default -> Core.forEachChild(bare, made::add);
         }
         return PathResolution.madeOf(made.stream()
-                .map(part -> cameFromThroughWhatItIsMadeOf(part, reads, read)).toList());
+                .map(part -> cameFromThroughWhatItIsMadeOf(part, reads, read, followed)).toList());
     }
 
     private static void filedWhereItCameFrom(

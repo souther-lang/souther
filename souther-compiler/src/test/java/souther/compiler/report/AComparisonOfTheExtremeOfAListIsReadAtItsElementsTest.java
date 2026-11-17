@@ -165,6 +165,35 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
                 && line.contains("about `ds")), report);
     }
 
+    /**
+     * A chain of names each made of the one before twice has as many ways through as it has links
+     * to the power of two, and is read link by link: a value made of a payload by thirty such
+     * steps is reported unread at the elements, and the report is made.
+     */
+    @Test
+    void aChainOfNamesEachMadeOfTheOneBeforeTwiceIsFollowedOnce() {
+        StringBuilder lets = new StringBuilder("let a0 = m + 1\n");
+        for (int link = 1; link <= 30; link++) {
+            lets.append("    let a").append(link).append(" = a").append(link - 1)
+                    .append(" + a").append(link - 1).append("\n");
+        }
+        String report = reading("""
+                module m
+
+                behavior role : (ds: List<Int>) -> Int
+                let role (ds) = match List.max(ds) with
+                    | None -> 0
+                    | Some m -> {
+                    %s
+                    if a30 <= 10 then 1 else 2
+                    }
+                """.formatted(lets));
+
+        assertTrue(report.contains("measurement: partial"), report);
+        assertTrue(report.lines().anyMatch(line -> line.contains("· not read:")
+                && line.contains("about `ds")), report);
+    }
+
     /** A rate wearing a name, the list made of each line's rate and compared through its value by
      *  the library's order: the elements the end is read at are the lines'. */
     @Test

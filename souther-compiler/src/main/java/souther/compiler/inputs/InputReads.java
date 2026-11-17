@@ -11,7 +11,6 @@ import souther.compiler.check.ClosureUses;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.DeclaredArgument;
-import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.Location;
