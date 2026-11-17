@@ -183,11 +183,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * every row — so which way the comparison comes out is settled by it and the relation, and
          * a reader asking that is not sent back to the operands to fold them a second way.
          */
-        record CutsNothing(java.util.Set<NumericTerm> read, ExactRatio difference,
+        record CutsNothing(Set<NumericTerm> read, ExactRatio difference,
                            UndividedByARelation.Working working) implements OfAComparison {
 
             public CutsNothing {
-                read = java.util.Set.copyOf(read);
+                read = Set.copyOf(read);
                 Objects.requireNonNull(difference,
                         "a comparison that cuts nothing still has its two sides' difference");
                 Objects.requireNonNull(working, "a comparison says what it works out");
