@@ -2364,6 +2364,25 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         return together;
     }
 
+    /**
+     * What a run works out evaluating {@code expression}, every operation of whole numbers in the
+     * order it works them out, for where a run stops: told by walking the expression as written,
+     * and not by what a comparison made of its value is read as.
+     */
+    static UndividedByARelation.Working workedOutByEvaluating(Core expression, InputReads at,
+                                                              InputReading ofTheInput) {
+        if (WorkedOutToReachIt.of(ofTheInput).endsNoRun(new Denotation(expression, at))) {
+            return UndividedByARelation.Working.NOTHING;
+        }
+        WhatWasTold told = new WhatWasTold();
+        if (AffineForms.outcome(expression, at,
+                reading(ofTheInput, new LinkedHashSet<>(), new ElementsMet(), told))
+                instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>) {
+            told.exact = false;
+        }
+        return told.workedOut().stops().operations();
+    }
+
     private static UndividedByARelation.Working workingOfEvaluating(Core expression, InputReads at,
                                                                     InputReading ofTheInput) {
         if (WorkedOutToReachIt.of(ofTheInput).endsNoRun(new Denotation(expression, at))) {

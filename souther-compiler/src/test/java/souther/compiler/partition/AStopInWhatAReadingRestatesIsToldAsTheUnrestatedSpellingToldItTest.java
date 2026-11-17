@@ -41,6 +41,11 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         CONDITIONS.put("written", "List.all(r -> r >= 4, [q + 1, 3])");
         CONDITIONS.put("arm", "(if q > 5 then q + 1 else 3) >= q");
         CONDITIONS.put("ruleSays", "(q + 1) / 2 >= 3");
+        CONDITIONS.put("maxOfAnArm", "Int.max((if q > 5 then q + 1 else 3), 4) >= q");
+        CONDITIONS.put("absOfAnArm", "Int.abs(if q > 5 then q + 1 else 3) >= q");
+        CONDITIONS.put("maxOfAnArmNoStop", "Int.max((if q > 5 then q - 1 else 3), 4) >= q");
+        CONDITIONS.put("maxOfAnArmUnreached",
+                "Int.max((if q > 5 && q < 3 then q + 1 else 3), 4) >= q");
         CONDITIONS.put("armInAClosure", "List.all(r -> (if r > 5 then q + 1 else 3) >= q, ds)");
         CONDITIONS.put("armInAClosureNoStop",
                 "List.all(r -> (if q > 5 then q - 1 else 3) >= r, ds)");
@@ -88,6 +93,13 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         assertEquals(1, TOLD.get("ruleSays").size(), TOLD.toString());
     }
 
+    /** The arms of a choice that is an argument are worked out before the operation picks one. */
+    @Test
+    void anOperationInAnArmThatIsAnArgumentIsToldWhateverTheOperationPicks() {
+        assertEquals(1, TOLD.get("maxOfAnArm").size(), TOLD.toString());
+        assertEquals(1, TOLD.get("absOfAnArm").size(), TOLD.toString());
+    }
+
     /** A closure is applied to each element, and what a run works out on an arm it takes there
      *  is worked out wherever that application is made. */
     @Test
@@ -124,6 +136,8 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         assertEquals(List.of(), TOLD.get("armNoStop"));
         assertEquals(List.of(), TOLD.get("nestedArmNoStop"));
         assertEquals(List.of(), TOLD.get("armInAClosureNoStop"));
+        assertEquals(List.of(), TOLD.get("maxOfAnArmNoStop"));
+        assertEquals(List.of(), TOLD.get("maxOfAnArmUnreached"));
     }
 
     /** The notes of each behavior, each of the conditions read once, as the model says them. */
