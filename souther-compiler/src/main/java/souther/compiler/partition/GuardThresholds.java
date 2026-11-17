@@ -626,18 +626,17 @@ public final class GuardThresholds {
     }
 
     /**
-     * What a side owes where it stands and where its values came from. A side that came from one
-     * place or from several made together is owed at those; one that may stand at one of several
-     * and came from one of several is owed at the places it may stand at and at those it came from
-     * beyond them ({@link OwedWhereItCameFrom#ofSeveral(ValuesAt, MadeFrom)}).
+     * What a side owes where it stands and where its values came from. One that may stand at one of
+     * several places is owed at those and at the places its values came from beyond them, however
+     * they came ({@link OwedWhereItCameFrom#ofSeveral(ValuesAt, MadeFrom)}); any other is owed at
+     * where it came from.
      */
     private static void filedWhereItCameFrom(
             ValuesAt stands, MadeFrom came,
             SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
-        OwedWhereItCameFrom together = came instanceof MadeFrom.FromOneOf
-                ? OwedWhereItCameFrom.ofSeveral(stands, came) : null;
+        OwedWhereItCameFrom together = OwedWhereItCameFrom.ofSeveral(stands, came);
         OwedWhereItCameFrom owed = together != null ? together : OwedWhereItCameFrom.ofSeveral(came);
-        if (came instanceof MadeFrom.FromOne(var at)) {
+        if (owed == null && came instanceof MadeFrom.FromOne(var at)) {
             out.putIfAbsent(FilingCoordinate.at(at), new BlockReason.RuleAboutADerivedValue());
         } else if (owed != null) {
             owed.places().forEach(each -> out.putIfAbsent(FilingCoordinate.at(each), owed.why()));

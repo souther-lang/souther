@@ -35,6 +35,18 @@ class OwedWhereItCameFromTest {
         assertEquals(new BlockReason.RuleAboutAnElementOfSeveralContainers(), owed.why());
     }
 
+    /** However the origin says it: a name that came from one place on one run and from several made
+     *  together on another is owed at where it stands as well. */
+    @Test
+    void whereItStandsIsSaidWhateverShapeTheOriginHas() {
+        assertEquals(List.of(A.then("age"), B, C),
+                OwedWhereItCameFrom.ofSeveral(new ValuesAt.MayStandAt(List.of(A.then("age"))),
+                        new MadeFrom.FromEvery(List.of(List.of(A), List.of(B, C)))).places());
+        assertEquals(List.of(A.then("age"), B),
+                OwedWhereItCameFrom.ofSeveral(new ValuesAt.MayStandAt(List.of(A.then("age"))),
+                        new MadeFrom.FromOne(B)).places());
+    }
+
     /** The container the name stands at an element of is the one it came from, and adds nothing. */
     @Test
     void whatItCameFromThatItStandsAtIsNotSaidTwice() {
