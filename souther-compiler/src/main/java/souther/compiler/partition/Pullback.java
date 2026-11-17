@@ -16202,8 +16202,7 @@ final class Pullback {
             return partOf(at, new Derivation.Stopped(past, false));
         }
         Function<Rel, Derivation> endedSo = rel -> {
-            boolean every = (rel == Rel.LT || rel == Rel.LE)
-                    == (kept.extreme() instanceof Extreme.Greatest);
+            boolean every = everyElementMeets(rel, kept.extreme() instanceof Extreme.Greatest);
             ConditionJoin how = every ? ConditionJoin.BOTH : ConditionJoin.EITHER;
             // Past the elements that decide it, the step answers the side of what it carried. It
             // still compares every element's value with what it carried, so every element is
@@ -16215,6 +16214,23 @@ final class Pullback {
                             !every),
                     how, HowTheElementsAreAsked.EVERY_ONE, ends.value(), ends.at());
         };
+        return readAtEachEndOf(states, endedSo);
+    }
+
+    /**
+     * Whether the greatest (or the least) of some elements is related to a number by {@code rel}
+     * where every element is, and not where some element is: the greatest is at or below a number
+     * where every element is, the least at or above it.
+     */
+    private static boolean everyElementMeets(Rel rel, boolean greatest) {
+        return (rel == Rel.LT || rel == Rel.LE) == greatest;
+    }
+
+    /**
+     * {@code states} as an end of some elements is read at it: an order as itself, equality as the
+     * end at or below and at or above, and a difference as the end below or above.
+     */
+    private static Derivation readAtEachEndOf(Rel states, Function<Rel, Derivation> endedSo) {
         return switch (states) {
             case LT, LE, GT, GE -> endedSo.apply(states);
             case EQ -> new Derivation.Joined(ConditionJoin.BOTH, endedSo.apply(Rel.LE),
@@ -16257,20 +16273,13 @@ final class Pullback {
     private Derivation theEndCompared(AnEndOfAContainer end, ASide other, Rel states,
                                       Denotation at) {
         Function<Rel, Derivation> endedSo = rel -> {
-            boolean every = (rel == Rel.LT || rel == Rel.LE)
-                    == (end.end() == BoundOperationFacts.End.GREATEST);
+            boolean every = everyElementMeets(rel, end.end() == BoundOperationFacts.End.GREATEST);
             Derivation some = someElementMeeting(end.container(), end.held(),
                     comparedCase(ASide.of(end.element()), other, rel, at), !every,
                     HowTheElementsAreAsked.EVERY_ONE, end.call().value(), end.call().at());
             return every ? new Derivation.UnderADenial(some, true) : some;
         };
-        return switch (states) {
-            case LT, LE, GT, GE -> endedSo.apply(states);
-            case EQ -> new Derivation.Joined(ConditionJoin.BOTH, endedSo.apply(Rel.LE),
-                    endedSo.apply(Rel.GE));
-            case NE -> new Derivation.Joined(ConditionJoin.EITHER, endedSo.apply(Rel.LT),
-                    endedSo.apply(Rel.GT));
-        };
+        return readAtEachEndOf(states, endedSo);
     }
 
     /**
@@ -16280,7 +16289,12 @@ final class Pullback {
     private Derivation comparedAsAnEnd(ASide left, ASide right, Rel states, Denotation at) {
         for (boolean onTheLeft : new boolean[] {true, false}) {
             ASide side = onTheLeft ? left : right;
-            if (side.whole() == null) {
+            // The end of a container is a name an arm bound, worn or not by a newtype: no other
+            // shape is resolved.
+            if (side.whole() == null || !(Core.withoutStanding(side.whole().value())
+                    instanceof Core.Read || Core.withoutStanding(side.whole().value())
+                    instanceof Core.FieldAccess || Core.withoutStanding(side.whole().value())
+                    instanceof Core.FieldProjection)) {
                 continue;
             }
             ValueStanding.ReadThrough<InputReads> resolved = Extreme.comparedAs(
