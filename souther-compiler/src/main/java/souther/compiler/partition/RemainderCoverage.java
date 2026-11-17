@@ -44,6 +44,8 @@ final class RemainderCoverage {
     record Proof(Set<NumericTerm> universal, List<TakenConstraint.Affine> narrowingsMet) {}
 
     /**
+     * What choosing {@code pivot} shows of the statements, or empty where it shows nothing.
+     *
      * @param dividend  the form the statements hold to a remainder, without its constant
      * @param moves     the constant each statement moves the form by
      * @param divisor   the divisor the remainder is of
