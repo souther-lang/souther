@@ -483,14 +483,8 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     /** What the operation answers holds, where it holds a value, the greatest or the least element
      *  of {@code source}. */
     record AnswersAnExtremeElementOf(DeclaredOperation operation, DeclaredArgument source,
-                                     TheEnd end)
+                                     BoundOperationFacts.End end)
             implements OneAboutAnOperation {}
-
-    /** Which end of the elements of a container an answer is. */
-    enum TheEnd {
-        GREATEST,
-        LEAST
-    }
 
     /** What the operation answers holds, where it holds a value, an element of {@code source} that
      *  {@code closure} answers true on. */

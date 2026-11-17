@@ -408,7 +408,7 @@ final class OperationFactBinder {
                         TypeRequirement.CONTAINER, "what the value answered is an end of");
                 holdTheAnswerToAnElementOf(declaration, source);
                 yield new BoundOperationFact.AnswersAnExtremeElementOf(operation, source,
-                        BoundOperationFact.TheEnd.valueOf(extreme.end().name()));
+                        BoundOperationFacts.End.valueOf(extreme.end().name()));
             }
             // An element picked at a place of a list: the place is a whole number, and the answer
             // an option of an element of the list.

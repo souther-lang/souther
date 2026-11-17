@@ -75,13 +75,31 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
         assertEquals(linesDrawn(equivalent), linesDrawn(viaDefault), viaDefault);
     }
 
+    /** The whole report, as {@code withDefault} is the {@code match} it expands to: where each
+     *  was written is the only thing the two reports may differ in. */
     @Test
     void aMatchOpensTheOptionAsWithDefaultDoes() {
         String viaDefault = ofACondition("Option.withDefault(0, List.max(ds)) <= 10");
         String viaMatch = ofACondition("(match List.max(ds) with | None -> 0 | Some m -> m) <= 10");
 
         assertDrawsAtTheElements(viaMatch);
-        assertEquals(linesDrawn(viaDefault), linesDrawn(viaMatch), viaMatch);
+        assertEquals(withoutPositions(viaDefault), withoutPositions(viaMatch));
+    }
+
+    private static String withoutPositions(String report) {
+        return report.replaceAll("comparison@[0-9:]+", "comparison@")
+                .replaceAll("(, )?at [0-9]+:[0-9]+", "");
+    }
+
+    /** A step that may end a run ends it on every element it is handed, whatever the comparison of
+     *  its answers is, which the reading made here does not tell of. */
+    @Test
+    void aListMadeByAStepThatMayEndARunIsNotReadAtTheElementsItIsMadeOf() {
+        String report = ofACondition(
+                "Option.withDefault(0, List.max(List.map(x -> x + 1, ds))) <= 10");
+
+        assertTrue(report.contains("· not read:"), report);
+        assertTrue(linesDrawn(report).isEmpty(), report);
     }
 
     @ParameterizedTest(name = "max {0} 10")

@@ -1713,7 +1713,7 @@ public final class InputReads {
      * @param lookup  the call that asked the map for the key, itself and not one like it
      * @param entered the arm that binds the name
      */
-    public record LookupOpened(Core lookup, EnteredArm entered) {
+    public record LookupOpened(Core lookup, EnteredArm entered) implements ArmOpened {
 
         public LookupOpened {
             Objects.requireNonNull(lookup, "a name is found by some lookup");
@@ -1733,10 +1733,56 @@ public final class InputReads {
         }
     }
 
+    /**
+     * What a name under an arm is made of where it is the payload of a call that answers an
+     * option: which call, and which arm.
+     *
+     * <p>The name is an {@code Int} where the call answers an {@code Option<Int>}, so it stands
+     * for no expression of its own and is read by no reader of values. What it is the payload of
+     * is said apart from it, for the reader that asks.
+     */
+    public sealed interface ArmOpened permits LookupOpened, ExtremeOpened {
+
+        /** The arm that binds the name. */
+        EnteredArm entered();
+    }
+
+    /**
+     * What the name {@code entered} binds is the greatest or the least element of a container,
+     * where {@code call} answers it ({@link BoundOperationFacts#answersAnExtremeElementOf}).
+     *
+     * @param call    the call that answers it, where it stands
+     * @param entered the arm that binds the name
+     */
+    public record ExtremeOpened(Denotation call, EnteredArm entered) implements ArmOpened {
+
+        public ExtremeOpened {
+            Objects.requireNonNull(call, "the call that answers the greatest or the least");
+            Objects.requireNonNull(entered, "under some arm of the match on it");
+        }
+
+        /** The same arm: the call is read through the names in force, a new tree each time. */
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof ExtremeOpened that && entered.equals(that.entered);
+        }
+
+        @Override
+        public int hashCode() {
+            return entered.hashCode();
+        }
+    }
+
     /** What the name {@code binding} is the value of, where an arm bound it to what a lookup in a
      *  map found under its key — or null where it is no such name. */
     public LookupOpened lookupOpenedBy(BindingId binding) {
-        return names.openedBy(binding);
+        return names.openedBy(binding) instanceof LookupOpened lookup ? lookup : null;
+    }
+
+    /** The greatest or the least element the name {@code binding} is the payload of, where an arm
+     *  bound it to what a call answering one holds — or null where it is no such name. */
+    public ExtremeOpened extremeOpenedBy(BindingId binding) {
+        return names.openedBy(binding) instanceof ExtremeOpened extreme ? extreme : null;
     }
 
     /** {@link #insideArmOn}, without the lookup the name under the arm is found by. */
@@ -1758,6 +1804,15 @@ public final class InputReads {
             if (held instanceof WhatItHolds.AtAnIndex(PickedAtAnIndex element)) {
                 return picking(arm.binder().binding(), element)
                         .narrowedByThePattern(scrutinee, arm, symbols, newtypes);
+            }
+            // The payload is no expression of the input and no name of one: what it is the
+            // payload of is said beside the name the pattern gives it.
+            if (held instanceof WhatItHolds.AnExtremeOf(Denotation call)) {
+                InputReads narrowed = narrowedByThePattern(scrutinee, arm, symbols, newtypes);
+                BindingId binding = arm.binder().binding();
+                return new InputReads(narrowed.names.opening(binding,
+                        new ExtremeOpened(call, new EnteredArm(binding))), narrowed.alternatives,
+                        narrowed.declared, narrowed.dependencies, narrowed.applied);
             }
             InputReads holding = holdingWhatItHolds(held, arm.binder(), newtypes);
             if (holding != null) {
@@ -1960,8 +2015,9 @@ public final class InputReads {
          * The greatest or the least element of a container, which an operation answering one
          * holds ({@link BoundOperationFacts#answersAnExtremeElementOf}): the call itself, read
          * where it stands. Which element that is turns on the container, and it is no place of
-         * the input, so the name stands for the call and a comparison of it is read at the
-         * elements. Made of no entry, as a list's element is not.
+         * the input, so the name under the arm is told apart from the call it is the payload of
+         * ({@link ExtremeOpened}) and a comparison of it is read at the elements. Made of no
+         * entry, as a list's element is not.
          */
         record AnExtremeOf(Denotation call) implements WhatItHolds {
 
@@ -2145,8 +2201,8 @@ public final class InputReads {
             case WhatItHolds.MadeByAClosure(Denotation answered, var _) ->
                     standingFor(name, answered, newtypes);
             case WhatItHolds.AnElement(Denotation element) -> standingFor(name, element, newtypes);
-            case WhatItHolds.AnExtremeOf(Denotation call) -> standingFor(name, call, newtypes);
             case WhatItHolds.AtAnIndex(PickedAtAnIndex element) -> picking(name, element);
+            case WhatItHolds.AnExtremeOf _ -> this;
             case WhatItHolds.Unsaid _ -> this;
         };
     }
@@ -2292,9 +2348,10 @@ public final class InputReads {
                                           DeclarationNewtypes newtypes) {
         return switch (held) {
             case WhatItHolds.AnEntry _, WhatItHolds.AnEntryOfAnAnswer _,
-                 WhatItHolds.MadeByAClosure _, WhatItHolds.AnElement _,
-                 WhatItHolds.AnExtremeOf _ -> holding(name.binding(), held, newtypes);
-            case WhatItHolds.AtAPosition _, WhatItHolds.AtAnIndex _, WhatItHolds.Unsaid _ -> null;
+                 WhatItHolds.MadeByAClosure _, WhatItHolds.AnElement _ ->
+                    holding(name.binding(), held, newtypes);
+            case WhatItHolds.AtAPosition _, WhatItHolds.AtAnIndex _, WhatItHolds.AnExtremeOf _,
+                 WhatItHolds.Unsaid _ -> null;
         };
     }
 

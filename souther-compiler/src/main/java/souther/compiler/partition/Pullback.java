@@ -16258,7 +16258,7 @@ final class Pullback {
                                       Denotation at) {
         Function<Rel, Derivation> endedSo = rel -> {
             boolean every = (rel == Rel.LT || rel == Rel.LE)
-                    == end.greatest();
+                    == (end.end() == BoundOperationFacts.End.GREATEST);
             Derivation some = someElementMeeting(end.container(), end.held(),
                     comparedCase(ASide.of(end.element()), other, rel, at), !every,
                     HowTheElementsAreAsked.EVERY_ONE, end.call().value(), end.call().at());
@@ -16296,10 +16296,15 @@ final class Pullback {
 
     /** {@code value}, read where {@code where} stands, as the end of a container it answers —
      *  or null where it is no such call. */
-    private AnEndOfAContainer endOfAContainer(Core value, InputReads where) {
-        if (!(Core.withoutStanding(value) instanceof Core.PreservedCall call)) {
+    private AnEndOfAContainer endOfAContainer(Core value, InputReads reads) {
+        // The value is the payload of the call an arm opened, a name that is no expression.
+        if (!(Core.withoutStanding(value) instanceof Core.Read name) || name.binding() == null
+                || reads.extremeOpenedBy(name.binding()) == null
+                || !(Core.withoutStanding(reads.extremeOpenedBy(name.binding()).call().value())
+                        instanceof Core.PreservedCall call)) {
             return null;
         }
+        InputReads where = reads.extremeOpenedBy(name.binding()).call().at();
         AnOperationApplied applied = AnOperationApplied.of(call);
         if (applied == null) {
             return null;
@@ -16318,6 +16323,12 @@ final class Pullback {
         ElementBindings.StepOnEachElement step;
         while ((step = ElementBindings.stepAnsweredOnEachElement(base,
                 blocksAt(new Denotation(base, where)))) != null) {
+            // A step that may end a run does so on every run that hands it such an element,
+            // whatever the comparison of its answers comes to, and what ends the run is told by
+            // the reading of the step's own application, which this one does not make.
+            if (!WhatARunMayEndFor.endsNoneBeneath(step.step().body())) {
+                return null;
+            }
             steps.add(step);
             base = step.walked();
         }
@@ -16350,7 +16361,7 @@ final class Pullback {
             element = each.step().body();
         }
         return new AnEndOfAContainer(new Denotation(call, where), base, container,
-                new Denotation(element, at), extremity.greatest());
+                new Denotation(element, at), extremity.end());
     }
 
     /**
@@ -16360,10 +16371,10 @@ final class Pullback {
      * @param held      the container, as the call was handed it
      * @param container what the container is, as a decision is about it
      * @param element   an element of the container, standing as the name its own are given
-     * @param greatest  whether it is the greatest element, and the least where not
+     * @param end       which end of the elements it is
      */
     private record AnEndOfAContainer(Denotation call, Core held, DecisionSubject container,
-                                     Denotation element, boolean greatest) {}
+                                     Denotation element, BoundOperationFacts.End end) {}
 
     /**
      * A side of a comparison that is what a walk keeping an end ends with.
