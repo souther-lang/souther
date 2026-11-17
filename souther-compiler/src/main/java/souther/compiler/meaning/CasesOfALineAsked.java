@@ -119,12 +119,22 @@ public final class CasesOfALineAsked {
      *                   every case it holds ({@link DecidingCase#saidInAsFewAsMay})
      * @param notWorkedOutIn the cases asked some of whose cases nobody worked out, each with the
      *                   figures that stopped them; empty where every case was worked out
+     * @param walkedPast the case asked, where its cases were more ways of choosing one than are
+     *                   taken apart and every one of them was worked out all the same, by the
+     *                   ways the numbers leave ({@link WalkedPast}); empty otherwise
      */
-    public record Found(List<DecidingCase> decidesIn, List<NotWorkedOut> notWorkedOutIn) {
+    public record Found(List<DecidingCase> decidesIn, List<NotWorkedOut> notWorkedOutIn,
+                        List<WalkedPast> walkedPast) {
 
         public Found {
             decidesIn = DecidingCase.eachByItsOwnCondition(decidesIn);
             notWorkedOutIn = List.copyOf(notWorkedOutIn);
+            walkedPast = List.copyOf(walkedPast);
+        }
+
+        /** What asking found where no case was worked out past the figure. */
+        public Found(List<DecidingCase> decidesIn, List<NotWorkedOut> notWorkedOutIn) {
+            this(decidesIn, notWorkedOutIn, List.of());
         }
 
         /** Every figure some case was stopped at: which way those cases go was not worked out.
@@ -173,6 +183,27 @@ public final class CasesOfALineAsked {
         /** The same, with the ways not counted. */
         public NotWorkedOut(DecidingCase in, Set<Figure.Budget> stoppedAt) {
             this(in, stoppedAt, Optional.empty());
+        }
+    }
+
+    /**
+     * A case asked whose cases were more ways of choosing one than are taken apart, and every
+     * one of which was worked out: the choices stood past the figure, and what the numbers leave
+     * of them did not.
+     *
+     * <p>No stop, and no part of why a line was or was not worked out. It is what the asking
+     * cost, for a reader telling an author where a model is dear to read: how many ways there
+     * were, and, where the numbers left more than a walk goes to the end of, the ways it walked
+     * ({@link CaseCount}).
+     *
+     * @param in      the case asked
+     * @param counted how many ways of choosing its cases there were
+     */
+    public record WalkedPast(DecidingCase in, CaseCount counted) {
+
+        public WalkedPast {
+            Objects.requireNonNull(in, "cases walked past the figure are some case's");
+            Objects.requireNonNull(counted, "and were counted");
         }
     }
 
@@ -267,6 +298,10 @@ public final class CasesOfALineAsked {
 
     /** How many ways of choosing the cases asked there were, where their number stopped them. */
     private Optional<CaseCount> counted = Optional.empty();
+
+    /** How many ways the cases asked were, where they stood past the figure and were worked out
+     *  all the same ({@link WalkedPast}). */
+    private Optional<CaseCount> walkedPast = Optional.empty();
 
     /** The figures each case was never taken apart at, for the cases already asked of. */
     private final Map<DecidingCase.Cases, Set<Figure.Budget>> figuresOf =
@@ -462,6 +497,7 @@ public final class CasesOfALineAsked {
         if (pastTheFigureAsTheChoicesStand(said.standsFor())) {
             NumericallyConsistentWays.Counts counts =
                     NumericallyConsistentWays.counted(said.standsFor());
+            Optional<BigInteger> walkedFromTheRemainders = Optional.empty();
             if (!noMoreThan(counts.ofTheIntervals(), most)) {
                 Optional<NumericallyConsistentWays.Starts> byTheRemainders =
                         noMoreThan(counts.ofTheNumbers(), most)
@@ -476,7 +512,11 @@ public final class CasesOfALineAsked {
                     return new Found(List.of(), notWorkedOutIn(said));
                 }
                 starts = byTheRemainders.get().states();
+                walkedFromTheRemainders = byTheRemainders.map(
+                        NumericallyConsistentWays.Starts::walked);
             }
+            walkedPast = Optional.of(CaseCount.of(said.standsFor(), counts.ofTheNumbers(),
+                    walkedFromTheRemainders));
         }
         DecidingCase.Cases cases = heldFirst(said.standsFor());
         for (NumericallyConsistentWays.State start : starts) {
@@ -489,10 +529,17 @@ public final class CasesOfALineAsked {
         // the rows of the cases the line decides in; one with rows on one side would add rows the
         // line turns nothing between.
         if (!droppedNonDividing && stopped.isEmpty() && !dividing.isEmpty()) {
-            return new Found(List.of(said), List.of());
+            return new Found(List.of(said), List.of(), walkedPastBy(said));
         }
         return new Found(dividing.stream().map(DecidingCase::alone).toList(),
-                notWorkedOutIn(said));
+                notWorkedOutIn(said), walkedPastBy(said));
+    }
+
+    /** The case asked as it was walked past the figure, where it was and no case of it was
+     *  stopped: a case stopped is told of by what stopped it ({@link NotWorkedOut}). */
+    private List<WalkedPast> walkedPastBy(DecidingCase said) {
+        return stopped.isEmpty() && walkedPast.isPresent()
+                ? List.of(new WalkedPast(said, walkedPast.get())) : List.of();
     }
 
     /**
