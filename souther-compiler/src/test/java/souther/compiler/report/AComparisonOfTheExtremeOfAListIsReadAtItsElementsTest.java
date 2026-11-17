@@ -199,10 +199,14 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
      * A field of a payload came from the elements the payload did, and is no field of them where
      * the payload is a record made of each element of a list of integers, which have none. The
      * payload here is an element of a list of records or one of those made of integers, by the
-     * list chosen, and the field is said at the elements of each.
+     * list chosen, and the field is said at the elements of each. Compared as it stands, which
+     * the first question after where a value came from reads, and worked out, which is read
+     * through what it is made of.
      */
-    @Test
-    void aFieldOfAPayloadIsSaidUnreadAtTheElementsItCameFromAndNotAtAFieldOfThem() {
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({"b.amount <= 10", "b.amount + 1 <= 10"})
+    void aFieldOfAPayloadIsSaidUnreadAtTheElementsItCameFromAndNotAtAFieldOfThem(
+            String comparison) {
         String report = reading("""
                 module m
 
@@ -210,8 +214,8 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
 
                 behavior role : (bs: List<Box>, xs: List<Int>, i: Int, p: Bool) -> Int
                     constructs Box
-                let role (bs, xs, i, p) = if (match List.get(i, if p then bs else List.map(x -> Box { amount = x }, xs)) with | None -> false | Some b -> b.amount + 1 <= 10) then 1 else 2
-                """);
+                let role (bs, xs, i, p) = if (match List.get(i, if p then bs else List.map(x -> Box { amount = x }, xs)) with | None -> false | Some b -> %s) then 1 else 2
+                """.formatted(comparison));
 
         assertTrue(saysNotReadAt(report, "bs[*]"), report);
         assertTrue(saysNotReadAt(report, "xs[*]"), report);

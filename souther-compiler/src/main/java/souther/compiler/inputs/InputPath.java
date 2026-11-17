@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 
 /**
  * Which position of a behavior's input an expression names, and that it names none where it names
@@ -93,6 +94,9 @@ final class InputPath {
      *  origin of what no reader of positions follows is being found, and not in an expression a
      *  rule is written about ({@link #partOf}). */
     private boolean aPositionIsAnOrigin;
+    /** Whether the walk has met the payload of a call, as the answer being built goes through it
+     *  ({@link #throughAPayload}). Shared with the walks that read a value where it was given. */
+    private boolean[] cameThroughAPayload = new boolean[1];
     /** The direction a walk after the order must come out walking ({@link TraversalDirection});
      *  the other questions say nothing of it. */
     private final TraversalDirection arrivingAs;
@@ -137,6 +141,7 @@ final class InputPath {
         there.walking = walking;
         there.followed = followed;
         there.aPositionIsAnOrigin = aPositionIsAnOrigin;
+        there.cameThroughAPayload = cameThroughAPayload;
         return wanted == null ? there.named(given.value(), given.at().names())
                 : there.heldAt(given.value(), wanted, given.at().names());
     }
@@ -367,10 +372,37 @@ final class InputPath {
         boolean before = aPositionIsAnOrigin;
         aPositionIsAnOrigin = true;
         try {
-            return readWhereGiven(picked.list(), null);
+            return throughAPayload(readWhereGiven(picked.list(), null));
         } finally {
             aPositionIsAnOrigin = before;
         }
+    }
+
+    /**
+     * {@code answered}, where a payload came from, and the walk has met one. The payload is an
+     * element of a container that may be made of others by an operation, or one it keeps; which
+     * it is the walk after where a value came from does not say, and a field is read at none of
+     * the answers that go through one: a record made of each element of a list of integers is no
+     * element, and has fields the element has none of.
+     */
+    private PathResolution throughAPayload(PathResolution answered) {
+        cameThroughAPayload[0] = true;
+        return answered;
+    }
+
+    /**
+     * What {@code target} was answered, at the field {@code step} says of it — or as it was
+     * answered where the walk met a payload on the way to it ({@link #throughAPayload}).
+     */
+    private PathResolution deeperUnlessItCameThroughAPayload(Core target,
+                                                             BindingEnvironment names,
+                                                             UnaryOperator<TermPath> step) {
+        boolean outer = cameThroughAPayload[0];
+        cameThroughAPayload[0] = false;
+        PathResolution answered = named(target, names);
+        boolean met = cameThroughAPayload[0];
+        cameThroughAPayload[0] = outer || met;
+        return met ? answered : answered.deeper(step);
     }
 
     /** What following the name {@code binding} comes to, which is asked once per walk where the
@@ -399,8 +431,8 @@ final class InputPath {
                     && names.openedBy(r.binding()) instanceof InputReads.LookupOpened opened
                     && names.roleOf(r.binding()) instanceof BindingRole.Unknown
                     && AnOperationApplied.of(opened.lookup()) instanceof AnOperationApplied looked
-                    && looked.args().size() == 2 ->
-                    heldAt(looked.args().get(1), new Wanted.APart(HeldIn.Part.ELEMENT), names);
+                    && looked.args().size() == 2 -> throughAPayload(
+                    heldAt(looked.args().get(1), new Wanted.APart(HeldIn.Part.ELEMENT), names));
             // The payload of a call that answers an element of a container is one of that
             // container's elements, and came from wherever they did.
             case Core.Read r when asksWhereItCameFrom()
@@ -408,8 +440,9 @@ final class InputPath {
                     && AnOperationApplied.of(opened.call().value()) instanceof AnOperationApplied answered
                     && DefaultBoundOperationFacts.get().answersAnElementOf(answered.operation())
                             instanceof DeclaredArgument container
-                    && answered.argument(container) != null ->
-                    heldAt(answered.argument(container), new Wanted.APart(HeldIn.Part.ELEMENT), names);
+                    && answered.argument(container) != null -> throughAPayload(
+                    heldAt(answered.argument(container), new Wanted.APart(HeldIn.Part.ELEMENT),
+                            names));
             // An element an index picked of a list that is no position of the input came from that
             // list. Of a list that is one, it is the element there, which the rows measure.
             case Core.Read r when asked == ElementQuestion.WHAT_IT_IS_MADE_OF
@@ -453,7 +486,7 @@ final class InputPath {
             // fields the element has none of. So what a field of it was made of is what it was.
             case Core.FieldAccess fa when asked == ElementQuestion.WHAT_IT_IS_MADE_OF ->
                     named(fa.target(), names);
-            case Core.FieldAccess fa -> named(fa.target(), names).deeper(
+            case Core.FieldAccess fa -> deeperUnlessItCameThroughAPayload(fa.target(), names,
                     // Asked of {@link Location}, which owns the rule, from the answer this walk was
                     // handed. Whether a name wears one value was settled when the module was
                     // indexed, so a path through a field does not turn on what the declaration
@@ -616,10 +649,14 @@ final class InputPath {
         if (reduced != null) {
             return reduced;
         }
+        boolean outer = cameThroughAPayload[0];
+        cameThroughAPayload[0] = false;
         PathResolution at = named(from, names);
+        boolean metAPayload = cameThroughAPayload[0];
+        cameThroughAPayload[0] = outer || metAPayload;
         // What a value was made of is where it came from, and a field of it is no field of that
-        // ({@link #nameOf} says so of one field).
-        if (asked == ElementQuestion.WHAT_IT_IS_MADE_OF) {
+        // ({@link #nameOf} says so of one field); nor is one of what came through a payload.
+        if (asked == ElementQuestion.WHAT_IT_IS_MADE_OF || metAPayload) {
             return at;
         }
         Type read = from.type();
