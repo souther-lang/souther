@@ -8,6 +8,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalLong;
 import java.util.Set;
 
 /**
@@ -117,6 +118,16 @@ public final class MonthMoveCases {
     }
 
     /**
+     * The months of a move of {@code first} and one of {@code then}, where they are a count: none
+     * where the sum is not one, which a sum that wraps is not, whatever it wraps to.
+     */
+    public static OptionalLong chained(long first, long then) {
+        long sum = first + then;
+        boolean wrapped = ((first ^ sum) & (then ^ sum)) < 0;
+        return wrapped ? OptionalLong.empty() : OptionalLong.of(sum);
+    }
+
+    /**
      * The cases of what {@code asked} of a date moved by {@code months} is, or null where the move
      * is by more months than {@link #MOST_MONTHS}.
      *
@@ -125,7 +136,7 @@ public final class MonthMoveCases {
      *                        month it lands in
      */
     public static List<Case> of(long months, Asked asked, boolean firstOfItsMonth) {
-        if (Math.abs(months) > MOST_MONTHS) {
+        if (months < -MOST_MONTHS || months > MOST_MONTHS) {
             return null;
         }
         List<Case> out = new ArrayList<>();

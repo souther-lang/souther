@@ -14306,7 +14306,8 @@ final class Pullback {
 
     /**
      * The date whose month {@code date} is the first of, and how many months on from the first of
-     * that month it is — or null where {@code date} is not the first of a month.
+     * that month it is — or null where {@code date} is not the first of a month, or the months of
+     * the moves are not a count.
      *
      * <p>The first of a month is a date moved by one less than its own day of the month, and a
      * date the first of a month is moved by months is the first of the month it lands in
@@ -14328,14 +14329,14 @@ final class Pullback {
                         read.rules().newtypes()));
         MonthMovesInCases.MonthStart inner = moved == null ? null
                 : theMonthStartOf(moved.date(), stands.at(), dayOfTheMonth, steps + 1);
-        return inner == null ? null
-                : new MonthMovesInCases.MonthStart(inner.of(), inner.moved() + moved.months());
+        return inner == null ? null : inner.movedBy(moved.months());
     }
 
     /**
      * The date whose month the first of the month of {@code date} is the first of, and how many
      * months on it is: {@code date} itself where it is a date no more is known of, and what it
-     * moves or is the first of the month of otherwise.
+     * moves or is the first of the month of otherwise — or null where the months of the moves are
+     * not a count.
      */
     private MonthMovesInCases.MonthStart theMonthOf(Denotation date, ValueName dayOfTheMonth,
                                                     int steps) {
@@ -14355,7 +14356,7 @@ final class Pullback {
         MonthMovesInCases.MonthStart inner = theMonthOf(
                 writtenOutside(new Denotation(moved.date(), stands.at())), dayOfTheMonth,
                 steps + 1);
-        return new MonthMovesInCases.MonthStart(inner.of(), inner.moved() + moved.months());
+        return inner == null ? null : inner.movedBy(moved.months());
     }
 
     /**

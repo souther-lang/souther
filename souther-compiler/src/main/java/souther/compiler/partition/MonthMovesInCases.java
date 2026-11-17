@@ -23,6 +23,7 @@ import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.function.Function;
 
 /**
@@ -60,7 +61,17 @@ final class MonthMovesInCases {
      * @param of    the date whose month it is the first of, as it is written where it is read
      * @param moved how many months on from the first of the month of {@code of} it is
      */
-    record MonthStart(Core of, long moved) {}
+    record MonthStart(Core of, long moved) {
+
+        /**
+         * The first of that month moved by {@code months} more, or null where the months of the
+         * two are not a count ({@link MonthMoveCases#chained}).
+         */
+        MonthStart movedBy(long months) {
+            OptionalLong total = MonthMoveCases.chained(moved, months);
+            return total.isEmpty() ? null : new MonthStart(of, total.getAsLong());
+        }
+    }
 
     /**
      * The cases {@code e}, read where {@code at} is, is defined in where it is a date moved by
@@ -89,7 +100,12 @@ final class MonthMovesInCases {
         // is the first of the month of, has no day of its own to state, and is moved by the months
         // it is on from that month as well.
         MonthStart start = monthStartOf.apply(moved);
-        long months = start == null ? moved.months() : moved.months() + start.moved();
+        OptionalLong chained = start == null ? OptionalLong.of(moved.months())
+                : MonthMoveCases.chained(moved.months(), start.moved());
+        if (chained.isEmpty()) {
+            return null;
+        }
+        long months = chained.getAsLong();
         List<MonthMoveCases.Case> cases = MonthMoveCases.of(months, asked, start != null);
         if (cases == null || !(moved.law().operation().operation()
                 instanceof ValueName.Stdlib move)) {
