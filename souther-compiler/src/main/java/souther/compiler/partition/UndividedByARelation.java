@@ -3192,11 +3192,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // of it, so it is asked before any is taken away.
         WhatStatementsOfOneFormDecide.Verdict decided = WhatStatementsOfOneFormDecide.of(
                 unfree.stream().map(OnAWay::affine).toList(), askedAsAStatement());
+        List<TakenConstraint.Affine> coveredNarrowings = new ArrayList<>();
+        covered.forEach(each -> coveredNarrowings.addAll(each.narrowingsHeld()));
         Rebuilding rebuilt = unfree.size() != written.size()
-                ? Rebuilding.of(applied, written, List.of()) : null;
-        // The way as it states itself, which every reading but the terms' own is made of.
-        WayRead entire = wayRead(unfree, past, rebuilt, region, offItsLine, read, sources,
-                heldWhole);
+                ? Rebuilding.of(applied, written, coveredNarrowings) : null;
+        // The way as it states itself, which every reading but the terms' own is made of. What a
+        // coverage showed met comes out of it with the statement it was shown for.
+        WayRead entire = wayRead(unfree, past.without(coveredNarrowings), rebuilt, region,
+                offItsLine, read, sources, heldWhole);
         // A statement a row beside this relation's line meets leaves the sides as they stand to
         // one another there, whatever the others hold. Each term is read without it, and no
         // other reading is: they speak of the whole of what the way leaves, and a row beside the
@@ -9532,7 +9535,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                          boolean sizesAreRowsComputed,
                                                          WayRead way) {
         TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, region,
-                independent) : null;
+                independent, way, read) : null;
         if (pair == null || !apartByTheDeclarations(pair.first(), pair.second(), sources, read)) {
             return Set.of();
         }
@@ -9604,7 +9607,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             WhatARelationLeavesUndivided.Operations operations, boolean sizesAreRowsComputed,
             WayRead way) {
         TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, along,
-                independent) : null;
+                independent, way, read) : null;
         if (pair == null || !apartByTheDeclarations(pair.first(), pair.second(), sources, read)) {
             return List.of();
         }
@@ -9686,7 +9689,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private TwoSides twoSidesStandingApart(
             List<Source> sources, List<Carrier> carriers, List<List<OnAWay>> stating,
-            SearchRegion region, WhatARelationLeavesUndivided.Independence independent) {
+            SearchRegion region, WhatARelationLeavesUndivided.Independence independent,
+            WayRead way, InputReading read) {
         if (sides.size() == 2) {
             return carriers.get(0) != null && carriers.get(0).equals(carriers.get(1))
                     ? new TwoSides(0, 1, constant == null ? null
@@ -9708,6 +9712,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             NumericDomain.Bounds run = realized(value, sources.get(held), region, Way.TIES);
+            if (run == null) {
+                run = wholeRunWithTheRestAtNought(value, sources.get(held), way.narrowing(),
+                        way.conditions(), read);
+            }
             ExactRatio at = run == null || !run.holdsAValue() ? null
                     : run.aValueNearestNought(carriers.get(held).spacingBetweenValues());
             ExactRatio weighed = at == null || (carriers.get(held).spacingBetweenValues()
@@ -9772,12 +9780,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (each.terms().stream().noneMatch(ofTheSides::contains)) {
                 continue;
             }
+            // A third side is held at a value: what the run narrows of it with the others is
+            // narrowed of the two with that value put in.
+            LinearForm<NumericTerm> form = each instanceof TakenConstraint.Affine affine
+                    ? withTheHeldSidesAt(affine.form(), pair.standing()) : null;
+            Rel rel = each instanceof TakenConstraint.Affine affine ? affine.rel() : null;
+            if (form != null && holdsOverTheWholeTypeOfItsNumbers(form, rel, read)) {
+                continue;
+            }
             WhatARelationLeavesUndivided.OnTheDifference statement =
-                    each instanceof TakenConstraint.Affine(var form, var rel, var _)
-                    ? onTheDifference(form, rel, pair) : null;
+                    form == null ? null : onTheDifference(form, rel, pair);
             if (statement != null) {
                 held.add(statement);
-            } else if (!(each instanceof TakenConstraint.Affine(var form, var rel, var _))
+            } else if (form == null
                     || !holdsASideAwayFromAValue(form, rel, ofTheSides, holes)) {
                 return null;
             }
@@ -9790,6 +9805,55 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return new HeldOfTheDifference(held, holes);
+    }
+
+    /**
+     * Whether {@code form} held as {@code rel} against nought holds wherever every number it
+     * names is in its type, so that it says nothing a row is held to: a form of the numbers
+     * alone, and each of them with the whole run its type leaves it.
+     */
+    private static boolean holdsOverTheWholeTypeOfItsNumbers(LinearForm<NumericTerm> form,
+                                                             Rel rel, InputReading read) {
+        BigInteger low = wholeNumberOf(form.constant());
+        BigInteger high = low;
+        if (low == null) {
+            return false;
+        }
+        for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+            TermOrders orders = each.getKey() instanceof NumericTerm.FromOnePosition number
+                    ? read.quantities().ordersOf(number) : null;
+            WholeEnds ends = orders == null ? null
+                    : wholeEndsOf(orders.answered().whereItStops());
+            BigInteger by = wholeNumberOf(each.getValue());
+            if (ends == null || ends.low() == null || ends.high() == null || by == null) {
+                return false;
+            }
+            low = low.add(by.signum() >= 0 ? by.multiply(ends.low()) : by.multiply(ends.high()));
+            high = high.add(by.signum() >= 0 ? by.multiply(ends.high())
+                    : by.multiply(ends.low()));
+        }
+        return NumbersChosen.holdsEverywhere(low, high, rel);
+    }
+
+    /**
+     * {@code form} with each number {@code standing} holds at a value put there: the value
+     * weighed is added to the constant, and the number leaves the form. Null where the form is
+     * not worked out.
+     */
+    private static LinearForm<NumericTerm> withTheHeldSidesAt(LinearForm<NumericTerm> form,
+                                                              Map<Object, ExactRatio> standing) {
+        Map<NumericTerm, ExactRatio> coefs = new LinkedHashMap<>();
+        ExactRatio constant = form.constant();
+        for (Map.Entry<NumericTerm, ExactRatio> each : form.coefs().entrySet()) {
+            ExactRatio at = standing.get(each.getKey());
+            if (at == null) {
+                coefs.put(each.getKey(), each.getValue());
+                continue;
+            }
+            ExactRatio weighed = at.times(each.getValue()).orNull();
+            constant = weighed == null || constant == null ? null : constant.plus(weighed).orNull();
+        }
+        return constant == null ? null : new LinearForm<>(constant, coefs);
     }
 
     /**

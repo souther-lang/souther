@@ -123,7 +123,7 @@ class AMembershipBesideARemainderOfTwoDatesIsReadTest {
      */
     @Test
     void eachOfTwoNumbersASumStopsOverTakesEveryValueByChoosingTheOtherAtNought() {
-        for (String at : List.of("d", "n")) {
+        for (String at : List.of("d", "n", "hs[*]")) {
             assertTrue(reasonsAt("d: Int, n: Int, s: Int, hs: Set<Int>",
                     "Int.floorMod(d + n - s, 7) >= 1 && Set.contains(d + n, hs)", at)
                     .contains(READ), at);
@@ -133,12 +133,14 @@ class AMembershipBesideARemainderOfTwoDatesIsReadTest {
     /** The other held off nought at an end of its type is not one the choice sets at nought. */
     @Test
     void aSumWhoseOtherNumberCannotBeNoughtIsNotShownToTakeEveryValue() {
-        assertFalse(reasonsAt("d: Int, n: Int, s: Int, hs: Set<Int>",
-                "n >= 1 && Int.floorMod(d + n - s, 7) >= 1 && Set.contains(d + n, hs)", "d")
-                .contains(READ));
-        assertFalse(reasonsAt("d: Int, n: Int, s: Int, hs: Set<Int>",
-                "n <= -1 && Int.floorMod(d + n - s, 7) >= 1 && Set.contains(d + n, hs)", "d")
-                .contains(READ));
+        for (String at : List.of("d", "hs[*]")) {
+            assertFalse(reasonsAt("d: Int, n: Int, s: Int, hs: Set<Int>",
+                    "n >= 1 && Int.floorMod(d + n - s, 7) >= 1 && Set.contains(d + n, hs)", at)
+                    .contains(READ), at);
+            assertFalse(reasonsAt("d: Int, n: Int, s: Int, hs: Set<Int>",
+                    "n <= -1 && Int.floorMod(d + n - s, 7) >= 1 && Set.contains(d + n, hs)", at)
+                    .contains(READ), at);
+        }
     }
 
     /** A third number the form holds that cannot be nought is not one the witness sets there. */
