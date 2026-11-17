@@ -7,8 +7,8 @@ import souther.compiler.numeric.LinearForm;
 
 import java.math.BigInteger;
 import java.util.BitSet;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -52,7 +52,6 @@ public final class NoCaseCrosses {
     private final Predicate<NumericTerm> wholeInItsUnit;
     private final Sum sum;
     private final int divisor;
-    private final Map<DecidingCase.Cases, BitSet> worked = new IdentityHashMap<>();
 
     private NoCaseCrosses(Predicate<NumericTerm> wholeInItsUnit, Sum sum) {
         this.wholeInItsUnit = wholeInItsUnit;
@@ -220,30 +219,32 @@ public final class NoCaseCrosses {
     // ---- the pairs of residues two rows may have and meet one case ----
 
     private BitSet pairsOf(DecidingCase.Cases cases) {
-        BitSet known = worked.get(cases);
-        if (known != null) {
-            return known;
-        }
-        BitSet out = switch (cases) {
-            case DecidingCase.Cases.One one -> pairsWithin(residuesOf(one.condition()));
-            case DecidingCase.Cases.EachOf each -> {
+        return cases.fold(new DecidingCase.Cases.Fold<BitSet>() {
+
+            @Override
+            public BitSet one(DecidingCase.Cases.One one) {
+                return pairsWithin(residuesOf(one.condition()));
+            }
+
+            @Override
+            public BitSet eachOf(DecidingCase.Cases.EachOf node, List<BitSet> alternatives) {
                 BitSet any = new BitSet();
-                for (DecidingCase.Cases alternative : each.alternatives()) {
-                    any.or(pairsOf(alternative));
-                }
-                yield any;
+                alternatives.forEach(any::or);
+                return any;
             }
-            case DecidingCase.Cases.Together together -> {
+
+            @Override
+            public BitSet together(DecidingCase.Cases.Together node, List<BitSet> factors) {
                 BitSet both = pairsWithin(every());
-                for (DecidingCase.Cases factor : together.factors()) {
-                    both.and(pairsOf(factor));
-                }
-                yield both;
+                factors.forEach(both::and);
+                return both;
             }
-            case DecidingCase.Cases.NotTakenApart _ -> pairsWithin(every());
-        };
-        worked.put(cases, out);
-        return out;
+
+            @Override
+            public BitSet notTakenApart(DecidingCase.Cases.NotTakenApart notTakenApart) {
+                return pairsWithin(every());
+            }
+        });
     }
 
     /** The pairs of residues both of which are among {@code residues}. */
