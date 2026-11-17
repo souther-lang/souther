@@ -186,10 +186,14 @@ final class ReadingsChosenOneBesideAnother {
                     // the readings that tell it apart are all that can be said to tell it apart.
                     // Taken together, the readings that tell some pair apart would stand in the way
                     // of a pair another reading alone tells apart.
-                    for (int first = 0; first < those.size(); first++) {
-                        for (int second = first + 1; second < those.size(); second++) {
-                            Set<Proposition> one = alternatives.get(those.get(first)).held();
-                            Set<Proposition> other = alternatives.get(those.get(second)).held();
+                    // Alternatives that hold the same on every way tell nothing apart, so each way
+                    // of holding it is one alternative here.
+                    List<Set<Proposition>> held = new ArrayList<>(new LinkedHashSet<>(
+                            those.stream().map(at -> alternatives.get(at).held()).toList()));
+                    for (int first = 0; first < held.size(); first++) {
+                        for (int second = first + 1; second < held.size(); second++) {
+                            Set<Proposition> one = held.get(first);
+                            Set<Proposition> other = held.get(second);
                             Set<Proposition> alikeThere = alike(List.of(one, other));
                             BitSet by = readingsOf.apply(apart(one, alikeThere));
                             by.or(readingsOf.apply(apart(other, alikeThere)));
