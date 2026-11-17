@@ -627,6 +627,14 @@ final class Pullback {
      * where that is being asked.
      */
     private boolean askingWhereAStepAnswers;
+    /**
+     * The calls that make what the comparison left out reads, and the answers of their closures:
+     * what each may itself stop a run on is the relation's own arithmetic, said by the relation,
+     * and is not left unsaid ({@link #leaveUnsaidWhatMayEndARunUnder}). A construction a clause of
+     * its type may refuse is no arithmetic of the relation's, and what they work out in their
+     * other parts is not either.
+     */
+    private final Set<Core> callsMakingWhatTheRelationReads;
 
     /** What a value a walk or a recursion hands back to itself is supposed to be. */
     private sealed interface Supposed permits Carried, Descending, Reaching {}
@@ -670,6 +678,17 @@ final class Pullback {
      */
     private Pullback(InputReading read, Optional<ModelOccurrence> where,
                      ElementsNamed freeInTheRoot, boolean theRelationReadsItsOwnDivisions) {
+        this(read, where, freeInTheRoot, theRelationReadsItsOwnDivisions, Set.of());
+    }
+
+    /**
+     * The same, where the calls making what the comparison left out reads are
+     * {@code callsMakingWhatTheRelationReads}.
+     */
+    private Pullback(InputReading read, Optional<ModelOccurrence> where,
+                     ElementsNamed freeInTheRoot, boolean theRelationReadsItsOwnDivisions,
+                     Set<Core> callsMakingWhatTheRelationReads) {
+        this.callsMakingWhatTheRelationReads = callsMakingWhatTheRelationReads;
         this.theRelationReadsItsOwnDivisions = theRelationReadsItsOwnDivisions;
         this.read = read;
         this.keptByTheInput = WhatConditionsState.of(read).readingsKept();
@@ -1538,13 +1557,15 @@ final class Pullback {
      * The same, leaving out what may stop a run under {@code leftOut}, a node of {@code body}: a
      * comparison a closure the body applies holds, which is the relation's own working out and
      * is read as the relation reads it, at the application it is reached in as at every one
-     * before.
+     * before. What the calls {@code makingWhatItReads} may themselves stop a run on is said by the
+     * relation, and left out as well.
      */
     static OperatorsAnswer whereItsOperatorsAnswerLeavingOut(Core body, Core leftOut,
+                                                             Set<Core> makingWhatItReads,
                                                              InputReads reads,
                                                              InputReading read) {
-        return new Pullback(read, Optional.empty()).whereItsOperatorsAnswerApartFrom(body, reads,
-                null, leftOut);
+        return new Pullback(read, Optional.empty(), ElementsNamed.NONE, false, makingWhatItReads)
+                .whereItsOperatorsAnswerApartFrom(body, reads, null, leftOut);
     }
 
     /**
@@ -2011,7 +2032,8 @@ final class Pullback {
             return;
         }
         operated.readsAt.putIfAbsent(e, reads);
-        boolean told = operated.nodes.contains(e) || operated.nodes.contains(standing);
+        boolean told = operated.nodes.contains(e) || operated.nodes.contains(standing)
+                || (!(e instanceof Core.Construct) && callsMakingWhatTheRelationReads.contains(e));
         GetsPast completion = told ? null : completionOf(e, reads);
         if (!told && !(completion instanceof GetsPast.Always)) {
             WorkedOutWhere where = bound == null ? WorkedOutWhere.ALWAYS : bound.where();

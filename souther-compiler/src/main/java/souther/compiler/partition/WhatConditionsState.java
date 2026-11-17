@@ -160,26 +160,32 @@ final class WhatConditionsState {
     /** The same, leaving out what may stop a run under {@code leftOut}, a node of {@code body}
      *  ({@link Pullback#whereItsOperatorsAnswerLeavingOut}). */
     Pullback.OperatorsAnswer whereItsOperatorsAnswerLeavingOut(Core body, Core leftOut,
+                                                               Set<Core> callsMakingWhatItReads,
                                                                InputReads reads,
                                                                InputReading read) {
         heldTo(read);
-        return kept(operatorsAnswerLeavingOut, new ANodeLeavingOut(body, leftOut, reads),
-                () -> Pullback.whereItsOperatorsAnswerLeavingOut(body, leftOut, reads, read));
+        return kept(operatorsAnswerLeavingOut,
+                new ANodeLeavingOut(body, leftOut, callsMakingWhatItReads, reads),
+                () -> Pullback.whereItsOperatorsAnswerLeavingOut(body, leftOut,
+                        callsMakingWhatItReads,
+                        reads, read));
     }
 
-    /** A node read leaving out one of its nodes, by the nodes they are, under names. */
-    record ANodeLeavingOut(Core value, Core leftOut, InputReads reads) {
+    /** A node read leaving out one of its nodes and what the calls making what the comparison
+     *  reads may stop a run on, by the nodes and the set they are, under names. */
+    record ANodeLeavingOut(Core value, Core leftOut, Set<Core> making, InputReads reads) {
 
         @Override
         public boolean equals(Object other) {
             return other instanceof ANodeLeavingOut that && value == that.value
-                    && leftOut == that.leftOut && reads.equals(that.reads);
+                    && leftOut == that.leftOut && making == that.making
+                    && reads.equals(that.reads);
         }
 
         @Override
         public int hashCode() {
-            return (System.identityHashCode(value) * 31 + System.identityHashCode(leftOut)) * 31
-                    + reads.hashCode();
+            return ((System.identityHashCode(value) * 31 + System.identityHashCode(leftOut)) * 31
+                    + System.identityHashCode(making)) * 31 + reads.hashCode();
         }
     }
 

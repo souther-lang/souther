@@ -67,14 +67,53 @@ class ANumberAWalkHandsItsStepIsHeldAtOneValueItTakesTest {
                 """));
     }
 
+    /** The moved date made first, by a {@code map}, and compared by the next step of the pipe. */
+    @Test
+    void aDateTheWalkMadeIsReadWhereThePipeComparesIt() {
+        assertEquals(List.of(), unread("""
+                module demo
+
+                behavior f : (to: Date, from: Date, n: Int) -> Bool
+
+                let f (to, from, n) =
+                    List.rangeInclusive(0, n)
+                        |> List.map(k -> Date.addDays(k, from))
+                        |> List.any(d -> d > to)
+                """));
+    }
+
+    /** The made date as the element a set is asked to hold. */
+    @Test
+    void aDateTheWalkMadeIsReadWhereASetIsAskedToHoldIt() {
+        assertEquals(List.of(), unread("""
+                module demo
+
+                behavior f : (holidays: Set<Date>, from: Date, n: Int) -> Bool
+
+                let f (holidays, from, n) =
+                    List.rangeInclusive(0, n)
+                        |> List.map(k -> Date.addDays(k, from))
+                        |> List.any(d -> Set.contains(d, holidays))
+                """));
+    }
+
     /**
-     * The same walk of {@code Int}s, with the sum made before the comparison: the sum stops a run
-     * at an {@code a} near the greatest {@code Int}, and so {@code a} is not shown reached; the
-     * {@code b} it is compared with is read by no stop, and is read.
+     * The sum made before the comparison is read as the one written in it: what the comparison
+     * reads of the value is its own arithmetic whether the value is made in the step that compares
+     * it or in one before.
      */
     @Test
-    void aPlaceNoStopOfTheWalkReadsIsReadWhereAPlaceItReadsIsNot() {
-        assertEquals(List.of("a"), unread("""
+    void aSumTheWalkMadeIsReadAsOneWrittenInTheComparison() {
+        String written = unread("""
+                module demo
+
+                behavior f : (a: Int, b: Int, n: Int) -> Bool
+
+                let f (a, b, n) =
+                    List.rangeInclusive(0, n)
+                        |> List.any(k -> k + a > b)
+                """).toString();
+        assertEquals(written, unread("""
                 module demo
 
                 behavior f : (a: Int, b: Int, n: Int) -> Bool
@@ -83,6 +122,6 @@ class ANumberAWalkHandsItsStepIsHeldAtOneValueItTakesTest {
                     List.rangeInclusive(0, n)
                         |> List.map(k -> k + a)
                         |> List.any(d -> d > b)
-                """));
+                """).toString());
     }
 }
