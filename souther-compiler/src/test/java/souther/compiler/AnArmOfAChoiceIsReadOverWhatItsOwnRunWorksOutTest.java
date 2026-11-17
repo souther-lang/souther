@@ -8,6 +8,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A relation read on an arm of a choice is held by the rows that take the arm, and a row that
@@ -48,6 +49,7 @@ class AnArmOfAChoiceIsReadOverWhatItsOwnRunWorksOutTest {
                 "(h, d, s) -> (if d >= h then Date.addDays(1, d) else d) >= s");
 
         assertFalse(human.contains(NOT_SHOWN), human);
+        assertTrue(human.contains("may stop"), human);
     }
 
     /** The same where the way is a membership, which states nothing of the numbers. */

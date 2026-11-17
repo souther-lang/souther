@@ -7799,10 +7799,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     truthsWritten &= at.isAtOrUnder(container.element())
                             && !namedDownTo(at, deepest, read, null).isReadByARule()
                             && apartFrom.stream().noneMatch(at::bearsOn);
-                } else if (numberHeldEqualToOthers(each, container, read) != null) {
-                    pinned.add(numberHeldEqualToOthers(each, container, read));
                 } else {
-                    ofItsNumbers.add(each);
+                    NumericTerm.FromOnePosition held =
+                            numberHeldEqualToOthers(each, container, read);
+                    if (held != null) {
+                        pinned.add(held);
+                    } else {
+                        ofItsNumbers.add(each);
+                    }
                 }
             }
             Map<NumericTerm.FromOnePosition, NumericDomain.Bounds> ends =
@@ -9447,8 +9451,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * {@code stated} with each number that an equality with a number of the sides defines put in
      * the others' terms and the equality dropped, so that what a way states of that number is
      * stated of the sides: {@code d == from} and {@code d /= from + 1} say {@code from /= from + 1},
-     * which holds. A statement left over no numbers is dropped where it holds, and the statements
-     * stay as they were where it does not.
+     * which holds. A statement left over no numbers is dropped where it holds. Each definition is
+     * put in or left alone by itself: where a statement it would put in does not hold, or is not
+     * worked out, the statements stay as they were for that definition.
      *
      * <p>Only a number that nothing but {@code aboutEither} states anything of, that the
      * declarations leave every value of its type and tie to no number of the sides, and that

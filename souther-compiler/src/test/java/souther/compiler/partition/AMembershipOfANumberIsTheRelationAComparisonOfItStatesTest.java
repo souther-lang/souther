@@ -145,9 +145,12 @@ class AMembershipOfANumberIsTheRelationAComparisonOfItStatesTest {
         for (int j = 0; j < 4; j++) {
             holidaysOfEveryCandidate.add("d cal.holidays[*]" + (j == 0 ? "" : " - " + j));
         }
-        // Every candidate is a date worked out before any is looked at, so no row has a date
-        // within three of the last: a holiday on the last two dates is none a candidate is, and
-        // one on the day before them is.
+        // Every candidate is worked out before any is looked at, and the fourth is three days on,
+        // so a row has {@code d} no later than three days before the last date. The first
+        // candidate is {@code d}, so a holiday on the last three dates is one no row compares it
+        // with: the comparison of {@code d} with a holiday comes out false there whatever
+        // {@code d} is, and the line is drawn where that starts. The later candidates still meet
+        // those holidays, each on the lines already drawn.
         String pastEveryCandidate = "cal.holidays[*] " + LocalDate.MAX.minusDays(2);
         Set<String> everyLine = new TreeSet<>(everyCandidate);
         everyLine.addAll(holidaysOfEveryCandidate);

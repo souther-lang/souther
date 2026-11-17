@@ -471,8 +471,11 @@ final class Pullback {
     private final Deque<Trial> underTrial = new ArrayDeque<>();
     /** What each candidate that concluded something said, by what it concluded. */
     private final Map<Derivation, Trial> triedAndConcluded = new IdentityHashMap<>();
-    /** What decided the arms being read, outermost first: worked out before any arm is. */
-    private final Deque<UndividedByARelation.Working> beforeTheFork = new ArrayDeque<>();
+    /** What decided each choice whose arms are being read, nearest first: what every run works out
+     *  before it takes an arm, or nothing where the choice was read other than as a fork, which
+     *  tells nothing of what decides its arms ({@link #whatDecidedTheArm}). */
+    private final Deque<Optional<UndividedByARelation.Working>> decidingTheArms =
+            new ArrayDeque<>();
     /** The comparisons whose arms are being read, innermost first: what a run taking an arm
      *  works out is read off the innermost ({@link #readOnAnArm}). */
     private final Deque<StatedComparison> armsOfAComparison = new ArrayDeque<>();    /**
@@ -3243,33 +3246,31 @@ final class Pullback {
      *
      * @param worksOut   what the comparison works out with the choice standing as the arm; worked
      *                   out only when asked
-     * @param beforeTheFork what every run works out before it takes the arm, the nearest choice
-     *                   first
-     * @param decided    whether the arm was taken where the choice it belongs to was read as a
-     *                   fork, so that what decided it is {@code beforeTheFork}: an arm read any
-     *                   other way is taken after what nothing here says, and what a row taking it
-     *                   gets past is not told
+     * @param decidedBy  what every run works out before it takes the arm, the nearest choice
+     *                   first: what decided the arm. None where the arm's choice was not read as a
+     *                   fork, which is taken after what nothing here says, so that what a row
+     *                   taking it gets past is not told
      */
     record OnThisArm(Supplier<AffineReading.WorkedOut> worksOut,
-                     List<UndividedByARelation.Working> beforeTheFork, boolean decided) {
+                     List<UndividedByARelation.Working> decidedBy) {
 
         /** What a row taking the arm gets past: what the arm works out, after what decided it. */
         UndividedByARelation.Working toGetPast() {
             UndividedByARelation.Working told = worksOut.get().toGetPast().notOnEveryRun();
-            for (UndividedByARelation.Working earlier : beforeTheFork) {
+            for (UndividedByARelation.Working earlier : decidedBy) {
                 told = told.after(earlier);
             }
             return told;
         }
 
         /**
-         * Whether what a row taking the arm gets past is told in full: the arm was decided by a
-         * fork, and what it works out and what decided it are every operation that can stop a run.
+         * Whether what a row taking the arm gets past is told in full: something decided the arm,
+         * and what it works out and what decided it are every operation that can stop a run.
          * Where something is left untold, a row is not shown to get past what it leaves, and the
          * relation is read as it is where nothing was said of the arm.
          */
         boolean tellsEvery() {
-            return decided && toGetPast().exact();
+            return !decidedBy.isEmpty() && toGetPast().exact();
         }
 
         StopEvidence stops() {
@@ -13382,12 +13383,40 @@ final class Pullback {
 
     /** {@code reading}, with {@code before} worked out by every run before it takes an arm. */
     private <T> T underTheFork(UndividedByARelation.Working before, Supplier<T> reading) {
-        beforeTheFork.push(before);
+        return decidingTheArms(Optional.of(before), reading);
+    }
+
+    /** {@code reading}, of the arms of a choice that is not read as a fork: nothing is told of
+     *  what decides them. */
+    private <T> T underAChoiceNothingIsToldOf(Supplier<T> reading) {
+        return decidingTheArms(Optional.empty(), reading);
+    }
+
+    private <T> T decidingTheArms(Optional<UndividedByARelation.Working> before,
+                                  Supplier<T> reading) {
+        decidingTheArms.push(before);
         try {
             return reading.get();
         } finally {
-            beforeTheFork.pop();
+            decidingTheArms.pop();
         }
+    }
+
+    /**
+     * What every run works out before it takes the arm being read, the nearest choice first — or
+     * nothing where the arm is no arm of a choice read as a fork, or any choice around it was read
+     * otherwise: a run taking the arm is then decided by something not told, and what it gets past
+     * is not.
+     */
+    private List<UndividedByARelation.Working> whatDecidedTheArm() {
+        List<UndividedByARelation.Working> out = new ArrayList<>();
+        for (Optional<UndividedByARelation.Working> each : decidingTheArms) {
+            if (each.isEmpty()) {
+                return List.of();
+            }
+            out.add(each.get());
+        }
+        return out;
     }
 
     /**
@@ -13397,7 +13426,8 @@ final class Pullback {
      * written works out the operations of whichever arm is taken.
      */
     private void tellWhatItWorksOut(Derivation cut, UndividedByARelation.Working working) {
-        if (beforeTheFork.isEmpty() || restatingAQuotient
+        List<UndividedByARelation.Working> decided = whatDecidedTheArm();
+        if (decided.isEmpty() || restatingAQuotient
                 || !(Derivation.readOff(cut) instanceof Derivation.AComparisonRead)) {
             return;
         }
@@ -13408,7 +13438,7 @@ final class Pullback {
             return;
         }
         UndividedByARelation.Working told = working.notOnEveryRun();
-        for (UndividedByARelation.Working earlier : beforeTheFork) {
+        for (UndividedByARelation.Working earlier : decided) {
             told = told.after(earlier);
         }
         trial().tell(said, told);
@@ -13577,8 +13607,8 @@ final class Pullback {
         Trial theRule = concluded != null ? concluded : trial();
         Once<AffineReading.WorkedOut> worksOut =
                 new Once<>(() -> worksOut(theRule, arithmeticOf(stated, there)));
-        OnThisArm arm = new OnThisArm(worksOut, List.copyOf(beforeTheFork),
-                !beforeTheFork.isEmpty() && !restatingAQuotient);
+        OnThisArm arm = new OnThisArm(worksOut,
+                restatingAQuotient ? List.of() : whatDecidedTheArm());
         for (Relation each : Meaning.relationsReadIn(read)) {
             trial().readOnAnArm(each, arm);
         }
@@ -16188,15 +16218,17 @@ final class Pullback {
                                 right.in(taking.apply(right.at())), states, at));
             }
         }
-        Derivation byLeft = left.whole() == null ? null : byItsCases(left.whole(), at,
-                side -> readOnAnArm(comparedCase(ASide.of(side), right, states, at),
-                        takenAs(left.whole(), side)));
+        Derivation byLeft = left.whole() == null ? null : underAChoiceNothingIsToldOf(() ->
+                byItsCases(left.whole(), at,
+                        side -> readOnAnArm(comparedCase(ASide.of(side), right, states, at),
+                                takenAs(left.whole(), side))));
         if (byLeft != null) {
             return byLeft;
         }
-        Derivation byRight = right.whole() == null ? null : byItsCases(right.whole(), at,
-                side -> readOnAnArm(comparedCase(left, ASide.of(side), states, at),
-                        takenAs(right.whole(), side)));
+        Derivation byRight = right.whole() == null ? null : underAChoiceNothingIsToldOf(() ->
+                byItsCases(right.whole(), at,
+                        side -> readOnAnArm(comparedCase(left, ASide.of(side), states, at),
+                                takenAs(right.whole(), side))));
         if (byRight != null) {
             return byRight;
         }
