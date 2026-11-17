@@ -2,7 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.PathResolution;
+import souther.compiler.inputs.MadeFrom;
 import souther.compiler.inputs.TermPath;
 
 import java.util.List;
@@ -23,7 +23,7 @@ class OwedWhereItCameFromTest {
 
     @Test
     void aValueMadeOfSeveralPlacesIsOwedTheSentenceAboutADerivedValueAtEveryOneOfThem() {
-        OwedWhereItCameFrom owed = OwedWhereItCameFrom.ofSeveral(new PathResolution.MadeOf(
+        OwedWhereItCameFrom owed = OwedWhereItCameFrom.ofSeveral(new MadeFrom.FromEvery(
                 List.of(List.of(A, B), List.of(A, C))));
         assertEquals(List.of(A, B, C), owed.places());
         assertEquals(new BlockReason.RuleAboutADerivedValue(), owed.why());
@@ -32,14 +32,14 @@ class OwedWhereItCameFromTest {
     @Test
     void aValueThatMayStandAtSeveralPlacesIsOwedTheSentenceAboutAnElementOfSeveralContainers() {
         OwedWhereItCameFrom owed = OwedWhereItCameFrom.ofSeveral(
-                new PathResolution.MayStandAt(List.of(A, B)));
+                new MadeFrom.FromOneOf(List.of(A, B)));
         assertEquals(List.of(A, B), owed.places());
         assertEquals(new BlockReason.RuleAboutAnElementOfSeveralContainers(), owed.why());
     }
 
     @Test
     void aValueThatCameFromOnePlaceOrNoneIsLeftToTheReaderThatReadsThroughTheOperation() {
-        assertNull(OwedWhereItCameFrom.ofSeveral(new PathResolution.At(A)));
-        assertNull(OwedWhereItCameFrom.ofSeveral(new PathResolution.NotAPosition()));
+        assertNull(OwedWhereItCameFrom.ofSeveral(new MadeFrom.FromOne(A)));
+        assertNull(OwedWhereItCameFrom.ofSeveral(new MadeFrom.FromNothing()));
     }
 }

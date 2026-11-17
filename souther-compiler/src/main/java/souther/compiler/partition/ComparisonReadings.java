@@ -29,8 +29,8 @@ import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
@@ -1131,7 +1131,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // reading's to say ({@link ArmsNamed}).
             case Core.Match match -> {
                 if (reads.pathOf(match.scrutinee(), in.newtypes())
-                        instanceof PathResolution.At(TermPath at)) {
+                        instanceof ValuesAt.At(TermPath at)) {
                     List<souther.compiler.reading.Condition.Case> cases = new ArrayList<>();
                     for (Core.Case arm : match.cases()) {
                         cases.add(souther.compiler.reading.Condition.Case.of(at, arm));
@@ -1328,7 +1328,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         RecursionOverAList walk = recursion == null ? null : recursion.walk().orElse(null);
         if (walk == null || buildsAValue(recursion.body().body())
                 || !(reads.pathOf(args.get(walk.walked()), in.newtypes())
-                        instanceof PathResolution.At(TermPath list))) {
+                        instanceof ValuesAt.At(TermPath list))) {
             return null;
         }
         Way made = wayTo(in.root(), call, in.atTheRoot(), in);
@@ -1962,7 +1962,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // Which rule the part is, by the node; where it stands, in the reading it is written in.
             if (statedAt(part.value(), () -> WhatNamesStandFor.in(part.at(), read), here) == null
                     && !(part.at().pathOf(part.value(), read.rules().newtypes())
-                            instanceof PathResolution.At)) {
+                            instanceof ValuesAt.At)) {
                 left.add(part);
             }
         }

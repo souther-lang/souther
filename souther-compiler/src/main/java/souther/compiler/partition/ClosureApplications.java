@@ -8,9 +8,9 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.meaning.Derivation;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
@@ -547,7 +547,7 @@ sealed interface ClosureApplications {
         List<TermPath> positions = new ArrayList<>();
         for (Denotation each : containers) {
             if (!(each.at().pathOf(each.value(), read.newtypes())
-                    instanceof PathResolution.At(TermPath container))) {
+                    instanceof ValuesAt.At(TermPath container))) {
                 return around.notSaidAnywhere(why);
             }
             positions.add(container);

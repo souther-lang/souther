@@ -80,14 +80,16 @@ import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.InputTruth;
+import souther.compiler.inputs.MadeFrom;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.OnePerElement;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
+import souther.compiler.inputs.ValuesHeld;
 import souther.compiler.inputs.Watched;
 import souther.compiler.inputs.WhatAConstructionAsks;
 import souther.compiler.inputs.WrittenOutElements;
@@ -2870,20 +2872,15 @@ final class Pullback {
             return;
         }
         switch (reads.pathOf(operand, read.rules().newtypes())) {
-            case PathResolution.At(TermPath path) -> operated.unsaidAt.add(path);
-            case PathResolution.MayStandAt(List<TermPath> among) -> operated.unsaidAt.addAll(among);
+            case ValuesAt.At(TermPath path) -> operated.unsaidAt.add(path);
             default -> {
                 // A value made from positions stands at none, and is as much theirs: it stops a
-                // run on what they hold.
-                PathResolution made = reads.cameFrom(operand, read.rules().newtypes());
-                if (made instanceof PathResolution.At(TermPath path)) {
-                    operated.unsaidAt.add(path);
-                    return;
-                } else if (made instanceof PathResolution.MayStandAt(List<TermPath> among)) {
-                    operated.unsaidAt.addAll(among);
-                    return;
-                } else if (made instanceof PathResolution.MadeOf places) {
-                    operated.unsaidAt.addAll(places.places());
+                // run on what they hold. So does a name that may stand at one of several places,
+                // which is theirs and which a block handed to a walk over a list made of another
+                // is made of as well: where it came from says every one.
+                MadeFrom made = reads.cameFrom(operand, read.rules().newtypes());
+                if (!(made instanceof MadeFrom.FromNothing)) {
+                    operated.unsaidAt.addAll(made.places());
                     return;
                 }
                 // A name an arm of a match, an attempt or a let binds stands for what the value it
@@ -2897,10 +2894,10 @@ final class Pullback {
                 Core node = Core.withoutStanding(operand);
                 Core skipped = switch (node) {
                     case Core.Match match -> {
-                        PathResolution selects = reads.pathOf(match.scrutinee(),
+                        ValuesAt selects = reads.pathOf(match.scrutinee(),
                                 read.rules().newtypes());
-                        yield selects instanceof PathResolution.At
-                                || selects instanceof PathResolution.MayStandAt
+                        yield selects instanceof ValuesAt.At
+                                || selects instanceof ValuesAt.MayStandAt
                                 ? match.scrutinee() : null;
                     }
                     case Core.LetIn li -> li.value();
@@ -3455,7 +3452,7 @@ final class Pullback {
                 () -> inTheCalledBody(e, new Asked.OnASide(AnswerAspect.EMPTINESS), reads),
                 () -> {
                     DecisionSubject held = reads.pathOf(e, read.rules().newtypes())
-                            instanceof PathResolution.At(TermPath at)
+                            instanceof ValuesAt.At(TermPath at)
                             ? new DecisionSubject.AnInput(at) : answerAt(e, reads);
                     if (held == null) {
                         return null;
@@ -3489,7 +3486,7 @@ final class Pullback {
                 () -> inTheCalledBody(e, new Asked.OnASide(AnswerAspect.PRESENCE), reads),
                 () -> {
                     DecisionSubject subject = reads.pathOf(e, read.rules().newtypes())
-                            instanceof PathResolution.At(TermPath at)
+                            instanceof ValuesAt.At(TermPath at)
                             ? new DecisionSubject.AnInput(at) : answerAt(e, reads);
                     return subject == null ? null
                             : leaf(new Derivation.PresentInASubject(subject), e, reads);
@@ -3607,7 +3604,7 @@ final class Pullback {
                                                          InputReading read) {
         Symbols symbols = read.rules().symbols();
         DeclarationNewtypes newtypes = read.rules().newtypes();
-        if (container.at().pathOf(container.value(), newtypes) instanceof PathResolution.At(
+        if (container.at().pathOf(container.value(), newtypes) instanceof ValuesAt.At(
                 TermPath at)) {
             return Optional.of(at);
         }
@@ -3615,7 +3612,7 @@ final class Pullback {
         KeyedAccumulation filed = KeyedAccumulation.of(whole.value(), whole.at(),
                 new Pullback(read, Optional.empty()).sides(), blocksAt(whole, symbols, newtypes));
         return filed != null && whole.at().holdingSomethingWhere(filed.walked(), symbols, newtypes)
-                instanceof PathResolution.At(TermPath at) ? Optional.of(at) : Optional.empty();
+                instanceof ValuesHeld.At(TermPath at) ? Optional.of(at) : Optional.empty();
     }
 
     /**
@@ -3825,7 +3822,7 @@ final class Pullback {
      *  a dependency the row stands in answered. */
     private DecisionSubject subjectOf(Denotation value) {
         return value.at().pathOf(value.value(), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath at)
+                instanceof ValuesAt.At(TermPath at)
                 ? new DecisionSubject.AnInput(at) : answerAt(value.value(), value.at());
     }
 
@@ -3877,7 +3874,7 @@ final class Pullback {
             return new WhichCase.Written(written);
         }
         if (value.at().pathOf(value.value(), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath at)) {
+                instanceof ValuesAt.At(TermPath at)) {
             return new WhichCase.AtAnInput(at);
         }
         DecisionSubject.AnAnswer answer = answerAt(value.value(), value.at());
@@ -5096,7 +5093,7 @@ final class Pullback {
                                                                InputReads at) {
         InputReads.PickedAtAnIndex picked = at.pickedAtAnIndex(name);
         if (picked == null || !(picked.list().at().pathOf(picked.list().value(),
-                read.rules().newtypes()) instanceof PathResolution.At(var list))
+                read.rules().newtypes()) instanceof ValuesAt.At(var list))
                 || list.insideAContainer()) {
             return Optional.empty();
         }
@@ -5182,7 +5179,7 @@ final class Pullback {
         // Where it stands once the names and the arms taken are followed.
         Denotation made = at.standing(value, read.rules().symbols(), read.rules().newtypes());
         if (made.at().pathOf(made.value(), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath held)) {
+                instanceof ValuesAt.At(TermPath held)) {
             NumericTerm.TakenOf size = sizeAt(held);
             return size == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
                     : new Sized.AsAForm(LinearForm.atom(new DecisionAtom.OfTheInput(size)));
@@ -5957,7 +5954,7 @@ final class Pullback {
         for (DeclaredArgument each : named) {
             Core argument = applied.argument(each);
             if (argument != null && reads.pathOf(argument, read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath at)) {
+                    instanceof ValuesAt.At(TermPath at)) {
                 standingAt.put(each, at);
             }
         }
@@ -6546,7 +6543,7 @@ final class Pullback {
                 case LawSubject.Argument<DeclaredArgument>(DeclaredArgument at) -> {
                     Core value = applied.argument(at);
                     yield reads.pathOf(value, read.rules().newtypes())
-                            instanceof PathResolution.At(TermPath held)
+                            instanceof ValuesAt.At(TermPath held)
                             ? new DecisionSubject.AnInput(held) : answerAt(value, reads);
                 }
                 case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) ->
@@ -6558,7 +6555,7 @@ final class Pullback {
                                     list.element();
                             case ElementAt.AValue(Core value, InputReads in) ->
                                     in.pathOf(value, read.rules().newtypes())
-                                            instanceof PathResolution.At(TermPath held)
+                                            instanceof ValuesAt.At(TermPath held)
                                             ? new DecisionSubject.AnInput(held)
                                             : answerAt(value, in);
                             case ElementAt.AKey(DecisionSubject key) -> key;
@@ -7529,7 +7526,7 @@ final class Pullback {
                     || !(stated.statement() instanceof PredicateStatement.Applying(
                             var operation, var written))
                     || !(reads.pathOf(stated.subject(), read.rules().newtypes())
-                            instanceof PathResolution.At(TermPath at))) {
+                            instanceof ValuesAt.At(TermPath at))) {
                 return null;
             }
             return new Derivation.AStringInALanguage(at, new StringsLanguage(accepts), operation,
@@ -7594,7 +7591,7 @@ final class Pullback {
             }
             if (!(container.at().holdingSomethingWhere(filed.walked(),
                     read.rules().symbols(), read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath held))) {
+                    instanceof ValuesHeld.At(TermPath held))) {
                 return entriesOfWhatWasKept(container, filed, pending, located, outerEach,
                         outerHanded);
             }
@@ -8276,7 +8273,7 @@ final class Pullback {
          * what an operation answered and none of those, the reason names the operation.
          */
         private Sized codePointsOfTheValue(Core value, InputReads in, CodePointClass counted) {
-            if (in.pathOf(value, read.rules().newtypes()) instanceof PathResolution.At(TermPath at)) {
+            if (in.pathOf(value, read.rules().newtypes()) instanceof ValuesAt.At(TermPath at)) {
                 return codePointsAt(at, counted, CaseMapping.NONE);
             }
             Denotation standing = in.standing(value, read.rules().symbols(),
@@ -8320,7 +8317,7 @@ final class Pullback {
                 cursor = where.standing(inner, read.rules().symbols(), read.rules().newtypes());
             }
             if (inner == null || !(where.pathOf(inner, read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath at))) {
+                    instanceof ValuesAt.At(TermPath at))) {
                 return null;
             }
             CaseMapping through = CaseMapping.NONE;
@@ -8414,7 +8411,7 @@ final class Pullback {
                                                  boolean _) -> null;
                     case ElementAt.AValue(Core value, InputReads in) ->
                             in.pathOf(value, read.rules().newtypes())
-                                    instanceof PathResolution.At(TermPath inside)
+                                    instanceof ValuesAt.At(TermPath inside)
                                     && inside.isAtOrUnder(held.element()) ? inside : null;
                     case ElementAt.AKey(DecisionSubject.AnInput(TermPath key, var _)) -> key;
                     case ElementAt.AKey(DecisionSubject.AnAnswer _) -> null;
@@ -10356,7 +10353,7 @@ final class Pullback {
 
     private Quantity valueOfAString(Core argument, InputReads at, OperationsAnswered answered) {
         if (at.pathOf(argument, read.rules().newtypes())
-                instanceof PathResolution.At(TermPath held)) {
+                instanceof ValuesAt.At(TermPath held)) {
             return new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(held));
         }
         return callOf(new Denotation(argument, at)) instanceof Denotation inner
@@ -10541,7 +10538,7 @@ final class Pullback {
         if (filed.filed() instanceof KeyedAccumulation.Filed.Counted counted
                 && counted.step().signum() == 0) {
             return whole.at().holdingSomethingWhere(filed.walked(), symbols, newtypes)
-                    instanceof PathResolution.At ? LinearForm.constant(counted.first()) : null;
+                    instanceof ValuesHeld.At ? LinearForm.constant(counted.first()) : null;
         }
         return switch (filed.filed()) {
             case KeyedAccumulation.Filed.Counted counted ->
@@ -10878,7 +10875,7 @@ final class Pullback {
             InputReads at) {
         if (applied.args().size() != 2
                 || !(at.pathOf(applied.args().getFirst(), read.rules().newtypes())
-                        instanceof PathResolution.At(TermPath asked))) {
+                        instanceof ValuesAt.At(TermPath asked))) {
             return null;
         }
         ElementsGathered gathered = elementsGathered(whole, filed, value, alike);
@@ -11142,7 +11139,7 @@ final class Pullback {
     private NumericTerm.OccurrencesOfAKey occurrencesOfTheKeyAskedFor(
             Denotation whole, KeyedAccumulation filed, Core asked, InputReads at) {
         if (asked == null || !(at.pathOf(asked, read.rules().newtypes())
-                instanceof PathResolution.At(TermPath key))) {
+                instanceof ValuesAt.At(TermPath key))) {
             return null;
         }
         // Every occurrence across the containers, since a count of a value asked for says nothing
@@ -12985,7 +12982,7 @@ final class Pullback {
                 // A field of a value that stands nowhere is arithmetic's to walk into, as it is for
                 // the reading of the input's own numbers ({@link AffineReading}).
                 boolean stands = !(at.pathOf(fa.target(), read.rules().newtypes())
-                        instanceof PathResolution.NotAPosition);
+                        instanceof ValuesAt.NotAPosition);
                 return !stands && !Location.isStep(fa.target().type(), fa.field(),
                         read.rules().newtypes());
             }
@@ -13098,7 +13095,7 @@ final class Pullback {
     /** The subject a row controls that {@code e} stands for: a position the input is written at, or
      *  what a dependency answered — or null where it is neither. */
     private DecisionSubject subjectOf(Core e, InputReads reads) {
-        return reads.pathOf(e, read.rules().newtypes()) instanceof PathResolution.At(TermPath at)
+        return reads.pathOf(e, read.rules().newtypes()) instanceof ValuesAt.At(TermPath at)
                 ? new DecisionSubject.AnInput(at) : answerAt(e, reads);
     }
 
@@ -13590,7 +13587,7 @@ final class Pullback {
         Map<DeclaredArgument, TermPath> standingAt = new HashMap<>();
         for (int i = 0; i < arguments.size(); i++) {
             if (ordered.at().pathOf(terms.get(i), read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath at)) {
+                    instanceof ValuesAt.At(TermPath at)) {
                 standingAt.put(arguments.get(i), at);
             }
         }
@@ -14451,9 +14448,9 @@ final class Pullback {
             return true;
         }
         return first.at().pathOf(a, read.rules().newtypes())
-                instanceof PathResolution.At(TermPath placeA)
+                instanceof ValuesAt.At(TermPath placeA)
                 && second.at().pathOf(b, read.rules().newtypes())
-                        instanceof PathResolution.At(TermPath placeB)
+                        instanceof ValuesAt.At(TermPath placeB)
                 && placeA.equals(placeB);
     }
 
@@ -14677,7 +14674,7 @@ final class Pullback {
         }
         Core walked = args.get(walk.walked());
         TermPath list = reads.pathOf(walked, read.rules().newtypes())
-                instanceof PathResolution.At(TermPath at) ? at
+                instanceof ValuesAt.At(TermPath at) ? at
                         : reads.containerWhoseEveryElementIsIn(walked, read.rules().newtypes());
         if (list == null) {
             return null;
@@ -14758,7 +14755,7 @@ final class Pullback {
      * stands at none, so a call handed it is on no node one step below.
      */
     private String belowOneStep(Core node, TermPath from, InputReads reads) {
-        if (!(reads.pathOf(node, read.rules().newtypes()) instanceof PathResolution.At(
+        if (!(reads.pathOf(node, read.rules().newtypes()) instanceof ValuesAt.At(
                 TermPath at)) || at.steps().size() != from.steps().size() + 2
                 || !(at.steps().get(from.steps().size()) instanceof TermPath.Step.Field(
                         String field))) {
@@ -14785,7 +14782,7 @@ final class Pullback {
                                    RecursionOverATree search, List<Core> args, AnswerAspect aspect,
                                    Core e, InputReads reads) {
         if (!(reads.pathOf(args.get(search.node()), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath node))) {
+                instanceof ValuesAt.At(TermPath node))) {
             return null;
         }
         List<TermPath> staying = new ArrayList<>();
@@ -14795,7 +14792,7 @@ final class Pullback {
             }
             // One under the node or holding it is refused before the body is read.
             if (!(reads.pathOf(args.get(at), read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath stays))
+                    instanceof ValuesAt.At(TermPath stays))
                     || !WrittenOfANode.apart(stays, node)) {
                 return null;
             }
@@ -15016,12 +15013,12 @@ final class Pullback {
         // Asked before the body is read: no run is over the nodes below a root that is one tree of
         // many.
         if (search == null || !(reads.pathOf(args.get(search.node()), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath node)) || !RunSource.oneTreeStandsAt(node)) {
+                instanceof ValuesAt.At(TermPath node)) || !RunSource.oneTreeStandsAt(node)) {
             return null;
         }
         for (int at = 0; at < args.size(); at++) {
             if (at != search.node() && !(reads.pathOf(args.get(at), read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath stays)
+                    instanceof ValuesAt.At(TermPath stays)
                     && WrittenOfANode.apart(stays, node))) {
                 return null;
             }
@@ -16136,7 +16133,7 @@ final class Pullback {
         }
         Core date = call.args().getFirst();
         return Type.DATE.equals(date.type()) && reads.pathOf(date, read.rules().newtypes())
-                instanceof PathResolution.NotAPosition ? call : null;
+                instanceof ValuesAt.NotAPosition ? call : null;
     }
 
     /**

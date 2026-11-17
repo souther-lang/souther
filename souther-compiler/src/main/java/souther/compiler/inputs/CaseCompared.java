@@ -65,7 +65,7 @@ public record CaseCompared(TermPath at, TypeSymbol named, List<TypeSymbol> leave
 
     private static CaseCompared oneWayRound(Core value, Core written, ComparisonClaim.Singled singled,
                                             InputReading read, InputReads reads) {
-        if (!(reads.pathOf(value, read.newtypes()) instanceof PathResolution.At(TermPath at))) {
+        if (!(reads.pathOf(value, read.newtypes()) instanceof ValuesAt.At(TermPath at))) {
             return null;
         }
         // Read as an order reads the value written against it ({@link Carrier#bare}): followed past

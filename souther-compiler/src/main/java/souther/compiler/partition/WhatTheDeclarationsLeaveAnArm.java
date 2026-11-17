@@ -8,10 +8,10 @@ import souther.compiler.flow.WhyNoValueTakesTheArm;
 import souther.compiler.inputs.Admits;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.meaning.MeaningsOfABody;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ResolvedCase;
@@ -96,7 +96,7 @@ public final class WhatTheDeclarationsLeaveAnArm {
      *  stands at, where it stands at one: an arm goes only where all of them go. */
     private Optional<WhyNoValueTakesTheArm> refusedByThePosition(Core.Case arm) {
         if (arm.caseTypes().isEmpty()
-                || !(reads.pathOf(match.scrutinee(), newtypes) instanceof PathResolution.At(
+                || !(reads.pathOf(match.scrutinee(), newtypes) instanceof ValuesAt.At(
                         TermPath at))) {
             return Optional.empty();
         }

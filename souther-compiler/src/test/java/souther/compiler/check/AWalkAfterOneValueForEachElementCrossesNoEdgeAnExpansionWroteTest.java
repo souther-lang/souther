@@ -9,9 +9,9 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.OnePerElement;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.ValueDefinitions;
+import souther.compiler.inputs.ValuesHeld;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
@@ -92,14 +92,14 @@ class AWalkAfterOneValueForEachElementCrossesNoEdgeAnExpansionWroteTest {
         return onePerElement(reads(provenance), read("xs", CONTAINER));
     }
 
-    private static PathResolution holdingSomething(ElementProvenance provenance) {
+    private static ValuesHeld holdingSomething(ElementProvenance provenance) {
         return reads(provenance).holdingSomethingWhere(read("xs", CONTAINER), SYMBOLS, NEWTYPES);
     }
 
     @Test
     void whereNothingWasWrittenWhatTheBindingHoldsIsRead() {
         assertEquals(OF_HELD, onePerElement(ElementProvenance.NONE));
-        assertEquals(new PathResolution.At(TermPath.of("held")),
+        assertEquals(new ValuesHeld.At(TermPath.of("held")),
                 holdingSomething(ElementProvenance.NONE));
     }
 
@@ -113,7 +113,7 @@ class AWalkAfterOneValueForEachElementCrossesNoEdgeAnExpansionWroteTest {
         Core wider = new Core.Widen(read("held", HELD), Type.list(Type.DECIMAL));
         InputReads reads = reads(ElementProvenance.NONE);
         assertNull(onePerElement(reads, wider));
-        assertEquals(new PathResolution.At(TermPath.of("held")),
+        assertEquals(new ValuesHeld.At(TermPath.of("held")),
                 reads.holdingSomethingWhere(wider, SYMBOLS, NEWTYPES));
         assertEquals(OF_HELD, onePerElement(reads, read("held", HELD)));
     }
@@ -131,19 +131,19 @@ class AWalkAfterOneValueForEachElementCrossesNoEdgeAnExpansionWroteTest {
                 DeclaredInput.NONE, elements, ValueDefinitions.NONE, Membership.none());
         Core xs = new Core.Read("xs", CONTAINER, Type.list(Type.DECIMAL), POS);
         assertNull(onePerElement(reads, xs));
-        assertEquals(new PathResolution.At(TermPath.of("held")),
+        assertEquals(new ValuesHeld.At(TermPath.of("held")),
                 reads.holdingSomethingWhere(xs, SYMBOLS, NEWTYPES));
     }
 
     @Test
     void anEdgeToTheSameValuesIsNotCrossed() {
         assertNull(onePerElement(theSameAs()));
-        assertEquals(new PathResolution.NotAPosition(), holdingSomething(theSameAs()));
+        assertEquals(new ValuesHeld.NotAPosition(), holdingSomething(theSameAs()));
     }
 
     @Test
     void anEdgeToWhatTheValuesWereMadeFromIsNotCrossed() {
         assertNull(onePerElement(madeFrom()));
-        assertEquals(new PathResolution.NotAPosition(), holdingSomething(madeFrom()));
+        assertEquals(new ValuesHeld.NotAPosition(), holdingSomething(madeFrom()));
     }
 }

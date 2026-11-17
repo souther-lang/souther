@@ -159,7 +159,7 @@ public record InputUses(List<TermPath> decided, List<TermPath> whole, boolean kn
                 note(each, names);
             }
             switch (names.pathOf(e, newtypes)) {
-                case PathResolution.At(var at) -> {
+                case ValuesAt.At(var at) -> {
                     whole.add(at);
                     // A field taken off a value at a position reads that field. The value it was
                     // taken off is read for nothing else, so it is walked for the names on the way
@@ -170,9 +170,8 @@ public record InputUses(List<TermPath> decided, List<TermPath> whole, boolean kn
                     }
                 }
                 // Each of them on some run, so each is read.
-                case PathResolution.MayStandAt(var among) -> whole.addAll(among);
-                case PathResolution.MadeOf made -> whole.addAll(made.places());
-                case PathResolution.NotAPosition _ -> {
+                case ValuesAt.MayStandAt(var among) -> whole.addAll(among);
+                case ValuesAt.NotAPosition _ -> {
                     if (Core.withoutStanding(e) instanceof Core.Read read
                             && watched.contains(read.binding())) {
                         known = false;
@@ -198,7 +197,7 @@ public record InputUses(List<TermPath> decided, List<TermPath> whole, boolean kn
          * something, and what that is read whole.
          */
         private void takenOff(Core e, InputReads names) {
-            if (!(names.pathOf(e, newtypes) instanceof PathResolution.At)) {
+            if (!(names.pathOf(e, newtypes) instanceof ValuesAt.At)) {
                 whole(e, names);
                 return;
             }
@@ -227,13 +226,13 @@ public record InputUses(List<TermPath> decided, List<TermPath> whole, boolean kn
          */
         private Core heldWithoutReading(Core e, InputReads names) {
             if (e instanceof Core.LetIn binding
-                    && names.pathOf(binding.value(), newtypes) instanceof PathResolution.At) {
+                    && names.pathOf(binding.value(), newtypes) instanceof ValuesAt.At) {
                 watch(binding.binder());
                 return binding.value();
             }
             if (e instanceof Core.Match choice
                     && names.pathOf(choice.scrutinee(), newtypes)
-                            instanceof PathResolution.At(var at)) {
+                            instanceof ValuesAt.At(var at)) {
                 decided.add(at);
                 for (Core.Case arm : choice.cases()) {
                     watch(arm.binding().binder());
@@ -255,11 +254,10 @@ public record InputUses(List<TermPath> decided, List<TermPath> whole, boolean kn
          */
         private void note(Core each, InputReads names) {
             switch (names.pathOf(each, newtypes)) {
-                case PathResolution.At(var at) -> demanded.add(at);
-                case PathResolution.NotAPosition _ -> { }
+                case ValuesAt.At(var at) -> demanded.add(at);
+                case ValuesAt.NotAPosition _ -> { }
                 // A name that may stand at a place stands there on some run, so each is named.
-                case PathResolution.MayStandAt(var among) -> demanded.addAll(among);
-                case PathResolution.MadeOf made -> demanded.addAll(made.places());
+                case ValuesAt.MayStandAt(var among) -> demanded.addAll(among);
             }
         }
 

@@ -29,13 +29,14 @@ import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.PathResolution;
+import souther.compiler.inputs.MadeFrom;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.RuleSite;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.meaning.AuthoredPointMapping;
@@ -595,7 +596,7 @@ public final class GuardThresholds {
             // position is that place's to say: where a value came from is asked of a side that
             // names none, which is the only side it is a different question about. A side that may
             // stand at one of several is not that, and where it came from is which of them.
-            if (reads.pathOf(side, newtypes) instanceof PathResolution.At) {
+            if (reads.pathOf(side, newtypes) instanceof ValuesAt.At) {
                 continue;
             }
             // Where a side's values came from, and nothing where they came from nowhere.
@@ -614,17 +615,17 @@ public final class GuardThresholds {
             StatedComparison comparison, InputReads reads, DeclarationNewtypes newtypes,
             SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
         for (Core side : List.of(comparison.left(), comparison.right())) {
-            if (!(reads.pathOf(side, newtypes) instanceof PathResolution.At)
-                    && reads.cameFrom(side, newtypes) instanceof PathResolution.NotAPosition) {
+            if (!(reads.pathOf(side, newtypes) instanceof ValuesAt.At)
+                    && reads.cameFrom(side, newtypes) instanceof MadeFrom.FromNothing) {
                 filedWhereItCameFrom(reads.madeOf(side, newtypes), out);
             }
         }
     }
 
     private static void filedWhereItCameFrom(
-            PathResolution came,
+            MadeFrom came,
             SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
-        if (came instanceof PathResolution.At(var at)) {
+        if (came instanceof MadeFrom.FromOne(var at)) {
             out.putIfAbsent(FilingCoordinate.at(at), new BlockReason.RuleAboutADerivedValue());
         } else if (OwedWhereItCameFrom.ofSeveral(came) instanceof OwedWhereItCameFrom owed) {
             owed.places().forEach(each -> out.putIfAbsent(FilingCoordinate.at(each), owed.why()));
@@ -699,22 +700,22 @@ public final class GuardThresholds {
                 // Which position the expression is, and none where it is none: the walk this
                 // answers for reads through what names nothing.
                 return switch (at.pathOf(here, newtypes)) {
-                    case PathResolution.At(var stands) -> stands;
-                    case PathResolution.NotAPosition _ -> null;
+                    case ValuesAt.At(var stands) -> stands;
+                    case ValuesAt.NotAPosition _ -> null;
                     // A name that only may stand at a position is a term over no one of them. What
                     // this answers for is a number a line can be drawn on, and a line drawn on this
                     // would be drawn at whichever place was picked out of the ones it may be.
-                    case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
+                    case ValuesAt.MayStandAt _ -> null;
                 };
             }
 
             @Override
             public TermPath madeFrom(Core here, InputReads at) {
                 return switch (at.cameFrom(here, newtypes)) {
-                    case PathResolution.At(var from) -> from;
-                    case PathResolution.NotAPosition _ -> null;
+                    case MadeFrom.FromOne(var from) -> from;
+                    case MadeFrom.FromNothing _ -> null;
                     // One place is what a line is drawn on, and a value made of several is at none.
-                    case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
+                    case MadeFrom.FromOneOf _, MadeFrom.FromEvery _ -> null;
                 };
             }
 
