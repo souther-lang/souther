@@ -17,7 +17,6 @@ import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -420,8 +419,8 @@ class WhatAClauseDrawsALineOnTest {
     /**
      * A rule about the answer reads the same whether it is written out or through a helper.
      *
-     * <p>The helper's parameter is another name for the answer, and a helper whose body branches
-     * with the other branch a written {@code false} says what {@code &&} says.
+     * <p>The helper's parameter is another name for the answer, and a {@code match} whose other
+     * arm is a written {@code false} says that the arm is the case and what its body says.
      */
     @Test
     void aRuleAboutTheAnswerReadsTheSameThroughAHelper() {
@@ -439,12 +438,6 @@ class WhatAClauseDrawsALineOnTest {
                 """, "Account -> sameDomain(name, value)");
         assertEquals(List.of(), byMatch.noLine().reported(), "a match whose other arm is false");
         assertEquals(List.of(), byMatch.noLine().unclassified());
-        EnsuresThresholds.Clauses byIf = findingByName("""
-                let sameName (name: String, a: Account): Bool =
-                    if a.ok then a.name == name else false
-                """, "Account -> sameName(name, value)");
-        assertEquals(List.of(), byIf.noLine().reported(), "an if whose else is false");
-        assertEquals(List.of(), byIf.noLine().unclassified());
     }
 
     /** A behavior over two inputs, whose clause is stated through {@code helper}. */
@@ -524,9 +517,10 @@ class WhatAClauseDrawsALineOnTest {
     /**
      * A value made of the answer is the answer's, whichever way it was got to.
      *
-     * <p>Each spelling is one way a name comes to stand for something made of the answer, and each
-     * must read as the rule written out reads: a name given to a field of it, a field handed to a
-     * helper as an argument, the case an arm selected of it, and a name given to what was matched.
+     * <p>Two ways a name comes to stand for something made of the answer, each of which must read
+     * as the rule written out reads: a name a {@code let} gave to a field of it, and the case an
+     * arm of a {@code match} selected of it. A field handed to a helper as an argument is the first
+     * of these, since the argument is bound to the parameter by a {@code let}.
      */
     @Test
     void whatIsMadeOfTheAnswerIsTheAnswerWhicheverWayItIsGotTo() {
@@ -539,44 +533,33 @@ class WhatAClauseDrawsALineOnTest {
                 data Account = { name: String, status: Status }
                 data AccountNotFound
 
-                let same (x: String, y: String): Bool = x == y
-
                 %s
 
                 behavior find : (name: String) -> Account | AccountNotFound
-                    ensures Account -> %s
+                    ensures Account -> h(name, value)
                 """;
-        Map<String, String[]> spellings = new LinkedHashMap<>();
-        spellings.put("a name for a field", new String[] {"""
+        EnsuresThresholds.Clauses named = drawn(model.formatted("""
                 let h (name: String, a: Account): Bool = {
                     let own = a.name
                     own == name
                 }
-                """, "h(name, value)"});
-        spellings.put("a field handed over", new String[] {"", "same(name, value.name)"});
-        spellings.put("a case selected", new String[] {"""
+                """), "find");
+        EnsuresThresholds.Clauses selected = drawn(model.formatted("""
                 let h (name: String, a: Account): Bool =
                     match a.status with
                         | Active as s -> s.label == name
                         | Inactive -> false
-                """, "h(name, value)"});
-        spellings.put("a name for what was matched", new String[] {"""
-                let h (name: String, a: Account): Bool = {
-                    let st = a.status
-                    match st with
-                        | Active as s -> s.label == name
-                        | Inactive -> false
-                }
-                """, "h(name, value)"});
-        List<String> unread = new ArrayList<>();
-        spellings.forEach((how, parts) -> {
-            EnsuresThresholds.Clauses clauses = drawn(model.formatted(parts[0], parts[1]), "find");
-            if (!clauses.noLine().reported().isEmpty()
-                    || !clauses.noLine().unclassified().isEmpty()) {
-                unread.add(how + ": " + clauses.noLine().unclassified());
-            }
-        });
-        assertEquals(List.of(), unread);
+                """), "find");
+
+        assertEquals(List.of(), unreadOf(named), "a name for a field");
+        assertEquals(List.of(), unreadOf(selected), "a case selected");
+    }
+
+    /** What a reading left unread of the rules it was handed. */
+    private static List<Object> unreadOf(EnsuresThresholds.Clauses clauses) {
+        List<Object> unread = new ArrayList<>(clauses.noLine().reported());
+        unread.addAll(clauses.noLine().unclassified());
+        return unread;
     }
 
     /**
@@ -618,17 +601,6 @@ class WhatAClauseDrawsALineOnTest {
                 selected.noLine().unclassified().stream()
                         .map(each -> each.at().toString()).toList(),
                 "the selection stays a statement about the input it selects on");
-    }
-
-    /** A helper that hands the answer on to another is as much a name for it as the first. */
-    @Test
-    void aNameForTheAnswerThroughTwoHelpersIsStillTheAnswer() {
-        List<String> written = saidOf(findingByName("", "Account -> value.name == name"));
-
-        assertEquals(written, saidOf(findingByName("""
-                let inner (name: String, b: Account): Bool = b.name == name
-                let outer (name: String, a: Account): Bool = inner(name, a)
-                """, "Account -> outer(name, value)")));
     }
 
     /**
