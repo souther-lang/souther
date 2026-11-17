@@ -52,6 +52,24 @@ class AnArmOfAChoiceIsReadOverWhatItsOwnRunWorksOutTest {
         assertTrue(human.contains("may stop"), human);
     }
 
+    /**
+     * A choice nested in an arm decides its own arms by what it works out, which the fork around it
+     * does not tell: {@code d + 1} stops a run at the greatest {@code Int}, whichever arm the inner
+     * choice then takes, and the report says so.
+     */
+    @Test
+    void anArmOfAChoiceNestedInAForkIsNotToldByWhatTheForkDecided() {
+        String stopped = "every run stops in d + 1 where d is at least 9223372036854775807";
+
+        String byACondition = comparison("h: Int, d: Int, s: Int",
+                "(h, d, s) -> (if d >= h then (if d + 1 > h then d else h) else d) >= s");
+        assertTrue(byACondition.contains(stopped), byACondition);
+
+        String byAnOperation = comparison("h: Int, d: Int, s: Int",
+                "(h, d, s) -> (if d >= h then Int.max(d + 1, h) else d) >= s");
+        assertTrue(byAnOperation.contains("may stop a run"), byAnOperation);
+    }
+
     /** The same where the way is a membership, which states nothing of the numbers. */
     @Test
     void anAdditionOnAnArmPastAMembershipLeavesNoValueUnreadOverInt() {
