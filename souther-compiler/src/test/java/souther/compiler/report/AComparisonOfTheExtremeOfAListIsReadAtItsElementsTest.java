@@ -9,6 +9,7 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -46,11 +47,20 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
                 """.formatted(condition));
     }
 
-    /** The lines of the report that say where the elements are divided, and nothing else of it. */
+    /**
+     * What the report says of where the elements are divided: the summary of the borders, which
+     * counts them and the points they owe, and each line drawn. The reasons a point is not shown
+     * reached, and the partition and decision lines, differ between spellings that are one rule
+     * and are left out.
+     */
     private static List<String> linesDrawn(String report) {
-        return report.lines().map(String::strip)
+        List<String> said = new ArrayList<>();
+        report.lines().map(String::strip).filter(line -> line.startsWith("border "))
+                .findFirst().ifPresent(line -> said.add(line.replaceAll("\\s+", " ")));
+        report.lines().map(String::strip)
                 .filter(line -> line.startsWith("· read as "))
-                .map(line -> line.split(" — ")[0]).sorted().toList();
+                .map(line -> line.split(" — ")[0]).sorted().forEach(said::add);
+        return said;
     }
 
     private static void assertDrawsAtTheElements(String report) {
@@ -106,7 +116,7 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
                 "Option.withDefault(0, List.max(List.map(x -> x + 1, ds))) <= 10");
 
         assertTrue(report.contains("· not read:"), report);
-        assertTrue(linesDrawn(report).isEmpty(), report);
+        assertFalse(report.contains("· read as "), report);
     }
 
     @ParameterizedTest(name = "{0} {1} 10")
