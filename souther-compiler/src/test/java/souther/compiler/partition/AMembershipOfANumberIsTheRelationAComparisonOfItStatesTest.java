@@ -145,14 +145,25 @@ class AMembershipOfANumberIsTheRelationAComparisonOfItStatesTest {
         for (int j = 0; j < 4; j++) {
             holidaysOfEveryCandidate.add("d cal.holidays[*]" + (j == 0 ? "" : " - " + j));
         }
+        // Every candidate is worked out before any is looked at, and the fourth is three days on,
+        // so a row has {@code d} no later than three days before the last date. The first
+        // candidate is {@code d}, so a holiday on the last three dates is one no row compares it
+        // with: the comparison of {@code d} with a holiday comes out false there whatever
+        // {@code d} is, and the line is drawn where that starts. The later candidates still meet
+        // those holidays, each on the lines already drawn.
+        String pastEveryCandidate = "cal.holidays[*] " + LocalDate.MAX.minusDays(2);
         Set<String> everyLine = new TreeSet<>(everyCandidate);
         everyLine.addAll(holidaysOfEveryCandidate);
+        everyLine.add(pastEveryCandidate);
         assertEquals(everyLine, linesOf(withHolidays));
         Pattern candidate = Pattern.compile(
                 "Int\\.floorMod\\(-cal\\.aSunday \\+ d(?: \\+ (\\d))?, 7\\) (\\d)");
         List<String> reachedPastAClosedDay = new ArrayList<>();
         Pattern holidayOf = Pattern.compile("d cal\\.holidays\\[\\*](?: - (\\d))?");
         everyRowAt(withHolidays, (line, row) -> {
+            if (line.equals(pastEveryCandidate)) {
+                return dates(field(row.getFirst(), "holidays")).contains(LocalDate.MAX.minusDays(2));
+            }
             Matcher holiday = holidayOf.matcher(line);
             if (holiday.matches()) {
                 int k = holiday.group(1) == null ? 0 : Integer.parseInt(holiday.group(1));

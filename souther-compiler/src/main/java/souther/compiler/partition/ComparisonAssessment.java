@@ -869,37 +869,36 @@ sealed interface ComparisonAssessment {
          * {@code c} below nought. Joined, the two come out either way below nought and only
          * holding from nought up, and the line at nought parts the two.
          *
-         * <p>Only where the statement is plainly its arms: the parts that answer for an arm are
-         * the answers of two arms of one choice, each read in one case, and the two cases a
-         * condition and its denial, so that every row is in one of them and none in both. More
-         * arms, or arms written inside arms, are not joined here. Each arm says how
-         * it comes out as it was read along the ways to its own case ({@link Part#comesOut}), so
-         * of the rows that take it and of no other: what one arm shows is never lent to the
-         * values of the other. A place an arm says nothing of, a value neither way is shown at,
-         * or a change no line is drawn at leaves the place as each arm alone leaves it.
+         * <p>The parts that answer for an arm are the lines under arms none of which only selects,
+         * at however many choices: a row that takes all of a line's arms has the statement come
+         * out as that line does. Each arm says how it comes out as it was read along the ways to
+         * its own case ({@link Part#comesOut}), so of the rows that take it and of no other: what
+         * one arm shows is never lent to the values of the other. A place an arm says nothing of,
+         * a value neither way is shown at, or a change no line is drawn at leaves the place as
+         * each arm alone leaves it.
+         *
+         * <p>Where the arms are the two of one choice, each read in one case, and the two cases a
+         * condition and its denial, every row is in one of them and none in both: a way is never
+         * reached where no arm reaches it, and the values no arm holds are none. Past that, the
+         * arms read are not every one, and a row may take one nobody read. A way is then reached
+         * where some arm reaches it, which no other arm takes back, and is shown nowhere else: the
+         * arms show a place only where they reach both ways at every number.
          */
         Set<FilingCoordinate> shownByItsArms() {
-            List<Part> arms = new ArrayList<>();
-            WrittenChoice choice = null;
-            for (Part part : parts) {
-                WrittenChoice answered = choiceAnsweredBy(part.id());
-                if (answered == null) {
-                    continue;
-                }
-                if (choice != null && !choice.equals(answered)) {
-                    return Set.of();
-                }
-                choice = answered;
-                arms.add(part);
-            }
-            if (arms.size() != 2 || !inACaseAndItsDenial(arms.get(0), arms.get(1))) {
+            List<Part> arms = parts.stream()
+                    .filter(part -> part.id().line().line().answersUnderArms()).toList();
+            if (arms.isEmpty()) {
                 return Set.of();
             }
+            boolean every = arms.size() == 2 && inACaseAndItsDenial(arms.get(0), arms.get(1))
+                    && choiceAnsweredBy(arms.get(0).id()) != null
+                    && Objects.equals(choiceAnsweredBy(arms.get(0).id()),
+                            choiceAnsweredBy(arms.get(1).id()));
             Set<FilingCoordinate> out = new LinkedHashSet<>();
             for (Part arm : arms) {
                 arm.comesOut().keySet().forEach(term -> {
                     FilingCoordinate at = FilingCoordinate.of(term);
-                    if (!out.contains(at) && armsShow(at, arms)) {
+                    if (!out.contains(at) && armsShow(at, arms, every)) {
                         out.add(at);
                     }
                 });
@@ -932,7 +931,7 @@ sealed interface ComparisonAssessment {
          * and is then in what each arm was read along, and the line it draws is one of the
          * statement's.
          */
-        private boolean armsShow(FilingCoordinate at, List<Part> arms) {
+        private boolean armsShow(FilingCoordinate at, List<Part> arms, boolean every) {
             List<EachWayItComesOut> alternatives = new ArrayList<>();
             List<ExactCut> drawn = new ArrayList<>();
             for (Part part : parts) {
@@ -945,13 +944,18 @@ sealed interface ComparisonAssessment {
                         its = each.getValue();
                     }
                 }
-                if (its == null) {
+                if (its != null) {
+                    alternatives.add(its);
+                } else if (every) {
                     return false;
                 }
-                alternatives.add(its);
+            }
+            if (alternatives.isEmpty()) {
+                return false;
             }
             EachWayItComesOut joined = EachWayItComesOut.eitherOf(alternatives);
-            if (joined == null || !joined.showsEveryValue()) {
+            if (joined == null || !(every ? joined.showsEveryValue()
+                    : joined.reachesEveryNumberBothWays())) {
                 return false;
             }
             for (ExactCut turn : joined.whereItTurns()) {

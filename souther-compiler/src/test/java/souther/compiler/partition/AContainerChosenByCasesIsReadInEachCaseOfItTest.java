@@ -104,8 +104,9 @@ class AContainerChosenByCasesIsReadInEachCaseOfItTest {
     /**
      * What a statement leaves unread does not depend on whether the arms cover every case of the
      * value: the relation of an arm stands only under its cases, whichever way the rest is
-     * written. A choice by a flag is no choice by cases and is read as the one statement it is,
-     * which leaves more unread and is never read as arms.
+     * written. A choice by a flag the model writes is read the same way: the line of each arm is
+     * one a row takes on its own, and the statement reaches both ways at every value where some
+     * arm does.
      */
     @Test
     void whatIsLeftUnreadIsTheSameWhetherTheArmsCoverEveryCaseAndWhetherTheChoiceIsByCases() {
@@ -120,8 +121,7 @@ class AContainerChosenByCasesIsReadInEachCaseOfItTest {
         assertEquals(Map.of(
                 "everyCase", List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
                 "notEveryCase", List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
-                "byAFlag", List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES,
-                        UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE)),
+                "byAFlag", List.of(UndividedPosition.Reason.RULE_RELATING_TWO_VALUES)),
                 reasons);
     }
 

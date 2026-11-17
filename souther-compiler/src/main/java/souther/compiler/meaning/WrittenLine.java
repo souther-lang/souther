@@ -77,6 +77,15 @@ public record WrittenLine(List<Arm> arms) {
         return arms.size() != 1 || arms.getFirst().selects() ? null : arms.getFirst().at();
     }
 
+    /**
+     * Whether this line is what the arms it is under answer, at however many choices: it is not
+     * the comparison itself and no arm of it only selects. A row that takes all of them has the
+     * comparison come out as this line does.
+     */
+    public boolean answersUnderArms() {
+        return !arms.isEmpty() && arms.stream().noneMatch(Arm::selects);
+    }
+
     /** This line, one arm further in. */
     WrittenLine then(Arm next) {
         List<Arm> more = new ArrayList<>(arms);
