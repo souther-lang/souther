@@ -166,6 +166,27 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
     }
 
     /**
+     * What a value was worked out of is said at each list it came from, however the other side is
+     * spelled: a payload kept as it is against one doubled says both lists, as against one kept
+     * as it is.
+     */
+    @ParameterizedTest(name = "a <= {0}")
+    @CsvSource({"b", "b * 2", "Int.abs(b)"})
+    void aValueWorkedOutOfOnePayloadAgainstAnotherIsSaidUnreadAtBothLists(String other) {
+        String report = reading("""
+                module m
+
+                behavior role : (ds: List<Int>, es: List<Int>) -> Int
+                let role (ds, es) = if (match List.max(ds) with | None -> false | Some a -> (match List.max(es) with | None -> false | Some b -> a <= %s)) then 1 else 2
+                """.formatted(other));
+
+        for (String list : List.of("ds[*]", "es[*]")) {
+            assertTrue(report.lines().anyMatch(line -> line.contains("· not read:")
+                    && line.contains("about `" + list + "`")), report);
+        }
+    }
+
+    /**
      * A chain of names each made of the one before twice has as many ways through as it has links
      * to the power of two, and is read link by link: a value made of a payload by thirty such
      * steps is reported unread at the elements, and the report is made.

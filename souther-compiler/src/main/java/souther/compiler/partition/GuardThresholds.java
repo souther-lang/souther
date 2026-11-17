@@ -76,7 +76,6 @@ import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.stream.Stream;
 
 /**
  * The values a behavior's body compares its inputs against.
@@ -588,86 +587,44 @@ public final class GuardThresholds {
      * be. Answered alike, a rule about an element of a container would be reported as one about a
      * value somebody computed, and an author would go looking for the operation to invert.
      */
-    static void cameFrom(StatedComparison comparison, InputReads reads, InputReading read,
+    static void cameFrom(StatedComparison comparison, InputReads reads,
+                         DeclarationNewtypes newtypes, boolean ofAStoppedReading,
                          SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
-        DeclarationNewtypes newtypes = read.newtypes();
-        // A side that names a position is the values there, and what the rule is about at that
-        // position is that place's to say: where a value came from is asked of a side that names
-        // none, which is the only side it is a different question about. A side that may stand
-        // at one of several is not that, and where it came from is which of them.
-        List<Core> sides = Stream.of(comparison.left(), comparison.right())
-                .filter(side -> !(reads.pathOf(side, newtypes) instanceof PathResolution.At))
-                .toList();
-        // Where a side's values came from, and nothing where they came from nowhere.
-        sides.forEach(side -> filedWhereItCameFrom(reads.cameFrom(side, newtypes), out));
-        // Where that says nowhere at all, the comparison is not thereby about nothing: a value
-        // worked out of one that came from somewhere came from there as well.
-        if (out.isEmpty()) {
-            // Each name is followed once however many times it is read: a chain of names each
-            // made of the one before twice is read as often as it is long, not as often as it
-            // has ways through.
-            Map<BindingId, PathResolution> followed = new HashMap<>();
-            sides.forEach(side -> filedWhereItCameFrom(
-                    cameFromThroughWhatItIsMadeOf(side, reads, read, followed), out));
+        for (Core side : List.of(comparison.left(), comparison.right())) {
+            // A side that names a position is the values there, and what the rule is about at that
+            // position is that place's to say: where a value came from is asked of a side that
+            // names none, which is the only side it is a different question about. A side that may
+            // stand at one of several is not that, and where it came from is which of them.
+            if (reads.pathOf(side, newtypes) instanceof PathResolution.At) {
+                continue;
+            }
+            // Where a side's values came from, and where that says nowhere and the reading
+            // stopped, what the side is made of: a value worked out of ones that came from
+            // somewhere came from there as well, and a rule a reading could not follow is about
+            // them and not about nothing. A comparison read to the end that cuts nothing is
+            // answered by what it says, and is not asked what its sides are made of.
+            PathResolution came = reads.cameFrom(side, newtypes);
+            filedWhereItCameFrom(ofAStoppedReading && came instanceof PathResolution.NotAPosition
+                    ? reads.madeOf(side, newtypes) : came, out);
         }
     }
 
-    private static PathResolution cameFromThroughWhatItIsMadeOf(
-            Core side, InputReads reads, InputReading read,
-            Map<BindingId, PathResolution> followed) {
-        Core bare = Core.withoutStanding(side);
-        for (Core each : Core.subexpressionsAt(bare)) {
-            PathResolution came = reads.cameFrom(each, read.newtypes());
-            if (!(came instanceof PathResolution.NotAPosition)) {
-                return came;
-            }
-        }
-        // An element an index picked of a list that is no position of the input came from that
-        // list. Of a list that is one, it is the element there, which the rows measure.
-        InputReads.PickedAtAnIndex picked = reads.pickedAtAnIndex(bare);
-        if (picked != null && !(reads.pathOf(picked.list().value(), read.newtypes())
-                instanceof PathResolution.At)) {
-            return cameFromThroughWhatItIsMadeOf(picked.list().value(), picked.list().at(), read,
-                    followed);
-        }
-        // A name stands for what it was bound to, read where it was bound.
-        if (bare instanceof Core.Read name && name.binding() != null) {
-            PathResolution done = followed.get(name.binding());
-            if (done != null) {
-                return done;
-            }
-            Denotation stood = reads.standing(bare, read.symbols(), read.newtypes());
-            if (!(Core.withoutStanding(stood.value()) instanceof Core.Read)) {
-                followed.put(name.binding(), new PathResolution.NotAPosition());
-                PathResolution came = cameFromThroughWhatItIsMadeOf(stood.value(), stood.at(),
-                        read, followed);
-                followed.put(name.binding(), came);
-                return came;
-            }
-        }
-        // What a value is made of: for a choice, the values of its arms and not what decides the
-        // arm.
-        List<Core> made = new ArrayList<>();
-        switch (bare) {
-            case Core.If choice -> made.addAll(List.of(choice.then(), choice.els()));
-            case Core.Match match -> match.cases().forEach(arm -> made.add(arm.body()));
-            case Core.IfConstructed choice -> {
-                made.add(choice.then());
-                choice.els().forEach(arm -> made.add(arm.body()));
-            }
-            default -> Core.forEachChild(bare, made::add);
-        }
-        return PathResolution.madeOf(made.stream()
-                .map(part -> cameFromThroughWhatItIsMadeOf(part, reads, read, followed)).toList());
-    }
-
+    /** {@code came} said of the places a value came from, each place filed once whichever way the
+     *  reading named it, and a container and its elements one place: there is one word for it. */
     private static void filedWhereItCameFrom(
             PathResolution came,
             SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
         if (came instanceof PathResolution.At(var at)) {
-            out.putIfAbsent(FilingCoordinate.at(at), new BlockReason.RuleAboutADerivedValue());
+            filedOnce(at, new BlockReason.RuleAboutADerivedValue(), out);
         } else if (OwedWhereItCameFrom.ofSeveral(came) instanceof OwedWhereItCameFrom owed) {
-            owed.places().forEach(each -> out.putIfAbsent(FilingCoordinate.at(each), owed.why()));
+            owed.places().forEach(each -> filedOnce(each, owed.why(), out));
+        }
+    }
+
+    private static void filedOnce(TermPath at, BlockReason.RuleReadingStopped why,
+                                  SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
+        if (out.keySet().stream().noneMatch(each -> each.path().bearsOn(at))) {
+            out.put(FilingCoordinate.at(at), why);
         }
     }
 

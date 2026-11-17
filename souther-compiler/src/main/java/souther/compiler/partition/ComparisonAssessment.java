@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.ComparisonClaim;
+import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.RuleCitation;
@@ -1361,22 +1362,22 @@ sealed interface ComparisonAssessment {
         return switch (cut) {
             case Cutting.Read.Cuts _, Cutting.Read.NoOrderToCountOn _,
                  Cutting.Read.NumberNoRatioHolds _ -> aLine(cut, at, read, drawnByAnInvariant,
-                    () -> aboutNoPosition(comparison, reads, read), witnesses,
+                    () -> aboutNoPosition(comparison, reads, read.newtypes()), witnesses,
                     () -> conditions.comparison(comparison, reads, read).working().get());
             // One rule and a line for each relation it holds, each line read as a comparison of
             // one line is and carrying where it decides.
             case Cutting.Read.Several several -> eachLineOf(behavior,
                     Optional.of(comparison.claim()), several, at, read, drawnByAnInvariant,
-                    () -> aboutNoPosition(comparison, reads, read), witnesses);
+                    () -> aboutNoPosition(comparison, reads, read.newtypes()), witnesses);
             // Read to the end and cutting nothing, which is a fact about the rule and not a limit
             // of this compiler: `a <= a` holds of every row. Where the comparison names no position
             // either, there is no rule about a position to say it of — `2 > 1` is a comparison of
             // constants and states nothing anywhere.
             case Cutting.Read.CutsNothing over -> over.filedAt().isEmpty()
-                    ? aboutNoPosition(comparison, reads, read)
+                    ? aboutNoPosition(comparison, reads, read.newtypes())
                     : new CutsNothing(over.filedAt());
             case Cutting.Read.AnswersNowhere over -> over.filedAt().isEmpty()
-                    ? aboutNoPosition(comparison, reads, read)
+                    ? aboutNoPosition(comparison, reads, read.newtypes())
                     : new AnswersNowhere(over.filedAt());
             case Cutting.Read.StatesNoRelation _ -> new StatesNoRelation();
             // Where the reading stopped and the comparison is over what a dependency answered, it is
@@ -1400,7 +1401,7 @@ sealed interface ComparisonAssessment {
             // is for.
             case Cutting.Read.Stopped stopped ->
                     besideWhereTheValuesCameFrom(stopped.places(), stopped.where(), comparison,
-                            reads, read);
+                            reads, read.newtypes(), true);
         };
     }
 
@@ -2115,9 +2116,9 @@ sealed interface ComparisonAssessment {
      */
     private static ComparisonAssessment aboutNoPosition(StatedComparison comparison,
                                                         InputReads reads,
-                                                        InputReading read) {
+                                                        DeclarationNewtypes newtypes) {
         return besideWhereTheValuesCameFrom(PlacesStopped.NOWHERE, WhereAReadingStopped.ELSEWHERE,
-                comparison, reads, read);
+                comparison, reads, newtypes, false);
     }
 
     /**
@@ -2137,9 +2138,9 @@ sealed interface ComparisonAssessment {
      */
     private static ComparisonAssessment besideWhereTheValuesCameFrom(
             PlacesStopped filed, WhereAReadingStopped where, StatedComparison comparison,
-            InputReads reads, InputReading read) {
+            InputReads reads, DeclarationNewtypes newtypes, boolean ofAStoppedReading) {
         SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why = filed.reasons();
-        GuardThresholds.cameFrom(comparison, reads, read, why);
+        GuardThresholds.cameFrom(comparison, reads, newtypes, ofAStoppedReading, why);
         PlacesStopped places = filed.alsoFiledAt(why);
         return places.isEmpty() ? new NoInput() : new Unread(places, where);
     }

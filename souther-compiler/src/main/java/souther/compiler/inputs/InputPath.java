@@ -21,6 +21,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -83,6 +84,14 @@ final class InputPath {
      *  while an arm, or a value given, is read ({@link #under}). */
     private InputReads reads;
     private final BindingTrail trail = new BindingTrail();
+    /** What each name came to under {@link ElementQuestion#WHAT_IT_IS_MADE_OF}, so that a chain of
+     *  names each made of the one before twice is followed as often as it is long and not as often
+     *  as it has ways through. Shared with the walks that read a value where it was given. */
+    private Map<BindingId, PathResolution> followed = new HashMap<>();
+    /** Whether a position a part of a value stands at is where the value came from: so while the
+     *  origin of what no reader of positions follows is being found, and not in an expression a
+     *  rule is written about ({@link #partOf}). */
+    private boolean aPositionIsAnOrigin;
     /** The direction a walk after the order must come out walking ({@link TraversalDirection});
      *  the other questions say nothing of it. */
     private final TraversalDirection arrivingAs;
@@ -125,6 +134,8 @@ final class InputPath {
     private PathResolution readWhereGiven(Denotation given, Wanted wanted) {
         InputPath there = new InputPath(newtypes, asked, given.at(), arrivingAs);
         there.walking = walking;
+        there.followed = followed;
+        there.aPositionIsAnOrigin = aPositionIsAnOrigin;
         return wanted == null ? there.named(given.value(), given.at().names())
                 : there.heldAt(given.value(), wanted, given.at().names());
     }
@@ -189,6 +200,21 @@ final class InputPath {
                                    DeclarationNewtypes newtypes,
                                    InputReads reads) {
         return new InputPath(newtypes, ElementQuestion.VALUE_ORIGIN, reads).named(e, names);
+    }
+
+    /**
+     * Where {@code e}'s value came from, followed through everything it is made of: the places of
+     * its parts, a name's own, the values of the arms of a choice and what a list an index picked
+     * from was made of — and that it came from none where it did.
+     *
+     * <p>Beside {@link #cameFrom}, which stops at arithmetic and at an operation's answer, and
+     * asked only where nothing else says where a value came from: a rule about a sum of two
+     * positions is read off the numbers it is made of and is about the places they say, and this
+     * would say more places than that rule is about.
+     */
+    static PathResolution madeOf(Core e, BindingEnvironment names, DeclarationNewtypes newtypes,
+                                 InputReads reads) {
+        return new InputPath(newtypes, ElementQuestion.WHAT_IT_IS_MADE_OF, reads).named(e, names);
     }
 
     /**
@@ -267,11 +293,80 @@ final class InputPath {
     private boolean asksEveryOccurrence() {
         return switch (asked) {
             case EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN -> true;
-            case NAMED_POSITION, VALUE_ORIGIN, ONE_PER_ELEMENT, SAME_EMPTINESS -> false;
+            case NAMED_POSITION, VALUE_ORIGIN, WHAT_IT_IS_MADE_OF, ONE_PER_ELEMENT,
+                 SAME_EMPTINESS -> false;
         };
     }
 
+    /** Whether the question in hand is where a value came from, however far it follows it. */
+    private boolean asksWhereItCameFrom() {
+        return asked == ElementQuestion.VALUE_ORIGIN || asked == ElementQuestion.WHAT_IT_IS_MADE_OF;
+    }
+
+    /**
+     * What {@code e} names, and under {@link ElementQuestion#WHAT_IT_IS_MADE_OF} what it is made of
+     * where it names nothing: the answers of its parts, which come together as the places a value
+     * made of them came from.
+     */
     private PathResolution named(Core e, BindingEnvironment names) {
+        PathResolution named = nameOf(e, names);
+        return asked == ElementQuestion.WHAT_IT_IS_MADE_OF
+                && named instanceof PathResolution.NotAPosition ? madeOfTheParts(e, names) : named;
+    }
+
+    /**
+     * The places the parts of {@code e} came from, together: those of every arm for a choice, read
+     * in the names inside it ({@link #armsOf}), and of every child otherwise.
+     */
+    private PathResolution madeOfTheParts(Core e, BindingEnvironment names) {
+        Core bare = Core.withoutStanding(e);
+        List<PathResolution> parts = new ArrayList<>();
+        List<Arm> arms = armsOf(bare, names);
+        if (arms != null) {
+            arms.forEach(arm -> parts.add(
+                    under(arm.reads(), () -> partOf(arm.body(), arm.names()))));
+        } else {
+            Core.forEachChild(bare, part -> parts.add(partOf(part, names)));
+        }
+        return PathResolution.madeOf(parts);
+    }
+
+    /**
+     * What a part of a value came from, where it is not at a position: what reads the positions of
+     * the input follows a part that is, and says the places a rule about it is about.
+     */
+    private PathResolution partOf(Core part, BindingEnvironment names) {
+        return !aPositionIsAnOrigin && of(part, names, newtypes, reads) instanceof PathResolution.At
+                ? new PathResolution.NotAPosition() : named(part, names);
+    }
+
+    /** Where what an index picked of a list that is no position came from: the list's own, a
+     *  position it is made of being where it came from. */
+    private PathResolution originOfWhatWasPicked(InputReads.PickedAtAnIndex picked) {
+        boolean before = aPositionIsAnOrigin;
+        aPositionIsAnOrigin = true;
+        try {
+            return readWhereGiven(picked.list(), null);
+        } finally {
+            aPositionIsAnOrigin = before;
+        }
+    }
+
+    /** What following the name {@code binding} comes to, which is asked once per walk where the
+     *  question follows what a value is made of: a name is read as often as it is used there. */
+    private PathResolution followedOnce(BindingId binding, Supplier<PathResolution> follow) {
+        if (asked != ElementQuestion.WHAT_IT_IS_MADE_OF || aPositionIsAnOrigin) {
+            return follow.get();
+        }
+        PathResolution done = followed.get(binding);
+        if (done == null) {
+            done = follow.get();
+            followed.put(binding, done);
+        }
+        return done;
+    }
+
+    private PathResolution nameOf(Core e, BindingEnvironment names) {
         PathResolution where = whereTaken(e, null);
         if (where != null) {
             return where;
@@ -279,7 +374,7 @@ final class InputPath {
         return switch (e) {
             // A name an arm opened a lookup's answer under, where nothing else says what it is,
             // holds one of the map's values, and came from wherever those did.
-            case Core.Read r when asked == ElementQuestion.VALUE_ORIGIN
+            case Core.Read r when asksWhereItCameFrom()
                     && names.openedBy(r.binding()) instanceof InputReads.LookupOpened opened
                     && names.roleOf(r.binding()) instanceof BindingRole.Unknown
                     && AnOperationApplied.of(opened.lookup()) instanceof AnOperationApplied looked
@@ -287,13 +382,19 @@ final class InputPath {
                     heldAt(looked.args().get(1), new Wanted.APart(HeldIn.Part.ELEMENT), names);
             // The payload of a call that answers an element of a container is one of that
             // container's elements, and came from wherever they did.
-            case Core.Read r when asked == ElementQuestion.VALUE_ORIGIN
+            case Core.Read r when asksWhereItCameFrom()
                     && names.openedBy(r.binding()) instanceof InputReads.ElementOpened opened
                     && AnOperationApplied.of(opened.call().value()) instanceof AnOperationApplied answered
                     && DefaultBoundOperationFacts.get().answersAnElementOf(answered.operation())
                             instanceof DeclaredArgument container
                     && answered.argument(container) != null ->
                     heldAt(answered.argument(container), new Wanted.APart(HeldIn.Part.ELEMENT), names);
+            // An element an index picked of a list that is no position of the input came from that
+            // list. Of a list that is one, it is the element there, which the rows measure.
+            case Core.Read r when asked == ElementQuestion.WHAT_IT_IS_MADE_OF
+                    && reads.pickedAtAnIndex(r) instanceof InputReads.PickedAtAnIndex picked
+                    && !(reads.pathOf(picked.list().value(), newtypes)
+                            instanceof PathResolution.At) -> originOfWhatWasPicked(picked);
             // What the name is, asked once, and the step that answers is the answer. An element is
             // answered by the container it came from even where that container is at no position:
             // the value a rewrite left under such a name is what the walk before it made of an
@@ -309,8 +410,8 @@ final class InputPath {
                 // leave the measurement without a word.
                 case BindingRole.ElementOfSeveral(var containers) ->
                         oneOfTheElementsOf(r.binding(), containers, names);
-                case BindingRole.Alias(var held) ->
-                        trail.through(r.binding(), () -> named(held, names));
+                case BindingRole.Alias(var held) -> followedOnce(r.binding(),
+                        () -> trail.through(r.binding(), () -> named(held, names)));
                 case BindingRole.Unknown _ -> givenTo(r) instanceof Denotation given
                         ? readWhereGiven(given, null) : new PathResolution.NotAPosition();
             };
@@ -650,7 +751,7 @@ final class InputPath {
             return each.getFirst();
         }
         return switch (asked) {
-            case NAMED_POSITION, VALUE_ORIGIN -> PathResolution.anyOf(each);
+            case NAMED_POSITION, VALUE_ORIGIN, WHAT_IT_IS_MADE_OF -> PathResolution.anyOf(each);
             case EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN -> PathResolution.inEveryCase(each);
             case ONE_PER_ELEMENT, SAME_EMPTINESS -> throw unaskedHere();
         };
@@ -659,7 +760,8 @@ final class InputPath {
     /** Whether the question being asked has an answer across the cases a value is chosen between. */
     private boolean asksAcrossCases() {
         return switch (asked) {
-            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN -> true;
+            case NAMED_POSITION, VALUE_ORIGIN, WHAT_IT_IS_MADE_OF, EVERY_OCCURRENCE,
+                 IN_THE_ORDER_WRITTEN -> true;
             case ONE_PER_ELEMENT, SAME_EMPTINESS -> false;
         };
     }
@@ -901,7 +1003,7 @@ final class InputPath {
                 return new PathResolution.NotAPosition();
             }
         }
-        if (asked == ElementQuestion.VALUE_ORIGIN) {
+        if (asksWhereItCameFrom()) {
             PathResolution walked = throughAWalkFromASeed(e, names);
             if (walked != null) {
                 return walked;
@@ -1223,7 +1325,8 @@ final class InputPath {
             // at every other before it is asked of.
             case IN_THE_ORDER_WRITTEN -> throw new IllegalStateException("a walk after the order"
                     + " asks no operation of what it holds, and " + operation + " was asked of");
-            case NAMED_POSITION, VALUE_ORIGIN, ONE_PER_ELEMENT, SAME_EMPTINESS -> { }
+            case NAMED_POSITION, VALUE_ORIGIN, WHAT_IT_IS_MADE_OF, ONE_PER_ELEMENT,
+                 SAME_EMPTINESS -> { }
         }
         DeclaredArgument holds = argumentWhoseElementsItHolds(operation);
         // What is made from a position came from it and is not it, so an answer holding only that
@@ -1233,7 +1336,8 @@ final class InputPath {
         // declaration that states them because the operation is still standing to be asked.
         return holds != null ? holds
                 : switch (asked) {
-                    case VALUE_ORIGIN -> built != null ? built.derivesItsElementsFrom()
+                    case VALUE_ORIGIN, WHAT_IT_IS_MADE_OF -> built != null
+                            ? built.derivesItsElementsFrom()
                             : DefaultBoundOperationFacts.get().elementsMadeFromAlone(operation);
                     case NAMED_POSITION, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN -> null;
                     case ONE_PER_ELEMENT, SAME_EMPTINESS -> throw unaskedHere();
@@ -1279,7 +1383,8 @@ final class InputPath {
             case ONE_PER_ELEMENT -> !(asked instanceof Core.Widen)
                     && !(reached instanceof Core.Widen) && asked.type().equals(reached.type());
             case SAME_EMPTINESS -> true;
-            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN ->
+            case NAMED_POSITION, VALUE_ORIGIN, WHAT_IT_IS_MADE_OF, EVERY_OCCURRENCE,
+                 IN_THE_ORDER_WRITTEN ->
                     throw new IllegalArgumentException("a list is followed beneath for a question"
                             + " about one value for each element, not " + question);
         };
@@ -1311,7 +1416,8 @@ final class InputPath {
         boolean asksWhatEachIs = switch (question) {
             case ONE_PER_ELEMENT -> true;
             case SAME_EMPTINESS -> false;
-            case NAMED_POSITION, VALUE_ORIGIN, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN ->
+            case NAMED_POSITION, VALUE_ORIGIN, WHAT_IT_IS_MADE_OF, EVERY_OCCURRENCE,
+                 IN_THE_ORDER_WRITTEN ->
                     throw new IllegalArgumentException("a step beneath a list is taken for a"
                             + " question about one value for each element, not " + question);
         };

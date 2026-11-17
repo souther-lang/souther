@@ -5111,6 +5111,12 @@ public final class InputReads {
         return InputPath.cameFrom(e, names, newtypes, this).heldAt();
     }
 
+    /** Where {@code e}'s value came from, followed through everything it is made of
+     *  ({@link InputPath#madeOf}). */
+    public PathResolution madeOf(Core e, DeclarationNewtypes newtypes) {
+        return InputPath.madeOf(e, names, newtypes, this).heldAt();
+    }
+
     /**
      * Two readings are one where they hold the same facts and stand under the same arms.
      *

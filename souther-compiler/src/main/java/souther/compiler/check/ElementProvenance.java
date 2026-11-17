@@ -268,7 +268,8 @@ public final class ElementProvenance {
             // kept some of the elements may hold none of them. Nor does it say they stand in the
             // same order, so the walk after the order stops too.
             case ElementEdge.TheSameAs(var container) -> switch (question) {
-                case NAMED_POSITION, VALUE_ORIGIN -> new ElementStep.Through(container);
+                case NAMED_POSITION, VALUE_ORIGIN, WHAT_IT_IS_MADE_OF ->
+                        new ElementStep.Through(container);
                 case EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN, ONE_PER_ELEMENT, SAME_EMPTINESS ->
                         new ElementStep.Refused();
             };
@@ -279,7 +280,7 @@ public final class ElementProvenance {
             case ElementEdge.MadeFrom(var container) -> switch (question) {
                 case NAMED_POSITION, EVERY_OCCURRENCE, IN_THE_ORDER_WRITTEN, ONE_PER_ELEMENT,
                      SAME_EMPTINESS -> new ElementStep.Refused();
-                case VALUE_ORIGIN -> new ElementStep.Through(container);
+                case VALUE_ORIGIN, WHAT_IT_IS_MADE_OF -> new ElementStep.Through(container);
             };
         };
     }
