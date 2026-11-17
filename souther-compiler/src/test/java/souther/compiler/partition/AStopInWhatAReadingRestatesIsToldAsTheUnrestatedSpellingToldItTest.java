@@ -40,12 +40,17 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         CONDITIONS.put("cancelled", "q + 1 >= q");
         CONDITIONS.put("written", "List.all(r -> r >= 4, [q + 1, 3])");
         CONDITIONS.put("arm", "(if q > 5 then q + 1 else 3) >= q");
+        CONDITIONS.put("ruleSays", "(q + 1) / 2 >= 3");
+        CONDITIONS.put("nestedArm", "(if q > 5 then (if q > 7 then q + 1 else 3) else 4) >= q");
+        CONDITIONS.put("armOfARule", "(if q > 5 then Int.max(q + 1, 3) else 4) >= q");
         CONDITIONS.put("composed",
                 "List.all(r -> r <= 10, List.map(x -> x + 1, List.map(y -> y * 2, ds)))");
         CONDITIONS.put("beside",
                 "List.fold((w, l) -> if l > w then l else w, 0, ds) <= q + 1");
         CONDITIONS.put("none", "q >= q");
         CONDITIONS.put("armNoStop", "(if q > 5 then q - 1 else 3) >= q");
+        CONDITIONS.put("nestedArmNoStop",
+                "(if q > 5 then (if q > 7 then q - 1 else 3) else 4) >= q");
     }
 
     private static final Map<String, List<String>> TOLD = told();
@@ -74,6 +79,20 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         assertEquals(1, TOLD.get("arm").size(), TOLD.toString());
     }
 
+    /** Where a rule says what its rows get past, what a run works out is still told. */
+    @Test
+    void anOperationInAComparisonARuleSaysTheRowsOfIsTold() {
+        assertEquals(1, TOLD.get("ruleSays").size(), TOLD.toString());
+    }
+
+    /** What a rule kept of an arm is kept through the rules read inside it, as many deep as the
+     *  choices are. */
+    @Test
+    void anArmIsToldThroughTheChoicesAndTheRulesReadInsideIt() {
+        assertEquals(1, TOLD.get("nestedArm").size(), TOLD.toString());
+        assertEquals(1, TOLD.get("armOfARule").size(), TOLD.toString());
+    }
+
     /** The first step is worked out before the second, so a row is not said to stop in the
      *  second where it stopped in the first, and the first is told. */
     @Test
@@ -93,6 +112,7 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
     void nothingIsToldWhereNoRunWorksTheOperationOut() {
         assertEquals(List.of(), TOLD.get("none"));
         assertEquals(List.of(), TOLD.get("armNoStop"));
+        assertEquals(List.of(), TOLD.get("nestedArmNoStop"));
     }
 
     /** The notes of each behavior, each of the conditions read once, as the model says them. */

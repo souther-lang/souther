@@ -2081,9 +2081,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          *  comparison draws on the count is at a count a list holds, to be asked of the form of
          *  the comparison. */
         private final List<NumericTerm> countsOverTheStop = new ArrayList<>();
-        /** The last operation told before the step of a walk being unrolled, by the accumulator
-         *  that step reads the answer so far on: what the steps before worked out. */
-        private final Map<BindingId, Integer> carriedAfter = new HashMap<>();
+        /** The operations an operation over a name is worked out after, by the name: for the
+         *  accumulator of a walk being unrolled, what the steps before worked out, and for a name
+         *  a value was given, what a run worked out to give it. */
+        private final Map<BindingId, List<Integer>> carriedAfter = new HashMap<>();
         /** The names read under a node read as numbers of the input, where what each was given
          *  was asked with the node ({@link NumbersOnTheWayToATotal}). */
         private final Set<BindingId> readByATerm = new HashSet<>();
@@ -2257,21 +2258,21 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * the elements', and the steps before.
          */
         void after(BindingId accumulator) {
-            if (operations.isEmpty()) {
-                carriedAfter.remove(accumulator);
-            } else {
-                carriedAfter.put(accumulator, operations.size() - 1);
-            }
+            workedOutToGive(accumulator, 0);
         }
 
         /**
          * That the operations told from {@code from} on are what a run works out to give
-         * {@code name} its value, the last of them standing for the rest, which it is worked out
-         * after ({@link #workedOutOf}).
+         * {@code name} its value: every one of them is worked out before an operation over the
+         * name ({@link #workedOutOf}). Not the last of them alone, which stands for the rest only
+         * where each depends on the one before it: a value that is a call, or an element, tells
+         * the operations of its arguments side by side.
          */
         void workedOutToGive(BindingId name, int from) {
             if (operations.size() > from) {
-                carriedAfter.put(name, operations.size() - 1);
+                carriedAfter.put(name, IntStream.range(from, operations.size()).boxed().toList());
+            } else {
+                carriedAfter.remove(name);
             }
         }
 
@@ -2302,10 +2303,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             List<Integer> out = new ArrayList<>();
             for (Core operand : operands) {
                 Core bare = Core.withoutStanding(operand);
-                if (bare instanceof Core.Read name
-                        && carriedAfter.get(name.binding()) instanceof Integer last) {
-                    out.add(last);
-                    out.addAll(operations.get(last).after());
+                if (bare instanceof Core.Read name && carriedAfter.get(name.binding())
+                        instanceof List<Integer> given) {
+                    for (int each : given) {
+                        out.add(each);
+                        out.addAll(operations.get(each).after());
+                    }
                     continue;
                 }
                 for (int i = at.size() - 1; i >= 0; i--) {

@@ -1065,12 +1065,12 @@ final class Pullback {
         }
         List<StopEvidence.OnAnArm> out = new ArrayList<>();
         for (Meaning.ReadOnAnArm each : stated.meaning().relationsDownTheArms()) {
-            for (OnThisArm arm : theRule.onTheArms(each.relation())) {
+            for (OnThisArm arm : theRule.onTheArms(new ArmRead.OfARelation(each.relation()))) {
                 out.add(new StopEvidence.OnAnArm(each.reached(), arm.stops()));
             }
         }
         for (Meaning.CutNothingOnAnArm each : stated.meaning().cutsNothingDownTheArms()) {
-            for (OnThisArm arm : theRule.onTheArms(each.step())) {
+            for (OnThisArm arm : theRule.onTheArms(new ArmRead.OfACut(each.step()))) {
                 out.add(new StopEvidence.OnAnArm(each.reached(), arm.stops()));
             }
         }
@@ -3115,12 +3115,9 @@ final class Pullback {
          *  that says the written one works out the same ({@link #worksOutWhatItIsRestatedAs}). */
         private List<Supplier<UndividedByARelation.Working>> restated;
 
-        /** What a run taking an arm of a choice works out there, by each relation the comparison
-         *  was read as with the choice standing as that arm ({@link Pullback#readOnAnArm}). */
-        private Map<Relation, List<OnThisArm>> onTheArms;
-
-        /** The same, by the step of each comparison read as cutting nothing. */
-        private Map<Derivation, List<OnThisArm>> cutsNothingOnTheArms;
+        /** What a run taking an arm of a choice works out there, by each comparison the written
+         *  one was read as with the choice standing as that arm ({@link Pullback#readOnAnArm}). */
+        private Map<ArmRead, List<OnThisArm>> onTheArms;
 
         // The maps and lists of a candidate are made when the candidate first says something into
         // them: most say nothing, and an identity map holds a table before it holds anything.
@@ -3194,34 +3191,18 @@ final class Pullback {
             return restated == null ? List.of() : restated;
         }
 
-        void readOnAnArm(Relation relation, OnThisArm arm) {
+        void readOnAnArm(ArmRead read, OnThisArm arm) {
             marked = null;
             if (onTheArms == null) {
                 onTheArms = new LinkedHashMap<>();
             }
-            onTheArms.computeIfAbsent(relation, _ -> new ArrayList<>()).add(arm);
+            onTheArms.computeIfAbsent(read, _ -> new ArrayList<>()).add(arm);
         }
 
-        /** The same of a comparison read as cutting nothing, which has no relation: by the step
-         *  that reads it, which is that one comparison and no other that reads alike. */
-        void readOnAnArm(Derivation cutsNothing, OnThisArm arm) {
-            marked = null;
-            if (cutsNothingOnTheArms == null) {
-                cutsNothingOnTheArms = new IdentityHashMap<>();
-            }
-            cutsNothingOnTheArms.computeIfAbsent(cutsNothing, _ -> new ArrayList<>()).add(arm);
-        }
-
-        /** What runs taking the arms {@code relation} was read on work out there; none where it
-         *  was read on no arm. */
-        List<OnThisArm> onTheArms(Relation relation) {
-            return onTheArms == null ? List.of() : onTheArms.getOrDefault(relation, List.of());
-        }
-
-        /** What runs taking the arms {@code cutsNothing} was read on work out there. */
-        List<OnThisArm> onTheArms(Derivation cutsNothing) {
-            return cutsNothingOnTheArms == null ? List.of()
-                    : cutsNothingOnTheArms.getOrDefault(cutsNothing, List.of());
+        /** What runs taking the arms {@code read} was read on work out there; none where it was
+         *  read on no arm. */
+        List<OnThisArm> onTheArms(ArmRead read) {
+            return onTheArms == null ? List.of() : onTheArms.getOrDefault(read, List.of());
         }
 
         void tell(Relation relation, UndividedByARelation.Working told) {
@@ -3241,7 +3222,7 @@ final class Pullback {
          */
         UndividedByARelation.Working workingOf(Relation relation) {
             UndividedByARelation.Working told = relations == null ? null : relations.get(relation);
-            List<OnThisArm> arms = onTheArms(relation);
+            List<OnThisArm> arms = onTheArms(new ArmRead.OfARelation(relation));
             if (told != null || arms.isEmpty() || !arms.stream().allMatch(OnThisArm::tellsEvery)) {
                 return told;
             }
@@ -3257,9 +3238,44 @@ final class Pullback {
                 kept.relations.forEach(this::tell);
             }
             if (kept.onTheArms != null) {
-                kept.onTheArms.forEach((relation, arms) -> arms.forEach(each ->
-                        readOnAnArm(relation, each)));
+                kept.onTheArms.forEach((read, arms) -> arms.forEach(each ->
+                        readOnAnArm(read, each)));
             }
+        }
+    }
+
+    /**
+     * A comparison a candidate read the written one as, which what a run taking an arm works out
+     * is kept by. One read as a relation is told by the relation. One read as cutting nothing
+     * draws none, and is told by the step that reads it, which is that one comparison and no
+     * other that reads alike: two arms can cut nothing alike and work different things out.
+     */
+    sealed interface ArmRead {
+
+        /** The comparison read as {@code relation}. */
+        record OfARelation(Relation relation) implements ArmRead {}
+
+        /** The comparison {@code step} reads as cutting nothing. */
+        record OfACut(Derivation step) implements ArmRead {
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof OfACut(Derivation same) && same == step;
+            }
+
+            @Override
+            public int hashCode() {
+                return System.identityHashCode(step);
+            }
+        }
+
+        /** Every comparison read in {@code derivation} that a run taking an arm works things out
+         *  of. */
+        static List<ArmRead> in(Derivation derivation) {
+            List<ArmRead> out = new ArrayList<>();
+            Meaning.relationsReadIn(derivation).forEach(each -> out.add(new OfARelation(each)));
+            Meaning.cutsNothingIn(derivation).forEach(each -> out.add(new OfACut(each)));
+            return out;
         }
     }
 
@@ -13662,10 +13678,7 @@ final class Pullback {
                 new Once<>(() -> worksOut(theRule, arithmeticOf(stated, there)));
         OnThisArm arm = new OnThisArm(worksOut,
                 restatingAQuotient ? List.of() : whatDecidedTheArm());
-        for (Relation each : Meaning.relationsReadIn(read)) {
-            trial().readOnAnArm(each, arm);
-        }
-        for (Derivation each : Meaning.cutsNothingIn(read)) {
+        for (ArmRead each : ArmRead.in(read)) {
             trial().readOnAnArm(each, arm);
         }
         return read;
