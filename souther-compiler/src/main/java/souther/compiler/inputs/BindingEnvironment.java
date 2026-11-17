@@ -81,7 +81,7 @@ final class BindingEnvironment {
     private final Map<BindingId, InputReads.EntryLookedUp> selected;
     /** The lookup each name opens: the call that asked a map for a key, whose answer the arm
      *  binding the name is under holds the value of. */
-    private final Map<BindingId, InputReads.LookupOpened> opened;
+    private final Map<BindingId, InputReads.ArmOpened> opened;
     /** The place inside what a dependency answered each such name is the value at, for a name
      *  given the entry a lookup in a map filed from an answer's list picked out. */
     private final Map<BindingId, InputReads.AnAnswerAt> answered;
@@ -578,7 +578,7 @@ final class BindingEnvironment {
                                Map<BindingId, Core> table, Layer newest, ElementBindings elements,
                                ValueDefinitions values, HeldHash heldHash, boolean callsStand,
                                Map<BindingId, InputReads.EntryLookedUp> selected,
-                               Map<BindingId, InputReads.LookupOpened> opened,
+                               Map<BindingId, InputReads.ArmOpened> opened,
                                Map<BindingId, InputReads.AnAnswerAt> answered) {
         this.selected = selected;
         this.opened = opened;
@@ -853,15 +853,15 @@ final class BindingEnvironment {
     }
 
     /** The same, where {@code binding} is what the lookup {@code lookup} found under its key. */
-    BindingEnvironment opening(BindingId binding, InputReads.LookupOpened lookup) {
-        Map<BindingId, InputReads.LookupOpened> wider = new LinkedHashMap<>(opened);
+    BindingEnvironment opening(BindingId binding, InputReads.ArmOpened lookup) {
+        Map<BindingId, InputReads.ArmOpened> wider = new LinkedHashMap<>(opened);
         wider.put(binding, lookup);
         return new BindingEnvironment(roots, handed, table, newest, elements, values, heldHash,
                 callsStand, selected, Map.copyOf(wider), answered);
     }
 
     /** What {@code binding} is the value of, or null where it is no such name. */
-    InputReads.LookupOpened openedBy(BindingId binding) {
+    InputReads.ArmOpened openedBy(BindingId binding) {
         return opened.get(binding);
     }
 

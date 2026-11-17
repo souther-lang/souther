@@ -9,9 +9,10 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.DeclaredInput;
 import souther.compiler.inputs.HeldIn;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.inputs.PathResolution;
+import souther.compiler.inputs.MadeFrom;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.ValueDefinitions;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
@@ -78,7 +79,7 @@ class WhatAQuestionMayNotCrossIsNotWhatWasNeverRecordedTest {
         return builder.built();
     }
 
-    private static PathResolution namedPositionOf(ElementProvenance provenance) {
+    private static ValuesAt namedPositionOf(ElementProvenance provenance) {
         return reads(provenance).pathOf(read("x", ELEMENT),
                 DeclarationNewtypes.asWritten(Symbols.none(DefaultStdlib.get())));
     }
@@ -89,7 +90,7 @@ class WhatAQuestionMayNotCrossIsNotWhatWasNeverRecordedTest {
      */
     @Test
     void aRefusedEdgeIsNotAWayToLookElsewhere() {
-        assertEquals(new PathResolution.NotAPosition(), namedPositionOf(madeFrom()),
+        assertEquals(new ValuesAt.NotAPosition(), namedPositionOf(madeFrom()),
                 "the elements were made from somewhere, so an element of them is at no position —"
                         + " and what the container holds is what that making read");
     }
@@ -103,7 +104,7 @@ class WhatAQuestionMayNotCrossIsNotWhatWasNeverRecordedTest {
      */
     @Test
     void andWhereNothingWasRecordedWhatTheBindingHoldsIsRead() {
-        assertEquals(new PathResolution.At(TermPath.of("held").element()),
+        assertEquals(new ValuesAt.At(TermPath.of("held").element()),
                 namedPositionOf(ElementProvenance.NONE),
                 "nothing says where these elements came from, so the container is what it holds");
     }
@@ -111,7 +112,7 @@ class WhatAQuestionMayNotCrossIsNotWhatWasNeverRecordedTest {
     /** And the walk after where a value came from crosses the edge, which is what it is for. */
     @Test
     void andAReadingOfProvenanceCrossesIt() {
-        assertEquals(new PathResolution.At(TermPath.of("made").element()),
+        assertEquals(new MadeFrom.FromOne(TermPath.of("made").element()),
                 reads(madeFrom()).cameFrom(read("x", ELEMENT),
                         DeclarationNewtypes.asWritten(Symbols.none(DefaultStdlib.get()))),
                 "the values came from there, which is what a rule about them was written about");

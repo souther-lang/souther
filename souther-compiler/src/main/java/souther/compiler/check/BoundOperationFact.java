@@ -481,6 +481,12 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
     record AnswersAnElementOf(DeclaredOperation operation, DeclaredArgument source)
             implements OneAboutAnOperation {}
 
+    /** What the operation answers holds, where it holds a value, the greatest or the least element
+     *  of {@code source}. */
+    record AnswersAnExtremeElementOf(DeclaredOperation operation, DeclaredArgument source,
+                                     BoundOperationFacts.End end)
+            implements OneAboutAnOperation {}
+
     /** What the operation answers holds, where it holds a value, an element of {@code source} that
      *  {@code closure} answers true on. */
     record AnswersAnElementWhereTheClosureHolds(DeclaredOperation operation,

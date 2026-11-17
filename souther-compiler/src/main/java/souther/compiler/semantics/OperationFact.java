@@ -295,6 +295,28 @@ public sealed interface OperationFact {
     }
 
     /**
+     * What the operation answers holds, where it holds a value, the greatest or the least element
+     * of {@code source}: {@code List.max(xs)} is {@code Some(x)} only for an {@code x} of
+     * {@code xs} that no element of {@code xs} is above.
+     *
+     * <p>The stronger of two statements, and the weaker is stated from it and never beside it
+     * ({@link AnswersAnElementOf}): written twice, the two could be changed apart.
+     */
+    record AnswersAnExtremeElementOf(ArgumentRef source, End end) implements OperationFact {
+
+        public AnswersAnExtremeElementOf {
+            Objects.requireNonNull(source, "an extreme is one of some container's elements");
+            Objects.requireNonNull(end, "which end of the elements it is");
+        }
+
+        /** Which end of the elements the answer is. */
+        public enum End {
+            GREATEST,
+            LEAST
+        }
+    }
+
+    /**
      * What the operation answers holds a value exactly where {@code container} files one under the
      * value of {@code key}, and it is that value: {@code Map.get(k, m)} is {@code Some(v)} where
      * {@code m} holds {@code v} under {@code k}, and nothing where it holds nothing under it.

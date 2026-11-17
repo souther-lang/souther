@@ -9,6 +9,7 @@ import souther.compiler.check.StatedComparison;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.UnreadComparison;
 import souther.compiler.core.Core;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.BlockReason;
@@ -1304,9 +1305,10 @@ sealed interface ComparisonAssessment {
      * What {@code comparison} comes to, whoever wrote it.
      *
      * <p>The one way in. {@code applying} is the applications of the closures the comparison
-     * stands inside, on each of which it is read. {@code answer} is the binding a clause calls what
-     * the behavior answers, or
-     * null where the comparison is written in a body and there is nothing to be the answer.
+     * stands inside, on each of which it is read. {@code answer} is what a clause calls what the
+     * behavior answers and every name the clause makes of it
+     * ({@link souther.compiler.core.WhatABodyReads#namesMadeOf}), or empty where the comparison is
+     * written in a body and there is nothing to be the answer.
      * {@code writtenIn} is the copy of the body a comparison a body wrote stands in, which tells
      * the lines its author drew from the places a call put them; nothing for a clause.
      *
@@ -1323,7 +1325,7 @@ sealed interface ComparisonAssessment {
     static ComparisonAssessment of(String behavior, StatedComparison comparison, Citation at,
                                    InputReading read, InputReads reads,
                                    ClosureApplications applying,
-                                   BindingId answer, Arrivals answering,
+                                   Set<BindingId> answer, Arrivals answering,
                                    boolean drawnByAnInvariant, WhatConditionsState conditions,
                                    Optional<ExpansionLineage> writtenIn,
                                    ComparisonWitnesses.AtAComparison witnesses) {
@@ -1347,14 +1349,23 @@ sealed interface ComparisonAssessment {
     /** {@link #of}, and which applications read each of its lines and relations. */
     static Assessed ofEach(String behavior, StatedComparison comparison, Citation at,
                            InputReading read, InputReads reads, ClosureApplications applying,
-                           BindingId answer, Arrivals answering, boolean drawnByAnInvariant,
+                           Set<BindingId> answer, Arrivals answering, boolean drawnByAnInvariant,
                            WhatConditionsState conditions, Optional<ExpansionLineage> writtenIn,
                            ComparisonWitnesses.AtAComparison witnesses) {
         // Asked first, and of the whole comparison. A rule that reads the answer anywhere in it is
         // one this reading does not put on the input space, whichever side the answer is on and
         // whatever else stands beside it: `value.n + query.offset <= 20` is about the answer and
         // about an input, and the input is no more measurable here for the input being named.
-        if (readsAnswer(comparison.left(), answer) || readsAnswer(comparison.right(), answer)) {
+        //
+        // Syntactic, over the names the clause made of the answer. {@code value.n - value.n +
+        // query.limit.value <= 20} does not depend on the answer once the arithmetic is read, and
+        // this answers that it does: the atoms of the canonical form are the input's positions, so
+        // the arithmetic cannot see through a read of the answer at all, and a predicate that
+        // quietly did some of the cancelling would be a second reading of the comparison. The same
+        // predicate answers whether a rule about the answer is one this compiler failed to read
+        // ({@link EnsuresThresholds}), so the two cannot come to different answers about one rule.
+        if (WhatABodyReads.anyOf(comparison.left(), answer)
+                || WhatABodyReads.anyOf(comparison.right(), answer)) {
             return new Assessed(new AnswerDependent(), LinesReadOn.NONE);
         }
         Cutting.Drawn drawn = Cutting.drawn(behavior, comparison, read, reads, applying,
@@ -1413,7 +1424,7 @@ sealed interface ComparisonAssessment {
             // is for.
             case Cutting.Read.Stopped stopped ->
                     besideWhereTheValuesCameFrom(stopped.places(), stopped.where(), comparison,
-                            reads, read.newtypes());
+                            reads, read.newtypes(), true);
         };
     }
 
@@ -2166,7 +2177,7 @@ sealed interface ComparisonAssessment {
                                                         InputReads reads,
                                                         DeclarationNewtypes newtypes) {
         return besideWhereTheValuesCameFrom(PlacesStopped.NOWHERE, WhereAReadingStopped.ELSEWHERE,
-                comparison, reads, newtypes);
+                comparison, reads, newtypes, false);
     }
 
     /**
@@ -2186,9 +2197,15 @@ sealed interface ComparisonAssessment {
      */
     private static ComparisonAssessment besideWhereTheValuesCameFrom(
             PlacesStopped filed, WhereAReadingStopped where, StatedComparison comparison,
-            InputReads reads, DeclarationNewtypes newtypes) {
+            InputReads reads, DeclarationNewtypes newtypes, boolean ofAStoppedReading) {
         SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> why = filed.reasons();
         GuardThresholds.cameFrom(comparison, reads, newtypes, why);
+        // A reading that stopped and filed nowhere is no rule about nothing: that is a comparison
+        // of constants, and a rule whose values nothing followed is about where they came from.
+        // One that filed a place has said where it stopped, and that place says all of it.
+        if (ofAStoppedReading && filed.isEmpty()) {
+            GuardThresholds.cameFromThroughWhatTheSidesAreMadeOf(comparison, reads, newtypes, why);
+        }
         PlacesStopped places = filed.alsoFiledAt(why);
         return places.isEmpty() ? new NoInput() : new Unread(places, where);
     }
@@ -2900,35 +2917,5 @@ sealed interface ComparisonAssessment {
                  NothingArrivesAtItsRelation _, NothingArrivesAtItsStop _,
                  RelationTurnsNothing _ -> false;
         };
-    }
-
-    /**
-     * Whether anything in {@code e} reads the binding a rule calls the answer.
-     *
-     * <p>A mechanical predicate over the tree, and it classifies nothing by itself. Two readers ask
-     * it and reach different conclusions: {@link #of} answers that the comparison raises no
-     * input-coverage obligation, and {@link EnsuresThresholds} answers that a rule about the answer
-     * is not one this compiler failed to read. Written twice, the two came apart — the second had
-     * the predicate and the first did not — so it is written once and neither reader owns what the
-     * other makes of it.
-     *
-     * <p>Syntactic. {@code value.n - value.n + query.limit.value <= 20} does not depend on the
-     * answer once the arithmetic is read, and this answers that it does. The atoms of the canonical
-     * form are the input's positions, so the arithmetic cannot see through a read of the answer at
-     * all; a predicate that quietly did some of the cancelling would be a second reading of the
-     * comparison, which is the shape this whole assessment is written against.
-     *
-     * <p>False where there is no answer to read, which is every comparison written in a body.
-     */
-    static boolean readsAnswer(Core e, BindingId answer) {
-        if (answer == null) {
-            return false;
-        }
-        if (e instanceof Core.Read read && answer.equals(read.binding())) {
-            return true;
-        }
-        boolean[] found = {false};
-        Core.forEachChild(e, child -> found[0] |= readsAnswer(child, answer));
-        return found[0];
     }
 }

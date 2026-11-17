@@ -35,7 +35,7 @@ import java.util.function.UnaryOperator;
  * written as one arm and a catch-all, and a catch-all is exhaustive whatever this gains. That step
  * is taken here ({@link #deeper}) so there is nothing for a catch-all to swallow.
  */
-public sealed interface PathResolution {
+sealed interface PathResolution {
 
     /**
      * Where the expression stands.

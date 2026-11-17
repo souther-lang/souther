@@ -75,13 +75,7 @@ class AnOperatorIsAskedWhatItComposesInOnePlaceTest {
                             + " both halves. The one place an authored part is recognised: which"
                             + " parts there are, where each stands among them, the clause with each"
                             + " expanded where it stands, and which subtree of a reading each of"
-                            + " them became are all answers over that one shape"),
-            new Licence("souther.compiler.partition.ClauseStatements.walk", 1,
-                    "what a behavior's clause states outright: one recognition, and both of what a"
-                            + " connective can compose read off it. The comparisons a clause draws"
-                            + " lines with and the predicates it tells sets of strings apart with"
-                            + " are read off the statements this leaves, so neither reader is a"
-                            + " second place the same `&&` is recognised in"));
+                            + " them became are all answers over that one shape"));
 
     @Test
     void onlyARecognitionReadsAnOperatorForWhatItComposes() {

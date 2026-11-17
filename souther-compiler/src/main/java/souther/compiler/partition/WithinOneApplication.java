@@ -5,7 +5,7 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.inputs.PathResolution;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.semantics.HowAClosureIsApplied;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
@@ -109,7 +109,7 @@ public record WithinOneApplication(Set<ModelOccurrence> forks,
             }
             Denotation container = new Denotation(each.container(), reads);
             if (!(container.at().pathOf(container.value(), read.newtypes())
-                    instanceof PathResolution.At)) {
+                    instanceof ValuesAt.At)) {
                 out.add(new WhyKept.Shortfall.OverNoPosition(asWritten(each, module, said)));
             }
         }

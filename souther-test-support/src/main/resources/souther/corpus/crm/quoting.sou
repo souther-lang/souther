@@ -319,12 +319,21 @@ let rejectedQuote = Quote { ...vpQuote
                                                      , note = RejectionNote("margin too thin") }
                           }
 
-// Four rows, one per band, and both sides of the first two boundaries. A matrix nobody has checked at its
-// edges is a matrix that lets a rep sign off their own thirty per cent.
+// One row per band, and each boundary at the boundary and on both sides of it. A matrix nobody has checked at
+// its edges is a matrix that lets a rep sign off their own thirty per cent.
 example approvalNeeded
+    | "no discount is a rep's own call" :
+        (quoteAt(DiscountRate(0.00m), Amount(10000.00m)))
+        -> WithinAuthority
     | "a tenth off is a rep's own call" :
         (quoteAt(DiscountRate(0.10m), Amount(9000.00m)))
         -> WithinAuthority
+    | "a fifth is the manager's, and no more" :
+        (quoteAt(DiscountRate(0.20m), Amount(8000.00m)))
+        -> NeedsApproval { role = SalesManager, worstDiscount = DiscountRate(0.20m) }
+    | "thirty-five per cent is still the VP's" :
+        (quoteAt(DiscountRate(0.35m), Amount(6500.00m)))
+        -> NeedsApproval { role = RegionalVp, worstDiscount = DiscountRate(0.35m) }
     | "a fraction past a tenth needs a manager" :
         (quoteAt(DiscountRate(0.11m), Amount(8900.00m)))
         -> NeedsApproval { role = SalesManager, worstDiscount = DiscountRate(0.11m) }

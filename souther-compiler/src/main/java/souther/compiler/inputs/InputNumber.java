@@ -144,14 +144,14 @@ public final class InputNumber {
         // And a number of the input is the value at a position, so an expression naming none names
         // no number here.
         return switch (reads.pathOf(e, source.newtypes())) {
-            case PathResolution.At(var at) -> LinearForm.atom(new NumericTerm.ValueOf(at));
+            case ValuesAt.At(var at) -> LinearForm.atom(new NumericTerm.ValueOf(at));
             // Asked only of what stands at no position, which is what a call is: following what an
             // expression stands as is a walk of its own, and every value of the input would pay it.
-            case PathResolution.NotAPosition _ -> atomOf(wholeUnitsOf(e, inputs, reads, source));
+            case ValuesAt.NotAPosition _ -> atomOf(wholeUnitsOf(e, inputs, reads, source));
             // And a number of the input is the value at one position. A name standing at one of
             // several would be a number at whichever of them a reader picked, and a line drawn on
             // it would fall at a place the rule may say nothing about.
-            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
+            case ValuesAt.MayStandAt _ -> null;
         };
     }
 
@@ -190,7 +190,7 @@ public final class InputNumber {
         AnOperationApplied applied = AnOperationApplied.of(e);
         Core counted = DefaultBoundOperationFacts.get().wholeUnitsCountedIn(applied);
         if (counted == null || !(reads.pathOf(counted, source.newtypes())
-                instanceof PathResolution.At(var at))
+                instanceof ValuesAt.At(var at))
                 || !(applied.operation() instanceof ValueName.Stdlib operation)) {
             return null;
         }
@@ -229,8 +229,8 @@ public final class InputNumber {
                                               RuleReadingSource source) {
         Core of = measured.of();
         return switch (reads.pathOf(of, source.newtypes())) {
-            case PathResolution.At(var at) -> ObservationSource.asItStands(at);
-            case PathResolution.NotAPosition _ -> {
+            case ValuesAt.At(var at) -> ObservationSource.asItStands(at);
+            case ValuesAt.NotAPosition _ -> {
                 ObservationSource moved = movedFromALocation(of, reads, source);
                 if (moved != null || !measured.takenAs().theSameInEveryOrder()) {
                     yield moved;
@@ -241,7 +241,7 @@ public final class InputNumber {
             // A taking is of one location, and a name that only may stand at one is no one of
             // them. Taken of any, the number would be a size of a container the run it is on
             // never walked.
-            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
+            case ValuesAt.MayStandAt _ -> null;
         };
     }
 
@@ -296,7 +296,7 @@ public final class InputNumber {
         }
         if (days.isEmpty()
                 || !(met.at().pathOf(met.value(), source.newtypes())
-                        instanceof PathResolution.At(var from))) {
+                        instanceof ValuesAt.At(var from))) {
             return null;
         }
         // The innermost shift first: each one is defined only at the dates the ones inside it
@@ -343,7 +343,7 @@ public final class InputNumber {
                 : facts.codePointsListedOf(applied.operation());
         Core argument = string == null ? null : applied.argument(string);
         return argument != null && standing.at().pathOf(argument, source.newtypes())
-                instanceof PathResolution.At(var at) ? at : null;
+                instanceof ValuesAt.At(var at) ? at : null;
     }
 
     /**
@@ -519,7 +519,7 @@ public final class InputNumber {
         if (string != null) {
             Core argument = applied.argument(string);
             if (argument == null || !(standing.at().pathOf(argument, source.newtypes())
-                    instanceof PathResolution.At(var at))) {
+                    instanceof ValuesAt.At(var at))) {
                 return null;
             }
             Integer length = howManyCodePointsAt(at, inputs, source);
@@ -720,14 +720,14 @@ public final class InputNumber {
         // and is one of every element whatever order they stand in.
         if (!kept.readsThePosition()) {
             return listed.at().everyElementOf(listed.value(), source.newtypes())
-                    instanceof PathResolution.At(TermPath at)
+                    instanceof ValuesHeld.At(TermPath at)
                     ? overTheElements(operation, takenAs, at, kept,
                             each != null ? each : inputs.typeAt(at, source), null, inputs, source)
                     : null;
         }
         for (TraversalDirection direction : TraversalDirection.values()) {
             if (listed.at().inTheOrderOf(listed.value(), direction, source.newtypes())
-                    instanceof PathResolution.At(TermPath at)) {
+                    instanceof ValuesHeld.At(TermPath at)) {
                 return overTheElements(operation, takenAs, at, kept,
                         each != null ? each : inputs.typeAt(at, source),
                         new RunSource.TraversalOrder(at, direction), inputs, source);
@@ -1214,11 +1214,11 @@ public final class InputNumber {
         // leaves no run to take — and a walk over some of them, as one after a filter is, is no
         // run over the values standing there.
         TermPath at = switch (where.everyElementAt(element, source.newtypes())) {
-            case PathResolution.At(var stands) -> stands;
-            case PathResolution.NotAPosition _ -> null;
+            case ValuesHeld.At(var stands) -> stands;
+            case ValuesHeld.NotAPosition _ -> null;
             // A run is over the values at one position, and a walk whose elements come from more
             // than one container is no one run.
-            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
+            case ValuesHeld.MayStandAt _ -> null;
         };
         Selection some = null;
         if (at == null) {
@@ -1226,7 +1226,7 @@ public final class InputNumber {
             some = container == null || !kept.isEmpty() ? null
                     : selectionOf(where.denotes(container, symbols, source.newtypes()), source);
             if (some == null || !(some.list().at().everyElementOf(some.list().value(),
-                    source.newtypes()) instanceof PathResolution.At(TermPath stands))) {
+                    source.newtypes()) instanceof ValuesHeld.At(TermPath stands))) {
                 return null;
             }
             at = stands;
@@ -1337,7 +1337,7 @@ public final class InputNumber {
         // Every occurrence of the position and each as often, which a total of what each element
         // adds is a total of.
         if (!(container.at().everyElementOf(container.value(), source.newtypes())
-                instanceof PathResolution.At(TermPath at))) {
+                instanceof ValuesHeld.At(TermPath at))) {
             return null;
         }
         BindingId element = walk.element().binding();
@@ -1423,7 +1423,7 @@ public final class InputNumber {
         }
         Denotation container = reads.standing(walk.container(), source.symbols(), source.newtypes());
         if (!(container.at().everyElementOf(container.value(), source.newtypes())
-                instanceof PathResolution.At(TermPath walked))
+                instanceof ValuesHeld.At(TermPath walked))
                 || walked.containersHoldingIt().size() != 1) {
             return null;
         }
@@ -1574,7 +1574,7 @@ public final class InputNumber {
                 || !(followed(lookup.container(), names) instanceof Core.Read map)) {
             return null;
         }
-        return reads.forkedOn(map, source.newtypes()) instanceof PathResolution.At(TermPath at)
+        return reads.forkedOn(map, source.newtypes()) instanceof ValuesAt.At(TermPath at)
                 ? at.element() : null;
     }
 
@@ -1719,7 +1719,7 @@ public final class InputNumber {
             ElementComputation read = ElementValue.readBeside(
                     new ElementAnswer(walked.element(), value, null), arm.standing(), arm.held(),
                     source, new ElementValue.ElementsAt(elements, reads.declared()),
-                    e -> reads.pathOf(e, source.newtypes()) instanceof PathResolution.At(
+                    e -> reads.pathOf(e, source.newtypes()) instanceof ValuesAt.At(
                             TermPath at) && !at.standsAtUnderOrAround(elements)
                             ? new NumericTerm.ValueOf(at) : null);
             if (read == null || (beside != null && !beside.equals(read.invariant()))) {
@@ -1787,7 +1787,7 @@ public final class InputNumber {
             InputReads where, BindingId element, TermPath at, RuleReadingSource source) {
         for (TraversalDirection direction : TraversalDirection.values()) {
             if (where.inTheOrderAt(element, direction, source.newtypes())
-                    instanceof PathResolution.At(TermPath shown) && shown.equals(at)) {
+                    instanceof ValuesHeld.At(TermPath shown) && shown.equals(at)) {
                 return new RunSource.TraversalOrder(at, direction);
             }
         }

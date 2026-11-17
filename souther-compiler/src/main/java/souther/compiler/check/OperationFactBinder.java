@@ -399,6 +399,17 @@ final class OperationFactBinder {
                 holdTheAnswerToAnElementOf(declaration, source);
                 yield new BoundOperationFact.AnswersAnElementOf(operation, source);
             }
+            // The greatest or the least of the elements of a container, which are ordered.
+            case OperationFact.AnswersAnExtremeElementOf extreme -> {
+                requireAKernel(stdlib, operation, "which element it answers");
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.OPTIONAL,
+                        "an option of an element of a container");
+                DeclaredArgument source = holdToTheDeclaration(declaration, extreme.source(), null,
+                        TypeRequirement.CONTAINER, "what the value answered is an end of");
+                holdTheAnswerToAnElementOf(declaration, source);
+                yield new BoundOperationFact.AnswersAnExtremeElementOf(operation, source,
+                        BoundOperationFacts.End.valueOf(extreme.end().name()));
+            }
             // An element picked at a place of a list: the place is a whole number, and the answer
             // an option of an element of the list.
             case OperationFact.AnswersTheElementAt picked -> {
