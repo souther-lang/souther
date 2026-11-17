@@ -73,9 +73,10 @@ class WhatACandidateHasSaidIsMarkedOnceWhileItSaysNothingMoreTest {
                 trial -> trial.dividendBesideTheRows(number(3), number(4)),
                 trial -> trial.landsInAMonth(number(5), operation),
                 trial -> trial.restatedAs(() -> null),
-                trial -> trial.readOnAnArm(relation, new Pullback.OnThisArm(() ->
+                trial -> trial.readOnAnArm(new Pullback.ArmRead.OfARelation(relation),
+                        new Pullback.OnThisArm(() ->
                         AffineReading.WorkedOut.ofWhatIsToldOf(UndividedByARelation.Working.UNREAD),
-                        List.of())),
+                        () -> UndividedByARelation.Working.NOTHING, List.of())),
                 trial -> trial.tell(relation, UndividedByARelation.Working.UNREAD));
     }
 

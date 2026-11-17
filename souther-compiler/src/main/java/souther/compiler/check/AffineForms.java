@@ -34,6 +34,7 @@ import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * Reading an expression as {@code const + Σ coef·atom}, over whatever a caller counts as an atom.
@@ -167,6 +168,16 @@ public final class AffineForms {
          * {@code a}, and a run stops at {@code a + b} all the same.
          */
         default void composed(Core operation, LinearForm<A> form) {
+        }
+
+        /**
+         * {@code read}, the walk reading the value {@code name} was given. A reader that tells of
+         * the operations composed ({@link #composed}) learns from it which of them a run works
+         * out to give the name its value, and so what an operation over the name is worked out
+         * after.
+         */
+        default <T> T readingTheValueOf(BindingId name, Supplier<T> read) {
+            return read.get();
         }
 
         /**
@@ -507,6 +518,11 @@ public final class AffineForms {
         @Override
         public void composed(Core operation, LinearForm<A> form) {
             of.composed(operation, form);
+        }
+
+        @Override
+        public <T> T readingTheValueOf(BindingId name, Supplier<T> read) {
+            return of.readingTheValueOf(name, read);
         }
 
         @Override
@@ -985,11 +1001,12 @@ public final class AffineForms {
                     ValueStanding.Standing<E, Reading<A, E>> one) ->
                     ValueStanding.answered(one.names(), ValueStanding.NameQuestion.FORM,
                             one.value(), one.at(),
-                            () -> following.readingOf(r.binding(), one.value(),
+                            () -> reading.readingTheValueOf(r.binding(),
+                                    () -> following.readingOf(r.binding(), one.value(),
                                     readAs(r, at, one.at(), reading), () -> {
                                         countANameRead();
                                         return of(one.value(), one.at(), one.names(), following);
-                                    }));
+                                    })));
             case ValueStanding.Named.OneOf<E, Reading<A, E>>(
                     List<ValueStanding.Standing<E, Reading<A, E>>> members) -> {
                 // Several values the name may stand for, each read apart from the operations the

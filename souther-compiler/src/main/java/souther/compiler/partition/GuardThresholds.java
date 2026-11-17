@@ -41,6 +41,7 @@ import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
@@ -373,8 +374,12 @@ public final class GuardThresholds {
                                                     .orElseGet(() -> arrived.relationsRead()
                                                             .stream().anyMatch(UndividedByARelation
                                                                     ::aRunMayStopOverABoundValue)))
-                                    || aRunTakingAnArmMayStop(each, read, arrivals, wayToACase,
-                                            aCase));
+                                    || aRunTakingAnArmMayStop(each, each.onTheArms(), null, read,
+                                            arrivals, wayToACase, aCase)
+                                    || each.worksOutOnEach().map(applications -> applications
+                                            .stream().anyMatch(one -> aRunTakingAnArmMayStop(each,
+                                                    one.arms(), one.reached(), read, arrivals,
+                                                    wayToACase, aCase))).orElse(false));
                             // And the values at which every run getting to it stops in what it
                             // works out, asked of the way before a row is narrowed to getting
                             // past that: a row that got past holds none of them.
@@ -1258,22 +1263,29 @@ public final class GuardThresholds {
     }
 
     /**
-     * Whether a run taking an arm of a choice {@code each} is read through may stop in what it
-     * works out there ({@link StopEvidence.OnAnArm}): asked over the rows the way to the arm
-     * leaves, the arm's condition put on it, of an arm some row is shown to arrive at. An arm no
-     * row takes works nothing out, and an arm whose condition cannot be put on the way is asked
-     * nothing, since what the rows of the whole way would say is said of runs that do not take it.
+     * Whether a run taking an arm of {@code arms}, those of a choice {@code each} is read through,
+     * may stop in what it works out there ({@link StopEvidence.OnAnArm}): asked over the rows the
+     * way to the arm leaves, the arm's condition put on it, of an arm some row is shown to arrive
+     * at. An arm no row takes works nothing out, and an arm whose condition cannot be put on the
+     * way is asked nothing, since what the rows of the whole way would say is said of runs that do
+     * not take it. {@code within} is where the arms are read where that is one application of the
+     * closure the comparison stands in, which a run makes only where that is made, and null where
+     * they are read wherever the comparison is.
      */
     private static boolean aRunTakingAnArmMayStop(
-            ComparisonReadings.Reading each, InputReading read, List<ComparisonArrival> arrivals,
-            WaysToACase wayToACase, Function<Proposition, ReachingCuts.Stating> aCase) {
+            ComparisonReadings.Reading each, List<StopEvidence.OnAnArm> arms, Proposition within,
+            InputReading read, List<ComparisonArrival> arrivals, WaysToACase wayToACase,
+            Function<Proposition, ReachingCuts.Stating> aCase) {
         if (each.statedAsACondition().isEmpty()) {
             return false;
         }
-        for (StopEvidence.OnAnArm arm : each.onTheArms()) {
-            if (!arm.stops().noRunMayStopAnywhere() && ComparisonAssessment.someRowArrives(wayToACase.apply(arm.reached()), arrivals)
+        for (StopEvidence.OnAnArm arm : arms) {
+            Proposition reached = within == null ? arm.reached()
+                    : WhereAnApplicationIsMade.past(within, arm.reached());
+            if (!arm.stops().noRunMayStopAnywhere()
+                    && ComparisonAssessment.someRowArrives(wayToACase.apply(reached), arrivals)
                     && arm.stops().aRunMayStopIn(read, regionsOf(Reachability.of(
-                            new WayToTheBorder(each.wayToACase(aCase.apply(arm.reached()))),
+                            new WayToTheBorder(each.wayToACase(aCase.apply(reached))),
                             read.quantities().region())))) {
                 return true;
             }

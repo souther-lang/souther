@@ -709,14 +709,17 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      *                this out
      * @param working what the comparison works out on it, as a row of its lines gets past it
      * @param stops   what a run making it works out there, for where a run stops in it
+     * @param arms    what a run taking each arm of a choice the comparison is read through works
+     *                out on it, where the application is made
      */
     record OnAnApplication(Proposition reached, UndividedByARelation.Working working,
-                           StopEvidence stops) {
+                           StopEvidence stops, List<StopEvidence.OnAnArm> arms) {
 
         OnAnApplication {
             Objects.requireNonNull(reached, "an application is made somewhere");
             Objects.requireNonNull(working, "and works something out");
             Objects.requireNonNull(stops, "and a run making it works something out");
+            Objects.requireNonNull(arms, "and what it works out on each arm it takes, if any");
         }
     }
 
@@ -741,7 +744,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
             Pullback.OnTheInput onTheInput = conditions.comparison(comparison, one.reads(), read);
             out.add(new OnAnApplication(one.reached(), workingOf(onTheInput),
-                    onTheInput.stops().get()));
+                    onTheInput.stops().get(), onTheInput.onTheArms().get()));
         }
         return Optional.of(out);
     }

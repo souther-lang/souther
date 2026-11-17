@@ -215,6 +215,40 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
             return List.copyOf(out);
         }
 
+        /**
+         * Each step {@code wanted} says in what this states, with where it is read, as
+         * {@link #relationsDownTheArms} has them: a comparison read as cutting nothing, which draws
+         * no relation, and an arm, whose answer a run works out whether the comparison made of it
+         * is read or not.
+         */
+        public List<StepOnAnArm> stepsDownTheArms(Predicate<Derivation> wanted) {
+            List<StepOnAnArm> out = new ArrayList<>();
+            new Walk(wanted, (step, down) -> out.add(new StepOnAnArm(step, down.all())))
+                    .down(how, Down.NO_ARM);
+            return List.copyOf(out);
+        }
+
+        /** The steps {@link #stepsDownTheArms} has of {@code how}, without where each is read. */
+        public static List<Derivation> stepsIn(Derivation how, Predicate<Derivation> wanted) {
+            List<Derivation> out = new ArrayList<>();
+            new Walk(wanted, (step, _) -> out.add(step)).down(how, Down.NO_ARM);
+            return List.copyOf(out);
+        }
+
+        /**
+         * A step of a derivation that {@code wanted} says, and where it is read.
+         *
+         * @param step    the step, which stands for itself by identity
+         * @param reached where the arms it is down are taken
+         */
+        public record StepOnAnArm(Derivation step, Proposition reached) {
+
+            public StepOnAnArm {
+                Objects.requireNonNull(step, "a step read");
+                Objects.requireNonNull(reached, "is read somewhere, if only nowhere");
+            }
+        }
+
         private static boolean isAComparisonRead(Derivation step) {
             return step instanceof Derivation.AComparisonRead;
         }

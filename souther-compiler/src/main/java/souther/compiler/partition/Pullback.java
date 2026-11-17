@@ -1065,8 +1065,23 @@ final class Pullback {
         }
         List<StopEvidence.OnAnArm> out = new ArrayList<>();
         for (Meaning.ReadOnAnArm each : stated.meaning().relationsDownTheArms()) {
-            for (OnThisArm arm : theRule.onTheArms(each.relation())) {
+            for (OnThisArm arm : theRule.onTheArms(new ArmRead.OfARelation(each.relation()))) {
                 out.add(new StopEvidence.OnAnArm(each.reached(), arm.stops()));
+            }
+        }
+        for (Meaning.StepOnAnArm each : stated.meaning().stepsDownTheArms(
+                ArmRead::isAComparisonThatCutsNothing)) {
+            for (OnThisArm arm : theRule.onTheArms(new ArmRead.OfACutThatCutsNothing(
+                    each.step()))) {
+                out.add(new StopEvidence.OnAnArm(each.reached(), arm.stops()));
+            }
+        }
+        // What a run works out evaluating the answer of an arm is the arm's own, and is asked
+        // where the arm is taken: the comparison made of the answer is read where it stands.
+        for (Meaning.StepOnAnArm each : stated.meaning().stepsDownTheArms(
+                theRule::isTheAnswerOfAnArm)) {
+            for (OnThisArm arm : theRule.onTheArms(new ArmRead.OfTheAnswerOfAnArm(each.step()))) {
+                out.add(new StopEvidence.OnAnArm(each.reached(), arm.evaluatedStops()));
             }
         }
         return List.copyOf(out);
@@ -3110,9 +3125,9 @@ final class Pullback {
          *  that says the written one works out the same ({@link #worksOutWhatItIsRestatedAs}). */
         private List<Supplier<UndividedByARelation.Working>> restated;
 
-        /** What a run taking an arm of a choice works out there, by each relation the comparison
-         *  was read as with the choice standing as that arm ({@link Pullback#readOnAnArm}). */
-        private Map<Relation, List<OnThisArm>> onTheArms;
+        /** What a run taking an arm of a choice works out there, by each comparison the written
+         *  one was read as with the choice standing as that arm ({@link Pullback#readOnAnArm}). */
+        private Map<ArmRead, List<OnThisArm>> onTheArms;
 
         // The maps and lists of a candidate are made when the candidate first says something into
         // them: most say nothing, and an identity map holds a table before it holds anything.
@@ -3186,18 +3201,24 @@ final class Pullback {
             return restated == null ? List.of() : restated;
         }
 
-        void readOnAnArm(Relation relation, OnThisArm arm) {
+        void readOnAnArm(ArmRead read, OnThisArm arm) {
             marked = null;
             if (onTheArms == null) {
                 onTheArms = new LinkedHashMap<>();
             }
-            onTheArms.computeIfAbsent(relation, _ -> new ArrayList<>()).add(arm);
+            onTheArms.computeIfAbsent(read, _ -> new ArrayList<>()).add(arm);
         }
 
-        /** What runs taking the arms {@code relation} was read on work out there; none where it
-         *  was read on no arm. */
-        List<OnThisArm> onTheArms(Relation relation) {
-            return onTheArms == null ? List.of() : onTheArms.getOrDefault(relation, List.of());
+        /** What runs taking the arms {@code read} was read on work out there; none where it was
+         *  read on no arm. */
+        List<OnThisArm> onTheArms(ArmRead read) {
+            return onTheArms == null ? List.of() : onTheArms.getOrDefault(read, List.of());
+        }
+
+        /** Whether {@code step} is what the answer of an arm of a choice this candidate read was
+         *  read as. */
+        boolean isTheAnswerOfAnArm(Derivation step) {
+            return !onTheArms(new ArmRead.OfTheAnswerOfAnArm(step)).isEmpty();
         }
 
         void tell(Relation relation, UndividedByARelation.Working told) {
@@ -3217,7 +3238,7 @@ final class Pullback {
          */
         UndividedByARelation.Working workingOf(Relation relation) {
             UndividedByARelation.Working told = relations == null ? null : relations.get(relation);
-            List<OnThisArm> arms = onTheArms(relation);
+            List<OnThisArm> arms = onTheArms(new ArmRead.OfARelation(relation));
             if (told != null || arms.isEmpty() || !arms.stream().allMatch(OnThisArm::tellsEvery)) {
                 return told;
             }
@@ -3233,9 +3254,65 @@ final class Pullback {
                 kept.relations.forEach(this::tell);
             }
             if (kept.onTheArms != null) {
-                kept.onTheArms.forEach((relation, arms) -> arms.forEach(each ->
-                        readOnAnArm(relation, each)));
+                kept.onTheArms.forEach((read, arms) -> arms.forEach(each ->
+                        readOnAnArm(read, each)));
             }
+        }
+    }
+
+    /**
+     * What a candidate read the written comparison as, which what a run taking an arm works out
+     * is kept by. One read as a relation is told by the relation. One read as cutting nothing
+     * draws none, and is told by the step that reads it; and what a run works out evaluating the
+     * answer of an arm is told by that answer. A step stands for itself and no other that reads
+     * alike: two arms can cut nothing alike and work different things out.
+     */
+    sealed interface ArmRead {
+
+        /** The comparison read as {@code relation}. */
+        record OfARelation(Relation relation) implements ArmRead {}
+
+        /** The step {@code step}, a comparison read as cutting nothing. */
+        record OfACutThatCutsNothing(Derivation step) implements ArmRead {
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof OfACutThatCutsNothing(Derivation same) && same == step;
+            }
+
+            @Override
+            public int hashCode() {
+                return System.identityHashCode(step);
+            }
+        }
+
+        /** The step {@code step}, what the answer of an arm is read as. */
+        record OfTheAnswerOfAnArm(Derivation step) implements ArmRead {
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof OfTheAnswerOfAnArm(Derivation same) && same == step;
+            }
+
+            @Override
+            public int hashCode() {
+                return System.identityHashCode(step);
+            }
+        }
+
+        /** Whether {@code step} reads a comparison as cutting nothing. */
+        static boolean isAComparisonThatCutsNothing(Derivation step) {
+            return step instanceof Derivation.ACutThatCutsNothing;
+        }
+
+        /** Every comparison read in {@code derivation} that a run taking an arm works things out
+         *  of. */
+        static List<ArmRead> in(Derivation derivation) {
+            List<ArmRead> out = new ArrayList<>();
+            Meaning.relationsReadIn(derivation).forEach(each -> out.add(new OfARelation(each)));
+            Meaning.stepsIn(derivation, ArmRead::isAComparisonThatCutsNothing)
+                    .forEach(each -> out.add(new OfACutThatCutsNothing(each)));
+            return out;
         }
     }
 
@@ -3245,12 +3322,14 @@ final class Pullback {
      *
      * @param worksOut   what the comparison works out with the choice standing as the arm; worked
      *                   out only when asked
+     * @param evaluated  what a run taking the arm works out evaluating the answer of the arm
      * @param decidedBy  what every run works out before it takes the arm, the nearest choice
      *                   first: what decided the arm. None where the arm's choice was not read as a
      *                   fork, which is taken after what nothing here says, so that what a row
      *                   taking it gets past is not told
      */
     record OnThisArm(Supplier<AffineReading.WorkedOut> worksOut,
+                     Supplier<UndividedByARelation.Working> evaluated,
                      List<UndividedByARelation.Working> decidedBy) {
 
         /** What a row taking the arm gets past: what the arm works out, after what decided it. */
@@ -3274,6 +3353,11 @@ final class Pullback {
 
         StopEvidence stops() {
             return worksOut.get().stops();
+        }
+
+        /** What a run taking the arm works out evaluating the answer of the arm. */
+        StopEvidence evaluatedStops() {
+            return new StopEvidence(evaluated.get());
         }
     }
 
@@ -13389,7 +13473,7 @@ final class Pullback {
     private Derivation asACut(StatedComparison comparison,
                               AffineReading.OfAComparison arithmetic, boolean fixed) {
         return switch (arithmetic) {
-            case AffineReading.OfAComparison.Cuts(var affine, var mirrored, var working) -> {
+            case AffineReading.OfAComparison.Cuts(var affine, var mirrored, var worked) -> {
                 Rel states = affine.claim().statedRelation();
                 LinearForm<NumericTerm> against;
                 switch (affine.form().minus(LinearForm.constant(affine.cut()))) {
@@ -13402,7 +13486,7 @@ final class Pullback {
                         asQuantities(DecisionAtom.ofTheInput(against)), states,
                         mirrored ? Derivation.AComparisonRead.Facing.TURNED
                                 : Derivation.AComparisonRead.Facing.AS_WRITTEN);
-                tellWhatItWorksOut(cut, working);
+                tellWhatItWorksOut(cut, worked.toGetPast());
                 yield cut;
             }
             case AffineReading.OfAComparison.CutsNothing constant ->
@@ -13628,6 +13712,15 @@ final class Pullback {
      * arm concluded, or the one it is read under. Worked out only when asked.
      */
     private Derivation readOnAnArm(Derivation read, InputReads there) {
+        return readOnAnArm(read, there, null);
+    }
+
+    /**
+     * The same, where the arm is the answer {@code answered} of a choice: what a run taking it
+     * works out evaluating that answer is worked out before the comparison it is made of, and a
+     * reading that stops at the choice (as an argument of an operation) does not tell it.
+     */
+    private Derivation readOnAnArm(Derivation read, InputReads there, Denotation answered) {
         if (read == null || there == null || armsOfAComparison.isEmpty()) {
             return read;
         }
@@ -13636,10 +13729,16 @@ final class Pullback {
         Trial theRule = concluded != null ? concluded : trial();
         Once<AffineReading.WorkedOut> worksOut =
                 new Once<>(() -> worksOut(theRule, arithmeticOf(stated, there)));
-        OnThisArm arm = new OnThisArm(worksOut,
+        Once<UndividedByARelation.Working> evaluated = new Once<>(() -> answered == null
+                ? UndividedByARelation.Working.NOTHING
+                : AffineReading.workedOutByEvaluating(answered.value(), answered.at(), this.read));
+        OnThisArm arm = new OnThisArm(worksOut, evaluated,
                 restatingAQuotient ? List.of() : whatDecidedTheArm());
-        for (Relation each : Meaning.relationsReadIn(read)) {
+        for (ArmRead each : ArmRead.in(read)) {
             trial().readOnAnArm(each, arm);
+        }
+        if (answered != null) {
+            trial().readOnAnArm(new ArmRead.OfTheAnswerOfAnArm(read), arm);
         }
         return read;
     }
@@ -13728,7 +13827,7 @@ final class Pullback {
                         Optional.of(AffineReading.workingOfWhatDecides(iff, choiceAt.at(), read)),
                         iff, choiceAt.at(), condition, left,
                         arm -> readOnAnArm(again.apply(on -> on.taking(choice, arm, 1)),
-                                reads.taking(choice, arm, 1)))));
+                                reads.taking(choice, arm, 1), arm))));
             }
             case Inside.AChoice(Denotation chosen) -> {
                 int arms = Choice.of(Core.withoutStanding(chosen.value())).arms().size();
@@ -13741,7 +13840,7 @@ final class Pullback {
                         Optional.of(AffineReading.workingOfWhatDecides(
                                 Core.withoutStanding(chosen.value()), chosen.at(), read)),
                         arm -> readOnAnArm(again.apply(on -> on.taking(choice, arm, arms)),
-                                reads.taking(choice, arm, arms))));
+                                reads.taking(choice, arm, arms), arm)));
             }
             case Inside.ACall(Core call, ValueName.Behavior behavior, Denotation body) ->
                     new Derivation.ABehaviorsBody(behavior,
