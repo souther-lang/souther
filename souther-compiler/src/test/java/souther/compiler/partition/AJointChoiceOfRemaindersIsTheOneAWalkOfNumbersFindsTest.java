@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 
@@ -43,13 +42,14 @@ class AJointChoiceOfRemaindersIsTheOneAWalkOfNumbersFindsTest {
                 statements.add(new JointResidues.Statement(random.nextInt(divisor),
                         random.nextInt(3) == 0 ? 0 : 1 + random.nextInt(2), allowed));
             }
-            Optional<JointResidues.Choice> choice = JointResidues.least(divisor, statements);
+            JointResidues.Answer answer = JointResidues.least(divisor, statements);
             for (int days = 0; days <= 2 * divisor; days++) {
                 boolean some = someWholeNumbersMeetEvery(divisor, statements, days);
-                boolean given = choice.isPresent() && choice.get().least() <= days;
+                boolean given = answer instanceof JointResidues.Choice choice
+                        && choice.least() <= days;
                 assertEquals(some, given, divisor + " " + statements + " days " + days);
             }
-            if (choice.isPresent()) {
+            if (answer instanceof JointResidues.Choice) {
                 met++;
             } else {
                 none++;
@@ -57,6 +57,18 @@ class AJointChoiceOfRemaindersIsTheOneAWalkOfNumbersFindsTest {
         }
         // Both answers are met, or the test says nothing of the one that is not.
         assertTrue(met > 1000 && none > 1000, met + " met, " + none + " none");
+    }
+
+    /** A divisor past what is searched is no answer that the statements cannot be met, and is not
+     *  searched. */
+    @Test
+    void aDivisorPastWhatIsSearchedIsNotSearchedAndIsNoAnswerOfNone() {
+        List<JointResidues.Statement> statements =
+                List.of(new JointResidues.Statement(0, 1, Set.of(0)));
+        assertEquals(new JointResidues.NotSearched(),
+                JointResidues.least(JointResidues.MOST_DIVISOR + 1, statements));
+        assertTrue(JointResidues.least(JointResidues.MOST_DIVISOR, statements)
+                instanceof JointResidues.Choice);
     }
 
     private static boolean someWholeNumbersMeetEvery(int divisor,

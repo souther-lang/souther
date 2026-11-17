@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -16,42 +15,58 @@ import java.util.Set;
  * remainders, which are as many as the divisor's square: each pair is tried against every
  * statement.
  *
- * <p>The number is taken as small as the pair allows, which is the remainder itself: no
- * non-negative whole number of that remainder is smaller. It is the least {@code n} such a
- * choice can use, so where {@code n} lies up to a bound the choice needs the bound to reach it
- * and no more. Where no pair meets every statement, no whole number does: the statements are met
- * by no row at all.
+ * <p>This is the answer to the remainders and to nothing else of a program: that a choice is
+ * given says the statements leave a pair of remainders, and not that a row of the program stops at
+ * no operation, or meets what else the way states. The number is taken as small as the pair allows,
+ * which is the remainder itself: no non-negative whole number of that remainder is smaller. For
+ * the remainders alone, some whole numbers meet every statement with the number lying up to a
+ * bound exactly where the bound is no less than {@link Choice#least}.
  */
 final class JointResidues {
+
+    /** The most remainders of a divisor that every pair is tried of: the search is the square of
+     *  the divisor, and a larger one is not started. */
+    static final int MOST_DIVISOR = 64;
 
     private JointResidues() {}
 
     /** {@code x + onTheNumber * n + shift}, by the divisor, is one of {@code allowed}. */
     record Statement(int shift, int onTheNumber, Set<Integer> allowed) {}
 
-    /**
-     * The choice that meets every statement, with the least value of the number that makes it.
-     *
-     * @param x     the remainder the form leaves
-     * @param least the least non-negative number the choice uses
-     */
-    record Choice(int x, int least) {}
+    /** What the statements leave of the remainders. */
+    sealed interface Answer {}
 
     /**
-     * The choice that needs the number no further than any other does, or empty where there is
-     * none.
+     * A pair of remainders every statement allows.
+     *
+     * @param x     the remainder the form leaves
+     * @param least the least non-negative number the pair uses
      */
-    static Optional<Choice> least(int divisor, List<Statement> statements) {
-        Choice best = null;
+    record Choice(int x, int least) implements Answer {}
+
+    /** No pair of remainders is allowed by every statement, so no whole number is. */
+    record None() implements Answer {}
+
+    /** The divisor is past what is searched: nothing is said of the statements. That is no answer
+     *  that they cannot be met. */
+    record NotSearched() implements Answer {}
+
+    /**
+     * The pair that needs the number no further than any other does, none where no pair is
+     * allowed, and not searched where the divisor is past {@link #MOST_DIVISOR}.
+     */
+    static Answer least(int divisor, List<Statement> statements) {
+        if (divisor < 1 || divisor > MOST_DIVISOR) {
+            return new NotSearched();
+        }
         for (int y = 0; y < divisor; y++) {
             for (int x = 0; x < divisor; x++) {
-                if (meetsEvery(divisor, statements, x, y)
-                        && (best == null || y < best.least())) {
-                    best = new Choice(x, y);
+                if (meetsEvery(divisor, statements, x, y)) {
+                    return new Choice(x, y);
                 }
             }
         }
-        return Optional.ofNullable(best);
+        return new None();
     }
 
     private static boolean meetsEvery(int divisor, List<Statement> statements, int x, int n) {
