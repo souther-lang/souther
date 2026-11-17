@@ -80,23 +80,13 @@ public record CaseExpansion(Which which, String line, String cutAt, CameTo cameT
      * @param diagnosed  how many ways some of those parts can come out together, where they compare
      *                   one number ({@link WhatTheNumbersOfACaseLeave}): what the numbers leave,
      *                   and no count of cases nor of what a rewrite would leave
-     * @param workedOut  whether every case was worked out all the same, by what the numbers leave
-     *                   of the ways, and so the line was read: what this is then is what asking
-     *                   cost, which a report tells an author only where there is something to
-     *                   change in the model, and never as why a line was not read
      */
-    public record CameTo(CaseCount counted, Attribution attributed, List<Diagnosis> diagnosed,
-                         boolean workedOut) {
+    public record CameTo(CaseCount counted, Attribution attributed, List<Diagnosis> diagnosed) {
 
         public CameTo {
             Objects.requireNonNull(counted, "cases are some number of ways");
             Objects.requireNonNull(attributed, "what they came from, or why that was not said");
             diagnosed = List.copyOf(diagnosed);
-        }
-
-        /** What a case that was not worked out came to. */
-        public CameTo(CaseCount counted, Attribution attributed, List<Diagnosis> diagnosed) {
-            this(counted, attributed, diagnosed, false);
         }
     }
 
@@ -109,7 +99,11 @@ public record CaseExpansion(Which which, String line, String cutAt, CameTo cameT
      * @param cutAt   where on it the line is
      * @param asked   the case
      * @param counted how many ways there were of choosing one of what it stands for
-     * @param workedOut whether the case was worked out all the same ({@link CameTo#workedOut})
+     * @param workedOut whether the case was worked out all the same, by what the numbers leave
+     *                  of the ways its choices stand for, and so the line was read: what is
+     *                  counted is then what asking it cost, and no reason a line was not read.
+     *                  Nothing is read off the statement's derivations for such a case, which is
+     *                  what a reader of a line not worked out is told of one that was
      */
     public record Counted(Line of, String line, String cutAt, DecidingCase asked,
                           CaseCount counted, boolean workedOut) {
@@ -132,21 +126,23 @@ public record CaseExpansion(Which which, String line, String cutAt, CameTo cameT
         CaseExpansion attributed(Attribution attributed) {
             return new CaseExpansion(new Which(of, asked.condition()), line, cutAt,
                     new CameTo(counted, attributed,
-                            WhatTheNumbersOfACaseLeave.of(asked.standsFor()), workedOut));
+                            WhatTheNumbersOfACaseLeave.of(asked.standsFor())));
         }
 
         /**
-         * Each of {@code counted}, in order, with what made its parts read off {@code derivedBy},
-         * the derivations of the one statement they are all cases of on each application it was
-         * read on.
+         * Each of {@code counted} that was not worked out, in order, with what made its parts
+         * read off {@code derivedBy}, the derivations of the one statement they are all cases of
+         * on each application it was read on. A case worked out all the same is told of by
+         * nothing here and costs no more than its count.
          */
         public static List<CaseExpansion> attributedTo(List<Counted> counted,
                                                        List<Derivation> derivedBy) {
+            List<Counted> stopped = counted.stream().filter(each -> !each.workedOut()).toList();
             List<Attribution> made = TheChoicesACaseIsMadeOf.of(
-                    counted.stream().map(each -> each.asked().standsFor()).toList(), derivedBy);
+                    stopped.stream().map(each -> each.asked().standsFor()).toList(), derivedBy);
             List<CaseExpansion> out = new ArrayList<>();
-            for (int at = 0; at < counted.size(); at++) {
-                out.add(counted.get(at).attributed(made.get(at)));
+            for (int at = 0; at < stopped.size(); at++) {
+                out.add(stopped.get(at).attributed(made.get(at)));
             }
             return List.copyOf(out);
         }

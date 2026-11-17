@@ -4415,7 +4415,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // and not about why the line was not worked out.
         PartitionEvidence partition = behavior.partition();
         if (partition != null) {
-            List<CasesExpandedAtARule> expanded = notWorkedOut(partition.caseExpansions());
+            List<CasesExpandedAtARule> expanded = partition.caseExpansions();
             List<CaseOfALine> numbered = casesNumbered(expanded);
             for (int at = 0; at < expanded.size(); at++) {
                 CasesExpandedAtARule each = expanded.get(at);
@@ -9591,7 +9591,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // and per case asked, beside the entries above and joined to them by the rule. Never put
         // into those: two of them about one rule are one finding, and two counts are two counts.
         DocumentArray expanded = DocumentPart.CASE_EXPANSIONS.putArray(out);
-        List<CasesExpandedAtARule> told = notWorkedOut(partition.caseExpansions());
+        List<CasesExpandedAtARule> told = partition.caseExpansions();
         List<CaseOfALine> numbered = casesNumbered(told);
         for (int at = 0; at < told.size(); at++) {
             caseExpansionRow(expanded.addObject(), told.get(at), numbered.get(at), places,
@@ -9643,15 +9643,6 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     /** Which of the cases a rule's line was told of an entry is, from one, and of how many. */
     private record CaseOfALine(int ordinal, int of) {}
-
-    /**
-     * What each of {@code expanded} was told of the cases a line was not worked out for: the
-     * cases worked out all the same are not told of here, since a count of them says nothing an
-     * author can act on, and a reader would take it for the reason a line was not read.
-     */
-    private static List<CasesExpandedAtARule> notWorkedOut(List<CasesExpandedAtARule> expanded) {
-        return expanded.stream().flatMap(each -> each.notWorkedOut().stream()).toList();
-    }
 
     /**
      * Each entry numbered among those about the same line of the same rule, in the order they

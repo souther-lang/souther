@@ -11,7 +11,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -78,21 +77,6 @@ public record CasesExpandedAtARule(RuleRef rule, Set<RuleReportAnchor> reachedBy
             Objects.requireNonNull(readAt, "a reading is made at some copies, if only none");
             Objects.requireNonNull(cameTo, "and came to something");
         }
-    }
-
-    /**
-     * What a line not worked out was told of this case, which is every reading of it but those of
-     * a case worked out all the same ({@link CaseExpansion.CameTo#workedOut}), and none where
-     * there is no such reading.
-     */
-    public Optional<CasesExpandedAtARule> notWorkedOut() {
-        List<Reading> stopped = readings.stream()
-                .filter(each -> !each.cameTo().workedOut()).toList();
-        if (stopped.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(stopped.size() == readings.size() ? this
-                : new CasesExpandedAtARule(rule, reachedBy, which, line, cutAt, stopped));
     }
 
     /** What makes two of these one: the rule, and which case of which of its lines. */

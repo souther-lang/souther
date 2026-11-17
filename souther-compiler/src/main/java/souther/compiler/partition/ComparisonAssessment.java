@@ -787,10 +787,21 @@ sealed interface ComparisonAssessment {
         public List<CaseExpansion> caseExpansions() {
             List<CaseExpansion.Counted> counted = new ArrayList<>();
             for (Part part : parts) {
-                counted.addAll(part.expanded());
+                part.expanded().stream().filter(each -> !each.workedOut()).forEach(counted::add);
             }
             return counted.isEmpty() ? List.of()
                     : CaseExpansion.Counted.attributedTo(counted, derivedBy);
+        }
+
+        /** The cases of these lines that were worked out all the same, each as it was counted. */
+        @Override
+        public List<CaseExpansion.Counted> countedWorkedOut() {
+            List<CaseExpansion.Counted> counted = new ArrayList<>();
+            for (Part part : parts) {
+                part.expanded().stream().filter(CaseExpansion.Counted::workedOut)
+                        .forEach(counted::add);
+            }
+            return List.copyOf(counted);
         }
 
         /**
@@ -2517,6 +2528,16 @@ sealed interface ComparisonAssessment {
      * cases are never taken apart.
      */
     default List<CaseExpansion> caseExpansions() {
+        return List.of();
+    }
+
+    /**
+     * How many ways each case of a line whose cases were more ways of choosing one than are taken
+     * apart stood for, where every one of them was worked out all the same, by what the numbers
+     * leave of the ways. What asking them cost, which is no part of why a line was or was not
+     * read, and is kept as it was counted: nothing is read off the derivations for it.
+     */
+    default List<CaseExpansion.Counted> countedWorkedOut() {
         return List.of();
     }
 
