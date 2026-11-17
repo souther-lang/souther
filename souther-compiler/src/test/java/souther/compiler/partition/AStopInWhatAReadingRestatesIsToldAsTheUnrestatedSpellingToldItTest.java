@@ -64,6 +64,10 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
                 "List.fold((w, l) -> w + l, 0, List.map(x -> x + 1, ds)) >= 10");
         CONDITIONS.put("maxOfAStep",
                 "Option.withDefault(0, List.max(List.map(x -> x - q, ds))) >= 3");
+        CONDITIONS.put("sumBesideAMaximum",
+                "Option.withDefault(0, List.max(ds)) >= List.sum(ds)");
+        CONDITIONS.put("maxOfTheElementsInAClosure",
+                "List.all(r -> Option.withDefault(0, List.max(ds)) + 1 <= r, ds)");
         CONDITIONS.put("maxOfTheElements", "Option.withDefault(0, List.max(ds)) + 1 <= 10");        CONDITIONS.put("none", "q >= q");
         CONDITIONS.put("armNoStop", "(if q > 5 then q - 1 else 3) >= q");
         CONDITIONS.put("nestedArmNoStop",
@@ -156,6 +160,15 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         assertEquals(1, TOLD.get("foldOfAStep").size(), TOLD.toString());
         assertEquals(1, TOLD.get("maxOfAStep").size(), TOLD.toString());
         assertEquals(1, TOLD.get("maxOfTheElements").size(), TOLD.toString());
+        assertEquals(1, TOLD.get("maxOfTheElementsInAClosure").size(), TOLD.toString());
+    }
+
+    /** A total stops a run only where its answer has no place, which no note says of a total of
+     *  the elements read, nor of one read beside what nothing read. */
+    @Test
+    void aTotalOfTheElementsIsToldOfNoStopWhereverItStands() {
+        assertEquals(List.of(), TOLD.get("sumOfTheElements"));
+        assertEquals(List.of(), TOLD.get("sumBesideAMaximum"), TOLD.toString());
     }
 
     /** The other side of a comparison of a walk is worked out whatever the walk answers. */

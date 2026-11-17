@@ -376,10 +376,7 @@ public final class GuardThresholds {
                                                     .orElseGet(() -> arrived.relationsRead()
                                                             .stream().anyMatch(UndividedByARelation
                                                                     ::aRunMayStopOverABoundValue)))
-                                    || worksOutWhatMayEndARunWhereUnread(each, admitted.read())
-                                    || each.stopsIn().map(stops -> !stops.noRunMayStopAnywhere()
-                                            && stops.aRunMayStopIn(read,
-                                            regionsOf(beforeIt))).orElse(false)
+                                    || worksOutWhatMayEndARunBesideWhatIsTold(each)
                                     || aRunTakingAnArmMayStop(each, each.onTheArms(), null, read,
                                             arrivals, wayToACase, aCase)
                                     || each.worksOutOnEach().map(applications -> applications
@@ -1300,15 +1297,18 @@ public final class GuardThresholds {
     }
 
     /**
-     * Whether a comparison whose reading stopped works out, on the way to its answer, an
-     * operation known to end a run for some reason ({@link WhatARunMayEndFor}). The reading
-     * stopping is no word on whether a run stops, so what the comparison's own tree says is
-     * asked of it, and a run that reaches it may stop. Where what it works out is not known
-     * ({@link WhatARunMayEndFor.Endings.NotKnown}) nothing is said.
+     * Whether a comparison some operation of which no reading told works out, on the way to its
+     * answer, an operation known to end a run for some reason ({@link WhatARunMayEndFor}). What
+     * the readings leave untold is no word on whether a run stops, so what the comparison's own
+     * tree says is asked, and a run that reaches it may stop. Where what it works out is not
+     * known ({@link WhatARunMayEndFor.Endings.NotKnown}) nothing is said.
      */
-    private static boolean worksOutWhatMayEndARunWhereUnread(ComparisonReadings.Reading each,
-                                                           ComparisonAssessment read) {
-        return read instanceof ComparisonAssessment.Unread
+    private static boolean worksOutWhatMayEndARunBesideWhatIsTold(
+            ComparisonReadings.Reading each) {
+        boolean someUntold = each.stopsIn().map(stops -> !stops.exact()).orElse(false)
+                || each.worksOutOnEach().map(applications -> applications.stream()
+                        .anyMatch(one -> !one.stops().exact())).orElse(false);
+        return someUntold
                 && each.statement() instanceof ComparisonReadings.Stated.AComparison(
                         StatedComparison comparison)
                 && Stream.of(comparison.left(), comparison.right())
