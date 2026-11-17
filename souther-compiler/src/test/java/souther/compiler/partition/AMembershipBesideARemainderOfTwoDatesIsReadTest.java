@@ -18,6 +18,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A remainder of a form of several numbers states nothing of one of them while another is free to
@@ -114,6 +115,30 @@ class AMembershipBesideARemainderOfTwoDatesIsReadTest {
         assertEquals(List.of(READ), reasonsAt("s: Date, d: Date, n: Int, hs: Set<Date>",
                 "Int.floorMod(Date.daysBetween(s, d) + n, 7) >= 1 && Set.contains(d, hs)",
                 "hs[*]"));
+    }
+
+    /**
+     * The elements are looked for in a sum of two numbers, which stops where it leaves the
+     * {@code Int}s: each of the two takes every value by choosing the other at nought.
+     */
+    @Test
+    void eachOfTwoNumbersASumStopsOverTakesEveryValueByChoosingTheOtherAtNought() {
+        for (String at : List.of("d", "n")) {
+            assertTrue(reasonsAt("d: Int, n: Int, s: Int, hs: Set<Int>",
+                    "Int.floorMod(d + n - s, 7) >= 1 && Set.contains(d + n, hs)", at)
+                    .contains(READ), at);
+        }
+    }
+
+    /** The other held off nought at an end of its type is not one the choice sets at nought. */
+    @Test
+    void aSumWhoseOtherNumberCannotBeNoughtIsNotShownToTakeEveryValue() {
+        assertFalse(reasonsAt("d: Int, n: Int, s: Int, hs: Set<Int>",
+                "n >= 1 && Int.floorMod(d + n - s, 7) >= 1 && Set.contains(d + n, hs)", "d")
+                .contains(READ));
+        assertFalse(reasonsAt("d: Int, n: Int, s: Int, hs: Set<Int>",
+                "n <= -1 && Int.floorMod(d + n - s, 7) >= 1 && Set.contains(d + n, hs)", "d")
+                .contains(READ));
     }
 
     /** A third number the form holds that cannot be nought is not one the witness sets there. */

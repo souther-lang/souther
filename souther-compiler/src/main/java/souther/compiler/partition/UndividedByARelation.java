@@ -6778,7 +6778,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return true;
         }
 
-        private static boolean holdsEverywhere(BigInteger low, BigInteger high, Rel rel) {
+        static boolean holdsEverywhere(BigInteger low, BigInteger high, Rel rel) {
             return switch (rel) {
                 case GE -> low.signum() >= 0;
                 case GT -> low.signum() > 0;
@@ -8377,6 +8377,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? asARelationReadsIt(positionsReached(each.position(), read, region,
                             conditions, heldWhole), carriers.get(i))
                     : null;
+            if (realizes == null && heldWhole && source != null
+                    && each.number() instanceof NumericTerm.ValueOf value) {
+                realizes = asARelationReadsIt(wholeRunWithTheRestAtNought(value, source,
+                        narrowedByTheRun, conditions, read), carriers.get(i));
+            }
             Takes takes = source != null && way == Way.UNTOUCHED
                     && each.number() instanceof NumericTerm.ValueOf ? source.takes() : null;
             NumericDomain.Bounds runsTo = each.position() != null
@@ -10483,6 +10488,102 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _,
                  NumericTerm.CodePointAt _ -> null;
         };
+    }
+
+    /**
+     * The run of every value of {@code value}, shown by choosing the other numbers the run
+     * narrows it with at nought, or null where that is not shown.
+     *
+     * <p>For each value of {@code value} the numbers named beside it are chosen, and the choice
+     * is nought for each, so what the run narrows ({@code d + n} held inside the {@code Int}s) is
+     * obligations on the one value: each holds with the others at nought wherever the value is in
+     * its type. The others are numbers nothing else holds: no statement of the way turns on
+     * them, no declaration or rule names them, and nought is a value they take. A statement
+     * that moves {@code value} or any of them is no such nothing, and the claim is not made.
+     *
+     * <p>This is the claim for {@code value} alone. It says nothing of the others' runs, nor of
+     * the values of {@code value} and an other together: the relation that reads the sides asks
+     * each of those for itself.
+     */
+    private static NumericDomain.Bounds wholeRunWithTheRestAtNought(
+            NumericTerm.ValueOf value, Source source, List<TakenConstraint> narrowing,
+            List<OnAWay> conditions, InputReading read) {
+        if (!source.takes().every() || source.named()) {
+            return null;
+        }
+        TermOrders orders = read.quantities().ordersOf(value);
+        UndividedByARelation.WholeEnds mine = orders == null ? null
+                : wholeEndsOf(orders.answered().whereItStops());
+        if (mine == null || mine.low() == null || mine.high() == null) {
+            return null;
+        }
+        Set<NumericTerm> others = new LinkedHashSet<>();
+        for (TakenConstraint each : narrowing) {
+            if (each.terms().contains(value)) {
+                others.addAll(each.terms());
+            }
+        }
+        others.remove(value);
+        for (NumericTerm other : others) {
+            if (!(other instanceof NumericTerm.FromOnePosition number)
+                    || !nothingHoldsBut(number, conditions, read)) {
+                return null;
+            }
+        }
+        for (OnAWay statement : conditions) {
+            Optional<Set<TermPath>> turnsOn = statement.turnsOn();
+            if (turnsOn.isEmpty() || touches(value, turnsOn.get())) {
+                return null;
+            }
+        }
+        for (TakenConstraint each : narrowing) {
+            if (each.terms().stream().noneMatch(term -> term.equals(value)
+                    || others.contains(term))) {
+                continue;
+            }
+            if (!(each instanceof TakenConstraint.Affine(var form, var rel, var _))
+                    || form.coefs().keySet().stream().anyMatch(term ->
+                            !term.equals(value) && !others.contains(term))) {
+                return null;
+            }
+            BigInteger constant = wholeNumberOf(form.constant());
+            BigInteger by = form.coefs().containsKey(value)
+                    ? wholeNumberOf(form.coefs().get(value)) : BigInteger.ZERO;
+            if (constant == null || by == null) {
+                return null;
+            }
+            BigInteger low = constant.add(by.signum() >= 0 ? by.multiply(mine.low())
+                    : by.multiply(mine.high()));
+            BigInteger high = constant.add(by.signum() >= 0 ? by.multiply(mine.high())
+                    : by.multiply(mine.low()));
+            if (!NumbersChosen.holdsEverywhere(low, high, rel)) {
+                return null;
+            }
+        }
+        return NumericDomain.Bounds.OPEN;
+    }
+
+    /** Whether {@code number} is held by nothing but the type: no statement of the way turns on
+     *  it, no rule or declaration names it, and nought is a value it takes. */
+    private static boolean nothingHoldsBut(NumericTerm.FromOnePosition number,
+                                           List<OnAWay> conditions, InputReading read) {
+        Source source = sourceOf(number, read);
+        TermOrders orders = read.quantities().ordersOf(number);
+        if (source == null || source.named() || !source.takes().every() || orders == null) {
+            return false;
+        }
+        WholeEnds ends = wholeEndsOf(orders.answered().whereItStops());
+        if (ends == null || (ends.low() != null && ends.low().signum() > 0)
+                || (ends.high() != null && ends.high().signum() < 0)) {
+            return false;
+        }
+        for (OnAWay statement : conditions) {
+            Optional<Set<TermPath>> turnsOn = statement.turnsOn();
+            if (turnsOn.isEmpty() || touches(number, turnsOn.get())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
