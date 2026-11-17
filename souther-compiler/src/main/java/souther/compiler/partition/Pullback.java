@@ -2994,6 +2994,7 @@ final class Pullback {
                 () -> partOf(at, ofItsArguments(stated, fixed, reads)),
                 () -> readingTheComparisonAgain(ofASizeInCases(stated, at, reads)),
                 () -> readingTheComparisonAgain(ofAWalkKeepingAnEnd(stated, at, reads)),
+                () -> readingTheComparisonAgain(ofTheEndOfAContainer(stated, at, reads)),
                 () -> readingTheComparisonAgain(ofAWalkChoosingAnElement(stated, at, reads)),
                 () -> {
                     Derivation read = ofAChoice(stated, at, reads);
@@ -14989,7 +14990,25 @@ final class Pullback {
     private Derivation acrossTheElements(Derivation start, DecisionSubject container, Core walked,
                                          Derivation meets, Derivation keeps, ConditionJoin how,
                                          HowTheElementsAreAsked asked, Core e, InputReads reads) {
-        boolean holds = how == ConditionJoin.EITHER;
+        return new Derivation.AcrossAWalk(start,
+                someElementMeeting(container, walked, meets, how == ConditionJoin.EITHER, asked,
+                        e, reads),
+                keeps, how);
+    }
+
+    /**
+     * Some element of {@code container} meeting {@code meets}, where {@code holds}, and some
+     * element failing it where not: the quantifier a walk keeping an end, and an end of a
+     * container, are read through.
+     *
+     * @param walked the expression the container is, whose size is read where some element meeting
+     *               the statement has the container's holding anything as a part
+     */
+    private Derivation.SomeElementMeeting someElementMeeting(DecisionSubject container,
+                                                             Core walked, Derivation meets,
+                                                             boolean holds,
+                                                             HowTheElementsAreAsked asked, Core e,
+                                                             InputReads reads) {
         Derivation meeting = ofItsOwnElement(container, e, reads, meets);
         Proposition element = holds ? tried(meeting) : tried(meeting).denied();
         Optional<Derivation> holdsSomething = Optional.empty();
@@ -15000,11 +15019,8 @@ final class Pullback {
                             askedAt != null ? askedAt : new Denotation(e, reads))
                     : unread(walked, reads, new WhyUnread.NoMeasureOfItsSize()));
         }
-        return new Derivation.AcrossAWalk(start,
-                new Derivation.SomeElementMeeting(container, meeting, holds, holdsSomething,
-                        Proposition.mayAnswerNothing(element) ? asked
-                                : HowTheElementsAreAsked.NOT_SAID),
-                keeps, how);
+        return new Derivation.SomeElementMeeting(container, meeting, holds, holdsSomething,
+                Proposition.mayAnswerNothing(element) ? asked : HowTheElementsAreAsked.NOT_SAID);
     }
 
     /** {@code walk}'s step coming out on {@code aspect}, with what it was carried standing as
@@ -16209,6 +16225,147 @@ final class Pullback {
     }
 
     /**
+     * A comparison one side of which is the greatest or the least element of a container, as an
+     * operation answering one says ({@link BoundOperationFacts#answersAnExtremeElementOf}), read
+     * at the elements — or null where neither side is such an element, or the container stands on
+     * no binding a name for its element can be owned by.
+     *
+     * <p>The greatest is at or below a number exactly where every element is, and at or above it
+     * where some element is; the least is the other way round. Equality is the end at or below and
+     * at or above, and a difference is the end below or above. Each is read as a comparison of an
+     * element is ({@link #comparedCase}), the element standing as the name the container's own
+     * elements are given. Where the container is empty the operation answers no value, which the
+     * statement the end is read under says.
+     */
+    private Derivation ofTheEndOfAContainer(StatedComparison stated, Denotation at,
+                                            InputReads reads) {
+        StatedComparison.Numbered<AnEndOfAContainer> numbered = stated.at(side -> {
+            ValueStanding.ReadThrough<InputReads> resolved =
+                    Extreme.comparedAs(side, reads, sides());
+            return endOfAContainer(resolved.value(), resolved.at());
+        });
+        if (numbered == null) {
+            return null;
+        }
+        return theEndCompared(numbered.number(), ASide.of(new Denotation(numbered.other(), reads)),
+                numbered.claim().statedRelation(), at);
+    }
+
+    /**
+     * {@code end} related to {@code other} by {@code states}, as every element or some element is.
+     */
+    private Derivation theEndCompared(AnEndOfAContainer end, ASide other, Rel states,
+                                      Denotation at) {
+        Function<Rel, Derivation> endedSo = rel -> {
+            boolean every = (rel == Rel.LT || rel == Rel.LE)
+                    == end.greatest();
+            Derivation some = someElementMeeting(end.container(), end.held(),
+                    comparedCase(ASide.of(end.element()), other, rel, at), !every,
+                    HowTheElementsAreAsked.EVERY_ONE, end.call().value(), end.call().at());
+            return every ? new Derivation.UnderADenial(some, true) : some;
+        };
+        return switch (states) {
+            case LT, LE, GT, GE -> endedSo.apply(states);
+            case EQ -> new Derivation.Joined(ConditionJoin.BOTH, endedSo.apply(Rel.LE),
+                    endedSo.apply(Rel.GE));
+            case NE -> new Derivation.Joined(ConditionJoin.EITHER, endedSo.apply(Rel.LT),
+                    endedSo.apply(Rel.GT));
+        };
+    }
+
+    /**
+     * {@code left states right} where one side is the greatest or the least of a container, which
+     * the side as one value is — or null where neither is.
+     */
+    private Derivation comparedAsAnEnd(ASide left, ASide right, Rel states, Denotation at) {
+        for (boolean onTheLeft : new boolean[] {true, false}) {
+            ASide side = onTheLeft ? left : right;
+            if (side.whole() == null) {
+                continue;
+            }
+            ValueStanding.ReadThrough<InputReads> resolved = Extreme.comparedAs(
+                    side.whole().value(), side.whole().at(), sides());
+            AnEndOfAContainer end = endOfAContainer(resolved.value(), resolved.at());
+            if (end != null) {
+                return onTheLeft ? theEndCompared(end, right, states, at)
+                        : theEndCompared(end, left, states.turned(), at);
+            }
+        }
+        return null;
+    }
+
+    /** {@code value}, read where {@code where} stands, as the end of a container it answers —
+     *  or null where it is no such call. */
+    private AnEndOfAContainer endOfAContainer(Core value, InputReads where) {
+        if (!(Core.withoutStanding(value) instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        AnOperationApplied applied = AnOperationApplied.of(call);
+        if (applied == null) {
+            return null;
+        }
+        BoundOperationFacts.Extremity extremity = DefaultBoundOperationFacts.get()
+                .answersAnExtremeElementOf(applied.operation());
+        Core held = extremity == null ? null : applied.argument(extremity.container());
+        if (held == null) {
+            return null;
+        }
+        // The elements of a container made of each element of another by a step are what the step
+        // answers on the elements of that other, so the end is read at the elements of the
+        // container that stands on the input, and each step is read on the element it is handed.
+        List<ElementBindings.StepOnEachElement> steps = new ArrayList<>();
+        Core base = held;
+        ElementBindings.StepOnEachElement step;
+        while ((step = ElementBindings.stepAnsweredOnEachElement(base,
+                blocksAt(new Denotation(base, where)))) != null) {
+            steps.add(step);
+            base = step.walked();
+        }
+        Shape shape = TypeView.shapeOf(base.type(), read.rules().inners(),
+                read.rules().symbols(), read.rules().kinds(), read.rules().sums());
+        // The name for an element is owned within the call that answers the end, which says where
+        // it is: the binding the container stands on, or one it is made of.
+        BindingOwner within = ownerOfTheRootOf(base);
+        if (within == null) {
+            within = WhatABodyReads.freeIn(base).stream().filter(Objects::nonNull).findFirst()
+                    .map(BindingId::owner).orElse(null);
+        }
+        if (!(shape instanceof Shape.Container holding) || within == null
+                || !(call.application() instanceof ApplicationOrigin.Identified site)) {
+            return null;
+        }
+        DecisionSubject container = subjectOf(base, where);
+        if (container == null) {
+            return null;
+        }
+        InputReads.ElementNamed named = where.holdingAnElement(
+                new BindingOwner.Expansion(within, applied.operation(), site),
+                new HeldIn(base, HeldIn.Part.ELEMENT, HowAClosureIsApplied.TO_EVERY_ELEMENT,
+                        false));
+        Core element = new Core.Read("own", named.name(), holding.element(), call.pos());
+        InputReads at = named.reads();
+        for (ElementBindings.StepOnEachElement each : steps.reversed()) {
+            at = at.handing(each.element().binding(), new Denotation(element, at),
+                    read.rules().newtypes());
+            element = each.step().body();
+        }
+        return new AnEndOfAContainer(new Denotation(call, where), base, container,
+                new Denotation(element, at), extremity.greatest());
+    }
+
+    /**
+     * The greatest or the least element of a container.
+     *
+     * @param call      the call that answers it, where it stands
+     * @param held      the container, as the call was handed it
+     * @param container what the container is, as a decision is about it
+     * @param element   an element of the container, standing as the name its own are given
+     * @param greatest  whether it is the greatest element, and the least where not
+     */
+    private record AnEndOfAContainer(Denotation call, Core held, DecisionSubject container,
+                                     Denotation element, boolean greatest) {}
+
+    /**
      * A side of a comparison that is what a walk keeping an end ends with.
      *
      * @param ends the walk's call, where it stands
@@ -16247,6 +16404,10 @@ final class Pullback {
                         taking -> comparedCase(left.in(taking.apply(left.at())),
                                 right.in(taking.apply(right.at())), states, at));
             }
+        }
+        Derivation asAnEnd = comparedAsAnEnd(left, right, states, at);
+        if (asAnEnd != null) {
+            return asAnEnd;
         }
         Derivation byLeft = left.whole() == null ? null : byItsCases(left.whole(), at,
                 Optional.empty(),

@@ -9,6 +9,7 @@ import souther.compiler.check.CallArguments;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ClosureUses;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementAnswer;
@@ -1955,6 +1956,25 @@ public final class InputReads {
             }
         }
 
+        /**
+         * The greatest or the least element of a container, which an operation answering one
+         * holds ({@link BoundOperationFacts#answersAnExtremeElementOf}): the call itself, read
+         * where it stands. Which element that is turns on the container, and it is no place of
+         * the input, so the name stands for the call and a comparison of it is read at the
+         * elements. Made of no entry, as a list's element is not.
+         */
+        record AnExtremeOf(Denotation call) implements WhatItHolds {
+
+            public AnExtremeOf {
+                Objects.requireNonNull(call, "the call that answers the greatest or the least");
+            }
+
+            @Override
+            public EntryLookedUp madeOf() {
+                return null;
+            }
+        }
+
         /** Nothing says. */
         record Unsaid() implements WhatItHolds {
 
@@ -2064,6 +2084,10 @@ public final class InputReads {
                         : unsaid();
             }
             if (applied != null) {
+                if (DefaultBoundOperationFacts.get()
+                        .answersAnExtremeElementOf(applied.operation()) != null) {
+                    return new WhatItHolds.AnExtremeOf(new Denotation(option.value(), at));
+                }
                 AnOperationApplied.Lookup lookup = applied.lookup();
                 if (lookup == null) {
                     return unsaid();
@@ -2121,6 +2145,7 @@ public final class InputReads {
             case WhatItHolds.MadeByAClosure(Denotation answered, var _) ->
                     standingFor(name, answered, newtypes);
             case WhatItHolds.AnElement(Denotation element) -> standingFor(name, element, newtypes);
+            case WhatItHolds.AnExtremeOf(Denotation call) -> standingFor(name, call, newtypes);
             case WhatItHolds.AtAnIndex(PickedAtAnIndex element) -> picking(name, element);
             case WhatItHolds.Unsaid _ -> this;
         };
@@ -2267,8 +2292,8 @@ public final class InputReads {
                                           DeclarationNewtypes newtypes) {
         return switch (held) {
             case WhatItHolds.AnEntry _, WhatItHolds.AnEntryOfAnAnswer _,
-                 WhatItHolds.MadeByAClosure _, WhatItHolds.AnElement _ ->
-                    holding(name.binding(), held, newtypes);
+                 WhatItHolds.MadeByAClosure _, WhatItHolds.AnElement _,
+                 WhatItHolds.AnExtremeOf _ -> holding(name.binding(), held, newtypes);
             case WhatItHolds.AtAPosition _, WhatItHolds.AtAnIndex _, WhatItHolds.Unsaid _ -> null;
         };
     }
