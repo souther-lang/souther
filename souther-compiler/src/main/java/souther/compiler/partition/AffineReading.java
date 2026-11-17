@@ -135,10 +135,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** The same, with what a run getting to the comparison works out, off the one reading. */
         static WorkedOut worksOut(OfAComparison read) {
             return switch (read) {
-                case Cuts cuts -> WorkedOut.ofWhatIsToldOf(cuts.working());
+                case Cuts cuts -> cuts.worked();
                 case Stopped stopped -> stopped.worksOut(WhatTheAnalysisAnswersFor.NOTHING);
-                case CutsNothing nothing -> WorkedOut.ofNoLine(nothing.working());
-                case NotHeld held -> WorkedOut.ofNoLine(held.working());
+                case CutsNothing nothing -> nothing.worked();
+                case NotHeld held -> held.worked();
             };
         }
 
@@ -149,17 +149,22 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          *                 less the right, which is how the line is faced to the position the left
          *                 names first ({@link #facesTheOtherWay}) and is what tells which of the two
          *                 written sides is above on either side of the line
-         * @param working  the sums, differences, products and negations of whole numbers the
+         * @param worked   the sums, differences, products and negations of whole numbers the
          *                 comparison works out as it is written, each over the numbers it was
          *                 read through, and whether they are all a run can stop at: what the
          *                 line is cut as does not say which of them the program runs, and these do
          */
-        record Cuts(AffineReading read, boolean mirrored, UndividedByARelation.Working working)
+        record Cuts(AffineReading read, boolean mirrored, WorkedOut worked)
                 implements OfAComparison {
 
             public Cuts {
                 Objects.requireNonNull(read, "a comparison that cuts has a line");
-                Objects.requireNonNull(working, "a comparison says what it works out");
+                Objects.requireNonNull(worked, "a comparison says what it works out");
+            }
+
+            /** What a row of the line gets past. */
+            UndividedByARelation.Working working() {
+                return worked.toGetPast();
             }
         }
 
@@ -183,14 +188,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * every row — so which way the comparison comes out is settled by it and the relation, and
          * a reader asking that is not sent back to the operands to fold them a second way.
          */
-        record CutsNothing(Set<NumericTerm> read, ExactRatio difference,
-                           UndividedByARelation.Working working) implements OfAComparison {
+        record CutsNothing(Set<NumericTerm> read, ExactRatio difference, WorkedOut worked)
+                implements OfAComparison {
 
             public CutsNothing {
                 read = Set.copyOf(read);
                 Objects.requireNonNull(difference,
                         "a comparison that cuts nothing still has its two sides' difference");
-                Objects.requireNonNull(working, "a comparison says what it works out");
+                Objects.requireNonNull(worked, "a comparison says what it works out");
             }
 
             /** Whether a comparison stating {@code rel} of its left side against its right comes
@@ -214,12 +219,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * <p>{@code read} is every number of the input this reading named on the way, for the same
          * reason {@link CutsNothing} carries it.
          */
-        record NotHeld(Set<NumericTerm> read, UndividedByARelation.Working working)
-                implements OfAComparison {
+        record NotHeld(Set<NumericTerm> read, WorkedOut worked) implements OfAComparison {
 
             public NotHeld {
                 read = Set.copyOf(read);
-                Objects.requireNonNull(working, "a comparison says what it works out");
+                Objects.requireNonNull(worked, "a comparison says what it works out");
             }
         }
 
@@ -379,12 +383,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (!(left.minus(
                         ((AffineForms.Outcome.Composed<NumericTerm, InputReads>) read).form())
                         instanceof ExactAnswer.Held<LinearForm<NumericTerm>> difference)) {
-                    return new OfAComparison.NotHeld(named, told.working());
+                    return new OfAComparison.NotHeld(named, told.workedOut().noLine());
                 }
                 LinearForm<NumericTerm> whole =
                         TotalsOfOneRun.addedUp(difference.value(), inputs, ruleSource);
                 if (whole.coefs().isEmpty()) {
-                    return new OfAComparison.CutsNothing(named, whole.constant(), told.working());
+                    return new OfAComparison.CutsNothing(named, whole.constant(),
+                            told.workedOut().noLine());
                 }
                 if (productsAreNumbers && whole.coefs().size() == 1
                         && whole.coefs().keySet().iterator().next()
@@ -401,7 +406,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 boolean mirrored =
                         here.facesTheOtherWay(subjectOf(comparison.left(), left, reads, ruleSource));
                 return new OfAComparison.Cuts(mirrored ? here.mirrored() : here, mirrored,
-                        told.working());
+                        told.workedOut());
             }
         }
         throw new IllegalStateException("a comparison has two sides");
@@ -2241,6 +2246,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             return onEveryRun ? out : out.notOnEveryRun();
         }
 
+        /** What a row of a line gets past, and what a run works out, off what the walk told. */
+        WorkedOut workedOut() {
+            return new WorkedOut(working(), new StopEvidence(everyOperation(true)));
+        }
+
         /**
          * That the step about to be read is handed the answer so far on {@code accumulator}, so
          * what it works out of that is worked out after every operation told so far: the seed's,
@@ -2502,13 +2512,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         }
 
         /**
-         * Of a reading that drew no line: no row gets past anything, since there is no row of a
-         * line, and a run works out what the walk of the two sides told, whatever their
-         * difference came to. Cancelling {@code q + 1} against {@code q} leaves no operation for a
-         * line, and the run still adds.
+         * The same where the reading drew no line: no row of one gets past anything, and a run
+         * works out what it did all the same. Cancelling {@code q + 1} against {@code q} leaves
+         * no operation for a line, and the run still adds.
          */
-        static WorkedOut ofNoLine(UndividedByARelation.Working worked) {
-            return new WorkedOut(UndividedByARelation.Working.UNREAD, new StopEvidence(worked));
+        WorkedOut noLine() {
+            return new WorkedOut(UndividedByARelation.Working.UNREAD, stops);
         }
     }
 
