@@ -1278,16 +1278,16 @@ final class Pullback {
             }
             case Core.If iff -> {
                 Derivation cond = observe(iff.cond(), AnswerAspect.TRUTH, reads);
-                return madeBy(iff, decidingTheArms(Optional.empty(),
-                        () -> new Derivation.IfThenElse(cond, observe(iff.then(), asked, reads),
-                                observe(iff.els(), asked, reads))));
+                Derivation then = observe(iff.then(), asked, reads);
+                return madeBy(iff,
+                        new Derivation.IfThenElse(cond, then, observe(iff.els(), asked, reads)));
             }
             case Core.Match match -> {
-                return madeBy(match, armsOf(Optional.empty(), match, reads,
-                        (body, inside) -> observe(body, asked, inside)));
+                return madeBy(match,
+                        armsOfAMatch(match, reads, (body, inside) -> observe(body, asked, inside)));
             }
             case Core.IfConstructed attempt -> {
-                return madeBy(attempt, armsOf(Optional.empty(), attempt, reads,
+                return madeBy(attempt, armsOfAnAttempt(attempt, reads,
                         (body, inside) -> observe(body, asked, inside)));
             }
             default -> { }
@@ -3633,12 +3633,26 @@ final class Pullback {
     private Derivation.MatchArms armsOf(Optional<UndividedByARelation.Working> decidedBy,
                                         Core.Match match, InputReads reads,
                                         BiFunction<Core, InputReads, Derivation> states) {
-        return decidingTheArms(decidedBy, () -> armsOfAMatch(match, reads, states));
+        // Which case a run takes is settled before it takes an arm, as the condition of an if is:
+        // read in the layers around the choice, and not in the one for its arms.
+        List<Derivation> selections = selectionsOf(match, reads);
+        return decidingTheArms(decidedBy, () -> armsOfAMatch(match, reads, selections, states));
+    }
+
+    /**
+     * The arms of {@code match}, read for what a condition states of them. No layer is added to
+     * what decides the arms ({@link #decidingTheArms}): these are no arms of the comparison being
+     * asked, and a layer is part of the state a reading kept to be taken again is keyed by, so one
+     * here would make every reading of a {@code match} another.
+     */
+    private Derivation.MatchArms armsOfAMatch(Core.Match match, InputReads reads,
+                                              BiFunction<Core, InputReads, Derivation> states) {
+        return armsOfAMatch(match, reads, selectionsOf(match, reads), states);
     }
 
     private Derivation.MatchArms armsOfAMatch(Core.Match match, InputReads reads,
+                                              List<Derivation> selections,
                                               BiFunction<Core, InputReads, Derivation> states) {
-        List<Derivation> selections = selectionsOf(match, reads);
         boolean ofAnEntry = reads.holdsAnEntryLookedUp(match.scrutinee(),
                 read.rules().symbols(), read.rules().newtypes());
         List<Derivation.MatchArms.Arm> arms = new ArrayList<>();
@@ -3661,12 +3675,19 @@ final class Pullback {
     private Derivation.MatchArms armsOf(Optional<UndividedByARelation.Working> decidedBy,
                                         Core.IfConstructed attempt, InputReads reads,
                                         BiFunction<Core, InputReads, Derivation> states) {
-        return decidingTheArms(decidedBy, () -> armsOfAnAttempt(attempt, reads, states));
+        List<Derivation> taken = attempted(attempt, reads);
+        return decidingTheArms(decidedBy, () -> armsOfAnAttempt(attempt, reads, taken, states));
+    }
+
+    /** The same of an attempt to build a value, with no layer added ({@link #armsOfAMatch}). */
+    private Derivation.MatchArms armsOfAnAttempt(Core.IfConstructed attempt, InputReads reads,
+                                                 BiFunction<Core, InputReads, Derivation> states) {
+        return armsOfAnAttempt(attempt, reads, attempted(attempt, reads), states);
     }
 
     private Derivation.MatchArms armsOfAnAttempt(Core.IfConstructed attempt, InputReads reads,
+                                                 List<Derivation> taken,
                                                  BiFunction<Core, InputReads, Derivation> states) {
-        List<Derivation> taken = attempted(attempt, reads);
         List<Choice.Arm> arms = Choice.of(attempt).arms();
         List<Derivation.MatchArms.Arm> out = new ArrayList<>();
         for (int i = 0; i < arms.size(); i++) {
@@ -7996,16 +8017,14 @@ final class Pullback {
                         read.rules().newtypes());
                 switch (Core.withoutStanding(stands.value())) {
                     case Core.If iff -> {
-                        Derivation cond = observe(iff.cond(), AnswerAspect.TRUTH, stands.at());
-                        return madeBy(iff, decidingTheArms(Optional.empty(),
-                                () -> new Derivation.IfThenElse(cond,
-                                        asTheElement(container, iff.then(), stands.at(), compared),
-                                        asTheElement(container, iff.els(), stands.at(),
-                                                compared))));
+                        return madeBy(iff, new Derivation.IfThenElse(
+                                observe(iff.cond(), AnswerAspect.TRUTH, stands.at()),
+                                asTheElement(container, iff.then(), stands.at(), compared),
+                                asTheElement(container, iff.els(), stands.at(), compared)));
                     }
                     case Core.Match match -> {
-                        return madeBy(match, armsOf(Optional.empty(), match, stands.at(),
-                                (body, inside) -> asTheElement(container, body, inside, compared)));
+                        return madeBy(match, armsOfAMatch(match, stands.at(), (body, inside) ->
+                                asTheElement(container, body, inside, compared)));
                     }
                     default -> { }
                 }
@@ -11646,8 +11665,7 @@ final class Pullback {
                 decided[next] = now.holds();
                 truthsDecided.add(now);
                 try {
-                    each[way] = decidingTheArms(Optional.empty(),
-                            () -> keptAs(total, ways, decided, conditions, at, fixed, again));
+                    each[way] = keptAs(total, ways, decided, conditions, at, fixed, again);
                 } finally {
                     truthsDecided.remove(now);
                     decided[next] = null;
@@ -13399,8 +13417,10 @@ final class Pullback {
     /**
      * {@code reading} of the arms of a choice, with what decided them: {@code before}, what every
      * run works out before it takes an arm, or nothing where the choice is not read as a fork.
-     * Every reader of a choice's arms says it, so that none is read without ({@link #armsOf},
-     * {@link #byItsCases}).
+     * Every reader of the arms of a choice the comparison asked is read through says it, so that
+     * none is read without ({@link #armsOf}, {@link #byItsCases}). A reading of what a condition
+     * states of a choice's arms adds none: the layers are state a kept reading is keyed by
+     * ({@link ReadingRoles}), and one on every such reading keeps none from being taken again.
      */
     private <T> T decidingTheArms(Optional<UndividedByARelation.Working> before,
                                   Supplier<T> reading) {
