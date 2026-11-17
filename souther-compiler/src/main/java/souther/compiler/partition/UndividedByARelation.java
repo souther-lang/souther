@@ -425,15 +425,38 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * What several readings of one relation tell together: the same where they agree, and
          * otherwise nothing that holds of the rows of every one of them. A row arrives along one
          * reading, and an operation told by another is not one it is asked to get past.
+         *
+         * <p>They agree where they tell the same operations, however many times each: a row gets
+         * past an operation worked out twice exactly where it gets past it once, so a reading that
+         * counts one operation both as what decided the way and as what the relation reads tells
+         * what another counting it once does.
          */
         static Working together(List<Working> readings) {
-            Working first = readings.getFirst().notOnEveryRun();
-            // Whether every run reaches the relation is no part of what is told of it: readings
-            // that tell alike tell that, and the relation is on every run only if each is.
-            if (!readings.stream().allMatch(each -> each.notOnEveryRun().equals(first))) {
+            Working first = readings.getFirst();
+            if (!readings.stream().allMatch(each -> each.tellsWhat(first))) {
                 return UNREAD;
             }
-            return readings.stream().allMatch(Working::onEveryRun) ? readings.getFirst() : first;
+            // Whether every run reaches the relation is no part of what is told of it: readings
+            // that tell alike tell that, and the relation is on every run only if each is.
+            return readings.stream().allMatch(Working::onEveryRun) ? first
+                    : first.notOnEveryRun();
+        }
+
+        /** Whether this tells the operations {@code other} does, each once or more, and as much
+         *  of what can stop a run. */
+        private boolean tellsWhat(Working other) {
+            return told == other.told && partials.equals(other.partials)
+                    && operationsWorkedOut().equals(other.operationsWorkedOut());
+        }
+
+        /** The operations, each as what it works out and the numbers it comes to between, and not
+         *  where it stands among the others. */
+        private Set<List<Object>> operationsWorkedOut() {
+            Set<List<Object>> out = new HashSet<>();
+            for (IntOperation each : operations) {
+                out.add(Arrays.asList(each.form(), each.least(), each.greatest()));
+            }
+            return out;
         }
 
         Working {
