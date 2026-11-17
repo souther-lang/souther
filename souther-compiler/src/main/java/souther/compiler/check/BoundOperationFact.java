@@ -105,7 +105,8 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
      *  count plus {@code months} by twelve ({@code numeric.CalendarMonths}). */
     record MovesADateByMonths(DeclaredOperation operation, DeclaredArgument months,
                               DeclaredArgument date, DeclaredOperation year,
-                              DeclaredOperation month, DeclaredOperation remainder)
+                              DeclaredOperation month, DeclaredOperation day,
+                              DeclaredOperation remainder)
             implements OneAboutAnOperation {}
 
     /** The operation answers how many whole units, of {@code perUnit} steps each, lie from
@@ -478,6 +479,12 @@ sealed interface BoundOperationFact permits BoundOperationFact.OneAboutAnOperati
 
     /** What the operation answers holds, where it holds a value, an element of {@code source}. */
     record AnswersAnElementOf(DeclaredOperation operation, DeclaredArgument source)
+            implements OneAboutAnOperation {}
+
+    /** What the operation answers holds, where it holds a value, the greatest or the least element
+     *  of {@code source}. */
+    record AnswersAnExtremeElementOf(DeclaredOperation operation, DeclaredArgument source,
+                                     BoundOperationFacts.End end)
             implements OneAboutAnOperation {}
 
     /** What the operation answers holds, where it holds a value, an element of {@code source} that

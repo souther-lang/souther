@@ -878,7 +878,10 @@ public sealed interface Derivation {
             }
             cases = List.copyOf(cases);
             int defined = DefaultBoundOperationFacts.get().isDefinedByCases(operation).size();
-            if (defined != cases.size()) {
+            // The cases a move of a date by months is read in are the calendar's and not the
+            // library's, and which they are turns on the months the move is by.
+            if (defined != cases.size()
+                    && DefaultBoundOperationFacts.get().movesADateByMonths(operation) == null) {
                 throw new IllegalArgumentException(operation + " is defined in " + defined
                         + " cases and is read in " + cases.size());
             }

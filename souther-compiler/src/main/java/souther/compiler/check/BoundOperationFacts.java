@@ -491,6 +491,27 @@ public final class BoundOperationFacts {
     }
 
     /**
+     * The container whose greatest or least element {@code operation} answers where it answers a
+     * value, and which end — or null where it says no such thing
+     * ({@link BoundOperationFact.AnswersAnExtremeElementOf}).
+     */
+    public Extremity answersAnExtremeElementOf(ValueName operation) {
+        BoundOperationFact.AnswersAnExtremeElementOf held =
+                one(BoundOperationFact.AnswersAnExtremeElementOf.class, operation);
+        return held == null ? null : new Extremity(held.source(), held.end());
+    }
+
+    /** The container an answer is an end of, and which end. */
+    public record Extremity(DeclaredArgument container, End end) {}
+
+    /** Which end of the elements of a container an answer is: the one no element is above, or the
+     *  one no element is below, by the order the comparison operators put them in. */
+    public enum End {
+        GREATEST,
+        LEAST
+    }
+
+    /**
      * The container {@code operation} finds an element of and the closure that element is found
      * by, where what it answers holds, if it holds a value, an element of that container the closure
      * answers true on — or null where it says no such thing

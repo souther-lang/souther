@@ -9,8 +9,8 @@ import souther.compiler.check.CallArguments;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ClosureUses;
 import souther.compiler.check.DeclarationNewtypes;
-import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.DeclaredArgument;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.Location;
@@ -1712,7 +1712,7 @@ public final class InputReads {
      * @param lookup  the call that asked the map for the key, itself and not one like it
      * @param entered the arm that binds the name
      */
-    public record LookupOpened(Core lookup, EnteredArm entered) {
+    public record LookupOpened(Core lookup, EnteredArm entered) implements ArmOpened {
 
         public LookupOpened {
             Objects.requireNonNull(lookup, "a name is found by some lookup");
@@ -1732,10 +1732,57 @@ public final class InputReads {
         }
     }
 
+    /**
+     * What a name under an arm is made of where it is the payload of a call that answers an
+     * option: which call, and which arm.
+     *
+     * <p>The name is an {@code Int} where the call answers an {@code Option<Int>}, so it stands
+     * for no expression of its own and is read by no reader of values. What it is the payload of
+     * is said apart from it, for the reader that asks.
+     */
+    public sealed interface ArmOpened permits LookupOpened, ElementOpened {
+
+        /** The arm that binds the name. */
+        EnteredArm entered();
+    }
+
+    /**
+     * What the name {@code entered} binds is an element of a container, where {@code call}
+     * answers one ({@link BoundOperationFacts#answersAnElementOf}): which element, if the call
+     * says (the greatest, the first a closure holds of), is for the reader that asks the call.
+     *
+     * @param call    the call that answers it, where it stands
+     * @param entered the arm that binds the name
+     */
+    public record ElementOpened(Denotation call, EnteredArm entered) implements ArmOpened {
+
+        public ElementOpened {
+            Objects.requireNonNull(call, "the call that answers an element");
+            Objects.requireNonNull(entered, "under some arm of the match on it");
+        }
+
+        /** The same arm: the call is read through the names in force, a new tree each time. */
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof ElementOpened that && entered.equals(that.entered);
+        }
+
+        @Override
+        public int hashCode() {
+            return entered.hashCode();
+        }
+    }
+
     /** What the name {@code binding} is the value of, where an arm bound it to what a lookup in a
      *  map found under its key — or null where it is no such name. */
     public LookupOpened lookupOpenedBy(BindingId binding) {
-        return names.openedBy(binding);
+        return names.openedBy(binding) instanceof LookupOpened lookup ? lookup : null;
+    }
+
+    /** The element the name {@code binding} is the payload of, where an arm bound it to what a
+     *  call answering one holds — or null where it is no such name. */
+    public ElementOpened elementOpenedBy(BindingId binding) {
+        return names.openedBy(binding) instanceof ElementOpened element ? element : null;
     }
 
     /** {@link #insideArmOn}, without the lookup the name under the arm is found by. */
@@ -1757,6 +1804,15 @@ public final class InputReads {
             if (held instanceof WhatItHolds.AtAnIndex(PickedAtAnIndex element)) {
                 return picking(arm.binder().binding(), element)
                         .narrowedByThePattern(scrutinee, arm, symbols, newtypes);
+            }
+            // The payload is no expression of the input and no name of one: what it is the
+            // payload of is said beside the name the pattern gives it.
+            if (held instanceof WhatItHolds.AnElementOf(Denotation call)) {
+                InputReads narrowed = narrowedByThePattern(scrutinee, arm, symbols, newtypes);
+                BindingId binding = arm.binder().binding();
+                return new InputReads(narrowed.names.opening(binding,
+                        new ElementOpened(call, new EnteredArm(binding))), narrowed.alternatives,
+                        narrowed.declared, narrowed.dependencies, narrowed.applied);
             }
             InputReads holding = holdingWhatItHolds(held, arm.binder(), newtypes);
             if (holding != null) {
@@ -1955,6 +2011,26 @@ public final class InputReads {
             }
         }
 
+        /**
+         * An element of a container, which an operation answering one holds
+         * ({@link BoundOperationFacts#answersAnElementOf}): the call itself, read where it
+         * stands. Which element that is turns on the container, and it is no place of the input,
+         * so the name under the arm is told apart from the call it is the payload of
+         * ({@link ElementOpened}), and it came from wherever the container's elements did. Made of
+         * no entry, as a list's element is not.
+         */
+        record AnElementOf(Denotation call) implements WhatItHolds {
+
+            public AnElementOf {
+                Objects.requireNonNull(call, "the call that answers an element");
+            }
+
+            @Override
+            public EntryLookedUp madeOf() {
+                return null;
+            }
+        }
+
         /** Nothing says. */
         record Unsaid() implements WhatItHolds {
 
@@ -2056,17 +2132,19 @@ public final class InputReads {
         public WhatItHolds otherwise(ElementsWrittenOut.Stood<InputReads> option,
                                      AnOperationApplied applied) {
             InputReads at = option.at();
-            if (applied != null && applied.picks() instanceof AnOperationApplied.Picked picked) {
-                return at.folded(picked.index(), symbols, newtypes).orElse(null)
-                                instanceof Long index && index >= 0
-                        ? new WhatItHolds.AtAnIndex(new PickedAtAnIndex(
-                                new Denotation(picked.list(), at), index))
-                        : unsaid();
+            if (applied != null && applied.picks() instanceof AnOperationApplied.Picked picked
+                    && at.folded(picked.index(), symbols, newtypes).orElse(null)
+                            instanceof Long index && index >= 0) {
+                return new WhatItHolds.AtAnIndex(new PickedAtAnIndex(
+                        new Denotation(picked.list(), at), index));
             }
             if (applied != null) {
                 AnOperationApplied.Lookup lookup = applied.lookup();
                 if (lookup == null) {
-                    return unsaid();
+                    return DefaultBoundOperationFacts.get()
+                            .answersAnElementOf(applied.operation()) != null
+                            ? new WhatItHolds.AnElementOf(new Denotation(option.value(), at))
+                            : unsaid();
                 }
                 EntryLookedUp entry = at.entryLookedUp(new Denotation(option.value(), at),
                         lookup.container(), symbols, newtypes);
@@ -2122,6 +2200,9 @@ public final class InputReads {
                     standingFor(name, answered, newtypes);
             case WhatItHolds.AnElement(Denotation element) -> standingFor(name, element, newtypes);
             case WhatItHolds.AtAnIndex(PickedAtAnIndex element) -> picking(name, element);
+            case WhatItHolds.AnElementOf(Denotation call) -> new InputReads(
+                    names.opening(name, new ElementOpened(call, new EnteredArm(name))),
+                    alternatives, declared, dependencies, applied);
             case WhatItHolds.Unsaid _ -> this;
         };
     }
@@ -2269,7 +2350,8 @@ public final class InputReads {
             case WhatItHolds.AnEntry _, WhatItHolds.AnEntryOfAnAnswer _,
                  WhatItHolds.MadeByAClosure _, WhatItHolds.AnElement _ ->
                     holding(name.binding(), held, newtypes);
-            case WhatItHolds.AtAPosition _, WhatItHolds.AtAnIndex _, WhatItHolds.Unsaid _ -> null;
+            case WhatItHolds.AtAPosition _, WhatItHolds.AtAnIndex _, WhatItHolds.AnElementOf _,
+                 WhatItHolds.Unsaid _ -> null;
         };
     }
 
@@ -2875,6 +2957,17 @@ public final class InputReads {
         InputReads there = withNames(at);
         Symbols symbols = declared.symbols();
         return symbols == null ? there : there.choosing(decidedBy, symbols, newtypes);
+    }
+
+    /**
+     * The reading a child is read in, {@code step} being the way from its parent into it
+     * ({@link ScopeStep#forEachChild}), in the names {@code at}: the reading at {@code at} itself
+     * where the declarations of this input carry no symbols to enter a step under.
+     */
+    InputReads insideStep(BindingEnvironment at, ScopeStep step, DeclarationNewtypes newtypes) {
+        InputReads there = withNames(at);
+        Symbols symbols = declared.symbols();
+        return symbols == null ? there : there.entering(step, symbols, newtypes);
     }
 
     /** Whether a name was given a value on the way to this reading ({@link #handedOver}). */
@@ -5027,6 +5120,12 @@ public final class InputReads {
      *  position ({@link InputPath#cameFrom}). */
     public PathResolution cameFrom(Core e, DeclarationNewtypes newtypes) {
         return InputPath.cameFrom(e, names, newtypes, this).heldAt();
+    }
+
+    /** Where {@code e}'s value came from, followed through everything it is made of
+     *  ({@link InputPath#madeOf}). */
+    public PathResolution madeOf(Core e, DeclarationNewtypes newtypes) {
+        return InputPath.madeOf(e, names, newtypes, this).heldAt();
     }
 
     /**

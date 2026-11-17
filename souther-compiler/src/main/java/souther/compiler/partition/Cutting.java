@@ -1524,13 +1524,18 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     private static Map<PartOfAComparison, AuthoredPointMapping> authorsLines(
             AuthorsLines lines, List<Proposition.Compared> scales, ComparisonClaim written) {
         Map<PartOfAComparison, AuthoredPointMapping> out = new LinkedHashMap<>();
+        // A relation that only selects a case of a library's definition parts the values like any
+        // other and is no place of a line the author wrote.
         for (Proposition.Compared relation : scales) {
             // The author's lines were read at positions, before any name was told.
-            Map<WrittenLine, AuthoredPointMapping> under = lines.of(((Proposition.Compared)
-                    ReadThroughNames.atThePositions(relation)).heldSpelling());
+            Spelling at = ((Proposition.Compared) ReadThroughNames.atThePositions(relation))
+                    .heldSpelling();
+            Map<WrittenLine, AuthoredPointMapping> under = lines.of(at);
             if (under != null) {
-                under.forEach((line, mapping) ->
-                        out.putIfAbsent(PartOfAComparison.of(line), mapping));
+                boolean selectsACase = lines.selectsOnlyACase(at);
+                under.forEach((line, mapping) -> out.putIfAbsent(PartOfAComparison.of(line),
+                        selectsACase ? new AuthoredPointMapping.SelectsACase(line,
+                                mapping.claims()) : mapping));
             }
         }
         if (out.isEmpty()) {
@@ -2325,15 +2330,18 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * <p>Read once, under the names of the one application it is asked of: which applications
      * there are, and where each is reached, is what {@link #ofAnApplicationOnEach} walks, so that
      * a comparison read here and a statement read as lines are told apart by the same walk.
+     *
+     * @param onEveryElement whether a run that gets to the closure the application stands in
+     *                       makes it on every element the closure is handed, which is what lets a
+     *                       comparison of a remainder be read on the elements a list starts with.
+     *                       False where the applications are not said
      */
     static Read ofALawComparison(String behavior, StatedComparison comparison,
                                  InputReading read, InputReads reads,
                                  Arrivals answering, WhatConditionsState conditions,
-                                 Optional<ExpansionLineage> writtenIn) {
-        // Nothing is claimed of every element a closure is handed: that is only ever what lets a
-        // comparison of a remainder be read on the elements a list starts with.
+                                 boolean onEveryElement, Optional<ExpansionLineage> writtenIn) {
         Read drawn = readOnce(behavior, comparison, read, reads, answering,
-                conditions.comparison(comparison, reads, read), false, writtenIn);
+                conditions.comparison(comparison, reads, read), onEveryElement, writtenIn);
         // An application states lines, the values it relates, or a stop
         // ({@link ComparisonAssessment#ofAnApplication}), and takes no other reading of a
         // comparison as its own.
@@ -2377,7 +2385,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return null;
         }
         List<WhereEachLineDecides.Decides> lines =
-                WhereEachLineDecides.in(stated, read.quantities()::countsWhole);
+                WhereEachLineDecides.in(stated, read.quantities()::countsWhole,
+                        read.quantities()::countsInWholeUnits);
         if (lines.isEmpty()) {
             return null;
         }
@@ -2804,7 +2813,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return TheParts.READ_TO_THE_END;
         }
         List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated,
-                read.quantities()::countsWhole);
+                read.quantities()::countsWhole, read.quantities()::countsInWholeUnits);
         if (lines.isEmpty()) {
             return TheParts.READ_TO_THE_END;
         }

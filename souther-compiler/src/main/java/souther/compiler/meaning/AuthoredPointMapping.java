@@ -72,6 +72,20 @@ public sealed interface AuthoredPointMapping {
         }
     }
 
+    /**
+     * A relation that only selects a case of the definition a library writes an operation in. It
+     * is part of what the statement comes to, so it cuts the values into regions as any relation
+     * does, but the author wrote no comparison of it and owes no row at its points.
+     */
+    record SelectsACase(WrittenLine line, ComparisonClaim claims)
+            implements AuthoredPointMapping {
+
+        public SelectsACase {
+            Objects.requireNonNull(line, "a relation is a place of some line");
+            Objects.requireNonNull(claims, "a line claims something");
+        }
+    }
+
     /** A place the statement turns that this reading cannot tie to the author's line either way. */
     record Undetermined(WrittenLine line, ComparisonClaim claims) implements AuthoredPointMapping {
 

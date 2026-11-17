@@ -112,4 +112,23 @@ public sealed interface ApplicationDerivationCause extends RecordOfTheBuilding {
             }
         }
     }
+
+    /**
+     * A number of the date a move by months is made from, which the cases the move is read in are
+     * stated through: its month, its year, what its year leaves by a divisor, its day.
+     *
+     * <p>Not the application that was written. The author wrote the move, and the calls that
+     * state its cases are ones this compiler wrote, so each is an application of its own derived
+     * from the move's. Given the move's identity instead, a number of the date and the move
+     * would answer as one.
+     */
+    record NumberOfADateMoved(ApplicationOrigin.Identified from)
+            implements ApplicationDerivationCause {
+
+        public NumberOfADateMoved {
+            if (from == null) {
+                throw new IllegalArgumentException("a number of a date moved is of some move");
+            }
+        }
+    }
 }

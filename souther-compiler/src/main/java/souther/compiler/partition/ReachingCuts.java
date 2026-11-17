@@ -1120,7 +1120,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
             case DemandReading.Read.Unread(var whys, var besideAnAnswer) ->
                     new OnTheWay.Declined(condition, at, whys, entered, besideAnAnswer);
         };
-        by.alone(made, readOff.of(read));
+        by.alone(made, () -> readOff.of(read));
         return made;
     }
 

@@ -399,6 +399,17 @@ final class OperationFactBinder {
                 holdTheAnswerToAnElementOf(declaration, source);
                 yield new BoundOperationFact.AnswersAnElementOf(operation, source);
             }
+            // The greatest or the least of the elements of a container, which are ordered.
+            case OperationFact.AnswersAnExtremeElementOf extreme -> {
+                requireAKernel(stdlib, operation, "which element it answers");
+                holdTheResultToTheDeclaration(declaration, TypeRequirement.OPTIONAL,
+                        "an option of an element of a container");
+                DeclaredArgument source = holdToTheDeclaration(declaration, extreme.source(), null,
+                        TypeRequirement.CONTAINER, "what the value answered is an end of");
+                holdTheAnswerToAnElementOf(declaration, source);
+                yield new BoundOperationFact.AnswersAnExtremeElementOf(operation, source,
+                        BoundOperationFacts.End.valueOf(extreme.end().name()));
+            }
             // An element picked at a place of a list: the place is a whole number, and the answer
             // an option of an element of the list.
             case OperationFact.AnswersTheElementAt picked -> {
@@ -922,7 +933,8 @@ final class OperationFactBinder {
         }
         CompleteSignature year = declaredSignature(stdlib, moves.year());
         CompleteSignature month = declaredSignature(stdlib, moves.month());
-        for (CompleteSignature part : List.of(year, month)) {
+        CompleteSignature day = declaredSignature(stdlib, moves.day());
+        for (CompleteSignature part : List.of(year, month, day)) {
             if (!part.params().equals(List.of(Type.Prim.DATE)) || part.result() != Type.Prim.INT) {
                 throw new IllegalStateException("a date " + library.qualified()
                         + " moves is counted by " + part.declaring().operation()
@@ -937,7 +949,7 @@ final class OperationFactBinder {
                     + ", which does not leave a whole number of a whole number");
         }
         return new BoundOperationFact.MovesADateByMonths(declaration.declaring(), months, date,
-                year.declaring(), month.declaring(), remainder.declaring());
+                year.declaring(), month.declaring(), day.declaring(), remainder.declaring());
     }
 
     /**

@@ -54,7 +54,8 @@ class AnArithmeticStopIsReportedAtTheCallItStoppedAtTest {
                 Option.withDefault(from, List.find(d -> d == from, xs)))
 
             behavior monthAdded : (c: PaymentCalendar, from: Date) -> Bool
-            let monthAdded (c, from) = isBusinessDay(c, Date.addMonths(1, from))
+            let monthAdded (c, from) = isBusinessDay(c,
+                Date.addMonths(Int.floorMod(Date.day(from), 5), from))
 
             behavior daysAdded : (c: PaymentCalendar, from: Date) -> Bool
             let daysAdded (c, from) = isBusinessDay(c, Date.addDays(3, from))

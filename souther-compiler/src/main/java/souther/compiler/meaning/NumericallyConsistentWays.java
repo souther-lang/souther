@@ -438,6 +438,14 @@ public final class NumericallyConsistentWays {
     /** How many states a walk of a line's cases starts from, at most: each walks the cases. */
     static final int MOST_STARTS = MOST_REMAINDERS_TOLD_APART + 1;
 
+    /**
+     * Whether {@code part} is something a {@link State} holds of what is chosen: a comparison of an
+     * affine form. Every other part leaves every state as it was, so a state says nothing of it.
+     */
+    static boolean leavesAStateWhatItHolds(Proposition part) {
+        return Narrowing.of(part).isEmpty();
+    }
+
     /** What a condition chosen states together: its parts, where it is a conjunction. */
     private static List<Proposition> conjunctsOf(Proposition condition) {
         if (condition instanceof Proposition.All all) {
@@ -673,6 +681,33 @@ public final class NumericallyConsistentWays {
         State taking(Proposition part) {
             Optional<Narrowing> narrowing = Narrowing.of(part);
             return narrowing.isEmpty() ? this : taking(narrowing.get(), true);
+        }
+
+        /**
+         * This as the rows it leaves and nothing of how they were left: without the interval of a
+         * form that is one remainder of a dividend, which the dividend's remainders say exactly.
+         * Two states that leave the same rows are one here, where they differ only in comparisons
+         * of a remainder the others made implied.
+         */
+        State rowsLeft() {
+            Map<Form, Interval> kept = new HashMap<>();
+            for (Map.Entry<Form, Interval> each : forms.entrySet()) {
+                if (!aRemainderTheRemaindersSay(each.getKey())) {
+                    kept.put(each.getKey(), each.getValue());
+                }
+            }
+            return kept.size() == forms.size() ? this : new State(kept, remainders);
+        }
+
+        /** Whether {@code form} is one remainder of a dividend that {@link #remainders} holds the
+         *  exact set of: one told apart, of a dividend moved by a whole number. */
+        private static boolean aRemainderTheRemaindersSay(Form form) {
+            return form.coefs().size() == 1
+                    && form.coefs().keySet().iterator().next()
+                    instanceof Quantity.RemainderOfADividend remainder
+                    && remainder.divisor().compareTo(
+                            BigInteger.valueOf(MOST_REMAINDERS_TOLD_APART)) <= 0
+                    && remainder.dividend().constant().isWhole();
         }
 
         /** The intervals this leaves its forms, and no remainder of any dividend: the state the

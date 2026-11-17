@@ -26,6 +26,18 @@ public enum ElementQuestion {
      *  rule is about something made from those values. */
     VALUE_ORIGIN,
 
+    /**
+     * Which positions the values in an expression that stand at none came from, followed through
+     * everything it is made of — arithmetic, operations, the arms of a choice.
+     *
+     * <p>{@link #VALUE_ORIGIN} and a wider one, for the names no reader of positions follows: the
+     * payload of an option an operation answered, an element an index picked of a list that is no
+     * position. A name at a position says nothing here, since what reads the numbers of the input
+     * follows it and says the places a rule about a sum of them is about. So a comparison of what
+     * an operation made of such values is not taken for one of constants.
+     */
+    WHAT_IT_IS_MADE_OF,
+
     /** Which position holds these very values, every occurrence of it and each as often as the
      *  container holds it, so that a total of them is a total of everything standing there. */
     EVERY_OCCURRENCE,

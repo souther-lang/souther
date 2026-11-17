@@ -329,13 +329,18 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/AWayReadForARelation$WaysFound;)Z",
                     "keeps a choice as it stands past the ways walked to show them met, and"
                             + " hands the figure to what the relation says it stopped at"),
-            Map.entry("souther.compiler.partition.AWayReadForARelation$ChoiceRead#of("
+            Map.entry("souther.compiler.partition.AWayReadForARelation$ChoiceRead#partedBy("
                             + "Lsouther/compiler/partition/OnTheWay;"
                             + "Lsouther/compiler/partition/AWayReadForARelation;)"
-                            + "Lsouther/compiler/partition/AWayReadForARelation$ChoiceRead;",
+                            + "Lsouther/compiler/partition/AWayReadForARelation$ChoiceRead$Parted;",
                     "past the leaves a choice is opened into, asks of each alternative what its"
-                            + " choices are to meet at once, and hands the figure to what the"
-                            + " relation says it stopped at"),
+                            + " choices are to meet at once, and hands the figure back with the"
+                            + " choice parted, so that what keeps it keeps the stop with it"),
+            Map.entry("souther.compiler.partition.AWayReadForARelation#readAgain()"
+                            + "Ljava/util/Optional;",
+                    "takes the choices figure from each choice parted, where parting it was"
+                            + " stopped there, and hands it to what the relation says it stopped"
+                            + " at"),
             Map.entry("souther.compiler.partition.AWayReadForARelation#walked("
                             + "Ljava/util/List;)Lsouther/compiler/partition/Reachability;",
                     "stops walking a way read again at the walks it is read again with, and hands"

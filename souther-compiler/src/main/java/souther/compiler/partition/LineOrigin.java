@@ -60,6 +60,15 @@ import java.util.Optional;
 public sealed interface LineOrigin extends RuleEvidenceOrigin {
 
     /**
+     * Whether the line only selects a case of the definition a library writes an operation in. It
+     * parts the values as any line does, and no comparison of the author's is there for a row to
+     * be owed at its points.
+     */
+    default boolean onlySelectsACase() {
+        return false;
+    }
+
+    /**
      * A clause of a {@code data}'s invariant, as the clause it is.
      *
      * <p>The clause that placed the end, and not the declaration it is written on together with the
@@ -159,6 +168,11 @@ public sealed interface LineOrigin extends RuleEvidenceOrigin {
             if (read == null || part == null || facts == null || authored == null) {
                 throw new IllegalArgumentException("a line is what some comparison placed");
             }
+        }
+
+        @Override
+        public boolean onlySelectsACase() {
+            return authored instanceof AuthoredPointMapping.SelectsACase;
         }
 
         /**

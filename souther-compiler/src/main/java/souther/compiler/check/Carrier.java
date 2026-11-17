@@ -305,6 +305,21 @@ public sealed interface Carrier extends ValueOrder {
     }
 
     /**
+     * Whether every value on this order is a whole number of its own unit: a whole number, a count
+     * of days, of seconds, of seconds of the day, or of nanoseconds. What is asked of the numbers
+     * of the input by a reader that holds a value to be one of those and says nothing of what the
+     * unit is — the days a date stands for are whole, though no value of a date is a whole number.
+     *
+     * <p>A switch with nothing to fall through to, so that a ninth carrier says for itself.
+     */
+    default boolean wholeInItsUnit() {
+        return switch (this) {
+            case Whole _, Days _, Seconds _, SecondsOfDay _, Nanos _ -> true;
+            case Dense _, Text _, Ordinal _ -> false;
+        };
+    }
+
+    /**
      * Whether a value written out on this order is a constant of the arithmetic over the input's
      * numbers.
      *

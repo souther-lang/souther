@@ -42,18 +42,20 @@ class AStopNoRowReachesIsNotReportedAsNotReadTest {
             data No = { n: Int }
             data Terms = Net15 | Net30 | Eom
             let weekday (c: Date, d: Date): Int = Int.floorMod(Date.daysBetween(c, d), 7)
-            let stopped (c: Date, d: Date): Bool = weekday(c, Date.addMonths(1, d)) >= 1
+            let stopped (c: Date, d: Date): Bool = weekday(c, Date.addMonths(Int.floorMod(Date.day(d), 5), d)) >= 1
             behavior f : (c: Date, d: Date, t: Terms, xs: List<Int>) -> Yes | No
             let f (c, d, t, xs) = %s
             """;
 
     /** The month a date moves into is a stop of the reading, whatever it is compared with. */
-    private static final String STOP = "weekday(c, Date.addMonths(1, d)) >= 1";
+    private static final String STOP =
+            "weekday(c, Date.addMonths(Int.floorMod(Date.day(d), 5), d)) >= 1";
 
     /** A condition no reader takes in, so the fork around it states a rule of its own. */
     private static final String OPAQUE = "List.allDistinctBy(n -> n, xs)";
 
-    private static final String SEVERAL = "Int.max(weekday(c, Date.addMonths(1, d)),"
+    private static final String SEVERAL = "Int.max(weekday(c,"
+            + " Date.addMonths(Int.floorMod(Date.day(d), 5), d)),"
             + " weekday(c, d)) >= 3";
 
     private static final String CLOSURE = "List.any(n -> weekday(c, Date.addMonths(n, d)) >= 1,"

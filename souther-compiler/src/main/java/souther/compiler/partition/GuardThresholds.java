@@ -599,13 +599,35 @@ public final class GuardThresholds {
                 continue;
             }
             // Where a side's values came from, and nothing where they came from nowhere.
-            PathResolution came = reads.cameFrom(side, newtypes);
-            if (came instanceof PathResolution.At(var at)) {
-                out.putIfAbsent(FilingCoordinate.at(at), new BlockReason.RuleAboutADerivedValue());
-            } else if (OwedWhereItCameFrom.ofSeveral(came) instanceof OwedWhereItCameFrom owed) {
-                owed.places().forEach(each ->
-                        out.putIfAbsent(FilingCoordinate.at(each), owed.why()));
+            filedWhereItCameFrom(reads.cameFrom(side, newtypes), out);
+        }
+    }
+
+    /**
+     * Where the sides of a comparison a reading stopped at and filed nowhere came from, through
+     * what each is made of: a value worked out of ones that came from somewhere came from there as
+     * well, and a rule no reading followed is about them and not about nothing. Asked of the side
+     * whose own origin says none, beside {@link #cameFrom}; for a reading that has filed a place
+     * already, what it filed is what says where it stopped.
+     */
+    static void cameFromThroughWhatTheSidesAreMadeOf(
+            StatedComparison comparison, InputReads reads, DeclarationNewtypes newtypes,
+            SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
+        for (Core side : List.of(comparison.left(), comparison.right())) {
+            if (!(reads.pathOf(side, newtypes) instanceof PathResolution.At)
+                    && reads.cameFrom(side, newtypes) instanceof PathResolution.NotAPosition) {
+                filedWhereItCameFrom(reads.madeOf(side, newtypes), out);
             }
+        }
+    }
+
+    private static void filedWhereItCameFrom(
+            PathResolution came,
+            SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
+        if (came instanceof PathResolution.At(var at)) {
+            out.putIfAbsent(FilingCoordinate.at(at), new BlockReason.RuleAboutADerivedValue());
+        } else if (OwedWhereItCameFrom.ofSeveral(came) instanceof OwedWhereItCameFrom owed) {
+            owed.places().forEach(each -> out.putIfAbsent(FilingCoordinate.at(each), owed.why()));
         }
     }
 

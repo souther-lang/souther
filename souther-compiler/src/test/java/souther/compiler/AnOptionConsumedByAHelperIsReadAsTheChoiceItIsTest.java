@@ -184,14 +184,15 @@ class AnOptionConsumedByAHelperIsReadAsTheChoiceItIsTest {
      * something; a list it finds nothing in; one it finds something in; and what it finds there.
      *
      * <p>What the operation finds is no position of the input, so nothing is said of where it falls:
-     * the first element meeting the predicate, the element at the index and the greatest are three
-     * different elements, and a row that names {@code xs} names none of them.
+     * the first element meeting the predicate and the element at the index are different
+     * elements, and a row that names {@code xs} names neither of them. The greatest and the least
+     * are not among these: a comparison of one is a statement about the elements
+     * ({@code AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest}).
      */
     static Stream<Arguments> operationsAnsweringAnOption() {
         return Stream.of(
                 Arguments.of("List.find(x -> x > 10, xs)", "xs[*]", "[5]", "[12]", 12),
-                Arguments.of("List.get(2, xs)", "List.length(xs)", "[1]", "[1, 2, 3]", 3),
-                Arguments.of("List.max(xs)", "List.length(xs)", "[]", "[5]", 5));
+                Arguments.of("List.get(2, xs)", "List.length(xs)", "[1]", "[1, 2, 3]", 3));
     }
 
     private static String reportOf(String operation, String body, String rows) {
