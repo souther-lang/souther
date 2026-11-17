@@ -6,8 +6,8 @@ import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleCitations;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.CasesExpandedAtARule;
-import souther.compiler.inputs.CasesReadAtACost;
+import souther.compiler.inputs.CasesAtARule;
+import souther.compiler.meaning.CaseExpansion;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputQuestion;
 import souther.compiler.inputs.PositionReadingBlocked;
@@ -102,9 +102,9 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                 List<Unanswered> unanswered,
                                 List<Incompleteness> whyUnclassified,
-                                List<CasesExpandedAtARule> caseExpansions,
+                                List<CasesAtARule<CaseExpansion.CameTo>> caseExpansions,
                                 List<StopPastTheRepresentation> stopsPastTheRepresentation,
-                                List<CasesReadAtACost> costlyReadings)
+                                List<CasesAtARule<List<CaseExpansion.MultipliedHelper>>> costlyReadings)
         implements RuleCitations {
 
     /** The same, with no rule's line read at a cost told of. */
@@ -117,7 +117,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                              List<PositionValuesNotSeparated> notSeparated,
                              List<Unanswered> unanswered,
                              List<Incompleteness> whyUnclassified,
-                             List<CasesExpandedAtARule> caseExpansions,
+                             List<CasesAtARule<CaseExpansion.CameTo>> caseExpansions,
                              List<StopPastTheRepresentation> stopsPastTheRepresentation) {
         this(partitioned, pairs, notDerivable, rulesWithoutALine, rulesWhereARunMayStop, blocked,
                 notSeparated, unanswered, whyUnclassified, caseExpansions,
@@ -134,7 +134,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                              List<PositionValuesNotSeparated> notSeparated,
                              List<Unanswered> unanswered,
                              List<Incompleteness> whyUnclassified,
-                             List<CasesExpandedAtARule> caseExpansions) {
+                             List<CasesAtARule<CaseExpansion.CameTo>> caseExpansions) {
         this(partitioned, pairs, notDerivable, rulesWithoutALine, rulesWhereARunMayStop, blocked,
                 notSeparated, unanswered, whyUnclassified, caseExpansions, List.of());
     }

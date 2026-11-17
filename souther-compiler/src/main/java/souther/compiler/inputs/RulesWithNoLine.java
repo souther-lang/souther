@@ -43,8 +43,8 @@ import java.util.Map;
 public record RulesWithNoLine(List<RuleWithoutALine> reported,
                               List<StandingQuestion.Unclassified> unclassified,
                               List<RuleWhereARunMayStop> stopping,
-                              List<CasesExpandedAtARule> expanded,
-                              List<CasesReadAtACost> costly) {
+                              List<CasesAtARule<CaseExpansion.CameTo>> expanded,
+                              List<CasesAtARule<List<CaseExpansion.MultipliedHelper>>> costly) {
 
     /** Nothing found, which is what a reader with no rules to read hands on. */
     public static final RulesWithNoLine NONE =
@@ -62,7 +62,7 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
     public RulesWithNoLine(List<RuleWithoutALine> reported,
                            List<StandingQuestion.Unclassified> unclassified,
                            List<RuleWhereARunMayStop> stopping,
-                           List<CasesExpandedAtARule> expanded) {
+                           List<CasesAtARule<CaseExpansion.CameTo>> expanded) {
         this(reported, unclassified, stopping, expanded, List.of());
     }
 
@@ -169,10 +169,10 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
         private final Map<Object, RuleWithoutALine> reported = new LinkedHashMap<>();
         private final Map<Object, StandingQuestion.Unclassified> unclassified = new LinkedHashMap<>();
         private final Map<RuleRef, RuleWhereARunMayStop> stopping = new LinkedHashMap<>();
-        private final Map<CasesExpandedAtARule.Key, CasesExpandedAtARule> expanded =
+        private final Map<CasesAtARule.Key, CasesAtARule<CaseExpansion.CameTo>> expanded =
                 new LinkedHashMap<>();
-        private final Map<CasesReadAtACost.Key, CasesReadAtACost> costly =
-                new LinkedHashMap<>();
+        private final Map<CasesAtARule.Key, CasesAtARule<List<CaseExpansion.MultipliedHelper>>>
+                costly = new LinkedHashMap<>();
 
         /**
          * What a rule's line not worked out because its cases were too many was told of those
@@ -180,12 +180,13 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
          */
         public void expanded(RuleCitation cited, ModelOccurrences readAt,
                              CaseExpansion expansion) {
-            expanded(CasesExpandedAtARule.of(cited, readAt, expansion));
+            expanded(CasesAtARule.of(cited, readAt, expansion.which(), expansion.line(),
+                    expansion.cutAt(), expansion.cameTo()));
         }
 
         /** The same, as another reader handed it on. */
-        public void expanded(CasesExpandedAtARule one) {
-            expanded.merge(one.key(), one, CasesExpandedAtARule::mergedWith);
+        public void expanded(CasesAtARule<CaseExpansion.CameTo> one) {
+            expanded.merge(one.key(), one, CasesAtARule::mergedWith);
         }
 
         /**
@@ -195,12 +196,13 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
          */
         public void costly(RuleCitation cited, ModelOccurrences readAt,
                            CaseExpansion.CostlyCase told) {
-            costly(CasesReadAtACost.of(cited, readAt, told));
+            costly(CasesAtARule.of(cited, readAt, told.which(), told.line(), told.cutAt(),
+                    told.helpers()));
         }
 
         /** The same, as another reader handed it on. */
-        public void costly(CasesReadAtACost one) {
-            costly.merge(one.key(), one, CasesReadAtACost::mergedWith);
+        public void costly(CasesAtARule<List<CaseExpansion.MultipliedHelper>> one) {
+            costly.merge(one.key(), one, CasesAtARule::mergedWith);
         }
 
         /** A rule a run reaching it may stop in, which is what a report says of it. */

@@ -191,6 +191,10 @@ public record CaseExpansion(Which which, String line, String cutAt, CameTo cameT
             Objects.requireNonNull(line, "a case is a line's");
             Objects.requireNonNull(cutAt, "a line is somewhere on its quantity");
             helpers = List.copyOf(helpers);
+            if (helpers.isEmpty()) {
+                throw new IllegalArgumentException("a case is told of by the helpers it chooses"
+                        + " among");
+            }
         }
     }
 

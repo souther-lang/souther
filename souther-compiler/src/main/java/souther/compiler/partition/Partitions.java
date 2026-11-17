@@ -16,8 +16,7 @@ import souther.compiler.check.SidesBalanced;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.check.DeclaredClauses;
-import souther.compiler.inputs.CasesExpandedAtARule;
-import souther.compiler.inputs.CasesReadAtACost;
+import souther.compiler.inputs.CasesAtARule;
 import souther.compiler.inputs.Distinctions;
 import souther.compiler.inputs.EmptyInput;
 import souther.compiler.inputs.PositionValuesNotSeparated;
@@ -38,6 +37,7 @@ import souther.compiler.inputs.Position;
 import souther.compiler.inputs.StructuralInspection;
 import souther.compiler.inputs.TypeBounds;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.meaning.CaseExpansion;
 import souther.compiler.meaning.StringsLanguage;
 import souther.compiler.values.AdmissibleSet;
 import souther.compiler.values.Allowance;
@@ -181,9 +181,9 @@ public final class Partitions {
                                WhereTheOperationsStand operationsStanding,
                                StringsReached strings,
                                List<DerivedValue.Replaced> replaced,
-                               List<CasesExpandedAtARule> caseExpansions,
+                               List<CasesAtARule<CaseExpansion.CameTo>> caseExpansions,
                                ReadingsReadOn readOn,
-                               List<CasesReadAtACost> costlyReadings) {
+                               List<CasesAtARule<List<CaseExpansion.MultipliedHelper>>> costlyReadings) {
 
         /** The same, with no rule's line read at a cost told of. */
         public Partitioning(List<PositionMeasurements> measurements,
@@ -201,7 +201,7 @@ public final class Partitions {
                             WhereTheOperationsStand operationsStanding,
                             StringsReached strings,
                             List<DerivedValue.Replaced> replaced,
-                            List<CasesExpandedAtARule> caseExpansions,
+                            List<CasesAtARule<CaseExpansion.CameTo>> caseExpansions,
                             ReadingsReadOn readOn) {
             this(measurements, unanswered, uncertain, rulesWithoutALine, rulesWhereARunMayStop,
                     notSeparated, between, along, reaching, partitionClosure, borderClosure,
@@ -225,7 +225,7 @@ public final class Partitions {
                             WhereTheOperationsStand operationsStanding,
                             StringsReached strings,
                             List<DerivedValue.Replaced> replaced,
-                            List<CasesExpandedAtARule> caseExpansions) {
+                            List<CasesAtARule<CaseExpansion.CameTo>> caseExpansions) {
             this(measurements, unanswered, uncertain, rulesWithoutALine, rulesWhereARunMayStop,
                     notSeparated, between, along, reaching, partitionClosure, borderClosure,
                     inputIsEmpty, operationsStanding, strings, replaced, caseExpansions,

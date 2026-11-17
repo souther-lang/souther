@@ -83,7 +83,7 @@ class TwoCasesOfOneLineAreTwoEntriesWhateverTheyCameToTest {
 
     private record Told(ModelOccurrences at, CaseExpansion expansion) {}
 
-    private static List<CasesExpandedAtARule> gathered(Told... told) {
+    private static List<CasesAtARule<CaseExpansion.CameTo>> gathered(Told... told) {
         RulesWithNoLine.Gathered gathered = new RulesWithNoLine.Gathered();
         for (Told each : told) {
             gathered.expanded(CITED, each.at(), each.expansion());
@@ -111,7 +111,7 @@ class TwoCasesOfOneLineAreTwoEntriesWhateverTheyCameToTest {
 
     @Test
     void oneCaseToldTwiceIsOneEntry() {
-        List<CasesExpandedAtARule> told = gathered(
+        List<CasesAtARule<CaseExpansion.CameTo>> told = gathered(
                 new Told(ONE_COPY, ofTheCase(new Proposition.Always(true))),
                 new Told(ONE_COPY, ofTheCase(new Proposition.Always(true))));
         assertEquals(1, told.size(), "the same case of the same line, told by two readers");
@@ -125,14 +125,14 @@ class TwoCasesOfOneLineAreTwoEntriesWhateverTheyCameToTest {
     @Test
     void oneCaseReadAtTwoCopiesIsOneEntryWithAnAnswerAtEach() {
         Proposition condition = new Proposition.Always(true);
-        List<CasesExpandedAtARule> told = gathered(
+        List<CasesAtARule<CaseExpansion.CameTo>> told = gathered(
                 new Told(ONE_COPY, ofTheCase(WrittenLine.THE_COMPARISON, condition,
                         madeByTheIfAt(3))),
                 new Told(ANOTHER_COPY, ofTheCase(WrittenLine.THE_COMPARISON, condition,
                         madeByTheIfAt(4))));
         assertEquals(1, told.size(), "one case, whatever its readings came to");
-        assertEquals(List.of(new CasesExpandedAtARule.Reading(ONE_COPY, madeByTheIfAt(3)),
-                        new CasesExpandedAtARule.Reading(ANOTHER_COPY, madeByTheIfAt(4))),
+        assertEquals(List.of(new CasesAtARule.Reading<>(ONE_COPY, madeByTheIfAt(3)),
+                        new CasesAtARule.Reading<>(ANOTHER_COPY, madeByTheIfAt(4))),
                 told.getFirst().readings(), "an answer for each copy, at that copy");
     }
 
@@ -140,12 +140,12 @@ class TwoCasesOfOneLineAreTwoEntriesWhateverTheyCameToTest {
     @Test
     void readingsThatCameToTheSameAreOneReadAtEachOfTheirCopies() {
         Proposition condition = new Proposition.Always(true);
-        List<CasesExpandedAtARule> told = gathered(
+        List<CasesAtARule<CaseExpansion.CameTo>> told = gathered(
                 new Told(ONE_COPY, ofTheCase(WrittenLine.THE_COMPARISON, condition,
                         madeByTheIfAt(3))),
                 new Told(ANOTHER_COPY, ofTheCase(WrittenLine.THE_COMPARISON, condition,
                         madeByTheIfAt(3))));
-        assertEquals(List.of(new CasesExpandedAtARule.Reading(ONE_COPY.and(ANOTHER_COPY),
+        assertEquals(List.of(new CasesAtARule.Reading<>(ONE_COPY.and(ANOTHER_COPY),
                 madeByTheIfAt(3))), told.getFirst().readings());
     }
 
