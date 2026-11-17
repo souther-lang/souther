@@ -259,6 +259,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
     private static final String ASKS_EACH = "asks each node it meets what it is, and asks it of"
             + " every subexpression standing there, as the descent would have met them";
 
+    /** Answers each part of a value for itself. */
+    private static final String ASKS_EACH_PART = "asks the question of each part of a value, which"
+            + " reads a projection's names itself: the part of a projection is its base";
+
     /** Reads the names off the projection, a name at a time. */
     private static final String READS_THE_NAMES = "the rule for a field access, read along the"
             + " projection's names rather than down the stack";
@@ -601,9 +605,12 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "inputs/InputPath", "introducing", "(" + core + "L" + c
                 + "inputs/BindingEnvironment;L" + c + "inputs/InputPath$OfAConstruction;)L" + c
                 + "inputs/PathResolution;", Reading.NAMES, READS_THE_NAMES);
-        row(out, c + "inputs/InputPath", "named", "(" + core + "L" + c
+        row(out, c + "inputs/InputPath", "nameOf", "(" + core + "L" + c
                 + "inputs/BindingEnvironment;)L" + c + "inputs/PathResolution;",
                 Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "inputs/InputPath", "madeOfTheParts", "(" + core + "L" + c
+                + "inputs/BindingEnvironment;)L" + c + "inputs/PathResolution;",
+                Reading.STRUCTURE, ASKS_EACH_PART);
         row(out, c + "inputs/InputPath", "through", "(" + core + "L" + c
                 + "inputs/InputPath$Wanted;L" + c + "inputs/BindingEnvironment;)L" + c
                 + "inputs/PathResolution;", Reading.NAMES, READS_THE_NAMES);
