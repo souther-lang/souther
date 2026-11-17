@@ -56,9 +56,11 @@ final class RemainderCoverage {
                                  List<BigInteger> moves, BigInteger divisor,
                                  List<TakenConstraint> narrowing, BigInteger least,
                                  BigInteger greatest) {
+        // A pivot weighing more than one steps the form by more than one, and the values of it in
+        // the window are as many as the window is wide only for some remainders of the rest: it
+        // is not asked.
         BigInteger weight = UndividedByARelation.wholeNumberOf(dividend.coefs().get(pivot));
-        if (weight == null || weight.signum() == 0 || moves.isEmpty()
-                || !weight.abs().gcd(divisor).equals(BigInteger.ONE)) {
+        if (weight == null || weight.abs().compareTo(BigInteger.ONE) != 0 || moves.isEmpty()) {
             return Optional.empty();
         }
         BigInteger rest = moves.stream().reduce(BigInteger::min).orElseThrow();
