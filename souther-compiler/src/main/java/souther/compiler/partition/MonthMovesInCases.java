@@ -174,8 +174,12 @@ final class MonthMovesInCases {
         private final Core partsOf;
         private final Map<MonthMoveCases.Of, Core> made = new EnumMap<>(MonthMoveCases.Of.class);
 
-        /** @param partsOf the date whose day count, month, year and day state the cases: the date
-         *                 moved, or the date it is the first of the month of */
+        /**
+         * The atoms the month cases of a moved date are stated over.
+         *
+         * @param partsOf the date whose day count, month, year and day state the cases: the date
+         *                moved, or the date it is the first of the month of
+         */
         Atoms(Core.PreservedCall basis, DateMonthMoves.Step step, Core partsOf) {
             this.basis = basis;
             this.step = step;

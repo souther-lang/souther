@@ -211,6 +211,8 @@ public final class WrittenLines {
     }
 
     /**
+     * The arms of a match, each read under what chooses it.
+     *
      * @param ofTheLibrary whether the arms are the cases of a definition the library writes: what
      *                     selects one is no comparison its author wrote, so the relations it
      *                     states are conditions and no lines. The author wrote the operation and
