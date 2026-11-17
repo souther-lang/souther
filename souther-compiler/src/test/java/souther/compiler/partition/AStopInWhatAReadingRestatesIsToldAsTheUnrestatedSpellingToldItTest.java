@@ -57,6 +57,9 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
                 "List.all(r -> r <= 10, List.map(x -> x + 1, List.map(y -> y * 2, ds)))");
         CONDITIONS.put("beside",
                 "List.fold((w, l) -> if l > w then l else w, 0, ds) <= q + 1");
+        CONDITIONS.put("sumOfAStep", "List.sum(List.map(x -> x + 1, ds)) >= 10");
+        CONDITIONS.put("sumOfAStepWithAProduct", "List.sum(List.map(x -> x * 2, ds)) >= 10");
+        CONDITIONS.put("sumOfTheElements", "List.sum(ds) >= 10");
         CONDITIONS.put("none", "q >= q");
         CONDITIONS.put("armNoStop", "(if q > 5 then q - 1 else 3) >= q");
         CONDITIONS.put("nestedArmNoStop",
@@ -130,6 +133,15 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         assertEquals(1, TOLD.get("composed").size(), TOLD.toString());
         assertTrue(TOLD.get("composed").getFirst()
                 .contains("in 2 * ds[*] where ds[*] is at least"), TOLD.toString());
+    }
+
+    /** What a step works out at each element is told as it is where its answers are added up,
+     *  and a total of the elements themselves works out nothing at each. */
+    @Test
+    void aStepWorkedOutAtEachElementOfATotalIsToldAsTheStepAloneIs() {
+        assertEquals(1, TOLD.get("sumOfAStep").size(), TOLD.toString());
+        assertEquals(1, TOLD.get("sumOfAStepWithAProduct").size(), TOLD.toString());
+        assertEquals(List.of(), TOLD.get("sumOfTheElements"));
     }
 
     /** The other side of a comparison of a walk is worked out whatever the walk answers. */

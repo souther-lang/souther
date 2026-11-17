@@ -374,6 +374,8 @@ public final class GuardThresholds {
                                                     .orElseGet(() -> arrived.relationsRead()
                                                             .stream().anyMatch(UndividedByARelation
                                                                     ::aRunMayStopOverABoundValue)))
+                                    || each.stopsIn().map(stops -> stops.aRunMayStopIn(read,
+                                            regionsOf(beforeIt))).orElse(false)
                                     || aRunTakingAnArmMayStop(each, each.onTheArms(), null, read,
                                             arrivals, wayToACase, aCase)
                                     || each.worksOutOnEach().map(applications -> applications

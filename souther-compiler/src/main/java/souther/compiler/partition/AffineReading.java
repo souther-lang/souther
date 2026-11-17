@@ -26,6 +26,7 @@ import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.ElementProjection;
+import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.inputs.InputDomain;
@@ -1746,10 +1747,28 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return false;
                 }
                 tellAnIntTotal(node, answer, List.of());
+                tellWhatIsWorkedOutAtEachElement(node, total);
                 if (through == AddedOfEachElement.Through.A_ROW_OF_ONE_ELEMENT) {
                     told.partials.add(total);
                 }
                 return true;
+            }
+
+            /**
+             * What a run works out at each element, the number {@code total} adds up, told as the
+             * one operation it is over the element's place: held to an {@code Int} at every
+             * element, and so a run stops at the element that takes it past the ends, whatever the
+             * total comes to. Nothing is told where the elements' places keep it within them.
+             */
+            private void tellWhatIsWorkedOutAtEachElement(Core node, NumericTerm total) {
+                if (total instanceof NumericTerm.TakenOver over
+                        && over.source() instanceof RunSource.ComputedOccurrences(
+                                TermPath elements, ElementValue.Affine(var each), _, _)
+                        && WhereAnOperatorAnswers.ofATotal(Type.INT)
+                        instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
+                    tellHeld(node, held, each.over(place -> LinearForm.atom(
+                            new NumericTerm.ValueOf(place.from(elements)))), List.of());
+                }
             }
 
             /**
