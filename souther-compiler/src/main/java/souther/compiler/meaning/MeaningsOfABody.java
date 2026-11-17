@@ -216,6 +216,15 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
         }
 
         /**
+         * Where an arm is taken when what holds the arm is read — an application of a closure — is
+         * made where {@code within} holds: both hold. For a reader asking whether some row
+         * arrives there, which no derivation states, so it is joined here and not by the reader.
+         */
+        public static Proposition takenWhere(Proposition within, Proposition reachedOnTheArm) {
+            return Proposition.all(List.of(within, reachedOnTheArm));
+        }
+
+        /**
          * Each comparison read as cutting nothing in what this states, with where it is read, as
          * {@link #relationsDownTheArms} has them. It draws no relation, and a run working it out
          * still works out what it is written with.

@@ -40,6 +40,7 @@ import souther.compiler.inputs.ValuesAt;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.meaning.AuthoredPointMapping;
+import souther.compiler.meaning.MeaningsOfABody.Meaning;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.Place;
@@ -373,9 +374,8 @@ public final class GuardThresholds {
                                                     .orElseGet(() -> arrived.relationsRead()
                                                             .stream().anyMatch(UndividedByARelation
                                                                     ::aRunMayStopOverABoundValue)))
-                                    || aRunTakingAnArmMayStop(each, each.onTheArms(),
-                                            new Proposition.Always(true), read, arrivals,
-                                            wayToACase, aCase)
+                                    || aRunTakingAnArmMayStop(each, each.onTheArms(), null, read,
+                                            arrivals, wayToACase, aCase)
                                     || each.worksOutOnEach().map(applications -> applications
                                             .stream().anyMatch(one -> aRunTakingAnArmMayStop(each,
                                                     one.arms(), one.reached(), read, arrivals,
@@ -1268,8 +1268,9 @@ public final class GuardThresholds {
      * way to the arm leaves, the arm's condition put on it, of an arm some row is shown to arrive
      * at. An arm no row takes works nothing out, and an arm whose condition cannot be put on the
      * way is asked nothing, since what the rows of the whole way would say is said of runs that do
-     * not take it. {@code within} is where the arms are read: the whole comparison, or one
-     * application of the closure it stands in, which a run makes only where that is made.
+     * not take it. {@code within} is where the arms are read where that is one application of the
+     * closure the comparison stands in, which a run makes only where that is made, and null where
+     * they are read wherever the comparison is.
      */
     private static boolean aRunTakingAnArmMayStop(
             ComparisonReadings.Reading each, List<StopEvidence.OnAnArm> arms, Proposition within,
@@ -1279,7 +1280,8 @@ public final class GuardThresholds {
             return false;
         }
         for (StopEvidence.OnAnArm arm : arms) {
-            Proposition reached = Proposition.all(List.of(within, arm.reached()));
+            Proposition reached = within == null ? arm.reached()
+                    : Meaning.takenWhere(within, arm.reached());
             if (!arm.stops().noRunMayStopAnywhere()
                     && ComparisonAssessment.someRowArrives(wayToACase.apply(reached), arrivals)
                     && arm.stops().aRunMayStopIn(read, regionsOf(Reachability.of(
