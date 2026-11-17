@@ -666,6 +666,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(" + core + "L" + c + "types/BindingId;)Z", Reading.STRUCTURE, BINDINGS);
         row(out, c + "partition/ComparisonReadings", "buildsAValue", "(" + core + ")Z",
                 Reading.STRUCTURE, CHOICES_AND_CALLS);
+        row(out, c + "partition/GuardThresholds", "cameFromThroughWhatItIsMadeOf",
+                "(" + core + reads + "L" + c + "check/DeclarationNewtypes;)L" + c
+                + "inputs/PathResolution;", Reading.EACH_SUBEXPRESSION, ASKS_EACH);
         row(out, c + "partition/GuardThresholds", "throughEachValue", "(" + core + reads + "L"
                 + c + "check/Symbols;L" + c + "check/DeclarationNewtypes;L" + c
                 + "inputs/ReadMeaning$WhereKept;L" + c + "coverage/Arrivals;Ljava/util/List;)V",

@@ -604,19 +604,23 @@ public final class GuardThresholds {
         // worked out of one that came from somewhere came from there as well.
         if (out.isEmpty()) {
             sides.forEach(side -> filedWhereItCameFrom(
-                    cameFromThroughArithmetic(side, reads, newtypes), out));
+                    cameFromThroughWhatItIsMadeOf(side, reads, newtypes), out));
         }
     }
 
-    private static PathResolution cameFromThroughArithmetic(Core side, InputReads reads,
-                                                            DeclarationNewtypes newtypes) {
-        return switch (Core.withoutStanding(side)) {
-            case Core.Neg negated -> cameFromThroughArithmetic(negated.operand(), reads, newtypes);
-            case Core.Binary binary -> PathResolution.madeOf(List.of(
-                    cameFromThroughArithmetic(binary.left(), reads, newtypes),
-                    cameFromThroughArithmetic(binary.right(), reads, newtypes)));
-            default -> reads.cameFrom(side, newtypes);
-        };
+    private static PathResolution cameFromThroughWhatItIsMadeOf(Core side, InputReads reads,
+                                                                DeclarationNewtypes newtypes) {
+        Core bare = Core.withoutStanding(side);
+        for (Core each : Core.subexpressionsAt(bare)) {
+            PathResolution came = reads.cameFrom(each, newtypes);
+            if (!(came instanceof PathResolution.NotAPosition)) {
+                return came;
+            }
+        }
+        List<PathResolution> parts = new ArrayList<>();
+        Core.forEachChild(bare, part ->
+                parts.add(cameFromThroughWhatItIsMadeOf(part, reads, newtypes)));
+        return PathResolution.madeOf(parts);
     }
 
     private static void filedWhereItCameFrom(
