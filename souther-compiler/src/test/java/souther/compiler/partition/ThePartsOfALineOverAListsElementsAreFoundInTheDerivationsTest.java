@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -84,7 +85,7 @@ class ThePartsOfALineOverAListsElementsAreFoundInTheDerivationsTest {
         Compilation compilation = Compilation.ofSource(MODEL, "Main").allowing(
                 Allowances.DECLARED.with(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO, 0));
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
-        JsonNode partition = JSON.readTree(AdequacyReport.of(compilation)
+        JsonNode partition = JSON.readTree(AdequacyReport.of(ACompiledModel.compiles(compilation))
                         .json(SourceRendering.namedByIdentity(compilation.texts())))
                 .path("modules").get(0).path("behaviors").get(0).path("partition");
         List<String> heavy = new ArrayList<>();
