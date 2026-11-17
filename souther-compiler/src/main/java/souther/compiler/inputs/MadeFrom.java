@@ -55,6 +55,7 @@ public sealed interface MadeFrom {
         }
 
         /** Every place the value is made of on some run, once each. */
+        @Override
         public List<TermPath> places() {
             return alternatives.stream().flatMap(List::stream).distinct().toList();
         }
