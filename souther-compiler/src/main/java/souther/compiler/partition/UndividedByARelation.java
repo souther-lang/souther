@@ -10065,8 +10065,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * stands. The rows with that side at that value are rows of the model, so a value of either of
      * the two that is left either way among them is left either way. It is held only where it is
      * the value at a position the declarations leave a run of whole numbers, the way says nothing
-     * of it, and nothing ties it to either of the two. A value near nought is the one held: it
-     * keeps the constant, and so the sizes the arithmetic is asked at, near where they were.
+     * of it, and nothing ties it to either of the two; or a whole number of a walk, which is held
+     * where it is shown to take a run ({@link #wholeNumberAlong}). A value near nought is the one
+     * held: it keeps the constant, and so the sizes the arithmetic is asked at, near where they
+     * were.
      *
      * @return null where there are not two such sides
      */
@@ -10087,18 +10089,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             int second = held == 2 ? 1 : 2;
             if (carriers.get(first) == null || !carriers.get(first).equals(carriers.get(second))
                     || carriers.get(held) == null
-                    || !(sides.get(held).number() instanceof NumericTerm.ValueOf value)
-                    || sources.get(held) == null || !stating.get(held).isEmpty()
                     || !independent.between(first, held) || !independent.between(second, held)
                     || overlapping(sides.get(first), sides.get(held))
                     || overlapping(sides.get(second), sides.get(held))) {
                 continue;
             }
-            NumericDomain.Bounds run = realized(value, sources.get(held), region, Way.TIES);
-            if (run == null) {
-                run = runTheBoundsOnASumLeave(value, sources.get(held), way.narrowing(),
-                        way.conditions(), read);
-            }
+            NumericDomain.Bounds run = whatAHeldSideTakes(held, sources, carriers.get(held),
+                    stating, region, way, read);
             ExactRatio at = run == null || !run.holdsAValue() ? null
                     : run.aValueNearestNought(carriers.get(held).spacingBetweenValues());
             ExactRatio weighed = at == null || (carriers.get(held).spacingBetweenValues()
@@ -10107,10 +10104,33 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (weighed != null && constant != null) {
                 return new TwoSides(first, second,
                         new WhatARelationLeavesUndivided.Beside(List.of(constant, weighed)),
-                        Map.of(value, at));
+                        Map.of(sides.get(held).key(), at));
             }
         }
         return null;
+    }
+
+    /**
+     * The run the side at {@code held} is shown to take, where it can be held at one value of it:
+     * a whole number of a walk takes the run it is shown to, and the value at a position takes the
+     * run the region answers where the way says nothing of it. Null otherwise.
+     */
+    private NumericDomain.Bounds whatAHeldSideTakes(int held, List<Source> sources,
+                                                    Carrier carrier, List<List<OnAWay>> stating,
+                                                    SearchRegion region, WayRead way,
+                                                    InputReading read) {
+        Side side = sides.get(held);
+        if (side.inTurn() != null) {
+            return wholeNumberAlong(side, carrier, region, read, way.conditions(), true)
+                    .realizes();
+        }
+        if (!(side.number() instanceof NumericTerm.ValueOf value) || sources.get(held) == null
+                || !stating.get(held).isEmpty()) {
+            return null;
+        }
+        NumericDomain.Bounds run = realized(value, sources.get(held), region, Way.TIES);
+        return run != null ? run : runTheBoundsOnASumLeave(value, sources.get(held),
+                way.narrowing(), way.conditions(), read);
     }
 
     /** Everything a way states of each of the two sides {@code pair} asks about, and everything the

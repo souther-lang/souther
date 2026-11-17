@@ -1076,10 +1076,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return true;
                 }
                 // The analysis that owns the stopped value answers for where a sum of the addends
-                // of the comparison passes the ends of an Int, and for no other end: a run that
-                // stops where a construction's rules refuse the number is not one it answers for.
-                if (held.equals(WhereAnOperatorAnswers.WHAT_AN_INT_HOLDS)
-                        && over.size() == 1 && stoppedAt.isAPlainStop(over.get(0))) {
+                // of the comparison passes the ends of the type it answers, an Int or a Date, and
+                // for no other end: a run that stops where a construction's rules refuse the
+                // number is not one it answers for.
+                if (!(Core.withoutStanding(node) instanceof Core.Construct)
+                        && over.size() == 1
+                        && stoppedAt.isAPlainStopOrABoundValue(over.get(0))) {
                     told.sumsOverTheStop.add(new SumOverTheStop(node, form, over.get(0),
                             held.least(), held.greatest(), after));
                     return true;
@@ -2656,10 +2658,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             return new StoppedValues(value, false, read, answersFor);
         }
 
-        /** Whether {@code held} is the stopped expression, and neither a choice nor a quotient by
-         *  a value. */
-        boolean isAPlainStop(Held held) {
-            return held.theStop && !held.aChoice && !quotientAwayFromNought;
+        /** Whether {@code held} is the stopped expression or a bound value the derivation names,
+         *  and neither a choice nor a quotient by a value: an operation over it is one over that
+         *  value, which the analysis that drew the lines answers for. */
+        boolean isAPlainStopOrABoundValue(Held held) {
+            return (held.theStop || held.bound != null) && !held.aChoice
+                    && !quotientAwayFromNought;
         }
 
         boolean quotientAwayFromNought() {

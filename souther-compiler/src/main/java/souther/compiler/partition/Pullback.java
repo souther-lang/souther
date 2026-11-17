@@ -2696,7 +2696,48 @@ final class Pullback {
             containers.addAll(held.get().containers());
             decidedBy.addAll(held.get().decidedBy());
         }
-        return Optional.of(new WorkedOutWhere(List.of(containers), decidedBy, true));
+        // A closure applied over a walk of whole numbers is applied where the walk holds one, and
+        // no container of the input is asked for that: an empty set of containers of which one
+        // holds an entry is no condition at all.
+        return Optional.of(new WorkedOutWhere(containers.isEmpty() ? List.of()
+                : List.of(containers), decidedBy, true));
+    }
+
+    /**
+     * Where a walk of every whole number between two ends holds one, which is where the first end
+     * is not past the second — and a list made of it by operations that keep whether a list holds
+     * anything holds something exactly there: what the library says of the operation that made
+     * the walk
+     * ({@link BoundOperationFacts#holdsEachWholeNumberInTurn}). Whether a run gets to make the list
+     * turns on the same places, the numbers it is made between. Empty where the container is no
+     * such list, or an end is no form of the input's numbers.
+     */
+    private Optional<WorkedOutWhere> whereAWalkOfWholeNumbersHoldsOne(Denotation container) {
+        Denotation stands = container.at().holdingSomethingExactlyWhereThisDoes(
+                container.value(), read.rules().symbols(), read.rules().newtypes());
+        if (!(Core.withoutStanding(stands.value()) instanceof Core.PreservedCall call)
+                || !(call.declared().operation() instanceof ValueName.Stdlib operation)) {
+            return Optional.empty();
+        }
+        BoundOperationFacts.Between between =
+                DefaultBoundOperationFacts.get().holdsEachWholeNumberInTurn(operation);
+        if (between == null) {
+            return Optional.empty();
+        }
+        ElementsMet ends = new ElementsMet();
+        LinearForm<NumericTerm> from = AffineReading.formOf(
+                call.args().get(between.from().position()), stands.at(), read, ends,
+                sharedFactorNames);
+        LinearForm<NumericTerm> to = AffineReading.formOf(
+                call.args().get(between.to().position()), stands.at(), read, ends,
+                sharedFactorNames);
+        if (from == null || to == null) {
+            return Optional.empty();
+        }
+        Set<TermPath> reads = new LinkedHashSet<>();
+        from.coefs().keySet().forEach(term -> reads.addAll(term.placesReadOff()));
+        to.coefs().keySet().forEach(term -> reads.addAll(term.placesReadOff()));
+        return Optional.of(new WorkedOutWhere(List.of(), reads, true));
     }
 
     /**
@@ -2711,6 +2752,10 @@ final class Pullback {
         Optional<TermPath> at = positionHoldingWhatItHolds(container, read);
         if (at.isPresent()) {
             return Optional.of(new WorkedOutWhere(List.of(Set.of(at.get())), Set.of(), true));
+        }
+        Optional<WorkedOutWhere> walk = whereAWalkOfWholeNumbersHoldsOne(container);
+        if (walk.isPresent()) {
+            return walk;
         }
         return whereItHoldsWhat(ofHoldingSomething(container.value(), container.at(), read,
                 Optional.empty()));
