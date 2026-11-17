@@ -170,6 +170,16 @@ public final class WhereEachLineDecides {
     }
 
     /**
+     * {@code stated} with every quantifier in it said the way the lines are read ({@link Lifting}),
+     * or {@code stated} itself where the steps ran out and nothing is taken apart: the form the
+     * parts a quantifier makes are told apart in.
+     */
+    static Proposition lifted(Proposition stated) {
+        Proposition lifted = new Lifting().of(stated);
+        return lifted == null ? stated : lifted;
+    }
+
+    /**
      * {@code cases} less each that is proved to hold no row on each side of {@code line}
      * ({@link NoCaseCrosses}): a line decides in none of those, and asking them is what a line
      * decides nowhere in costs.
