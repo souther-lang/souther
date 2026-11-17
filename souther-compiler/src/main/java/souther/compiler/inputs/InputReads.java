@@ -1741,30 +1741,31 @@ public final class InputReads {
      * for no expression of its own and is read by no reader of values. What it is the payload of
      * is said apart from it, for the reader that asks.
      */
-    public sealed interface ArmOpened permits LookupOpened, ExtremeOpened {
+    public sealed interface ArmOpened permits LookupOpened, ElementOpened {
 
         /** The arm that binds the name. */
         EnteredArm entered();
     }
 
     /**
-     * What the name {@code entered} binds is the greatest or the least element of a container,
-     * where {@code call} answers it ({@link BoundOperationFacts#answersAnExtremeElementOf}).
+     * What the name {@code entered} binds is an element of a container, where {@code call}
+     * answers one ({@link BoundOperationFacts#answersAnElementOf}): which element, if the call
+     * says (the greatest, the first a closure holds of), is for the reader that asks the call.
      *
      * @param call    the call that answers it, where it stands
      * @param entered the arm that binds the name
      */
-    public record ExtremeOpened(Denotation call, EnteredArm entered) implements ArmOpened {
+    public record ElementOpened(Denotation call, EnteredArm entered) implements ArmOpened {
 
-        public ExtremeOpened {
-            Objects.requireNonNull(call, "the call that answers the greatest or the least");
+        public ElementOpened {
+            Objects.requireNonNull(call, "the call that answers an element");
             Objects.requireNonNull(entered, "under some arm of the match on it");
         }
 
         /** The same arm: the call is read through the names in force, a new tree each time. */
         @Override
         public boolean equals(Object other) {
-            return other instanceof ExtremeOpened that && entered.equals(that.entered);
+            return other instanceof ElementOpened that && entered.equals(that.entered);
         }
 
         @Override
@@ -1779,10 +1780,10 @@ public final class InputReads {
         return names.openedBy(binding) instanceof LookupOpened lookup ? lookup : null;
     }
 
-    /** The greatest or the least element the name {@code binding} is the payload of, where an arm
-     *  bound it to what a call answering one holds — or null where it is no such name. */
-    public ExtremeOpened extremeOpenedBy(BindingId binding) {
-        return names.openedBy(binding) instanceof ExtremeOpened extreme ? extreme : null;
+    /** The element the name {@code binding} is the payload of, where an arm bound it to what a
+     *  call answering one holds — or null where it is no such name. */
+    public ElementOpened elementOpenedBy(BindingId binding) {
+        return names.openedBy(binding) instanceof ElementOpened element ? element : null;
     }
 
     /** {@link #insideArmOn}, without the lookup the name under the arm is found by. */
@@ -1807,11 +1808,11 @@ public final class InputReads {
             }
             // The payload is no expression of the input and no name of one: what it is the
             // payload of is said beside the name the pattern gives it.
-            if (held instanceof WhatItHolds.AnExtremeOf(Denotation call)) {
+            if (held instanceof WhatItHolds.AnElementOf(Denotation call)) {
                 InputReads narrowed = narrowedByThePattern(scrutinee, arm, symbols, newtypes);
                 BindingId binding = arm.binder().binding();
                 return new InputReads(narrowed.names.opening(binding,
-                        new ExtremeOpened(call, new EnteredArm(binding))), narrowed.alternatives,
+                        new ElementOpened(call, new EnteredArm(binding))), narrowed.alternatives,
                         narrowed.declared, narrowed.dependencies, narrowed.applied);
             }
             InputReads holding = holdingWhatItHolds(held, arm.binder(), newtypes);
@@ -2012,17 +2013,17 @@ public final class InputReads {
         }
 
         /**
-         * The greatest or the least element of a container, which an operation answering one
-         * holds ({@link BoundOperationFacts#answersAnExtremeElementOf}): the call itself, read
-         * where it stands. Which element that is turns on the container, and it is no place of
-         * the input, so the name under the arm is told apart from the call it is the payload of
-         * ({@link ExtremeOpened}) and a comparison of it is read at the elements. Made of no
-         * entry, as a list's element is not.
+         * An element of a container, which an operation answering one holds
+         * ({@link BoundOperationFacts#answersAnElementOf}): the call itself, read where it
+         * stands. Which element that is turns on the container, and it is no place of the input,
+         * so the name under the arm is told apart from the call it is the payload of
+         * ({@link ElementOpened}), and it came from wherever the container's elements did. Made of
+         * no entry, as a list's element is not.
          */
-        record AnExtremeOf(Denotation call) implements WhatItHolds {
+        record AnElementOf(Denotation call) implements WhatItHolds {
 
-            public AnExtremeOf {
-                Objects.requireNonNull(call, "the call that answers the greatest or the least");
+            public AnElementOf {
+                Objects.requireNonNull(call, "the call that answers an element");
             }
 
             @Override
@@ -2132,21 +2133,19 @@ public final class InputReads {
         public WhatItHolds otherwise(ElementsWrittenOut.Stood<InputReads> option,
                                      AnOperationApplied applied) {
             InputReads at = option.at();
-            if (applied != null && applied.picks() instanceof AnOperationApplied.Picked picked) {
-                return at.folded(picked.index(), symbols, newtypes).orElse(null)
-                                instanceof Long index && index >= 0
-                        ? new WhatItHolds.AtAnIndex(new PickedAtAnIndex(
-                                new Denotation(picked.list(), at), index))
-                        : unsaid();
+            if (applied != null && applied.picks() instanceof AnOperationApplied.Picked picked
+                    && at.folded(picked.index(), symbols, newtypes).orElse(null)
+                            instanceof Long index && index >= 0) {
+                return new WhatItHolds.AtAnIndex(new PickedAtAnIndex(
+                        new Denotation(picked.list(), at), index));
             }
             if (applied != null) {
-                if (DefaultBoundOperationFacts.get()
-                        .answersAnExtremeElementOf(applied.operation()) != null) {
-                    return new WhatItHolds.AnExtremeOf(new Denotation(option.value(), at));
-                }
                 AnOperationApplied.Lookup lookup = applied.lookup();
                 if (lookup == null) {
-                    return unsaid();
+                    return DefaultBoundOperationFacts.get()
+                            .answersAnElementOf(applied.operation()) != null
+                            ? new WhatItHolds.AnElementOf(new Denotation(option.value(), at))
+                            : unsaid();
                 }
                 EntryLookedUp entry = at.entryLookedUp(new Denotation(option.value(), at),
                         lookup.container(), symbols, newtypes);
@@ -2202,7 +2201,7 @@ public final class InputReads {
                     standingFor(name, answered, newtypes);
             case WhatItHolds.AnElement(Denotation element) -> standingFor(name, element, newtypes);
             case WhatItHolds.AtAnIndex(PickedAtAnIndex element) -> picking(name, element);
-            case WhatItHolds.AnExtremeOf _ -> this;
+            case WhatItHolds.AnElementOf _ -> this;
             case WhatItHolds.Unsaid _ -> this;
         };
     }
@@ -2350,7 +2349,7 @@ public final class InputReads {
             case WhatItHolds.AnEntry _, WhatItHolds.AnEntryOfAnAnswer _,
                  WhatItHolds.MadeByAClosure _, WhatItHolds.AnElement _ ->
                     holding(name.binding(), held, newtypes);
-            case WhatItHolds.AtAPosition _, WhatItHolds.AtAnIndex _, WhatItHolds.AnExtremeOf _,
+            case WhatItHolds.AtAPosition _, WhatItHolds.AtAnIndex _, WhatItHolds.AnElementOf _,
                  WhatItHolds.Unsaid _ -> null;
         };
     }

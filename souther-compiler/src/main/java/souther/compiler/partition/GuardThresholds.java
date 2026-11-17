@@ -76,6 +76,7 @@ import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Stream;
 
 /**
  * The values a behavior's body compares its inputs against.
@@ -590,22 +591,41 @@ public final class GuardThresholds {
     static void cameFrom(StatedComparison comparison, InputReads reads,
                          DeclarationNewtypes newtypes,
                          SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
-        for (Core side : List.of(comparison.left(), comparison.right())) {
-            // A side that names a position is the values there, and what the rule is about at that
-            // position is that place's to say: where a value came from is asked of a side that
-            // names none, which is the only side it is a different question about. A side that may
-            // stand at one of several is not that, and where it came from is which of them.
-            if (reads.pathOf(side, newtypes) instanceof PathResolution.At) {
-                continue;
-            }
-            // Where a side's values came from, and nothing where they came from nowhere.
-            PathResolution came = reads.cameFrom(side, newtypes);
-            if (came instanceof PathResolution.At(var at)) {
-                out.putIfAbsent(FilingCoordinate.at(at), new BlockReason.RuleAboutADerivedValue());
-            } else if (OwedWhereItCameFrom.ofSeveral(came) instanceof OwedWhereItCameFrom owed) {
-                owed.places().forEach(each ->
-                        out.putIfAbsent(FilingCoordinate.at(each), owed.why()));
-            }
+        // A side that names a position is the values there, and what the rule is about at that
+        // position is that place's to say: where a value came from is asked of a side that names
+        // none, which is the only side it is a different question about. A side that may stand
+        // at one of several is not that, and where it came from is which of them.
+        List<Core> sides = Stream.of(comparison.left(), comparison.right())
+                .filter(side -> !(reads.pathOf(side, newtypes) instanceof PathResolution.At))
+                .toList();
+        // Where a side's values came from, and nothing where they came from nowhere.
+        sides.forEach(side -> filedWhereItCameFrom(reads.cameFrom(side, newtypes), out));
+        // Where that says nowhere at all, the comparison is not thereby about nothing: a value
+        // worked out of one that came from somewhere came from there as well.
+        if (out.isEmpty()) {
+            sides.forEach(side -> filedWhereItCameFrom(
+                    cameFromThroughArithmetic(side, reads, newtypes), out));
+        }
+    }
+
+    private static PathResolution cameFromThroughArithmetic(Core side, InputReads reads,
+                                                            DeclarationNewtypes newtypes) {
+        return switch (Core.withoutStanding(side)) {
+            case Core.Neg negated -> cameFromThroughArithmetic(negated.operand(), reads, newtypes);
+            case Core.Binary binary -> PathResolution.madeOf(List.of(
+                    cameFromThroughArithmetic(binary.left(), reads, newtypes),
+                    cameFromThroughArithmetic(binary.right(), reads, newtypes)));
+            default -> reads.cameFrom(side, newtypes);
+        };
+    }
+
+    private static void filedWhereItCameFrom(
+            PathResolution came,
+            SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
+        if (came instanceof PathResolution.At(var at)) {
+            out.putIfAbsent(FilingCoordinate.at(at), new BlockReason.RuleAboutADerivedValue());
+        } else if (OwedWhereItCameFrom.ofSeveral(came) instanceof OwedWhereItCameFrom owed) {
+            owed.places().forEach(each -> out.putIfAbsent(FilingCoordinate.at(each), owed.why()));
         }
     }
 

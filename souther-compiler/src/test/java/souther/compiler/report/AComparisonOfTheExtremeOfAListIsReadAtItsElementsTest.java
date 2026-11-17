@@ -140,6 +140,27 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
         assertDrawsAtTheElements(ofACondition("Option.withDefault(0, List.max(ds)) >= q"));
     }
 
+    /**
+     * What an arm binds to the payload of a call that answers an element of a list came from that
+     * list's elements, whichever call it is and however the payload is used. A comparison of a
+     * value worked out of it is about the elements and is not read, which the report says at them:
+     * it is no comparison of constants, and the measurement is not complete.
+     */
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(delimiter = '|', value = {
+            "List.max(ds) | m + 1 <= 10",
+            "List.max(ds) | m * 2 <= 10",
+            "List.find(x -> x > q, ds) | m + 1 <= 10",
+            "List.get(q, ds) | m + 1 <= 10"})
+    void aValueWorkedOutOfAPayloadIsSaidNotReadAtTheElements(String call, String comparison) {
+        String report = ofACondition("(match " + call + " with | None -> false | Some m -> "
+                + comparison + ")");
+
+        assertTrue(report.contains("measurement: partial"), report);
+        assertTrue(report.lines().anyMatch(line -> line.contains("· not read:")
+                && line.contains("about `ds[*]`")), report);
+    }
+
     /** A rate wearing a name, the list made of each line's rate and compared through its value by
      *  the library's order: the elements the end is read at are the lines'. */
     @Test

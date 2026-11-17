@@ -290,6 +290,15 @@ final class InputPath {
             // the value a rewrite left under such a name is what the walk before it made of an
             // element, and reaching a position through it would put a line at a place whose values
             // are not the ones a rule about the name is about.
+            // The payload of a call that answers an element of a container is one of that
+            // container's elements, and came from wherever they did.
+            case Core.Read r when asked == ElementQuestion.VALUE_ORIGIN
+                    && names.openedBy(r.binding()) instanceof InputReads.ElementOpened opened
+                    && AnOperationApplied.of(opened.call().value()) instanceof AnOperationApplied answered
+                    && DefaultBoundOperationFacts.get().answersAnElementOf(answered.operation())
+                            instanceof DeclaredArgument container
+                    && answered.argument(container) != null ->
+                    heldAt(answered.argument(container), new Wanted.APart(HeldIn.Part.ELEMENT), names);
             case Core.Read r -> switch (names.roleOf(r.binding())) {
                 case BindingRole.Root(var stands) -> new PathResolution.At(stands);
                 case BindingRole.Element _ -> elementOf(r.binding(), names);
