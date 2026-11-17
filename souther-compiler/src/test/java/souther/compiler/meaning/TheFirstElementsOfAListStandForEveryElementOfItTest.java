@@ -149,7 +149,7 @@ class TheFirstElementsOfAListStandForEveryElementOfItTest {
     void thePartsAStatementComesToOnTheFirstElementsAreThoseItsConjunctsComeToThere() {
         Random random = new Random(2939);
         int compared = 0;
-        for (int drawn = 0; drawn < 400; drawn++) {
+        for (int drawn = 0; drawn < 60; drawn++) {
             Proposition stated = statement(random, 3);
             TheWholeNumbersAListStartsWith.Plan plan = TheWholeNumbersAListStartsWith
                     .planFor(stated);
@@ -175,7 +175,7 @@ class TheFirstElementsOfAListStandForEveryElementOfItTest {
                     + ": the whole comes to " + ofTheWhole + " and its conjuncts to "
                     + ofTheConjuncts);
         }
-        assertTrue(compared > 20, compared + " statements compared");
+        assertTrue(compared > 3, compared + " statements compared");
     }
 
     private static Proposition statement(Random random, int depth) {

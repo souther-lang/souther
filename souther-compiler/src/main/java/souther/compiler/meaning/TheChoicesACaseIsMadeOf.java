@@ -209,6 +209,9 @@ public final class TheChoicesACaseIsMadeOf {
         private final Map<Spelling, BitSet> readingsOf = new HashMap<>();
         private Conclusion concluding;
         private TheWholeNumbersAListStartsWith.Plan plan;
+        /** What each conclusion of the derivation being walked comes to put on the elements, by
+         *  the conclusion itself: a conclusion a step shares is put once. */
+        private Map<Proposition, List<Spelling>> putOn;
         private Map<Derivation, Set<Spelling>> under;
         private int steps;
 
@@ -220,6 +223,7 @@ public final class TheChoicesACaseIsMadeOf {
         boolean from(Derivation root) {
             concluding = new Conclusion(Optional.empty());
             plan = TheWholeNumbersAListStartsWith.planFor(concluding.of(root));
+            putOn = new IdentityHashMap<>();
             under = new IdentityHashMap<>();
             return visit(root, Context.OUTSIDE);
         }
@@ -255,11 +259,16 @@ public final class TheChoicesACaseIsMadeOf {
          * the step concluded, as the reading of the comparison makes it.
          */
         private void putOnTheElements(Proposition concluded, Set<Spelling> out) {
+            out.addAll(putOn.computeIfAbsent(concluded, this::partsPutOn));
+        }
+
+        private List<Spelling> partsPutOn(Proposition concluded) {
             if (OnOneElement.theElementOf(concluded).isEmpty()
                     || !(plan.on(concluded) instanceof TheWholeNumbersAListStartsWith.Read.OnEach(
                             var each))) {
-                return;
+                return List.of();
             }
+            List<Spelling> out = new ArrayList<>();
             for (TheWholeNumbersAListStartsWith.OnOne one : each) {
                 for (Spelling part : WhereEachLineDecides.partsJoinedBy(one.stated())) {
                     if (split.contains(part)) {
@@ -267,6 +276,7 @@ public final class TheChoicesACaseIsMadeOf {
                     }
                 }
             }
+            return out;
         }
 
         /**

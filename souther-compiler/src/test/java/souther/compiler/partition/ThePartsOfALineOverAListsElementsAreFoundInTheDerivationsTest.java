@@ -30,7 +30,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * A part found in no derivation is counted as one nothing made, and most of a heavy case's parts
  * are found in some.
  *
- * <p>A model measured by hand at about two minutes of CPU, so it runs with the nightly ones.
+ * <p>The search is over four days, the fewest that still leave a case of over twenty parts: it is
+ * the cases of such a line that are asked, and each takes some seconds to ask, so it runs with the
+ * nightly ones.
  */
 @Nightly
 class ThePartsOfALineOverAListsElementsAreFoundInTheDerivationsTest {
@@ -48,7 +50,7 @@ class ThePartsOfALineOverAListsElementsAreFoundInTheDerivationsTest {
                 weekday(calendar, d) >= 1 && weekday(calendar, d) <= 5
                     && Bool.not(Set.contains(d, calendar.holidays))
             let firstBusinessDay (calendar: PaymentCalendar, from: Date, step: Int): Date =
-                List.rangeInclusive(0, 7)
+                List.rangeInclusive(0, 3)
                     |> List.map(n -> Date.addDays(n * step, from))
                     |> List.find(d -> isBusinessDay(calendar, d))
                     |> Option.withDefault(from)
@@ -76,9 +78,10 @@ class ThePartsOfALineOverAListsElementsAreFoundInTheDerivationsTest {
 
     /**
      * No line of the model is worked out for the cases it would be taken apart into, so each is
-     * told what made its parts: for the heaviest, over fifty parts, fewer than half are found in
-     * no derivation. Before the element was put on the derivations' conclusions, and before a
-     * holiday comparison was said of the element some holiday is, more than half were.
+     * told what made its parts: for the heaviest, over twenty parts, under three eighths are found
+     * in no derivation, which is the parts the language makes (a range's ends, the remainders of
+     * its element). With the element left out of the derivations' conclusions, or a holiday
+     * comparison not said of the element some holiday is, over three eighths are.
      */
     @Test
     void mostPartsOfTheHeaviestCasesAreFoundInSomeDerivation() {
@@ -92,14 +95,15 @@ class ThePartsOfALineOverAListsElementsAreFoundInTheDerivationsTest {
         partition.path("caseExpansions").forEach(each -> each.path("readings")
                 .forEach(reading -> {
                     JsonNode expansion = reading.path("caseExpansion");
-                    if (expansion.path("partsSplitOn").asInt() > 50) {
+                    if (expansion.path("partsSplitOn").asInt() > 20) {
                         heavy.add(expansion.toString());
-                        assertTrue(2 * expansion.path("unattributed").asInt()
-                                        < expansion.path("partsSplitOn").asInt(),
-                                "most parts are found in a derivation: " + expansion);
+                        assertTrue(8 * expansion.path("unattributed").asInt()
+                                        < 3 * expansion.path("partsSplitOn").asInt(),
+                                "all but the parts the language makes are found in a derivation: "
+                                        + expansion);
                     }
                 }));
-        assertFalse(heavy.isEmpty(), "some line is past the figure with over fifty parts: "
+        assertFalse(heavy.isEmpty(), "some line is past the figure with over twenty parts: "
                 + partition);
     }
 }

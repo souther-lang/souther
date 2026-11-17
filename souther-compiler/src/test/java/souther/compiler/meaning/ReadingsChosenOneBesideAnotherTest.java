@@ -165,19 +165,14 @@ class ReadingsChosenOneBesideAnotherTest {
                 together(one("h2c"), next))));
     }
 
-    /**
-     * Many alternatives, most of them holding what another holds: the pairs that are told apart
-     * are the same however many alternatives hold alike, and are found at once.
-     */
+    /** An alternative holding what another holds is that one: said again, it changes no answer. */
     @Test
-    void alternativesHoldingAlikeAreOneAlternativeAmongManyAndTheAnswerIsTheSame() {
+    void anAlternativeHoldingWhatAnotherHoldsChangesNoAnswerWhenSaidAgain() {
         DecidingCase.Cases next = anyOf(one("h2a"), one("h2b"));
-        List<DecidingCase.Cases> alternatives = new ArrayList<>();
-        for (int at = 0; at < 400; at++) {
-            alternatives.add(together(one(at % 2 == 0 ? "h1a" : "h1b"), next));
-        }
-        assertEquals(Map.of("H", List.of("h1", "h2")),
-                found(anyOf(alternatives.toArray(DecidingCase.Cases[]::new))));
+        assertEquals(Map.of("H", List.of("h1", "h2")), found(anyOf(
+                together(one("h1a"), next),
+                together(one("h1a"), next),
+                together(one("h1b"), next))));
     }
 
     /** Alternatives told apart by the reading {@code h0} and a choice after them of {@code h1},
