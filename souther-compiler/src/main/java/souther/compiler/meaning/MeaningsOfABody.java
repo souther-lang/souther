@@ -215,6 +215,41 @@ public record MeaningsOfABody(Map<Site, Meaning> stated, Set<Site> ambiguous,
             return List.copyOf(out);
         }
 
+        /**
+         * Each comparison read as cutting nothing in what this states, with where it is read, as
+         * {@link #relationsDownTheArms} has them. It draws no relation, and a run working it out
+         * still works out what it is written with.
+         */
+        public List<CutNothingOnAnArm> cutsNothingDownTheArms() {
+            List<CutNothingOnAnArm> out = new ArrayList<>();
+            new Walk(step -> step instanceof Derivation.ACutThatCutsNothing, (step, down) ->
+                    out.add(new CutNothingOnAnArm(step, down.all()))).down(how, Down.NO_ARM);
+            return List.copyOf(out);
+        }
+
+        /** The comparisons {@link #cutsNothingDownTheArms} has of {@code how}, without where
+         *  each is read. */
+        public static List<Derivation> cutsNothingIn(Derivation how) {
+            List<Derivation> out = new ArrayList<>();
+            new Walk(step -> step instanceof Derivation.ACutThatCutsNothing, (step, _) ->
+                    out.add(step)).down(how, Down.NO_ARM);
+            return List.copyOf(out);
+        }
+
+        /**
+         * A comparison read as cutting nothing, and where it is read.
+         *
+         * @param step    the step that reads it, which stands for it by identity
+         * @param reached where the arms it is down are taken
+         */
+        public record CutNothingOnAnArm(Derivation step, Proposition reached) {
+
+            public CutNothingOnAnArm {
+                Objects.requireNonNull(step, "a comparison read");
+                Objects.requireNonNull(reached, "is read somewhere, if only nowhere");
+            }
+        }
+
         private static boolean isAComparisonRead(Derivation step) {
             return step instanceof Derivation.AComparisonRead;
         }

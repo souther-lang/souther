@@ -137,8 +137,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             return switch (read) {
                 case Cuts cuts -> WorkedOut.ofWhatIsToldOf(cuts.working());
                 case Stopped stopped -> stopped.worksOut(WhatTheAnalysisAnswersFor.NOTHING);
-                case CutsNothing _, NotHeld _ ->
-                        WorkedOut.ofWhatIsToldOf(UndividedByARelation.Working.UNREAD);
+                case CutsNothing nothing -> WorkedOut.ofNoLine(nothing.working());
+                case NotHeld held -> WorkedOut.ofNoLine(held.working());
             };
         }
 
@@ -183,13 +183,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * every row — so which way the comparison comes out is settled by it and the relation, and
          * a reader asking that is not sent back to the operands to fold them a second way.
          */
-        record CutsNothing(java.util.Set<NumericTerm> read, ExactRatio difference)
-                implements OfAComparison {
+        record CutsNothing(java.util.Set<NumericTerm> read, ExactRatio difference,
+                           UndividedByARelation.Working working) implements OfAComparison {
 
             public CutsNothing {
                 read = java.util.Set.copyOf(read);
                 Objects.requireNonNull(difference,
                         "a comparison that cuts nothing still has its two sides' difference");
+                Objects.requireNonNull(working, "a comparison says what it works out");
             }
 
             /** Whether a comparison stating {@code rel} of its left side against its right comes
@@ -213,10 +214,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * <p>{@code read} is every number of the input this reading named on the way, for the same
          * reason {@link CutsNothing} carries it.
          */
-        record NotHeld(Set<NumericTerm> read) implements OfAComparison {
+        record NotHeld(Set<NumericTerm> read, UndividedByARelation.Working working)
+                implements OfAComparison {
 
             public NotHeld {
                 read = Set.copyOf(read);
+                Objects.requireNonNull(working, "a comparison says what it works out");
             }
         }
 
@@ -376,12 +379,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (!(left.minus(
                         ((AffineForms.Outcome.Composed<NumericTerm, InputReads>) read).form())
                         instanceof ExactAnswer.Held<LinearForm<NumericTerm>> difference)) {
-                    return new OfAComparison.NotHeld(named);
+                    return new OfAComparison.NotHeld(named, told.working());
                 }
                 LinearForm<NumericTerm> whole =
                         TotalsOfOneRun.addedUp(difference.value(), inputs, ruleSource);
                 if (whole.coefs().isEmpty()) {
-                    return new OfAComparison.CutsNothing(named, whole.constant());
+                    return new OfAComparison.CutsNothing(named, whole.constant(), told.working());
                 }
                 if (productsAreNumbers && whole.coefs().size() == 1
                         && whole.coefs().keySet().iterator().next()
@@ -589,6 +592,16 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 return namesKept == null ? fresh.get()
                         : namesKept.answerOf(question, value, at, met, fresh,
                                 told::askedOfTheFigure);
+            }
+
+            /** What a run works out to give a name its value is worked out before any operation
+             *  over the name: it is what that operation is worked out after. */
+            @Override
+            public <T> T readingTheValueOf(BindingId name, Supplier<T> read) {
+                int from = told.operations.size();
+                T answer = read.get();
+                told.workedOutToGive(name, from);
+                return answer;
             }
 
             /**
@@ -2242,6 +2255,17 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         }
 
         /**
+         * That the operations told from {@code from} on are what a run works out to give
+         * {@code name} its value, the last of them standing for the rest, which it is worked out
+         * after ({@link #workedOutOf}).
+         */
+        void workedOutToGive(BindingId name, int from) {
+            if (operations.size() > from) {
+                carriedAfter.put(name, operations.size() - 1);
+            }
+        }
+
+        /**
          * The operations already told that {@code node} is worked out of: those told at one of
          * its operands, and theirs. The walk tells of an operand before what it is an operand of,
          * so the last told at the operand is one this run works out before {@code node}. A node
@@ -2475,6 +2499,16 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** Of a reading that leaves nothing to a witness: a run works out what a row gets past. */
         static WorkedOut ofWhatIsToldOf(UndividedByARelation.Working working) {
             return new WorkedOut(working, StopEvidence.ofWhatIsToldOf(working));
+        }
+
+        /**
+         * Of a reading that drew no line: no row gets past anything, since there is no row of a
+         * line, and a run works out what the walk of the two sides told, whatever their
+         * difference came to. Cancelling {@code q + 1} against {@code q} leaves no operation for a
+         * line, and the run still adds.
+         */
+        static WorkedOut ofNoLine(UndividedByARelation.Working worked) {
+            return new WorkedOut(UndividedByARelation.Working.UNREAD, new StopEvidence(worked));
         }
     }
 
@@ -2782,9 +2816,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             // a run getting to the comparison works every one out; what a row of a line gets past
             // is still not every one, since the sums left to a witness are not among them.
             boolean aName = stoppedAt.theStopIsABoundValue();
+            // A stopped value that ends no run does not keep a run from the operations beside
+            // it: what a run gets to is every one of them, though a row of a line is still asked
+            // only of what is told.
+            boolean endsNoRun = !aName && !stoppedAt.theStopWorksOutTheFormItIsReadAs()
+                    && WorkedOutToReachIt.of(ofTheInput).endsNoRun(new Denotation(node, reads));
             return new WorkedOut(aName ? told.working() : told.working().notOnEveryRun(),
                     new StopEvidence(told.everyOperation(
-                            aName || stoppedAt.theStopWorksOutTheFormItIsReadAs())));
+                            aName || endsNoRun || stoppedAt.theStopWorksOutTheFormItIsReadAs())));
         }
 
         /**
