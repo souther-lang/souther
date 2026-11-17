@@ -93,67 +93,76 @@ public final class TheWholeNumbersAListStartsWith {
             round = TheElementComesRound.inItsRemainders(whole);
         }
         if (round.isEmpty()) {
-            return new Plan(new Read.NotOfThatKind(), null, false, null, null);
+            return new Plan.Refused(new Read.NotOfThatKind());
         }
         if (round.get().every().compareTo(BigInteger.valueOf(
                 CompositionBudget.READINGS_OF_ONE_CONDITION.maximum())) > 0) {
-            return new Plan(new Read.PastTheReadings(), null, false, null, null);
+            return new Plan.Refused(new Read.PastTheReadings());
         }
         Quantity.AWholeNumberInTurn number = round.get().number();
         LinearForm<Quantity> past = number.to().minus(number.from()).orNull()
                 instanceof LinearForm<NumericTerm> gap ? ofTheInputsNumbers(gap) : null;
         if (past == null) {
-            return new Plan(new Read.NotOfThatKind(), null, false, null, null);
+            return new Plan.Refused(new Read.NotOfThatKind());
         }
-        return new Plan(null, round.get(), everywhere, ofTheInputsNumbers(number.from()), past);
+        return new Plan.OnTheFirstElements(round.get(), everywhere,
+                ofTheInputsNumbers(number.from()), past);
     }
 
     /** A comparison's reading on the elements its list starts with, from {@link #planFor}. */
-    public static final class Plan {
-
-        private final Read refused;
-        private final TheElementComesRound round;
-        private final boolean everywhere;
-        private final LinearForm<Quantity> from;
-        private final LinearForm<Quantity> past;
-
-        private Plan(Read refused, TheElementComesRound round, boolean everywhere,
-                     LinearForm<Quantity> from, LinearForm<Quantity> past) {
-            this.refused = refused;
-            this.round = round;
-            this.everywhere = everywhere;
-            this.from = from;
-            this.past = past;
-        }
+    public sealed interface Plan {
 
         /** What {@code part} comes to on each of those elements: the whole's own, where
          *  {@code part} is the whole. */
-        public Read on(Proposition part) {
-            if (refused != null) {
-                return refused;
+        Read on(Proposition part);
+
+        /** A comparison that is not read on those elements, and what is said of it. */
+        record Refused(Read why) implements Plan {
+
+            @Override
+            public Read on(Proposition part) {
+                return why;
             }
-            Quantity.OfABinding element = round.element();
-            List<OnOne> out = new ArrayList<>();
-            for (int at = 0; at < round.every().intValueExact(); at++) {
-                ExactRatio step = ExactRatio.of(at);
-                Proposition holding = heldAtOrPast(past, step);
-                if (holding instanceof Proposition.Always(boolean some) && !some) {
-                    break;
+        }
+
+        /**
+         * A comparison read on the first elements of its list.
+         *
+         * @param round      how many elements apart the statement comes out the same
+         * @param everywhere whether the element is put wherever it is weighed, and not only
+         *                   inside remainders
+         * @param from       where the list starts
+         * @param past       how far its end is past its start
+         */
+        record OnTheFirstElements(TheElementComesRound round, boolean everywhere,
+                                  LinearForm<Quantity> from, LinearForm<Quantity> past)
+                implements Plan {
+
+            @Override
+            public Read on(Proposition part) {
+                Quantity.OfABinding element = round.element();
+                List<OnOne> out = new ArrayList<>();
+                for (int at = 0; at < round.every().intValueExact(); at++) {
+                    ExactRatio step = ExactRatio.of(at);
+                    Proposition holding = heldAtOrPast(past, step);
+                    if (holding instanceof Proposition.Always(boolean some) && !some) {
+                        break;
+                    }
+                    LinearForm<Quantity> there = from.plus(LinearForm.constant(step)).orNull();
+                    Proposition on = there == null ? null
+                            : everywhere ? OnOneElement.at(part, element, there)
+                            : OnOneElement.inItsRemainders(part, element, there);
+                    if (on == null) {
+                        return new Read.NotOfThatKind();
+                    }
+                    if (on instanceof Proposition.Always) {
+                        continue;
+                    }
+                    out.add(new OnOne(on, Proposition.all(List.of(holding,
+                            OnOneElement.comesRoundTo(round, at)))));
                 }
-                LinearForm<Quantity> there = from.plus(LinearForm.constant(step)).orNull();
-                Proposition on = there == null ? null
-                        : everywhere ? OnOneElement.at(part, element, there)
-                        : OnOneElement.inItsRemainders(part, element, there);
-                if (on == null) {
-                    return new Read.NotOfThatKind();
-                }
-                if (on instanceof Proposition.Always) {
-                    continue;
-                }
-                out.add(new OnOne(on, Proposition.all(List.of(holding,
-                        OnOneElement.comesRoundTo(round, at)))));
+                return new Read.OnEach(out);
             }
-            return new Read.OnEach(out);
         }
     }
 

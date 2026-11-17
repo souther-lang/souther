@@ -374,20 +374,20 @@ public final class TheChoicesACaseIsMadeOf {
 
         /**
          * The parts the cases make of the quantifier {@code some}: each over some of the
-         * statements of its element, so made where those were. A part over none — the one the
-         * lifting adds to say the container holds something — is made where the quantifier's
-         * whole element was.
+         * statements of its element, so made where those were. A part over statements nothing
+         * is known to have made is made by nothing here, and is counted as such.
          */
         private void saidOfOneQuantifier(Proposition.Some some) {
-            Set<Origin> whole = originsOfTheStatementsOf(some.ofTheElement());
             WhereEachLineDecides.partsHeldBy(WhereEachLineDecides.lifted(some))
                     .forEach((spelling, part) -> {
                         if (!split.contains(spelling) || !(part instanceof Proposition.Some said)) {
                             return;
                         }
                         Set<Origin> there = originsOfTheStatementsOf(said.ofTheElement());
-                        made.computeIfAbsent(spelling, _ -> new LinkedHashSet<>())
-                                .addAll(there.isEmpty() ? whole : there);
+                        if (!there.isEmpty()) {
+                            made.computeIfAbsent(spelling, _ -> new LinkedHashSet<>())
+                                    .addAll(there);
+                        }
                     });
         }
 

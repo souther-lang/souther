@@ -53,25 +53,26 @@ class AHelperIsNamedWhereALineWasReadAtACostTest {
     /** Past what the numbers leave of the cases, and below what the choices stand for. */
     private static final int BETWEEN = 20;
 
-    private static AdequacyReport report(int figure, Compilation[] made) {
+    /** The model measured with the cases of a line taken apart into no more than {@code figure}. */
+    private static Compilation compiled(int figure) {
         Compilation compilation = Compilation.ofSource(MODEL, "Main").allowing(
                 Allowances.DECLARED.with(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
                         figure));
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
-        made[0] = ACompiledModel.compiles(compilation);
-        return AdequacyReport.of(made[0]);
+        return ACompiledModel.compiles(compilation);
     }
 
-    private static JsonNode partition(AdequacyReport report, Compilation compilation) {
-        return JSON.readTree(report.json(SourceRendering.namedByIdentity(compilation.texts())))
+    private static JsonNode partition(Compilation compiled) {
+        return JSON.readTree(AdequacyReport.of(compiled)
+                        .json(SourceRendering.namedByIdentity(compiled.texts())))
                 .path("modules").get(0).path("behaviors").get(0).path("partition");
     }
 
     @Test
     void theHelperTheCasesChooseAmongIsNamedBesideALineReadAllTheSameInTheDocumentAndInBothLanguages() {
-        Compilation[] made = new Compilation[1];
-        AdequacyReport report = report(BETWEEN, made);
-        JsonNode partition = partition(report, made[0]);
+        Compilation compiled = compiled(BETWEEN);
+        AdequacyReport report = AdequacyReport.of(compiled);
+        JsonNode partition = partition(compiled);
 
         assertTrue(partition.path("caseExpansions").isEmpty(),
                 "every line is worked out: " + partition);
@@ -90,7 +91,7 @@ class AHelperIsNamedWhereALineWasReadAtACostTest {
             }
         }
 
-        SourceRendering rendering = SourceRendering.namedByIdentity(made[0].texts());
+        SourceRendering rendering = SourceRendering.namedByIdentity(compiled.texts());
 
         List<String> english = report.humanInEnglish(rendering).lines()
                 .filter(line -> line.contains("many cases:")).toList();
@@ -112,13 +113,12 @@ class AHelperIsNamedWhereALineWasReadAtACostTest {
 
     @Test
     void aLineNotWorkedOutOrWithItsCasesWithinTheFigureHasNoEntryBesideIt() {
-        Compilation[] made = new Compilation[1];
-        JsonNode stopped = partition(report(0, made), made[0]);
+        JsonNode stopped = partition(compiled(0));
         assertFalse(stopped.path("caseExpansions").isEmpty(), stopped.toString());
         assertFalse(stopped.has("costlyReadings"), stopped.toString());
 
-        JsonNode within = partition(report(CompositionBudget
-                .CASES_A_LINE_IS_TAKEN_APART_INTO.maximum(), made), made[0]);
+        JsonNode within = partition(compiled(
+                CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum()));
         assertFalse(within.has("costlyReadings"), within.toString());
     }
 }
