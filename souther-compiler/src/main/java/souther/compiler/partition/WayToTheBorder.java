@@ -14,6 +14,7 @@ import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.partition.OneOfEach.Step;
 import souther.compiler.semantics.TakenAs;
 
@@ -175,18 +176,32 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
             return region;
         }
         int divisor = remainder.remainder().divisor().intValueExact();
-        Set<Integer> years = new TreeSet<>();
-        for (int left = 0; left < divisor; left++) {
-            if (remainder.leaves().holds(BigInteger.valueOf(left))) {
-                years.add(Math.floorMod(left - moved.intValue(), divisor));
-            }
-        }
         return region.assumingTheYearLeaves(new NumericTerm.ValueOf(year.position()), divisor,
-                years);
+                yearsLeaving(moved, divisor, remainder.leaves()));
     }
 
-    /** How large a divisor of a year a date is held to what it leaves of: past the years the
-     *  calendar repeats in, there is no class to walk the days of. */
+    /**
+     * The remainders by {@code divisor} a year may leave where the year moved by {@code moved}
+     * leaves one that {@code leaves} holds: each such remainder less the move.
+     *
+     * <p>The move is any whole number, so it is reduced by the divisor before it is taken from
+     * anything, and not narrowed to the bits a machine integer holds, which leaves another
+     * remainder.
+     */
+    static Set<Integer> yearsLeaving(BigInteger moved, int divisor, WholeNumberRuns leaves) {
+        int shift = moved.mod(BigInteger.valueOf(divisor)).intValueExact();
+        Set<Integer> years = new TreeSet<>();
+        for (int left = 0; left < divisor; left++) {
+            if (leaves.holds(BigInteger.valueOf(left))) {
+                years.add(Math.floorMod(left - shift, divisor));
+            }
+        }
+        return years;
+    }
+
+    /** How large a divisor of a year a date is held to what it leaves of: the walk of the days of
+     *  the class goes no further than a few cycles of the calendar, and says some may be left
+     *  where the class repeats in more than that. */
     private static final BigInteger MOST_DIVISOR_A_YEAR_IS_HELD_BY = BigInteger.valueOf(400);
 
     /**
