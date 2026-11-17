@@ -1,10 +1,12 @@
 package souther.compiler.partition;
 
+import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
 
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.meaning.PartedString;
 import souther.compiler.meaning.PieceWitness;
 import souther.compiler.meaning.Quantity;
 
@@ -24,24 +26,47 @@ import souther.compiler.meaning.Quantity;
  *                  so it is no part of what makes two of these the same
  */
 record PiecesOfAString(int separator, Quantity string, PieceWindow window,
-                       Optional<PieceWitness> within) {
+                       Optional<PieceWitness> within, ConvertedText converted) {
 
     PiecesOfAString {
-        if (separator < 0 || string == null || window == null || window.isEmpty()) {
+        if (separator < 0 || (string == null) == (converted == null) || window == null
+                || window.isEmpty()) {
             throw new IllegalArgumentException("pieces are some indexes of a string parted at a"
                     + " code point");
         }
     }
 
+    /** The pieces of a string written as an expression, whatever statement they are read in. */
+    PiecesOfAString(int separator, Quantity string, PieceWindow window,
+                    Optional<PieceWitness> within) {
+        this(separator, string, window, within, null);
+    }
+
+    /**
+     * The piece a statement of the way holds to a language, as the statement says which it is:
+     * the string is the one at a position, made by the case conversions it names.
+     */
+    static PiecesOfAString heldBy(PartedString parted, PieceWitness within) {
+        return new PiecesOfAString(parted.separator(), null,
+                new PieceWindow(parted.from(), parted.until()), Optional.of(within),
+                new ConvertedText(new NumericTerm.ValueOf(parted.string()), parted.conversion()));
+    }
+
     @Override
     public boolean equals(Object other) {
-        return other instanceof PiecesOfAString that && separator == that.separator
-                && string.equals(that.string) && window.equals(that.window);
+        if (!(other instanceof PiecesOfAString that) || separator != that.separator
+                || !window.equals(that.window)) {
+            return false;
+        }
+        ConvertedText whole = whole();
+        return whole != null ? whole.equals(that.whole())
+                : that.whole() == null && Objects.equals(string, that.string);
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(separator, string, window);
+        ConvertedText whole = whole();
+        return Objects.hash(separator, window, whole, whole == null ? string : null);
     }
 
     /** The piece at the index a lookup picked. */
@@ -77,7 +102,7 @@ record PiecesOfAString(int separator, Quantity string, PieceWindow window,
     /** The string and what was done to it, or null where it is made of the input by anything but
      *  case conversions of one string of it. */
     ConvertedText whole() {
-        return ConvertedText.of(string);
+        return converted != null ? converted : ConvertedText.of(string);
     }
 
     /**
