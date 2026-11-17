@@ -712,7 +712,8 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "follows what a node evaluates first to where a run stops, and what a Widen"
                         + " evaluates is what it holds (Evaluated)");
         row(out, c + "partition/ComparisonAssessment", "readsAnswer",
-                "(" + core + "L" + c + "types/BindingId;)Z", 1, COUNTS_THROUGH_IT);
+                "(" + core + "L" + c + "types/BindingId;L" + c + "inputs/InputReads;"
+                        + "Ljava/util/List;)Z", 1, COUNTS_THROUGH_IT);
         row(out, c + "partition/ComparisonReadings", "statedAt",
                 "(" + core + "Ljava/util/function/Supplier;L" + c
                         + "partition/ClosureApplications;L" + c

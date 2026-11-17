@@ -196,7 +196,7 @@ public final class EnsuresThresholds {
         if (!way.mayReachTheNext()) {
             return;
         }
-        reportRuleWithoutLine(rule.ref(), it.stated(), rule.value(),
+        reportRuleWithoutLine(rule.ref(), it.stated(), rule.value(), it.reads(), it.opened(),
                 ComparisonAssessment.leftAtEachOf(
                         GuardThresholds.mentionedIn(it.stated(), it.reads(), read.symbols(),
                                         read.newtypes(), answering).stream()
@@ -235,7 +235,7 @@ public final class EnsuresThresholds {
         // witness of a count, which is found at a row getting to a comparison of a body.
         ComparisonAssessment whole = ComparisonAssessment.of(out.behavior(), comparison.stated(),
                 Citation.of(e.pos()), read,
-                reads, ClosureApplications.OUTSIDE, rule.value(), answering, false,
+                reads, it.opened(), ClosureApplications.OUTSIDE, rule.value(), answering, false,
                 WhatConditionsState.of(read), Optional.empty(), ComparisonWitnesses.AtAComparison.NONE);
         // A statement of several relations holds a line for each only where the statement turns
         // on it, and a clause has nowhere to hold that: no way leads to it for a condition to be
@@ -250,7 +250,7 @@ public final class EnsuresThresholds {
         // And what a reading that stopped owes only where a run may evaluate it. The lines below
         // are the relation's and are drawn from `assessed` whatever the order the clause is
         // written in.
-        reportRuleWithoutLine(rule.ref(), e, rule.value(),
+        reportRuleWithoutLine(rule.ref(), e, rule.value(), reads, it.opened(),
                 ComparisonAssessment.whereItsStopIsReached(assessed, way::mayReachTheNext)
                         .whatEachPlaceIsLeftWith(), out.noLine());
         // And the geometry. Read the same way a guard reads it ({@link ComparisonGeometry}); only
@@ -290,9 +290,10 @@ public final class EnsuresThresholds {
      * form is what stopped it: the one reason that does not turn on what two sides name.
      */
     private static void reportRuleWithoutLine(RuleRef.Ensures rule, Core statement, BindingId answer,
+                                     InputReads reads, List<ClauseStatements.Opened> opened,
                                      List<ComparisonAssessment.LeftAt> left,
                                      RulesWithNoLine.Gathered withoutALine) {
-        if (ComparisonAssessment.readsAnswer(statement, answer)) {
+        if (ComparisonAssessment.readsAnswer(statement, answer, reads, opened)) {
             return;
         }
         souther.compiler.check.RuleCitation cited =

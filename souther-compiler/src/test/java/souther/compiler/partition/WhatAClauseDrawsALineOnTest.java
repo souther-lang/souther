@@ -392,6 +392,138 @@ class WhatAClauseDrawsALineOnTest {
         assertEquals(List.of("a.n = 100"), valuesOf(clauses));
     }
 
+    /** A behavior whose clause says what it says through {@code clause}, over an optional name. */
+    private static EnsuresThresholds.Clauses findingByName(String helper, String clause) {
+        return drawn("""
+                module g
+
+                data Account = { name: String, domain: String?, ok: Bool }
+                data AccountNotFound
+
+                %s
+
+                behavior find : (name: String) -> Account | AccountNotFound
+                    ensures %s
+                """.formatted(helper, clause), "find");
+    }
+
+    /** What the reading says of a clause, for two spellings to be held to one another. */
+    private static List<String> saidOf(EnsuresThresholds.Clauses clauses) {
+        return List.of(valuesOf(clauses).toString(),
+                clauses.noLine().reported().toString(),
+                clauses.noLine().unclassified().toString(),
+                clauses.between().toString());
+    }
+
+    /**
+     * A rule about the answer reads the same whether it is written out or through a helper.
+     *
+     * <p>The helper's parameter is another name for the answer, and a helper whose body branches
+     * with the other branch a written {@code false} says what {@code &&} says.
+     */
+    @Test
+    void aRuleAboutTheAnswerReadsTheSameThroughAHelper() {
+        List<String> written = saidOf(findingByName("", "Account -> value.name == name"));
+
+        assertEquals(written, saidOf(findingByName(
+                "let sameName (name: String, a: Account): Bool = a.name == name",
+                "Account -> sameName(name, value)")),
+                "a helper with no branch");
+        EnsuresThresholds.Clauses byMatch = findingByName("""
+                let sameDomain (name: String, a: Account): Bool =
+                    match a.domain with
+                        | Some own -> own == name
+                        | None -> false
+                """, "Account -> sameDomain(name, value)");
+        assertEquals(List.of(), byMatch.noLine().reported(), "a match whose other arm is false");
+        assertEquals(List.of(), byMatch.noLine().unclassified());
+        EnsuresThresholds.Clauses byIf = findingByName("""
+                let sameName (name: String, a: Account): Bool =
+                    if a.ok then a.name == name else false
+                """, "Account -> sameName(name, value)");
+        assertEquals(List.of(), byIf.noLine().reported(), "an if whose else is false");
+        assertEquals(List.of(), byIf.noLine().unclassified());
+    }
+
+    /** A behavior over two inputs, whose clause is stated through {@code helper}. */
+    private static EnsuresThresholds.Clauses statedThrough(String helper, String clause) {
+        return drawn("""
+                module g
+
+                data Active
+                data Inactive
+                data Status = Active | Inactive
+                data Account = { name: String, ok: Bool }
+                data AccountNotFound
+
+                %s
+
+                behavior find : (name: String, limit: Int, status: Status) -> Account | AccountNotFound
+                    ensures %s
+                """.formatted(helper, clause), "find");
+    }
+
+    /**
+     * A statement an arm of a {@code match} selects on is still a statement about what it selects
+     * on, and a branch that is not a written {@code false} states neither side.
+     */
+    @Test
+    void aBranchIsOnlyReadAsAConjunctionWhereTheOtherWayIsFalse() {
+        // The match is true only where the status is Active, and that is about an input.
+        EnsuresThresholds.Clauses onTheInput = statedThrough("""
+                let isActive (s: Status, a: Account): Bool =
+                    match s with
+                        | Active -> a.ok
+                        | Inactive -> false
+                """, "Account -> isActive(status, value)");
+        assertEquals(List.of("status"),
+                onTheInput.noLine().unclassified().stream()
+                        .map(each -> each.at().toString()).toList(),
+                "the selection stays a statement about the input it selects on");
+
+        // An else that is anything but false is a choice, and a choice states neither side.
+        EnsuresThresholds.Clauses choice = statedThrough("""
+                let either (limit: Int, a: Account): Bool =
+                    if a.ok then limit > 0 else limit < 5
+                """, "Account -> either(limit, value)");
+        assertEquals(List.of(), valuesOf(choice));
+
+        // Two arms that are not false: neither body is required by itself.
+        EnsuresThresholds.Clauses twoBodies = statedThrough("""
+                let both (limit: Int, s: Status): Bool =
+                    match s with
+                        | Active -> limit > 0
+                        | Inactive -> limit < 0
+                """, "Account -> both(limit, status)");
+        assertEquals(List.of(), valuesOf(twoBodies));
+    }
+
+    /**
+     * What a branch states about an input is still a line where the other thing it states is about
+     * the answer.
+     */
+    @Test
+    void anInputComparisonBesideARuleAboutTheAnswerStillDrawsItsLine() {
+        EnsuresThresholds.Clauses clauses = statedThrough("""
+                let sameAndPositive (name: String, limit: Int, a: Account): Bool =
+                    if a.name == name then limit > 0 else false
+                """, "Account -> sameAndPositive(name, limit, value)");
+
+        assertEquals(List.of("limit = 0"), valuesOf(clauses));
+        assertEquals(List.of(), clauses.noLine().reported());
+    }
+
+    /** A helper that hands the answer on to another is as much a name for it as the first. */
+    @Test
+    void aNameForTheAnswerThroughTwoHelpersIsStillTheAnswer() {
+        List<String> written = saidOf(findingByName("", "Account -> value.name == name"));
+
+        assertEquals(written, saidOf(findingByName("""
+                let inner (name: String, b: Account): Bool = b.name == name
+                let outer (name: String, a: Account): Bool = inner(name, a)
+                """, "Account -> outer(name, value)")));
+    }
+
     /**
      * And a rule stated in a form this does not read names the position it is about.
      *

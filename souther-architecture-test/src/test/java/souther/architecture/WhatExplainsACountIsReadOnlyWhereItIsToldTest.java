@@ -143,7 +143,7 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
                 "souther/compiler/partition/ComparisonAssessment", "ofEach",
                 "(Ljava/lang/String;Lsouther/compiler/check/StatedComparison;"
                         + "Lsouther/compiler/diag/Citation;Lsouther/compiler/inputs/InputReading;"
-                        + "Lsouther/compiler/inputs/InputReads;"
+                        + "Lsouther/compiler/inputs/InputReads;Ljava/util/List;"
                         + "Lsouther/compiler/partition/ClosureApplications;"
                         + "Lsouther/compiler/types/BindingId;Lsouther/compiler/coverage/Arrivals;Z"
                         + "Lsouther/compiler/partition/WhatConditionsState;Ljava/util/Optional;"

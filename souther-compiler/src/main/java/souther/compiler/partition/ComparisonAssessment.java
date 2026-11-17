@@ -1315,7 +1315,20 @@ sealed interface ComparisonAssessment {
                                    boolean drawnByAnInvariant, WhatConditionsState conditions,
                                    Optional<ExpansionLineage> writtenIn,
                                    ComparisonWitnesses.AtAComparison witnesses) {
-        return ofEach(behavior, comparison, at, read, reads, applying, answer, answering,
+        return of(behavior, comparison, at, read, reads, List.of(), applying, answer, answering,
+                drawnByAnInvariant, conditions, writtenIn, witnesses);
+    }
+
+    /** {@link #of}, for a comparison written where an arm opened the names {@code opened}. */
+    static ComparisonAssessment of(String behavior, StatedComparison comparison, Citation at,
+                                   InputReading read, InputReads reads,
+                                   List<ClauseStatements.Opened> opened,
+                                   ClosureApplications applying,
+                                   BindingId answer, Arrivals answering,
+                                   boolean drawnByAnInvariant, WhatConditionsState conditions,
+                                   Optional<ExpansionLineage> writtenIn,
+                                   ComparisonWitnesses.AtAComparison witnesses) {
+        return ofEach(behavior, comparison, at, read, reads, opened, applying, answer, answering,
                 drawnByAnInvariant, conditions, writtenIn, witnesses).assessment();
     }
 
@@ -1338,11 +1351,23 @@ sealed interface ComparisonAssessment {
                            BindingId answer, Arrivals answering, boolean drawnByAnInvariant,
                            WhatConditionsState conditions, Optional<ExpansionLineage> writtenIn,
                            ComparisonWitnesses.AtAComparison witnesses) {
+        return ofEach(behavior, comparison, at, read, reads, List.of(), applying, answer,
+                answering, drawnByAnInvariant, conditions, writtenIn, witnesses);
+    }
+
+    /** {@link #ofEach}, for a comparison written where an arm opened the names {@code opened}. */
+    static Assessed ofEach(String behavior, StatedComparison comparison, Citation at,
+                           InputReading read, InputReads reads,
+                           List<ClauseStatements.Opened> opened, ClosureApplications applying,
+                           BindingId answer, Arrivals answering, boolean drawnByAnInvariant,
+                           WhatConditionsState conditions, Optional<ExpansionLineage> writtenIn,
+                           ComparisonWitnesses.AtAComparison witnesses) {
         // Asked first, and of the whole comparison. A rule that reads the answer anywhere in it is
         // one this reading does not put on the input space, whichever side the answer is on and
         // whatever else stands beside it: `value.n + query.offset <= 20` is about the answer and
         // about an input, and the input is no more measurable here for the input being named.
-        if (readsAnswer(comparison.left(), answer) || readsAnswer(comparison.right(), answer)) {
+        if (readsAnswer(comparison.left(), answer, reads, opened)
+                || readsAnswer(comparison.right(), answer, reads, opened)) {
             return new Assessed(new AnswerDependent(), LinesReadOn.NONE);
         }
         Cutting.Drawn drawn = Cutting.drawn(behavior, comparison, read, reads, applying,
@@ -2863,14 +2888,49 @@ sealed interface ComparisonAssessment {
      * <p>False where there is no answer to read, which is every comparison written in a body.
      */
     static boolean readsAnswer(Core e, BindingId answer) {
+        return readsAnswer(e, answer, null, List.of());
+    }
+
+    /** {@link #readsAnswer(Core, BindingId, InputReads, List)} where no arm opened a name. */
+    static boolean readsAnswer(Core e, BindingId answer, InputReads reads) {
+        return readsAnswer(e, answer, reads, List.of());
+    }
+
+    /**
+     * {@link #readsAnswer(Core, BindingId)} where the names in force are known: a name that is
+     * another name for the answer — the parameter of a helper the clause called with it, or what a
+     * {@code let} gave it to — is a read of the answer, and the one place that decides
+     * {@link AnswerDependent} says so for both of the readers that ask.
+     *
+     * <p>And a name an arm opened out of a value is made of that value: {@code own} of
+     * {@code match value.domain with Some own} is a read of the answer. That is a dependence and
+     * not an identity, so it is asked here and never of {@link InputReads#namedBy}.
+     *
+     * @param reads  what the names stand for, or null where there are none to look through
+     * @param opened the names the arms above {@code e} opened
+     */
+    static boolean readsAnswer(Core e, BindingId answer, InputReads reads,
+                               List<ClauseStatements.Opened> opened) {
         if (answer == null) {
             return false;
         }
-        if (e instanceof Core.Read read && answer.equals(read.binding())) {
-            return true;
+        if (e instanceof Core.Read read) {
+            BindingId named = reads == null ? read.binding() : reads.namedBy(read.binding());
+            if (answer.equals(read.binding()) || answer.equals(named)) {
+                return true;
+            }
+            for (ClauseStatements.Opened each : opened) {
+                if (each.name().equals(read.binding()) || each.name().equals(named)) {
+                    List<ClauseStatements.Opened> rest = new ArrayList<>(opened);
+                    rest.remove(each);
+                    if (readsAnswer(each.from(), answer, reads, rest)) {
+                        return true;
+                    }
+                }
+            }
         }
         boolean[] found = {false};
-        Core.forEachChild(e, child -> found[0] |= readsAnswer(child, answer));
+        Core.forEachChild(e, child -> found[0] |= readsAnswer(child, answer, reads, opened));
         return found[0];
     }
 }

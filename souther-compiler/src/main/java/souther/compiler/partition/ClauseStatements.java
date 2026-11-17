@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.Comparison;
+import souther.compiler.check.Choice;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.PartId;
 import souther.compiler.check.RuleRef;
@@ -10,6 +11,7 @@ import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.types.ApplicationOrigin;
+import souther.compiler.types.BindingId;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,6 +63,16 @@ final class ClauseStatements {
     record Stated(ClauseStatementId id, Statement statement) {}
 
     /**
+     * A name an arm of a {@code match} opened out of {@code from}: what an optional holds, said as
+     * the name {@code Some own} gives it.
+     *
+     * <p>Not another name for {@code from} — {@link InputReads#namedBy} answers that, and the
+     * payload is not the optional — but a value made of it, so a statement over the name is about
+     * whatever {@code from} is about.
+     */
+    record Opened(BindingId name, Core from) {}
+
+    /**
      * One of the things a clause states, said as the kind of rule it is.
      *
      * <p>Every arm is counted: the position in the list is which statement of the clause this is,
@@ -74,8 +86,11 @@ final class ClauseStatements {
          * @param reads what the names in force at this statement stand for, which is what resolves
          *              a term to a position. It travels with the statement because a {@code let}
          *              above it binds names the statement is written in
+         * @param opened the names an arm above it opened out of a value, which are not that value
+         *               and are made of it
          */
-        record Compares(Core stated, InputReads reads, Comparison comparison) implements Statement {}
+        record Compares(Core stated, InputReads reads, List<Opened> opened, Comparison comparison)
+                implements Statement {}
 
         /**
          * A predicate over the strings at a position, which tells a set of them from the rest.
@@ -89,7 +104,7 @@ final class ClauseStatements {
 
         /** A form no reader of clauses reads. The one arm that is a finding: what the model states
          *  here reached this stage and nothing was made of it. */
-        record NotRead(Core stated, InputReads reads) implements Statement {}
+        record NotRead(Core stated, InputReads reads, List<Opened> opened) implements Statement {}
 
         /** A choice, which states neither of its sides and is here to hold its place in the
          *  numbering. Not a finding: what such a rule states is not what either side states, and
@@ -108,7 +123,7 @@ final class ClauseStatements {
     static List<Stated> of(PartId<RuleRef.Ensures> part, Core e, InputReads reads,
                            Symbols symbols, DeclarationNewtypes newtypes) {
         List<Statement> found = new ArrayList<>();
-        walk(e, reads, symbols, newtypes, found);
+        walk(e, reads, List.of(), symbols, newtypes, found);
         List<Stated> out = new ArrayList<>();
         for (int at = 0; at < found.size(); at++) {
             out.add(new Stated(new ClauseStatementId(part, at), found.get(at)));
@@ -116,8 +131,9 @@ final class ClauseStatements {
         return out;
     }
 
-    private static void walk(Core standing, InputReads reads, Symbols symbols,
-                             DeclarationNewtypes newtypes, List<Statement> out) {
+    private static void walk(Core standing, InputReads reads, List<Opened> opened,
+                             Symbols symbols, DeclarationNewtypes newtypes,
+                             List<Statement> out) {
         // What a rule states is the truth it is whatever type it stands as.
         Core e = Core.withoutStanding(standing);
         // Through what a `let` binds: what the expression comes to is its body, so the body states
@@ -125,8 +141,36 @@ final class ClauseStatements {
         // the call expanded and its argument bound to the helper's own parameter — and a walk that
         // stopped here would find the rule stating nothing while the model plainly says something.
         if (e instanceof Core.LetIn let) {
-            walk(let.body(), reads.and(let.binder(), let.value()), symbols, newtypes, out);
+            walk(let.body(), reads.and(let.binder(), let.value()), opened, symbols, newtypes, out);
             return;
+        }
+        // `if c then p else false` is true where `c` and `p` both are, which is what `c && p` says,
+        // so it states what that states. An else that is anything but a written `false` is a
+        // choice between two things the rule may be satisfied by, and states neither.
+        if (e instanceof Core.If iff && isWrittenFalse(iff.els())) {
+            walk(iff.cond(), reads, opened, symbols, newtypes, out);
+            walk(iff.then(), reads, opened, symbols, newtypes, out);
+            return;
+        }
+        // A `match` whose every other arm is a written `false` is true only where the value is the
+        // case the one arm selects and that arm's body is. The selection is a statement of its own,
+        // about the scrutinee, and it is not read: leaving it out would have the rule state less
+        // than it does about whatever the scrutinee is made of.
+        if (e instanceof Core.Match match) {
+            Core.Case only = theOnlyArmThatIsNotFalse(match);
+            if (only != null) {
+                out.add(new Statement.NotRead(match.scrutinee(), reads, opened));
+                List<Opened> within = opened;
+                if (only.binder() != null && only.binder().binding() != null
+                        && only.binding() instanceof Core.ArmBinding.Payload) {
+                    within = new ArrayList<>(opened);
+                    within.add(new Opened(only.binder().binding(), match.scrutinee()));
+                }
+                walk(only.body(),
+                        reads.choosing(Choice.Decides.ofCase(match, only), symbols, newtypes),
+                        within, symbols, newtypes, out);
+                return;
+            }
         }
         if (e instanceof Core.Binary binary) {
             // Asked once of the connective this is, and every answer read off that. Asked again
@@ -134,8 +178,8 @@ final class ClauseStatements {
             // operator the first has already been read for.
             ConditionJoin joined = ConditionJoin.of(binary.op()).orElse(null);
             if (joined == ConditionJoin.BOTH) {
-                walk(binary.left(), reads, symbols, newtypes, out);
-                walk(binary.right(), reads, symbols, newtypes, out);
+                walk(binary.left(), reads, opened, symbols, newtypes, out);
+                walk(binary.right(), reads, opened, symbols, newtypes, out);
                 return;
             }
             if (joined == ConditionJoin.EITHER) {
@@ -143,17 +187,37 @@ final class ClauseStatements {
                 return;
             }
         }
-        out.add(whatItStates(e, reads, symbols, newtypes));
+        out.add(whatItStates(e, reads, opened, symbols, newtypes));
+    }
+
+    private static boolean isWrittenFalse(Core e) {
+        return Core.withoutStanding(e) instanceof Core.Bool bool && !bool.value();
+    }
+
+    /** The arm of {@code match} that is not a written {@code false}, where there is exactly one and
+     *  every other arm is; null otherwise. */
+    private static Core.Case theOnlyArmThatIsNotFalse(Core.Match match) {
+        Core.Case only = null;
+        for (Core.Case arm : match.cases()) {
+            if (isWrittenFalse(arm.body())) {
+                continue;
+            }
+            if (only != null) {
+                return null;
+            }
+            only = arm;
+        }
+        return only;
     }
 
     /** Which kind of rule one statement is. */
-    private static Statement whatItStates(Core standing, InputReads reads, Symbols symbols,
-                                          DeclarationNewtypes newtypes) {
+    private static Statement whatItStates(Core standing, InputReads reads, List<Opened> opened,
+                                          Symbols symbols, DeclarationNewtypes newtypes) {
         Core e = Core.withoutStanding(standing);
         if (e instanceof Core.Binary binary) {
             Comparison comparison = Comparison.of(binary).orElse(null);
-            return comparison == null ? new Statement.NotRead(e, reads)
-                    : new Statement.Compares(e, reads, comparison);
+            return comparison == null ? new Statement.NotRead(e, reads, opened)
+                    : new Statement.Compares(e, reads, opened, comparison);
         }
         // A rule is read off a call the author wrote. What a pass composed — the size a comparison
         // means, a call written back out of a checked value — states nothing an author owes rows
@@ -166,6 +230,6 @@ final class ClauseStatements {
                 return new Statement.TellsStringsApart(call, reads, states);
             }
         }
-        return new Statement.NotRead(e, reads);
+        return new Statement.NotRead(e, reads, opened);
     }
 }
