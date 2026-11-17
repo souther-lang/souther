@@ -57,15 +57,17 @@ class AnAnswerOfARelationIsMadeOnlyWhereTheRelationIsReadTest {
     /** The control: the owner makes them, which is what this reads. */
     @Test
     void andTheCheckSeesTheOwnerMakingThem() {
-        assertFalse(arms().isEmpty(), "the arms are read off the types");
+        assertFalse(ARMS.isEmpty(), "the arms are read off the types");
         assertTrue(PUBLISHED.all().stream()
                         .filter(each -> each.thisClass().asInternalName().startsWith(OWNER))
                         .anyMatch(AnAnswerOfARelationIsMadeOnlyWhereTheRelationIsReadTest::makesOne),
                 "the reading of the inputs makes the answers it hands out");
     }
 
-    /** The internal names of the arms of the three answers. */
-    private static Set<String> arms() {
+    /** The internal names of the arms of the three answers, read off the types once. */
+    private static final Set<String> ARMS = armsOfTheAnswers();
+
+    private static Set<String> armsOfTheAnswers() {
         Set<String> names = new LinkedHashSet<>();
         for (Class<?> type : List.of(ValuesAt.class, ValuesHeld.class, MadeFrom.class)) {
             for (Class<?> arm : type.getPermittedSubclasses()) {
@@ -77,11 +79,10 @@ class AnAnswerOfARelationIsMadeOnlyWhereTheRelationIsReadTest {
 
     /** Whether {@code compiled} calls a constructor of one of the arms. */
     private static boolean makesOne(ClassModel compiled) {
-        Set<String> arms = arms();
         for (PoolEntry entry : compiled.constantPool()) {
             if (entry instanceof MemberRefEntry member
-                    && member.name().stringValue().equals("<init>")
-                    && arms.contains(member.owner().name().stringValue())) {
+                    && ARMS.contains(member.owner().name().stringValue())
+                    && member.name().stringValue().equals("<init>")) {
                 return true;
             }
         }
