@@ -3174,9 +3174,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 .allMatch(each -> granularityOf(each) == Granularity.DISCRETE);
         boolean offItsLine = asStated != null && !written.isEmpty()
                 && written.stream().allMatch(each -> keepsOffTheLineOf(each.affine(), asStated));
-        List<TakenConstraint.Affine> narrowingsMet = new ArrayList<>();
+        List<Coverage> covered = new ArrayList<>();
         List<OnAWay> unfree = offItsLine ? List.of()
-                : withoutWhatAFreeNumberMeets(written, declined, past, read, narrowingsMet);
+                : withoutWhatAFreeNumberMeets(written, declined, past, read, covered);
         // What the way leaves of the lengths of the strings this relation is between, asked once
         // for everything below that reads it. Where a value of the numbers it ties a length to is
         // shown for every length the string has, what it states of the length leaves its strings
@@ -3207,7 +3207,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<TakenConstraint.Affine> met = new ArrayList<>();
         if (!offItsLine) {
             met.addAll(metByARowAtTheLine(unfree, past.narrowing(), inWholeSteps));
-            met.addAll(narrowingsMet);
+            covered.forEach(each -> met.addAll(each.narrowingsHeld()));
         }
         WayRead beside = met.isEmpty() ? entire : wayRead(
                 unfree.stream().filter(each -> each.affine() == null
@@ -6411,7 +6411,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                      Optional<Set<String>> declined,
                                                      DemandReading.Answered past,
                                                      InputReading read,
-                                                     List<TakenConstraint.Affine> narrowingsMet) {
+                                                     List<Coverage> narrowingsMet) {
         List<OnAWay> out = new ArrayList<>(conditions);
         for (OnAWay each : conditions) {
             TakenConstraint.Affine affine = each.affine();
@@ -6468,7 +6468,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private boolean freeToMeet(NumericTerm term, OnAWay statement, List<OnAWay> conditions,
                                Optional<Set<String>> declined, DemandReading.Answered past,
-                               InputReading read, List<TakenConstraint.Affine> narrowingsMet) {
+                               InputReading read, List<Coverage> narrowingsMet) {
         if (!(term instanceof NumericTerm.FromOnePosition number)) {
             return false;
         }
@@ -6516,7 +6516,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                   Optional<Set<String>> declined,
                                                   DemandReading.Answered past,
                                                   InputReading read,
-                                                  List<TakenConstraint.Affine> narrowingsMet) {
+                                                  List<Coverage> narrowingsMet) {
         NumericDomain.Bounds takes = valuesFreeToChoose(free, statement, conditions, declined,
                 past, read, false);
         RowDemand.OnARemainder on = together.get(0);
@@ -6539,12 +6539,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (mine == null) {
             return false;
         }
-        BigInteger keptLow = BigInteger.ZERO;
-        BigInteger keptHigh = BigInteger.ZERO;
         int kept = 0;
         NumericTerm keptTerm = null;
         WholeEnds keptEnds = null;
-        Set<NumericTerm> atNought = new LinkedHashSet<>();
+        Map<NumericTerm, WholeEnds> atNought = new LinkedHashMap<>();
         for (Map.Entry<NumericTerm, ExactRatio> each : on.dividend().coefs().entrySet()) {
             if (each.getKey().equals(free)) {
                 continue;
@@ -6560,12 +6558,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             if (otherTakes != null) {
                 WholeEnds ends = wholeEndsOf(otherTakes.meet(orders.answered().whereItStops()));
-                if (ends == null || (ends.low() != null && ends.low().signum() > 0)
-                        || (ends.high() != null && ends.high().signum() < 0)
-                        || readBySides(other)) {
+                if (ends == null || readBySides(other)) {
                     return false;
                 }
-                atNought.add(other);
+                atNought.put(other, ends);
                 continue;
             }
             BigInteger by = wholeNumberOf(each.getValue());
@@ -6579,23 +6575,78 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (ends == null || ends.low() == null || ends.high() == null) {
                 return false;
             }
-            keptLow = by.signum() > 0 ? ends.low() : ends.high().negate();
-            keptHigh = by.signum() > 0 ? ends.high() : ends.low().negate();
             keptTerm = other;
             keptEnds = ends;
         }
-        if (!windowHoldsEveryRemainder(weight, mine, keptLow, keptHigh, BigInteger.ZERO,
-                divisor, least, greatest)) {
-            return false;
-        }
-        List<TakenConstraint.Affine> verified = new ArrayList<>();
-        if (!meetsWhatTheRunNarrows(past.narrowing(), on.dividend(), free, keptTerm, keptEnds,
-                atNought, mine, least, greatest, verified)) {
-            return false;
-        }
-        narrowingsMet.addAll(verified);
-        return true;
+        NumbersChosen candidate = new NumbersChosen(free, mine, keptTerm, keptEnds, atNought);
+        Optional<Coverage> shown = candidate.coverage(on.dividend(), divisor, weight,
+                past.narrowing(), least, greatest);
+        shown.ifPresent(narrowingsMet::add);
+        return shown.isPresent();
     }
+
+    /**
+     * A choice of numbers for the form of a remainder: {@code free} anywhere in {@code freeEnds},
+     * each number of {@code atNought} at nought, and {@code kept} wherever it is in
+     * {@code keptEnds}, which is no choice but the value asked. It is what the generator above
+     * proposes and nothing it says is believed: {@link #coverage} is the only way to a
+     * {@link Coverage}.
+     */
+    record NumbersChosen(NumericTerm free, WholeEnds freeEnds, NumericTerm kept,
+                         WholeEnds keptEnds, Map<NumericTerm, WholeEnds> atNought) {
+
+        /**
+         * What this shows, or empty where it shows nothing: every number set at nought is one
+         * its run holds at nought, the free number can be put where the form is at each
+         * remainder for every value of the kept number, and every number the run narrows holds
+         * where the numbers are put.
+         */
+        Optional<Coverage> coverage(LinearForm<NumericTerm> dividend, BigInteger divisor,
+                                    BigInteger weight, List<TakenConstraint> narrowing,
+                                    BigInteger least, BigInteger greatest) {
+            for (WholeEnds ends : atNought.values()) {
+                if ((ends.low() != null && ends.low().signum() > 0)
+                        || (ends.high() != null && ends.high().signum() < 0)) {
+                    return Optional.empty();
+                }
+            }
+            BigInteger by = kept == null ? BigInteger.ZERO : wholeNumberOf(dividend.coefs().get(kept));
+            if (by == null) {
+                return Optional.empty();
+            }
+            BigInteger keptLow = BigInteger.ZERO;
+            BigInteger keptHigh = BigInteger.ZERO;
+            if (kept != null) {
+                if (keptEnds == null || keptEnds.low() == null || keptEnds.high() == null) {
+                    return Optional.empty();
+                }
+                keptLow = by.signum() > 0 ? keptEnds.low() : keptEnds.high().negate();
+                keptHigh = by.signum() > 0 ? keptEnds.high() : keptEnds.low().negate();
+            }
+            if (!windowHoldsEveryRemainder(weight, freeEnds, keptLow, keptHigh, BigInteger.ZERO,
+                    divisor, least, greatest)) {
+                return Optional.empty();
+            }
+            List<TakenConstraint.Affine> held = new ArrayList<>();
+            if (!meetsWhatTheRunNarrows(narrowing, dividend, free, kept, keptEnds,
+                    atNought.keySet(), freeEnds, least, greatest, held)) {
+                return Optional.empty();
+            }
+            Set<NumericTerm> keptTerms = new LinkedHashSet<>();
+            if (kept != null) {
+                keptTerms.add(kept);
+            }
+            return Optional.of(new Coverage(keptTerms, held));
+        }
+    }
+
+    /**
+     * What {@link NumbersChosen} shows: for every value of the {@code kept} numbers, the others can be
+     * chosen so that {@code narrowingsHeld} hold. A reader of the kept numbers and of nothing else
+     * reads the run without them; they hold nothing of any other number, and are the only
+     * constraints this lets a reader leave out.
+     */
+    record Coverage(Set<NumericTerm> kept, List<TakenConstraint.Affine> narrowingsHeld) {}
 
     /**
      * Whether every number the run narrows ({@link DemandReading.Answered#narrowing}) holds for
