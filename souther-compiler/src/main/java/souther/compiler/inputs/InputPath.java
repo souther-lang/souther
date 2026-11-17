@@ -94,6 +94,9 @@ final class InputPath {
      *  origin of what no reader of positions follows is being found, and not in an expression a
      *  rule is written about ({@link #partOf}). */
     private boolean aPositionIsAnOrigin;
+    /** Whether the payload of a call that answers an element is read as the element, by a walk
+     *  after the position the very values stand at ({@link #keepsItsFields}). */
+    private boolean payloadsAreElements;
     /** The direction a walk after the order must come out walking ({@link TraversalDirection});
      *  the other questions say nothing of it. */
     private final TraversalDirection arrivingAs;
@@ -138,6 +141,7 @@ final class InputPath {
         there.walking = walking;
         there.followed = followed;
         there.aPositionIsAnOrigin = aPositionIsAnOrigin;
+        there.payloadsAreElements = payloadsAreElements;
         return wanted == null ? there.named(given.value(), given.at().names())
                 : there.heldAt(given.value(), wanted, given.at().names());
     }
@@ -300,6 +304,13 @@ final class InputPath {
         };
     }
 
+    /** Whether the payload of a call that answers an element of a container is that element: where
+     *  a value came from is asked of it, and so is whether its fields are the element's
+     *  ({@link #keepsItsFields}). */
+    private boolean readsAPayloadAsAnElement() {
+        return asksWhereItCameFrom() || payloadsAreElements;
+    }
+
     /** Whether the question in hand is where a value came from, however far it follows it. */
     private boolean asksWhereItCameFrom() {
         return asked == ElementQuestion.VALUE_ORIGIN || asked == ElementQuestion.WHAT_IT_IS_MADE_OF;
@@ -396,7 +407,7 @@ final class InputPath {
         return switch (e) {
             // A name an arm opened a lookup's answer under, where nothing else says what it is,
             // holds one of the map's values, and came from wherever those did.
-            case Core.Read r when asksWhereItCameFrom()
+            case Core.Read r when readsAPayloadAsAnElement()
                     && names.openedBy(r.binding()) instanceof InputReads.LookupOpened opened
                     && names.roleOf(r.binding()) instanceof BindingRole.Unknown
                     && AnOperationApplied.of(opened.lookup()) instanceof AnOperationApplied looked
@@ -404,7 +415,7 @@ final class InputPath {
                     heldAt(looked.args().get(1), new Wanted.APart(HeldIn.Part.ELEMENT), names);
             // The payload of a call that answers an element of a container is one of that
             // container's elements, and came from wherever they did.
-            case Core.Read r when asksWhereItCameFrom()
+            case Core.Read r when readsAPayloadAsAnElement()
                     && names.openedBy(r.binding()) instanceof InputReads.ElementOpened opened
                     && AnOperationApplied.of(opened.call().value()) instanceof AnOperationApplied answered
                     && DefaultBoundOperationFacts.get().answersAnElementOf(answered.operation())
@@ -637,14 +648,20 @@ final class InputPath {
     /**
      * Whether a field of {@code target} is where the answer for {@code target} has it. Under
      * {@link ElementQuestion#WHAT_IT_IS_MADE_OF} an answer is where a value came from, and a field
-     * is read at it only where the value is one the walk after where a value came from
-     * ({@link ElementQuestion#VALUE_ORIGIN}) follows: a record made out of an element of a list is
-     * no element, and has fields the element has none of.
+     * is read at it only where the value is the very values of a position: the walk after which
+     * position they stand at, which crosses what hands the elements on as they are and no
+     * operation that makes others of them, finds one ({@link ElementQuestion#NAMED_POSITION}).
+     * Where a value came from ({@link ElementQuestion#VALUE_ORIGIN}) is no such answer: a record
+     * made of each element of a list came from it and is no element, and has fields the element
+     * has none of.
      */
     private boolean keepsItsFields(Core target, BindingEnvironment names) {
-        return asked != ElementQuestion.WHAT_IT_IS_MADE_OF
-                || !(new InputPath(newtypes, ElementQuestion.VALUE_ORIGIN, reads)
-                        .named(target, names) instanceof PathResolution.NotAPosition);
+        if (asked != ElementQuestion.WHAT_IT_IS_MADE_OF) {
+            return true;
+        }
+        InputPath standing = new InputPath(newtypes, ElementQuestion.NAMED_POSITION, reads);
+        standing.payloadsAreElements = true;
+        return !(standing.named(target, names) instanceof PathResolution.NotAPosition);
     }
 
     /**

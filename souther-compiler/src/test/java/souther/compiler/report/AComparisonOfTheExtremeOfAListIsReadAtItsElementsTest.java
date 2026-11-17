@@ -211,6 +211,24 @@ class AComparisonOfTheExtremeOfAListIsReadAtItsElementsTest {
         assertTrue(saysNotReadAt(report, "bs[*].amount"), report);
     }
 
+    /** A record made of each element of a list of integers came from the elements and is none of
+     *  them: its field is no field of the elements, which have none. */
+    @Test
+    void aFieldOfARecordMadeOfTheElementsIsSaidUnreadAtTheElementsAndNotAtAFieldOfThem() {
+        String report = reading("""
+                module m
+
+                data Box = { amount: Int }
+
+                behavior role : (xs: List<Int>, i: Int) -> Int
+                    constructs Box
+                let role (xs, i) = if (match List.get(i, List.map(x -> Box { amount = x }, xs)) with | None -> false | Some b -> b.amount + 1 <= 10) then 1 else 2
+                """);
+
+        assertTrue(saysNotReadAt(report, "xs[*]"), report);
+        assertFalse(report.contains("xs[*].amount"), report);
+    }
+
     /** A value a {@code let} binds reaches the answer through the name the body reads it by. */
     @Test
     void aValueALetBindsIsSaidUnreadWhereTheBodyReadsItByItsName() {
