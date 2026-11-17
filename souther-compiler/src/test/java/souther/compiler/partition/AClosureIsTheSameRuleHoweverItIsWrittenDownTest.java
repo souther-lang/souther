@@ -429,14 +429,13 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
      * The same closure handed to a list the input holds and to one made of another is at the first
      * on one run and made of the second on the next, and the rule is owed at both.
      *
-     * <p>Where the name stands is the first's alone, with its field; where it was made from is the
-     * second's, and a field of a record the walk made is no field of what it was made from, so the
-     * place is the container.
+     * <p>Where the name stands is the first's alone; where it was made from is the second's, and
+     * the position leaves it out.
      */
     @Test
     void aSharedClosureOverAMadeListIsOwedAtWhatTheListWasMadeOf() {
         assertEquals(List.of("xs[*].age RuleAboutAnElementOfSeveralContainers",
-                        "ys[*] RuleAboutAnElementOfSeveralContainers"),
+                        "ys[*].age RuleAboutAnElementOfSeveralContainers"),
                 withoutALine("""
                         data Person = { age: Int }
 

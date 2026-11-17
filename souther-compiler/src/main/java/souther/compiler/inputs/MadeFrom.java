@@ -13,11 +13,11 @@ import java.util.Objects;
  * there.
  *
  * <p>So what only a position allows is not offered: no step into a field or an element of a place,
- * no narrowing to a case, and no join with the answer of a walk after where a value stands. A field
- * of a value is the answer for the value: a field of a record made of an element is not a field of
- * the element, and a place that is one is said by the walk after where the values stand, with its
- * field ({@link ValuesAt}), which a reader that wants a place a rule is drawn at asks
- * ({@link InputReads#pathOf}).
+ * no narrowing to a case, and no join with the answer of a walk after where a value stands. The
+ * walk itself reads a field off a place the values came from through what keeps them, and reads none
+ * through a payload, which an operation may have made of other values: a field of a record made of
+ * an element is not a field of the element. A reader that wants a place a rule is drawn at asks
+ * {@link InputReads#pathOf} ({@link ValuesAt}).
  *
  * <p><b>The two are said together by a reader whose expression stands at one of several places.</b>
  * What it stands at is the position's to say, and what it was made out of beyond that is this
