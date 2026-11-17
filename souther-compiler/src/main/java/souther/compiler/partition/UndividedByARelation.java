@@ -6712,10 +6712,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     && out.contains(each)) {
                 List<OnAWay> together = out.stream()
                         .filter(other -> sameRemainder(each, other)).toList();
-                if (allowTogether(together) && each.onARemainder().dividend().coefs().keySet()
+                boolean allowed = allowTogether(together);
+                if (allowed && each.onARemainder().dividend().coefs().keySet()
                         .stream().anyMatch(term ->
                                 freeToMeet(term, each, out, declined, past, read,
                                         narrowingsMet))) {
+                    out.removeAll(together);
+                } else if (allowed && jointlyFree(each, together, out, declined, past, read,
+                        narrowingsMet)) {
                     out.removeAll(together);
                 } else {
                     together.forEach(one -> notMetWith.put(one, out.size()));
@@ -6774,7 +6778,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
             }
             return choosesTheFormToARemainder(number, together, statement, conditions, declined,
-                    past, read, narrowingsMet);
+                    past, read, narrowingsMet, null);
         }
         if (takes == null) {
             return false;
@@ -6796,7 +6800,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                OnAWay statement, List<OnAWay> conditions,
                                                Optional<Set<String>> declined,
                                                DemandReading.Answered past, InputReading read,
-                                               List<RemainderCoverage.Proof> proved) {
+                                               List<RemainderCoverage.Proof> proved,
+                                               JointGroup joint) {
         NumericDomain.Bounds takes = valuesFreeToChoose(free, statement, conditions, declined,
                 past, read, false);
         TermOrders freeOrders = read.quantities().ordersOf(free);
@@ -6815,6 +6820,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             moves.add(move);
         }
         RowDemand.OnARemainder on = together.get(0);
+        // The statements are the family's, and each of them is held to hold where the number the
+        // run chooses is any the way's own statements of it leave.
         Map<NumericTerm, RemainderCoverage.Other> others = new LinkedHashMap<>();
         for (NumericTerm term : on.dividend().coefs().keySet()) {
             if (term.equals(free)) {
@@ -6841,10 +6848,247 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             others.put(term, new RemainderCoverage.Other(ends, chosen != null));
         }
         Optional<RemainderCoverage.Proof> shown = mine == null ? Optional.empty()
-                : RemainderCoverage.prove(free, mine, others, on.dividend(), moves,
-                        on.remainder().divisor(), past.narrowing(), least, greatest);
+                : joint == null
+                ? RemainderCoverage.prove(free, mine, others, on.dividend(), moves,
+                        on.remainder().divisor(), past.narrowing(), least, greatest)
+                : RemainderCoverage.proveJointly(free, mine, others, on.dividend(),
+                        joint.statements(), joint.ofTheNumber(), on.remainder().divisor(),
+                        past.narrowing(), least, greatest, joint.low(), joint.high());
         shown.ifPresent(proved::add);
         return shown.isPresent();
+    }
+
+    /**
+     * The statements of a remainder of one form that a run states of a number it chooses, the
+     * way's own, held together with the statements of the form's remainder.
+     *
+     * @param statements  every statement of the form's remainder, as the program moves the form
+     *                    by the number and a constant
+     * @param ofTheNumber the statements of the number alone
+     * @param members     the run's statements among {@code statements}, which are taken away with
+     *                    the statements of the remainder
+     * @param low         the least the number lies at on every row of the way
+     * @param high        the most
+     */
+    private record JointGroup(List<RemainderCoverage.Moved> statements,
+                              List<RemainderCoverage.Moved> ofTheNumber, List<OnAWay> members,
+                              long low, long high) {}
+
+    /**
+     * Whether choosing one number of the form brings the statements of the form's remainder and
+     * the run's statements of it to hold on every row of the way for every number the run may
+     * choose, and if so takes them out of {@code out}.
+     *
+     * <p>The run's statements that name the number and the form are met together with the
+     * remainder's; the run's statements of the number alone, and what else the way states of it
+     * or of the places it turns on, stay as stated. They are not asked to hold at a number
+     * apart from the others: the number is the run's, and the claim is that every number they
+     * leave is one the choice meets the statements at ({@link RemainderCoverage#proveJointly}).
+     */
+    private boolean jointlyFree(OnAWay statement, List<OnAWay> together, List<OnAWay> out,
+                                Optional<Set<String>> declined, DemandReading.Answered past,
+                                InputReading read, List<RemainderCoverage.Proof> proved) {
+        JointGroup group = jointGroupOf(together, out, read);
+        if (group == null) {
+            return false;
+        }
+        List<OnAWay> rest = new ArrayList<>(out);
+        rest.removeAll(group.members());
+        List<RowDemand.OnARemainder> remainders = together.stream()
+                .map(OnAWay::onARemainder).toList();
+        boolean chosen = statement.onARemainder().dividend().coefs().keySet().stream()
+                .anyMatch(term -> term instanceof NumericTerm.FromOnePosition number
+                        && choosesTheFormToARemainder(number, remainders, statement, rest,
+                                declined, past, read, proved, group));
+        if (chosen) {
+            out.removeAll(group.members());
+        }
+        return chosen;
+    }
+
+    /**
+     * The statements of the remainder {@code together} state, and the run's statements of the
+     * same form moved by one number the run chooses, or null where the run states none or the
+     * number is not held between two ends on every row of the way.
+     */
+    private JointGroup jointGroupOf(List<OnAWay> together, List<OnAWay> conditions,
+                                    InputReading read) {
+        ARemainderMoved.Said said = ARemainderMoved.saidBy(together.get(0).onARemainder())
+                .orElse(null);
+        if (said == null || said.stated().of().divisor().compareTo(
+                BigInteger.valueOf(JointResidues.MOST_DIVISOR)) > 0) {
+            return null;
+        }
+        BigInteger divisor = said.stated().of().divisor();
+        int modulus = divisor.intValueExact();
+        List<RemainderCoverage.Moved> statements = new ArrayList<>();
+        for (OnAWay each : together) {
+            ARemainderMoved moved = ARemainderMoved.of(each.onARemainder()).orElse(null);
+            Set<Integer> allowed = remaindersOf(each.onARemainder().leaves(), modulus);
+            if (moved == null || allowed == null) {
+                return null;
+            }
+            statements.add(new RemainderCoverage.Moved(moved.by(), BigInteger.ZERO, allowed));
+        }
+        List<RemainderCoverage.Moved> ofTheNumber = new ArrayList<>();
+        List<OnAWay> members = new ArrayList<>();
+        Quantity.OfABinding number = null;
+        for (OnAWay each : conditions) {
+            if (!(each.statedOfTheRun() instanceof Proposition.Compared(
+                    Relation relation, boolean holds, var _, var _))
+                    || !(relation instanceof Relation.Affine affine)
+                    || affine.form().coefs().size() != 1
+                    || !(affine.form().coefs().keySet().iterator().next()
+                            instanceof Quantity.RemainderOfADividend remainder)
+                    || !remainder.divisor().equals(divisor)) {
+                continue;
+            }
+            Map<NumericTerm, ExactRatio> inputs = new LinkedHashMap<>();
+            Quantity.OfABinding bound = null;
+            BigInteger weighs = BigInteger.ZERO;
+            boolean mine = true;
+            for (Map.Entry<Quantity, ExactRatio> part : remainder.dividend().coefs().entrySet()) {
+                if (part.getKey() instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)) {
+                    inputs.put(term, part.getValue());
+                } else if (part.getKey() instanceof Quantity.OfABinding value
+                        && wholeNumberOf(part.getValue()) != null
+                        && (bound == null || bound.equals(value))) {
+                    bound = value;
+                    weighs = wholeNumberOf(part.getValue());
+                } else {
+                    mine = false;
+                }
+            }
+            BigInteger shift = wholeNumberOf(remainder.dividend().constant());
+            WholeNumberRuns leaves = RowDemand.OnARemainder.meeting(affine,
+                    holds ? affine.proposition() : affine.proposition().denied());
+            Set<Integer> allowed = leaves == null ? null : remaindersOf(leaves, modulus);
+            if (!mine || shift == null || allowed == null || bound == null
+                    || (number != null && !number.equals(bound))) {
+                continue;
+            }
+            if (inputs.equals(said.stated().of().weighing())) {
+                statements.add(new RemainderCoverage.Moved(shift, weighs, allowed));
+                members.add(each);
+                number = bound;
+            } else if (inputs.isEmpty()) {
+                ofTheNumber.add(new RemainderCoverage.Moved(shift, weighs, allowed));
+                number = bound;
+            }
+        }
+        if (members.isEmpty() || number == null) {
+            return null;
+        }
+        BigInteger[] between = theNumberLiesBetween(number, conditions, read);
+        if (between == null || between[0].bitLength() > Long.SIZE - 1
+                || between[1].bitLength() > Long.SIZE - 1) {
+            return null;
+        }
+        return new JointGroup(statements, ofTheNumber, members, between[0].longValueExact(),
+                between[1].longValueExact());
+    }
+
+    /** The remainders by {@code divisor} that {@code runs} holds, or null where it holds none. */
+    private static Set<Integer> remaindersOf(WholeNumberRuns runs, int divisor) {
+        Set<Integer> out = new LinkedHashSet<>();
+        for (int r = 0; r < divisor; r++) {
+            if (runs.holds(BigInteger.valueOf(r))) {
+                out.add(r);
+            }
+        }
+        return out.isEmpty() ? null : out;
+    }
+
+    /**
+     * The least and the greatest the number {@code number} may be on any row of the way, from the
+     * run's statements that hold it from one end or the other against nothing but a number of the
+     * input, or null where either end is not shown.
+     *
+     * <p>Each end is the widest the statement leaves over the values the other number takes on
+     * any row, and the ends are met: the least of the greatests and the greatest of the leasts
+     * are no narrower than any row's. A statement of another form says nothing here, which leaves
+     * the ends no narrower.
+     */
+    private BigInteger[] theNumberLiesBetween(Quantity.OfABinding number,
+                                              List<OnAWay> conditions, InputReading read) {
+        BigInteger low = null;
+        BigInteger high = null;
+        for (OnAWay each : conditions) {
+            // Some element held to the relation is an element that holds it, a value of the
+            // element's own ends.
+            Proposition stated = each.statedOfTheRun() instanceof Proposition.Some some
+                    && some.holds() ? some.ofTheElement() : each.statedOfTheRun();
+            if (!(stated instanceof Proposition.Compared(
+                    Relation relation, boolean holds, var _, var _))
+                    || !(relation instanceof Relation.Affine affine)
+                    || !affine.form().coefs().containsKey(number)) {
+                continue;
+            }
+            Rel rel = holds ? affine.proposition() : affine.proposition().denied();
+            BigInteger onNumber = wholeNumberOf(affine.form().coefs().get(number));
+            BigInteger constant = wholeNumberOf(affine.form().constant());
+            if (onNumber == null || onNumber.abs().compareTo(BigInteger.ONE) != 0
+                    || constant == null) {
+                continue;
+            }
+            // The form is held at or above nought: turned round where it is held below, once
+            // each way where it is held equal, and one less where the relation is strict, which
+            // is of whole numbers throughout.
+            List<Boolean> turns = switch (rel) {
+                case GE, GT -> List.of(false);
+                case LE, LT -> List.of(true);
+                case EQ -> List.of(false, true);
+                case NE -> List.of();
+            };
+            boolean strict = rel == Rel.GT || rel == Rel.LT;
+            for (boolean turned : turns) {
+                BigInteger sign = turned ? BigInteger.ONE.negate() : BigInteger.ONE;
+                BigInteger weighs = onNumber.multiply(sign);
+                // The most the rest of the form comes to on any row, with the constant: the
+                // statement is the widest there, which is what every row's is within.
+                BigInteger most = constant.multiply(sign).subtract(strict ? BigInteger.ONE
+                        : BigInteger.ZERO);
+                boolean known = true;
+                for (Map.Entry<Quantity, ExactRatio> part : affine.form().coefs().entrySet()) {
+                    if (part.getKey().equals(number)) {
+                        continue;
+                    }
+                    BigInteger by = wholeNumberOf(part.getValue());
+                    WholeEnds ends = by != null && part.getKey()
+                            instanceof DecisionAtom.OfTheInput(NumericTerm term, var _)
+                            ? keptEndsOf(term, read) : null;
+                    if (ends == null || ends.low() == null || ends.high() == null) {
+                        known = false;
+                        break;
+                    }
+                    BigInteger on = by.multiply(sign);
+                    most = most.add(on.signum() >= 0 ? on.multiply(ends.high())
+                            : on.multiply(ends.low()));
+                }
+                if (!known) {
+                    continue;
+                }
+                // weighs * number + rest + constant >= 0.
+                if (weighs.signum() > 0) {
+                    low = low == null ? most.negate() : low.max(most.negate());
+                } else {
+                    high = high == null ? most : high.min(most);
+                }
+            }
+        }
+        return low == null || high == null || low.compareTo(high) > 0 ? null
+                : new BigInteger[] {low, high};
+    }
+
+    /** The ends a number of the input takes on every row of the way, or null where not shown. */
+    private WholeEnds keptEndsOf(NumericTerm term, InputReading read) {
+        TermOrders orders = term instanceof NumericTerm.FromOnePosition number
+                ? read.quantities().ordersOf(number) : null;
+        if (orders == null || !(read.quantities().region().projectionOf(term)
+                instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within))) {
+            return null;
+        }
+        return wholeEndsOf(within.meet(orders.answered().whereItStops()));
     }
 
     /**
@@ -6983,9 +7227,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             // A statement that places no row and says nothing of what stands is one whose places
             // are not told by its positions: a remainder is taken away only where none such
-            // stands beside it.
+            // stands beside it. What a statement the run says whether it held turns on is told
+            // by what it reads, and was asked above.
             if (statement.onARemainder() != null && other.positions().isEmpty()
-                    && !other.whatStands()) {
+                    && !other.whatStands() && other.statedOfTheRun() == null) {
                 return null;
             }
         }
