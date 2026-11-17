@@ -130,6 +130,9 @@ class WhoMaySayWhatARuleHandleReadsAsTest {
             // The rule a line of which was not worked out for its many cases, beside what those
             // cases were: the same rule the partition's own entries name for why.
             REPORT + "#caseExpansionRow",
+            // The rule a line of which was read all the same at a cost, beside the helper its
+            // cases choose among: the same rule again.
+            REPORT + "#costlyReadingRow",
             REPORT + "#finding",
             REPORT + "#obligations",
             // The rule a run of a row stopped at, beside the combination no row was found for: the
