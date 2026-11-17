@@ -155,6 +155,22 @@ public final class WhatARunMayEndFor {
     }
 
     /**
+     * Whether something in {@code e}, a call handed a closure written at it asked apart from the
+     * closure, is known to end a run for some reason. What is not known
+     * ({@link Endings.NotKnown}) is not looked on, and is neither a stop nor the lack of one.
+     */
+    public static boolean someKnownEndingBeneath(Core e) {
+        Core here = Core.withoutStanding(e);
+        if (itselfApartFromTheClosuresWrittenAtIt(here) instanceof Endings.Known(var kinds)
+                && !kinds.isEmpty()) {
+            return true;
+        }
+        boolean[] under = {false};
+        Core.forEachChild(here, child -> under[0] |= someKnownEndingBeneath(child));
+        return under[0];
+    }
+
+    /**
      * The same, apart from the expressions in {@code apart}, which are asked of someone else:
      * the elements of a list a reading takes one by one.
      */

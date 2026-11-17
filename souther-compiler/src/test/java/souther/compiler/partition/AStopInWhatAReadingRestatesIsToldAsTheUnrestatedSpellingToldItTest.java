@@ -60,7 +60,11 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         CONDITIONS.put("sumOfAStep", "List.sum(List.map(x -> x + 1, ds)) >= 10");
         CONDITIONS.put("sumOfAStepWithAProduct", "List.sum(List.map(x -> x * 2, ds)) >= 10");
         CONDITIONS.put("sumOfTheElements", "List.sum(ds) >= 10");
-        CONDITIONS.put("none", "q >= q");
+        CONDITIONS.put("foldOfAStep",
+                "List.fold((w, l) -> w + l, 0, List.map(x -> x + 1, ds)) >= 10");
+        CONDITIONS.put("maxOfAStep",
+                "Option.withDefault(0, List.max(List.map(x -> x - q, ds))) >= 3");
+        CONDITIONS.put("maxOfTheElements", "Option.withDefault(0, List.max(ds)) + 1 <= 10");        CONDITIONS.put("none", "q >= q");
         CONDITIONS.put("armNoStop", "(if q > 5 then q - 1 else 3) >= q");
         CONDITIONS.put("nestedArmNoStop",
                 "(if q > 5 then (if q > 7 then q - 1 else 3) else 4) >= q");
@@ -142,6 +146,16 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         assertEquals(1, TOLD.get("sumOfAStep").size(), TOLD.toString());
         assertEquals(1, TOLD.get("sumOfAStepWithAProduct").size(), TOLD.toString());
         assertEquals(List.of(), TOLD.get("sumOfTheElements"));
+    }
+
+    /** A comparison whose reading stopped is asked what it works out all the same: a run that
+     *  works out an operation that may stop it may stop, and a step no element is handed to
+     *  stops none. */
+    @Test
+    void anOperationInAComparisonNothingReadIsToldAsOneAMayStop() {
+        assertEquals(1, TOLD.get("foldOfAStep").size(), TOLD.toString());
+        assertEquals(1, TOLD.get("maxOfAStep").size(), TOLD.toString());
+        assertEquals(1, TOLD.get("maxOfTheElements").size(), TOLD.toString());
     }
 
     /** The other side of a comparison of a walk is worked out whatever the walk answers. */

@@ -880,12 +880,19 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              */
             private void tellHeld(Core node, WhereAnOperatorAnswers.WhereItsExactValueIsHeld held,
                                   LinearForm<NumericTerm> form, List<Integer> after) {
+                tellHeld(told, node, held, form, after);
+            }
+
+            /** The same, told into {@code into}. */
+            private void tellHeld(WhatWasTold into, Core node,
+                                  WhereAnOperatorAnswers.WhereItsExactValueIsHeld held,
+                                  LinearForm<NumericTerm> form, List<Integer> after) {
                 UndividedByARelation.IntOperation operation =
                         UndividedByARelation.IntOperation.overTheInput(form, held.least(),
                                 held.greatest(), after);
                 if (!FormRange.liesWithin(form, ofTheInput, Map.of(), held.least(), held.greatest())
-                        && !told.told(operation)) {
-                    told.add(node, operation);
+                        && !into.told(operation)) {
+                    into.add(node, operation);
                 }
             }
 
@@ -1633,6 +1640,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 }
                 LinearForm<NumericTerm> answer = new LinearForm<>(walk.seed(),
                         walk.added().coefs());
+                tellWhatIsWorkedOutAtEachElement(node, addedAsItIs(walk.added()));
                 named.addAll(answer.coefs().keySet());
                 SeededWalk seeded = SeededWalk.of(node, closure -> Core.withoutStanding(closure)
                         instanceof Core.Block block ? block : null);
@@ -1755,19 +1763,26 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             /**
-             * What a run works out at each element, the number {@code total} adds up, told as the
-             * one operation it is over the element's place: held to an {@code Int} at every
-             * element, and so a run stops at the element that takes it past the ends, whatever the
-             * total comes to. Nothing is told where the elements' places keep it within them.
+             * What a run works out at each element, the number {@code total} adds up: the walk
+             * that reads the total answers for the running totals, and a row of a line is not
+             * asked to get past what each element comes to, but a run works it out at every
+             * element and stops at one that takes it past the ends of an {@code Int}
+             * ({@link WhatWasTold#leftToTheWitness}). Nothing is told where the elements' places
+             * keep it within them, nor where the number is not a whole one.
              */
             private void tellWhatIsWorkedOutAtEachElement(Core node, NumericTerm total) {
-                if (total instanceof NumericTerm.TakenOver over
+                if (Core.withoutStanding(node).type() == Type.INT
+                        && total instanceof NumericTerm.TakenOver over
                         && over.source() instanceof RunSource.ComputedOccurrences(
                                 TermPath elements, ElementValue.Affine(var each), _, _)
                         && WhereAnOperatorAnswers.ofATotal(Type.INT)
                         instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
-                    tellHeld(node, held, each.over(place -> LinearForm.atom(
+                    WhatWasTold apart = told.apart();
+                    tellHeld(apart, node, held, each.over(place -> LinearForm.atom(
                             new NumericTerm.ValueOf(place.from(elements)))), List.of());
+                    if (!apart.operations.isEmpty()) {
+                        told.leftToTheWitness(apart);
+                    }
                 }
             }
 
