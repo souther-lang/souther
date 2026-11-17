@@ -9,9 +9,9 @@ import souther.compiler.check.Symbols;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.meaning.WrittenOfANode;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
@@ -68,12 +68,12 @@ final class LineDownATree {
                    DeclarationNewtypes newtypes) {
         RecursionOverATree search = recursion.search().orElse(null);
         if (search == null || !(reads.pathOf(args.get(search.node()), newtypes)
-                instanceof PathResolution.At(TermPath root)) || !RunSource.oneTreeStandsAt(root)) {
+                instanceof ValuesAt.At(TermPath root)) || !RunSource.oneTreeStandsAt(root)) {
             return null;
         }
         for (int at = 0; at < args.size(); at++) {
             if (at != search.node() && !(reads.pathOf(args.get(at), newtypes)
-                    instanceof PathResolution.At(TermPath stays)
+                    instanceof ValuesAt.At(TermPath stays)
                     && WrittenOfANode.apart(stays, root))) {
                 return null;
             }
@@ -152,8 +152,8 @@ final class LineDownATree {
         }
 
         private boolean sides(Core ofTheNode, Core handed, InputReads at) {
-            if (!(at.pathOf(ofTheNode, newtypes) instanceof PathResolution.At(TermPath held))
-                    || !(at.pathOf(handed, newtypes) instanceof PathResolution.At(TermPath sought))
+            if (!(at.pathOf(ofTheNode, newtypes) instanceof ValuesAt.At(TermPath held))
+                    || !(at.pathOf(handed, newtypes) instanceof ValuesAt.At(TermPath sought))
                     || !held.isAtOrUnder(root) || held.equals(root)
                     || !WrittenOfANode.apart(sought, root)) {
                 return false;
@@ -182,7 +182,7 @@ final class LineDownATree {
                 case Core.Read read -> env.get(read.binding());
                 case Core.ListLit list -> list.elements().isEmpty() ? new Abs.Nothing()
                         : list.elements().size() == 1 && here.pathOf(list.elements().getFirst(),
-                                newtypes) instanceof PathResolution.At(TermPath held)
+                                newtypes) instanceof ValuesAt.At(TermPath held)
                                 && held.isAtOrUnder(root) ? new Abs.One() : null;
                 case Core.LetIn let -> {
                     Abs value = eval(let.value(), here, env);
@@ -240,7 +240,7 @@ final class LineDownATree {
             // of its order, or hands them from the last, is a search for another node.
             if (!walk.inTheContainersOrder()
                     || !(eval(walk.seed(), here, env) instanceof Abs.Nothing)
-                    || !(here.pathOf(walk.container(), newtypes) instanceof PathResolution.At(
+                    || !(here.pathOf(walk.container(), newtypes) instanceof ValuesAt.At(
                             TermPath over))
                     || over.steps().size() != root.steps().size() + 1
                     || !over.isAtOrUnder(root)

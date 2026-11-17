@@ -21,8 +21,8 @@ import souther.compiler.inputs.ComparedNumbers;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.InputTruth;
 import souther.compiler.inputs.WhatAConditionRuns;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.TypeSymbol;
 
@@ -253,11 +253,11 @@ final class CoverageNaming implements Naming<Outcome> {
         // What a fork is named by is the position it is on, and a scrutinee at none names nothing —
         // which is also what a scrutinee this reading did not follow leaves to name it with.
         TermPath at = switch (reads.pathOf(match.scrutinee(), newtypes)) {
-            case PathResolution.At(var stands) -> stands;
-            case PathResolution.NotAPosition _ -> null;
+            case ValuesAt.At(var stands) -> stands;
+            case ValuesAt.NotAPosition _ -> null;
             // A name that only may stand at a position names no one position for a fork to be on,
             // and a name built out of the ones it may be would be a place no reader could look up.
-            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
+            case ValuesAt.MayStandAt _ -> null;
         };
         if (at == null) {
             return null;

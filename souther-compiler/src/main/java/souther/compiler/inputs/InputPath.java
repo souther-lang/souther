@@ -448,7 +448,7 @@ final class InputPath {
             case Core.Read r when asked == ElementQuestion.WHAT_IT_IS_MADE_OF
                     && reads.pickedAtAnIndex(r) instanceof InputReads.PickedAtAnIndex picked
                     && !(reads.pathOf(picked.list().value(), newtypes)
-                            instanceof PathResolution.At) -> originOfWhatWasPicked(picked);
+                            instanceof ValuesAt.At) -> originOfWhatWasPicked(picked);
             // What the name is, asked once, and the step that answers is the answer. An element is
             // answered by the container it came from even where that container is at no position:
             // the value a rewrite left under such a name is what the walk before it made of an

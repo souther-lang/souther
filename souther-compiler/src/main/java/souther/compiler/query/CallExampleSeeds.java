@@ -9,8 +9,8 @@ import souther.compiler.check.Sig;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.RowStatement;
@@ -102,7 +102,7 @@ final class CallExampleSeeds {
         for (CallRead each : calls) {
             List<Optional<TermPath>> at = new ArrayList<>();
             for (Core argument : each.applied().args()) {
-                at.add(each.reads().pathOf(argument, input.newtypes()) instanceof PathResolution.At(
+                at.add(each.reads().pathOf(argument, input.newtypes()) instanceof ValuesAt.At(
                         TermPath path) ? Optional.of(path) : Optional.empty());
             }
             out.add(new Call((ValueName.Behavior) each.applied().operation(), at));

@@ -34,11 +34,11 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.NumericTerms;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.TotalsOfOneRun;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.inputs.WrittenOperation;
 import souther.compiler.inputs.WrittenOutElements;
 import souther.compiler.meaning.Quantity;
@@ -1997,12 +1997,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 // that stands nowhere is arithmetic's to walk into, since it is no place a row
                 // writes at.
                 boolean stands = switch (at.pathOf(fa.target(), ruleSource.newtypes())) {
-                    case PathResolution.At _ -> true;
-                    case PathResolution.NotAPosition _ -> false;
+                    case ValuesAt.At _ -> true;
+                    case ValuesAt.NotAPosition _ -> false;
                     // A target that may stand at a position of the input does, on some run, and
                     // which is not for arithmetic to decide by walking into it. Read through, a
                     // field of it would be a term over a place it may never stand at.
-                    case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> true;
+                    case ValuesAt.MayStandAt _ -> true;
                 };
                 return !stands
                         && !Location.isStep(fa.target().type(), fa.field(), ruleSource.newtypes());

@@ -16,9 +16,9 @@ import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.inputs.WhereAnEquationHolds;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.regex.PatternPlan;
@@ -536,9 +536,9 @@ public final class BehaviorSetStatements {
                     new NumericTerm.ValueOf(pieces.at()),
                     pieces.outside() ? outside : within, pieces.outside() ? within : outside));
         }
-        PathResolution stands = each.reads().pathOf(each.subject(), newtypes);
-        if (!(stands instanceof PathResolution.At at)) {
-            return saidWithoutADenominator(each, stands, symbols, newtypes, answering);
+        ValuesAt stands = each.reads().pathOf(each.subject(), newtypes);
+        if (!(stands instanceof ValuesAt.At at)) {
+            return whereItsValueCameFrom(each, symbols, newtypes, answering);
         }
         NumericTerm.FromOnePosition term = new NumericTerm.ValueOf(at.path());
         return switch (each.reading()) {
@@ -555,36 +555,18 @@ public final class BehaviorSetStatements {
     }
 
     /**
-     * What a rule whose subject stands at no one position comes to, and where to say it.
+     * What a rule whose subject stands at no one position comes to, and where to say it: read out
+     * of where its value came from, which holds the places the subject may stand at as well as
+     * those it was made out of.
      *
      * <p>Two ways for that, and they are different sentences. A value an operation made out of what
      * stands somewhere is about that value, and what the rule says about the values at the position
      * it came from would take reading the operation backwards. A value that <em>is</em> what stands
      * somewhere, in a block handed to more than one walk, is about the input at whichever of the
      * places it may stand at this run is — nothing was made out of it and there is no operation to
-     * read backwards.
-     *
-     * <p>Both are said at every place they may be about, and neither holds a position's classes
-     * open: what is missing is not a distinction the classes would have been composed from, it is
-     * which position the rule was of.
-     */
-    private static Outcome saidWithoutADenominator(PredicateReadings.Reading each,
-                                                   PathResolution stands, Symbols symbols,
-                                                   DeclarationNewtypes newtypes,
-                                                   souther.compiler.coverage.Arrivals answering) {
-        return switch (stands) {
-            case PathResolution.MayStandAt several ->
-                    saying(OwedWhereItCameFrom.ofSeveral(several));
-            case PathResolution.NotAPosition _, PathResolution.MadeOf _ ->
-                    whereItsValueCameFrom(each, symbols, newtypes, answering);
-            // The caller asks this only where the subject stands at no one place.
-            case PathResolution.At at -> throw new IllegalArgumentException(
-                    "a rule whose subject stands at " + at.path() + " has a denominator");
-        };
-    }
-
-    /**
-     * The same for a subject that is at no one position, read out of what its value is made of.
+     * read backwards. Both are said at every place they may be about, and neither holds a
+     * position's classes open: what is missing is not a distinction the classes would have been
+     * composed from, it is which position the rule was of.
      *
      * <p>Asked of {@link ValueOrigin}, which is where what an expression is made of is worked out
      * for every reader of a body, and read off the arms of it that say where a value came from
@@ -596,7 +578,7 @@ public final class BehaviorSetStatements {
      * and an author who wrote a rule about the joined string is owed the sentence at each — filed
      * at one of them, the other comes back as a position the model says nothing about.
      *
-     * <p>A subject that <em>is</em> what stands at more than one place is asked first, and of the
+     * <p>A subject that <em>is</em> what stands at more than one place is asked first, of the
      * reading rather than of what the value is made of. That is the other sentence — nothing was
      * made out of it and there is no operation to read backwards — and it is not the choice a body
      * writes: what may stand at several places is one name whose position differs from run to run,
@@ -932,10 +914,10 @@ public final class BehaviorSetStatements {
             // positions it names, and a term over a place nothing settled is a term at whichever
             // place a reader picked. Asked first, so a fork over such a part is filed at each of
             // them rather than at none — which is where the rule the author wrote would go.
-            if (part.at().pathOf(part.value(), newtypes)
-                    instanceof PathResolution.MayStandAt(var among)) {
-                among.forEach(at -> filed.putIfAbsent(FilingCoordinate.at(at),
-                        new BlockReason.RuleAboutAnElementOfSeveralContainers()));
+            if (part.at().pathOf(part.value(), newtypes) instanceof ValuesAt.MayStandAt) {
+                part.at().cameFrom(part.value(), newtypes).places().forEach(at ->
+                        filed.putIfAbsent(FilingCoordinate.at(at),
+                                new BlockReason.RuleAboutAnElementOfSeveralContainers()));
                 continue;
             }
             GuardThresholds.Names names = GuardThresholds.namesIn(part.value(), part.at(),
@@ -972,7 +954,7 @@ public final class BehaviorSetStatements {
     private static boolean namesSomething(Denotation part, Symbols symbols,
                                           DeclarationNewtypes newtypes,
                                           souther.compiler.coverage.Arrivals answering) {
-        return part.at().pathOf(part.value(), newtypes) instanceof PathResolution.MayStandAt
+        return part.at().pathOf(part.value(), newtypes) instanceof ValuesAt.MayStandAt
                 || !GuardThresholds.namesIn(part.value(), part.at(), symbols, newtypes, answering)
                         .met().isEmpty();
     }
