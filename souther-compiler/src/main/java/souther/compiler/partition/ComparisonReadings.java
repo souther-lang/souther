@@ -772,6 +772,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     : in.conditions().whereItsOperatorsAnswer(part, reads, in.read());
             DemandReading.Answered ofIt = operators.answers().isPresent()
                     ? DemandReading.regionAnswered(operators.answers().get(), in.read())
+                            .atTheEndsOfARepresentation(operators.atTheEnds()
+                                    .map(ends -> DemandReading.regionAnswered(ends, in.read())
+                                            .narrowing())
+                                    .orElse(List.of()))
                     : DemandReading.Answered.NOTHING;
             if (ofTheRelationItself) {
                 out = out.and(ofIt.ofTheRelationItself(in.read().quantities().region()));

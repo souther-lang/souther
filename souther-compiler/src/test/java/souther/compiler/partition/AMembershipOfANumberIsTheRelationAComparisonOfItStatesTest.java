@@ -4,10 +4,12 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ItemAssessment;
+import souther.compiler.report.AdequacyReport;
 
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -15,7 +17,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
@@ -147,31 +148,18 @@ class AMembershipOfANumberIsTheRelationAComparisonOfItStatesTest {
             holidaysOfEveryCandidate.add("d cal.holidays[*]" + (j == 0 ? "" : " - " + j));
         }
         // Every candidate is worked out before any is looked at, and the fourth is three days on,
-        // so a row has {@code d} no later than three days before the last date. The first
-        // candidate is {@code d}, so a holiday on the last three dates is one no row compares it
-        // with: the comparison of {@code d} with a holiday comes out false there whatever
-        // {@code d} is, and the line is drawn where that starts. The later candidates still meet
-        // those holidays, each on the lines already drawn. A calendar may hold several holidays,
-        // and each of the last three dates is one only a later candidate meets, so each is a
-        // line of its own.
-        Map<String, LocalDate> pastEveryCandidate = new TreeMap<>();
-        for (int past = 0; past < 3; past++) {
-            LocalDate day = LocalDate.MAX.minusDays(2 - past);
-            pastEveryCandidate.put("cal.holidays[*] " + day, day);
-        }
+        // so a run stops before the comparison where {@code d} is one of the last three dates.
+        // That is where the representation of a date stops, and no line of the model's: no
+        // holiday on those dates is drawn apart from the others ({@link
+        // #aDateAtTheEndOfTheCalendarIsAStopAndNoLine}).
         Set<String> everyLine = new TreeSet<>(everyCandidate);
         everyLine.addAll(holidaysOfEveryCandidate);
-        everyLine.addAll(pastEveryCandidate.keySet());
         assertEquals(everyLine, linesOf(withHolidays));
         Pattern candidate = Pattern.compile(
                 "Int\\.floorMod\\(-cal\\.aSunday \\+ d(?: \\+ (\\d))?, 7\\) (\\d)");
         List<String> reachedPastAClosedDay = new ArrayList<>();
         Pattern holidayOf = Pattern.compile("d cal\\.holidays\\[\\*](?: - (\\d))?");
         everyRowAt(withHolidays, (line, row) -> {
-            if (pastEveryCandidate.containsKey(line)) {
-                return dates(field(row.getFirst(), "holidays"))
-                        .contains(pastEveryCandidate.get(line));
-            }
             Matcher holiday = holidayOf.matcher(line);
             if (holiday.matches()) {
                 int k = holiday.group(1) == null ? 0 : Integer.parseInt(holiday.group(1));
@@ -195,6 +183,46 @@ class AMembershipOfANumberIsTheRelationAComparisonOfItStatesTest {
             return weekday(sunday, d.plusDays(j)) == Integer.parseInt(on.group(2));
         });
         assertFalse(reachedPastAClosedDay.isEmpty());
+    }
+
+    /**
+     * Where the last candidate is past the last date of the calendar, the list of candidates is
+     * not built, and a run stops before the search: no line is drawn there, and the report says
+     * of the holidays the search compares that a run may stop on the way to the comparison.
+     */
+    @Test
+    void aDateAtTheEndOfTheCalendarIsAStopAndNoLine() {
+        String withHolidays = FINDS.formatted(CALENDAR.formatted(NOT_A_HOLIDAY));
+        assertTrue(linesOf(withHolidays).stream().noneMatch(line ->
+                line.contains(String.valueOf(LocalDate.MAX.getYear()))), withHolidays);
+        assertTrue(notRead(withHolidays).stream().anyMatch(line ->
+                line.contains("a run may stop on the way to it")
+                        && line.contains("about `cal.holidays[*]`")), withHolidays);
+    }
+
+    /**
+     * A date the model writes is a line of the model's, whatever the calendar holds past it: a
+     * search reached only before it draws the line there.
+     */
+    @Test
+    void aDateTheModelWritesIsALine() {
+        String written = """
+                module demo
+                behavior f : (holidays: Set<Date>, d: Date) -> Bool
+                let f (holidays, d) =
+                    d <= Date("2099-12-31") && Set.contains(d, holidays)
+                """;
+        assertTrue(linesOf(written).stream().anyMatch(line -> line.contains("2099-12-31")),
+                linesOf(written).toString());
+    }
+
+    /** The lines of the report saying what was not read, for {@code model}. */
+    private static List<String> notRead(String model) {
+        Compilation compilation = measured(model);
+        return AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .filter(line -> line.contains("not read:"))
+                .toList();
     }
 
     /** Each line of {@code model}'s {@code f}, as what it is drawn on and where. */

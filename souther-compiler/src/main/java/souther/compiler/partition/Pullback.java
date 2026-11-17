@@ -1583,6 +1583,7 @@ final class Pullback {
                 : WhatABodyReads.namesReadBy(body, comparisonHolding(body, apart));
         Operators[] told = new Operators[1];
         List<ConstructionAsk> asked = new ArrayList<>();
+        List<Derivation> atTheEnds = new ArrayList<>();
         List<Derivation> answers = inAComparisonsScope(true, () -> {
             if (apart == null) {
                 operated.within = body;
@@ -1593,19 +1594,21 @@ final class Pullback {
                 leaveUnsaidWhatMayEndARunUnder(body, reads, null);
             }
             told[0] = operated;
-            return whereEachOperatorAnswers(operated, asked);
+            return whereEachOperatorAnswers(operated, asked, atTheEnds);
         });
-        Derivation answered = null;
-        for (Derivation one : answers) {
-            answered = answered == null ? one
-                    : new Derivation.Joined(ConditionJoin.BOTH, answered, one);
+        return new OperatorsAnswer(bothOf(answers), told[0].unsaidGroups,
+                told[0].unsaidGroupsWhere, told[0].unsaidElsewhere, told[0].obligations,
+                told[0].afterTheFirst, told[0].relationStandsWhere(), asked,
+                bothOf(atTheEnds));
+    }
+
+    /** What {@code parts} state together, or nothing where there are none. */
+    private Optional<Proposition> bothOf(List<Derivation> parts) {
+        Derivation both = null;
+        for (Derivation one : parts) {
+            both = both == null ? one : new Derivation.Joined(ConditionJoin.BOTH, both, one);
         }
-        return new OperatorsAnswer(
-                answered == null ? Optional.empty()
-                        : Optional.of(pulled(answered).proposition()),
-                told[0].unsaidGroups, told[0].unsaidGroupsWhere, told[0].unsaidElsewhere,
-                told[0].obligations, told[0].afterTheFirst, told[0].relationStandsWhere(),
-                asked);
+        return both == null ? Optional.empty() : Optional.of(pulled(both).proposition());
     }
 
     /**
@@ -9476,7 +9479,8 @@ final class Pullback {
         /** What is left unsaid and owed here, with nothing told of where an operator answers. */
         OperatorsAnswer leftUnsaid() {
             return new OperatorsAnswer(Optional.empty(), unsaidGroups, unsaidGroupsWhere,
-                    unsaidElsewhere, obligations, afterTheFirst, relationStandsWhere(), List.of());
+                    unsaidElsewhere, obligations, afterTheFirst, relationStandsWhere(), List.of(),
+                    Optional.empty());
         }
 
         /** What has been told so far, which is the same only while nothing more has. */
@@ -9635,12 +9639,15 @@ final class Pullback {
      *                        it out, which is the condition the same operator narrows the run by,
      *                        kept as a condition and not told yet; nothing of one the
      *                        declarations hold
+     * @param atTheEnds       the part of {@code answers} said by operators that answer where the
+     *                        number they come to is one their type holds: where a run stops at one
+     *                        is where the representation stops, and no line of the model's
      */
     record OperatorsAnswer(Optional<Proposition> answers, List<Set<TermPath>> unsaidAt,
                            List<WorkedOutWhere> unsaidWhere,
                            boolean unsaidElsewhere, List<StopObligation> obligations,
                            List<AfterTheFirst> afterTheFirst, WorkedOutWhere relationStands,
-                           List<ConstructionAsk> asks) {
+                           List<ConstructionAsk> asks, Optional<Proposition> atTheEnds) {
 
         OperatorsAnswer {
             if (unsaidAt.size() != unsaidWhere.size()) {
@@ -9874,9 +9881,15 @@ final class Pullback {
      *
      * <p>A rounding held to a run answers where the number before rounding stands as the way of
      * rounding puts the ends of the run ({@link RoundedToAWholeNumber#heldBetween}).
+     *
+     * <p>Of those, the ones that answer where the number they come to is one their type holds are
+     * added to {@code atTheEnds} as well: where a run stops at one is where the representation
+     * stops, which is no line the model draws, and a reader of the relation tells it apart from
+     * the rest.
      */
     private List<Derivation> whereEachOperatorAnswers(Operators operated,
-                                                      List<ConstructionAsk> asked) {
+                                                      List<ConstructionAsk> asked,
+                                                      List<Derivation> atTheEnds) {
         List<Derivation> out = new ArrayList<>();
         for (Operated each : operated.told) {
             if (each.where() instanceof Answers.OfAChoice(var on)) {
@@ -9928,6 +9941,10 @@ final class Pullback {
                     ? null : whereItStands(form, held);
             if (answers != null) {
                 out.add(answers);
+                if (over instanceof Answers.AsAnOperator(var _,
+                        WhereAnOperatorAnswers.WhereItsExactValueIsHeld _)) {
+                    atTheEnds.add(answers);
+                }
                 askedOf(asked, each.operation(), askedBy(form, held), form.coefs().keySet());
             } else if (!comesOnlyToWhereItAnswers(over)) {
                 operated.beginGroup();
