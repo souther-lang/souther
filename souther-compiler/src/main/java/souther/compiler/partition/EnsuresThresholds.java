@@ -5,6 +5,7 @@ import souther.compiler.check.RuleRef;
 import souther.compiler.check.StatedContract;
 import souther.compiler.core.Contract;
 import souther.compiler.core.Core;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.InputReading;
@@ -19,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * The values a behavior's own {@code ensures} compares its inputs against.
@@ -138,12 +140,17 @@ public final class EnsuresThresholds {
                 if (conjunct.stated().orNull() == null) {
                     continue;
                 }
+                // What the rule calls the answer, and what the conjunct makes of it by naming it:
+                // a helper's parameter, a `let`, what an arm of a `match` opens out of it. A
+                // statement reading any of these is about the answer.
+                Set<BindingId> answer = WhatABodyReads.namesMadeOf(conjunct.stated().orNull(),
+                        Set.of(rule.value()));
                 for (ClauseStatements.Stated said : ClauseStatements.of(
                         conjunct.part(), conjunct.stated().orNull(), reads, read.symbols(),
                         read.newtypes())) {
                     switch (said.statement()) {
                         case ClauseStatements.Statement.Compares it ->
-                                compared(it, rule, said.id(), read,
+                                compared(it, rule, answer, said.id(), read,
                                         souther.compiler.coverage.Arrivals.inTheTree(
                                                 conjunct.stated().orNull()), way, drawn);
                         // A form no reader of clauses reads. Which positions it is about is still
@@ -153,7 +160,7 @@ public final class EnsuresThresholds {
                         // the statement is nobody's, which is one fact about it and not one per
                         // reader that turned it away.
                         case ClauseStatements.Statement.NotRead it ->
-                                notRead(it, rule, read,
+                                notRead(it, rule, answer, read,
                                         souther.compiler.coverage.Arrivals.inTheTree(
                                                 conjunct.stated().orNull()), way, drawn);
                         // Read by the reader that publishes what a rule tells apart
@@ -187,7 +194,7 @@ public final class EnsuresThresholds {
      * each of them is left with.
      */
     private static void notRead(ClauseStatements.Statement.NotRead it,
-                                StatedContract.StatedRule rule,
+                                StatedContract.StatedRule rule, Set<BindingId> answer,
                                 InputReading read,
                                 souther.compiler.coverage.Arrivals answering,
                                 WayThroughAClause way, Drawn out) {
@@ -196,7 +203,7 @@ public final class EnsuresThresholds {
         if (!way.mayReachTheNext()) {
             return;
         }
-        reportRuleWithoutLine(rule.ref(), it.stated(), rule.value(), it.reads(), it.opened(),
+        reportRuleWithoutLine(rule.ref(), it.stated(), answer,
                 ComparisonAssessment.leftAtEachOf(
                         GuardThresholds.mentionedIn(it.stated(), it.reads(), read.symbols(),
                                         read.newtypes(), answering).stream()
@@ -217,8 +224,8 @@ public final class EnsuresThresholds {
      *             the part states issued it
      */
     private static void compared(ClauseStatements.Statement.Compares it,
-                                 StatedContract.StatedRule rule, ClauseStatementId said,
-                                 InputReading read,
+                                 StatedContract.StatedRule rule, Set<BindingId> answer,
+                                 ClauseStatementId said, InputReading read,
                                  souther.compiler.coverage.Arrivals answering,
                                  WayThroughAClause way, Drawn out) {
         Core e = it.stated();
@@ -235,7 +242,7 @@ public final class EnsuresThresholds {
         // witness of a count, which is found at a row getting to a comparison of a body.
         ComparisonAssessment whole = ComparisonAssessment.of(out.behavior(), comparison.stated(),
                 Citation.of(e.pos()), read,
-                reads, it.opened(), ClosureApplications.OUTSIDE, rule.value(), answering, false,
+                reads, ClosureApplications.OUTSIDE, answer, answering, false,
                 WhatConditionsState.of(read), Optional.empty(), ComparisonWitnesses.AtAComparison.NONE);
         // A statement of several relations holds a line for each only where the statement turns
         // on it, and a clause has nowhere to hold that: no way leads to it for a condition to be
@@ -250,7 +257,7 @@ public final class EnsuresThresholds {
         // And what a reading that stopped owes only where a run may evaluate it. The lines below
         // are the relation's and are drawn from `assessed` whatever the order the clause is
         // written in.
-        reportRuleWithoutLine(rule.ref(), e, rule.value(), reads, it.opened(),
+        reportRuleWithoutLine(rule.ref(), e, answer,
                 ComparisonAssessment.whereItsStopIsReached(assessed, way::mayReachTheNext)
                         .whatEachPlaceIsLeftWith(), out.noLine());
         // And the geometry. Read the same way a guard reads it ({@link ComparisonGeometry}); only
@@ -289,11 +296,11 @@ public final class EnsuresThresholds {
      * not — a rule stated in some other form — this reading did not take it apart at all, and the
      * form is what stopped it: the one reason that does not turn on what two sides name.
      */
-    private static void reportRuleWithoutLine(RuleRef.Ensures rule, Core statement, BindingId answer,
-                                     InputReads reads, List<ClauseStatements.Opened> opened,
+    private static void reportRuleWithoutLine(RuleRef.Ensures rule, Core statement,
+                                     Set<BindingId> answer,
                                      List<ComparisonAssessment.LeftAt> left,
                                      RulesWithNoLine.Gathered withoutALine) {
-        if (ComparisonAssessment.readsAnswer(statement, answer, reads, opened)) {
+        if (WhatABodyReads.anyOf(statement, answer)) {
             return;
         }
         souther.compiler.check.RuleCitation cited =

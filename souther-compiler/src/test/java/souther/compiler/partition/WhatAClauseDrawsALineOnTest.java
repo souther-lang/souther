@@ -510,6 +510,12 @@ class WhatAClauseDrawsALineOnTest {
                 let sameAndPositive (name: String, limit: Int, a: Account): Bool =
                     if a.name == name then limit > 0 else false
                 """, "Account -> sameAndPositive(name, limit, value)");
+        // And with the branch written the other way round, which says the condition denied.
+        EnsuresThresholds.Clauses denied = statedThrough("""
+                let otherAndPositive (name: String, limit: Int, a: Account): Bool =
+                    if a.name == name then false else limit > 0
+                """, "Account -> otherAndPositive(name, limit, value)");
+        assertEquals(List.of("limit = 0"), valuesOf(denied));
 
         assertEquals(List.of("limit = 0"), valuesOf(clauses));
         assertEquals(List.of(), clauses.noLine().reported());

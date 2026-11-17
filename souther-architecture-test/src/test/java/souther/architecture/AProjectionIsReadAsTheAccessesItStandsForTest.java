@@ -616,8 +616,6 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "inputs/PathResolution;", Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/AffineReading$1", "readsThrough",
                 "(L" + CORE + "$FieldAccess;" + reads + ")Z", Reading.ONE_ACCESS, ONE);
-        row(out, c + "partition/ComparisonAssessment", "readsAnswer", "(" + core + "L" + c
-                + "types/BindingId;" + reads + "Ljava/util/List;)Z", Reading.STRUCTURE, BINDINGS);
         row(out, c + "partition/ComparisonReadings", "walk", "(" + core + "L" + c
                 + "partition/ComparisonReadings$Body;" + reads + "L" + c
                 + "partition/ClosureApplications;L" + c

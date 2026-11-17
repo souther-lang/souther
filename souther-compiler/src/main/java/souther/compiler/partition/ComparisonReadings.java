@@ -937,7 +937,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     case Stated.AComparison(var comparison) -> {
                         ComparisonAssessment.Assessed assessed = ComparisonAssessment.ofEach(
                                 in.behavior(), comparison, where, in.read(), reads, applying,
-                                null, in.answering(), false, in.conditions(),
+                                Set.of(), in.answering(), false, in.conditions(),
                                 Optional.of(stands.lineage().expansionProjection()), witnesses);
                         readOn = assessed.readOn();
                         standing = new BoundaryPolicy.Standing.Admitted(onItsRunsWhereUnread(

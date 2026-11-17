@@ -71,6 +71,11 @@ class WhereAClauseIsReadIntoItsShapeIsWrittenDownTest {
                             + " rule asks for and so is read as stated, and whose parts are only"
                             + " asked what they say of the value found — no part is numbered or"
                             + " filed under a rule"),
+            new Licence("souther.compiler.partition.ClauseStatements.statedBy", 1,
+                    "what an ensures clause states outright, read off the shape the way every"
+                            + " reader of a declaration's statements reads a conjunct, for the"
+                            + " clause and again for the body of the one arm a match leaves, which"
+                            + " is a clause read under the names the arm gives"),
             new Licence("souther.compiler.check.StatedByClauses.mirrors", 1,
                     "the shape of a clause a caller holds only as a tree, compared against one"
                             + " already read"));

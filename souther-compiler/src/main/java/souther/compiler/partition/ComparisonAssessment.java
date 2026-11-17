@@ -9,10 +9,10 @@ import souther.compiler.check.StatedComparison;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.UnreadComparison;
 import souther.compiler.core.Core;
+import souther.compiler.core.WhatABodyReads;
 import souther.compiler.coverage.Arrivals;
 import souther.compiler.diag.Citation;
 import souther.compiler.inputs.BlockReason;
-import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.EachWayItComesOut;
 import souther.compiler.inputs.EmptyInput;
 import souther.compiler.inputs.InputReading;
@@ -1305,9 +1305,10 @@ sealed interface ComparisonAssessment {
      * What {@code comparison} comes to, whoever wrote it.
      *
      * <p>The one way in. {@code applying} is the applications of the closures the comparison
-     * stands inside, on each of which it is read. {@code answer} is the binding a clause calls what
-     * the behavior answers, or
-     * null where the comparison is written in a body and there is nothing to be the answer.
+     * stands inside, on each of which it is read. {@code answer} is what a clause calls what the
+     * behavior answers and every name the clause makes of it
+     * ({@link souther.compiler.core.WhatABodyReads#namesMadeOf}), or empty where the comparison is
+     * written in a body and there is nothing to be the answer.
      * {@code writtenIn} is the copy of the body a comparison a body wrote stands in, which tells
      * the lines its author drew from the places a call put them; nothing for a clause.
      *
@@ -1324,24 +1325,11 @@ sealed interface ComparisonAssessment {
     static ComparisonAssessment of(String behavior, StatedComparison comparison, Citation at,
                                    InputReading read, InputReads reads,
                                    ClosureApplications applying,
-                                   BindingId answer, Arrivals answering,
+                                   Set<BindingId> answer, Arrivals answering,
                                    boolean drawnByAnInvariant, WhatConditionsState conditions,
                                    Optional<ExpansionLineage> writtenIn,
                                    ComparisonWitnesses.AtAComparison witnesses) {
-        return of(behavior, comparison, at, read, reads, List.of(), applying, answer, answering,
-                drawnByAnInvariant, conditions, writtenIn, witnesses);
-    }
-
-    /** {@link #of}, for a comparison written where an arm opened the names {@code opened}. */
-    static ComparisonAssessment of(String behavior, StatedComparison comparison, Citation at,
-                                   InputReading read, InputReads reads,
-                                   List<ClauseStatements.Opened> opened,
-                                   ClosureApplications applying,
-                                   BindingId answer, Arrivals answering,
-                                   boolean drawnByAnInvariant, WhatConditionsState conditions,
-                                   Optional<ExpansionLineage> writtenIn,
-                                   ComparisonWitnesses.AtAComparison witnesses) {
-        return ofEach(behavior, comparison, at, read, reads, opened, applying, answer, answering,
+        return ofEach(behavior, comparison, at, read, reads, applying, answer, answering,
                 drawnByAnInvariant, conditions, writtenIn, witnesses).assessment();
     }
 
@@ -1361,26 +1349,23 @@ sealed interface ComparisonAssessment {
     /** {@link #of}, and which applications read each of its lines and relations. */
     static Assessed ofEach(String behavior, StatedComparison comparison, Citation at,
                            InputReading read, InputReads reads, ClosureApplications applying,
-                           BindingId answer, Arrivals answering, boolean drawnByAnInvariant,
-                           WhatConditionsState conditions, Optional<ExpansionLineage> writtenIn,
-                           ComparisonWitnesses.AtAComparison witnesses) {
-        return ofEach(behavior, comparison, at, read, reads, List.of(), applying, answer,
-                answering, drawnByAnInvariant, conditions, writtenIn, witnesses);
-    }
-
-    /** {@link #ofEach}, for a comparison written where an arm opened the names {@code opened}. */
-    static Assessed ofEach(String behavior, StatedComparison comparison, Citation at,
-                           InputReading read, InputReads reads,
-                           List<ClauseStatements.Opened> opened, ClosureApplications applying,
-                           BindingId answer, Arrivals answering, boolean drawnByAnInvariant,
+                           Set<BindingId> answer, Arrivals answering, boolean drawnByAnInvariant,
                            WhatConditionsState conditions, Optional<ExpansionLineage> writtenIn,
                            ComparisonWitnesses.AtAComparison witnesses) {
         // Asked first, and of the whole comparison. A rule that reads the answer anywhere in it is
         // one this reading does not put on the input space, whichever side the answer is on and
         // whatever else stands beside it: `value.n + query.offset <= 20` is about the answer and
         // about an input, and the input is no more measurable here for the input being named.
-        if (readsAnswer(comparison.left(), answer, reads, opened)
-                || readsAnswer(comparison.right(), answer, reads, opened)) {
+        //
+        // Syntactic, over the names the clause made of the answer. {@code value.n - value.n +
+        // query.limit.value <= 20} does not depend on the answer once the arithmetic is read, and
+        // this answers that it does: the atoms of the canonical form are the input's positions, so
+        // the arithmetic cannot see through a read of the answer at all, and a predicate that
+        // quietly did some of the cancelling would be a second reading of the comparison. The same
+        // predicate answers whether a rule about the answer is one this compiler failed to read
+        // ({@link EnsuresThresholds}), so the two cannot come to different answers about one rule.
+        if (WhatABodyReads.anyOf(comparison.left(), answer)
+                || WhatABodyReads.anyOf(comparison.right(), answer)) {
             return new Assessed(new AnswerDependent(), LinesReadOn.NONE);
         }
         Cutting.Drawn drawn = Cutting.drawn(behavior, comparison, read, reads, applying,
@@ -2932,82 +2917,5 @@ sealed interface ComparisonAssessment {
                  NothingArrivesAtItsRelation _, NothingArrivesAtItsStop _,
                  RelationTurnsNothing _ -> false;
         };
-    }
-
-    /**
-     * Whether anything in {@code e} reads the binding a rule calls the answer.
-     *
-     * <p>A mechanical predicate over the tree, and it classifies nothing by itself. Two readers ask
-     * it and reach different conclusions: {@link #of} answers that the comparison raises no
-     * input-coverage obligation, and {@link EnsuresThresholds} answers that a rule about the answer
-     * is not one this compiler failed to read. Written twice, the two came apart — the second had
-     * the predicate and the first did not — so it is written once and neither reader owns what the
-     * other makes of it.
-     *
-     * <p>Syntactic. {@code value.n - value.n + query.limit.value <= 20} does not depend on the
-     * answer once the arithmetic is read, and this answers that it does. The atoms of the canonical
-     * form are the input's positions, so the arithmetic cannot see through a read of the answer at
-     * all; a predicate that quietly did some of the cancelling would be a second reading of the
-     * comparison, which is the shape this whole assessment is written against.
-     *
-     * <p>False where there is no answer to read, which is every comparison written in a body.
-     */
-    static boolean readsAnswer(Core e, BindingId answer) {
-        return readsAnswer(e, answer, null, List.of());
-    }
-
-    /**
-     * {@link #readsAnswer(Core, BindingId)} where the names in force are known: a value is made of
-     * the answer where what it is made of reads the answer, however many names stand between.
-     *
-     * <p>A name stands for an expression — what a {@code let} gave it, what a call handed the
-     * parameter of the helper — and not only for another name, so the answer is looked for in that
-     * expression, read where it was written ({@link InputReads#handedOver}). {@code own} of
-     * {@code let own = a.name} is made of the answer when {@code a} is the answer handed to a
-     * helper, as is a parameter bound to {@code value.name}.
-     *
-     * <p>And a name an arm of a {@code match} gave to a value made of what it matched
-     * ({@code Some own}, {@code Active as s}) is made of the scrutinee. That is a dependence and not
-     * an identity, so it is held beside the names and never answered by {@link InputReads}.
-     *
-     * @param reads  what the names stand for, or null where there are none to look through
-     * @param opened the names the arms above {@code e} gave
-     */
-    static boolean readsAnswer(Core e, BindingId answer, InputReads reads,
-                               List<ClauseStatements.Opened> opened) {
-        if (answer == null) {
-            return false;
-        }
-        if (Core.withoutStanding(e) instanceof Core.Read read) {
-            if (answer.equals(read.binding())) {
-                return true;
-            }
-            Core stands = read;
-            InputReads where = reads;
-            if (reads != null) {
-                Denotation handed = reads.handedOver(read);
-                stands = handed.value();
-                where = handed.at();
-            }
-            if (!(stands instanceof Core.Read name)) {
-                return readsAnswer(stands, answer, where, opened);
-            }
-            if (answer.equals(name.binding())) {
-                return true;
-            }
-            for (ClauseStatements.Opened each : opened) {
-                if (each.name().equals(name.binding())) {
-                    List<ClauseStatements.Opened> rest = new ArrayList<>(opened);
-                    rest.remove(each);
-                    if (readsAnswer(each.from().value(), answer, each.from().at(), rest)) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-        boolean[] found = {false};
-        Core.forEachChild(e, child -> found[0] |= readsAnswer(child, answer, reads, opened));
-        return found[0];
     }
 }
