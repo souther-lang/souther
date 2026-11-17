@@ -573,8 +573,8 @@ public final class BehaviorSetStatements {
                                                    DeclarationNewtypes newtypes,
                                                    souther.compiler.coverage.Arrivals answering) {
         return switch (stands) {
-            case ValuesAt.MayStandAt several ->
-                    saying(OwedWhereItCameFrom.ofSeveral(several));
+            case ValuesAt.MayStandAt several -> saying(OwedWhereItCameFrom.ofSeveral(several,
+                    each.reads().cameFrom(each.subject(), newtypes)));
             case ValuesAt.NotAPosition _ ->
                     whereItsValueCameFrom(each, symbols, newtypes, answering);
             // The caller asks this only where the subject stands at no one place.

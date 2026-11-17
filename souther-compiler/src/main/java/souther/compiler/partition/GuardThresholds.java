@@ -595,18 +595,14 @@ public final class GuardThresholds {
             // A side that names a position is the values there, and what the rule is about at that
             // position is that place's to say: where a value came from is asked of a side that
             // names none, which is the only side it is a different question about. A side that may
-            // stand at one of several is not that, and the places it may stand at are where the
-            // rule is owed.
+            // stand at one of several is not that, and where it came from is which of them, said
+            // beside where it stands.
             ValuesAt stands = reads.pathOf(side, newtypes);
             if (stands instanceof ValuesAt.At) {
                 continue;
             }
-            if (OwedWhereItCameFrom.ofSeveral(stands) instanceof OwedWhereItCameFrom owed) {
-                owed.places().forEach(each -> out.putIfAbsent(FilingCoordinate.at(each), owed.why()));
-                continue;
-            }
             // Where a side's values came from, and nothing where they came from nowhere.
-            filedWhereItCameFrom(reads.cameFrom(side, newtypes), out);
+            filedWhereItCameFrom(stands, reads.cameFrom(side, newtypes), out);
         }
     }
 
@@ -621,19 +617,29 @@ public final class GuardThresholds {
             StatedComparison comparison, InputReads reads, DeclarationNewtypes newtypes,
             SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
         for (Core side : List.of(comparison.left(), comparison.right())) {
-            if (!(reads.pathOf(side, newtypes) instanceof ValuesAt.At)
+            ValuesAt stands = reads.pathOf(side, newtypes);
+            if (!(stands instanceof ValuesAt.At)
                     && reads.cameFrom(side, newtypes) instanceof MadeFrom.FromNothing) {
-                filedWhereItCameFrom(reads.madeOf(side, newtypes), out);
+                filedWhereItCameFrom(stands, reads.madeOf(side, newtypes), out);
             }
         }
     }
 
+    /**
+     * What a side owes where it stands and where its values came from. A side that came from one
+     * place or from several made together is owed at those; one that may stand at one of several
+     * and came from one of several is owed at the places it may stand at and at those it came from
+     * beyond them ({@link OwedWhereItCameFrom#ofSeveral(ValuesAt, MadeFrom)}).
+     */
     private static void filedWhereItCameFrom(
-            MadeFrom came,
+            ValuesAt stands, MadeFrom came,
             SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
+        OwedWhereItCameFrom together = came instanceof MadeFrom.FromOneOf
+                ? OwedWhereItCameFrom.ofSeveral(stands, came) : null;
+        OwedWhereItCameFrom owed = together != null ? together : OwedWhereItCameFrom.ofSeveral(came);
         if (came instanceof MadeFrom.FromOne(var at)) {
             out.putIfAbsent(FilingCoordinate.at(at), new BlockReason.RuleAboutADerivedValue());
-        } else if (OwedWhereItCameFrom.ofSeveral(came) instanceof OwedWhereItCameFrom owed) {
+        } else if (owed != null) {
             owed.places().forEach(each -> out.putIfAbsent(FilingCoordinate.at(each), owed.why()));
         }
     }

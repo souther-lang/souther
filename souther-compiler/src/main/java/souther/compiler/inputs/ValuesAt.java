@@ -2,7 +2,6 @@ package souther.compiler.inputs;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.function.UnaryOperator;
 
 /**
  * Where an expression stands: the expression is the values at the place, nothing made of them and
@@ -10,9 +9,13 @@ import java.util.function.UnaryOperator;
  *
  * <p>The one relation a field can be read at, an element taken of, a rule filed at, or a line
  * drawn on. A value made out of a place is {@link MadeFrom}, and what holds the elements of a place
- * in a count or an order is {@link Holds}; neither is offered these, and neither converts to this.
+ * in a count or an order is {@link ValuesHeld}; neither is offered these, and neither converts to
+ * this. The step into a field is the walk's own, taken where it reads the position, so no step is
+ * offered on the answer.
  *
- * <p>Made from the answer of the walk after a position by {@link InputReads}, which owns it.
+ * <p>Made from the answer of the walk after a position by {@link InputReads}, which owns it. The
+ * answer of an expression that is also made out of other places is said beside {@link MadeFrom},
+ * and {@link MadeFrom#placesBeyond} is what the two say together.
  */
 public sealed interface ValuesAt {
 
@@ -45,18 +48,12 @@ public sealed interface ValuesAt {
         }
     }
 
-    /**
-     * The same answer with {@code step} taken at every position it names: a field of what stands
-     * here stands at the field of it, and an element at an element of it.
-     */
-    default ValuesAt deeper(UnaryOperator<TermPath> step) {
+    /** Every place the expression stands at on some run; none for {@link NotAPosition}. */
+    default List<TermPath> places() {
         return switch (this) {
-            case At(var at) -> new At(step.apply(at));
-            case NotAPosition _ -> this;
-            case MayStandAt(var among) -> {
-                List<TermPath> stepped = among.stream().map(step).distinct().toList();
-                yield new MayStandAt(stepped);
-            }
+            case At(var at) -> List.of(at);
+            case MayStandAt(var among) -> among;
+            case NotAPosition _ -> List.of();
         };
     }
 }

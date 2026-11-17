@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.MadeFrom;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
 
 import java.util.List;
 
@@ -20,6 +21,38 @@ class OwedWhereItCameFromTest {
     private static final TermPath A = TermPath.of("a").then("items").element();
     private static final TermPath B = TermPath.of("b").then("items").element();
     private static final TermPath C = TermPath.of("c").then("items").element();
+
+    /**
+     * A value that may stand at one of several places and came from one of several is owed at the
+     * places it may stand at, with their fields, and at those it came from that they do not say.
+     */
+    @Test
+    void aValueThatMayStandAtOneAndCameFromAnotherIsOwedAtBoth() {
+        OwedWhereItCameFrom owed = OwedWhereItCameFrom.ofSeveral(
+                new ValuesAt.MayStandAt(List.of(A.then("age"))),
+                new MadeFrom.FromOneOf(List.of(A, B)));
+        assertEquals(List.of(A.then("age"), B), owed.places());
+        assertEquals(new BlockReason.RuleAboutAnElementOfSeveralContainers(), owed.why());
+    }
+
+    /** The container the name stands at an element of is the one it came from, and adds nothing. */
+    @Test
+    void whatItCameFromThatItStandsAtIsNotSaidTwice() {
+        OwedWhereItCameFrom owed = OwedWhereItCameFrom.ofSeveral(
+                new ValuesAt.MayStandAt(List.of(A.then("age"), B.then("age"))),
+                new MadeFrom.FromOneOf(List.of(A, B)));
+        assertEquals(List.of(A.then("age"), B.then("age")), owed.places());
+    }
+
+    /** A value that stands at one place, or at none, is read through the operation that made it,
+     *  or from where it came alone. */
+    @Test
+    void aValueThatStandsAtNoOneOfSeveralIsLeftToTheOriginAlone() {
+        assertNull(OwedWhereItCameFrom.ofSeveral(new ValuesAt.At(A), new MadeFrom.FromOneOf(
+                List.of(A, B))));
+        assertNull(OwedWhereItCameFrom.ofSeveral(new ValuesAt.NotAPosition(),
+                new MadeFrom.FromOneOf(List.of(A, B))));
+    }
 
     @Test
     void aValueMadeOfSeveralPlacesIsOwedTheSentenceAboutADerivedValueAtEveryOneOfThem() {

@@ -12,10 +12,17 @@ import java.util.Objects;
  * made from. A rule about the expression is about that place; the expression is not the values
  * there.
  *
- * <p>So what only a position allows is not offered: no step into a field or an element of a place
- * ({@link PathResolution#deeper}), no narrowing to a case, and no join with the answer of a walk
- * after where a value stands. A field of a record made of an element is not a field of the
- * element, and a reader that wants a place a rule is drawn at asks {@link InputReads#pathOf}.
+ * <p>So what only a position allows is not offered: no step into a field or an element of a place,
+ * no narrowing to a case, and no join with the answer of a walk after where a value stands. A field
+ * of a value is the answer for the value: a field of a record made of an element is not a field of
+ * the element, and a place that is one is said by the walk after where the values stand, with its
+ * field ({@link ValuesAt}), which a reader that wants a place a rule is drawn at asks
+ * ({@link InputReads#pathOf}).
+ *
+ * <p><b>The two are said together by a reader whose expression stands at one of several places.</b>
+ * What it stands at is the position's to say, and what it was made out of beyond that is this
+ * answer's ({@link #placesBeyond}). Either alone leaves out the other: a reader that took only the
+ * places the expression may stand at left out every container the same name was made of.
  *
  * <p>Made from the answer of those walks by {@link InputReads}, which owns them.
  */
@@ -63,6 +70,19 @@ public sealed interface MadeFrom {
 
     /** The values came from no place the walk follows. */
     record FromNothing() implements MadeFrom {}
+
+    /**
+     * The places the values came from that what stands says nothing of: those no place of
+     * {@code stands} is at or under. A place the expression stands at is said, with its field, by
+     * the position; what came from the whole of a container the expression stands at an element of
+     * is the same container, and adds nothing.
+     */
+    default List<TermPath> placesBeyond(ValuesAt stands) {
+        List<TermPath> said = stands.places();
+        return places().stream()
+                .filter(each -> said.stream().noneMatch(there -> there.isAtOrUnder(each)))
+                .toList();
+    }
 
     /** Every place the values came from on some run, once each; none for {@link FromNothing}. */
     default List<TermPath> places() {

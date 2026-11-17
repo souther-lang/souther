@@ -424,4 +424,44 @@ class AClosureIsTheSameRuleHoweverItIsWrittenDownTest {
                             if List.any(adult, xs) && List.any(adult, ys) then High else Low
                         }"""));
     }
+
+    /**
+     * The same closure handed to a list the input holds and to one made of another is at the first
+     * on one run and made of the second on the next, and the rule is owed at both.
+     *
+     * <p>Where the name stands is the first's alone, with its field; where it was made from is the
+     * second's, and a field of a record the walk made is no field of what it was made from, so the
+     * place is the container.
+     */
+    @Test
+    void aSharedClosureOverAMadeListIsOwedAtWhatTheListWasMadeOf() {
+        assertEquals(List.of("xs[*].age RuleAboutAnElementOfSeveralContainers",
+                        "ys[*] RuleAboutAnElementOfSeveralContainers"),
+                withoutALine("""
+                        data Person = { age: Int }
+
+                        behavior pick : (xs: List<Person>, ys: List<Person>) -> Low | High
+                        let pick (xs, ys) = {
+                            let adult = (p) -> p.age > 18
+                            let zs = List.map((y) -> Person { age = y.age + 1 }, ys)
+                            if List.any(adult, xs) && List.any(adult, zs) then High else Low
+                        }"""));
+    }
+
+    /** And over a list that keeps the elements it is made of, the second is the same place with its
+     *  field, which the position says. */
+    @Test
+    void aSharedClosureOverAListThatKeepsItsElementsIsOwedAtTheirField() {
+        assertEquals(List.of("xs[*].age RuleAboutAnElementOfSeveralContainers",
+                        "ys[*].age RuleAboutAnElementOfSeveralContainers"),
+                withoutALine("""
+                        data Person = { age: Int }
+
+                        behavior pick : (xs: List<Person>, ys: List<Person>) -> Low | High
+                        let pick (xs, ys) = {
+                            let adult = (p) -> p.age > 18
+                            let zs = List.filter((y) -> y.age > 0, ys)
+                            if List.any(adult, xs) && List.any(adult, zs) then High else Low
+                        }"""));
+    }
 }
