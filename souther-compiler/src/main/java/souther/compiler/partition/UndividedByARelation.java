@@ -6532,9 +6532,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 || greatest == null || weight.abs().compareTo(BigInteger.ONE) != 0) {
             return false;
         }
+        BigInteger shift = wholeNumberOf(on.dividend().constant());
         for (RowDemand.OnARemainder each : together) {
-            BigInteger move = wholeNumberOf(each.dividend().constant());
-            if (move == null || move.signum() != 0) {
+            if (shift == null || !shift.equals(wholeNumberOf(each.dividend().constant()))) {
                 return false;
             }
         }
@@ -6615,12 +6615,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return Optional.empty();
             }
             BigInteger[] range = keptSumWithin(narrowing, dividend, sum);
-            if (!windowHoldsEveryRemainder(weight, freeEnds, range[0], range[1],
-                    BigInteger.ZERO, divisor, least, greatest)) {
+            BigInteger shift = wholeNumberOf(dividend.constant());
+            if (shift == null || !windowHoldsEveryRemainder(weight, freeEnds,
+                    range[0].add(shift), range[1].add(shift), BigInteger.ZERO, divisor, least,
+                    greatest)) {
                 return Optional.empty();
             }
             List<TakenConstraint.Affine> held = new ArrayList<>();
-            if (!meetsWhatTheRunNarrows(narrowing, dividend, least, greatest, held)) {
+            if (!meetsWhatTheRunNarrows(narrowing, dividend, least.subtract(shift),
+                    greatest.subtract(shift), held)) {
                 return Optional.empty();
             }
             return Optional.of(new Coverage(kept.keySet(), held));
@@ -9785,7 +9788,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             LinearForm<NumericTerm> form = each instanceof TakenConstraint.Affine affine
                     ? withTheHeldSidesAt(affine.form(), pair.standing()) : null;
             Rel rel = each instanceof TakenConstraint.Affine affine ? affine.rel() : null;
-            if (form != null && holdsOverTheWholeTypeOfItsNumbers(form, rel, read)) {
+            if (form != null && (holdsOverTheWholeTypeOfItsNumbers(form, rel, read)
+                    || endsAnOperationOfTheRelation(form, rel))) {
                 continue;
             }
             WhatARelationLeavesUndivided.OnTheDifference statement =
@@ -9805,6 +9809,31 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return new HeldOfTheDifference(held, holes);
+    }
+
+    /**
+     * Whether {@code form} held as {@code rel} against nought is an end of an operation this
+     * comparison works out, the form the operation is over held to its greatest or its least.
+     * The relation's reading asks those operations of every row itself
+     * ({@link WhatARelationLeavesUndivided.Operations}), so the end is no further statement the
+     * rows are held to.
+     */
+    private boolean endsAnOperationOfTheRelation(LinearForm<NumericTerm> form, Rel rel) {
+        if (rel != Rel.LE && rel != Rel.GE) {
+            return false;
+        }
+        for (IntOperation each : working.operations()) {
+            LinearForm<NumericTerm> over = each.overTheInput();
+            BigInteger end = rel == Rel.LE ? each.greatest() : each.least();
+            if (over == null || end == null
+                    || !over.constant().minus(ExactRatio.of(end)).equals(
+                            new ExactAnswer.Held<>(form.constant()))
+                    || !over.coefs().equals(form.coefs())) {
+                continue;
+            }
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -10600,31 +10629,82 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return null;
             }
         }
+        // Every narrowing of the number is a bound on one form of it and the others, weighing each
+        // one: the form is held between its least and its greatest, and whatever the others sum
+        // to, a number of the sum is the number's with the others put to it.
+        LinearForm<NumericTerm> shape = null;
+        BigInteger from = null;
+        BigInteger to = null;
         for (TakenConstraint each : narrowing) {
             if (each.terms().stream().noneMatch(term -> term.equals(value)
                     || others.contains(term))) {
                 continue;
             }
             if (!(each instanceof TakenConstraint.Affine(var form, var rel, var _))
+                    || (rel != Rel.LE && rel != Rel.GE) || !form.coefs().containsKey(value)
                     || form.coefs().keySet().stream().anyMatch(term ->
-                            !term.equals(value) && !others.contains(term))) {
+                            !term.equals(value) && !others.contains(term))
+                    || form.coefs().values().stream().anyMatch(weight ->
+                            wholeNumberOf(weight) == null
+                                    || wholeNumberOf(weight).abs().compareTo(BigInteger.ONE) != 0)
+                    || (shape != null && !shape.coefs().equals(form.coefs()))) {
                 return null;
             }
             BigInteger constant = wholeNumberOf(form.constant());
-            BigInteger by = form.coefs().containsKey(value)
-                    ? wholeNumberOf(form.coefs().get(value)) : BigInteger.ZERO;
-            if (constant == null || by == null) {
+            if (constant == null) {
                 return null;
             }
-            BigInteger low = constant.add(by.signum() >= 0 ? by.multiply(mine.low())
-                    : by.multiply(mine.high()));
-            BigInteger high = constant.add(by.signum() >= 0 ? by.multiply(mine.high())
-                    : by.multiply(mine.low()));
-            if (!NumbersChosen.holdsEverywhere(low, high, rel)) {
-                return null;
+            shape = form;
+            if (rel == Rel.LE) {
+                to = to == null ? constant.negate() : to.min(constant.negate());
+            } else {
+                from = from == null ? constant.negate() : from.max(constant.negate());
             }
         }
-        return NumericDomain.Bounds.OPEN;
+        if (shape == null) {
+            return NumericDomain.Bounds.OPEN;
+        }
+        BigInteger byValue = wholeNumberOf(shape.coefs().get(value));
+        BigInteger leastOthers = BigInteger.ZERO;
+        BigInteger greatestOthers = BigInteger.ZERO;
+        for (NumericTerm other : others) {
+            TermOrders otherOrders = read.quantities().ordersOf((NumericTerm.FromOnePosition) other);
+            WholeEnds ends = otherOrders == null ? null
+                    : wholeEndsOf(otherOrders.answered().whereItStops());
+            BigInteger by = wholeNumberOf(shape.coefs().get(other));
+            if (ends == null || ends.low() == null || ends.high() == null || by == null) {
+                return null;
+            }
+            leastOthers = leastOthers.add(by.signum() > 0 ? ends.low() : ends.high().negate());
+            greatestOthers = greatestOthers.add(by.signum() > 0 ? ends.high()
+                    : ends.low().negate());
+        }
+        // The weighed value is between the form's least less the greatest the others weigh to,
+        // and its greatest less the least: every whole number of that has the others to bring the
+        // form to it, since each is weighed one.
+        BigInteger weighedLow = from == null ? null : from.subtract(greatestOthers);
+        BigInteger weighedHigh = to == null ? null : to.subtract(leastOthers);
+        BigInteger low = mine.low();
+        BigInteger high = mine.high();
+        BigInteger lowest = byValue.signum() > 0 ? weighedLow
+                : weighedHigh == null ? null : weighedHigh.negate();
+        BigInteger highest = byValue.signum() > 0 ? weighedHigh
+                : weighedLow == null ? null : weighedLow.negate();
+        if (lowest != null) {
+            low = low.max(lowest);
+        }
+        if (highest != null) {
+            high = high.min(highest);
+        }
+        if (low.compareTo(high) > 0) {
+            return null;
+        }
+        if (low.equals(mine.low()) && high.equals(mine.high())) {
+            return NumericDomain.Bounds.OPEN;
+        }
+        return new NumericDomain.Bounds(
+                Endpoint.inclusive(Count.of(new BigDecimal(low))),
+                Endpoint.inclusive(Count.of(new BigDecimal(high))));
     }
 
     /** Whether {@code number} is held by nothing but the type: no statement of the way turns on

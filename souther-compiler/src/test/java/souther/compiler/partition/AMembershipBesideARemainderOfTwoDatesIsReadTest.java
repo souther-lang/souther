@@ -130,6 +130,24 @@ class AMembershipBesideARemainderOfTwoDatesIsReadTest {
         }
     }
 
+    /**
+     * A date moved by days is a date the type stops at, and the remainder of the days to a Sunday
+     * is met by choosing the Sunday: the elements are read at every date whether the days are
+     * written or are a number of the input.
+     */
+    @Test
+    void aDateMovedByDaysIsReadBesideTheRemainderOfItsDaysToASunday() {
+        for (String days : List.of("3", "n")) {
+            for (String at : List.of("from", "hs[*]")) {
+                assertTrue(reasonsAt("sun: Date, from: Date, n: Int, hs: Set<Date>",
+                        "Int.floorMod(Date.daysBetween(sun, Date.addDays(" + days
+                                + ", from)), 7) >= 1"
+                                + " && Bool.not(Set.contains(Date.addDays(" + days
+                                + ", from), hs))", at).contains(READ), days + " " + at);
+            }
+        }
+    }
+
     /** The other held off nought at an end of its type is not one the choice sets at nought. */
     @Test
     void aSumWhoseOtherNumberCannotBeNoughtIsNotShownToTakeEveryValue() {
