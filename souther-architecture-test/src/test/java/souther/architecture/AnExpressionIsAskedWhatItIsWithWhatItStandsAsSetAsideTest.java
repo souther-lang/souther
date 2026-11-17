@@ -617,9 +617,9 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
         row(out, c + "core/WhatABodyReads", "anyOf", "(" + core + "Ljava/util/Set;)Z", 1,
                 "asks whether a node reads one of some bindings, and walks on through a Widen into"
                         + " what it holds");
-        row(out, c + "core/WhatABodyReads", "madeOf", "(" + core + "Ljava/util/Set;)V", 1,
-                "asks whether a node binds a name, and walks on through a Widen into what it"
-                        + " holds");
+        row(out, c + "core/WhatABodyReads", "madeOf", "(" + core + "Ljava/util/Set;)V", 2,
+                "asks whether a node binds a name, by a let or by an arm of a match, and walks on"
+                        + " through a Widen into what it holds");
         row(out, c + "core/WhatABodyReads", "boundIn", "(" + core + "Ljava/util/Map;)V", 1,
                 "asks whether a node binds a name, and walks on through a Widen into what it"
                         + " holds");
@@ -711,8 +711,6 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "(" + core + "L" + c + "coverage/NormalReturn;Ljava/util/List;)V", 1,
                 "follows what a node evaluates first to where a run stops, and what a Widen"
                         + " evaluates is what it holds (Evaluated)");
-        row(out, c + "partition/ComparisonAssessment", "readsAnswer",
-                "(" + core + "L" + c + "types/BindingId;)Z", 1, COUNTS_THROUGH_IT);
         row(out, c + "partition/ComparisonReadings", "statedAt",
                 "(" + core + "Ljava/util/function/Supplier;L" + c
                         + "partition/ClosureApplications;L" + c

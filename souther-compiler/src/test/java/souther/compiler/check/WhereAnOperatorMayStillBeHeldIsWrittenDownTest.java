@@ -471,9 +471,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.check.Terms.aWholeNumberOfAQuotient",
                     "asks whether what a narrowing to a whole number rounds is a quotient, which"
                             + " is then a quotient rounded to the scale nought"),
-            new Held("souther.compiler.partition.ClauseStatements.walk",
-                    "walks into both halves, and stops where the connective composes either of"
-                            + " them because what such a rule states is neither of its sides"),
 
             // Which operand runs when, asked of the operator itself rather than of what it
             // composes: the two are answered by the same two operators and are not one question.

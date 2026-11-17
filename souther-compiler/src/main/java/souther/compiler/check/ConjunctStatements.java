@@ -20,7 +20,7 @@ import java.util.List;
  * conjunction is descended into, and what is left is a statement — which is what {@link ClauseExpr}
  * already decided when it read the clause's connectives once.
  */
-final class ConjunctStatements {
+public final class ConjunctStatements {
 
     private ConjunctStatements() {
     }
@@ -58,9 +58,9 @@ final class ConjunctStatements {
      * <p>For a reader that asks what a clause states and does not file the answer under a rule's
      * part, which is the only thing a number is for.
      */
-    record Stated(ClauseExpr.Part said, List<ClauseExpr.Scoped> crossed) {
+    public record Stated(ClauseExpr.Part said, List<ClauseExpr.Scoped> crossed) {
 
-        Stated {
+        public Stated {
             if (said == null) {
                 throw new IllegalArgumentException("a statement of a conjunct says something");
             }
@@ -116,7 +116,7 @@ final class ConjunctStatements {
      * before they are numbered. The same walk {@link #of} numbers, so the two cannot disagree about
      * what a conjunct states.
      */
-    static List<Stated> statedBy(ClauseExpr conjunct) {
+    public static List<Stated> statedBy(ClauseExpr conjunct) {
         List<Stated> out = new ArrayList<>();
         reach(conjunct, List.of(), out);
         return List.copyOf(out);

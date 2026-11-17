@@ -147,7 +147,7 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
                         + "Lsouther/compiler/diag/Citation;Lsouther/compiler/inputs/InputReading;"
                         + "Lsouther/compiler/inputs/InputReads;"
                         + "Lsouther/compiler/partition/ClosureApplications;"
-                        + "Lsouther/compiler/types/BindingId;Lsouther/compiler/coverage/Arrivals;Z"
+                        + "Ljava/util/Set;Lsouther/compiler/coverage/Arrivals;Z"
                         + "Lsouther/compiler/partition/WhatConditionsState;Ljava/util/Optional;"
                         + "Lsouther/compiler/partition/ComparisonWitnesses$AtAComparison;)"
                         + "Lsouther/compiler/partition/ComparisonAssessment$Assessed;")));

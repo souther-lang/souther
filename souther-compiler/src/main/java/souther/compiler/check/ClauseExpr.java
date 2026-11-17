@@ -40,7 +40,7 @@ import java.util.List;
  * would be. Left as a leaf, it was a form every reading below had no word for, and an author who
  * named a rule lost the reading an author who repeated it kept.
  */
-sealed interface ClauseExpr {
+public sealed interface ClauseExpr {
 
     /**
      * The tree nodes this stands for, outermost first.
@@ -340,20 +340,36 @@ sealed interface ClauseExpr {
         if (restated != null) {
             return of(restated.operand(), restated.denies() != positive, spelled, at, counted);
         }
-        Core bare = Core.withoutStanding(clause);
-        if (bare instanceof Core.If iff
-                && Core.withoutStanding(iff.then()) instanceof Core.Bool t && !t.value()
-                && Core.withoutStanding(iff.els()) instanceof Core.Bool f && f.value()) {
-            return of(iff.cond(), !positive, spelled, at, counted);
+        if (!(Core.withoutStanding(clause) instanceof Core.If iff)) {
+            return null;
         }
-        // An if whose then-branch is a written true says the choice between its condition and its
-        // else-branch: the else-branch is read only where the condition is false, which is how a
-        // choice reads its right side.
-        if (bare instanceof Core.If iff
-                && Core.withoutStanding(iff.then()) instanceof Core.Bool t && t.value()) {
-            return new Joined(spelled, positive, at, ConditionJoin.EITHER.under(positive),
-                    under(iff.cond(), positive, counted), under(iff.els(), positive, counted));
+        Boolean then = written(iff.then());
+        Boolean otherwise = written(iff.els());
+        // Both branches written: the condition, or its denial.
+        if (then != null && otherwise != null && !then.equals(otherwise)) {
+            return of(iff.cond(), then == positive, spelled, at, counted);
+        }
+        // One branch written says what a connective says: the written branch is what the clause
+        // comes to where the condition went that way, and the other branch is read only where it
+        // went the other. An if with a true then-branch is a choice between its condition and its
+        // else-branch, one with a false else-branch is a conjunction of its condition and its
+        // then-branch, and the two with the condition denied are the other two.
+        if (then != null || otherwise != null) {
+            boolean thenWritten = then != null;
+            boolean truth = thenWritten ? then : otherwise;
+            // The condition is stated where the written branch is the one it selects and that
+            // branch is true — a choice — or the one it does not and that branch is false.
+            boolean conditionStated = thenWritten == truth;
+            ConditionJoin how = truth ? ConditionJoin.EITHER : ConditionJoin.BOTH;
+            return new Joined(spelled, positive, at, how.under(positive),
+                    under(iff.cond(), conditionStated == positive, counted),
+                    under(thenWritten ? iff.els() : iff.then(), positive, counted));
         }
         return null;
+    }
+
+    /** The truth a clause writes outright, or null where it writes none. */
+    private static Boolean written(Core clause) {
+        return Core.withoutStanding(clause) instanceof Core.Bool bool ? bool.value() : null;
     }
 }
