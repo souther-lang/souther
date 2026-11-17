@@ -80,13 +80,23 @@ public record CaseExpansion(Which which, String line, String cutAt, CameTo cameT
      * @param diagnosed  how many ways some of those parts can come out together, where they compare
      *                   one number ({@link WhatTheNumbersOfACaseLeave}): what the numbers leave,
      *                   and no count of cases nor of what a rewrite would leave
+     * @param workedOut  whether every case was worked out all the same, by what the numbers leave
+     *                   of the ways, and so the line was read: what this is then is what asking
+     *                   cost, which a report tells an author only where there is something to
+     *                   change in the model, and never as why a line was not read
      */
-    public record CameTo(CaseCount counted, Attribution attributed, List<Diagnosis> diagnosed) {
+    public record CameTo(CaseCount counted, Attribution attributed, List<Diagnosis> diagnosed,
+                         boolean workedOut) {
 
         public CameTo {
             Objects.requireNonNull(counted, "cases are some number of ways");
             Objects.requireNonNull(attributed, "what they came from, or why that was not said");
             diagnosed = List.copyOf(diagnosed);
+        }
+
+        /** What a case that was not worked out came to. */
+        public CameTo(CaseCount counted, Attribution attributed, List<Diagnosis> diagnosed) {
+            this(counted, attributed, diagnosed, false);
         }
     }
 
@@ -99,9 +109,16 @@ public record CaseExpansion(Which which, String line, String cutAt, CameTo cameT
      * @param cutAt   where on it the line is
      * @param asked   the case
      * @param counted how many ways there were of choosing one of what it stands for
+     * @param workedOut whether the case was worked out all the same ({@link CameTo#workedOut})
      */
     public record Counted(Line of, String line, String cutAt, DecidingCase asked,
-                          CaseCount counted) {
+                          CaseCount counted, boolean workedOut) {
+
+        /** A case that was not worked out. */
+        public Counted(Line of, String line, String cutAt, DecidingCase asked,
+                       CaseCount counted) {
+            this(of, line, cutAt, asked, counted, false);
+        }
 
         public Counted {
             Objects.requireNonNull(of, "cases are of some place of a line");
@@ -115,7 +132,7 @@ public record CaseExpansion(Which which, String line, String cutAt, CameTo cameT
         CaseExpansion attributed(Attribution attributed) {
             return new CaseExpansion(new Which(of, asked.condition()), line, cutAt,
                     new CameTo(counted, attributed,
-                            WhatTheNumbersOfACaseLeave.of(asked.standsFor())));
+                            WhatTheNumbersOfACaseLeave.of(asked.standsFor()), workedOut));
         }
 
         /**

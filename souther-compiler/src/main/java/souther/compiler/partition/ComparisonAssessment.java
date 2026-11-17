@@ -1855,7 +1855,8 @@ sealed interface ComparisonAssessment {
             List<CaseExpansion.Counted> walked = new ArrayList<>();
             for (CasesOfALineAsked.WalkedPast each : found.walkedPast()) {
                 walked.add(new CaseExpansion.Counted(part.id().ofItsCases(),
-                        cutting.of().named(), cutting.at().toString(), each.in(), each.counted()));
+                        cutting.of().named(), cutting.at().toString(), each.in(), each.counted(),
+                        true));
             }
             out.add(new Several.Part(part.id(), read, DecidingCase.saidInAsFewAsMay(reached),
                     deciding.isEmpty() || Several.choiceAnsweredBy(part.id()) == null ? Map.of()
