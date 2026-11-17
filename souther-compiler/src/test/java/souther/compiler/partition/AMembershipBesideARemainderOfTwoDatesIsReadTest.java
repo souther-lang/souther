@@ -18,6 +18,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A remainder of a form of several numbers states nothing of one of them while another is free to
@@ -95,11 +96,95 @@ class AMembershipBesideARemainderOfTwoDatesIsReadTest {
                 "Int.floorMod(2 * a - d, 4) == 1 && Bool.not(Set.contains(d, hs))", "hs[*]"));
     }
 
-    /** The form is added up as the program adds it, which can stop a run where a number is large. */
+    /**
+     * The form is added up as the program adds it, and {@code a + b} can stop a run where both are
+     * large, so no number is free to meet the remainder whatever the others hold. For each
+     * {@code d} the others can be chosen, though: {@code b} at nought and {@code a} a step from
+     * {@code d}, so that {@code a + b} and {@code a + b - d} both stay inside the {@code Int}s.
+     */
     @Test
-    void aFormTheProgramMayNotAddUpIsNotTakenAwayFromTheRun() {
-        assertEquals(List.of(NOT_SHOWN), reasonsAt("a: Int, b: Int, d: Int, hs: Set<Int>",
+    void aFormTheProgramMayNotAddUpIsMetByChoosingTheRestForEachValueOfTheElements() {
+        assertEquals(List.of(READ), reasonsAt("a: Int, b: Int, d: Int, hs: Set<Int>",
                 "Int.floorMod(a + b - d, 7) >= 1 && Bool.not(Set.contains(d, hs))", "hs[*]"));
+    }
+
+    @Test
+    void aNumberOfTheFormBesideTheOneChosenIsSetAtNoughtWhereItCan() {
+        assertEquals(List.of(READ), reasonsAt("d: Int, n: Int, s: Int, hs: Set<Int>",
+                "Int.floorMod(d + n - s, 7) >= 1 && Set.contains(d, hs)", "hs[*]"));
+        assertEquals(List.of(READ), reasonsAt("s: Date, d: Date, n: Int, hs: Set<Date>",
+                "Int.floorMod(Date.daysBetween(s, d) + n, 7) >= 1 && Set.contains(d, hs)",
+                "hs[*]"));
+    }
+
+    /**
+     * The elements are looked for in a sum of two numbers, which stops where it leaves the
+     * {@code Int}s: each of the two takes every value by choosing the other at nought.
+     */
+    @Test
+    void eachOfTwoNumbersASumStopsOverTakesEveryValueByChoosingTheOtherAtNought() {
+        for (String at : List.of("d", "n", "hs[*]")) {
+            assertTrue(reasonsAt("d: Int, n: Int, s: Int, hs: Set<Int>",
+                    "Int.floorMod(d + n - s, 7) >= 1 && Set.contains(d + n, hs)", at)
+                    .contains(READ), at);
+        }
+    }
+
+    /**
+     * A date moved by days is a date the type stops at, and the remainder of the days to a Sunday
+     * is met by choosing the Sunday: the elements are read at every date whether the days are
+     * written or are a number of the input.
+     */
+    @Test
+    void aDateMovedByDaysIsReadBesideTheRemainderOfItsDaysToASunday() {
+        for (String days : List.of("3", "n")) {
+            for (String at : List.of("from", "hs[*]")) {
+                assertTrue(reasonsAt("sun: Date, from: Date, n: Int, hs: Set<Date>",
+                        "Int.floorMod(Date.daysBetween(sun, Date.addDays(" + days
+                                + ", from)), 7) >= 1"
+                                + " && Bool.not(Set.contains(Date.addDays(" + days
+                                + ", from), hs))", at).contains(READ), days + " " + at);
+            }
+        }
+    }
+
+    /**
+     * The first sum of the form stops a run where {@code d + n} is past the type, so with both
+     * numbers sides of a relation each takes every value and the pair does not: {@code d} at the
+     * greatest {@code Int} is held to {@code n} at nought or below, and {@code d == n} comes out
+     * true there at no row. What each side takes is no claim of the pair, and the relation is not
+     * read as if every pair was there.
+     */
+    @Test
+    void twoSidesTheRunsFirstSumStopsOverAreNotReadAsIfEveryPairOfThemWasThere() {
+        for (String relation : List.of("d == n", "d < n")) {
+            for (String at : List.of("d", "n")) {
+                assertFalse(reasonsAt("d: Int, n: Int, s: Int, hs: Set<Int>",
+                        "Int.floorMod(d + n - s, 7) >= 1 && " + relation, at).contains(READ),
+                        relation + " " + at);
+            }
+        }
+    }
+
+    /** The other held off nought at an end of its type is not one the choice sets at nought. */
+    @Test
+    void aSumWhoseOtherNumberCannotBeNoughtIsNotShownToTakeEveryValue() {
+        for (String at : List.of("d", "hs[*]")) {
+            assertFalse(reasonsAt("d: Int, n: Int, s: Int, hs: Set<Int>",
+                    "n >= 1 && Int.floorMod(d + n - s, 7) >= 1 && Set.contains(d + n, hs)", at)
+                    .contains(READ), at);
+            assertFalse(reasonsAt("d: Int, n: Int, s: Int, hs: Set<Int>",
+                    "n <= -1 && Int.floorMod(d + n - s, 7) >= 1 && Set.contains(d + n, hs)", at)
+                    .contains(READ), at);
+        }
+    }
+
+    /** A third number the form holds that cannot be nought is not one the witness sets there. */
+    @Test
+    void aNumberThatCannotBeNoughtIsNotSetThere() {
+        assertEquals(List.of(NOT_SHOWN), reasonsAt("a: Int, b: Int, d: Int, hs: Set<Int>",
+                "b >= 5 && Int.floorMod(a + b - d, 7) >= 1 && Bool.not(Set.contains(d, hs))",
+                "hs[*]"));
     }
 
     /** Nor is a remainder taken away from a run that works the same numbers out otherwise. */
