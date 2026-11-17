@@ -16,6 +16,8 @@ import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Shapes;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -538,7 +540,7 @@ class WhatAClauseDrawsALineOnTest {
                 behavior find : (name: String) -> Account | AccountNotFound
                     ensures Account -> %s
                 """;
-        Map<String, String[]> spellings = new java.util.LinkedHashMap<>();
+        Map<String, String[]> spellings = new LinkedHashMap<>();
         spellings.put("a name for a field", new String[] {"""
                 let h (name: String, a: Account): Bool = {
                     let own = a.name
@@ -560,7 +562,7 @@ class WhatAClauseDrawsALineOnTest {
                         | Inactive -> false
                 }
                 """, "h(name, value)"});
-        List<String> unread = new java.util.ArrayList<>();
+        List<String> unread = new ArrayList<>();
         spellings.forEach((how, parts) -> {
             EnsuresThresholds.Clauses clauses = drawn(model.formatted(parts[0], parts[1]), "find");
             if (!clauses.noLine().reported().isEmpty()
