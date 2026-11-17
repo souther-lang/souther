@@ -177,7 +177,12 @@ final class AWayReadForARelation {
             bearingOnTheRelation(asked);
             parted.clear();
             for (OnTheWay each : whole.unsplit()) {
-                ChoiceRead one = keptWhole.contains(each) ? null : ChoiceRead.of(each, this);
+                ChoiceRead.Parted read = keptWhole.contains(each) ? null
+                        : ChoiceRead.of(each, this);
+                ChoiceRead one = read == null ? null : read.read();
+                if (read != null && read.stoppedAtChoices()) {
+                    stoppedAt.add(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT);
+                }
                 if (one != null) {
                     parted.put(each, one);
                 } else if (bearing.addAll(WayToTheBorder.positionsInside(each))) {
@@ -1089,15 +1094,35 @@ final class AWayReadForARelation {
          * their ways asks and so shows no more met than is, and the figure is one the reading
          * again stopped at.
          */
-        static ChoiceRead of(OnTheWay choice, AWayReadForARelation reading) {
+        static Parted of(OnTheWay choice, AWayReadForARelation reading) {
+            return OneReading.choiceParted(choice, reading.bearing,
+                    reading.whole.from().declarations(), () -> partedBy(choice, reading));
+        }
+
+        /**
+         * A choice parted for the relation, or none where it is not read so, and whether parting
+         * it reached the figure its choices are looked at with.
+         *
+         * <p>Of the choice, of the positions bearing on the relation, and of what the declarations
+         * leave: no more of the way it is on, so a reading parts a choice once for however many
+         * ways it is read along ({@link OneReading#choiceParted}).
+         *
+         * @param read             none where the choice is not read for the relation
+         * @param stoppedAtChoices whether it, or a choice inside it, was parted past
+         *                         {@link CompositionBudget#CHOICES_ON_A_WAY_LOOKED_AT}
+         */
+        record Parted(ChoiceRead read, boolean stoppedAtChoices) {}
+
+        private static Parted partedBy(OnTheWay choice, AWayReadForARelation reading) {
             if (!choice.ofSeveralWays()) {
-                return null;
+                return new Parted(null, false);
             }
             int most = CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT.maximum();
             List<List<OnTheWay>> bearing = new ArrayList<>();
             List<List<OnTheWay>> apart = new ArrayList<>();
             List<Leaf> leaves = new ArrayList<>();
             boolean opened = true;
+            boolean stopped = false;
             for (List<OnTheWay> alternative : choice.alternatives()) {
                 List<OnTheWay> on = new ArrayList<>();
                 List<OnTheWay> off = new ArrayList<>();
@@ -1105,7 +1130,9 @@ final class AWayReadForARelation {
                 for (OnTheWay each : alternative) {
                     // A choice inside an alternative is parted as one on the way is, and what it
                     // comes to for the relation is part of what the alternative does.
-                    ChoiceRead inside = each instanceof OnTheWay.OneOf ? of(each, reading) : null;
+                    Parted parted = each instanceof OnTheWay.OneOf ? of(each, reading) : null;
+                    ChoiceRead inside = parted == null ? null : parted.read();
+                    stopped |= parted != null && parted.stoppedAtChoices();
                     if (inside != null) {
                         inside.standingFor().ifPresent(on::add);
                         off.addAll(inside.toMeet());
@@ -1132,7 +1159,7 @@ final class AWayReadForARelation {
                 leaves.addAll(ways);
             }
             if (!opened) {
-                reading.stoppedAt.add(CompositionBudget.CHOICES_ON_A_WAY_LOOKED_AT);
+                stopped = true;
                 leaves.clear();
                 for (int each = 0; each < bearing.size(); each++) {
                     leaves.add(new Leaf(bearing.get(each), apart.get(each)));
@@ -1140,7 +1167,8 @@ final class AWayReadForARelation {
             }
             ChoiceRead out = new ChoiceRead(choice, bearing, apart, leaves,
                     reading.leavesEveryValueDeclared(bearing));
-            return out.whole() || out.leftOut() || choice instanceof OnTheWay.OneOf ? out : null;
+            return new Parted(out.whole() || out.leftOut() || choice instanceof OnTheWay.OneOf
+                    ? out : null, stopped);
         }
 
         /** Whether the relation is read as less for it than as it stands, where what it asks

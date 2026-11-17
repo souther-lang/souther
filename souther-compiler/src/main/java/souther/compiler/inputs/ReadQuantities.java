@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.Carrier;
+import souther.compiler.check.DatePartsLeft;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.NumberAt;
 import souther.compiler.check.RuleReadingContext;
@@ -436,6 +437,20 @@ final class ReadQuantities implements Quantities {
             @Override
             public Set<NumericTerm> terms() {
                 return Set.of(term);
+            }
+        }
+
+        /**
+         * The date at one position held to the days whose year leaves one of {@code remainders}
+         * by {@code divisor}: a class of the days and no run of them, which is why it is not a
+         * form.
+         */
+        record YearLeaves(NumericTerm.ValueOf date, int divisor, Set<Integer> remainders)
+                implements Assumed {
+
+            @Override
+            public Set<NumericTerm> terms() {
+                return Set.of(date);
             }
         }
     }
@@ -1246,6 +1261,20 @@ final class ReadQuantities implements Quantities {
         }
         held(term);
         return alsoAssuming(new Assumed.OnAnOrder(term, at, rel));
+    }
+
+    /**
+     * The same rules, with the date {@code date} held to the days whose year leaves one of
+     * {@code remainders} by {@code divisor}.
+     *
+     * <p>Read back as the class the value is held to ({@link #classAt}) and nowhere else: a
+     * region holds a run and a class holds no run, so what this narrows is which days a search
+     * offers for the date and never where the date runs.
+     */
+    ReadQuantities assumingTheYearLeaves(NumericTerm.ValueOf date, int divisor,
+                                         Set<Integer> remainders) {
+        held(date);
+        return alsoAssuming(new Assumed.YearLeaves(date, divisor, remainders));
     }
 
     /**
@@ -3455,9 +3484,30 @@ final class ReadQuantities implements Quantities {
                 together = new HeldClass.OfResidues(new Congruences(ofTheValue.residue(), shared));
             }
         }
-        for (Map.Entry<NumericTerm.TakenOf, BigInteger> each : remaindersPinned().entrySet()) {
+        // The years the way leaves the date, a class of its days beside the parts fixed below.
+        if (own == null && (together instanceof HeldClass.None || together instanceof HeldClass.OfDays)) {
+            for (Assumed taken : assumed) {
+                if (taken instanceof Assumed.YearLeaves years
+                        && years.date().position().equals(here.position())) {
+                    together = together.and(new HeldClass.OfDays(
+                            DatePartsLeft.yearLeaving(years.divisor(), years.remainders())));
+                }
+            }
+        }
+        for (Map.Entry<NumericTerm.TakenOf, BigInteger> each : numbersPinned().entrySet()) {
             NumericTerm.TakenOf other = each.getKey();
             if (other.equals(term) || !other.position().equals(here.position())) {
+                continue;
+            }
+            // A part of the date fixed beside the date holds it to the days that have the part, as
+            // a remainder holds a value to the numbers that leave it. A part of the date moved by
+            // days is a part of another date and holds this one to nothing.
+            if (own == null && other.takenAs() instanceof TakenAs.PartOfDate part
+                    && other.transformation().translation().offsetDays() == 0
+                    && (together instanceof HeldClass.None || together instanceof HeldClass.OfDays)) {
+                Endpoint at = Endpoint.inclusive(Count.of(each.getValue().longValueExact()));
+                together = together.and(new HeldClass.OfDays(new DatePartsLeft(
+                        Map.of(part.part(), new NumericDomain.Bounds(at, at)))));
                 continue;
             }
             BigInteger left = each.getValue();
@@ -3479,13 +3529,14 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
-     * The remainders held at one whole number each, by a value fixed there or by a comparison taken
-     * in that says no more than {@code remainder == number}.
+     * The numbers taken of a value, a remainder or a part of a date, held at one whole number each,
+     * by a value fixed there or by a comparison taken in that says no more than
+     * {@code number == whole}.
      *
-     * <p>Both are the same fact about the value the remainder is of, and a row reached through the
-     * line of one remainder is as much held to it as a row for which it was fixed.
+     * <p>Both are the same fact about the value the number is of, and a row reached through the
+     * line of one number is as much held to it as a row for which it was fixed.
      */
-    private Map<NumericTerm.TakenOf, BigInteger> remaindersPinned() {
+    private Map<NumericTerm.TakenOf, BigInteger> numbersPinned() {
         Map<NumericTerm.TakenOf, BigInteger> pinned = new LinkedHashMap<>();
         for (Map.Entry<NumericTerm, Fixed> each : fixed.entrySet()) {
             if (each.getKey() instanceof NumericTerm.TakenOf of && each.getValue().isOne()

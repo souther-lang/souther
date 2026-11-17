@@ -787,10 +787,21 @@ sealed interface ComparisonAssessment {
         public List<CaseExpansion> caseExpansions() {
             List<CaseExpansion.Counted> counted = new ArrayList<>();
             for (Part part : parts) {
-                counted.addAll(part.expanded());
+                part.expanded().stream().filter(each -> !each.workedOut()).forEach(counted::add);
             }
             return counted.isEmpty() ? List.of()
                     : CaseExpansion.Counted.attributedTo(counted, derivedBy);
+        }
+
+        /** The cases of these lines that were worked out all the same, each as it was counted. */
+        @Override
+        public List<CaseExpansion.Counted> countedWorkedOut() {
+            List<CaseExpansion.Counted> counted = new ArrayList<>();
+            for (Part part : parts) {
+                part.expanded().stream().filter(CaseExpansion.Counted::workedOut)
+                        .forEach(counted::add);
+            }
+            return List.copyOf(counted);
         }
 
         /**
@@ -1047,12 +1058,13 @@ sealed interface ComparisonAssessment {
          *              None where it was not read along them
          * @param workedOut how far {@code cases} were shown to be ones the line decides in, which
          *              every reading of it is made with ({@link #readings})
-         * @param expanded for the line not worked out because its cases were more ways of choosing
-         *              one than are taken apart, how many ways each case asked stood for, each on
-         *              its own ({@link CaseExpansion.Counted}), and nothing yet of what made its
-         *              parts, which is read off the statement's derivations
-         *              ({@link Several#derivedBy}); empty for every other part. Beside what the
-         *              line comes to and no part of it
+         * @param expanded for the line whose cases were more ways of choosing one than are taken
+         *              apart, not worked out or worked out all the same by what the numbers leave
+         *              of them, how many ways each case asked stood for, each on its own
+         *              ({@link CaseExpansion.Counted}), and nothing yet of what made its parts,
+         *              which is read off the statement's derivations ({@link Several#derivedBy});
+         *              empty for every other part. Beside what the line comes to and no part of
+         *              it
          */
         public record Part(PlaceOfALine id, ComparisonAssessment line, List<DecidingCase> cases,
                            Map<NumericTerm, EachWayItComesOut> comesOut,
@@ -1848,9 +1860,19 @@ sealed interface ComparisonAssessment {
                     : arrived;
             // Read only of what an arm of a choice answers, which is all a reader joins
             // ({@link Several#shownByItsArms}).
+            // And beside it, how many ways each case asked that was worked out all the same stood
+            // for, where their number was more than are taken apart: what asking them cost, for an
+            // author to find where the model is dear to read.
+            List<CaseExpansion.Counted> walked = new ArrayList<>();
+            for (CasesOfALineAsked.WalkedPast each : found.walkedPast()) {
+                walked.add(new CaseExpansion.Counted(part.id().ofItsCases(),
+                        cutting.of().named(), cutting.at().toString(), each.in(), each.counted(),
+                        true));
+            }
             out.add(new Several.Part(part.id(), read, DecidingCase.saidInAsFewAsMay(reached),
                     deciding.isEmpty() || Several.choiceAnsweredBy(part.id()) == null ? Map.of()
-                            : comingOutAlong(read, deciding, reading)));
+                            : comingOutAlong(read, deciding, reading),
+                    CasesWorkedOut.SHOWN, walked));
         }
         if (!stoppedAt.isEmpty()) {
             // And beside it, how many ways each case asked stood for, where their number is what
@@ -1915,7 +1937,14 @@ sealed interface ComparisonAssessment {
      * shown to divide no rows is in none of them.
      */
     record CasesReached(List<DecidingCase> reached, List<Reachability.Reaching> deciding,
-                        List<CasesOfALineAsked.NotWorkedOut> notWorkedOut) {
+                        List<CasesOfALineAsked.NotWorkedOut> notWorkedOut,
+                        List<CasesOfALineAsked.WalkedPast> walkedPast) {
+
+        /** Where no case was worked out past the figure. */
+        CasesReached(List<DecidingCase> reached, List<Reachability.Reaching> deciding,
+                     List<CasesOfALineAsked.NotWorkedOut> notWorkedOut) {
+            this(reached, deciding, notWorkedOut, List.of());
+        }
 
         /** Every figure a case nobody worked out was stopped at. */
         Set<Figure.Budget> stoppedAt() {
@@ -1945,6 +1974,7 @@ sealed interface ComparisonAssessment {
         List<DecidingCase> reached = new ArrayList<>();
         List<Reachability.Reaching> deciding = new ArrayList<>();
         List<CasesOfALineAsked.NotWorkedOut> notWorkedOut = new ArrayList<>();
+        List<CasesOfALineAsked.WalkedPast> walkedPast = new ArrayList<>();
         for (DecidingCase each : cases) {
             if (each.saidAlone()) {
                 if (wayToACase.crossing(cutting, each.condition(), reading, (toIt, keptTo) ->
@@ -1963,8 +1993,9 @@ sealed interface ComparisonAssessment {
                 deciding.addAll(waysArrivedBy(wayToACase.apply(one.condition()), arrivals));
             }
             notWorkedOut.addAll(found.notWorkedOutIn());
+            walkedPast.addAll(found.walkedPast());
         }
-        return new CasesReached(reached, deciding, notWorkedOut);
+        return new CasesReached(reached, deciding, notWorkedOut, walkedPast);
     }
 
     /**
@@ -2002,6 +2033,11 @@ sealed interface ComparisonAssessment {
         Map<Proposition, InACase> asked = new HashMap<>();
         Function<Proposition, InACase> inCase = condition ->
                 asked.computeIfAbsent(condition, _ -> {
+                    // A relation drawn beside no line parts nothing in any case, whichever rows
+                    // arrive: only whether some row is in the case is left to ask.
+                    if (against.beside().isEmpty()) {
+                        return new InACase(wayToACase.reaches(condition), List.of());
+                    }
                     Reachability toIt = wayToACase.apply(condition);
                     return new InACase(toIt instanceof Reachability.Reaching,
                             against.whereRowsArrive(reading, waysArrivedBy(toIt, arrivals),
@@ -2032,6 +2068,18 @@ sealed interface ComparisonAssessment {
         Set<Figure.Budget> stoppedAt = new LinkedHashSet<>();
         boolean someCaseLeftUndrawn = part.cases().isEmpty();
         for (DecidingCase each : part.cases()) {
+            // Beside no line, no case has a line to part the values by: a case some row is in is
+            // all there is to find, and the cases not walked after it have none to leave unread.
+            if (against.beside().isEmpty()) {
+                CasesOfALineAsked.Some<InACase> some = CasesOfALineAsked.someCaseAnswers(each,
+                        inCase, reachable, InACase::reachable);
+                if (some.first().isPresent()) {
+                    return List.of(new Several.Part(part.id(), against.partedBy(List.of()),
+                            List.of()));
+                }
+                stoppedAt.addAll(some.notWorkedOut());
+                continue;
+            }
             CasesOfALineAsked.Atoms<InACase> atoms =
                     CasesOfALineAsked.atomsOf(each, inCase, reachable);
             stoppedAt.addAll(atoms.notWorkedOut());
@@ -2480,6 +2528,16 @@ sealed interface ComparisonAssessment {
      * cases are never taken apart.
      */
     default List<CaseExpansion> caseExpansions() {
+        return List.of();
+    }
+
+    /**
+     * How many ways each case of a line whose cases were more ways of choosing one than are taken
+     * apart stood for, where every one of them was worked out all the same, by what the numbers
+     * leave of the ways. What asking them cost, which is no part of why a line was or was not
+     * read, and is kept as it was counted: nothing is read off the derivations for it.
+     */
+    default List<CaseExpansion.Counted> countedWorkedOut() {
         return List.of();
     }
 

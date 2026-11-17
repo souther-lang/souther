@@ -1625,16 +1625,18 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     private static final class StatedHere {
 
         /** A construct, by the node it is, under a reading of its names, by what that holds. */
-        private record Asked(Core node, InputReads reads) {
+        private record Asked(Core node, InputReads reads, boolean onEveryElement) {
 
             @Override
             public boolean equals(Object other) {
-                return other instanceof Asked that && node == that.node && reads.equals(that.reads);
+                return other instanceof Asked that && node == that.node && reads.equals(that.reads)
+                        && onEveryElement == that.onEveryElement;
             }
 
             @Override
             public int hashCode() {
-                return System.identityHashCode(node) * 31 + reads.hashCode();
+                return (System.identityHashCode(node) * 31 + reads.hashCode()) * 31
+                        + Boolean.hashCode(onEveryElement);
             }
         }
 
@@ -1684,9 +1686,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             if (applying instanceof ClosureApplications.Each(var made)
                     && made.stream().anyMatch(ClosureApplications.Application::isMadeOnSomeRow)) {
                 return Cutting.ofAnApplicationOnEach(made, one -> appliedOn(application,
-                        WhatNamesStandFor.in(one.reads(), standing.read())));
+                        WhatNamesStandFor.in(one.reads(), standing.read()),
+                        one.metOn().levels().isEmpty()));
             }
-            Cutting.AppliedOn applied = appliedOn(application, standing);
+            Cutting.AppliedOn applied = appliedOn(application, standing, false);
             return applied == null ? null : applied.read();
         }
 
@@ -1698,7 +1701,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
          */
         private Optional<Cutting.AppliedOn> unreadAsItsLawComparison(
                 Core.PreservedCall application, Pullback.Pulled stated,
-                WhatNamesStandFor standing) {
+                WhatNamesStandFor standing, boolean onEveryElement) {
             Pullback.LawComparison law = Pullback.lawComparisonOf(application, standing.reads(),
                     standing.read());
             if (law == null) {
@@ -1706,7 +1709,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             }
             Cutting.Read read = Cutting.ofALawComparison(behavior, law.comparison(),
                     standing.read(), law.reads(), answering,
-                    WhatConditionsState.of(standing.read()),
+                    WhatConditionsState.of(standing.read()), onEveryElement,
                     Optional.of(application.occurrence().lineage().expansionProjection()));
             return read == null ? Optional.empty()
                     : Optional.of(new Cutting.AppliedOn(read, stated.meaning().how(),
@@ -1714,10 +1717,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
 
         /** What {@code application} reads as under the names {@code standing} holds, or null where
-         *  it states nothing of its own. */
+         *  it states nothing of its own. {@code onEveryElement} is whether a run that gets to the
+         *  closure it stands in makes it on every element the closure is handed. */
         private Cutting.AppliedOn appliedOn(Core.PreservedCall application,
-                                            WhatNamesStandFor standing) {
-            return applications.computeIfAbsent(new Asked(application, standing.reads()), _ -> {
+                                            WhatNamesStandFor standing, boolean onEveryElement) {
+            return applications.computeIfAbsent(
+                    new Asked(application, standing.reads(), onEveryElement), _ -> {
                 // Whether an optional holds a value is what it states, as a truth is what it
                 // answers.
                 WhatConditionsState state = WhatConditionsState.of(standing.read());
@@ -1732,7 +1737,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     // holds against the value it was handed, that comparison is the application's
                     // own and says why at the places it compares. What stopped elsewhere in what
                     // the application states is a fork's to say.
-                    return itsOwn ? unreadAsItsLawComparison(application, stated, standing)
+                    return itsOwn
+                            ? unreadAsItsLawComparison(application, stated, standing, onEveryElement)
                             : Optional.empty();
                 }
                 if (!itsOwn) {

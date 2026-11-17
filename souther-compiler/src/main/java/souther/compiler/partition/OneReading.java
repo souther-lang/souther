@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.inputs.SearchRegion;
+import souther.compiler.inputs.TermPath;
 import souther.compiler.regex.Language;
 import souther.compiler.regex.StringsOfAPiece;
 import souther.compiler.semantics.CaseMapping;
@@ -11,13 +12,15 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
  * What one reading of a body's guards works out once and hands back to whoever asks the same
  * again while the reading lasts: the walk of a way ({@link WayToTheBorder#along}), what a run's
  * answers narrow a region by ({@link Reachability.Reaching#narrowedPast}), what a statement
- * says of its remainder ({@link ARemainderMoved#saidBy}), which operations of a case conversion
+ * says of its remainder ({@link ARemainderMoved#saidBy}), how a choice is parted for a relation
+ * ({@link AWayReadForARelation.ChoiceRead#of}), which operations of a case conversion
  * are not exact over the strings it is done to ({@link #notExactOver}), what it answers of them
  * ({@link #conversionAnswers}), which pieces of what
  * it answers are pieces of its values ({@link #piecesAConversionAnswers}), whether the strings
@@ -53,6 +56,8 @@ final class OneReading {
     private final Map<Conditions, OneOfEach.Walked<OnTheWay, Reachability>> walked =
             new HashMap<>();
     private final Map<RegionPast, Reachability.Reaching.NarrowedPast> narrowed = new HashMap<>();
+    private final Map<PartedFor, AWayReadForARelation.ChoiceRead.Parted> choicesParted =
+            new HashMap<>();
     private final Map<RowDemand.OnARemainder, Optional<ARemainderMoved.Said>> remaindersSaid =
             new IdentityHashMap<>();
     /** By value: a conversion is a value, and a language is its strings, hashed off the table it
@@ -103,6 +108,17 @@ final class OneReading {
         return READING.isBound()
                 ? kept(READING.get().remaindersSaid, statement, reading)
                 : reading.get();
+    }
+
+    /** {@code choice} parted for a relation reading {@code bearing}, over what {@code declarations}
+     *  leave: as this reading parted it already, or {@code parting}'s, now. */
+    static AWayReadForARelation.ChoiceRead.Parted choiceParted(
+            OnTheWay choice, Set<TermPath> bearing, SearchRegion declarations,
+            Supplier<AWayReadForARelation.ChoiceRead.Parted> parting) {
+        return READING.isBound()
+                ? kept(READING.get().choicesParted,
+                        new PartedFor(choice, Set.copyOf(bearing), declarations), parting)
+                : parting.get();
     }
 
     /** The operations of {@code conversion} whose image is not shown over {@code over}: as this
@@ -172,7 +188,7 @@ final class OneReading {
     }
 
     /** The conditions on a way, in their order, each by identity. */
-    private static final class Conditions {
+    static final class Conditions {
 
         private final List<OnTheWay> entries;
         private final int hash;
@@ -228,6 +244,15 @@ final class OneReading {
             return 31 * System.identityHashCode(region) + System.identityHashCode(answered);
         }
     }
+
+    /**
+     * A choice and the positions bearing on a relation, with the region of the declarations it is
+     * parted over, each by value: what a choice comes to for a relation is of what it says, of
+     * what bears on the relation and of what the declarations leave, and not of the entry that
+     * says it or the object that carries the region, which are made again for each case that
+     * asks.
+     */
+    private record PartedFor(OnTheWay choice, Set<TermPath> bearing, SearchRegion declarations) {}
 
     /** A conversion and the strings it is done to. */
     private record ConvertedOver(CaseMapping conversion, Language over) {}

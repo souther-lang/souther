@@ -31,7 +31,7 @@ class ADerivedValueInThePartitionPointsAtWhyItsDerivationWasNotProjectedTest {
             data No = { n: Int }
             data Maybe = { n: Int }
 
-            let late (c: Date, d: Date): Bool = Date.daysBetween(c, Date.addMonths(1, d)) >= 3
+            let late (c: Date, d: Date): Bool = Date.daysBetween(c, Date.addMonths(100, d)) >= 3
 
             behavior f : (c: Date, d: Date) -> Yes | No | Maybe
             let f (c, d) = {

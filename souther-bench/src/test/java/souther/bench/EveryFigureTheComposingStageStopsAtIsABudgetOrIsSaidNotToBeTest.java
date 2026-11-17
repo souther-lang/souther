@@ -72,6 +72,11 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
                             + ".MOST_DATES_A_WAY_IS_ASKED_OF",
                     "how many dates a way may state the parts of for them to be looked through"),
 
+            // How many steps of a date written as a move of another are followed to the date whose
+            // month it is the first of: the depth of an expression, which no search stops at.
+            Map.entry("souther.compiler.partition.Pullback.MOST_STEPS_TO_A_MONTH",
+                    "how deep a date written as moves of another is followed, which bounds the"
+                            + " expression and claims nothing of the model"),
             // A way over more numbers than this is not asked for a row made of numbers that meet
             // it, and nothing is then claimed of them; the numbers tried are each of a way that
             // states at most this many, so no search stops at it.

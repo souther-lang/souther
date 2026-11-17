@@ -102,6 +102,33 @@ class AStatementOfSeveralRelationsIsOneRuleWithALineForEachTest {
     }
 
     /**
+     * What selects a case of the magnitude, {@code a >= 0}, is the library's and owes no point;
+     * the same relation written by the author beside it is the author's and does.
+     */
+    @Test
+    void theSignTestOfTheMagnitudeOwesNoPointUnlessTheAuthorWroteIt() {
+        Set<String> library = new TreeSet<>();
+        pointsAnywhere(reportOf("Int.abs(a) > 3", ""), library);
+        assertFalse(library.isEmpty(), "the magnitude's own comparison is a line");
+        assertTrue(library.stream().noneMatch(each -> each.endsWith(" 0")),
+                () -> "nothing is owed at the sign test: " + library);
+        Set<String> written = new TreeSet<>();
+        pointsAnywhere(reportOf("Int.abs(a) < 7 && a >= 0", ""), written);
+        assertTrue(written.contains("pick/a 0"),
+                () -> "what the author wrote is owed: " + written);
+    }
+
+    /** The point every obligation of the report is owed at, whatever line it is on. */
+    private static void pointsAnywhere(JsonNode node, Set<String> out) {
+        if (node.isObject() && node.has("point") && node.has("readings")
+                && node.has("obligationId")) {
+            out.add(node.path("readings").get(0).path("axis").asString() + " "
+                    + node.path("readings").get(0).path("against").asString());
+        }
+        node.forEach(child -> pointsAnywhere(child, out));
+    }
+
+    /**
      * A line turns the statement only where rows on both sides of it are in one case of where it
      * decides, and not where the case holds on one side alone.
      *
