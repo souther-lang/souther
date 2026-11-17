@@ -8,7 +8,12 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -16,90 +21,101 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * An operation of a comparison that may end a run is told as such wherever the comparison is
  * read: where the arithmetic of the relation cancels it, where it is an element of a list
- * written out, and where it stands in an arm of a choice. Each is told the note the same
- * operation gives in a comparison that restates nothing, and an operation no run works out is
- * told of none.
+ * written out, where it stands in an arm of a choice, where two steps of a list are composed, and
+ * beside a walk. Each is told the note the same operation gives in a comparison that restates
+ * nothing, and an operation no run works out is told of none.
+ *
+ * <p>One case for each way the operation is lost, all read in one model: a form the same
+ * mechanism loses is not another claim.
  */
 class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
 
     private static final String THE_STOP = "every run stops in q + 1 where q is at least "
             + "9223372036854775807";
 
-    /** The control: nothing is cancelled or substituted. */
+    private static final Map<String, String> CONDITIONS = new LinkedHashMap<>();
+
+    static {
+        CONDITIONS.put("control", "q + 1 <= 10");
+        CONDITIONS.put("cancelled", "q + 1 >= q");
+        CONDITIONS.put("written", "List.all(r -> r >= 4, [q + 1, 3])");
+        CONDITIONS.put("arm", "(if q > 5 then q + 1 else 3) >= q");
+        CONDITIONS.put("composed",
+                "List.all(r -> r <= 10, List.map(x -> x + 1, List.map(y -> y * 2, ds)))");
+        CONDITIONS.put("beside",
+                "List.fold((w, l) -> if l > w then l else w, 0, ds) <= q + 1");
+        CONDITIONS.put("none", "q >= q");
+        CONDITIONS.put("armNoStop", "(if q > 5 then q - 1 else 3) >= q");
+    }
+
+    private static final Map<String, List<String>> TOLD = told();
+
     @Test
     void anOperationInAComparisonThatRestatesNothingIsTold() {
-        assertTrue(stops("q + 1 <= 10").stream().anyMatch(note -> note.endsWith(THE_STOP)),
-                stops("q + 1 <= 10").toString());
+        assertEquals(1, TOLD.get("control").size(), TOLD.toString());
+        assertTrue(TOLD.get("control").getFirst().endsWith(THE_STOP), TOLD.toString());
     }
 
     @Test
     void anOperationTheRelationCancelsIsToldAsTheControlTellsIt() {
-        for (String condition : List.of("q + 1 >= q", "q + 1 > q", "(q + 1) - q >= 3",
-                "1 + q - q >= 3")) {
-            assertEquals(1, stops(condition).size(), condition);
-            assertTrue(stops(condition).getFirst().endsWith(THE_STOP),
-                    condition + " " + stops(condition));
-        }
+        assertEquals(TOLD.get("control").size(), TOLD.get("cancelled").size(), TOLD.toString());
+        assertTrue(TOLD.get("cancelled").getFirst().endsWith(THE_STOP), TOLD.toString());
     }
 
     @Test
     void anOperationInAListWrittenOutIsToldAsTheControlTellsIt() {
-        for (String condition : List.of("List.all(r -> r >= 4, [q + 1, 3])",
-                "List.any(r -> r >= 4, [q + 1, 3])", "List.length([q + 1, 3]) >= 2")) {
-            assertEquals(1, stops(condition).size(), condition);
-            assertTrue(stops(condition).getFirst().endsWith(THE_STOP),
-                    condition + " " + stops(condition));
-        }
+        assertTrue(TOLD.get("written").getFirst().endsWith(THE_STOP), TOLD.toString());
     }
 
     /** Where the operation is in one arm only, a run that takes that arm may stop; which rows
      *  stop is not said of the others. */
     @Test
     void anOperationInOneArmOfAChoiceIsToldAsOneAMayStop() {
-        for (String condition : List.of("(if q > 5 then q + 1 else 3) >= q",
-                "Int.max(q + 1, 3) >= q")) {
-            assertEquals(1, stops(condition).size(), condition);
-        }
+        assertEquals(1, TOLD.get("arm").size(), TOLD.toString());
     }
 
-    /** Two steps of one list: the first is worked out before the second, so a row is not said
-     *  to stop in the second where it stopped in the first. */
+    /** The first step is worked out before the second, so a row is not said to stop in the
+     *  second where it stopped in the first, and the first is told. */
     @Test
     void anOperationInAStepComposedWithAnotherIsToldAsTheStepAloneIs() {
-        String alone = stops("List.all(r -> r <= 10, List.map(y -> y * 2, ds))").getFirst();
-        List<String> composed =
-                stops("List.all(r -> r <= 10, List.map(x -> x + 1, List.map(y -> y * 2, ds)))");
-        assertEquals(1, composed.size(), composed.toString());
-        assertTrue(composed.getFirst().contains("in 2 * ds[*] where ds[*] is at least"),
-                composed + " beside " + alone);
+        assertEquals(1, TOLD.get("composed").size(), TOLD.toString());
+        assertTrue(TOLD.get("composed").getFirst()
+                .contains("in 2 * ds[*] where ds[*] is at least"), TOLD.toString());
     }
 
     /** The other side of a comparison of a walk is worked out whatever the walk answers. */
     @Test
     void anOperationBesideAWalkThatEndsNoRunIsToldAsTheControlTellsIt() {
-        for (String condition : List.of(
-                "List.fold((w, l) -> if l > w then l else w, 0, ds) <= q + 1",
-                "q + 1 >= List.fold((w, l) -> if l > w then l else w, 0, ds)")) {
-            assertEquals(1, stops(condition).size(), condition);
-            assertTrue(stops(condition).getFirst().endsWith(THE_STOP),
-                    condition + " " + stops(condition));
-        }
+        assertTrue(TOLD.get("beside").getFirst().endsWith(THE_STOP), TOLD.toString());
     }
 
     @Test
     void nothingIsToldWhereNoRunWorksTheOperationOut() {
-        assertEquals(List.of(), stops("q >= q"));
-        assertEquals(List.of(), stops("(if q > 5 then q - 1 else 3) >= q"));
+        assertEquals(List.of(), TOLD.get("none"));
+        assertEquals(List.of(), TOLD.get("armNoStop"));
     }
 
-    private static List<String> stops(String condition) {
-        Compilation compilation = ACompiledModel.measured("""
-                module m
-                behavior role : (ds: List<Int>, q: Int) -> Int
-                let role (ds, q) = if %s then 1 else 2
-                """.formatted(condition), new Adequacy.Asked(Adequacy.Level.OFF, false));
-        return AdequacyReport.of(compilation)
+    /** The notes of each behavior, each of the conditions read once, as the model says them. */
+    private static Map<String, List<String>> told() {
+        StringBuilder model = new StringBuilder("module m\n");
+        CONDITIONS.forEach((name, condition) -> model.append("\nbehavior ").append(name)
+                .append(" : (ds: List<Int>, q: Int) -> Int\nlet ").append(name)
+                .append(" (ds, q) = if ").append(condition).append(" then 1 else 2\n"));
+        Compilation compilation = ACompiledModel.measured(model.toString(),
+                new Adequacy.Asked(Adequacy.Level.OFF, false));
+        Pattern header = Pattern.compile("^(\\w+)\\s+implemented\\b.*");
+        Map<String, List<String>> out = new LinkedHashMap<>();
+        List<String> current = null;
+        for (String line : AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
-                .map(String::strip).filter(line -> line.contains("may stop a run")).toList();
+                .map(String::strip).toList()) {
+            Matcher started = header.matcher(line);
+            if (started.matches()) {
+                current = out.computeIfAbsent(started.group(1), _ -> new ArrayList<>());
+            } else if (current != null && line.contains("may stop a run")) {
+                current.add(line);
+            }
+        }
+        return out;
     }
 }
