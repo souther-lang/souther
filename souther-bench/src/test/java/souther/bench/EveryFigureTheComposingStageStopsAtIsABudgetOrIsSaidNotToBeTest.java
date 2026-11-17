@@ -83,6 +83,12 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             Map.entry("souther.compiler.partition.AWitnessOfDifferences.MOST_NUMBERS",
                     "how many numbers a way may state for a row to be made of them by trying"),
 
+            // A divisor past this is not searched, and the answer says so, which is no answer that
+            // the remainders cannot be met; every pair of the remainders below it is tried, so no
+            // search stops at it.
+            Map.entry("souther.compiler.partition.JointResidues.MOST_DIVISOR",
+                    "how large a divisor the pairs of remainders are all tried at"),
+
             // A distance no assignment reaches, which a position with no class to move to is at.
             Map.entry("souther.compiler.partition.NearestAssignments.UNREACHABLE",
                     "no distance, which is what a position with no class to move to changes"
