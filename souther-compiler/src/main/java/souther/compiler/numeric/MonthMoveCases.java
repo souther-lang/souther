@@ -117,14 +117,26 @@ public final class MonthMoveCases {
         }
     }
 
+    /** Whether a move by {@code months} is one read in cases: by no more than
+     *  {@link #MOST_MONTHS} either way. */
+    public static boolean reads(long months) {
+        return months >= -MOST_MONTHS && months <= MOST_MONTHS;
+    }
+
     /**
-     * The months of a move of {@code first} and one of {@code then}, where they are a count: none
-     * where the sum is not one, which a sum that wraps is not, whatever it wraps to.
+     * The months of a move of {@code first} and one of {@code then}, where the chain is read in
+     * cases: none unless each move is one that is read, and the months they come to are too.
+     *
+     * <p>Each move and not only their sum, since a chain is a call in a call: one that moves by
+     * more months than are read stands at a date no case says anything of, and a move back by as
+     * many ends at the date the sum names without ever having been there. A chain that is none is
+     * read as the calls it is written as.
      */
     public static OptionalLong chained(long first, long then) {
-        long sum = first + then;
-        boolean wrapped = ((first ^ sum) & (then ^ sum)) < 0;
-        return wrapped ? OptionalLong.empty() : OptionalLong.of(sum);
+        if (!reads(first) || !reads(then) || !reads(first + then)) {
+            return OptionalLong.empty();
+        }
+        return OptionalLong.of(first + then);
     }
 
     /**
@@ -136,7 +148,7 @@ public final class MonthMoveCases {
      *                        month it lands in
      */
     public static List<Case> of(long months, Asked asked, boolean firstOfItsMonth) {
-        if (months < -MOST_MONTHS || months > MOST_MONTHS) {
+        if (!reads(months)) {
             return null;
         }
         List<Case> out = new ArrayList<>();

@@ -35,17 +35,24 @@ class TheMonthsAMoveIsReadInAreBoundedAtEveryEdgeTest {
     }
 
     @Test
-    void aChainIsTheSumOfItsMovesWhereTheSumIsACount() {
-        assertEquals(OptionalLong.of(5), MonthMoveCases.chained(30, -25));
-        assertEquals(OptionalLong.of(Long.MAX_VALUE), MonthMoveCases.chained(Long.MAX_VALUE, 0));
-        assertEquals(OptionalLong.of(-1), MonthMoveCases.chained(Long.MAX_VALUE, Long.MIN_VALUE));
+    void aChainIsTheSumOfItsMovesWhereEveryMoveAndTheSumAreRead() {
+        assertEquals(OptionalLong.of(2), MonthMoveCases.chained(1, 1));
+        assertEquals(OptionalLong.of(0), MonthMoveCases.chained(24, -24));
+        assertEquals(OptionalLong.of(-24), MonthMoveCases.chained(-24, 0));
     }
 
     @Test
-    void aChainWhoseSumIsNotACountIsNoMoveEvenWhereItWrapsIntoWhatIsRead() {
-        assertEquals(OptionalLong.empty(), MonthMoveCases.chained(Long.MAX_VALUE, 1));
-        assertEquals(OptionalLong.empty(), MonthMoveCases.chained(Long.MIN_VALUE, -1));
-        // Long.MAX_VALUE + 25 wraps to Long.MIN_VALUE + 24, which is below the bound and no sum.
+    void aChainIsNoMoveWhereOneOfItsMovesIsByMoreMonthsThanAreRead() {
+        // The sum of these is nought, and the first is a move no case says anything of.
+        assertEquals(OptionalLong.empty(), MonthMoveCases.chained(25, -25));
+        assertEquals(OptionalLong.empty(), MonthMoveCases.chained(-25_000_000_000L, 25_000_000_000L));
+    }
+
+    @Test
+    void aChainWhoseSumIsByMoreMonthsThanAreReadIsNoMoveEvenWhereItWraps() {
+        assertEquals(OptionalLong.empty(), MonthMoveCases.chained(24, 1));
+        // Long.MAX_VALUE + 25 wraps to Long.MIN_VALUE + 24, below the bound and no sum.
         assertEquals(OptionalLong.empty(), MonthMoveCases.chained(Long.MAX_VALUE, 25));
+        assertEquals(OptionalLong.empty(), MonthMoveCases.chained(Long.MAX_VALUE, Long.MIN_VALUE));
     }
 }

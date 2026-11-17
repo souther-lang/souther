@@ -14306,8 +14306,8 @@ final class Pullback {
 
     /**
      * The date whose month {@code date} is the first of, and how many months on from the first of
-     * that month it is — or null where {@code date} is not the first of a month, or the months of
-     * the moves are not a count.
+     * that month it is — or null where {@code date} is not the first of a month, or the moves
+     * are not a chain read in cases ({@link souther.compiler.numeric.MonthMoveCases#chained}).
      *
      * <p>The first of a month is a date moved by one less than its own day of the month, and a
      * date the first of a month is moved by months is the first of the month it lands in
@@ -14335,8 +14335,8 @@ final class Pullback {
     /**
      * The date whose month the first of the month of {@code date} is the first of, and how many
      * months on it is: {@code date} itself where it is a date no more is known of, and what it
-     * moves or is the first of the month of otherwise — or null where the months of the moves are
-     * not a count.
+     * moves or is the first of the month of otherwise — or null where the moves are not a chain
+     * read in cases.
      */
     private MonthMovesInCases.MonthStart theMonthOf(Denotation date, ValueName dayOfTheMonth,
                                                     int steps) {

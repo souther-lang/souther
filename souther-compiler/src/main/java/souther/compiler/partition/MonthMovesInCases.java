@@ -64,8 +64,8 @@ final class MonthMovesInCases {
     record MonthStart(Core of, long moved) {
 
         /**
-         * The first of that month moved by {@code months} more, or null where the months of the
-         * two are not a count ({@link MonthMoveCases#chained}).
+         * The first of that month moved by {@code months} more, or null where the two are not a
+         * chain read in cases ({@link MonthMoveCases#chained}).
          */
         MonthStart movedBy(long months) {
             OptionalLong total = MonthMoveCases.chained(moved, months);
