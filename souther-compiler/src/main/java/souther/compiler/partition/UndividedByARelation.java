@@ -2156,6 +2156,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (int i = 0; i < sides.size(); i++) {
             tiedTo.add(tiedTo(i, tied, tying, sources, read, ignoring));
         }
+        List<Optional<Set<TermPath>>> placesOfSides = new ArrayList<>();
+        for (Side each : sides) {
+            placesOfSides.add(placesItIsReadOff(each).map(LinkedHashSet::new));
+        }
         for (TakenConstraint each : runNarrows) {
             if (each instanceof TakenConstraint.Affine(var form, var rel, var _)
                     && endsAnOperationOfTheRelation(form, rel)) {
@@ -2163,8 +2167,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             List<Integer> named = new ArrayList<>();
             for (int i = 0; i < sides.size(); i++) {
-                if (sides.get(i).number() != null
-                        && each.terms().contains(sides.get(i).number())) {
+                if (namesASide(each, sides.get(i), placesOfSides.get(i))) {
                     named.add(i);
                 }
             }
@@ -10632,6 +10635,23 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
     }
 
+    /**
+     * Whether {@code narrowing} says anything of {@code side}: a number of it, or a number read
+     * off a place the side is made of. A side whose places are not told is taken as named, so
+     * that what is not known never leaves two sides apart.
+     *
+     * @param places {@link #placesItIsReadOff} of {@code side}
+     */
+    private static boolean namesASide(TakenConstraint narrowing, Side side,
+                                      Optional<Set<TermPath>> places) {
+        if (places.isEmpty()) {
+            return true;
+        }
+        return narrowing.terms().stream().anyMatch(term -> term.equals(side.number())
+                || (term instanceof NumericTerm.FromOnePosition number
+                        && touches(number, places.get())));
+    }
+
     /** Whether one of {@code positions} bears on a place {@code term} is read off
      *  ({@link TermPath#bearsOn}): the place, one around it or under it, or the value it is in
      *  narrowed to another case. */
@@ -10775,47 +10795,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (shape == null) {
             return NumericDomain.Bounds.OPEN;
         }
-        BigInteger byValue = wholeNumberOf(shape.coefs().get(value));
-        BigInteger leastOthers = BigInteger.ZERO;
-        BigInteger greatestOthers = BigInteger.ZERO;
+        List<RunOfASum.Other> weighed = new ArrayList<>();
         for (NumericTerm other : others) {
             TermOrders otherOrders = read.quantities().ordersOf((NumericTerm.FromOnePosition) other);
-            WholeEnds ends = otherOrders == null ? null
-                    : wholeEndsOf(otherOrders.answered().whereItStops());
-            BigInteger by = wholeNumberOf(shape.coefs().get(other));
-            if (ends == null || ends.low() == null || ends.high() == null || by == null) {
-                return null;
-            }
-            leastOthers = leastOthers.add(by.signum() > 0 ? ends.low() : ends.high().negate());
-            greatestOthers = greatestOthers.add(by.signum() > 0 ? ends.high()
-                    : ends.low().negate());
+            weighed.add(new RunOfASum.Other(otherOrders == null ? null
+                    : wholeEndsOf(otherOrders.answered().whereItStops()),
+                    wholeNumberOf(shape.coefs().get(other))));
         }
-        // The weighed value is between the form's least less the greatest the others weigh to,
-        // and its greatest less the least: every whole number of that has the others to bring the
-        // form to it, since each is weighed one.
-        BigInteger weighedLow = from == null ? null : from.subtract(greatestOthers);
-        BigInteger weighedHigh = to == null ? null : to.subtract(leastOthers);
-        BigInteger low = mine.low();
-        BigInteger high = mine.high();
-        BigInteger lowest = byValue.signum() > 0 ? weighedLow
-                : weighedHigh == null ? null : weighedHigh.negate();
-        BigInteger highest = byValue.signum() > 0 ? weighedHigh
-                : weighedLow == null ? null : weighedLow.negate();
-        if (lowest != null) {
-            low = low.max(lowest);
-        }
-        if (highest != null) {
-            high = high.min(highest);
-        }
-        if (low.compareTo(high) > 0) {
+        Optional<WholeEnds> run = RunOfASum.of(mine, wholeNumberOf(shape.coefs().get(value)),
+                weighed, from, to);
+        if (run.isEmpty()) {
             return null;
         }
-        if (low.equals(mine.low()) && high.equals(mine.high())) {
+        if (run.get().equals(mine)) {
             return NumericDomain.Bounds.OPEN;
         }
         return new NumericDomain.Bounds(
-                Endpoint.inclusive(Count.of(new BigDecimal(low))),
-                Endpoint.inclusive(Count.of(new BigDecimal(high))));
+                Endpoint.inclusive(Count.of(new BigDecimal(run.get().low()))),
+                Endpoint.inclusive(Count.of(new BigDecimal(run.get().high()))));
     }
 
     /** Whether {@code number} is held by nothing but the type: no statement of the way turns on

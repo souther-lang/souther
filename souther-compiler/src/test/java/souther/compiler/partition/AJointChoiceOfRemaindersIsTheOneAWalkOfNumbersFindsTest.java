@@ -73,6 +73,18 @@ class AJointChoiceOfRemaindersIsTheOneAWalkOfNumbersFindsTest {
         assertTrue(met > 1000 && none > 1000, met + " met, " + none + " none");
     }
 
+    /** The number is the least that meets them, where that is past the bounds the sweep above asks
+     *  for the largest divisor: {@code x} is held at nought and {@code x + n} at five, so the
+     *  number is five and no less. */
+    @Test
+    void theNumberChosenIsTheLeastEvenWhereTheDivisorIsTheLargestSearched() {
+        List<JointResidues.Statement> statements = List.of(
+                new JointResidues.Statement(0, 0, Set.of(0)),
+                new JointResidues.Statement(0, 1, Set.of(5)));
+        assertEquals(new JointResidues.Choice(0, 5),
+                JointResidues.least(JointResidues.MOST_DIVISOR, statements));
+    }
+
     /** A divisor past what is searched is no answer that the statements cannot be met, and is not
      *  searched. */
     @Test

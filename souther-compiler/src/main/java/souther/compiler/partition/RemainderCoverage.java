@@ -89,6 +89,9 @@ final class RemainderCoverage {
             return Optional.empty();
         }
         BigInteger[] range = form.tightened(narrowing, sum);
+        if (range == null) {
+            return Optional.empty();
+        }
         WholeEnds ends = form.pivotWithin(narrowing, pivotEnds);
         // The form without its constant lies where the program works it out: inside the type as
         // the statements state it, and inside each end the run narrows it to.
@@ -132,7 +135,8 @@ final class RemainderCoverage {
         /**
          * {@code sum} narrowed by the narrowings of the universal numbers alone that hold the
          * form they weigh together between two ends: a premise, which keeps rows away and so
-         * leaves the claim narrower. Any other narrowing of them says nothing here.
+         * leaves the claim narrower. Any other narrowing of them says nothing here. Null where the
+         * premises leave no sum.
          */
         BigInteger[] tightened(List<TakenConstraint> narrowing, BigInteger[] sum) {
             BigInteger low = sum[0];
@@ -156,7 +160,7 @@ final class RemainderCoverage {
                     low = low.max(bound);
                 }
             }
-            return new BigInteger[] {low, high};
+            return low.compareTo(high) > 0 ? null : new BigInteger[] {low, high};
         }
 
         /**
