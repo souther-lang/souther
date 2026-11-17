@@ -7,6 +7,7 @@ import souther.compiler.check.RuleCitations;
 import souther.compiler.check.RuleRef;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.CasesExpandedAtARule;
+import souther.compiler.inputs.CasesReadAtACost;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputQuestion;
 import souther.compiler.inputs.PositionReadingBlocked;
@@ -103,7 +104,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 List<Incompleteness> whyUnclassified,
                                 List<CasesExpandedAtARule> caseExpansions,
                                 List<StopPastTheRepresentation> stopsPastTheRepresentation,
-                                List<CasesExpandedAtARule> costlyReadings)
+                                List<CasesReadAtACost> costlyReadings)
         implements RuleCitations {
 
     /** The same, with no rule's line read at a cost told of. */

@@ -17,6 +17,7 @@ import souther.compiler.check.RuleRef;
 import souther.compiler.check.StringPredicates;
 import souther.compiler.check.DeclaredClauses;
 import souther.compiler.inputs.CasesExpandedAtARule;
+import souther.compiler.inputs.CasesReadAtACost;
 import souther.compiler.inputs.Distinctions;
 import souther.compiler.inputs.EmptyInput;
 import souther.compiler.inputs.PositionValuesNotSeparated;
@@ -182,7 +183,7 @@ public final class Partitions {
                                List<DerivedValue.Replaced> replaced,
                                List<CasesExpandedAtARule> caseExpansions,
                                ReadingsReadOn readOn,
-                               List<CasesExpandedAtARule> costlyReadings) {
+                               List<CasesReadAtACost> costlyReadings) {
 
         /** The same, with no rule's line read at a cost told of. */
         public Partitioning(List<PositionMeasurements> measurements,

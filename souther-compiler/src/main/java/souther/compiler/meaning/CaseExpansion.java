@@ -148,29 +148,49 @@ public record CaseExpansion(Which which, String line, String cutAt, CameTo cameT
         }
 
         /**
-         * Each of {@code counted} that was worked out all the same and whose choices multiply the
-         * readings of some helper, in order, with what made its parts read off
-         * {@code derivedBy}. What a reader is told of such a case is that helper and where it was
-         * read, and no count: the line was read, and what the case cost is no reason it was not.
-         * A case that was not worked out, or whose choices multiply no helper's readings, is told
-         * of nothing here.
+         * Each of {@code counted} that was worked out all the same and whose choices stand among
+         * the readings of some helper, in order, with the helpers read off {@code derivedBy}.
+         * What a reader is told of such a case is that helper and where it was read, and no
+         * count and no account of the numbers its comparisons leave: the line was read, and what
+         * the case cost is no reason it was not. So nothing else of the case is worked out here.
+         * A case that was not worked out, or whose choices stand among no helper's readings, is
+         * told of nothing.
          */
-        public static List<CaseExpansion> costly(List<Counted> counted,
-                                                 List<Derivation> derivedBy) {
+        public static List<CostlyCase> costly(List<Counted> counted, List<Derivation> derivedBy) {
             List<Counted> read = counted.stream().filter(Counted::workedOut).toList();
             if (read.isEmpty()) {
                 return List.of();
             }
-            List<Attribution> made = TheChoicesACaseIsMadeOf.of(
+            List<List<MultipliedHelper>> chosen = TheChoicesACaseIsMadeOf.helpersOf(
                     read.stream().map(each -> each.asked().standsFor()).toList(), derivedBy);
-            List<CaseExpansion> out = new ArrayList<>();
+            List<CostlyCase> out = new ArrayList<>();
             for (int at = 0; at < read.size(); at++) {
-                if (made.get(at) instanceof Attributed attributed
-                        && !attributed.multiplied().isEmpty()) {
-                    out.add(read.get(at).attributed(made.get(at)));
+                if (!chosen.get(at).isEmpty()) {
+                    Counted each = read.get(at);
+                    out.add(new CostlyCase(new Which(each.of(), each.asked().condition()),
+                            each.line(), each.cutAt(), chosen.get(at)));
                 }
             }
             return List.copyOf(out);
+        }
+    }
+
+    /**
+     * A case read all the same at a cost, told of by the helpers its choices stand among.
+     *
+     * @param which   which case of which line
+     * @param line    the quantity the line is on
+     * @param cutAt   where on it the line is
+     * @param helpers the helpers whose readings the case chooses among one beside another
+     */
+    public record CostlyCase(Which which, String line, String cutAt,
+                             List<MultipliedHelper> helpers) {
+
+        public CostlyCase {
+            Objects.requireNonNull(which, "a case is of some line");
+            Objects.requireNonNull(line, "a case is a line's");
+            Objects.requireNonNull(cutAt, "a line is somewhere on its quantity");
+            helpers = List.copyOf(helpers);
         }
     }
 

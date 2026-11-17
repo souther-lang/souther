@@ -110,6 +110,7 @@ import souther.compiler.inputs.ElementKey;
 import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.WhatAConstructionAsks;
 import souther.compiler.inputs.CasesExpandedAtARule;
+import souther.compiler.inputs.CasesReadAtACost;
 import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
@@ -2252,13 +2253,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 }
             });
             // And each construct a line read at a cost names a helper's readings at.
-            partition.costlyReadings().forEach(each -> each.readings().forEach(reading -> {
-                if (reading.cameTo().attributed()
-                        instanceof CaseExpansion.Attributed attributed) {
-                    attributed.constructsNamed().forEach(
-                            construct -> whereItIsWritten(construct).ifPresent(take));
-                }
-            }));
+            partition.costlyReadings().forEach(each -> each.readings().forEach(reading ->
+                    reading.helpers().forEach(helper -> helper.madeAt().forEach(
+                            construct -> whereItIsWritten(construct).ifPresent(take)))));
             // And each construct a count of a line's cases says made its parts.
             partition.caseExpansions().forEach(each -> each.readings().forEach(reading -> {
                 if (reading.cameTo().attributed()
@@ -4445,13 +4442,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             }
             // And, for a rule a line of which was read all the same at a cost, the helper its
             // cases choose among: a line of its own, since it is no reason the line was not read.
-            for (CasesExpandedAtARule each : partition.costlyReadings()) {
-                for (CasesExpandedAtARule.Reading reading : each.readings()) {
-                    if (!(reading.cameTo().attributed()
-                            instanceof CaseExpansion.Attributed attributed)) {
-                        continue;
-                    }
-                    String helpers = String.join("", attributed.multiplied().stream()
+            for (CasesReadAtACost each : partition.costlyReadings()) {
+                for (CasesReadAtACost.Reading reading : each.readings()) {
+                    String helpers = String.join("", reading.helpers().stream()
                             .map(helper -> multipliedHelperSaid(helper, construct ->
                                     writtenInSaid(construct, parts, page, declaredIn),
                                     copy -> calledAt(callsAt(behavior.conditionPlaces().copies(),
@@ -9632,7 +9625,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         // there is one.
         if (!partition.costlyReadings().isEmpty()) {
             DocumentArray costly = DocumentPart.COSTLY_READINGS.putArray(out);
-            for (CasesExpandedAtARule each : partition.costlyReadings()) {
+            for (CasesReadAtACost each : partition.costlyReadings()) {
                 costlyReadingRow(costly.addObject(), each, places, parts, sources);
             }
         }
@@ -9682,7 +9675,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     /** One rule's line read at a cost and the helpers its cases choose among, as a row of
      *  {@code costlyReadings}. */
-    private static void costlyReadingRow(DocumentItem row, CasesExpandedAtARule each,
+    private static void costlyReadingRow(DocumentItem row, CasesReadAtACost each,
                                          PublishedRuleHandle.WhereARuleIs places,
                                          WhereAPartIs parts, DocumentSources sources) {
         ObjectNode said = row.node();
@@ -9695,15 +9688,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         ArrayNode arms = said.putArray("arms");
         each.which().line().written().arms().forEach(arm -> writtenArm(arms.addObject(), arm));
         ArrayNode readings = said.putArray("readings");
-        for (CasesExpandedAtARule.Reading reading : each.readings()) {
+        for (CasesReadAtACost.Reading reading : each.readings()) {
             ObjectNode one = readings.addObject();
             ArrayNode copies = one.putArray("readAt");
             reading.readAt().forEach(copy -> copyId(copies.addObject(), copy));
             ArrayNode helpers = one.putArray("helpers");
-            if (reading.cameTo().attributed() instanceof CaseExpansion.Attributed attributed) {
-                attributed.multiplied().forEach(helper ->
-                        multipliedHelper(helpers.addObject(), helper, parts, sources));
-            }
+            reading.helpers().forEach(helper ->
+                    multipliedHelper(helpers.addObject(), helper, parts, sources));
         }
     }
 

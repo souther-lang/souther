@@ -85,11 +85,16 @@ class ReadingsChosenOneBesideAnotherTest {
 
     /** The readings found for each group, by name. */
     private static Map<String, List<String>> found(DecidingCase.Cases cases) {
+        return found(cases, ReadingsChosenOneBesideAnother.PAIRS_ASKED_OF_ALTERNATIVES);
+    }
+
+    /** The same, asking no more than {@code mostPairs} pairs of alternatives. */
+    private static Map<String, List<String>> found(DecidingCase.Cases cases, int mostPairs) {
         Map<Spelling, BitSet> madeBy = madeBy(PARTS, READINGS);
         Map<String, List<String>> out = new HashMap<>();
         ReadingsChosenOneBesideAnother.of(cases,
                 spelling -> madeBy.getOrDefault(spelling, new BitSet()), GROUP::get,
-                ReadingsChosenOneBesideAnotherTest::mayBeOne)
+                ReadingsChosenOneBesideAnotherTest::mayBeOne, mostPairs)
                 .forEach((group, readings) -> out.put(group,
                         readings.stream().mapToObj(READINGS::get).toList()));
         return out;
@@ -163,6 +168,24 @@ class ReadingsChosenOneBesideAnotherTest {
         assertEquals(Map.of(), found(anyOf(
                 together(one("h1a"), next),
                 together(one("h2c"), next))));
+    }
+
+    /**
+     * What is asked of pairs of alternatives is bounded, and what is found stands: of four
+     * alternatives, six pairs, the last of which is the only one the readings of {@code h1} alone
+     * tell apart: the others are told apart by {@code h2}, which is the reading of the choice
+     * after them. Asked five, nothing is shown; asked all six, it is.
+     */
+    @Test
+    void pairsOfAlternativesAreAskedUpToAFigureAndNothingIsSaidOfThosePastIt() {
+        DecidingCase.Cases next = anyOf(one("h2a"), one("h2b"));
+        DecidingCase.Cases cases = anyOf(
+                together(one("h2c"), next),
+                together(one("h2a"), next),
+                together(one("h1a"), next),
+                together(one("h1b"), next));
+        assertEquals(Map.of(), found(cases, 5));
+        assertEquals(Map.of("H", List.of("h1", "h2")), found(cases, 6));
     }
 
     /** An alternative holding what another holds is that one: said again, it changes no answer. */

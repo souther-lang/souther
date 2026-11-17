@@ -800,7 +800,7 @@ sealed interface ComparisonAssessment {
          * show it.
          */
         @Override
-        public List<CaseExpansion> costlyReadings() {
+        public List<CaseExpansion.CostlyCase> costlyReadings() {
             return CaseExpansion.Counted.costly(countedWorkedOut(), derivedBy);
         }
 
@@ -2565,7 +2565,7 @@ sealed interface ComparisonAssessment {
      * and never in it, and no reason a line was not worked out: none for a line whose cases were
      * not past the figure, or whose choices multiply no helper's readings.
      */
-    default List<CaseExpansion> costlyReadings() {
+    default List<CaseExpansion.CostlyCase> costlyReadings() {
         return List.of();
     }
 

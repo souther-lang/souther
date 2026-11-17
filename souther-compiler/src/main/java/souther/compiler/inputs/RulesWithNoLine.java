@@ -44,7 +44,7 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
                               List<StandingQuestion.Unclassified> unclassified,
                               List<RuleWhereARunMayStop> stopping,
                               List<CasesExpandedAtARule> expanded,
-                              List<CasesExpandedAtARule> costly) {
+                              List<CasesReadAtACost> costly) {
 
     /** Nothing found, which is what a reader with no rules to read hands on. */
     public static final RulesWithNoLine NONE =
@@ -171,7 +171,7 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
         private final Map<RuleRef, RuleWhereARunMayStop> stopping = new LinkedHashMap<>();
         private final Map<CasesExpandedAtARule.Key, CasesExpandedAtARule> expanded =
                 new LinkedHashMap<>();
-        private final Map<CasesExpandedAtARule.Key, CasesExpandedAtARule> costly =
+        private final Map<CasesReadAtACost.Key, CasesReadAtACost> costly =
                 new LinkedHashMap<>();
 
         /**
@@ -193,13 +193,14 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
          * read in: which helper's readings the cases choose among. Beside the line and no reason
          * it was not read.
          */
-        public void costly(RuleCitation cited, ModelOccurrences readAt, CaseExpansion expansion) {
-            costly(CasesExpandedAtARule.of(cited, readAt, expansion));
+        public void costly(RuleCitation cited, ModelOccurrences readAt,
+                           CaseExpansion.CostlyCase told) {
+            costly(CasesReadAtACost.of(cited, readAt, told));
         }
 
         /** The same, as another reader handed it on. */
-        public void costly(CasesExpandedAtARule one) {
-            costly.merge(one.key(), one, CasesExpandedAtARule::mergedWith);
+        public void costly(CasesReadAtACost one) {
+            costly.merge(one.key(), one, CasesReadAtACost::mergedWith);
         }
 
         /** A rule a run reaching it may stop in, which is what a report says of it. */

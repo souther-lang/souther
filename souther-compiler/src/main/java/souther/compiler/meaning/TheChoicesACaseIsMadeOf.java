@@ -9,6 +9,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -70,25 +71,53 @@ public final class TheChoicesACaseIsMadeOf {
      */
     static List<CaseExpansion.Attribution> of(List<DecidingCase.Cases> cases,
                                               List<Derivation> derivedBy) {
+        Walked walked = walk(cases, derivedBy);
+        List<CaseExpansion.Attribution> out = new ArrayList<>();
+        for (int at = 0; at < cases.size(); at++) {
+            out.add(walked.why() != null ? walked.why()
+                    : walked.reading().attributed(walked.each().get(at), cases.get(at)));
+        }
+        return out;
+    }
+
+    /**
+     * The helpers whose readings the choices of each of {@code cases} stand among one beside
+     * another, read off {@code derivedBy}, in the order the cases are given: none for a case
+     * where the derivations show none, and for every case where they were not walked.
+     *
+     * <p>Nothing else of what made the parts is worked out, which is what a reader that tells
+     * only the helper has no use for.
+     */
+    static List<List<CaseExpansion.MultipliedHelper>> helpersOf(List<DecidingCase.Cases> cases,
+                                                                List<Derivation> derivedBy) {
+        Walked walked = walk(cases, derivedBy);
+        return cases.stream().map(each -> walked.why() != null
+                ? List.<CaseExpansion.MultipliedHelper>of()
+                : walked.reading().multiplied(each)).toList();
+    }
+
+    /** What the derivations came to when walked for the parts of the cases, or why they were
+     *  not. */
+    private record Walked(Reading reading, List<Set<Spelling>> each,
+                          CaseExpansion.NotAttributed why) {}
+
+    private static Walked walk(List<DecidingCase.Cases> cases, List<Derivation> derivedBy) {
         List<Set<Spelling>> each = cases.stream().map(TheChoicesACaseIsMadeOf::partsSplitOn)
                 .toList();
-        CaseExpansion.Attribution given = derivedBy.isEmpty()
-                ? new CaseExpansion.NotAttributed(CaseExpansion.WhyNotAttributed.NOTHING_DERIVED)
-                : null;
         Set<Spelling> any = new HashSet<>();
         each.forEach(any::addAll);
         Reading reading = new Reading(any);
+        if (derivedBy.isEmpty()) {
+            return new Walked(reading, each,
+                    new CaseExpansion.NotAttributed(CaseExpansion.WhyNotAttributed.NOTHING_DERIVED));
+        }
         for (Derivation one : derivedBy) {
-            if (given == null && !reading.from(one)) {
-                given = new CaseExpansion.NotAttributed(
-                        CaseExpansion.WhyNotAttributed.STEPS_A_READING_TAKES);
+            if (!reading.from(one)) {
+                return new Walked(reading, each, new CaseExpansion.NotAttributed(
+                        CaseExpansion.WhyNotAttributed.STEPS_A_READING_TAKES));
             }
         }
-        List<CaseExpansion.Attribution> out = new ArrayList<>();
-        for (int at = 0; at < cases.size(); at++) {
-            out.add(given != null ? given : reading.attributed(each.get(at), cases.get(at)));
-        }
-        return out;
+        return new Walked(reading, each, null);
     }
 
     /** Every part a case of {@code cases} is taken apart on, each case read once. */
@@ -136,25 +165,24 @@ public final class TheChoicesACaseIsMadeOf {
      * the step just entered makes, for the step under it to say which of its premises it decides
      * by; the operation whose law the steps below read, until they reach the elements it goes
      * through; and the innermost construct of the model the derivation says a step around it was
-     * read at, which wrote the parts made there.
+     * read at, which wrote the parts made there; and whether the step stands inside some
+     * element's statement a quantifier says, which is what its parts are said of.
      */
     private record Context(List<Frame> frames, Optional<Choosing> choosing,
                            Optional<Applied> law, Optional<ModelOccurrence> madeIn,
-                           List<Quantifier> quantifiers) {
+                           boolean underAQuantifier) {
 
         static final Context OUTSIDE = new Context(List.of(), Optional.empty(), Optional.empty(),
-                Optional.empty(), List.of());
+                Optional.empty(), false);
 
         Context plain() {
             return choosing.isEmpty() ? this
-                    : new Context(frames, Optional.empty(), law, madeIn, quantifiers);
+                    : new Context(frames, Optional.empty(), law, madeIn, underAQuantifier);
         }
 
-        /** Below the quantifier {@code some} says: what is made below is said of its element. */
-        Context under(Quantifier some) {
-            List<Quantifier> more = new ArrayList<>(quantifiers);
-            more.add(some);
-            return new Context(frames, Optional.empty(), law, madeIn, List.copyOf(more));
+        /** Below a quantifier: what is made below is said of the element it chose. */
+        Context belowAQuantifier() {
+            return new Context(frames, Optional.empty(), law, madeIn, true);
         }
 
         /**
@@ -166,7 +194,7 @@ public final class TheChoicesACaseIsMadeOf {
         Context readAt(ConstructOccurrence at) {
             Optional<ModelOccurrence> stated = ModelOccurrence.statedAt(at);
             return stated.isEmpty() || stated.equals(madeIn) ? this
-                    : new Context(frames, choosing, law, stated, quantifiers);
+                    : new Context(frames, choosing, law, stated, underAQuantifier);
         }
 
         Context inside(Frame frame) {
@@ -179,13 +207,9 @@ public final class TheChoicesACaseIsMadeOf {
                 }
             }
             more.add(frame);
-            return new Context(List.copyOf(more), Optional.empty(), law, madeIn, quantifiers);
+            return new Context(List.copyOf(more), Optional.empty(), law, madeIn, underAQuantifier);
         }
     }
-
-    /** Inside some element of {@code container} meeting what is concluded there, held as
-     *  {@code holds} says. */
-    private record Quantifier(DecisionSubject container, boolean holds) {}
 
     /** Where a part was made: the frames around the step, that step where it writes out the ways
      *  elements are kept, and the construct of the model that made it ({@link Context#madeIn}). */
@@ -212,6 +236,14 @@ public final class TheChoicesACaseIsMadeOf {
         /** What each conclusion of the derivation being walked comes to put on the elements, by
          *  the conclusion itself: a conclusion a step shares is put once. */
         private Map<Proposition, List<Spelling>> putOn;
+        /** Where each statement an element's statement is made of was first concluded, for the
+         *  derivation being walked ({@link #whereTheElementsStatementIsMade}). */
+        private Map<Spelling, Set<Origin>> ofTheElements;
+        /** The steps of the derivation being walked, each once: the ones {@link #concluding}
+         *  answers for. */
+        private Set<Derivation> inThisRoot;
+        /** What {@link #heldUnder} answered, by the step. */
+        private Map<Derivation, Set<Spelling>> held;
         private Map<Derivation, Set<Spelling>> under;
         private int steps;
 
@@ -224,8 +256,15 @@ public final class TheChoicesACaseIsMadeOf {
             concluding = new Conclusion(Optional.empty());
             plan = TheWholeNumbersAListStartsWith.planFor(concluding.of(root));
             putOn = new IdentityHashMap<>();
+            ofTheElements = new HashMap<>();
+            held = new IdentityHashMap<>();
+            inThisRoot = Collections.newSetFromMap(new IdentityHashMap<>());
             under = new IdentityHashMap<>();
-            return visit(root, Context.OUTSIDE);
+            boolean walked = visit(root, Context.OUTSIDE);
+            if (walked) {
+                saidOfTheQuantifiers();
+            }
+            return walked;
         }
 
         /** The parts some case is taken apart on that {@code step} concludes. */
@@ -280,41 +319,121 @@ public final class TheChoicesACaseIsMadeOf {
         }
 
         /**
-         * The parts the cases are taken apart on that say what {@code step} concludes of an element
-         * a quantifier around it chose: the quantifier said the way the lines are read
-         * ({@link WhereEachLineDecides#lifted}) of each part the step concludes, so that a part
-         * of the element's statement is a part of the cases as some element meeting it. Each is
-         * made where the part it says is: at the step whose conclusion first holds that part,
-         * which is no part of the cases itself, only the element's.
+         * Where each statement an element's statement is made of was first concluded, for a step
+         * standing inside a quantifier: each part it concludes that no step under it does, and
+         * each of them put on the elements as the cases put it ({@link #partsPutOn}). Kept for
+         * {@link #saidOfTheQuantifiers}, which tells what the cases made of them.
          */
-        private void saidOfTheElement(Derivation step, Context at) {
+        private void whereTheElementsStatementIsMade(Derivation step, Context at) {
             Proposition concluded = concluding.concludedAt(step);
             if (concluded == null) {
                 return;
             }
             Set<Spelling> below = new HashSet<>();
-            for (Derivation premise : WrittenLines.premisesOf(step)) {
-                Proposition under = concluding.concludedAt(premise);
-                if (under != null) {
-                    below.addAll(WhereEachLineDecides.partsJoinedBy(under));
-                }
-            }
+            WrittenLines.premisesOf(step).forEach(each -> below.addAll(heldUnder(each)));
             Origin origin = new Origin(at.frames(), Optional.empty(), at.madeIn());
             for (Proposition part : WhereEachLineDecides.partsHeldBy(concluded).values()) {
                 if (below.contains(part.spelling())) {
                     continue;
                 }
-                for (Quantifier quantifier : at.quantifiers()) {
-                    Proposition said = WhereEachLineDecides.lifted(new Proposition.Some(
-                            quantifier.container(), part, quantifier.holds()));
-                    for (Spelling made : WhereEachLineDecides.partsJoinedBy(said)) {
-                        if (split.contains(made) && !made.equals(part.spelling())) {
-                            this.made.computeIfAbsent(made, _ -> new LinkedHashSet<>())
-                                    .add(origin);
+                ofTheElements.computeIfAbsent(part.spelling(), _ -> new LinkedHashSet<>())
+                        .add(origin);
+                for (Proposition put : formsPutOn(part)) {
+                    WhereEachLineDecides.partsHeldBy(put).keySet().forEach(spelling ->
+                            ofTheElements.computeIfAbsent(spelling, _ -> new LinkedHashSet<>())
+                                    .add(origin));
+                }
+            }
+        }
+
+        /**
+         * The parts the cases are taken apart on that say some element meets what an element's
+         * statement is made of, made where that statement was. What a step concludes of a
+         * quantifier is already said as the derivation says it, the denial of the element where it
+         * is denied included; the cases take it apart as the lines are read
+         * ({@link WhereEachLineDecides#lifted}), each part a quantifier over some of the element's
+         * statement. So each is lifted from what the step concluded and made where the statements
+         * it is over were: a part is no more than the places its statements were made, and a
+         * quantifier over a conjunction is one part made at each of them.
+         */
+        private void saidOfTheQuantifiers() {
+            for (Derivation step : inThisRoot) {
+                Proposition concluded = concluding.concludedAt(step);
+                if (concluded == null) {
+                    continue;
+                }
+                for (Proposition form : formsPutOn(concluded)) {
+                    for (Proposition quantified : WhereEachLineDecides.partsHeldBy(form).values()) {
+                        if (quantified instanceof Proposition.Some some) {
+                            saidOfOneQuantifier(some);
                         }
                     }
                 }
             }
+        }
+
+        /**
+         * The parts the cases make of the quantifier {@code some}: each over some of the
+         * statements of its element, so made where those were. A part over none — the one the
+         * lifting adds to say the container holds something — is made where the quantifier's
+         * whole element was.
+         */
+        private void saidOfOneQuantifier(Proposition.Some some) {
+            Set<Origin> whole = originsOfTheStatementsOf(some.ofTheElement());
+            WhereEachLineDecides.partsHeldBy(WhereEachLineDecides.lifted(some))
+                    .forEach((spelling, part) -> {
+                        if (!split.contains(spelling) || !(part instanceof Proposition.Some said)) {
+                            return;
+                        }
+                        Set<Origin> there = originsOfTheStatementsOf(said.ofTheElement());
+                        made.computeIfAbsent(spelling, _ -> new LinkedHashSet<>())
+                                .addAll(there.isEmpty() ? whole : there);
+                    });
+        }
+
+        /** Where each statement {@code element} is made of was first concluded. */
+        private Set<Origin> originsOfTheStatementsOf(Proposition element) {
+            Set<Origin> out = new LinkedHashSet<>();
+            for (Spelling statement : WhereEachLineDecides.partsHeldBy(element).keySet()) {
+                Set<Origin> there = ofTheElements.get(statement);
+                if (there != null) {
+                    out.addAll(there);
+                }
+            }
+            return out;
+        }
+
+        /**
+         * Every part {@code step} concludes or a step under it does, whether or not a case is
+         * taken apart on it: what {@link #partsUnder} answers, without the cases'. A step that
+         * concludes nothing of its own holds what its premises do.
+         */
+        private Set<Spelling> heldUnder(Derivation step) {
+            Set<Spelling> known = held.get(step);
+            if (known != null) {
+                return known;
+            }
+            Proposition concluded = concluding.concludedAt(step);
+            Set<Spelling> out = new HashSet<>();
+            if (concluded == null) {
+                WrittenLines.premisesOf(step).forEach(each -> out.addAll(heldUnder(each)));
+            } else {
+                out.addAll(WhereEachLineDecides.partsJoinedBy(concluded));
+            }
+            held.put(step, out);
+            return out;
+        }
+
+        /** {@code stated} as it stands, and put on the elements as the cases put it. */
+        private List<Proposition> formsPutOn(Proposition stated) {
+            List<Proposition> out = new ArrayList<>();
+            out.add(stated);
+            if (OnOneElement.theElementOf(stated).isPresent()
+                    && plan.on(stated) instanceof TheWholeNumbersAListStartsWith.Read.OnEach(
+                            var each)) {
+                each.forEach(one -> out.add(one.stated()));
+            }
+            return out;
         }
 
         private boolean visit(Derivation step, Context at) {
@@ -324,6 +443,7 @@ public final class TheChoicesACaseIsMadeOf {
             if (++steps > STEPS_A_READING_TAKES) {
                 return false;
             }
+            inThisRoot.add(step);
             Set<Spelling> own = new HashSet<>(partsUnder(step));
             WrittenLines.premisesOf(step).forEach(each -> own.removeAll(partsUnder(each)));
             if (!own.isEmpty()) {
@@ -336,8 +456,8 @@ public final class TheChoicesACaseIsMadeOf {
                 own.forEach(part -> made.computeIfAbsent(part, _ -> new LinkedHashSet<>())
                         .add(origin));
             }
-            if (!at.quantifiers().isEmpty()) {
-                saidOfTheElement(step, at);
+            if (at.underAQuantifier()) {
+                whereTheElementsStatementIsMade(step, at);
             }
             return switch (step) {
                 case Derivation.AnApplication(var call, var ordinal, var derived) ->
@@ -363,7 +483,7 @@ public final class TheChoicesACaseIsMadeOf {
                         when at.law().isPresent() -> overTheElements(each, at);
                 case Derivation.SomeElementMeeting(var container, var element, var holds,
                                                    var holdsSomething, var _) -> {
-                    Context inside = at.plain().under(new Quantifier(container, holds));
+                    Context inside = at.plain().belowAQuantifier();
                     if (!visit(element, inside)) {
                         yield false;
                     }
@@ -394,7 +514,7 @@ public final class TheChoicesACaseIsMadeOf {
         private boolean overTheElements(List<Derivation> each, Context at) {
             Applied law = at.law().orElseThrow();
             Context below = new Context(at.frames(), Optional.empty(), Optional.empty(),
-                    at.madeIn(), at.quantifiers());
+                    at.madeIn(), at.underAQuantifier());
             for (int ordinal = 0; ordinal < each.size(); ordinal++) {
                 if (!visit(each.get(ordinal), below.inside(
                         registered(new Applied(law.call(), law.construct(), ordinal))))) {
@@ -433,10 +553,10 @@ public final class TheChoicesACaseIsMadeOf {
             if (choice instanceof Derivation.ByALaw(var call, var _, var _)) {
                 return new Context(at.frames(), Optional.empty(), Optional.of(new Applied(
                         new ACallOfAnOperation(call.operation(), where), construct.get(), 0)),
-                        at.madeIn(), at.quantifiers());
+                        at.madeIn(), at.underAQuantifier());
             }
             choosing.ifPresent(this::registered);
-            return new Context(at.frames(), choosing, at.law(), at.madeIn(), at.quantifiers());
+            return new Context(at.frames(), choosing, at.law(), at.madeIn(), at.underAQuantifier());
         }
 
         private <F extends Frame> F registered(F frame) {
