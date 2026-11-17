@@ -146,6 +146,13 @@ public sealed interface Quantities permits ReadQuantities {
         return orders != null && orders.countsWhole();
     }
 
+    /** Whether the number {@code term} names is a whole number of its own unit on every row
+     *  ({@link souther.compiler.check.Carrier#wholeInItsUnit}); not where nothing orders it. */
+    default boolean countsInWholeUnits(NumericTerm term) {
+        TermOrders orders = ordersOf(term);
+        return orders != null && orders.answered() != null && orders.answered().wholeInItsUnit();
+    }
+
     /**
      * The same number named at {@code at}, or null where what it takes is not taken there.
      *

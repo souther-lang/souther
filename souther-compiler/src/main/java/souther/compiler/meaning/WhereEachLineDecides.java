@@ -140,6 +140,17 @@ public final class WhereEachLineDecides {
      * line's.
      */
     public static List<Decides> in(Proposition writtenAs, Predicate<NumericTerm> measuredWhole) {
+        return in(writtenAs, measuredWhole, measuredWhole);
+    }
+
+    /**
+     * The same, where {@code wholeInItsUnit} says which numbers are whole numbers of their own
+     * unit — more than {@code measuredWhole}, which a date is not: it is a count of days, and the
+     * days are whole. That is what a proof that a line decides nowhere reads a number as
+     * ({@link NoCaseCrosses}).
+     */
+    public static List<Decides> in(Proposition writtenAs, Predicate<NumericTerm> measuredWhole,
+                                   Predicate<NumericTerm> wholeInItsUnit) {
         Map<Spelling, Proposition.Compared> lines = new TreeMap<>();
         Map<Spelling, List<List<List<DecidingCase>>>> standings = new TreeMap<>();
         OneSpellingPerLine spellings = new OneSpellingPerLine(measuredWhole);
@@ -152,8 +163,22 @@ public final class WhereEachLineDecides {
         }
         List<Decides> out = new ArrayList<>();
         lines.forEach((key, line) -> out.add(new Decides(line,
-                whereItStands(line, casesOf(standings.get(key))), spellings.scalesOf(line))));
+                withoutWhatNoRowCrosses(line, whereItStands(line, casesOf(standings.get(key))),
+                        wholeInItsUnit),
+                spellings.scalesOf(line))));
         return List.copyOf(out);
+    }
+
+    /**
+     * {@code cases} less each that is proved to hold no row on each side of {@code line}
+     * ({@link NoCaseCrosses}): a line decides in none of those, and asking them is what a line
+     * decides nowhere in costs.
+     */
+    private static List<DecidingCase> withoutWhatNoRowCrosses(
+            Proposition.Compared line, List<DecidingCase> cases,
+            Predicate<NumericTerm> wholeInItsUnit) {
+        return cases.stream().filter(each -> !NoCaseCrosses.proves(line, each, wholeInItsUnit))
+                .toList();
     }
 
     /**
