@@ -128,7 +128,7 @@ public final class InputReads {
     private int hash;
     /** Where each node {@link #pathOf} was asked of stands here, under the declarations
      *  {@link #pathsUnder}; null until it is first asked. No part of what this reading is. */
-    private Map<Core, PathResolution> paths;
+    private Map<Core, ValuesAt> paths;
     private DeclarationNewtypes pathsUnder;
     /** What each name {@link #meaningOf} was asked of means here, under the library
      *  {@link #meaningsAmong} and the declarations {@link #meaningsUnder}; null until it is first
@@ -601,7 +601,7 @@ public final class InputReads {
         narrower.remove(binding);
         Set<BindingId> handed = new HashSet<>(applied.handed());
         handed.add(binding);
-        if (value.at().pathOf(value.value(), newtypes) instanceof PathResolution.At(TermPath at)) {
+        if (value.at().pathOf(value.value(), newtypes) instanceof ValuesAt.At(TermPath at)) {
             return new InputReads(names.naming(binding, at), narrower, declared, dependencies,
                     new Applied(handed, applied.readings(), applied.taken(), applied.given(),
                             applied.picked(), applied.entered(), applied.widths(),
@@ -1834,12 +1834,12 @@ public final class InputReads {
         // What the arm narrows is a position of the input, and a scrutinee that stands at none
         // narrows nothing.
         TermPath standing = switch (forkedOn(scrutinee, newtypes)) {
-            case PathResolution.At(var at) -> at;
-            case PathResolution.NotAPosition _ -> null;
+            case ValuesAt.At(var at) -> at;
+            case ValuesAt.NotAPosition _ -> null;
             // A scrutinee that only may stand at a position narrows nothing here either. What an
             // arm narrows is one position, and narrowing each of the ones it may be would say a
             // value under this arm is a case of every one of them at once.
-            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
+            case ValuesAt.MayStandAt _ -> null;
         };
         if (standing == null) {
             return admitting(scrutinee, arm, symbols, newtypes);
@@ -2157,7 +2157,7 @@ public final class InputReads {
             }
             // An optional at a position holds what stands there narrowed to its present case.
             if (!(at.forkedOn(option.value(), newtypes)
-                    instanceof PathResolution.At(TermPath path))) {
+                    instanceof ValuesAt.At(TermPath path))) {
                 return unsaid();
             }
             TermPath narrowed = switch (at.declared.taking(path, option.value().type(), PRESENT)) {
@@ -2291,7 +2291,7 @@ public final class InputReads {
      */
     private InputReads standingFor(BindingId name, Denotation value,
                                    DeclarationNewtypes newtypes) {
-        if (value.at().pathOf(value.value(), newtypes) instanceof PathResolution.At(TermPath at)) {
+        if (value.at().pathOf(value.value(), newtypes) instanceof ValuesAt.At(TermPath at)) {
             return new InputReads(names.naming(name, at), alternatives, declared, dependencies,
                     applied).turningOn(name, List.of(value));
         }
@@ -2374,7 +2374,7 @@ public final class InputReads {
      *  or null where the map is none. */
     private EntryLookedUp entryLookedUp(Denotation looked, Core container, Symbols symbols,
                                         DeclarationNewtypes newtypes) {
-        if (looked.at().forkedOn(container, newtypes) instanceof PathResolution.At(
+        if (looked.at().forkedOn(container, newtypes) instanceof ValuesAt.At(
                 TermPath map)) {
             return new EntryLookedUp(map.element(), looked.value());
         }
@@ -2388,7 +2388,7 @@ public final class InputReads {
             return null;
         }
         Denotation walked = held.at().standing(indexed.walked(), symbols, newtypes);
-        return walked.at().forkedOn(walked.value(), newtypes) instanceof PathResolution.At(
+        return walked.at().forkedOn(walked.value(), newtypes) instanceof ValuesAt.At(
                 TermPath list) ? new EntryLookedUp(list.element(), looked.value()) : null;
     }
 
@@ -2534,7 +2534,7 @@ public final class InputReads {
             mine.named().forEach((slot, names) -> names.forEach(name ->
                     out.add(new ElementsNamed.Named(slot, name))));
             unnamed.addAll(mine.unnamed());
-            if (pathOf(read, newtypes) instanceof PathResolution.At(TermPath at)
+            if (pathOf(read, newtypes) instanceof ValuesAt.At(TermPath at)
                     && ElementsNamed.Slot.innermostOf(at) instanceof ElementsNamed.Slot slot
                     && !mine.named().containsKey(slot)) {
                 unnamed.add(slot);
@@ -2650,7 +2650,7 @@ public final class InputReads {
      */
     private boolean filedWhereItsElementStands(BindingId name, DeclarationNewtypes newtypes,
                                                Set<ElementStood> into) {
-        if (elementAt(name, newtypes) instanceof PathResolution.At(TermPath at)) {
+        if (elementAt(name, newtypes) instanceof ValuesAt.At(TermPath at)) {
             filedAt(name, at, into);
             return true;
         }
@@ -2701,7 +2701,7 @@ public final class InputReads {
                                     DeclarationNewtypes newtypes) {
         InputReads handed = new InputReads(names.naming(key.params().getFirst().binding(),
                 element), alternatives, declared, dependencies, applied);
-        return handed.forkedOn(key.body(), newtypes) instanceof PathResolution.At(TermPath at)
+        return handed.forkedOn(key.body(), newtypes) instanceof ValuesAt.At(TermPath at)
                 ? at : null;
     }
 
@@ -2801,7 +2801,7 @@ public final class InputReads {
     private InputReads denotingWhatWasMatched(Core scrutinee, Core.Case arm, Symbols symbols,
                                               DeclarationNewtypes newtypes) {
         if (!(arm.binding() instanceof Core.ArmBinding.Selected selected)
-                || !(forkedOn(scrutinee, newtypes) instanceof PathResolution.NotAPosition)
+                || !(forkedOn(scrutinee, newtypes) instanceof ValuesAt.NotAPosition)
                 || !answered(standing(new Denotation(scrutinee, this), symbols, newtypes,
                         new HashSet<>()).value())) {
             return this;
@@ -3042,19 +3042,42 @@ public final class InputReads {
      * and not one equal to it, since what this reading takes a node as is taken of that node
      * ({@link #taken}).
      */
-    public PathResolution pathOf(Core e, DeclarationNewtypes newtypes) {
+    public ValuesAt pathOf(Core e, DeclarationNewtypes newtypes) {
         if (paths == null) {
             paths = new IdentityHashMap<>();
             pathsUnder = newtypes;
         } else if (pathsUnder != newtypes) {
-            return InputPath.of(e, names, newtypes, this).heldAt();
+            return placed(InputPath.of(e, names, newtypes, this).heldAt());
         }
-        PathResolution held = paths.get(e);
+        ValuesAt held =paths.get(e);
         if (held == null) {
-            held = InputPath.of(e, names, newtypes, this).heldAt();
+            held = placed(InputPath.of(e, names, newtypes, this).heldAt());
             paths.put(e, held);
         }
         return held;
+    }
+
+    /** The answer of a walk after where a value stands, as that. Such a walk names no value made of
+     *  several places, which only a walk after where a value came from does. */
+    private static ValuesAt placed(PathResolution walked) {
+        return switch (walked) {
+            case PathResolution.At(var at) -> new ValuesAt.At(at);
+            case PathResolution.MayStandAt(var among) -> new ValuesAt.MayStandAt(among);
+            case PathResolution.NotAPosition _ -> new ValuesAt.NotAPosition();
+            case PathResolution.MadeOf _ -> throw new IllegalStateException(
+                    "a walk after where a value stands answered a value made of several places");
+        };
+    }
+
+    /** The answer of a walk after what an expression holds, as that. */
+    private static ValuesHeld valuesHeld(PathResolution walked) {
+        return switch (walked) {
+            case PathResolution.At(var at) -> new ValuesHeld.At(at);
+            case PathResolution.MayStandAt(var among) -> new ValuesHeld.MayStandAt(among);
+            case PathResolution.NotAPosition _ -> new ValuesHeld.NotAPosition();
+            case PathResolution.MadeOf _ -> throw new IllegalStateException(
+                    "a walk after what a value holds answered a value made of several places");
+        };
     }
 
     /** What a name means here, for a walk that goes on in this reading ({@link InputPath}). */
@@ -3070,8 +3093,8 @@ public final class InputReads {
      * left, so that an arm inside naming one of them narrows the same narrowing further rather than
      * the position afresh ({@link DeclaredInput#taking}).
      */
-    public PathResolution forkedOn(Core e, DeclarationNewtypes newtypes) {
-        return InputPath.of(e, names, newtypes, this);
+    public ValuesAt forkedOn(Core e, DeclarationNewtypes newtypes) {
+        return placed(InputPath.of(e, names, newtypes, this));
     }
 
     /** Where in the element handed to {@code binding} the value a walk answered stands, or null
@@ -3150,7 +3173,7 @@ public final class InputReads {
                 return null;
             }
             InputReads where = standing.at();
-            if (where.pathOf(standing.value(), newtypes) instanceof PathResolution.At(
+            if (where.pathOf(standing.value(), newtypes) instanceof ValuesAt.At(
                     TermPath container)) {
                 return new Occurrences.OfOneContainer(container,
                         placedIn(sought, container.element()), keptBy);
@@ -3303,7 +3326,7 @@ public final class InputReads {
         Set<BindingId> met = new HashSet<>();
         while (true) {
             InputReads where = standing.at();
-            if (where.pathOf(standing.value(), newtypes) instanceof PathResolution.At(
+            if (where.pathOf(standing.value(), newtypes) instanceof ValuesAt.At(
                     TermPath container)) {
                 return arms != null
                         ? new WalkedElement(container.element(), current, subject, arms, keptBy)
@@ -3331,7 +3354,7 @@ public final class InputReads {
             List<AnArmAnswered> answered = new ArrayList<>();
             boolean madeByArms = mapped != null
                     && where.everyElementOf(mapped.from(), newtypes)
-                            instanceof PathResolution.At(TermPath outer)
+                            instanceof ValuesHeld.At(TermPath outer)
                     && armsAnswering(mapped.closure().body(), where, new LinkedHashMap<>(held),
                             Map.of(), ChoicesOnTheWay.NONE, outer, ArmsEndIn.A_VALUE, answered,
                             symbols, newtypes)
@@ -3507,7 +3530,7 @@ public final class InputReads {
             Symbols symbols, DeclarationNewtypes newtypes) {
         RunSource.TraversalOrder order = null;
         for (TraversalDirection direction : TraversalDirection.values()) {
-            if (inTheOrderOf(list, direction, newtypes) instanceof PathResolution.At(
+            if (inTheOrderOf(list, direction, newtypes) instanceof ValuesHeld.At(
                     TermPath elements) && elements.equals(walked.elements())) {
                 order = new RunSource.TraversalOrder(elements,
                         inTheListsOrder ? direction : direction.reversed());
@@ -3796,7 +3819,7 @@ public final class InputReads {
         if (closure == null || closure.params().size() != 1
                 || closure.params().getFirst().binding() == null
                 || !(where.everyElementOf(args.get(container), newtypes)
-                        instanceof PathResolution.At(TermPath outer))) {
+                        instanceof ValuesHeld.At(TermPath outer))) {
             return null;
         }
         return new AFlattening(args.get(container), outer, closure);
@@ -4151,8 +4174,8 @@ public final class InputReads {
      * The position of the container of the input {@code list}, read here, holds something exactly
      * where it does, or no position where there is none ({@link ElementQuestion#SAME_EMPTINESS}).
      */
-    public PathResolution holdingSomethingWhere(Core list, Symbols symbols,
-                                                DeclarationNewtypes newtypes) {
+    public ValuesHeld holdingSomethingWhere(Core list, Symbols symbols,
+                                            DeclarationNewtypes newtypes) {
         Core asked = list;
         Denotation at = standing(list, symbols, newtypes);
         // A step to a name is a step over the binding graph, and a name come round to again is one
@@ -4162,22 +4185,22 @@ public final class InputReads {
             // Asked of the list as handed to the step and as it came to be reached, since
             // following names sets aside what a value stood as on the way.
             if (!InputPath.goesOnThrough(asked, at.value(), ElementQuestion.SAME_EMPTINESS)) {
-                return new PathResolution.NotAPosition();
+                return new ValuesHeld.NotAPosition();
             }
-            if (at.at().pathOf(at.value(), newtypes) instanceof PathResolution.At(
+            if (at.at().pathOf(at.value(), newtypes) instanceof ValuesAt.At(
                     TermPath container)) {
-                return new PathResolution.At(container);
+                return new ValuesHeld.At(container);
             }
             if (Core.withoutStanding(at.value()) instanceof Core.Read name
                     && !met.add(name.binding())) {
-                return new PathResolution.NotAPosition();
+                return new ValuesHeld.NotAPosition();
             }
             InputReads where = at.at();
             InputPath.Beneath step = InputPath.oneStepBeneath(at.value(),
                     ElementQuestion.SAME_EMPTINESS, where.names(), newtypes,
                     closure -> blockOf(where, closure, symbols, newtypes));
             if (step == null) {
-                return new PathResolution.NotAPosition();
+                return new ValuesHeld.NotAPosition();
             }
             asked = step.from();
             at = where.standing(asked, symbols, newtypes);
@@ -4526,14 +4549,14 @@ public final class InputReads {
         // A name is what it stands at where it stands at one, and where it stands at none the
         // answers below say what else it is.
         switch (pathOf(read, newtypes)) {
-            case PathResolution.At(var at) -> {
+            case ValuesAt.At(var at) -> {
                 return new ReadMeaning.Position(at);
             }
-            case PathResolution.NotAPosition _ -> { }
+            case ValuesAt.NotAPosition _ -> { }
             // A name that only may stand at a position is not the name of one, and what it is
             // instead is what the answers below say — an element, which is what it is however many
             // containers it is an element of.
-            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> { }
+            case ValuesAt.MayStandAt _ -> { }
         }
         // What a call handed a parameter of the body it entered, read where the call stands.
         Denotation given = applied.given().get(read.binding());
@@ -5070,14 +5093,14 @@ public final class InputReads {
 
     /** Where an element handed to {@code binding} stands ({@link InputPath#elementAt}), at a
      *  position and never at a narrowing of one to several cases ({@link PathResolution#heldAt}). */
-    public PathResolution elementAt(BindingId binding, DeclarationNewtypes newtypes) {
-        return InputPath.elementAt(binding, names, newtypes, this).heldAt();
+    public ValuesAt elementAt(BindingId binding, DeclarationNewtypes newtypes) {
+        return placed(InputPath.elementAt(binding, names, newtypes, this).heldAt());
     }
 
     /** Where the elements {@code e} holds stand, where it holds every occurrence of that position
      *  and each as often ({@link InputPath#everyElementOf}). */
-    public PathResolution everyElementOf(Core e, DeclarationNewtypes newtypes) {
-        return InputPath.everyElementOf(e, names, newtypes, this);
+    public ValuesHeld everyElementOf(Core e, DeclarationNewtypes newtypes) {
+        return valuesHeld(InputPath.everyElementOf(e, names, newtypes, this));
     }
 
     /**
@@ -5090,7 +5113,7 @@ public final class InputReads {
      * its path: no statement about the elements of one container says what those do.
      */
     public TermPath containerWhoseEveryElementIsIn(Core e, DeclarationNewtypes newtypes) {
-        if (!(everyElementOf(e, newtypes) instanceof PathResolution.At(TermPath elements))
+        if (!(everyElementOf(e, newtypes) instanceof ValuesHeld.At(TermPath elements))
                 || !(elements.steps().getLast() instanceof TermPath.Step.Element)) {
             return null;
         }
@@ -5099,33 +5122,43 @@ public final class InputReads {
     }
 
     /** The same, of the elements handed to {@code binding} ({@link InputPath#everyElementAt}). */
-    public PathResolution everyElementAt(BindingId binding, DeclarationNewtypes newtypes) {
-        return InputPath.everyElementAt(binding, names, newtypes, this);
+    public ValuesHeld everyElementAt(BindingId binding, DeclarationNewtypes newtypes) {
+        return valuesHeld(InputPath.everyElementAt(binding, names, newtypes, this));
     }
 
     /** The same, where the elements handed to {@code binding} are also handed in {@code direction}
      *  ({@link InputPath#inTheOrderAt}). */
-    public PathResolution inTheOrderAt(BindingId binding, TraversalDirection direction,
-                                       DeclarationNewtypes newtypes) {
-        return InputPath.inTheOrderAt(binding, direction, names, newtypes, this);
+    public ValuesHeld inTheOrderAt(BindingId binding, TraversalDirection direction,
+                                   DeclarationNewtypes newtypes) {
+        return valuesHeld(InputPath.inTheOrderAt(binding, direction, names, newtypes, this));
     }
 
     /** The same, of the elements {@code e} holds ({@link InputPath#inTheOrderOf}). */
-    public PathResolution inTheOrderOf(Core e, TraversalDirection direction,
-                                       DeclarationNewtypes newtypes) {
-        return InputPath.inTheOrderOf(e, direction, names, newtypes, this);
+    public ValuesHeld inTheOrderOf(Core e, TraversalDirection direction,
+                                   DeclarationNewtypes newtypes) {
+        return valuesHeld(InputPath.inTheOrderOf(e, direction, names, newtypes, this));
     }
 
     /** Where {@code e}'s value came from. Not where it is: a value made from a position is not that
      *  position ({@link InputPath#cameFrom}). */
-    public PathResolution cameFrom(Core e, DeclarationNewtypes newtypes) {
-        return InputPath.cameFrom(e, names, newtypes, this).heldAt();
+    public MadeFrom cameFrom(Core e, DeclarationNewtypes newtypes) {
+        return madeFrom(InputPath.cameFrom(e, names, newtypes, this).heldAt());
     }
 
     /** Where {@code e}'s value came from, followed through everything it is made of
      *  ({@link InputPath#madeOf}). */
-    public PathResolution madeOf(Core e, DeclarationNewtypes newtypes) {
-        return InputPath.madeOf(e, names, newtypes, this).heldAt();
+    public MadeFrom madeOf(Core e, DeclarationNewtypes newtypes) {
+        return madeFrom(InputPath.madeOf(e, names, newtypes, this).heldAt());
+    }
+
+    /** The answer of a walk after where a value came from, as that and nothing a position allows. */
+    private static MadeFrom madeFrom(PathResolution walked) {
+        return switch (walked) {
+            case PathResolution.At(var at) -> new MadeFrom.FromOne(at);
+            case PathResolution.MayStandAt(var among) -> new MadeFrom.FromOneOf(among);
+            case PathResolution.MadeOf(var alternatives) -> new MadeFrom.FromEvery(alternatives);
+            case PathResolution.NotAPosition _ -> new MadeFrom.FromNothing();
+        };
     }
 
     /**

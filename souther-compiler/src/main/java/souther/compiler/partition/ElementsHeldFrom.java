@@ -8,8 +8,8 @@ import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.core.Core;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.InputReading;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.semantics.MapPart;
@@ -63,7 +63,7 @@ record ElementsHeldFrom(TermPath position, TermPath elements, Proposition where)
                 : DefaultBoundOperationFacts.get().listsAPartOf(applied.operation());
         if (listed == null || listed.part() == MapPart.ENTRIES
                 || !(list.at().pathOf(applied.argument(listed.map()), read.newtypes())
-                        instanceof PathResolution.At(TermPath map))) {
+                        instanceof ValuesAt.At(TermPath map))) {
             return Optional.empty();
         }
         return Optional.of(new ElementsHeldFrom(map,
@@ -75,7 +75,7 @@ record ElementsHeldFrom(TermPath position, TermPath elements, Proposition where)
      *  those of one position of the input. */
     static Optional<ElementsHeldFrom> of(Denotation container, InputReading read) {
         DeclarationNewtypes newtypes = read.newtypes();
-        if (container.at().pathOf(container.value(), newtypes) instanceof PathResolution.At(
+        if (container.at().pathOf(container.value(), newtypes) instanceof ValuesAt.At(
                 TermPath at)) {
             return Optional.of(new ElementsHeldFrom(at, WhereAnApplicationIsMade.nothingAsked()));
         }

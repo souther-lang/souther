@@ -16,9 +16,9 @@ import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.inputs.WhereAnEquationHolds;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.regex.PatternPlan;
@@ -536,8 +536,8 @@ public final class BehaviorSetStatements {
                     new NumericTerm.ValueOf(pieces.at()),
                     pieces.outside() ? outside : within, pieces.outside() ? within : outside));
         }
-        PathResolution stands = each.reads().pathOf(each.subject(), newtypes);
-        if (!(stands instanceof PathResolution.At at)) {
+        ValuesAt stands = each.reads().pathOf(each.subject(), newtypes);
+        if (!(stands instanceof ValuesAt.At at)) {
             return saidWithoutADenominator(each, stands, symbols, newtypes, answering);
         }
         NumericTerm.FromOnePosition term = new NumericTerm.ValueOf(at.path());
@@ -569,16 +569,16 @@ public final class BehaviorSetStatements {
      * which position the rule was of.
      */
     private static Outcome saidWithoutADenominator(PredicateReadings.Reading each,
-                                                   PathResolution stands, Symbols symbols,
+                                                   ValuesAt stands, Symbols symbols,
                                                    DeclarationNewtypes newtypes,
                                                    souther.compiler.coverage.Arrivals answering) {
         return switch (stands) {
-            case PathResolution.MayStandAt several ->
+            case ValuesAt.MayStandAt several ->
                     saying(OwedWhereItCameFrom.ofSeveral(several));
-            case PathResolution.NotAPosition _, PathResolution.MadeOf _ ->
+            case ValuesAt.NotAPosition _ ->
                     whereItsValueCameFrom(each, symbols, newtypes, answering);
             // The caller asks this only where the subject stands at no one place.
-            case PathResolution.At at -> throw new IllegalArgumentException(
+            case ValuesAt.At at -> throw new IllegalArgumentException(
                     "a rule whose subject stands at " + at.path() + " has a denominator");
         };
     }
@@ -933,7 +933,7 @@ public final class BehaviorSetStatements {
             // place a reader picked. Asked first, so a fork over such a part is filed at each of
             // them rather than at none — which is where the rule the author wrote would go.
             if (part.at().pathOf(part.value(), newtypes)
-                    instanceof PathResolution.MayStandAt(var among)) {
+                    instanceof ValuesAt.MayStandAt(var among)) {
                 among.forEach(at -> filed.putIfAbsent(FilingCoordinate.at(at),
                         new BlockReason.RuleAboutAnElementOfSeveralContainers()));
                 continue;
@@ -972,7 +972,7 @@ public final class BehaviorSetStatements {
     private static boolean namesSomething(Denotation part, Symbols symbols,
                                           DeclarationNewtypes newtypes,
                                           souther.compiler.coverage.Arrivals answering) {
-        return part.at().pathOf(part.value(), newtypes) instanceof PathResolution.MayStandAt
+        return part.at().pathOf(part.value(), newtypes) instanceof ValuesAt.MayStandAt
                 || !GuardThresholds.namesIn(part.value(), part.at(), symbols, newtypes, answering)
                         .met().isEmpty();
     }

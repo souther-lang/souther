@@ -127,7 +127,7 @@ class AValueReadThroughItselfIsNotAPositionNothingNamesTest {
     void aNameThatReachesNoPositionSaysSoInstead() {
         InputReads names = reads(Map.of());
 
-        assertEquals(new PathResolution.NotAPosition(),
+        assertEquals(new ValuesAt.NotAPosition(),
                 names.pathOf(read("a", FIRST, Type.INT), newtypes()));
     }
 }

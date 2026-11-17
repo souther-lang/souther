@@ -37,7 +37,6 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.WhereAnEquationHolds;
 import souther.compiler.inputs.PositionBounds;
@@ -49,6 +48,7 @@ import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -5822,7 +5822,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 Optional<BigInteger> most = ContainerSizesUnderAWitness.mostHeld(each.container(),
                         node -> {
                             if (each.reads().pathOf(node, read.rules().newtypes())
-                                    instanceof PathResolution.At(TermPath collection)) {
+                                    instanceof ValuesAt.At(TermPath collection)) {
                                 heldToOne.add(collection);
                                 return Optional.of(BigInteger.ONE);
                             }
@@ -5930,7 +5930,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                             boolean ofEachElement) {
             InputReads at = owed.readsAt(node);
             if (at == null || !(at.pathOf(node, read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath path))) {
+                    instanceof ValuesAt.At(TermPath path))) {
                 return Optional.empty();
             }
             return holds(ofEachElement ? path.element() : path);

@@ -15,10 +15,10 @@ import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.InputTruth;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.TraversalDirection;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.meaning.DecisionArgument;
 import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
@@ -76,7 +76,7 @@ record DecisionSubjects(InputDomain inputs, Symbols symbols, DeclarationAccess d
      * element.
      */
     DecisionSubject of(Core e, InputReads at) {
-        if (at.pathOf(e, newtypes) instanceof PathResolution.At(TermPath stands)) {
+        if (at.pathOf(e, newtypes) instanceof ValuesAt.At(TermPath stands)) {
             TermPath position = inputs.at(stands) != null ? stands
                     : WhereANameIsWritten.ofAName(inputs, stands) != null
                             // Read at the sum, as a name on a value left several cases is.

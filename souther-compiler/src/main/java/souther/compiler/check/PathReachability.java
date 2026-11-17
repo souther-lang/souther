@@ -30,10 +30,10 @@ import souther.compiler.partition.WhatTheDeclarationsLeaveAnArm;
 import souther.compiler.partition.WhereAClosureIsApplied;
 import souther.compiler.types.ResolvedCase;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.reach.ValuesNamed;
 import souther.compiler.coverage.CoverageSites;
@@ -850,7 +850,7 @@ public final class PathReachability {
                               Map<MeaningAssumptions.AnswerPlace, Core> answers) {
         Core e = Core.withoutStanding(standing);
         for (Core each : Core.subexpressionsAt(e)) {
-            if (reads.pathOf(each, newtypes) instanceof PathResolution.At(TermPath at)) {
+            if (reads.pathOf(each, newtypes) instanceof ValuesAt.At(TermPath at)) {
                 ValueIdentity identity = ReadThroughNames.identityAt(at,
                         reads.elementsNamedIn(each, newtypes));
                 if (identity != null) {
@@ -1845,13 +1845,13 @@ public final class PathReachability {
      *  answer to a reader asking whether the guards above reach a position. */
     private TermPath positionOf(Core e, InputReads reads) {
         return switch (reads.pathOf(e, newtypes)) {
-            case PathResolution.At(var at) -> at;
-            case PathResolution.NotAPosition _ -> null;
+            case ValuesAt.At(var at) -> at;
+            case ValuesAt.NotAPosition _ -> null;
             // And one of several is not this position either. What the caller does with an answer
             // is prove a branch unreachable by what the rules leave at the position — a proof about
             // one place — so a name that stands at one of two places on two runs is one no such
             // proof can be made about, whichever of them it turns out to be.
-            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
+            case ValuesAt.MayStandAt _ -> null;
         };
     }
 

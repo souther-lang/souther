@@ -15,12 +15,12 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.Refinement;
 import souther.compiler.inputs.Requirements;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.types.ConstructOccurrence;
 import souther.compiler.types.ModelOccurrence;
@@ -667,9 +667,9 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
     private static TermPath positionOf(Core.Match match, InputReads reads,
                                        RuleReadingSource ruleSource) {
         return switch (reads.forkedOn(match.scrutinee(), ruleSource.newtypes())) {
-            case PathResolution.At(var stands) -> stands;
-            case PathResolution.NotAPosition _ -> null;
-            case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
+            case ValuesAt.At(var stands) -> stands;
+            case ValuesAt.NotAPosition _ -> null;
+            case ValuesAt.MayStandAt _ -> null;
         };
     }
 
@@ -809,7 +809,7 @@ public record ReachingCuts(Lookup<ALine, List<OnTheWay>> byLine,
     static Set<CasesLeft> answersOf(Core.Match match, InputDomain inputs, InputReads reads,
                                     RuleReadingSource ruleSource) {
         TermPath scrutinee = reads.forkedOn(match.scrutinee(), ruleSource.newtypes())
-                instanceof PathResolution.At(var stands) ? stands : null;
+                instanceof ValuesAt.At(var stands) ? stands : null;
         DeclaredInput declared = scrutinee == null ? null : inputs.declared(ruleSource);
         Set<CasesLeft> out = new LinkedHashSet<>();
         for (Core.Case arm : match.cases()) {
