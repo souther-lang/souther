@@ -3174,8 +3174,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 .allMatch(each -> granularityOf(each) == Granularity.DISCRETE);
         boolean offItsLine = asStated != null && !written.isEmpty()
                 && written.stream().allMatch(each -> keepsOffTheLineOf(each.affine(), asStated));
+        List<TakenConstraint.Affine> narrowingsMet = new ArrayList<>();
         List<OnAWay> unfree = offItsLine ? List.of()
-                : withoutWhatAFreeNumberMeets(written, declined, past, read);
+                : withoutWhatAFreeNumberMeets(written, declined, past, read, narrowingsMet);
         // What the way leaves of the lengths of the strings this relation is between, asked once
         // for everything below that reads it. Where a value of the numbers it ties a length to is
         // shown for every length the string has, what it states of the length leaves its strings
@@ -3203,8 +3204,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // term nothing ties to any other, so two terms the rest of the way holds to one another
         // are neither of them one, and a value is settled only over every value the others may
         // hold, which a tie among them cannot widen.
-        List<TakenConstraint.Affine> met = offItsLine ? List.of()
-                : metByARowAtTheLine(unfree, past.narrowing(), inWholeSteps);
+        List<TakenConstraint.Affine> met = new ArrayList<>();
+        if (!offItsLine) {
+            met.addAll(metByARowAtTheLine(unfree, past.narrowing(), inWholeSteps));
+            met.addAll(narrowingsMet);
+        }
         WayRead beside = met.isEmpty() ? entire : wayRead(
                 unfree.stream().filter(each -> each.affine() == null
                         || !met.contains(each.affine())).toList(),
@@ -6406,13 +6410,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private List<OnAWay> withoutWhatAFreeNumberMeets(List<OnAWay> conditions,
                                                      Optional<Set<String>> declined,
                                                      DemandReading.Answered past,
-                                                     InputReading read) {
+                                                     InputReading read,
+                                                     List<TakenConstraint.Affine> narrowingsMet) {
         List<OnAWay> out = new ArrayList<>(conditions);
         for (OnAWay each : conditions) {
             TakenConstraint.Affine affine = each.affine();
             if (affine != null && affine.rel() == Rel.NE && affine.form().coefs().keySet()
                     .stream().anyMatch(term ->
-                            freeToMeet(term, each, out, declined, past, read))) {
+                            freeToMeet(term, each, out, declined, past, read,
+                                    narrowingsMet))) {
                 out.remove(each);
             }
             if (each.onARemainder() != null && out.contains(each)) {
@@ -6420,7 +6426,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         .filter(other -> sameRemainder(each, other)).toList();
                 if (allowTogether(together) && each.onARemainder().dividend().coefs().keySet()
                         .stream().anyMatch(term ->
-                                freeToMeet(term, each, out, declined, past, read))) {
+                                freeToMeet(term, each, out, declined, past, read,
+                                        narrowingsMet))) {
                     out.removeAll(together);
                 }
             }
@@ -6461,15 +6468,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private boolean freeToMeet(NumericTerm term, OnAWay statement, List<OnAWay> conditions,
                                Optional<Set<String>> declined, DemandReading.Answered past,
-                               InputReading read) {
+                               InputReading read, List<TakenConstraint.Affine> narrowingsMet) {
         if (!(term instanceof NumericTerm.FromOnePosition number)) {
             return false;
         }
         NumericDomain.Bounds takes = valuesFreeToChoose(number, statement, conditions, declined,
                 past, read);
-        if (takes == null) {
-            return false;
-        }
         if (statement.onARemainder() != null) {
             List<RowDemand.OnARemainder> together = new ArrayList<>();
             together.add(statement.onARemainder());
@@ -6478,9 +6482,225 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     together.add(other.onARemainder());
                 }
             }
-            return choosesEveryRemainder(number, together, takes, read);
+            return (takes != null && choosesEveryRemainder(number, together, takes, read))
+                    || choosesBesideWhatTheSidesRead(number, together, statement,
+                            conditions, declined, past, read, narrowingsMet);
+        }
+        if (takes == null) {
+            return false;
         }
         return takesTwoValues(takes) && workedOutBeside(statement.affine(), number, takes, read);
+    }
+
+    /**
+     * Whether, for every value of the numbers the sides of this relation read, choosing
+     * {@code free} brings the form the statements {@code together} hold to every remainder, with
+     * every other number of the form chosen at nought.
+     *
+     * <p>This is the claim over the kept numbers (the ones the sides read) alone, and not over
+     * every value of the rest as {@link #choosesEveryRemainder} claims: the numbers it chooses
+     * are fixed at nought, so the form is worked out the way the program works it out for no
+     * value of them that is not nought. It is for a reader of the sides, who asks whether the
+     * relation reaches every value of the sides, and says nothing of the other numbers' values.
+     *
+     * <p>Only the shapes whose every partial sum is the form, one of its kept number or the free
+     * number alone are taken: the free number and the one kept number weigh one, no statement moves
+     * the form by a constant, and each number the form holds besides is free, may be nought, and
+     * is not read by a side. Any other form has a partial sum this does not look at, and is not
+     * shown.
+     */
+    private boolean choosesBesideWhatTheSidesRead(NumericTerm.FromOnePosition free,
+                                                  List<RowDemand.OnARemainder> together,
+                                                  OnAWay statement,
+                                                  List<OnAWay> conditions,
+                                                  Optional<Set<String>> declined,
+                                                  DemandReading.Answered past,
+                                                  InputReading read,
+                                                  List<TakenConstraint.Affine> narrowingsMet) {
+        NumericDomain.Bounds takes = valuesFreeToChoose(free, statement, conditions, declined,
+                past, read, false);
+        RowDemand.OnARemainder on = together.get(0);
+        BigInteger divisor = on.remainder().divisor();
+        BigInteger weight = wholeNumberOf(on.dividend().coefs().get(free));
+        TermOrders freeOrders = read.quantities().ordersOf(free);
+        BigInteger least = leastOf(Carrier.WHOLE);
+        BigInteger greatest = greatestOf(Carrier.WHOLE);
+        if (takes == null || weight == null || freeOrders == null || least == null
+                || greatest == null || weight.abs().compareTo(BigInteger.ONE) != 0) {
+            return false;
+        }
+        for (RowDemand.OnARemainder each : together) {
+            BigInteger move = wholeNumberOf(each.dividend().constant());
+            if (move == null || move.signum() != 0) {
+                return false;
+            }
+        }
+        WholeEnds mine = wholeEndsOf(takes.meet(freeOrders.answered().whereItStops()));
+        if (mine == null) {
+            return false;
+        }
+        BigInteger keptLow = BigInteger.ZERO;
+        BigInteger keptHigh = BigInteger.ZERO;
+        int kept = 0;
+        NumericTerm keptTerm = null;
+        WholeEnds keptEnds = null;
+        Set<NumericTerm> atNought = new LinkedHashSet<>();
+        for (Map.Entry<NumericTerm, ExactRatio> each : on.dividend().coefs().entrySet()) {
+            if (each.getKey().equals(free)) {
+                continue;
+            }
+            if (!(each.getKey() instanceof NumericTerm.FromOnePosition other)) {
+                return false;
+            }
+            NumericDomain.Bounds otherTakes = valuesFreeToChoose(other, statement, conditions,
+                    declined, past, read, false);
+            TermOrders orders = read.quantities().ordersOf(other);
+            if (orders == null) {
+                return false;
+            }
+            if (otherTakes != null) {
+                WholeEnds ends = wholeEndsOf(otherTakes.meet(orders.answered().whereItStops()));
+                if (ends == null || (ends.low() != null && ends.low().signum() > 0)
+                        || (ends.high() != null && ends.high().signum() < 0)
+                        || readBySides(other)) {
+                    return false;
+                }
+                atNought.add(other);
+                continue;
+            }
+            BigInteger by = wholeNumberOf(each.getValue());
+            if (!readBySides(other) || by == null || by.abs().compareTo(BigInteger.ONE) != 0
+                    || ++kept > 1 || !(read.quantities().region().projectionOf(other)
+                            instanceof NumericDomain.FormProjection.Within(
+                                    NumericDomain.Bounds run))) {
+                return false;
+            }
+            WholeEnds ends = wholeEndsOf(run.meet(orders.answered().whereItStops()));
+            if (ends == null || ends.low() == null || ends.high() == null) {
+                return false;
+            }
+            keptLow = by.signum() > 0 ? ends.low() : ends.high().negate();
+            keptHigh = by.signum() > 0 ? ends.high() : ends.low().negate();
+            keptTerm = other;
+            keptEnds = ends;
+        }
+        if (!windowHoldsEveryRemainder(weight, mine, keptLow, keptHigh, BigInteger.ZERO,
+                divisor, least, greatest)) {
+            return false;
+        }
+        List<TakenConstraint.Affine> verified = new ArrayList<>();
+        if (!meetsWhatTheRunNarrows(past.narrowing(), on.dividend(), free, keptTerm, keptEnds,
+                atNought, mine, least, greatest, verified)) {
+            return false;
+        }
+        narrowingsMet.addAll(verified);
+        return true;
+    }
+
+    /**
+     * Whether every number the run narrows ({@link DemandReading.Answered#narrowing}) holds for
+     * the values the witness chooses: the numbers in {@code atNought} at nought, the kept number
+     * anywhere in its run, and the free number where the window of
+     * {@link #windowHoldsEveryRemainder} puts it.
+     *
+     * <p>A narrowing is what the program's own arithmetic asks of a row to be worked out, so this
+     * is the witness checked in the order the program works the operations out. One that names a
+     * number nothing here chooses is not met. One of the kept number alone holds at both ends of
+     * its run, and one of the form this witness brings to a remainder holds where the form is
+     * inside the type, which the window keeps it.
+     */
+    private static boolean meetsWhatTheRunNarrows(List<TakenConstraint> narrowing,
+                                                  LinearForm<NumericTerm> dividend,
+                                                  NumericTerm free, NumericTerm kept,
+                                                  WholeEnds keptEnds, Set<NumericTerm> atNought,
+                                                  WholeEnds mine,
+                                                  BigInteger least, BigInteger greatest,
+                                                  List<TakenConstraint.Affine> verified) {
+        Set<NumericTerm> chosen = new LinkedHashSet<>(atNought);
+        chosen.add(free);
+        if (kept != null) {
+            chosen.add(kept);
+        }
+        for (TakenConstraint each : narrowing) {
+            if (!(each instanceof TakenConstraint.Affine affine)) {
+                return false;
+            }
+            LinearForm<NumericTerm> form = affine.form();
+            Rel rel = affine.rel();
+            if (form.coefs().keySet().stream().noneMatch(chosen::contains)) {
+                continue;
+            }
+            verified.add(affine);
+            BigInteger constant = wholeNumberOf(form.constant());
+            BigInteger onFree = wholeNumberOf(form.coefs().get(free));
+            BigInteger onKept = kept == null ? null : wholeNumberOf(form.coefs().get(kept));
+            if (constant == null || form.coefs().keySet().stream().anyMatch(term ->
+                    !chosen.contains(term) || (!term.equals(free) && !term.equals(kept)
+                            && !atNought.contains(term)))) {
+                return false;
+            }
+            if (onFree == null || onFree.signum() == 0) {
+                if (kept == null || onKept == null || keptEnds == null) {
+                    if (!holdsOf(constant, rel)) {
+                        return false;
+                    }
+                    continue;
+                }
+                if (!holdsOf(onKept.multiply(keptEnds.low()).add(constant), rel)
+                        || !holdsOf(onKept.multiply(keptEnds.high()).add(constant), rel)) {
+                    return false;
+                }
+                continue;
+            }
+            if (kept == null || !form.coefs().containsKey(kept)) {
+                if (mine.low() == null || mine.high() == null
+                        || !holdsOf(onFree.multiply(mine.low()).add(constant), rel)
+                        || !holdsOf(onFree.multiply(mine.high()).add(constant), rel)) {
+                    return false;
+                }
+                continue;
+            }
+            BigInteger weightOfFree = wholeNumberOf(dividend.coefs().get(free));
+            BigInteger weightOfKept = kept == null ? BigInteger.ZERO
+                    : wholeNumberOf(dividend.coefs().get(kept));
+            if (weightOfFree == null || weightOfKept == null || (onKept == null && kept != null)) {
+                return false;
+            }
+            BigInteger lambda = onFree.multiply(weightOfFree);
+            if (lambda.abs().compareTo(BigInteger.ONE) != 0
+                    || (kept != null && !onKept.equals(lambda.multiply(weightOfKept)))) {
+                return false;
+            }
+            if (!holdsOf(lambda.multiply(least).add(constant), rel)
+                    || !holdsOf(lambda.multiply(greatest).add(constant), rel)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean holdsOf(BigInteger value, Rel rel) {
+        int sign = value.signum();
+        return switch (rel) {
+            case GE -> sign >= 0;
+            case GT -> sign > 0;
+            case LE -> sign <= 0;
+            case LT -> sign < 0;
+            case EQ -> sign == 0;
+            case NE -> sign != 0;
+        };
+    }
+
+    /** Whether a side of the relation reads a place {@code number} is read off. */
+    private boolean readBySides(NumericTerm.FromOnePosition number) {
+        for (Side side : sides) {
+            Optional<List<TermPath>> reads = placesItIsReadOff(side);
+            if (reads.isEmpty() || reads.get().stream().anyMatch(place ->
+                    number.placesReadOff().stream().anyMatch(place::bearsOn))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -6586,6 +6806,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                     Optional<Set<String>> declined,
                                                     DemandReading.Answered past,
                                                     InputReading read) {
+        return valuesFreeToChoose(number, statement, conditions, declined, past, read, true);
+    }
+
+    /**
+     * The same, where {@code byTheRun} says whether the numbers the run narrows move the values:
+     * not, the values are those the declarations leave, and the caller holds the narrowings to
+     * the values it chooses ({@link #meetsWhatTheRunNarrows}).
+     */
+    private NumericDomain.Bounds valuesFreeToChoose(NumericTerm.FromOnePosition number,
+                                                    OnAWay statement, List<OnAWay> conditions,
+                                                    Optional<Set<String>> declined,
+                                                    DemandReading.Answered past,
+                                                    InputReading read, boolean byTheRun) {
         if (past.unsaidOrOwedOnWhatNoPlaceHolds()) {
             return null;
         }
@@ -6628,7 +6861,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // The values it takes are those the run leaves it: a number the run narrows is taken at
         // the values the run lets a row hold, whatever the declarations leave it.
         // Each narrowing is of one number alone, so only those naming this one move its values.
-        List<TakenConstraint> ofIt = past.narrowing().stream()
+        List<TakenConstraint> ofIt = !byTheRun ? List.of() : past.narrowing().stream()
                 .filter(each -> each.terms().contains(number)).toList();
         SearchRegion left = read.quantities().region();
         if (!ofIt.isEmpty()) {

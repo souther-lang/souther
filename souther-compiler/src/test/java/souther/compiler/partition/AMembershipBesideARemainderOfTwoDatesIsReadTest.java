@@ -95,11 +95,40 @@ class AMembershipBesideARemainderOfTwoDatesIsReadTest {
                 "Int.floorMod(2 * a - d, 4) == 1 && Bool.not(Set.contains(d, hs))", "hs[*]"));
     }
 
-    /** The form is added up as the program adds it, which can stop a run where a number is large. */
+    /**
+     * The form is added up as the program adds it, and {@code a + b} can stop a run where both are
+     * large, so no number is free to meet the remainder whatever the others hold. For each
+     * {@code d} the others can be chosen, though: {@code b} at nought and {@code a} a step from
+     * {@code d}, so that {@code a + b} and {@code a + b - d} both stay inside the {@code Int}s.
+     */
     @Test
-    void aFormTheProgramMayNotAddUpIsNotTakenAwayFromTheRun() {
-        assertEquals(List.of(NOT_SHOWN), reasonsAt("a: Int, b: Int, d: Int, hs: Set<Int>",
+    void aFormTheProgramMayNotAddUpIsMetByChoosingTheRestForEachValueOfTheElements() {
+        assertEquals(List.of(READ), reasonsAt("a: Int, b: Int, d: Int, hs: Set<Int>",
                 "Int.floorMod(a + b - d, 7) >= 1 && Bool.not(Set.contains(d, hs))", "hs[*]"));
+    }
+
+    @Test
+    void aNumberOfTheFormBesideTheOneChosenIsSetAtNoughtWhereItCan() {
+        assertEquals(List.of(READ), reasonsAt("d: Int, n: Int, s: Int, hs: Set<Int>",
+                "Int.floorMod(d + n - s, 7) >= 1 && Set.contains(d, hs)", "hs[*]"));
+        assertEquals(List.of(READ), reasonsAt("s: Date, d: Date, n: Int, hs: Set<Date>",
+                "Int.floorMod(Date.daysBetween(s, d) + n, 7) >= 1 && Set.contains(d, hs)",
+                "hs[*]"));
+    }
+
+    /** A third number the form holds that cannot be nought is not one the witness sets there. */
+    @Test
+    void aNumberThatCannotBeNoughtIsNotSetThere() {
+        assertEquals(List.of(NOT_SHOWN), reasonsAt("a: Int, b: Int, d: Int, hs: Set<Int>",
+                "b >= 5 && Int.floorMod(a + b - d, 7) >= 1 && Bool.not(Set.contains(d, hs))",
+                "hs[*]"));
+    }
+
+    /** Two numbers the elements are read at are not chosen for one another. */
+    @Test
+    void twoNumbersTheSidesReadAreNotKeptTogether() {
+        assertEquals(List.of(NOT_SHOWN), reasonsAt("a: Int, d: Int, e: Int, hs: Set<Int>",
+                "Int.floorMod(a - d - e, 7) >= 1 && Bool.not(Set.contains(d + e, hs))", "hs[*]"));
     }
 
     /** Nor is a remainder taken away from a run that works the same numbers out otherwise. */
