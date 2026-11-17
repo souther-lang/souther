@@ -40,8 +40,8 @@ import souther.compiler.inputs.ValuesAt;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.meaning.AuthoredPointMapping;
-import souther.compiler.meaning.MeaningsOfABody.Meaning;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
@@ -1281,7 +1281,7 @@ public final class GuardThresholds {
         }
         for (StopEvidence.OnAnArm arm : arms) {
             Proposition reached = within == null ? arm.reached()
-                    : Meaning.takenWhere(within, arm.reached());
+                    : WhereAnApplicationIsMade.past(within, arm.reached());
             if (!arm.stops().noRunMayStopAnywhere()
                     && ComparisonAssessment.someRowArrives(wayToACase.apply(reached), arrivals)
                     && arm.stops().aRunMayStopIn(read, regionsOf(Reachability.of(

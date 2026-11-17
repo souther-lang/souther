@@ -27,17 +27,23 @@ class AnAbsorbedCandidateKeepsEveryComparisonItsArmsWereReadAsTest {
         Derivation alike = new Derivation.ACutThatCutsNothing(true, Set.of());
         Pullback.OnThisArm arm = new Pullback.OnThisArm(() ->
                 AffineReading.WorkedOut.ofWhatIsToldOf(UndividedByARelation.Working.UNREAD),
-                () -> UndividedByARelation.Working.NOTHING, null, List.of());
+                () -> UndividedByARelation.Working.NOTHING, List.of());
         Pullback.Trial kept = new Pullback.Trial();
         kept.readOnAnArm(new Pullback.ArmRead.OfARelation(relation), arm);
-        kept.readOnAnArm(new Pullback.ArmRead.OfAStep(cut), arm);
+        kept.readOnAnArm(new Pullback.ArmRead.OfACutThatCutsNothing(cut), arm);
+        kept.readOnAnArm(new Pullback.ArmRead.OfTheAnswerOfAnArm(cut), arm);
 
         Pullback.Trial absorbing = new Pullback.Trial();
         absorbing.absorb(kept);
 
         assertEquals(List.of(arm), absorbing.onTheArms(new Pullback.ArmRead.OfARelation(relation)));
-        assertEquals(List.of(arm), absorbing.onTheArms(new Pullback.ArmRead.OfAStep(cut)));
+        assertEquals(List.of(arm),
+                absorbing.onTheArms(new Pullback.ArmRead.OfACutThatCutsNothing(cut)));
+        assertEquals(List.of(arm),
+                absorbing.onTheArms(new Pullback.ArmRead.OfTheAnswerOfAnArm(cut)));
         // Two arms can cut nothing alike and work different things out: a step is its own.
-        assertEquals(List.of(), absorbing.onTheArms(new Pullback.ArmRead.OfAStep(alike)));
+        assertEquals(List.of(),
+                absorbing.onTheArms(new Pullback.ArmRead.OfACutThatCutsNothing(alike)));
+        assertEquals(List.of(), absorbing.onTheArms(new Pullback.ArmRead.OfTheAnswerOfAnArm(alike)));
     }
 }

@@ -51,6 +51,8 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
                 "List.all(r -> (if q > 5 then q - 1 else 3) >= r, ds)");
         CONDITIONS.put("nestedArm", "(if q > 5 then (if q > 7 then q + 1 else 3) else 4) >= q");
         CONDITIONS.put("armOfARule", "(if q > 5 then Int.max(q + 1, 3) else 4) >= q");
+        CONDITIONS.put("matchArm", "(match t with | Low -> q + 1 | High -> 3) >= q");
+        CONDITIONS.put("matchArmNoStop", "(match t with | Low -> Int.max(q, 3) | High -> 3) >= q");
         CONDITIONS.put("composed",
                 "List.all(r -> r <= 10, List.map(x -> x + 1, List.map(y -> y * 2, ds)))");
         CONDITIONS.put("beside",
@@ -115,6 +117,12 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         assertEquals(1, TOLD.get("armOfARule").size(), TOLD.toString());
     }
 
+    /** An arm of a match is told as an arm of an if is. */
+    @Test
+    void anOperationInAnArmOfAMatchIsToldAsOneAMayStop() {
+        assertEquals(1, TOLD.get("matchArm").size(), TOLD.toString());
+    }
+
     /** The first step is worked out before the second, so a row is not said to stop in the
      *  second where it stopped in the first, and the first is told. */
     @Test
@@ -138,14 +146,15 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         assertEquals(List.of(), TOLD.get("armInAClosureNoStop"));
         assertEquals(List.of(), TOLD.get("maxOfAnArmNoStop"));
         assertEquals(List.of(), TOLD.get("maxOfAnArmUnreached"));
+        assertEquals(List.of(), TOLD.get("matchArmNoStop"));
     }
 
     /** The notes of each behavior, each of the conditions read once, as the model says them. */
     private static Map<String, List<String>> told() {
-        StringBuilder model = new StringBuilder("module m\n");
+        StringBuilder model = new StringBuilder("module m\n\ndata Tier = Low | High\n");
         CONDITIONS.forEach((name, condition) -> model.append("\nbehavior ").append(name)
-                .append(" : (ds: List<Int>, q: Int) -> Int\nlet ").append(name)
-                .append(" (ds, q) = if ").append(condition).append(" then 1 else 2\n"));
+                .append(" : (ds: List<Int>, q: Int, t: Tier) -> Int\nlet ").append(name)
+                .append(" (ds, q, t) = if ").append(condition).append(" then 1 else 2\n"));
         Compilation compilation = ACompiledModel.measured(model.toString(),
                 new Adequacy.Asked(Adequacy.Level.OFF, false));
         Pattern header = Pattern.compile("^(\\w+)\\s+implemented\\b.*");

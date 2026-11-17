@@ -1071,18 +1071,17 @@ final class Pullback {
         }
         for (Meaning.StepOnAnArm each : stated.meaning().stepsDownTheArms(
                 ArmRead::isAComparisonThatCutsNothing)) {
-            for (OnThisArm arm : theRule.onTheArms(new ArmRead.OfAStep(each.step()))) {
+            for (OnThisArm arm : theRule.onTheArms(new ArmRead.OfACutThatCutsNothing(
+                    each.step()))) {
                 out.add(new StopEvidence.OnAnArm(each.reached(), arm.stops()));
             }
         }
         // What a run works out evaluating the answer of an arm is the arm's own, and is asked
         // where the arm is taken: the comparison made of the answer is read where it stands.
         for (Meaning.StepOnAnArm each : stated.meaning().stepsDownTheArms(
-                step -> theRule.isTheBodyOfAnArm(step))) {
-            for (OnThisArm arm : theRule.onTheArms(new ArmRead.OfAStep(each.step()))) {
-                if (arm.body() == each.step()) {
-                    out.add(new StopEvidence.OnAnArm(each.reached(), arm.evaluatedStops()));
-                }
+                theRule::isTheAnswerOfAnArm)) {
+            for (OnThisArm arm : theRule.onTheArms(new ArmRead.OfTheAnswerOfAnArm(each.step()))) {
+                out.add(new StopEvidence.OnAnArm(each.reached(), arm.evaluatedStops()));
             }
         }
         return List.copyOf(out);
@@ -3216,10 +3215,10 @@ final class Pullback {
             return onTheArms == null ? List.of() : onTheArms.getOrDefault(read, List.of());
         }
 
-        /** Whether {@code step} is the body of an arm of a choice this candidate read. */
-        boolean isTheBodyOfAnArm(Derivation step) {
-            return onTheArms(new ArmRead.OfAStep(step)).stream()
-                    .anyMatch(arm -> arm.body() == step);
+        /** Whether {@code step} is what the answer of an arm of a choice this candidate read was
+         *  read as. */
+        boolean isTheAnswerOfAnArm(Derivation step) {
+            return !onTheArms(new ArmRead.OfTheAnswerOfAnArm(step)).isEmpty();
         }
 
         void tell(Relation relation, UndividedByARelation.Working told) {
@@ -3262,22 +3261,37 @@ final class Pullback {
     }
 
     /**
-     * A comparison a candidate read the written one as, which what a run taking an arm works out
+     * What a candidate read the written comparison as, which what a run taking an arm works out
      * is kept by. One read as a relation is told by the relation. One read as cutting nothing
-     * draws none, and is told by the step that reads it, which is that one comparison and no
-     * other that reads alike: two arms can cut nothing alike and work different things out.
+     * draws none, and is told by the step that reads it; and what a run works out evaluating the
+     * answer of an arm is told by that answer. A step stands for itself and no other that reads
+     * alike: two arms can cut nothing alike and work different things out.
      */
     sealed interface ArmRead {
 
         /** The comparison read as {@code relation}. */
         record OfARelation(Relation relation) implements ArmRead {}
 
-        /** The step {@code step}: a comparison read as cutting nothing, or the body of an arm. */
-        record OfAStep(Derivation step) implements ArmRead {
+        /** The step {@code step}, a comparison read as cutting nothing. */
+        record OfACutThatCutsNothing(Derivation step) implements ArmRead {
 
             @Override
             public boolean equals(Object other) {
-                return other instanceof OfAStep(Derivation same) && same == step;
+                return other instanceof OfACutThatCutsNothing(Derivation same) && same == step;
+            }
+
+            @Override
+            public int hashCode() {
+                return System.identityHashCode(step);
+            }
+        }
+
+        /** The step {@code step}, what the answer of an arm is read as. */
+        record OfTheAnswerOfAnArm(Derivation step) implements ArmRead {
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof OfTheAnswerOfAnArm(Derivation same) && same == step;
             }
 
             @Override
@@ -3297,7 +3311,7 @@ final class Pullback {
             List<ArmRead> out = new ArrayList<>();
             Meaning.relationsReadIn(derivation).forEach(each -> out.add(new OfARelation(each)));
             Meaning.stepsIn(derivation, ArmRead::isAComparisonThatCutsNothing)
-                    .forEach(each -> out.add(new OfAStep(each)));
+                    .forEach(each -> out.add(new OfACutThatCutsNothing(each)));
             return out;
         }
     }
@@ -3308,13 +3322,14 @@ final class Pullback {
      *
      * @param worksOut   what the comparison works out with the choice standing as the arm; worked
      *                   out only when asked
+     * @param evaluated  what a run taking the arm works out evaluating the answer of the arm
      * @param decidedBy  what every run works out before it takes the arm, the nearest choice
      *                   first: what decided the arm. None where the arm's choice was not read as a
      *                   fork, which is taken after what nothing here says, so that what a row
      *                   taking it gets past is not told
      */
     record OnThisArm(Supplier<AffineReading.WorkedOut> worksOut,
-                     Supplier<UndividedByARelation.Working> evaluated, Derivation body,
+                     Supplier<UndividedByARelation.Working> evaluated,
                      List<UndividedByARelation.Working> decidedBy) {
 
         /** What a row taking the arm gets past: what the arm works out, after what decided it. */
@@ -13717,13 +13732,13 @@ final class Pullback {
         Once<UndividedByARelation.Working> evaluated = new Once<>(() -> answered == null
                 ? UndividedByARelation.Working.NOTHING
                 : AffineReading.workedOutByEvaluating(answered.value(), answered.at(), this.read));
-        OnThisArm arm = new OnThisArm(worksOut, evaluated, answered == null ? null : read,
+        OnThisArm arm = new OnThisArm(worksOut, evaluated,
                 restatingAQuotient ? List.of() : whatDecidedTheArm());
         for (ArmRead each : ArmRead.in(read)) {
             trial().readOnAnArm(each, arm);
         }
         if (answered != null) {
-            trial().readOnAnArm(new ArmRead.OfAStep(read), arm);
+            trial().readOnAnArm(new ArmRead.OfTheAnswerOfAnArm(read), arm);
         }
         return read;
     }

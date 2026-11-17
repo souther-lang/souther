@@ -42,6 +42,19 @@ class AnOperationOverANameIsWorkedOutAfterEveryOperationThatGaveItsValueTest {
                 List.of(new Core.Read("x", NAME, Type.INT, POS)))));
     }
 
+    /** The answer so far a step of a fold is handed is a name given its value by all that was
+     *  told before the step: the seed, the elements and the steps before. */
+    @Test
+    void anOperationOverTheAnswerSoFarIsAfterEveryOneToldBeforeTheStep() {
+        AffineReading.WhatWasTold told = new AffineReading.WhatWasTold();
+        told.add(new Core.Int(1, Type.INT, POS), operation());
+        told.add(new Core.Int(2, Type.INT, POS), operation());
+        told.after(NAME);
+
+        assertEquals(Set.of(0, 1), Set.copyOf(told.workedOutOf(
+                List.of(new Core.Read("x", NAME, Type.INT, POS)))));
+    }
+
     @Test
     void whatWasToldBeforeTheValueWasReadIsNotWhatGaveIt() {
         AffineReading.WhatWasTold told = new AffineReading.WhatWasTold();
