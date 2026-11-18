@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.TypeView;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.ARounding;
 import souther.compiler.check.Choice;
@@ -20,6 +21,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.cst.CstLexer;
 import souther.compiler.core.Core;
+import souther.compiler.core.Evaluated;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -27,6 +29,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.TakenAs;
+import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -1548,6 +1551,21 @@ public sealed interface ElementValue {
     }
 
     /**
+     * Each whole-number operation a closure works out of its element on the way to its answer, in
+     * the order it works them out, as a form of the numbers at the places of the elements, and
+     * the product of two of them: what each comes to where it is worked out, and not what the
+     * answer comes to once the arithmetic has simplified it — {@code (x + 2) - 1} comes to
+     * {@code x + 1}, and a run stops at the {@code x + 2}. Not what a choice in the answer holds,
+     * which some runs do not work out, nor an operation that is no such form.
+     */
+    static List<LinearForm<NumericTerm>> operationsOf(ElementAnswer answer,
+                                                      Map<BindingId, Core> held,
+                                                      RuleReadingSource source,
+                                                      ElementsAt elements) {
+        return Reader.operationsOf(answer, held, source, elements);
+    }
+
+    /**
      * The test of the element a closure answering whether to keep it makes, read as a choice in
      * a closure's answer is ({@link Test}) — or null where it is no such test.
      */
@@ -1624,6 +1642,11 @@ public sealed interface ElementValue {
         /** The number of the input standing the same for every element a leaf is, or null
          *  where no such number is read. */
         private final Function<Core, NumericTerm> invariantAt;
+        /** Each whole-number operation the answer composes, as a form of what it comes to, where
+         *  they are asked for ({@link #operationsOf}); null where they are not. */
+        private List<LinearForm<Atom>> operations;
+        /** How many choices deep the walk is: what a choice holds is worked out on some runs. */
+        private int insideChoices;
 
         private Reader(BindingId element, BindingId position,
                        Map<BindingId, ElementProjection> standing, Map<BindingId, Core> held,
@@ -1636,6 +1659,84 @@ public sealed interface ElementValue {
             this.source = source;
             this.elements = elements;
             this.invariantAt = invariantAt;
+        }
+
+        /** What {@link ElementValue#operationsOf} says: each operation the answer composes, kept
+         *  where it is a form of places of the element alone. */
+        private static List<LinearForm<NumericTerm>> operationsOf(
+                ElementAnswer answer, Map<BindingId, Core> held, RuleReadingSource source,
+                ElementsAt elements) {
+            Reader reader = new Reader(answer.parameter(), answer.position(), Map.of(), held,
+                    source, elements, null);
+            reader.operations = new ArrayList<>();
+            reader.recordOperationsOf(answer.body());
+            List<LinearForm<NumericTerm>> out = new ArrayList<>();
+            for (LinearForm<Atom> form : reader.operations) {
+                Map<NumericTerm, ExactRatio> terms = new LinkedHashMap<>();
+                // A form with no number in it is a number written out, which a run stops at where
+                // it is past the type — {@code ((x - x) + max) + 1} — and is no form this cannot
+                // hold: whether it can is not whether it has a number.
+                boolean ofPlaces = true;
+                for (Map.Entry<Atom, ExactRatio> each : form.coefs().entrySet()) {
+                    if (each.getKey() instanceof Atom.Place(ElementProjection place)) {
+                        terms.put(new NumericTerm.ValueOf(place.from(elements.at())),
+                                each.getValue());
+                    } else if (!aProductOfTwoFieldsIn(each, terms, elements)) {
+                        ofPlaces = false;
+                        break;
+                    }
+                }
+                if (ofPlaces) {
+                    out.add(new LinearForm<>(form.constant(), terms));
+                }
+            }
+            return out;
+        }
+
+        /**
+         * Records the operations a run works out whenever it works {@code e} out: those of the
+         * number {@code e} is read as, where it is one, and otherwise those of the parts of it
+         * that run whenever it does ({@link Evaluated#inOrder}) and of the body of a
+         * {@code let}, which runs once its value has — so a tuple, a list or a record the answer
+         * makes of arithmetic is asked of what it makes it of.
+         */
+        private void recordOperationsOf(Core e) {
+            if (value(e) != null) {
+                return;
+            }
+            Core here = Core.withoutStanding(e);
+            for (Evaluated.Step step : Evaluated.inOrder(here)) {
+                if (step instanceof Evaluated.Step.Always(Core part)) {
+                    recordOperationsOf(part);
+                }
+            }
+            if (here instanceof Core.LetIn let) {
+                recordOperationsOf(let.body());
+            }
+        }
+
+        /**
+         * Whether {@code atom}, at its weight, is the product of two places of the element, and
+         * so put into {@code terms} as the product of the numbers at them, turned as the product
+         * is written ({@link NumericTerm.ProductOf#signed}).
+         */
+        private static boolean aProductOfTwoFieldsIn(Map.Entry<Atom, ExactRatio> atom,
+                                                     Map<NumericTerm, ExactRatio> terms,
+                                                     ElementsAt elements) {
+            if (!(atom.getKey() instanceof Atom.Product(Monomial made))
+                    || made.rounding() != null || made.fields().size() != 2) {
+                return false;
+            }
+            List<ElementProjection> two = List.copyOf(made.fields());
+            NumericTerm.ProductOf.Signed signed = NumericTerm.ProductOf.signed(
+                    LinearForm.atom(new NumericTerm.ValueOf(two.get(0).from(elements.at()))),
+                    LinearForm.atom(new NumericTerm.ValueOf(two.get(1).from(elements.at()))));
+            if (signed == null || !(signed.sign().times(atom.getValue())
+                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio weight))) {
+                return false;
+            }
+            terms.put(signed.product(), weight);
+            return true;
         }
 
         /** The same reading, inside an arm whose name {@code bound} stands at {@code at}. */
@@ -1866,9 +1967,21 @@ public sealed interface ElementValue {
          *  not read. */
         private ElementValue byCondition(Core.If branch) {
             Test test = testOf(branch.cond());
-            ElementValue yes = test == null ? null : value(branch.then());
-            ElementValue no = yes == null ? null : value(branch.els());
+            ElementValue yes = test == null ? null : inAnArm(branch.then());
+            ElementValue no = yes == null ? null : inAnArm(branch.els());
             return no == null ? null : ElementValue.choosing(test, yes, no);
+        }
+
+        /** What {@code arm}, the body of one arm of a choice, comes to: what it works out is
+         *  worked out on the runs that take it and on no others. What decides the choice is
+         *  worked out before any arm, on every run. */
+        private ElementValue inAnArm(Core arm) {
+            insideChoices++;
+            try {
+                return value(arm);
+            } finally {
+                insideChoices--;
+            }
         }
 
         /**
@@ -2217,8 +2330,9 @@ public sealed interface ElementValue {
          * stopped at a branch on a flag of the element or a {@code match} on a place of it, that
          * choice.
          */
-        private AffineForms.Reading<Atom, Map<BindingId, Core>> atoms() {
-            return new Names<>() {
+        private AffineForms.RunTelling<Atom, Map<BindingId, Core>> atoms() {
+            final class Telling extends Names<Atom>
+                    implements AffineForms.RunTelling<Atom, Map<BindingId, Core>> {
 
                 @Override
                 public LinearForm<Atom> leafOf(Core e, Map<BindingId, Core> at) {
@@ -2242,6 +2356,82 @@ public sealed interface ElementValue {
                         }
                     };
                     return choice == null ? null : termsOf(choice);
+                }
+
+                /** Whether the operations the walk tells of are being kept: asked for, and not in an
+                 *  arm, which some runs do not work out. */
+                private boolean keeping() {
+                    return operations != null && insideChoices == 0;
+                }
+
+                /** Told of each operator and not only of the whole, so that {@code (x + 1) - 1},
+                 *  which comes to {@code x}, is a run's to stop in at the {@code x + 1}. */
+                @Override
+                public void composed(Core operation, LinearForm<Atom> form,
+                                     List<LinearForm<Atom>> operands) {
+                    if (keeping() && Type.INT.equals(Core.withoutStanding(operation).type())) {
+                        operations.add(form);
+                    }
+                }
+
+                @Override
+                public void composedAsAProduct(Core operation, LinearForm<Atom> form,
+                                               List<LinearForm<Atom>> operands) {
+                    composed(operation, form, operands);
+                }
+
+                /** A library call read as arithmetic over its arguments stops a run where its
+                 *  answer is past the ends of its type, as an operator does. */
+                @Override
+                public void answeredByTheLibrary(Core call, LinearForm<Atom> form,
+                                                 WhereAnOperatorAnswers where) {
+                    if (keeping() && where instanceof
+                            WhereAnOperatorAnswers.WhereItsExactValueIsHeld
+                            && Type.INT.equals(Core.withoutStanding(call).type())) {
+                        operations.add(form);
+                    }
+                }
+
+                /** A value bound and not read by the body is worked out first all the same. */
+                @Override
+                public void bound(Core.LetIn binding, Map<BindingId, Core> at) {
+                    if (keeping()) {
+                        recordOperationsOf(binding.value());
+                    }
+                }
+
+                /** An operation the walk could not read has no form to keep: what it works out is
+                 *  told by nobody here, which is a limit of the record and not a finding. */
+                @Override
+                public void unobserved(Core node) {
+                }
+
+                /** A call that folds to a number is the same on every run that has one, and
+                 *  stops none where it is the number. */
+                @Override
+                public void folded(Core e, Map<BindingId, Core> at) {
+                }
+
+                /** Never asked: a total of a list written out is read as no form here
+                 *  ({@link Reading#readsATotalOfWhatIsWrittenOut} is false), and the elements of
+                 *  that list are parts a run works out whenever it works the call out, which
+                 *  {@link #recordOperationsOf} asks of. */
+                @Override
+                public void totalled(Core call, LinearForm<Atom> total, List<Core> elements) {
+                }
+
+                /** The elements of a list written out that a count is taken of are parts a run
+                 *  works out whenever it works the call out, which {@link #recordOperationsOf}
+                 *  asks of. */
+                @Override
+                public void counted(Core call, List<Core> elements, Map<BindingId, Core> at) {
+                }
+
+                /** A newtype's construction stops a run by the clauses of its type, which is told
+                 *  of the comparison that stands over the number and not of an element's answer. */
+                @Override
+                public void constructed(Core.Construct construct, TypeView type,
+                                        LinearForm<Atom> value) {
                 }
 
                 /** The position times a form of the places of the element, which is a form of the
@@ -2279,7 +2469,8 @@ public sealed interface ElementValue {
                     return by instanceof Form form && isAChoice(weight)
                             ? ElementValue.weighedBy(weight, form) : null;
                 }
-            };
+            }
+            return new Telling();
         }
 
         /**

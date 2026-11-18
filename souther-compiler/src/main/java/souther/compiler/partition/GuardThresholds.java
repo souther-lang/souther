@@ -353,8 +353,13 @@ public final class GuardThresholds {
                             // nothing out. Where those rows cannot be put on the way, the
                             // application is taken as made. That is asked of what a run works
                             // out, and not of what a row of a line gets past.
-                            boolean aRunStops = !(arrived instanceof ComparisonAssessment
-                                    .AnswersNowhere)
+                            // Whatever a run works out on the way to the comparison it works out
+                            // only if it gets there: where no row arrives, nothing below is a
+                            // run's, whichever of the ways to it says what.
+                            boolean aRowArrives = ComparisonAssessment.someRowArrives(beforeIt,
+                                    arrivals);
+                            boolean aRunStops = aRowArrives
+                                    && !(arrived instanceof ComparisonAssessment.AnswersNowhere)
                                     && ((each.stopsWhere().isPresent()
                                     && ComparisonAssessment.someRowArrives(
                                             wayToACase.apply(each.stopsWhere().get()), arrivals))
@@ -374,6 +379,9 @@ public final class GuardThresholds {
                                                     .orElseGet(() -> arrived.relationsRead()
                                                             .stream().anyMatch(UndividedByARelation
                                                                     ::aRunMayStopOverABoundValue)))
+                                    || each.stopsIn().map(stops -> !stops.noRunMayStopAnywhere()
+                                            && stops.aRunMayStopIn(read,
+                                            regionsOf(beforeIt))).orElse(false)
                                     || aRunTakingAnArmMayStop(each, each.onTheArms(), null, read,
                                             arrivals, wayToACase, aCase)
                                     || each.worksOutOnEach().map(applications -> applications
@@ -384,8 +392,8 @@ public final class GuardThresholds {
                             // works out, asked of the way before a row is narrowed to getting
                             // past that: a row that got past holds none of them.
                             List<SearchRegion> before = regionsOf(beforeIt);
-                            List<EveryRunStops> stops =
-                                    arrived instanceof ComparisonAssessment.AnswersNowhere
+                            List<EveryRunStops> stops = !aRowArrives
+                                    || arrived instanceof ComparisonAssessment.AnswersNowhere
                                             ? List.<EveryRunStops>of()
                                             : everyRunStops(arrived, each.worksOutOnEach(),
                                                     each.stopsIn(), read,
@@ -399,7 +407,8 @@ public final class GuardThresholds {
                                     whereMet(each, helper -> runsOnce.computeIfAbsent(helper,
                                             called -> plan.runsOnce(called, emitted))),
                                     reaches, arrived, each.readOn(), aRunStops, stops,
-                                    asksOfARunReaching(each.asks(), before, read, arrived), found,
+                                    aRowArrives ? asksOfARunReaching(each.asks(), before, read,
+                                            arrived) : List.of(), found,
                                     between, throughADerivedValue, partnered, withoutALine,
                                     readOn);
                         }

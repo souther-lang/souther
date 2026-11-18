@@ -57,6 +57,20 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
                 "List.all(r -> r <= 10, List.map(x -> x + 1, List.map(y -> y * 2, ds)))");
         CONDITIONS.put("beside",
                 "List.fold((w, l) -> if l > w then l else w, 0, ds) <= q + 1");
+        CONDITIONS.put("allOfAStep", "List.all(r -> r <= 10, List.map(x -> x + 1, ds))");
+        CONDITIONS.put("allOfAProduct", "List.all(r -> r <= 10, List.map(x -> x * 2, ds))");
+        CONDITIONS.put("allOfACancelledStep",
+                "List.all(r -> r <= 10, List.map(x -> (x + 1) - 1, ds))");
+        CONDITIONS.put("allOfAShiftedStep",
+                "List.all(r -> r <= 10, List.map(x -> (x + 2) - 1, ds))");
+        CONDITIONS.put("lengthOfAConditionStep",
+                "List.length(List.map(x -> if x + 1 > 0 then 1 else 2, ds)) >= 2");
+        CONDITIONS.put("lengthOfAnArmStepNoStop",
+                "List.length(List.map(x -> if x < 0 then x + 1 else 0, ds)) >= 2");
+        CONDITIONS.put("lengthOfAProduct",
+                "List.length(List.map(r -> r.price * r.qty, rs)) >= 2");
+        CONDITIONS.put("lengthOfAProductUnchanged",
+                "List.length(List.map(r -> r.price, rs)) >= 2");
         CONDITIONS.put("none", "q >= q");
         CONDITIONS.put("armNoStop", "(if q > 5 then q - 1 else 3) >= q");
         CONDITIONS.put("nestedArmNoStop",
@@ -132,6 +146,45 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
                 .contains("in 2 * ds[*] where ds[*] is at least"), TOLD.toString());
     }
 
+    /**
+     * What an element comes to stops a run at the operation the closure writes, where it comes to
+     * it, whatever the closure's answer is simplified to: {@code (x + 1) - 1} is {@code x} and a
+     * run stops at the {@code x + 1}; {@code (x + 2) - 1} is {@code x + 1} and a run stops at the
+     * {@code x + 2}, an element sooner. The note says the operation and where it is past the type,
+     * which a program run says only as that it stops.
+     */
+    @Test
+    void aStopOfAnElementIsToldAtTheOperationTheClosureWritesIt() {
+        assertTrue(TOLD.get("allOfAStep").getFirst().contains(
+                "in ds[*] + 1 where ds[*] is at least 9223372036854775807"), TOLD.toString());
+        assertTrue(TOLD.get("allOfAProduct").getFirst().contains(
+                "in 2 * ds[*] where ds[*] is at least 4611686018427387904"), TOLD.toString());
+        assertTrue(TOLD.get("allOfACancelledStep").getFirst().contains(
+                "in ds[*] + 1 where ds[*] is at least 9223372036854775807"), TOLD.toString());
+        assertTrue(TOLD.get("allOfAShiftedStep").getFirst().contains(
+                "in ds[*] + 2 where ds[*] is at least 9223372036854775806"), TOLD.toString());
+    }
+
+    /**
+     * What decides a choice in a closure's answer is worked out on every run: a stop in it is
+     * told by the comparison of the length as well as by the condition's own comparison, which a
+     * program run cannot tell apart. An operation only an arm works out, which cannot stop here,
+     * is told of none.
+     */
+    @Test
+    void aConditionIsToldByTheComparisonOfTheListAndByItsOwn() {
+        assertEquals(2, TOLD.get("lengthOfAConditionStep").size(), TOLD.toString());
+        assertEquals(List.of(), TOLD.get("lengthOfAnArmStepNoStop"), TOLD.toString());
+    }
+
+    /** What a program run cannot reach without a record: the product of two fields of an
+     *  element, and the same of one field. */
+    @Test
+    void theProductOfTwoFieldsOfAnElementIsTold() {
+        assertEquals(1, TOLD.get("lengthOfAProduct").size(), TOLD.toString());
+        assertEquals(List.of(), TOLD.get("lengthOfAProductUnchanged"), TOLD.toString());
+    }
+
     /** The other side of a comparison of a walk is worked out whatever the walk answers. */
     @Test
     void anOperationBesideAWalkThatEndsNoRunIsToldAsTheControlTellsIt() {
@@ -151,10 +204,12 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
 
     /** The notes of each behavior, each of the conditions read once, as the model says them. */
     private static Map<String, List<String>> told() {
-        StringBuilder model = new StringBuilder("module m\n\ndata Tier = Low | High\n");
+        StringBuilder model = new StringBuilder("module m\n\ndata Tier = Low | High\n"
+                + "data Row = { price: Int, qty: Int }\n");
         CONDITIONS.forEach((name, condition) -> model.append("\nbehavior ").append(name)
-                .append(" : (ds: List<Int>, q: Int, t: Tier) -> Int\nlet ").append(name)
-                .append(" (ds, q, t) = if ").append(condition).append(" then 1 else 2\n"));
+                .append(" : (ds: List<Int>, q: Int, t: Tier, rs: List<Row>) -> Int\nlet ")
+                .append(name).append(" (ds, q, t, rs) = if ").append(condition)
+                .append(" then 1 else 2\n"));
         Compilation compilation = ACompiledModel.measured(model.toString(),
                 new Adequacy.Asked(Adequacy.Level.OFF, false));
         Pattern header = Pattern.compile("^(\\w+)\\s+implemented\\b.*");

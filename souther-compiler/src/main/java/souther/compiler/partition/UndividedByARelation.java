@@ -253,6 +253,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return true;
         }
 
+        /** Whether {@code other} is this operation told again: the same number held to the same
+         *  ends, whatever it is worked out after. */
+        boolean sameOperationAs(IntOperation other) {
+            return form.equals(other.form) && least.equals(other.least)
+                    && greatest.equals(other.greatest);
+        }
+
         /** An operation over numbers of the input alone. */
         static IntOperation overTheInput(LinearForm<NumericTerm> form, BigInteger least,
                                          BigInteger greatest, List<Integer> after) {
@@ -264,6 +271,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         LinearForm<NumericTerm> overTheInput() {
             return form.over(operand -> operand instanceof IntOperand.OfTheInput(NumericTerm term)
                     ? LinearForm.atom(term) : null);
+        }
+
+        /**
+         * Whether the rows a run stops at in this can be said as {@link #placedOnRows} says them.
+         * Where they cannot, as for a total over a container, which stops a run where it is
+         * worked out exactly past its type and not where its place is, or for a number written
+         * out that is past the type, that no row stops is not shown, and a run may stop in it.
+         */
+        boolean stopsOnRowsOfTheInput() {
+            LinearForm<NumericTerm> over = overTheInput();
+            return over != null && placedOnRows(over)
+                    && over.coefs().keySet().stream().noneMatch(FormRange::aTotal);
         }
 
         /**
@@ -509,7 +528,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * does.
          */
         boolean aRunMayStopOverABoundValue() {
-            return operations.stream().anyMatch(each -> each.overTheInput() == null);
+            return operations.stream().anyMatch(each -> !each.stopsOnRowsOfTheInput());
         }
     }
 
@@ -2364,7 +2383,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             List<Bounded> before = new ArrayList<>(besides);
             for (int other = 0; other < operations.size(); other++) {
                 IntOperation one = operations.get(other);
-                if (other != at && !one.after().contains(at) && !withinItsEnds(one, before)) {
+                // An operation told twice is one a run works out, and is not another that has to
+                // be within the type before this one is asked.
+                if (other != at && !one.sameOperationAs(it) && !one.after().contains(at)
+                        && !withinItsEnds(one, before)) {
                     before = null;
                     break;
                 }
@@ -2451,6 +2473,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return true;
     }
 
+    /**
+     * Whether the rows a form stops at can be said as forms of numbers each at one position of
+     * the input ({@link #rowsWhere}): it has some number, each at a position, and a constant and
+     * a weight of one number that are whole.
+     */
+    static boolean placedOnRows(LinearForm<NumericTerm> form) {
+        Map<NumericTerm, ExactRatio> coefs = form.coefs();
+        return !coefs.isEmpty() && wholeOf(form.constant()) != null
+                && (coefs.size() != 1 || wholeOf(coefs.values().iterator().next()) != null)
+                && coefs.keySet().stream()
+                .allMatch(term -> term instanceof NumericTerm.FromOnePosition);
+    }
+
     /** A form over numbers of the input, constant and all, from {@code least} to
      *  {@code greatest}, either of which may be null where nothing bounds it there. */
     private record Bounded(LinearForm<NumericTerm> form, BigInteger least, BigInteger greatest) { }
@@ -2466,15 +2501,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Map<Map<NumericTerm, ExactRatio>, BigInteger[]> met = new LinkedHashMap<>();
         Set<NumericTerm.FromOnePosition> numbers = new LinkedHashSet<>();
         for (Bounded each : bounds) {
+            if (!placedOnRows(each.form())) {
+                return null;
+            }
             Map<NumericTerm, ExactRatio> coefs = each.form().coefs();
             BigInteger weight = coefs.size() == 1 ? wholeOf(coefs.values().iterator().next())
                     : BigInteger.ONE;
             BigInteger shift = wholeOf(each.form().constant());
-            if (coefs.isEmpty() || weight == null || shift == null
-                    || !coefs.keySet().stream().allMatch(term ->
-                            term instanceof NumericTerm.FromOnePosition)) {
-                return null;
-            }
             coefs.keySet().forEach(term -> numbers.add((NumericTerm.FromOnePosition) term));
             BigInteger least = each.least() == null ? null : each.least().subtract(shift);
             BigInteger greatest = each.greatest() == null ? null

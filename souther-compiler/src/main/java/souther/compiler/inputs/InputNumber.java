@@ -177,6 +177,33 @@ public final class InputNumber {
     }
 
     /**
+     * What a run works out of each element to make {@code walk}, a call of an operation applying
+     * a closure to the elements of a container that stands at a place: each whole-number
+     * operation the closure writes, in the order it works them out
+     * ({@link ElementValue#operationsOf}). None where {@code walk} is no such call, or its
+     * elements stand at no place, as the elements a filter keeps stand at none: a run is then
+     * over some of the values at a place, not the values there.
+     */
+    public static List<LinearForm<NumericTerm>> operationsAtEachElement(Core walk,
+                                                                        InputReads reads,
+                                                                        RuleReadingSource source) {
+        Denotation met = reads.denotes(walk, source.symbols(), source.newtypes());
+        if (met == null) {
+            return List.of();
+        }
+        InputReads where = met.at();
+        BindingId element = WalkElements.elementBindingOf(met.value(), where, source.symbols(),
+                source.newtypes());
+        ElementAnswer closure = element == null ? null : where.answerAt(element);
+        if (closure == null || !(where.everyElementAt(element, source.newtypes())
+                instanceof ValuesHeld.At(TermPath stands))) {
+            return List.of();
+        }
+        return ElementValue.operationsOf(closure, where.heldByTheBody(), source,
+                new ElementValue.ElementsAt(stands, where.declared()));
+    }
+
+    /**
      * The step of a coarser order that the value at a location falls in, where {@code e} is a call
      * of an operation counting whole units, or null where it is none.
      *

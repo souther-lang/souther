@@ -1134,6 +1134,63 @@ public final class AffineForms {
         }
     }
 
+    /**
+     * A reading that says what a run works out as the walk composes a value: each operation, and
+     * what is worked out without being read as a part of the value.
+     *
+     * <p>Every way the walk has of telling of an operation is abstract here. The defaults of
+     * {@link Reading} take an operation to be told of by nobody, so a reading that wants every one
+     * and answers some of the hooks compiles and drops the rest; one that is a {@code RunTelling}
+     * is made to answer each, and to say, where it tells nothing, that it does and why.
+     *
+     * <p>What this holds is that each hook is answered, and not that every operation is told: a
+     * reading that answers a hook by telling nothing still leaves what it works out untold, and
+     * says so where it does.
+     */
+    public interface RunTelling<A, E> extends Reading<A, E> {
+
+        /** A total over a list written out, which the reading reads as the sum of those numbers
+         *  ({@link Reading#totalled}). */
+        @Override
+        void totalled(Core call, LinearForm<A> total, List<Core> elements);
+
+        /** A count of a list written out, whose elements are worked out as the list is built
+         *  ({@link Reading#counted}). */
+        @Override
+        void counted(Core call, List<Core> elements, E at);
+
+        /** An operation composed, with the forms of its operands ({@link Reading#composed}). */
+        @Override
+        void composed(Core operation, LinearForm<A> form, List<LinearForm<A>> operands);
+
+        /** A product composed into a number of its own ({@link Reading#composedAsAProduct}). */
+        @Override
+        void composedAsAProduct(Core operation, LinearForm<A> form, List<LinearForm<A>> operands);
+
+        /** A call of the library read as arithmetic over its arguments
+         *  ({@link Reading#answeredByTheLibrary}). */
+        @Override
+        void answeredByTheLibrary(Core call, LinearForm<A> form, WhereAnOperatorAnswers where);
+
+        /** A value bound that the body read without reading the name: a run works it out first
+         *  all the same ({@link Reading#bound}). */
+        @Override
+        void bound(Core.LetIn binding, E at);
+
+        /** A node read without telling of every operation it works out
+         *  ({@link Reading#unobserved}). */
+        @Override
+        void unobserved(Core node);
+
+        /** A call that folds to a number ({@link Reading#folded}). */
+        @Override
+        void folded(Core e, E at);
+
+        /** A newtype's construction, whose clauses a run is held to ({@link Reading#constructed}). */
+        @Override
+        void constructed(Core.Construct construct, TypeView type, LinearForm<A> value);
+    }
+
     /** {@code of} with no plurality in it, which is what the members of one are read with. */
     private record OneAtATime<A, E>(Reading<A, E> of) implements Reading<A, E> {
 
