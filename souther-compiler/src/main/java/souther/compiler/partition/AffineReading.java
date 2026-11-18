@@ -502,7 +502,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      * The reading of a comparison's arithmetic, with the readings of a call it unrolls, which
      * are tried by another reading of the same input and kept only where they come to a form.
      */
-    private interface Arithmetic extends AffineForms.Reading<NumericTerm, InputReads> {
+    private interface Arithmetic extends AffineForms.RunTelling<NumericTerm, InputReads> {
 
         /** What a walk from a seed over a list written out at the call comes to, step by step. */
         Attempt walkOfWhatIsWrittenOut(Core node, InputReads at);

@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.AffineForms;
+import souther.compiler.check.TypeView;
 import souther.compiler.check.AnOperationApplied;
 import souther.compiler.check.ARounding;
 import souther.compiler.check.Choice;
@@ -28,6 +29,7 @@ import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.semantics.TakenAs;
+import souther.compiler.semantics.WhereAnOperatorAnswers;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -2328,8 +2330,9 @@ public sealed interface ElementValue {
          * stopped at a branch on a flag of the element or a {@code match} on a place of it, that
          * choice.
          */
-        private AffineForms.Reading<Atom, Map<BindingId, Core>> atoms() {
-            return new Names<>() {
+        private AffineForms.RunTelling<Atom, Map<BindingId, Core>> atoms() {
+            final class Telling extends Names<Atom>
+                    implements AffineForms.RunTelling<Atom, Map<BindingId, Core>> {
 
                 @Override
                 public LinearForm<Atom> leafOf(Core e, Map<BindingId, Core> at) {
@@ -2355,14 +2358,65 @@ public sealed interface ElementValue {
                     return choice == null ? null : termsOf(choice);
                 }
 
+                /** Whether the operations the walk tells of are being kept: asked for, and not in an
+                 *  arm, which some runs do not work out. */
+                private boolean keeping() {
+                    return operations != null && insideChoices == 0;
+                }
+
                 /** Told of each operator and not only of the whole, so that {@code (x + 1) - 1},
                  *  which comes to {@code x}, is a run's to stop in at the {@code x + 1}. */
                 @Override
-                public void composed(Core operation, LinearForm<Atom> form) {
-                    if (operations != null && insideChoices == 0
-                            && Type.INT.equals(Core.withoutStanding(operation).type())) {
+                public void composed(Core operation, LinearForm<Atom> form,
+                                     List<LinearForm<Atom>> operands) {
+                    if (keeping() && Type.INT.equals(Core.withoutStanding(operation).type())) {
                         operations.add(form);
                     }
+                }
+
+                @Override
+                public void composedAsAProduct(Core operation, LinearForm<Atom> form,
+                                               List<LinearForm<Atom>> operands) {
+                    composed(operation, form, operands);
+                }
+
+                /** A library call read as arithmetic over its arguments stops a run where its
+                 *  answer is past the ends of its type, as an operator does. */
+                @Override
+                public void answeredByTheLibrary(Core call, LinearForm<Atom> form,
+                                                 WhereAnOperatorAnswers where) {
+                    if (keeping() && where instanceof
+                            WhereAnOperatorAnswers.WhereItsExactValueIsHeld
+                            && Type.INT.equals(Core.withoutStanding(call).type())) {
+                        operations.add(form);
+                    }
+                }
+
+                /** A value bound and not read by the body is worked out first all the same. */
+                @Override
+                public void bound(Core.LetIn binding, Map<BindingId, Core> at) {
+                    if (keeping()) {
+                        recordOperationsOf(binding.value());
+                    }
+                }
+
+                /** An operation the walk could not read has no form to keep: what it works out is
+                 *  told by nobody here, which is a limit of the record and not a finding. */
+                @Override
+                public void unobserved(Core node) {
+                }
+
+                /** A call that folds to a number is the same on every run that has one, and
+                 *  stops none where it is the number. */
+                @Override
+                public void folded(Core e, Map<BindingId, Core> at) {
+                }
+
+                /** A newtype's construction stops a run by the clauses of its type, which is told
+                 *  of the comparison that stands over the number and not of an element's answer. */
+                @Override
+                public void constructed(Core.Construct construct, TypeView type,
+                                        LinearForm<Atom> value) {
                 }
 
                 /** The position times a form of the places of the element, which is a form of the
@@ -2400,7 +2454,8 @@ public sealed interface ElementValue {
                     return by instanceof Form form && isAChoice(weight)
                             ? ElementValue.weighedBy(weight, form) : null;
                 }
-            };
+            }
+            return new Telling();
         }
 
         /**

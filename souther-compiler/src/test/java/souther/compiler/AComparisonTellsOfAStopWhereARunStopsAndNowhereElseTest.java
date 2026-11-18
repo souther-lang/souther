@@ -116,6 +116,10 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 "List.length(List.map(x -> ((x - x) + 9223372036854775807) + 1, ds)) >= 1");
         FORMS.put("lengthOfACancelledConstantStepWithinTheType",
                 "List.length(List.map(x -> ((x - x) + 9223372036854775807) + 0, ds)) >= 1");
+        FORMS.put("lengthOfAnUnusedBinding",
+                "List.length(List.map(x -> { let unused = x + 1 \n 0 }, ds)) >= 1");
+        FORMS.put("lengthOfAnUnusedBindingWithinTheType",
+                "List.length(List.map(x -> { let unused = x + 0 \n 0 }, ds)) >= 1");
         FORMS.put("lengthOfATupleStep", "List.length(List.map(x -> (x + 1, 1), ds)) >= 2");
         FORMS.put("lengthOfATupleStepUnchanged", "List.length(List.map(x -> (x, 1), ds)) >= 2");
         FORMS.put("lengthOfAConditionStep",
