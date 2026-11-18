@@ -64,7 +64,7 @@ class OperatorsSayWhatTheyHaveBeenToldByTheirMarkTest {
         }
         assertEquals(before, operators.mark());
 
-        try (Restore _ = operators.withTheStepsNames(new Pullback.WhatTheStepsNamesHold(
+        try (Restore _ = operators.withTheStepsNamesFrom(_ -> new Pullback.WhatTheStepsNamesHold(
                 null, null, Map.of()))) {
             assertNotEquals(before, operators.mark());
         }

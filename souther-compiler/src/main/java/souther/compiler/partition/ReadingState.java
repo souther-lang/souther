@@ -404,22 +404,26 @@ final class ReadingState {
         return out;
     }
 
-    /** A value a reading is compared on and must leave as it found it, by what it holds. */
-    <T> Scoped<T> guarded() {
+    /**
+     * A ledger a reading is compared on by what it holds and must leave as it found it, which is
+     * where it stands ({@link Ledger#mark}). What a reading must leave alone is something that
+     * says what it has been told, and nothing that would have to be looked into to say so.
+     */
+    <T extends Ledger> Scoped<T> guarded() {
         return guarded(setting(Compared.BY_VALUE));
     }
 
-    /** The same, of an object changed in place that says what it has been told: compared on that
-     *  ({@link Compared#BY_MARK}). */
+    /** An object changed in place that says what it has been told, compared and left alone by
+     *  that ({@link Compared#BY_MARK}). */
     <T extends Marked> Scoped<T> guardedByItsMark() {
         return guarded(setting(Compared.BY_MARK));
     }
 
     /**
-     * A place a reading adds to where there is one: compared by whether there is one, and left as
-     * found.
+     * A ledger a reading adds to where there is one: compared by whether there is one, and left
+     * as found.
      */
-    <T> Scoped<T> writtenInto() {
+    <T extends Ledger> Scoped<T> writtenInto() {
         return guarded(setting(Compared.BY_PRESENCE));
     }
 
@@ -427,7 +431,7 @@ final class ReadingState {
      * The same, compared only for a reading that asked after it, and by what it holds where the
      * reading asked that ({@link Scoped#contents}).
      */
-    <T> Scoped<T> writtenIntoAndAskedAfter() {
+    <T extends Ledger> Scoped<T> writtenIntoAndAskedAfter() {
         Scoped<T> out = writtenInto();
         askedFor(out);
         out.contentBit = nextBit;
@@ -459,7 +463,7 @@ final class ReadingState {
      * The candidates being tried, newest on top: a reading must not have said anything into the one
      * on top, nor be read under another.
      */
-    <E> Layers<E> trials() {
+    <E extends Marked> Layers<E> trials() {
         return guarded(new Layers<>(this, Compared.NOT, true));
     }
 
@@ -512,7 +516,8 @@ final class ReadingState {
         List<Object> contents = new ArrayList<>(inputs.size());
         for (Part each : inputs) {
             Object value = each.held();
-            contents.add(each.contentBit != 0 && value != null ? snapshotOf(heldIn(value)) : null);
+            contents.add(each.contentBit != 0 && value != null
+                    ? ((Ledger) value).asItHolds() : null);
             values.add(switch (each.compared) {
                 case BY_PRESENCE -> Boolean.valueOf(value != null);
                 case BY_IDENTITY -> new Same(value);
@@ -522,7 +527,7 @@ final class ReadingState {
             });
         }
         return new Inputs(Collections.unmodifiableList(values),
-                aggregates == null ? null : snapshotOf(aggregates.held()),
+                aggregates == null ? null : theVeryOnes(aggregates.oldestFirst()),
                 Collections.unmodifiableList(contents));
     }
 
@@ -600,12 +605,13 @@ final class ReadingState {
     }
 
     /** What the state a reading must leave alone is, to be compared with it afterwards: the very
-     *  object it is and everything that can be reached through it. */
+     *  object it is and what it says it has been told. Only what says so is guarded
+     *  ({@link #guarded}, {@link #guardedByItsMark}, {@link #writtenInto}, {@link #trials}). */
     List<Object[]> guards() {
         List<Object[]> out = new ArrayList<>(guards.size());
         for (Part each : guards) {
             Object held = each.guarded();
-            out.add(new Object[] {held, snapshotOf(held)});
+            out.add(new Object[] {held, held == null ? null : ((Marked) held).mark()});
         }
         return out;
     }
@@ -630,32 +636,19 @@ final class ReadingState {
         return true;
     }
 
-    /**
-     * What {@code value} is and holds, to be compared with what it is and holds later: what an
-     * object that says what it has been told says ({@link Marked#mark}), and otherwise the lists
-     * and maps of lists a ledger or the aggregates hold, down to each object in them as the very
-     * one. An object added to a list held under a key is a change.
-     */
-    static Object snapshotOf(Object value) {
-        return switch (value) {
-            case null -> null;
-            case Marked marked -> marked.mark();
-            case Map<?, ?> map -> {
-                Map<Object, Object> held = new HashMap<>();
-                for (Map.Entry<?, ?> each : map.entrySet()) {
-                    held.put(new Same(each.getKey()), snapshotOf(each.getValue()));
-                }
-                yield held;
-            }
-            case Collection<?> collection -> {
-                List<Object> held = new ArrayList<>(collection.size());
-                for (Object each : collection) {
-                    held.add(new Same(each));
-                }
-                yield held;
-            }
-            default -> new Same(value);
-        };
+    /** {@code each} as the very objects it holds, in its order: what it is compared on where each
+     *  is the same only as itself. */
+    static List<Object> theVeryOnes(Collection<?> each) {
+        List<Object> out = new ArrayList<>(each.size());
+        for (Object one : each) {
+            out.add(theVeryOne(one));
+        }
+        return out;
+    }
+
+    /** {@code one} as itself, the same only as itself whatever it is equal to. */
+    static Object theVeryOne(Object one) {
+        return new Same(one);
     }
 
     /**

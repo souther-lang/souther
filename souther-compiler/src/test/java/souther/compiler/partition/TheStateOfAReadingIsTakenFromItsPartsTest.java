@@ -9,7 +9,6 @@ import souther.compiler.partition.ReadingState.Restore;
 import souther.compiler.partition.ReadingState.Scoped;
 import souther.compiler.partition.ReadingState.Layers;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -43,7 +42,6 @@ class TheStateOfAReadingIsTakenFromItsPartsTest {
     private final Members<String> scoped = state.members();
     private final Scoped<Object> holdsOne = state.setting(Compared.BY_PRESENCE);
     private final Layers<String> aggregates = state.aggregates();
-    private final Scoped<List<String>> added = state.guarded();
     private final Layers<ACandidate> trials = state.trials();
     private final Scoped<Object> notCompared = state.notCompared(null);
 
@@ -116,17 +114,6 @@ class TheStateOfAReadingIsTakenFromItsPartsTest {
         }
     }
 
-    @Test
-    void whatAReadingMustLeaveAloneIsSeenWhenItAddsToIt() {
-        List<String> parts = new ArrayList<>();
-        try (Restore _ = added.set(parts)) {
-            List<Object[]> before = state.guards();
-
-            parts.add("a part it would not add again");
-
-            assertFalse(state.sameGuards(before, state.guards()));
-        }
-    }
 
     @Test
     void theCandidateBeingTriedIsSeenWhenSomethingIsSaidIntoItAndWhenAnotherStandsInItsPlace() {

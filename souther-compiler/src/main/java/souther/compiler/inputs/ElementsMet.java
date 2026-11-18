@@ -125,13 +125,22 @@ public final class ElementsMet {
         crowded = mark.crowded;
     }
 
-    /** A reading being noted, which says what it left once it has ended. */
-    public static final class Noting {
+    /**
+     * A reading being noted, which says what it left once it has ended.
+     *
+     * <p>Noting is stopped when this is closed, however the reading ended: the elements the
+     * reading asked of are asked of by the reading around it, which goes on where it was noting.
+     * A reading that ended by an exception leaves no footprint, but what it asked of is still
+     * what the reading around asked of, since that reading may go on and come to something past
+     * it.
+     */
+    public static final class Noting implements AutoCloseable {
 
         private final ElementsMet owner;
         private final Mark began;
         private final Set<Slot> asked;
         private final Set<Slot> outer;
+        private boolean closed;
 
         private Noting(ElementsMet owner, Mark began, Set<Slot> asked, Set<Slot> outer) {
             this.owner = owner;
@@ -140,15 +149,25 @@ public final class ElementsMet {
             this.outer = outer;
         }
 
-        /**
-         * What the reading left of the elements — or null where a name was refused on the way,
-         * since that reading is not one to take from another.
-         */
-        public Footprint ended() {
+        /** Stops noting, and tells the reading around what this one asked of. */
+        @Override
+        public void close() {
+            if (closed) {
+                return;
+            }
+            closed = true;
             owner.asked = outer;
             if (outer != null) {
                 outer.addAll(asked);
             }
+        }
+
+        /**
+         * What the reading left of the elements, noting stopped — or null where a name was
+         * refused on the way, since that reading is not one to take from another.
+         */
+        public Footprint ended() {
+            close();
             if (!owner.holding) {
                 return new Footprint(false, Set.of(), Map.of(), Map.of());
             }

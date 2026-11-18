@@ -4,9 +4,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -25,7 +27,8 @@ import java.util.Set;
  * one there now. One taken on a branch that was rewound past is refused, since taking entries off
  * cannot put back the ones that were taken off.
  *
- * <p>Nothing adds to it but its own methods: what it hands out cannot be changed through.
+ * <p>Nothing adds to it but its own methods: what it hands out cannot be changed through. It
+ * holds no null: an entry is something added, and whether a key is held is whether it was put.
  */
 abstract sealed class Ledger implements ReadingState.Marked
         permits Ledger.OfEntries, Ledger.Keyed, Ledger.Grouped {
@@ -102,6 +105,10 @@ abstract sealed class Ledger implements ReadingState.Marked
     /** What it holds, as the collection a comparison of what it holds is made of. */
     abstract Object contents();
 
+    /** What it holds as a value that a later addition does not reach, each entry the very object
+     *  it is: what a reading that asked what it holds is compared on. */
+    abstract Object asItHolds();
+
     @Override
     public final Object mark() {
         return new Revision(this, revision);
@@ -113,7 +120,7 @@ abstract sealed class Ledger implements ReadingState.Marked
         private final List<E> held = new ArrayList<>();
 
         void add(E entry) {
-            held.add(entry);
+            held.add(Objects.requireNonNull(entry, "an entry is something added"));
             added();
         }
 
@@ -141,6 +148,11 @@ abstract sealed class Ledger implements ReadingState.Marked
         Object contents() {
             return held;
         }
+
+        @Override
+        Object asItHolds() {
+            return ReadingState.theVeryOnes(held);
+        }
     }
 
     /** Values each under a key, the first put under a key the one it keeps. */
@@ -151,7 +163,8 @@ abstract sealed class Ledger implements ReadingState.Marked
 
         /** Puts {@code value} under {@code key} where nothing is, and answers what is. */
         V putIfAbsent(K key, V value) {
-            V had = held.putIfAbsent(key, value);
+            V had = held.putIfAbsent(Objects.requireNonNull(key, "a key is something put"),
+                    Objects.requireNonNull(value, "a value is something put"));
             if (had == null) {
                 order.add(key);
                 added();
@@ -183,6 +196,14 @@ abstract sealed class Ledger implements ReadingState.Marked
         Object contents() {
             return held;
         }
+
+        @Override
+        Object asItHolds() {
+            Map<Object, Object> out = new HashMap<>();
+            held.forEach((key, value) -> out.put(ReadingState.theVeryOne(key),
+                    ReadingState.theVeryOne(value)));
+            return out;
+        }
     }
 
     /** Values gathered under each key, in the order they were added. */
@@ -192,7 +213,9 @@ abstract sealed class Ledger implements ReadingState.Marked
         private final List<K> order = new ArrayList<>();
 
         void add(K key, V value) {
-            held.computeIfAbsent(key, _ -> new ArrayList<>()).add(value);
+            held.computeIfAbsent(Objects.requireNonNull(key, "a key is something put"),
+                    _ -> new ArrayList<>()).add(Objects.requireNonNull(value,
+                    "a value is something added"));
             order.add(key);
             added();
         }
@@ -225,6 +248,14 @@ abstract sealed class Ledger implements ReadingState.Marked
         @Override
         Object contents() {
             return held;
+        }
+
+        @Override
+        Object asItHolds() {
+            Map<Object, Object> out = new HashMap<>();
+            held.forEach((key, under) -> out.put(ReadingState.theVeryOne(key),
+                    ReadingState.theVeryOnes(under)));
+            return out;
         }
     }
 }

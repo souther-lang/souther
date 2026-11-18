@@ -8,6 +8,7 @@ import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.PositionsAStatementReads.ReadSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.partition.Counted.InTheMark;
 import souther.compiler.partition.Pullback.AfterTheFirst;
 import souther.compiler.partition.Pullback.Answers;
 import souther.compiler.partition.Pullback.Operated;
@@ -18,16 +19,15 @@ import souther.compiler.partition.Pullback.WorkedOutWhere;
 import souther.compiler.partition.ReadingState.Restore;
 import souther.compiler.types.BindingId;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.UnaryOperator;
 
 /**
  * The operators a reading was told of, in the order it was told, each node once for each
@@ -39,49 +39,55 @@ import java.util.Set;
  * operator on each application, worked out over what that application is handed, so the node
  * alone would keep only the first.
  *
- * <p>Everything it holds is changed through its own methods, and every change moves a count, so
- * what it has been told ({@link #mark}) is the same only while it has been told nothing more. The
- * application being read and what the names of a walk's step hold are set for an extent and put
- * back, and are in the mark as the very values they are.
+ * <p>What it holds is held in counted parts ({@link Counted}), so every change moves the count
+ * its mark says ({@link #mark}) whoever makes it. The application being read and what the names
+ * of a walk's step hold are set for an extent and put back, and are in the mark as the very values
+ * they are.
  */
 final class Operators implements ReadingState.Marked {
 
-    private final List<Operated> told = new ArrayList<>();
+    private final Counted.Changes changes = new Counted.Changes();
+    private final Counted.Sequence<Operated> told = changes.sequence();
     /** The nodes told of wherever a run works them out: on every application of the closures
      *  around them, where there are any. */
-    private final Set<Core> nodes = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Counted.Group<Core> nodes = changes.group(Operators::byIdentity);
     /** For a node inside a closure, the applications it was told of on. */
-    private final Map<Core, Set<InputReads.Applications.Made>> toldOn = new IdentityHashMap<>();
+    private final Counted.Table<Core, Counted.Group<InputReads.Applications.Made>> toldOn =
+            changes.table(IdentityHashMap::new);
     /** The application being read, or null outside every closure. */
+    @InTheMark
     private InputReads.Applications.Made application;
     /** The closures no run applies ({@link InputReads.Applications.NoneMade}), whose bodies
      *  stop no run. */
-    private final Set<Core> neverApplied = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Counted.Group<Core> neverApplied = changes.group(Operators::byIdentity);
     /** What the names of the step of a walk around hold, where the walk of what may end a run
      *  stands now ({@link WhatTheStepsNamesHold}). */
+    @InTheMark
     private WhatTheStepsNamesHold stepsNames = WhatTheStepsNamesHold.NOTHING;
-    private final List<Set<TermPath>> unsaidGroups = new ArrayList<>();
+    /** The places each operator not said of may stop a run on, a group to an operator; the last
+     *  is the group of the operator being read. */
+    private final Counted.Sequence<Counted.Group<TermPath>> unsaidGroups = changes.sequence();
     /** For each of {@link #unsaidGroups}, where its operator is worked out. */
-    private final List<WorkedOutWhere> unsaidGroupsWhere = new ArrayList<>();
-    private Set<TermPath> unsaidAt = new LinkedHashSet<>();
-    private boolean unsaidElsewhere;
-    private final List<StopObligation> obligations = new ArrayList<>();
-    private final List<AfterTheFirst> afterTheFirst = new ArrayList<>();
-    private final Map<Core, InputReads> readsAt = new IdentityHashMap<>();
-    private Core within;
-    private Core leftOut;
+    private final Counted.Sequence<WorkedOutWhere> unsaidGroupsWhere = changes.sequence();
+    private final Counted.Value<Boolean> unsaidElsewhere = changes.value(false);
+    private final Counted.Sequence<StopObligation> obligations = changes.sequence();
+    private final Counted.Sequence<AfterTheFirst> afterTheFirst = changes.sequence();
+    private final Counted.Table<Core, InputReads> readsAt = changes.table(IdentityHashMap::new);
+    private final Counted.Value<Core> within = changes.value(null);
+    private final Counted.Value<Core> leftOut = changes.value(null);
     /** Where the comparison left out is worked out, as the closures it stands inside say, or
      *  null while the walk has not got to it. */
-    private WorkedOutWhere relationStands;
+    private final Counted.Value<WorkedOutWhere> relationStands = changes.value(null);
     /** What a run may stop on, told over a value read at one reading and under one closure's
      *  names, since the group began: telling it again says nothing more. */
-    private final Set<Visit> visited = new HashSet<>();
-    /** How many times what this holds has changed. */
-    private long changes;
+    private final Counted.Group<Visit> visited = changes.group(HashSet::new);
 
     Operators() {
-        unsaidGroups.add(unsaidAt);
-        unsaidGroupsWhere.add(WorkedOutWhere.ALWAYS);
+        beginGroup(WorkedOutWhere.ALWAYS);
+    }
+
+    private static <E> Set<E> byIdentity() {
+        return Collections.newSetFromMap(new IdentityHashMap<>());
     }
 
     /** What these operators have been told, compared by the very operators, the count of changes
@@ -97,19 +103,16 @@ final class Operators implements ReadingState.Marked {
 
         @Override
         public int hashCode() {
-            return (System.identityHashCode(by) * 31 + Long.hashCode(changes)) * 31
-                    + System.identityHashCode(stepsNames);
+            return ((System.identityHashCode(by) * 31 + Long.hashCode(changes)) * 31
+                    + System.identityHashCode(stepsNames)) * 31
+                    + System.identityHashCode(application);
         }
     }
 
     /** What has been told so far, which is the same only while nothing more has. */
     @Override
     public Object mark() {
-        return new Told(this, changes, stepsNames, application);
-    }
-
-    private void changed() {
-        changes++;
+        return new Told(this, changes.count(), stepsNames, application);
     }
 
     /**
@@ -119,19 +122,19 @@ final class Operators implements ReadingState.Marked {
      */
     Operators ofTheApplicationsAfterTheFirst() {
         Operators out = new Operators();
-        out.told.addAll(told);
-        out.nodes.addAll(nodes);
-        toldOn.forEach((node, on) -> {
-            Set<InputReads.Applications.Made> copy =
-                    Collections.newSetFromMap(new IdentityHashMap<>());
-            copy.addAll(on);
+        told.view().forEach(out.told::add);
+        out.nodes.addAll(nodes.view());
+        toldOn.view().forEach((node, on) -> {
+            Counted.Group<InputReads.Applications.Made> copy =
+                    out.changes.group(Operators::byIdentity);
+            copy.addAll(on.view());
             out.toldOn.put(node, copy);
         });
         out.application = application;
-        out.neverApplied.addAll(neverApplied);
+        out.neverApplied.addAll(neverApplied.view());
         out.stepsNames = stepsNames;
-        out.within = within;
-        out.leftOut = leftOut;
+        out.within.set(within.get());
+        out.leftOut.set(leftOut.get());
         return out;
     }
 
@@ -145,13 +148,15 @@ final class Operators implements ReadingState.Marked {
      *  their type holds {@code atTheEnds}. */
     OperatorsAnswer answer(Optional<Proposition> answers, List<ConstructionAsk> asked,
                            Optional<Proposition> atTheEnds) {
-        return new OperatorsAnswer(answers, unsaidGroups, unsaidGroupsWhere, unsaidElsewhere,
-                obligations, afterTheFirst, relationStandsWhere(), asked, atTheEnds);
+        return new OperatorsAnswer(answers,
+                unsaidGroups.view().stream().map(Counted.Group::view).toList(),
+                unsaidGroupsWhere.view(), unsaidElsewhere.get(), obligations.view(),
+                afterTheFirst.view(), relationStandsWhere(), asked, atTheEnds);
     }
 
     /** The operators told, in the order they were told. */
     List<Operated> told() {
-        return Collections.unmodifiableList(told);
+        return told.view();
     }
 
     /** How many operators have been told. */
@@ -161,12 +166,10 @@ final class Operators implements ReadingState.Marked {
 
     void tell(Core operation, Answers where) {
         boolean first = application == null ? nodes.add(operation)
-                : toldOn.computeIfAbsent(operation,
-                        _ -> Collections.newSetFromMap(new IdentityHashMap<>()))
+                : toldOn.computeIfAbsent(operation, _ -> changes.group(Operators::byIdentity))
                         .add(application);
         if (first) {
             told.add(new Operated(operation, where));
-            changed();
         }
     }
 
@@ -185,16 +188,18 @@ final class Operators implements ReadingState.Marked {
      * them was told there first on that application, and so is among those.
      */
     void toldOnEach(List<InputReads.Applications.Made> each, int from) {
-        Set<InputReads.Applications.Made> all = Collections.newSetFromMap(
-                new IdentityHashMap<>());
+        Set<InputReads.Applications.Made> all = byIdentity();
         all.addAll(each);
-        Set<Core> asked = Collections.newSetFromMap(new IdentityHashMap<>());
-        for (Operated one : told.subList(from, told.size())) {
-            Set<InputReads.Applications.Made> on = toldOn.get(one.operation());
-            if (asked.add(one.operation()) && on != null && on.containsAll(all)
-                    && (application == null ? nodes.add(one.operation())
-                            : on.add(application))) {
-                changed();
+        Set<Core> asked = byIdentity();
+        List<Operated> since = told.view();
+        for (Operated one : since.subList(from, since.size())) {
+            Counted.Group<InputReads.Applications.Made> on = toldOn.get(one.operation());
+            if (asked.add(one.operation()) && on != null && on.containsAll(all)) {
+                if (application == null) {
+                    nodes.add(one.operation());
+                } else {
+                    on.add(application);
+                }
             }
         }
     }
@@ -211,24 +216,23 @@ final class Operators implements ReadingState.Marked {
         return () -> application = before;
     }
 
-    /** What the names of the step of a walk around hold, where the walk stands now. */
-    WhatTheStepsNamesHold stepsNames() {
-        return stepsNames;
+    /** The numbers {@code name}, a name of the step of a walk around, holds where the walk stands
+     *  now, or null where it is no such name or they are not known. */
+    FormRange rangeOfAStepsName(BindingId name) {
+        return stepsNames.of(name);
     }
 
-    /** The names of the step of a walk around hold {@code held} until what is returned is
-     *  closed. */
-    Restore withTheStepsNames(WhatTheStepsNamesHold held) {
+    /** The names of the step of a walk around hold what {@code from} makes of what they hold now,
+     *  until what is returned is closed. */
+    Restore withTheStepsNamesFrom(UnaryOperator<WhatTheStepsNamesHold> from) {
         WhatTheStepsNamesHold before = stepsNames;
-        stepsNames = held;
+        stepsNames = from.apply(before);
         return () -> stepsNames = before;
     }
 
     /** That {@code block}, a closure, is applied on no run. */
     void appliedOnNoRun(Core block) {
-        if (neverApplied.add(block)) {
-            changed();
-        }
+        neverApplied.add(block);
     }
 
     /** Whether {@code block} is a closure applied on no run. */
@@ -238,33 +242,29 @@ final class Operators implements ReadingState.Marked {
 
     /** That what is read is {@code body}, where the operators that owe a proof are owed. */
     void readWithin(Core body) {
-        within = body;
-        changed();
+        within.set(body);
     }
 
     /** That the comparison {@code leftOut} is left out of what is read. */
     void leaveOut(Core leftOut) {
-        this.leftOut = leftOut;
-        changed();
+        this.leftOut.set(leftOut);
     }
 
     /** The comparison left out of what is read, or null where none is. */
     Core leftOut() {
-        return leftOut;
+        return leftOut.get();
     }
 
     /** That names at {@code node} are read in {@code reads}, where they were not read so
      *  before. */
     void readAt(Core node, InputReads reads) {
-        if (readsAt.putIfAbsent(node, reads) == null) {
-            changed();
-        }
+        readsAt.putIfAbsent(node, reads);
     }
 
     /** The walk got to the comparison left out, worked out where {@code inside} says. */
     void relationIsInside(WorkedOutWhere inside) {
-        relationStands = relationStands == null ? inside : relationStands.and(inside);
-        changed();
+        WorkedOutWhere stands = relationStands.get();
+        relationStands.set(stands == null ? inside : stands.and(inside));
     }
 
     /**
@@ -273,10 +273,11 @@ final class Operators implements ReadingState.Marked {
      * the walk did not get to it.
      */
     WorkedOutWhere relationStandsWhere() {
-        if (leftOut == null) {
+        if (leftOut.get() == null) {
             return WorkedOutWhere.ALWAYS;
         }
-        return relationStands == null ? WorkedOutWhere.ALWAYS.notSaid() : relationStands;
+        WorkedOutWhere stands = relationStands.get();
+        return stands == null ? WorkedOutWhere.ALWAYS.notSaid() : stands;
     }
 
     /** What the next operator not said of may stop a run on is one group of places: it ties
@@ -287,21 +288,24 @@ final class Operators implements ReadingState.Marked {
 
     /** The same, of an operator a run works out where {@code where} says. */
     void beginGroup(WorkedOutWhere where) {
-        unsaidAt = new LinkedHashSet<>();
-        unsaidGroups.add(unsaidAt);
+        unsaidGroups.add(changes.group(LinkedHashSet::new));
         unsaidGroupsWhere.add(where);
         visited.clear();
-        changed();
+    }
+
+    /** The places the operator whose group began last may stop a run on. */
+    private Counted.Group<TermPath> unsaidAt() {
+        return unsaidGroups.getLast();
     }
 
     /** Whether the group begun last names no place. */
     boolean noPlaceUnsaidInTheGroup() {
-        return unsaidAt.isEmpty();
+        return unsaidAt().isEmpty();
     }
 
     /** Whether an operator not said may stop a run on something that is no number of a place. */
     boolean unsaidElsewhere() {
-        return unsaidElsewhere;
+        return unsaidElsewhere.get();
     }
 
     /**
@@ -311,25 +315,23 @@ final class Operators implements ReadingState.Marked {
      */
     void owe(Core operation, boolean elsewhereBefore, GetsPast completion,
              WorkedOutWhere where) {
-        obligations.add(new StopObligation(operation, unsaidAt,
-                unsaidElsewhere != elsewhereBefore, completion, within,
-                Collections.unmodifiableMap(readsAt), where));
-        unsaidAt.clear();
-        unsaidElsewhere = elsewhereBefore;
+        obligations.add(new StopObligation(operation, unsaidAt().view(),
+                unsaidElsewhere.get() != elsewhereBefore, completion, within.get(),
+                readsAt.view(), where));
+        unsaidAt().clear();
+        unsaidElsewhere.set(elsewhereBefore);
         visited.clear();
-        changed();
     }
 
     /** Whether operators that owe a proof are owed here, which is where a body is read whole. */
     boolean owesWithin() {
-        return within != null;
+        return within.get() != null;
     }
 
     /** That {@code after}, what the applications of a step after the first leave, is owed of a
      *  run walking more than one element. */
     void afterTheFirst(AfterTheFirst after) {
         afterTheFirst.add(after);
-        changed();
     }
 
     private record Visit(Core node, InputReads reads, Pullback.Bound bound) {
@@ -353,32 +355,24 @@ final class Operators implements ReadingState.Marked {
      * told once and not once for every way down to it.
      */
     boolean firstOverWhereItStands(Core operand, InputReads reads, Pullback.Bound bound) {
-        if (!visited.add(new Visit(Core.withoutStanding(operand), reads, bound))) {
-            return false;
-        }
-        changed();
-        return true;
+        return visited.add(new Visit(Core.withoutStanding(operand), reads, bound));
     }
 
     /** Every place any operator not said of may stop a run on. */
     Set<TermPath> everyPlaceUnsaid() {
         Set<TermPath> out = new LinkedHashSet<>();
-        unsaidGroups.forEach(out::addAll);
+        unsaidGroups.view().forEach(group -> out.addAll(group.view()));
         return out;
     }
 
     /** That the operator whose group began last may stop a run on what is at {@code path}. */
     void unsaidAt(TermPath path) {
-        if (unsaidAt.add(path)) {
-            changed();
-        }
+        unsaidAt().add(path);
     }
 
     /** The same, of each of {@code paths}. */
     void unsaidAtEach(Collection<TermPath> paths) {
-        if (unsaidAt.addAll(paths)) {
-            changed();
-        }
+        unsaidAt().addAll(paths);
     }
 
     /** An operator that may stop a run where nothing is said, over {@code reads}: the places
@@ -422,9 +416,6 @@ final class Operators implements ReadingState.Marked {
 
     /** An operator that may stop a run where nothing is said, over operands no form says. */
     void leaveUnsaidOverUnreadOperands() {
-        if (!unsaidElsewhere) {
-            unsaidElsewhere = true;
-            changed();
-        }
+        unsaidElsewhere.set(true);
     }
 }

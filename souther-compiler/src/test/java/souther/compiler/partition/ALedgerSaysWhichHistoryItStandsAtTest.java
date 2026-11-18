@@ -117,6 +117,18 @@ class ALedgerSaysWhichHistoryItStandsAtTest {
         assertEquals(Map.of("first", 1), keyed.view());
     }
 
+    /** Whether a key is held is whether it was put, so nothing is put that would hold it and
+     *  read as not holding it. */
+    @Test
+    void aLedgerTakesNoNull() {
+        assertThrows(NullPointerException.class,
+                () -> new Ledger.Keyed<String, String>().putIfAbsent("k", null));
+        assertThrows(NullPointerException.class,
+                () -> new Ledger.Grouped<String, String>().add("k", null));
+        assertThrows(NullPointerException.class,
+                () -> new Ledger.OfEntries<String>().add(null));
+    }
+
     @Test
     void whatALedgerHandsOutCannotBeChangedThrough() {
         Ledger.OfEntries<String> entries = new Ledger.OfEntries<>();

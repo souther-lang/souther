@@ -1527,8 +1527,8 @@ final class Pullback {
         // It holds exactly where the written one does, over the same rows, so what the rule that
         // read it says of the operations they get past is said of the written one.
         Trial kept = triedAndConcluded.get(read);
-        if (kept != null && kept.working != null) {
-            trial().says(kept.working);
+        if (kept != null && kept.working() != null) {
+            trial().says(kept.working());
         }
         trial().restatedAs(new Once<>(() -> workingOf(kept, arithmeticOf(stated, reads))));
         return new Derivation.Restated(read);
@@ -2114,14 +2114,14 @@ final class Pullback {
                 operators.owe(e, elsewhereBefore, completion, where);
             }
         }
-        WhatTheStepsNamesHold around = operators.stepsNames();
         SeededWalk walk = e instanceof Core.PreservedCall call
                 ? SeededWalk.enteredHoweverFar(call, blocksAt(new Denotation(call, reads))) : null;
         KeyedAccumulation filed = walk == null ? null
                 : KeyedAccumulation.of(e, reads, sides(), blocksAt(new Denotation(e, reads)));
-        Function<Core, WhatTheStepsNamesHold> under = child -> walk != null
-                ? around.inTheWalk(walk.step(), filed, child)
-                : around.under(e, child);
+        // Each child is read with what the names hold around this node, which is put back after
+        // each: what the walk makes of them for one child is not what it makes for the next.
+        Function<Core, UnaryOperator<WhatTheStepsNamesHold>> under = child -> around ->
+                walk != null ? around.inTheWalk(walk.step(), filed, child) : around.under(e, child);
         // What a child is read in is the scope's own answer ({@link ScopeStep}), for every
         // step but the names this walk accounts for itself: a closure's parameters
         // ({@link #boundInside}). The same answer is asked where the operand a number is made
@@ -2130,7 +2130,7 @@ final class Pullback {
         BiConsumer<Core, ScopeStep> visit = (child, step) -> {
             InputReads within = reads;
             Bound inside = bound;
-            try (Restore _ = operators.withTheStepsNames(under.apply(child))) {
+            try (Restore _ = operators.withTheStepsNamesFrom(under.apply(child))) {
                 if (Core.withoutStanding(child) instanceof Core.Block block) {
                     inside = boundInside(e, block, reads, bound);
                 } else if (!(step instanceof ScopeStep.Block)) {
@@ -2608,7 +2608,7 @@ final class Pullback {
      */
     private FormRange exactRangeOfAName(BindingId name, InputReads reads,
                                         Map<BindingId, RangeOfAName> known) {
-        FormRange ofAStep = operated.get().stepsNames().of(name);
+        FormRange ofAStep = operated.get().rangeOfAStepsName(name);
         if (ofAStep != null) {
             return ofAStep;
         }
@@ -3149,12 +3149,12 @@ final class Pullback {
     static final class Trial implements ReadingState.Marked {
 
         /**
-         * How many times the candidate has said something besides the remainders it read, and how
-         * many times it read a remainder. Every way of saying something counts in one of them, so
-         * what the candidate has said is the same while neither moves.
+         * The changes to what the candidate has said besides the remainders it read, and to the
+         * remainders it read. What it says is held in parts counted into one or the other
+         * ({@link Counted}), so what the candidate has said is the same while neither moves.
          */
-        private long said;
-        private long remaindersSaid;
+        private final Counted.Changes said = new Counted.Changes();
+        private final Counted.Changes remaindersSaid = new Counted.Changes();
 
         /** What a candidate has said, compared by the very candidate and the two counts. */
         private record SaidSoFar(Trial by, long besides, long remainders) {
@@ -3195,64 +3195,75 @@ final class Pullback {
         /** What the candidate has said so far, which is the same only while it has said no more. */
         @Override
         public Object mark() {
-            return new SaidSoFar(this, said, remaindersSaid);
+            return new SaidSoFar(this, said.count(), remaindersSaid.count());
         }
 
         /** What the rows of the comparison get past is {@code told}. */
         void says(UndividedByARelation.Working told) {
-            said++;
-            working = told;
+            working.set(told);
+        }
+
+        /** What the rows of the comparison get past, as the rule worked it out; null where the
+         *  rule worked out none. */
+        UndividedByARelation.Working working() {
+            return working.get();
         }
 
         /** The expressions the rule reads the comparison again with each value of are those
          *  {@code answers} holds for. */
         void answersFor(Predicate<Core> answers) {
-            said++;
-            answersFor = answers;
+            answersFor.set(answers);
         }
+
+        /** The expressions the rule reads the comparison again with each value of, or null where
+         *  it reads none so. */
+        Predicate<Core> answersFor() {
+            return answersFor.get();
+        }
+
+        // The tables of a candidate are made when the candidate first says something into them:
+        // most say nothing, and an identity map holds a table before it holds anything.
 
         /** What the rows of the comparison get past, as the rule worked it out; null where the
          *  rule worked out none. */
-        private UndividedByARelation.Working working;
+        private final Counted.Value<UndividedByARelation.Working> working = said.value(null);
         /** The expressions the rule reads the comparison again with each value of, the one the
          *  arithmetic stopped at among them, which tells what working them out may stop a run at;
          *  null where it reads none so. */
-        private Predicate<Core> answersFor;
+        private final Counted.Value<Predicate<Core>> answersFor = said.value(null);
         /** The expressions the rule read as the form of one operand of theirs, each with that
          *  operand ({@link AffineReading.WhatTheAnalysisAnswersFor#readByTheFormOf}). */
-        private Map<Core, Core> readByTheFormOf;
+        private final Counted.Table<Core, Core> readByTheFormOf =
+                remaindersSaid.table(IdentityHashMap::new);
         /** The remainders the rule read without saying their rows are made where the dividend is
          *  worked out, each with its dividend
          *  ({@link AffineReading.WhatTheAnalysisAnswersFor#dividendBesideTheRows}). */
-        private Map<Core, Core> dividendBesideTheRows;
+        private final Counted.Table<Core, Core> dividendBesideTheRows =
+                remaindersSaid.table(IdentityHashMap::new);
         /** The months a date at a place lands in moved by months, as the rule read them, each
          *  with the count of months the move comes to
          *  ({@link AffineReading.WhatTheAnalysisAnswersFor#landsInAMonth}). */
-        private Map<Core, UndividedByARelation.IntOperation> landsInAMonth;
+        private final Counted.Table<Core, UndividedByARelation.IntOperation> landsInAMonth =
+                said.table(IdentityHashMap::new);
         /** What each relation read under an arm of a choice works out, off the comparison read
          *  with the choice standing as that arm ({@link Pullback#tellWhatItWorksOut}). */
-        private Map<Relation, UndividedByARelation.Working> relations;
+        private final Counted.Table<Relation, UndividedByARelation.Working> relations =
+                said.table(LinkedHashMap::new);
         /** What each comparison the rule read the written one as works out, asked only by a rule
          *  that says the written one works out the same ({@link #worksOutWhatItIsRestatedAs}). */
-        private List<Supplier<UndividedByARelation.Working>> restated;
-
+        private final Counted.Sequence<Supplier<UndividedByARelation.Working>> restated =
+                said.sequence();
         /** What a run taking an arm of a choice works out there, by each comparison the written
          *  one was read as with the choice standing as that arm ({@link Pullback#readOnAnArm}). */
-        private Map<ArmRead, List<OnThisArm>> onTheArms;
-
-        // The maps and lists of a candidate are made when the candidate first says something into
-        // them: most say nothing, and an identity map holds a table before it holds anything.
+        private final Counted.Table<ArmRead, Counted.Sequence<OnThisArm>> onTheArms =
+                said.table(LinkedHashMap::new);
 
         void readByTheFormOf(Core call, Core dividend) {
-            remaindersSaid++;
-            if (readByTheFormOf == null) {
-                readByTheFormOf = new IdentityHashMap<>();
-            }
             readByTheFormOf.put(call, dividend);
         }
 
         Core readByTheFormOf(Core held) {
-            return readByTheFormOf == null ? null : readByTheFormOf.get(held);
+            return readByTheFormOf.get(held);
         }
 
         /**
@@ -3263,69 +3274,50 @@ final class Pullback {
          * candidate said is not compared with it.
          */
         Object markBesidesTheRemainders() {
-            return said == 0 ? NOTHING_BESIDES : new SaidBesides(this, said);
+            return said.count() == 0 ? NOTHING_BESIDES : new SaidBesides(this, said.count());
         }
 
         /** The remainders read so far, as two tables apart from the candidate's own. */
         List<Map<Core, Core>> remaindersRead() {
-            return List.of(
-                    readByTheFormOf == null ? new IdentityHashMap<>()
-                            : new IdentityHashMap<>(readByTheFormOf),
-                    dividendBesideTheRows == null ? new IdentityHashMap<>()
-                            : new IdentityHashMap<>(dividendBesideTheRows));
+            return List.of(new IdentityHashMap<>(readByTheFormOf.view()),
+                    new IdentityHashMap<>(dividendBesideTheRows.view()));
         }
 
         void dividendBesideTheRows(Core call, Core dividend) {
-            remaindersSaid++;
-            if (dividendBesideTheRows == null) {
-                dividendBesideTheRows = new IdentityHashMap<>();
-            }
             dividendBesideTheRows.put(call, dividend);
         }
 
         Core dividendBesideTheRows(Core held) {
-            return dividendBesideTheRows == null ? null : dividendBesideTheRows.get(held);
+            return dividendBesideTheRows.get(held);
         }
 
         void landsInAMonth(Core node, UndividedByARelation.IntOperation count) {
-            said++;
-            if (landsInAMonth == null) {
-                landsInAMonth = new IdentityHashMap<>();
-            }
             landsInAMonth.put(node, count);
         }
 
         UndividedByARelation.IntOperation landsInAMonth(Core held) {
-            return landsInAMonth == null ? null : landsInAMonth.get(held);
+            return landsInAMonth.get(held);
         }
 
         void restatedAs(Supplier<UndividedByARelation.Working> working) {
-            said++;
-            if (restated == null) {
-                restated = new ArrayList<>();
-            }
             restated.add(working);
         }
 
         /** What the rule worked out of each comparison it read the written one as; none where it
          *  read it as none. */
         List<Supplier<UndividedByARelation.Working>> restated() {
-            return restated == null ? List.of() : Collections.unmodifiableList(restated);
+            return restated.view();
         }
 
         void readOnAnArm(ArmRead read, OnThisArm arm) {
-            said++;
-            if (onTheArms == null) {
-                onTheArms = new LinkedHashMap<>();
-            }
-            onTheArms.computeIfAbsent(read, _ -> new ArrayList<>()).add(arm);
+            onTheArms.computeIfAbsent(read, _ -> said.sequence()).add(arm);
         }
 
         /** What runs taking the arms {@code read} was read on work out there; none where it was
          *  read on no arm. */
         List<OnThisArm> onTheArms(ArmRead read) {
-            return onTheArms == null ? List.of()
-                    : Collections.unmodifiableList(onTheArms.getOrDefault(read, List.of()));
+            Counted.Sequence<OnThisArm> arms = onTheArms.get(read);
+            return arms == null ? List.of() : arms.view();
         }
 
         /** Whether {@code step} is what the answer of an arm of a choice this candidate read was
@@ -3335,10 +3327,6 @@ final class Pullback {
         }
 
         void tell(Relation relation, UndividedByARelation.Working told) {
-            said++;
-            if (relations == null) {
-                relations = new LinkedHashMap<>();
-            }
             UndividedByARelation.Working already = relations.get(relation);
             relations.put(relation, already == null ? told
                     : UndividedByARelation.Working.together(List.of(already, told)));
@@ -3350,7 +3338,7 @@ final class Pullback {
          * read on gets past, together where it was read on several.
          */
         UndividedByARelation.Working workingOf(Relation relation) {
-            UndividedByARelation.Working told = relations == null ? null : relations.get(relation);
+            UndividedByARelation.Working told = relations.get(relation);
             List<OnThisArm> arms = onTheArms(new ArmRead.OfARelation(relation));
             if (told != null || arms.isEmpty() || !arms.stream().allMatch(OnThisArm::tellsEvery)) {
                 return told;
@@ -3363,13 +3351,9 @@ final class Pullback {
          *  worked out of its own comparison is its own: a comparison read under an arm is not
          *  this one. */
         void absorb(Trial kept) {
-            if (kept.relations != null) {
-                kept.relations.forEach(this::tell);
-            }
-            if (kept.onTheArms != null) {
-                kept.onTheArms.forEach((read, arms) -> arms.forEach(each ->
-                        readOnAnArm(read, each)));
-            }
+            kept.relations.view().forEach(this::tell);
+            kept.onTheArms.view().forEach((read, arms) -> arms.view().forEach(each ->
+                    readOnAnArm(read, each)));
         }
     }
 
@@ -3543,14 +3527,14 @@ final class Pullback {
      */
     private AffineReading.WorkedOut worksOut(
             Trial theRule, Supplier<AffineReading.OfAComparison> arithmetic) {
-        if (theRule != null && theRule.working != null) {
-            return AffineReading.WorkedOut.ofWhatIsToldOf(theRule.working);
+        if (theRule != null && theRule.working() != null) {
+            return AffineReading.WorkedOut.ofWhatIsToldOf(theRule.working());
         }
         AffineReading.OfAComparison read = arithmetic.get();
         if (theRule == null || !(read instanceof AffineReading.OfAComparison.Stopped stopped)) {
             return AffineReading.OfAComparison.worksOut(read);
         }
-        Predicate<Core> readAgain = theRule.answersFor;
+        Predicate<Core> readAgain = theRule.answersFor();
         return stopped.worksOut(new AffineReading.WhatTheAnalysisAnswersFor(
                 readAgain == null ? _ -> false : readAgain,
                 held -> theRule.readByTheFormOf(Core.withoutStanding(held)),
@@ -15375,27 +15359,28 @@ final class Pullback {
         int kept = aggregatesKept;
         int asked = aggregatesAsked;
         int keptReadingsBefore = keptReadings;
-        ElementsMet.Noting noting = elementsMet.get().noting();
         // What the reading tells is told to whoever is noting what the reading around tells, and
         // that there is one is what the reading is made for, so the reading around asks after it;
         // what the reading reads of its own notes is its own.
         Set<Notice> outer = telling.get();
         Set<Notice> mine = new LinkedHashSet<>();
-        int consultedBefore = state.startConsulting();
         int consultedHere;
         R result;
         ElementsMet.Footprint footprint;
         HandedAnswers handed = null;
-        try (Restore _ = telling.set(mine)) {
-            if (watched) {
-                Watched<R> read = at.watchingWhatIsHanded(reading);
-                result = read.result();
-                handed = read.asked();
-            } else {
-                result = reading.get();
+        try (ElementsMet.Noting noting = elementsMet.get().noting()) {
+            int consultedBefore = state.startConsulting();
+            try (Restore _ = telling.set(mine)) {
+                if (watched) {
+                    Watched<R> read = at.watchingWhatIsHanded(reading);
+                    result = read.result();
+                    handed = read.asked();
+                } else {
+                    result = reading.get();
+                }
+            } finally {
+                consultedHere = state.endConsulting(consultedBefore);
             }
-        } finally {
-            consultedHere = state.endConsulting(consultedBefore);
             footprint = noting.ended();
         }
         if (outer != null) {
