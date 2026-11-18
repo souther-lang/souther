@@ -267,6 +267,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         /**
+         * Whether the rows a run stops at in this can be said as forms of numbers each at one
+         * position of the input, as {@code rowsWhere} says them. Where they cannot, as for a
+         * total over a container, which stops a run where it is worked out exactly past its
+         * type and not where its place is, that no row stops is not shown, and a run may stop in
+         * it.
+         */
+        boolean stopsOnRowsOfTheInput() {
+            LinearForm<NumericTerm> over = overTheInput();
+            return over != null && over.coefs().keySet().stream()
+                    .allMatch(term -> term instanceof NumericTerm.FromOnePosition
+                            && !FormRange.aTotal(term));
+        }
+
+        /**
          * The form at the least it comes to over the values each bound number takes, or at the
          * greatest: each bound number put at the end of its values that weighs the form down, or
          * up. Null where some bound number's end is not a form of the input's numbers.
@@ -509,7 +523,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * does.
          */
         boolean aRunMayStopOverABoundValue() {
-            return operations.stream().anyMatch(each -> each.overTheInput() == null);
+            return operations.stream().anyMatch(each -> !each.stopsOnRowsOfTheInput());
         }
     }
 

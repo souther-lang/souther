@@ -177,6 +177,22 @@ public final class InputNumber {
     }
 
     /**
+     * The total of the elements of {@code list}, as the term a call of {@code List.sum} over it
+     * reads as — or null where {@code list} is no walk read from a place. What a run works out of
+     * each element to make the list is what the term is computed of
+     * ({@link RunSource.ComputedOccurrences}), whether or not anything is added up.
+     */
+    public static LinearForm<NumericTerm> totalOfTheElementsOf(Core list, InputDomain inputs,
+                                                               InputReads reads,
+                                                               RuleReadingSource source) {
+        ValueName.Stdlib sum = ValueName.Stdlib.operation("List", "sum");
+        TakenAs how = DefaultBoundOperationFacts.get().takenAs(sum);
+        return how == null ? null : overARun(
+                new NumericMeasures.Measured(sum, list, TakenArguments.NONE, how), inputs, reads,
+                source);
+    }
+
+    /**
      * The step of a coarser order that the value at a location falls in, where {@code e} is a call
      * of an operation counting whole units, or null where it is none.
      *
