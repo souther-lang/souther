@@ -3462,9 +3462,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private sealed interface Lines {
 
-        /** What it leaves its places, with nothing said of a run stopping before it. */
-        WhatItLeaves shown();
-
         /** Along a way no row comes along. */
         record NoRowComesAlong(WhatItLeaves shown) implements Lines {
 
@@ -5444,7 +5441,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * and nothing of any other value: the place is still not shown reached at every value.
      *
      * <p>Not asked of a relation that comes out one way wherever a row gets to it, which divides
-     * none of its places whichever values get there ({@link Lines#askedOfTheRun}). And no line is
+     * none of its places whichever values get there ({@link Lines.OneWayWherever}). And no line is
      * drawn where a run may stop: that is no line of the model, and where it falls is what
      * nothing here says.
      */
