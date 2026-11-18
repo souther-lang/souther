@@ -102,18 +102,14 @@ public final class BinaryElaborator {
                 yield switch (answer) {
                     case ArithmeticCheck.Allowed allowed -> arithmetic(bin, left, right,
                             allowed, ctx);
-                    case ArithmeticCheck.DeferToPlainTypeCheck _ -> {
-                        // One type against another: the found-versus-expected block says it better
-                        // than a sentence would, and requireType raises or absorbs it. Absorbed,
-                        // the right side stands as the left's type, and the pair is read as it
-                        // stands.
-                        yield new Core.Binary(bin.op(), left,
-                                Elaborator.standing(bin.right(), right, lt, ctx.kinds(),
-                                        ctx.sums(),
-                                        "operand of arithmetic"),
-                                Core.BinaryReading.AS_THEY_STAND,
-                                ctx.occurrenceOf(bin.origin()), lt, bin.pos());
-                    }
+                    // One type against another: the found-versus-expected block says it better
+                    // than a sentence would, and requireType raises or absorbs it. Absorbed, the
+                    // right side stands as the left's type, and the pair is read as it stands.
+                    case ArithmeticCheck.DeferToPlainTypeCheck _ -> new Core.Binary(bin.op(), left,
+                            Elaborator.standing(bin.right(), right, lt, ctx.kinds(), ctx.sums(),
+                                    "operand of arithmetic"),
+                            Core.BinaryReading.AS_THEY_STAND,
+                            ctx.occurrenceOf(bin.origin()), lt, bin.pos());
                     case ArithmeticCheck.Refused no -> throw refused(bin, no.refusal(), lt, rt);
                 };
             }

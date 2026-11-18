@@ -250,16 +250,18 @@ final class SharedReads<C, E, M, R> {
         E guards = scene.guards();
         int metFrom = scene.metCount();
         int askedBefore = scene.aggregatesAsked();
-        ElementsMet.Noting noting = elements.noting();
-        int consultedBefore = scene.startConsulting();
         Watched<R> read;
         int consulted;
-        try {
-            read = reads.watchingWhatIsHanded(fresh);
-        } finally {
-            consulted = scene.endConsulting(consultedBefore);
+        ElementsMet.Footprint footprint;
+        try (ElementsMet.Noting noting = elements.noting()) {
+            int consultedBefore = scene.startConsulting();
+            try {
+                read = reads.watchingWhatIsHanded(fresh);
+            } finally {
+                consulted = scene.endConsulting(consultedBefore);
+            }
+            footprint = noting.ended();
         }
-        ElementsMet.Footprint footprint = noting.ended();
         R result = read.result();
         if (result != null && read.asked().toldApart() && footprint != null
                 && scene.metCount() >= metFrom && scene.sameGuards(guards, scene.guards())

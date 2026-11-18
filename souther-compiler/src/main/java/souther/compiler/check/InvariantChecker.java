@@ -3200,38 +3200,35 @@ public final class InvariantChecker {
      */
     private Set<NumberAt<RuleKey>> numbersALineIsStatedOn(ClauseExpr stated, Denotations at,
                                                           Coordinates byName) {
-        switch (stated) {
-            case ClauseExpr.Scoped it -> {
-                // A binding is crossed and never a leaf of its own: what the part states is what
-                // its body states, read inside it — so a rule stating its line through a helper
-                // states the line the same rule written out states.
-                return numbersALineIsStatedOn(it.body(), terms.inside(it.binding(), at), byName);
-            }
+        return switch (stated) {
+            // A binding is crossed and never a leaf of its own: what the part states is what its
+            // body states, read inside it — so a rule stating its line through a helper states the
+            // line the same rule written out states.
+            case ClauseExpr.Scoped it ->
+                    numbersALineIsStatedOn(it.body(), terms.inside(it.binding(), at), byName);
             case ClauseExpr.Joined it -> {
                 Set<NumberAt<RuleKey>> both =
                         new LinkedHashSet<>(numbersALineIsStatedOn(it.left(), at, byName));
                 both.addAll(numbersALineIsStatedOn(it.right(), at, byName));
-                return both;
+                yield both;
             }
-            case ClauseExpr.Leaf it -> {
-                // The one number the rule is over, which is the same answer the attribution of an
-                // end to a conjunct is put forward on. A rule over several is a line between them
-                // and an end at none, so it puts nothing forward.
-                // The clause this leaf was read out of does not reach here either, and what is
-                // asked is which number the rule is over rather than which arms it may come to.
-                return switch (lineStatedIn(it.of(), it.positive(), at, byName,
-                        Arrivals.everyArmIsTakenForAValue())) {
-                    case StatedLines.Statement.OnWhatStandsAtAPosition found ->
-                            Set.of(found.number());
-                    case StatedLines.Statement.OnADerivedNumber found ->
-                            Set.of(found.number().asNumber());
-                    case StatedLines.Statement.NoLine _,
-                         StatedLines.Statement.Between _,
-                         StatedLines.Statement.AdmitsNothing _,
-                         StatedLines.Statement.OnANumberNotNamed _ -> Set.of();
-                };
-            }
-        }
+            // The one number the rule is over, which is the same answer the attribution of an end
+            // to a conjunct is put forward on. A rule over several is a line between them and an
+            // end at none, so it puts nothing forward.
+            // The clause this leaf was read out of does not reach here either, and what is asked
+            // is which number the rule is over rather than which arms it may come to.
+            case ClauseExpr.Leaf it -> switch (lineStatedIn(it.of(), it.positive(), at, byName,
+                    Arrivals.everyArmIsTakenForAValue())) {
+                case StatedLines.Statement.OnWhatStandsAtAPosition found ->
+                        Set.of(found.number());
+                case StatedLines.Statement.OnADerivedNumber found ->
+                        Set.of(found.number().asNumber());
+                case StatedLines.Statement.NoLine _,
+                     StatedLines.Statement.Between _,
+                     StatedLines.Statement.AdmitsNothing _,
+                     StatedLines.Statement.OnANumberNotNamed _ -> Set.of();
+            };
+        };
     }
 
     /**
@@ -4251,12 +4248,10 @@ public final class InvariantChecker {
      */
     private Run placed(ValueSet set, NumberAt<RuleKey> value, InvariantStatementId statement,
                        ReadingPlace stands, List<Direct> out) {
-        switch (extentOf(set)) {
+        return switch (extentOf(set)) {
             // A run holding one string is the rule naming a value rather than bounding a range, and
             // a value it names is a distinction of the position rather than an edge on it.
-            case TextExtent.One run when run.holdsOneValue() -> {
-                return new Run.NotBounding();
-            }
+            case TextExtent.One run when run.holdsOneValue() -> new Run.NotBounding();
             case TextExtent.One run -> {
                 boolean placed = false;
                 if (run.holdsFromAbove()) {
@@ -4269,21 +4264,16 @@ public final class InvariantChecker {
                     out.add(new Direct(value, statement,
                             new InvariantBound(false, Endpoint.exclusive(run.after())), stands));
                 }
-                return placed ? new Run.Bounding(value) : new Run.NotBounding();
+                yield placed ? new Run.Bounding(value) : new Run.NotBounding();
             }
-            case TextExtent.NoNamedRun _ -> {
-                return new Run.NotBounding();
-            }
+            case TextExtent.NoNamedRun _ -> new Run.NotBounding();
             // The strings are a run, and an end of it is no value a line can be drawn at. That is
             // not the rule drawing no line: it is what was not established about the run.
-            case TextExtent.NotEstablished _ -> {
-                return new Run.Undecided(List.of(new BlockReason.OrderedExtentEndIsNoValue()));
-            }
-            case TextExtent.NotBuilt it -> {
-                return new Run.Undecided(
-                        List.of(new BlockReason.OrderedExtentTooCostly(it.stopped())));
-            }
-        }
+            case TextExtent.NotEstablished _ ->
+                    new Run.Undecided(List.of(new BlockReason.OrderedExtentEndIsNoValue()));
+            case TextExtent.NotBuilt it ->
+                    new Run.Undecided(List.of(new BlockReason.OrderedExtentTooCostly(it.stopped())));
+        };
     }
 
     /**

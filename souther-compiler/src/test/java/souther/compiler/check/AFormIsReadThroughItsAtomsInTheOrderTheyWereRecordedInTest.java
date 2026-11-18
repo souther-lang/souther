@@ -218,7 +218,7 @@ class AFormIsReadThroughItsAtomsInTheOrderTheyWereRecordedInTest {
     /** Whether {@code one} is at least as far in as {@code other}, which is above it for a least end
      *  ({@code sign} 1) and below it for a greatest ({@code -1}). */
     private static boolean tighterOrEqual(Endpoint one, Endpoint other, int sign) {
-        int by = sign * ((Count) one.at()).at().compareTo(((Count) other.at()).at());
+        int by = sign * Integer.signum(((Count) one.at()).at().compareTo(((Count) other.at()).at()));
         return by > 0 || (by == 0 && (other.inclusive() || !one.inclusive()));
     }
 

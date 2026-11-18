@@ -849,13 +849,12 @@ final class DerivedNumericFacts {
                         case UNSETTLED -> Shown.UNSETTLED;
                     };
             case Derivation.HoldsSomethingWhere.Holding.Stands(
-                    LinearForm<FactSubject> form, Rel rel) -> {
-                yield switch (boundsOf(form, base, terms, done, deriving, copies)
-                        .stands(rel, Count.ZERO)) {
-                    case null -> Shown.UNSETTLED;
-                    case Boolean holds -> holds ? Shown.YES : Shown.NO;
-                };
-            }
+                    LinearForm<FactSubject> form, Rel rel) ->
+                    switch (boundsOf(form, base, terms, done, deriving, copies)
+                            .stands(rel, Count.ZERO)) {
+                        case null -> Shown.UNSETTLED;
+                        case Boolean holds -> holds ? Shown.YES : Shown.NO;
+                    };
             // A side whose conditions do not hold is a side it is not on.
             case Derivation.HoldsSomethingWhere.Holding.Unnamed it ->
                     switch (it.outOf(condition -> switch (

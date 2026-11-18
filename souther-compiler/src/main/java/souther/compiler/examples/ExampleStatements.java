@@ -573,14 +573,12 @@ public final class ExampleStatements {
         // it may still be inside `expandedValue`, holding a binding or a half-walked expansion. What a
         // late worker can still write to is that reader, and the statement after it gets another.
         FixtureReader reader = readers.get();
-        switch (deadline.given(what, () -> counted(() -> read.apply(reader)))) {
-            case Deadline.Outcome.Finished(T value) -> {
-                return new Read.Got<>(value);
-            }
+        return switch (deadline.given(what, () -> counted(() -> read.apply(reader)))) {
+            case Deadline.Outcome.Finished(T value) -> new Read.Got<>(value);
             case Deadline.Outcome.Overran(Runnable abandon) -> {
                 // Nothing here was going to read how far it got, so it is given up on at once.
                 abandon.run();
-                return new Read.Unanswered<>(deadline.timeout());
+                yield new Read.Unanswered<>(deadline.timeout());
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
                 // The reading spent what the policy allows. That is an answer about the statements —
@@ -590,10 +588,10 @@ public final class ExampleStatements {
                 // wrapped (EvaluationContext.overspent).
                 RuntimeException stop = EvaluationContext.overspent(cause);
                 if (stop instanceof StepLimitExceeded) {
-                    return new Read.Overspent<>(FailurePhase.STEP_LIMIT, policy.stepLimit());
+                    yield new Read.Overspent<>(FailurePhase.STEP_LIMIT, policy.stepLimit());
                 }
                 if (stop instanceof DepthLimitExceeded) {
-                    return new Read.Overspent<>(FailurePhase.DEPTH_LIMIT,
+                    yield new Read.Overspent<>(FailurePhase.DEPTH_LIMIT,
                             policy.recursionDepthLimit());
                 }
                 // The stack ran out. Said here for the reason the two above are: everything the
@@ -606,13 +604,13 @@ public final class ExampleStatements {
                     // anywhere else arrives raw. Recognising only the raw one left the named one to
                     // the rethrow below, where a `RuntimeException` leaves the compilation as a
                     // failure of the compiler rather than as a report about the table.
-                    return new Read.StackRanOut<>(policy.recursionDepthLimit());
+                    yield new Read.StackRanOut<>(policy.recursionDepthLimit());
                 }
                 // One thing ends a reading without the model or this code being at fault: a host with
                 // no runtime to build a value against, since the runtime is `provided` (as it is for
                 // CTFE).
                 if (GeneratedLinkage.runtimeAbsent(cause)) {
-                    return new Read.RuntimeAbsent<>();
+                    yield new Read.RuntimeAbsent<>();
                 }
                 // Anything else is this code being wrong. An empty reading says the statements agree,
                 // so answering with one would leave a broken compiler reporting every model
@@ -625,7 +623,7 @@ public final class ExampleStatements {
                 }
                 throw new IllegalStateException(cause);
             }
-        }
+        };
     }
 
     /**

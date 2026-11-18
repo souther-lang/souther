@@ -130,6 +130,14 @@ import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.UnheldNumber;
 import souther.compiler.numeric.ValueTransformation;
+import souther.compiler.partition.ReadingState.Bindings;
+import souther.compiler.partition.ReadingState.Compared;
+import souther.compiler.partition.ReadingState.Members;
+import souther.compiler.partition.ReadingState.NoPartOfAReading;
+import souther.compiler.partition.ReadingState.NoPartOfAReading.Why;
+import souther.compiler.partition.ReadingState.Restore;
+import souther.compiler.partition.ReadingState.Scoped;
+import souther.compiler.partition.ReadingState.Layers;
 import souther.compiler.regex.StringsByTheirPieces;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.BuiltFrom;
@@ -168,14 +176,11 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.Year;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.BitSet;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
@@ -404,7 +409,16 @@ final class Pullback {
     /** A step a part was read at, and the expression it was read off. */
     private record Met(Derivation step, Denotation from) {}
 
+    /**
+     * The state of a reading that readings kept to be taken again depend on and leave alone, made
+     * of the parts the fields below are. Declared before them, which are made from it.
+     */
+    @NoPartOfAReading(Why.STATE)
+    private final ReadingState state = new ReadingState();
+
+    @NoPartOfAReading(Why.FIXED)
     private final InputReading read;
+    @NoPartOfAReading(Why.FIXED)
     private final Optional<ModelOccurrence> where;
     /**
      * Which elements the names free in the innermost call being read about its own elements stood
@@ -413,14 +427,16 @@ final class Pullback {
      * position untold, so that a name told there is always one given from outside
      * ({@link #inTheScopeOf}).
      */
-    private ElementsNamed freeInTheScope;
+    private final Scoped<ElementsNamed> freeInTheScope = state.setting(Compared.BY_VALUE);
     /** Which elements the names free in the expression read stood for ({@link #pulled}). */
+    @NoPartOfAReading(Why.FIXED)
     private final ElementsNamed freeInTheRoot;
     /**
      * What a value a row stands a dependency in for is, read as the decision table reads it: one
      * account of which answer a call is, so a column of the table and a part of what a condition
      * states are one subject.
      */
+    @NoPartOfAReading(Why.FIXED)
     private final DecisionSubjects subjects;
     /**
      * The parts met, in the order they were met. A candidate tried at a choice owns the parts
@@ -429,18 +445,21 @@ final class Pullback {
      * once by one that took it ({@link SharedReads}); it is one part to whoever reads them
      * ({@link #pulled}).
      */
+    @NoPartOfAReading(Why.LEDGER)
     private final List<Met> met = new ArrayList<>();
     /** What the candidates for each expression state, concluded once a step ({@link RuleChoice}). */
+    @NoPartOfAReading(Why.CACHE)
     private final Conclusion trying = Conclusion.reusing();
-    private final Set<DecisionSubject> quantifying = new HashSet<>();
+    private final Members<DecisionSubject> quantifying = state.members();
     /**
      * The pieces of a string a statement about some one of is being read of, each with how many
      * such statements it is read inside of: a count of a piece is a count of the piece of one of
      * these, and names which ({@link Quantity.CodePointsOfAPiece}).
      */
-    private final Map<Pieces, PieceWitness> parting = new HashMap<>();
+    private final Bindings<Pieces, PieceWitness> parting = state.bindings();
     /** What entering each arm of a fork derives on this reading, by the fork and its names
      *  ({@link #keeping}). */
+    @NoPartOfAReading(Why.CACHE)
     private final Map<WhatConditionsState.ANode, List<Derivation>> entered = new HashMap<>();
     /**
      * Where whether a container holds anything was asked, while what it holds is being read.
@@ -450,43 +469,48 @@ final class Pullback {
      * anything is answered for by whoever reads that question, and a position as a whole is no
      * reader of it.
      */
-    private Denotation askedAt;
+    private final Scoped<Denotation> askedAt = state.setting(Compared.BY_VALUE);
     /**
      * The counts of elements the comparison being read names, as they are read, so the relation
      * holds how each was read ({@link Derivation.AComparisonRead#counts}) — or null where what is
-     * read is no comparison that keeps them, and a count is not read there.
+     * read is no comparison that keeps them, and a count is not read there. Added to by a reading
+     * and taken back from, and asked what is in.
      */
-    private Map<Quantity, Derivation.AComparisonRead.Counted> counting;
+    private final Scoped<Ledger.Keyed<Quantity, Derivation.AComparisonRead.Counted>> counting =
+            state.guarded();
     /**
      * The call each count of elements meeting a statement was read off, where a law of what the
      * call answers counts them ({@link OnTheInput#readOff}). A count read any other way is not
      * here: nothing here names the one expression it is the size of.
      */
+    @NoPartOfAReading(Why.ACCRUES)
     private final Map<Quantity.HowManyMeet, Core> readOff = new LinkedHashMap<>();
     /** Whether the comparisons being read are the parts of a quotient's statement, which work out
      *  a product the quotient does not. */
-    private boolean restatingAQuotient;
+    private final Scoped<Boolean> restatingAQuotient = state.setting(Compared.BY_VALUE, false);
     /**
-     * The candidates being tried, innermost first. Everything a candidate says of the rows of what
+     * The candidates being tried, innermost on top. Everything a candidate says of the rows of what
      * it concludes is said into the one on top, so that what a candidate set aside said is said
      * into nothing the one kept holds ({@link #firstThatReadsIt}).
      */
-    private final Deque<Trial> underTrial = new ArrayDeque<>();
+    private final Layers<Trial> underTrial = state.trials();
     /** What each candidate that concluded something said, by what it concluded. */
+    @NoPartOfAReading(Why.ACCRUES)
     private final Map<Derivation, Trial> triedAndConcluded = new IdentityHashMap<>();
-    /** What decided each choice whose arms are being read, nearest first: what every run works out
-     *  before it takes an arm, or nothing where the choice was read other than as a fork, which
-     *  tells nothing of what decides its arms ({@link #whatDecidedTheArm}). */
-    private final Deque<Optional<UndividedByARelation.Working>> decidingTheArms =
-            new ArrayDeque<>();
-    /** The comparisons whose arms are being read, innermost first: what a run taking an arm
+    /** What decided each choice whose arms are being read, nearest on top: what every run works
+     *  out before it takes an arm, or nothing where the choice was read other than as a fork,
+     *  which tells nothing of what decides its arms ({@link #whatDecidedTheArm}). */
+    private final Layers<Optional<UndividedByARelation.Working>> decidingTheArms = state.stack();
+    /** The comparisons whose arms are being read, innermost on top: what a run taking an arm
      *  works out is read off the innermost ({@link #readOnAnArm}). */
-    private final Deque<StatedComparison> armsOfAComparison = new ArrayDeque<>();    /**
+    private final Layers<StatedComparison> armsOfAComparison = state.stack();
+    /**
      * Whether an element being added up over takes an arm, as the statement read of it, with the
      * reading of the arm being taken ({@link #sizedByTheArmsOfAnElement}): what a count of the
-     * elements taking it holds as how it was read.
+     * elements taking it holds as how it was read. The first reading of an arm a count takes is
+     * the one it keeps.
      */
-    private final Map<Quantity, ArmTaken> armsTaken = new HashMap<>();
+    private final Bindings<Quantity, ArmTaken> armsTaken = state.bindings();
 
     /**
      * The reading of an arm an element takes, and what the walk that reads it was handed from
@@ -500,63 +524,69 @@ final class Pullback {
      * the elements meeting a statement then counts those of one of the lists, which is the
      * statement an occurrence is kept by and no number of the whole.
      */
-    private boolean inTheListsOfAFlattening;
+    private final Scoped<Boolean> inTheListsOfAFlattening = state.setting(Compared.BY_VALUE, false);
     /**
      * The counts every element settles alike that the law's comparison being read needed, as they
      * are read ({@link Derivation.ALawComparison#alike}) — or null where what is read is no law's
-     * comparison.
+     * comparison. Added to by a reading where there is one, and never asked what is in: whoever
+     * set it up reads it after.
      */
-    private List<Derivation.AComparisonRead.Counted> alike;
+    private final Scoped<Ledger.OfEntries<Derivation.AComparisonRead.Counted>> alike =
+            state.writtenInto();
     /**
      * Where each count the comparison being read needed is a number at all, as they are read
      * ({@link Derivation.WhereItIsAnswered}): a count of statements some of which answer nothing on
      * some rows counts only where every one of them answers, and the comparison is read there — or
      * null where what is read is no comparison of numbers, and such a count is not read there.
      */
-    private List<Derivation> answering;
+    private final Scoped<Ledger.OfEntries<Derivation>> answering =
+            state.writtenIntoAndAskedAfter();
     /**
      * Each operator the sides of the comparison being read were worked out through, with the form
      * it came to, as they are read ({@link AffineForms.Reading#composed}) — or null where what is
      * read is no comparison of numbers. Where each answers is where the comparison is read
      * ({@link #whereEachOperatorAnswers}).
      */
-    private Operators operated;
+    private final Scoped<Operators> operated = state.guardedByItsMark();
     /**
      * Whether what is walked is what the relation being read itself works out, whose divisions the
      * reader of the relation reads: a division is told only where it is not.
      */
+    @NoPartOfAReading(Why.FIXED)
     private final boolean theRelationReadsItsOwnDivisions;
     /**
      * The elements of the containers the comparison being read is read of, which name stands for
      * each — held to one name for each container ({@link ElementsMet}). Nothing where what is read
-     * is no comparison of two numbers.
+     * is no comparison of two numbers. What a reading asked of it is its footprint, which a
+     * reading kept is held to in place of a comparison.
      */
-    private ElementsMet elementsMet = ElementsMet.NONE;
+    private final Scoped<ElementsMet> elementsMet = state.notCompared(ElementsMet.NONE);
     /**
      * The expression one side of the comparison being read is, names followed to what they stand
      * for — or null where what is read is no side of a comparison of two numbers. A product of two
-     * numbers is read only as the whole of such a side ({@link #productAt}).
+     * numbers is read only as the whole of such a side ({@link #productAt}). Looked up by identity.
      */
-    private Core sideAsWritten;
+    private final Scoped<Core> sideAsWritten = state.askedAfter(Compared.BY_IDENTITY);
     /**
      * How many each answer an operation sized by cases holds, in the case of it the comparison
      * being read is read in ({@link #inEachCaseOf}): a number of the input, where the arguments
      * stand as that case says.
      */
-    private final Map<Core, LinearForm<Quantity>> sizedInACase = new HashMap<>();
+    private final Bindings<Core, LinearForm<Quantity>> sizedInACase = state.bindings();
     /**
      * What each total over a container the body wrote out adds up to, and each container it counts,
      * in the way of keeping the comparison being read is read in ({@link #keepingOf}): the sum of
-     * the elements that way keeps, and how many of them there are. Newest last.
+     * the elements that way keeps, and how many of them there are. Newest on top.
      */
-    private final List<AnAggregateInACase> aggregatesInACase = new ArrayList<>();
+    private final Layers<AnAggregateInACase> aggregatesInACase = state.aggregates();
     /**
      * While a comparison's numbers are put together to ask how they stand
      * ({@link #aWayIn(List, Supplier, BooleanSupplier)}): each count of the elements a filter
      * keeps that how many a container holds came to ({@link #sizeOf}), with the containers it was
      * asked of, in the order met. Null elsewhere.
      */
-    private Map<Quantity.HowManyHold, List<Denotation>> countsMet;
+    private final Scoped<Ledger.Grouped<Quantity.HowManyHold, Denotation>> countsMet =
+            state.writtenIntoAndAskedAfter();
 
     /**
      * That {@code call}, standing in the names of {@code at}, is {@code form} in the way of
@@ -573,7 +603,7 @@ final class Pullback {
     private LinearForm<Quantity> aggregateInACase(Core call, InputReads at) {
         aggregatesAsked++;
         Core node = Core.withoutStanding(call);
-        for (AnAggregateInACase each : aggregatesInACase) {
+        for (AnAggregateInACase each : aggregatesInACase.oldestFirst()) {
             if (each.call() == node && each.at().standsInTheNamesOf(at)) {
                 return each.form();
             }
@@ -584,52 +614,54 @@ final class Pullback {
      * What each walk whose step is being read carried into it, on the side its end is asked about
      * ({@link #acrossAWalk}).
      */
-    private final Map<BindingId, Carried> carried = new HashMap<>();
+    private final Bindings<BindingId, Carried> carried = state.bindings();
     /**
      * What each call a recursion whose body is being read makes of itself is supposed to answer, on
      * the side the recursion is asked about ({@link #acrossARecursion}). By the call, since another
      * call of the same helper is not a step of this one.
      */
-    private final Map<Core, Supposed> recursed = new IdentityHashMap<>();
+    private final Bindings<Core, Supposed> recursed = state.searchBindings();
     /**
      * The recursions whose body is being read. One reached again inside its own body through
      * another helper is a recursion through two, which is read as neither.
      */
-    private final Set<ValueName.Helper> recursing = new HashSet<>();
+    private final Members<ValueName.Helper> recursing = state.searchMembers();
     /**
      * The calls of a search down a tree whose body is being read for how many it answers, each
      * standing for how many it answers one node down ({@link #sizeOfASearch}).
      */
-    private final Map<Core, SizedBelow> sizedBelow = new IdentityHashMap<>();
+    private final Bindings<Core, SizedBelow> sizedBelow = state.searchBindings();
     /**
      * How many what a walk carried holds, by the name its step is handed it under, while the step
      * is read for how many it adds ({@link #sizeOfAWalk}).
      */
-    private final Map<BindingId, LinearForm<Quantity>> sizedSoFar = new HashMap<>();
+    private final Bindings<BindingId, LinearForm<Quantity>> sizedSoFar = state.bindings();
     /**
      * What a walk over a container the body wrote out has carried, by the name its step is handed
      * it under, while the step is read for the next element ({@link #foldOfWrittenOut}).
      */
-    private final Map<BindingId, LinearForm<Quantity>> carriedSoFar = new HashMap<>();
+    private final Bindings<BindingId, LinearForm<Quantity>> carriedSoFar = state.bindings();
     /**
      * How many more readings this reading of a condition makes in all
      * ({@link CompositionBudget#TOTAL_READINGS_OF_ONE_CONDITION}), across every case, value and
      * application it is split into and every rule tried on each.
      */
+    @NoPartOfAReading(Why.BUDGET)
     private long readingsLeft = CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.maximum();
     /**
      * What the input is left as on the way to the arm being read: what the declarations hold of
      * it, and every condition of an arm taken on the way that holds of a run's own numbers
      * ({@link #armsLeftBy}). Null until an arm is first decided by one, which is the declarations
-     * alone.
+     * alone. Looked up by identity.
      */
-    private SearchRegion onTheWay;
+    private final Scoped<SearchRegion> onTheWay = state.setting(Compared.BY_IDENTITY);
     /**
      * Whether this reading is asking where a walk's step answers, for the reading of what the walk
      * hands it ({@link #handedToTheStep}): what it hands is read as handed here, since this is
-     * where that is being asked.
+     * where that is being asked. Set where the reader is made.
      */
-    private boolean askingWhereAStepAnswers;
+    private final Scoped<Boolean> askingWhereAStepAnswers =
+            state.setting(Compared.BY_VALUE, false);
     /**
      * The calls that make what the comparison left out reads, and the answers of their closures:
      * what each may itself stop a run on is the relation's own arithmetic, said by the relation,
@@ -637,6 +669,7 @@ final class Pullback {
      * its type may refuse is no arithmetic of the relation's, and what they work out in their
      * other parts is not either.
      */
+    @NoPartOfAReading(Why.FIXED)
     private final Set<Core> callsMakingWhatTheRelationReads;
 
     /** What a value a walk or a recursion hands back to itself is supposed to be. */
@@ -697,7 +730,7 @@ final class Pullback {
         this.keptByTheInput = WhatConditionsState.of(read).readingsKept();
         this.where = where;
         this.freeInTheRoot = freeInTheRoot;
-        this.freeInTheScope = freeInTheRoot;
+        this.freeInTheScope.beginAs(freeInTheRoot);
         this.subjects = new DecisionSubjects(read.domain(), read.rules().symbols(),
                 read.rules().declarations(), read.rules().newtypes(), KeptTruths.readIn(read));
     }
@@ -1494,8 +1527,8 @@ final class Pullback {
         // It holds exactly where the written one does, over the same rows, so what the rule that
         // read it says of the operations they get past is said of the written one.
         Trial kept = triedAndConcluded.get(read);
-        if (kept != null && kept.working != null) {
-            trial().says(kept.working);
+        if (kept != null && kept.working() != null) {
+            trial().says(kept.working());
         }
         trial().restatedAs(new Once<>(() -> workingOf(kept, arithmeticOf(stated, reads))));
         return new Derivation.Restated(read);
@@ -1604,20 +1637,17 @@ final class Pullback {
         List<Derivation> atTheEnds = new ArrayList<>();
         List<Derivation> answers = inAComparisonsScope(true, () -> {
             if (apart == null) {
-                operated.within = body;
+                operated.get().readWithin(body);
             }
             operatorsIn(body, reads, apart, ofTheRelation);
             if (apart == null) {
-                operated.leftOut = leftOut == null ? null : Core.withoutStanding(leftOut);
+                operated.get().leaveOut(leftOut == null ? null : Core.withoutStanding(leftOut));
                 leaveUnsaidWhatMayEndARunUnder(body, reads, null);
             }
-            told[0] = operated;
-            return whereEachOperatorAnswers(operated, asked, atTheEnds);
+            told[0] = operated.get();
+            return whereEachOperatorAnswers(told[0], asked, atTheEnds);
         });
-        return new OperatorsAnswer(bothOf(answers), told[0].unsaidGroups,
-                told[0].unsaidGroupsWhere, told[0].unsaidElsewhere, told[0].obligations,
-                told[0].afterTheFirst, told[0].relationStandsWhere(), asked,
-                bothOf(atTheEnds));
+        return told[0].answer(bothOf(answers), asked, bothOf(atTheEnds));
     }
 
     /** What {@code parts} state together, or nothing where there are none. */
@@ -1694,8 +1724,8 @@ final class Pullback {
         // Applied on no run, its body works nothing out on any. Said only outside every closure:
         // inside one, another application around it may hand it elements.
         if (applications instanceof InputReads.Applications.NoneMade
-                && operated.application == null) {
-            operated.neverApplied.add(block);
+                && operated.get().application() == null) {
+            operated.get().appliedOnNoRun(block);
             return;
         }
         if (!(applications instanceof InputReads.Applications.Each(var each, var how))
@@ -1703,17 +1733,13 @@ final class Pullback {
                 || each.stream().anyMatch(one -> !one.keptWhere().isEmpty())) {
             return;
         }
-        InputReads.Applications.Made around = operated.application;
-        int from = operated.told.size();
-        try {
-            for (InputReads.Applications.Made one : each) {
-                operated.application = one;
+        int from = operated.get().toldSoFar();
+        for (InputReads.Applications.Made one : each) {
+            try (Restore _ = operated.get().onTheApplication(one)) {
                 operatorsIn(block.body(), one.reads(), apart, ofTheRelation);
             }
-        } finally {
-            operated.application = around;
         }
-        operated.toldOnEach(each, from);
+        operated.get().toldOnEach(each, from);
     }
 
     /**
@@ -1727,7 +1753,7 @@ final class Pullback {
             return;
         }
         WhereAnOperatorAnswers where = AffineForms.whereItAnswers(operator);
-        operated.tell(operator, new Answers.AsAnOperator(form, where));
+        operated.get().tell(operator, new Answers.AsAnOperator(form, where));
     }
 
     /**
@@ -1749,7 +1775,7 @@ final class Pullback {
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form))) {
             return;
         }
-        operated.tell(operation, new Answers.AsAnOperator(form,
+        operated.get().tell(operation, new Answers.AsAnOperator(form,
                 new WhereAnOperatorAnswers.WhereTheDivisorIsNotNought()));
     }
 
@@ -1792,7 +1818,7 @@ final class Pullback {
             return;
         }
         if (isRefusedByNoRun(construct, reads)) {
-            operated.tell(construct, new Answers.Anywhere());
+            operated.get().tell(construct, new Answers.Anywhere());
             return;
         }
         WhereAnOperatorAnswers where =
@@ -1805,7 +1831,7 @@ final class Pullback {
             return;
         }
         if (where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
-            operated.tell(construct, new Answers.AsAnOperator(value, held));
+            operated.get().tell(construct, new Answers.AsAnOperator(value, held));
         } else {
             madeOfANumberStandingWithinARun(construct, where, reads);
         }
@@ -1868,7 +1894,7 @@ final class Pullback {
                 instanceof GetsPast.WhereTheTotalFits) {
             LinearForm<Quantity> total = totalOfWrittenOut(call, reads);
             if (total != null) {
-                operated.tell(call, new Answers.AsAnOperator(total,
+                operated.get().tell(call, new Answers.AsAnOperator(total,
                         WhereAnOperatorAnswers.ofATotal(call.type())));
             }
             return;
@@ -1884,7 +1910,7 @@ final class Pullback {
                 : RoundedToAWholeNumber.whereTheRoundedNumberIsHeld(call.type(),
                         read.rules().declarations());
         if (ends != null) {
-            operated.tell(call, new Answers.Rounded(rounding.before(), rounding.way(), ends));
+            operated.get().tell(call, new Answers.Rounded(rounding.before(), rounding.way(), ends));
             return;
         }
         WhereAnOperatorAnswers.WhereItsExactValueIsHeld held =
@@ -1892,7 +1918,7 @@ final class Pullback {
         if (held != null) {
             LinearForm<Quantity> form = composedAs(call, reads);
             if (form != null) {
-                operated.tell(call, new Answers.AsAnOperator(form, held));
+                operated.get().tell(call, new Answers.AsAnOperator(form, held));
             }
         }
     }
@@ -1911,7 +1937,8 @@ final class Pullback {
             return false;
         }
         if (where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld run) {
-            operated.tell(construct, new Answers.Rounded(rounding.before(), rounding.way(), run));
+            operated.get().tell(construct,
+                    new Answers.Rounded(rounding.before(), rounding.way(), run));
         }
         return true;
     }
@@ -1957,7 +1984,7 @@ final class Pullback {
         if (ends.isEmpty()) {
             return;
         }
-        operated.tell(construct, new Answers.OfAChoice(ends.size() == 1 ? ends.getFirst()
+        operated.get().tell(construct, new Answers.OfAChoice(ends.size() == 1 ? ends.getFirst()
                 : new Answers.Stands.AllOf(ends.get(0), ends.get(1))));
     }
 
@@ -2045,22 +2072,23 @@ final class Pullback {
      */
     private void leaveUnsaidWhatMayEndARunUnder(Core standing, InputReads reads, Bound bound) {
         Core e = Core.withoutStanding(standing);
-        if (e == operated.leftOut) {
-            operated.relationIsInside(bound == null ? WorkedOutWhere.ALWAYS : bound.where());
+        Operators operators = operated.get();
+        if (e == operators.leftOut()) {
+            operators.relationIsInside(bound == null ? WorkedOutWhere.ALWAYS : bound.where());
             return;
         }
-        if (operated.neverApplied.contains(e)) {
+        if (operators.isAppliedOnNoRun(e)) {
             return;
         }
-        operated.readsAt.putIfAbsent(e, reads);
-        boolean told = operated.nodes.contains(e) || operated.nodes.contains(standing)
+        operators.readAt(e, reads);
+        boolean told = operators.toldWhereverItRuns(e) || operators.toldWhereverItRuns(standing)
                 || (!(e instanceof Core.Construct) && callsMakingWhatTheRelationReads.contains(e));
         GetsPast completion = told ? null : completionOf(e, reads);
         if (!told && !(completion instanceof GetsPast.Always)) {
             WorkedOutWhere where = bound == null ? WorkedOutWhere.ALWAYS : bound.where();
-            operated.beginGroup(where);
+            operators.beginGroup(where);
             boolean[] hasOperands = {false};
-            boolean elsewhereBefore = operated.unsaidElsewhere;
+            boolean elsewhereBefore = operators.unsaidElsewhere();
             // A quotient or a remainder stops where its divisor is nought, and what it divides is
             // no part of it.
             Core divisor = theDivisorItAloneStopsOn(e);
@@ -2072,43 +2100,37 @@ final class Pullback {
                 leaveUnsaidOverWhatItReads(operand, reads, bound);
             });
             if (!hasOperands[0]) {
-                operated.leaveUnsaidOverUnreadOperands();
+                operators.leaveUnsaidOverUnreadOperands();
             }
             // What stops no run is said by its owner, and a place that is not named is not that: an
             // operation nothing says completes, reading no place, may still stop a run on a
             // number no place holds — a divisor that is nought however it is written.
-            if (!owedAProof(completion) && operated.unsaidAt.isEmpty()
-                    && operated.unsaidElsewhere == elsewhereBefore
+            if (!owedAProof(completion) && operators.noPlaceUnsaidInTheGroup()
+                    && operators.unsaidElsewhere() == elsewhereBefore
                     && !isProvenToComplete(e, divisor, reads)) {
-                operated.leaveUnsaidOverUnreadOperands();
+                operators.leaveUnsaidOverUnreadOperands();
             }
-            if (operated.within != null && owedAProof(completion)) {
-                operated.obligations.add(new StopObligation(e, operated.unsaidAt,
-                        operated.unsaidElsewhere != elsewhereBefore, completion, operated.within,
-                        operated.readsAt, where));
-                operated.unsaidAt.clear();
-                operated.unsaidElsewhere = elsewhereBefore;
-                operated.startAgain();
+            if (operators.owesWithin() && owedAProof(completion)) {
+                operators.owe(e, elsewhereBefore, completion, where);
             }
         }
-        WhatTheStepsNamesHold around = operated.stepsNames;
         SeededWalk walk = e instanceof Core.PreservedCall call
                 ? SeededWalk.enteredHoweverFar(call, blocksAt(new Denotation(call, reads))) : null;
         KeyedAccumulation filed = walk == null ? null
                 : KeyedAccumulation.of(e, reads, sides(), blocksAt(new Denotation(e, reads)));
-        Function<Core, WhatTheStepsNamesHold> under = child -> walk != null
-                ? around.inTheWalk(walk.step(), filed, child)
-                : around.under(e, child);
-        try {
-            // What a child is read in is the scope's own answer ({@link ScopeStep}), for every
-            // step but the names this walk accounts for itself: a closure's parameters
-            // ({@link #boundInside}). The same answer is asked where the operand a number is made
-            // of is read ({@link #leaveUnsaidOverWhereItStands}), so a name an arm binds is read
-            // in one world whichever walk meets it.
-            BiConsumer<Core, ScopeStep> visit = (child, step) -> {
-                operated.stepsNames = under.apply(child);
-                InputReads within = reads;
-                Bound inside = bound;
+        // Each child is read with what the names hold around this node, which is put back after
+        // each: what the walk makes of them for one child is not what it makes for the next.
+        Function<Core, UnaryOperator<WhatTheStepsNamesHold>> under = child -> around ->
+                walk != null ? around.inTheWalk(walk.step(), filed, child) : around.under(e, child);
+        // What a child is read in is the scope's own answer ({@link ScopeStep}), for every
+        // step but the names this walk accounts for itself: a closure's parameters
+        // ({@link #boundInside}). The same answer is asked where the operand a number is made
+        // of is read ({@link #leaveUnsaidOverWhereItStands}), so a name an arm binds is read
+        // in one world whichever walk meets it.
+        BiConsumer<Core, ScopeStep> visit = (child, step) -> {
+            InputReads within = reads;
+            Bound inside = bound;
+            try (Restore _ = operators.withTheStepsNamesFrom(under.apply(child))) {
                 if (Core.withoutStanding(child) instanceof Core.Block block) {
                     inside = boundInside(e, block, reads, bound);
                 } else if (!(step instanceof ScopeStep.Block)) {
@@ -2120,14 +2142,12 @@ final class Pullback {
                 } else {
                     leaveUnsaidWhatMayEndARunUnder(child, within, inside);
                 }
-            };
-            if (e instanceof Core.IfConstructed attempt) {
-                WhatARunMayEndFor.forEachWorkedOut(attempt, visit);
-            } else {
-                ScopeStep.forEachChild(e, visit);
             }
-        } finally {
-            operated.stepsNames = around;
+        };
+        if (e instanceof Core.IfConstructed attempt) {
+            WhatARunMayEndFor.forEachWorkedOut(attempt, visit);
+        } else {
+            ScopeStep.forEachChild(e, visit);
         }
     }
 
@@ -2148,17 +2168,14 @@ final class Pullback {
                                                    Bound bound) {
         leaveUnsaidWhatMayEndARunUnder(step, reads.handing(walk.accumulator().binding(),
                 new Denotation(walk.seed(), reads), read.rules().newtypes()), bound);
-        Operators first = operated;
+        Operators first = operated.get();
         Operators rest = first.ofTheApplicationsAfterTheFirst();
-        operated = rest;
-        try {
+        try (Restore _ = operated.set(rest)) {
             leaveUnsaidWhatMayEndARunUnder(step, reads, bound);
-        } finally {
-            operated = first;
         }
         OperatorsAnswer afterIt = rest.leftUnsaid();
         if (!afterIt.leavesNothingUnsaid()) {
-            first.afterTheFirst.add(new AfterTheFirst(walk.container(), reads, afterIt));
+            first.afterTheFirst(new AfterTheFirst(walk.container(), reads, afterIt));
         }
     }
 
@@ -2591,7 +2608,7 @@ final class Pullback {
      */
     private FormRange exactRangeOfAName(BindingId name, InputReads reads,
                                         Map<BindingId, RangeOfAName> known) {
-        FormRange ofAStep = operated.stepsNames.of(name);
+        FormRange ofAStep = operated.get().rangeOfAStepsName(name);
         if (ofAStep != null) {
             return ofAStep;
         }
@@ -2674,19 +2691,15 @@ final class Pullback {
         Core call = Core.withoutStanding(applied);
         if (call instanceof Core.Call || call instanceof Core.PreservedCall
                 || call instanceof Core.Apply) {
-            Operators held = operated;
             Operators others = new Operators();
-            operated = others;
-            try {
+            try (Restore _ = operated.set(others)) {
                 Core.forEachChild(applied, part -> {
                     if (!(Core.withoutStanding(part) instanceof Core.Block)) {
                         leaveUnsaidOverWhatItReads(part, reads, outer);
                     }
                 });
-            } finally {
-                operated = held;
             }
-            if (!others.unsaidElsewhere && (outer == null || outer.standFor() != null)) {
+            if (!others.unsaidElsewhere() &&(outer == null || outer.standFor() != null)) {
                 standFor = others.everyPlaceUnsaid();
                 if (outer != null) {
                     standFor.addAll(outer.standFor());
@@ -2865,7 +2878,7 @@ final class Pullback {
      * they stand for nothing this can name; and where a part inside them is worked out
      * ({@link #containersTheClosureIsAppliedOver}).
      */
-    private record Bound(Set<BindingId> names, Set<TermPath> standFor, WorkedOutWhere where) {}
+    record Bound(Set<BindingId> names, Set<TermPath> standFor, WorkedOutWhere where) {}
 
     /**
      * Where a part is worked out: only where, for each set of {@code oneHolds}, one of its
@@ -2936,7 +2949,7 @@ final class Pullback {
         }
         if (AffineForms.outcome(operand, reads, quantities())
                 instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form)) {
-            operated.leaveUnsaid(form.coefs().keySet(), bound, reads);
+            operated.get().leaveUnsaid(form.coefs().keySet(), bound, reads);
         } else {
             leaveUnsaidOverWhereItStands(operand, reads, bound);
         }
@@ -2948,11 +2961,11 @@ final class Pullback {
             // of the body, under the names it binds ({@link #boundInside}).
             return;
         }
-        if (!operated.firstOverWhereItStands(operand, reads, bound)) {
+        if (!operated.get().firstOverWhereItStands(operand, reads, bound)) {
             return;
         }
         switch (reads.pathOf(operand, read.rules().newtypes())) {
-            case ValuesAt.At(TermPath path) -> operated.unsaidAt.add(path);
+            case ValuesAt.At(TermPath path) -> operated.get().unsaidAt(path);
             default -> {
                 // A value made from positions stands at none, and is as much theirs: it stops a
                 // run on what they hold. So does a name that may stand at one of several places,
@@ -2960,7 +2973,7 @@ final class Pullback {
                 // is made of as well: where it came from says every one.
                 MadeFrom made = reads.cameFrom(operand, read.rules().newtypes());
                 if (!(made instanceof MadeFrom.FromNothing)) {
-                    operated.unsaidAt.addAll(made.places());
+                    operated.get().unsaidAtEach(made.places());
                     return;
                 }
                 // A name an arm of a match, an attempt or a let binds stands for what the value it
@@ -3003,7 +3016,7 @@ final class Pullback {
                         leaveUnsaidOverWhereItStands(standsFor, stands.at(), bound);
                         return;
                     }
-                    operated.leaveUnsaidOver(bound != null && !bound.names().contains(name.binding())
+                    operated.get().leaveUnsaidOver(bound != null && !bound.names().contains(name.binding())
                             ? reads.namedBy(name.binding()) : name.binding(), bound);
                 }
             }
@@ -3136,153 +3149,175 @@ final class Pullback {
     static final class Trial implements ReadingState.Marked {
 
         /**
-         * What the candidate has said so far, which is the same only while it has said no more.
-         * Taken once for as long as it says nothing: a reading asks after it far more often than
-         * the candidate says anything.
+         * The changes to what the candidate has said besides the remainders it read, and to the
+         * remainders it read. What it says is held in parts counted into one or the other
+         * ({@link Tallied}), so what the candidate has said is the same while neither moves.
          */
-        @Override
-        public Object mark() {
-            Object held = marked;
-            if (held == null) {
-                held = ReadingState.snapshotOfFieldsBut(this, Set.of(MARKED));
-                marked = held;
+        private final Tallied.Changes said = new Tallied.Changes();
+        private final Tallied.Changes remaindersSaid = new Tallied.Changes();
+
+        /** What a candidate has said, compared by the very candidate and the two counts. */
+        private record SaidSoFar(Trial by, long besides, long remainders) {
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof SaidSoFar that && that.by == by && that.besides == besides
+                        && that.remainders == remainders;
             }
-            return held;
+
+            @Override
+            public int hashCode() {
+                return (System.identityHashCode(by) * 31 + Long.hashCode(besides)) * 31
+                        + Long.hashCode(remainders);
+            }
         }
 
-        /** The name of {@link #marked}, which is no part of what the candidate has said. */
-        private static final String MARKED = "marked";
+        /** What a candidate has said besides the remainders it read, where it has said
+         *  anything. */
+        private record SaidBesides(Trial by, long besides) {
 
-        /** {@link #mark} as it was taken, or null where the candidate has said something since.
-         *  Every way of saying something puts it back to null. */
-        private Object marked;
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof SaidBesides that && that.by == by
+                        && that.besides == besides;
+            }
+
+            @Override
+            public int hashCode() {
+                return System.identityHashCode(by) * 31 + Long.hashCode(besides);
+            }
+        }
+
+        /** What every candidate that has said nothing besides the remainders it read has said:
+         *  one candidate is as good as another for that. */
+        private static final Object NOTHING_BESIDES = new Object();
+
+        /** What the candidate has said so far, which is the same only while it has said no more. */
+        @Override
+        public Object mark() {
+            return new SaidSoFar(this, said.count(), remaindersSaid.count());
+        }
 
         /** What the rows of the comparison get past is {@code told}. */
         void says(UndividedByARelation.Working told) {
-            marked = null;
-            working = told;
+            working.set(told);
+        }
+
+        /** What the rows of the comparison get past, as the rule worked it out; null where the
+         *  rule worked out none. */
+        UndividedByARelation.Working working() {
+            return working.get();
         }
 
         /** The expressions the rule reads the comparison again with each value of are those
          *  {@code answers} holds for. */
         void answersFor(Predicate<Core> answers) {
-            marked = null;
-            answersFor = answers;
+            answersFor.set(answers);
         }
+
+        /** The expressions the rule reads the comparison again with each value of, or null where
+         *  it reads none so. */
+        Predicate<Core> answersFor() {
+            return answersFor.get();
+        }
+
+        // The tables of a candidate are made when the candidate first says something into them:
+        // most say nothing, and an identity map holds a table before it holds anything.
 
         /** What the rows of the comparison get past, as the rule worked it out; null where the
          *  rule worked out none. */
-        private UndividedByARelation.Working working;
+        private final Tallied.Value<UndividedByARelation.Working> working = said.value(null);
         /** The expressions the rule reads the comparison again with each value of, the one the
          *  arithmetic stopped at among them, which tells what working them out may stop a run at;
          *  null where it reads none so. */
-        private Predicate<Core> answersFor;
+        private final Tallied.Value<Predicate<Core>> answersFor = said.value(null);
         /** The expressions the rule read as the form of one operand of theirs, each with that
          *  operand ({@link AffineReading.WhatTheAnalysisAnswersFor#readByTheFormOf}). */
-        private Map<Core, Core> readByTheFormOf;
+        private final Tallied.Table<Core, Core> readByTheFormOf =
+                remaindersSaid.table(IdentityHashMap::new);
         /** The remainders the rule read without saying their rows are made where the dividend is
          *  worked out, each with its dividend
          *  ({@link AffineReading.WhatTheAnalysisAnswersFor#dividendBesideTheRows}). */
-        private Map<Core, Core> dividendBesideTheRows;
+        private final Tallied.Table<Core, Core> dividendBesideTheRows =
+                remaindersSaid.table(IdentityHashMap::new);
         /** The months a date at a place lands in moved by months, as the rule read them, each
          *  with the count of months the move comes to
          *  ({@link AffineReading.WhatTheAnalysisAnswersFor#landsInAMonth}). */
-        private Map<Core, UndividedByARelation.IntOperation> landsInAMonth;
+        private final Tallied.Table<Core, UndividedByARelation.IntOperation> landsInAMonth =
+                said.table(IdentityHashMap::new);
         /** What each relation read under an arm of a choice works out, off the comparison read
          *  with the choice standing as that arm ({@link Pullback#tellWhatItWorksOut}). */
-        private Map<Relation, UndividedByARelation.Working> relations;
+        private final Tallied.Table<Relation, UndividedByARelation.Working> relations =
+                said.table(LinkedHashMap::new);
         /** What each comparison the rule read the written one as works out, asked only by a rule
          *  that says the written one works out the same ({@link #worksOutWhatItIsRestatedAs}). */
-        private List<Supplier<UndividedByARelation.Working>> restated;
-
+        private final Tallied.Sequence<Supplier<UndividedByARelation.Working>> restated =
+                said.sequence();
         /** What a run taking an arm of a choice works out there, by each comparison the written
          *  one was read as with the choice standing as that arm ({@link Pullback#readOnAnArm}). */
-        private Map<ArmRead, List<OnThisArm>> onTheArms;
-
-        // The maps and lists of a candidate are made when the candidate first says something into
-        // them: most say nothing, and an identity map holds a table before it holds anything.
+        private final Tallied.Table<ArmRead, Tallied.Sequence<OnThisArm>> onTheArms =
+                said.table(LinkedHashMap::new);
 
         void readByTheFormOf(Core call, Core dividend) {
-            marked = null;
-            if (readByTheFormOf == null) {
-                readByTheFormOf = new IdentityHashMap<>();
-            }
             readByTheFormOf.put(call, dividend);
         }
 
         Core readByTheFormOf(Core held) {
-            return readByTheFormOf == null ? null : readByTheFormOf.get(held);
+            return readByTheFormOf.get(held);
         }
 
         /**
          * What the candidate has said but for the remainders it read, which a remainder taken again
          * says again ({@link Pullback#remainderAt}): a reading that said anything else is not one
-         * to take from another.
+         * to take from another. The same for every candidate that has said nothing else, and
+         * otherwise the same only for this candidate while it says nothing more: what another
+         * candidate said is not compared with it.
          */
         Object markBesidesTheRemainders() {
-            return ReadingState.snapshotOfFieldsBut(this,
-                    Set.of("readByTheFormOf", "dividendBesideTheRows", MARKED));
+            return said.count() == 0 ? NOTHING_BESIDES : new SaidBesides(this, said.count());
         }
 
         /** The remainders read so far, as two tables apart from the candidate's own. */
         List<Map<Core, Core>> remaindersRead() {
-            return List.of(
-                    readByTheFormOf == null ? new IdentityHashMap<>()
-                            : new IdentityHashMap<>(readByTheFormOf),
-                    dividendBesideTheRows == null ? new IdentityHashMap<>()
-                            : new IdentityHashMap<>(dividendBesideTheRows));
+            return List.of(new IdentityHashMap<>(readByTheFormOf.view()),
+                    new IdentityHashMap<>(dividendBesideTheRows.view()));
         }
 
         void dividendBesideTheRows(Core call, Core dividend) {
-            marked = null;
-            if (dividendBesideTheRows == null) {
-                dividendBesideTheRows = new IdentityHashMap<>();
-            }
             dividendBesideTheRows.put(call, dividend);
         }
 
         Core dividendBesideTheRows(Core held) {
-            return dividendBesideTheRows == null ? null : dividendBesideTheRows.get(held);
+            return dividendBesideTheRows.get(held);
         }
 
         void landsInAMonth(Core node, UndividedByARelation.IntOperation count) {
-            marked = null;
-            if (landsInAMonth == null) {
-                landsInAMonth = new IdentityHashMap<>();
-            }
             landsInAMonth.put(node, count);
         }
 
         UndividedByARelation.IntOperation landsInAMonth(Core held) {
-            return landsInAMonth == null ? null : landsInAMonth.get(held);
+            return landsInAMonth.get(held);
         }
 
         void restatedAs(Supplier<UndividedByARelation.Working> working) {
-            marked = null;
-            if (restated == null) {
-                restated = new ArrayList<>();
-            }
             restated.add(working);
         }
 
         /** What the rule worked out of each comparison it read the written one as; none where it
          *  read it as none. */
         List<Supplier<UndividedByARelation.Working>> restated() {
-            return restated == null ? List.of() : restated;
+            return restated.view();
         }
 
         void readOnAnArm(ArmRead read, OnThisArm arm) {
-            marked = null;
-            if (onTheArms == null) {
-                onTheArms = new LinkedHashMap<>();
-            }
-            onTheArms.computeIfAbsent(read, _ -> new ArrayList<>()).add(arm);
+            onTheArms.computeIfAbsent(read, _ -> said.sequence()).add(arm);
         }
 
         /** What runs taking the arms {@code read} was read on work out there; none where it was
          *  read on no arm. */
         List<OnThisArm> onTheArms(ArmRead read) {
-            return onTheArms == null ? List.of() : onTheArms.getOrDefault(read, List.of());
+            Tallied.Sequence<OnThisArm> arms = onTheArms.get(read);
+            return arms == null ? List.of() : arms.view();
         }
 
         /** Whether {@code step} is what the answer of an arm of a choice this candidate read was
@@ -3292,10 +3327,6 @@ final class Pullback {
         }
 
         void tell(Relation relation, UndividedByARelation.Working told) {
-            marked = null;
-            if (relations == null) {
-                relations = new LinkedHashMap<>();
-            }
             UndividedByARelation.Working already = relations.get(relation);
             relations.put(relation, already == null ? told
                     : UndividedByARelation.Working.together(List.of(already, told)));
@@ -3307,7 +3338,7 @@ final class Pullback {
          * read on gets past, together where it was read on several.
          */
         UndividedByARelation.Working workingOf(Relation relation) {
-            UndividedByARelation.Working told = relations == null ? null : relations.get(relation);
+            UndividedByARelation.Working told = relations.get(relation);
             List<OnThisArm> arms = onTheArms(new ArmRead.OfARelation(relation));
             if (told != null || arms.isEmpty() || !arms.stream().allMatch(OnThisArm::tellsEvery)) {
                 return told;
@@ -3320,13 +3351,9 @@ final class Pullback {
          *  worked out of its own comparison is its own: a comparison read under an arm is not
          *  this one. */
         void absorb(Trial kept) {
-            if (kept.relations != null) {
-                kept.relations.forEach(this::tell);
-            }
-            if (kept.onTheArms != null) {
-                kept.onTheArms.forEach((read, arms) -> arms.forEach(each ->
-                        readOnAnArm(read, each)));
-            }
+            kept.relations.view().forEach(this::tell);
+            kept.onTheArms.view().forEach((read, arms) -> arms.view().forEach(each ->
+                    readOnAnArm(read, each)));
         }
     }
 
@@ -3433,7 +3460,7 @@ final class Pullback {
 
     /** The candidate being tried; one to say into nothing where none is. */
     private Trial trial() {
-        return underTrial.isEmpty() ? new Trial() : underTrial.peek();
+        return underTrial.isEmpty() ? new Trial() : underTrial.newest();
     }
 
     /**
@@ -3442,12 +3469,9 @@ final class Pullback {
     private Supplier<Derivation> underTrial(Supplier<Derivation> rule) {
         return () -> {
             Trial trial = new Trial();
-            underTrial.push(trial);
             Derivation concluded;
-            try {
+            try (Restore _ = underTrial.pushing(trial)) {
                 concluded = rule.get();
-            } finally {
-                underTrial.pop();
             }
             if (concluded != null) {
                 // One that several candidates conclude is the one kept by the first of them.
@@ -3503,14 +3527,14 @@ final class Pullback {
      */
     private AffineReading.WorkedOut worksOut(
             Trial theRule, Supplier<AffineReading.OfAComparison> arithmetic) {
-        if (theRule != null && theRule.working != null) {
-            return AffineReading.WorkedOut.ofWhatIsToldOf(theRule.working);
+        if (theRule != null && theRule.working() != null) {
+            return AffineReading.WorkedOut.ofWhatIsToldOf(theRule.working());
         }
         AffineReading.OfAComparison read = arithmetic.get();
         if (theRule == null || !(read instanceof AffineReading.OfAComparison.Stopped stopped)) {
             return AffineReading.OfAComparison.worksOut(read);
         }
-        Predicate<Core> readAgain = theRule.answersFor;
+        Predicate<Core> readAgain = theRule.answersFor();
         return stopped.worksOut(new AffineReading.WhatTheAnalysisAnswersFor(
                 readAgain == null ? _ -> false : readAgain,
                 held -> theRule.readByTheFormOf(Core.withoutStanding(held)),
@@ -3572,7 +3596,7 @@ final class Pullback {
         AnOperationApplied applied = AnOperationApplied.of(e);
         // What the container's holding anything is read off, or where reading it stopped, is the
         // question that asked it, where something asked it.
-        Denotation asked = askedAt != null ? askedAt : new Denotation(e, reads);
+        Denotation asked = askedAt.get() != null ? askedAt.get() : new Denotation(e, reads);
         Derivation taken = firstThatReadsIt(List.of(
                 () -> writtenOut(e, AnswerAspect.EMPTINESS, reads),
                 () -> ofAnElementOfAnAnswer(e, AnswerAspect.EMPTINESS, reads),
@@ -3769,7 +3793,7 @@ final class Pullback {
         Derivation chosen = RuleChoice.firstThatReadsIt(tried, met, trying);
         Trial kept = triedAndConcluded.get(chosen);
         if (kept != null && !underTrial.isEmpty()) {
-            underTrial.peek().absorb(kept);
+            underTrial.newest().absorb(kept);
         }
         return chosen;
     }
@@ -5289,11 +5313,10 @@ final class Pullback {
      */
     private Sized sizeOf(Core value, InputReads at) {
         Sized sized = howManyItHolds(value, at);
-        if (countsMet() != null && sized instanceof Sized.AsAForm(LinearForm<Quantity> form)) {
+        if (countsMet.get() != null && sized instanceof Sized.AsAForm(LinearForm<Quantity> form)) {
             for (Quantity atom : form.coefs().keySet()) {
                 if (atom instanceof Quantity.HowManyHold count) {
-                    countsMet().computeIfAbsent(count, _ -> new ArrayList<>())
-                            .add(new Denotation(value, at));
+                    countsMet.get().add(count, new Denotation(value, at));
                 }
             }
         }
@@ -5483,7 +5506,7 @@ final class Pullback {
                 return new Sized.NotSized(stopped);
             }
             Quantity.HowManyHold arrives = new Quantity.HowManyHold(List.of(stated));
-            armsTaken.putIfAbsent(arrives, new ArmTaken(oneOf, freeInTheScope));
+            armsTaken.keepFirst(arrives, new ArmTaken(oneOf, freeInTheScope.get()));
             parts.add(new LinearForm<>(ExactRatio.ZERO, Map.of(arrives, each.getKey())));
         }
         LinearForm<Quantity> out = LinearForm.constant(ExactRatio.ZERO);
@@ -5504,7 +5527,7 @@ final class Pullback {
      * any count of them is — or null where it is no such arm, or no comparison keeps its counts.
      */
     private Quantity.HowManyMeet armTakenOver(DecisionSubject.AnInput held, Quantity arrives) {
-        if (counting == null || !(arrives instanceof Quantity.HowManyHold)
+        if (counting.get() == null || !(arrives instanceof Quantity.HowManyHold)
                 || !(armsTaken.get(arrives) instanceof ArmTaken(Derivation arm, ElementsNamed given))) {
             return null;
         }
@@ -5516,7 +5539,7 @@ final class Pullback {
         }
         Quantity.HowManyMeet count = new Quantity.HowManyMeet(held,
                 Proposition.whereItHolds(element));
-        counting.putIfAbsent(count,
+        counting.get().putIfAbsent(count,
                 new Derivation.AComparisonRead.Counted(held, taken, Optional.empty()));
         return count;
     }
@@ -5599,7 +5622,7 @@ final class Pullback {
     }
 
     /** Where what a walk carried so far is told to the reading {@code how} names. */
-    private Map<BindingId, LinearForm<Quantity>> carriedUnder(Accumulating how) {
+    private Bindings<BindingId, LinearForm<Quantity>> carriedUnder(Accumulating how) {
         return switch (how) {
             case SIZE -> sizedSoFar;
             case NUMBER -> carriedSoFar;
@@ -5630,8 +5653,7 @@ final class Pullback {
         }
         Quantity.HowManyCarried soFar = new Quantity.HowManyCarried(ACarriedValue.made());
         return tentatively(soFar, () -> {
-            carriedUnder(how).put(accumulator, LinearForm.atom(soFar));
-            try {
+            try (Restore _ = carriedUnder(how).binding(accumulator, LinearForm.atom(soFar))) {
                 Sized total = eachAddedUpOver(walk.container(), walk.step(), at, accumulator,
                         (arm, inside) -> addedBeside(how, arm, inside, soFar));
                 if (!(total instanceof Sized.AsAForm(LinearForm<Quantity> over))) {
@@ -5640,8 +5662,6 @@ final class Pullback {
                 LinearForm<Quantity> all = seed.plus(over).orNull();
                 return all == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
                         : new Sized.AsAForm(all);
-            } finally {
-                carriedUnder(how).remove(accumulator);
             }
         });
     }
@@ -5681,17 +5701,13 @@ final class Pullback {
                             instanceof ExactAnswer.Held<LinearForm<Quantity>>(var times)
                     ? new Sized.AsAForm(times) : null;
         }
-        if (!quantifying.add(held)) {
+        if (quantifying.contains(held)) {
             return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
         }
-        ElementsNamed outer = inTheScopeOf(step, at);
-        try {
+        try (Restore _ = quantifying.adding(held); Restore _ = inTheScopeOf(step, at)) {
             Sized one = chosen ? byTheArmsOfAnElement(answer, at, each) : each.apply(answer, at);
             return one instanceof Sized.AsAForm(LinearForm<Quantity> added)
                     ? addedUpOver(held, added) : null;
-        } finally {
-            freeInTheScope = outer;
-            quantifying.remove(held);
         }
     }
 
@@ -5739,27 +5755,28 @@ final class Pullback {
      *         reading of how many a recursion answers does
      */
     private Sized tentatively(Quantity.HowManyCarried carried, Supplier<Sized> reading) {
-        Set<Quantity> countedBefore = counting == null ? null
-                : Set.copyOf(counting.keySet());
-        int alikeBefore = alike == null ? 0 : alike.size();
-        ElementsMet.Mark metBefore = elementsMet.mark();
+        Ledger.Keyed<Quantity, Derivation.AComparisonRead.Counted> counts = counting.get();
+        Ledger.OfEntries<Derivation.AComparisonRead.Counted> settledAlike = alike.get();
+        Ledger.Checkpoint countedBefore = counts == null ? null : counts.checkpoint();
+        Ledger.Checkpoint alikeBefore = settledAlike == null ? null : settledAlike.checkpoint();
+        ElementsMet.Mark metBefore = elementsMet.get().mark();
         Sized read = reading.get();
         if (read instanceof Sized.AsAForm(LinearForm<Quantity> form)) {
             if (carried.isIn(form)) {
                 throw carried.reachedAReader();
             }
-            if (counting == null || counting.keySet().stream().noneMatch(carried::isIn)) {
+            if (counts == null || counts.keys().stream().noneMatch(carried::isIn)) {
                 return read;
             }
             read = null;
         }
-        if (counting != null) {
-            counting.keySet().retainAll(countedBefore);
+        if (counts != null) {
+            counts.rewind(countedBefore);
         }
-        if (alike != null) {
-            alike.subList(alikeBefore, alike.size()).clear();
+        if (settledAlike != null) {
+            settledAlike.rewind(alikeBefore);
         }
-        elementsMet.rewind(metBefore);
+        elementsMet.get().rewind(metBefore);
         return read;
     }
 
@@ -6058,11 +6075,8 @@ final class Pullback {
                 case Sized.NotSized(WhyUnread why) ->
                         partOf(at, new Derivation.Stopped(why, false));
                 case Sized.AsAForm(LinearForm<Quantity> form) -> {
-                    sizedInACase.put(sized.e(), form);
-                    try {
+                    try (Restore _ = sizedInACase.binding(sized.e(), form)) {
                         yield read.get();
-                    } finally {
-                        sizedInACase.remove(sized.e());
                     }
                 }
             };
@@ -6276,7 +6290,7 @@ final class Pullback {
          */
         private Derivation asTheSourceWritesIt(LawProposition.Same<DeclaredArgument> same) {
             // Inside the count of a comparison, what is counted is read by the count.
-            if (counting != null) {
+            if (counting.get() != null) {
                 return null;
             }
             LawComparison law = Core.withoutStanding(e) instanceof Core.PreservedCall call
@@ -6949,7 +6963,7 @@ final class Pullback {
             DecisionAtom size = sizeOfSubject(heldAt, located.heldType());
             return Optional.of(size != null
                     ? leaf(new Derivation.SizeAboveNought(size),
-                            askedAt != null ? askedAt : new Denotation(e, reads))
+                            askedAt.get() != null ? askedAt.get() : new Denotation(e, reads))
                     : unread(over, in, new WhyUnread.NoMeasureOfItsSize()));
         }
 
@@ -7024,7 +7038,7 @@ final class Pullback {
             // the quantifier to that, so none of them meeting it is true and every one of them is.
             if (pieces.window().isEmpty()) {
                 return leaf(new Derivation.WrittenOut(false),
-                        askedAt != null ? askedAt : new Denotation(e, reads));
+                        askedAt.get() != null ? askedAt.get() : new Denotation(e, reads));
             }
             if (partingOf(pieces) != null) {
                 return unread(e, reads, new WhyUnread.TwoElementsOfOneContainer());
@@ -7035,9 +7049,8 @@ final class Pullback {
                         WhyUnread.AtNoPosition.Place.CONTAINER));
             }
             PieceWitness within = new PieceWitness(parting.size(), site);
-            parting.put(pieces, within);
             Derivation answered;
-            try {
+            try (Restore _ = parting.binding(pieces, within)) {
                 answered = located.handed() == null
                         ? ofAnElement(some.container(), located.each(), some.ofTheElement())
                         : ofTheValue(some.container(), some.ofTheElement(), located.handed());
@@ -7049,8 +7062,6 @@ final class Pullback {
                             entering(located.emitted().choice(), located.emitted().at())
                                     .get(located.emitted().arm())));
                 }
-            } finally {
-                parting.remove(pieces);
             }
             Proposition element = tried(answered);
             Derivation inALanguage = somePieceInALanguage(pieces, within, element, answered);
@@ -7065,7 +7076,7 @@ final class Pullback {
             Quantity.IsAmongThePieces among = valueBeingOneOfThePieces(element, within, pieces);
             if (among != null) {
                 return leaf(new Derivation.SomePieceEqualling(answered, among),
-                        askedAt != null ? askedAt : new Denotation(e, reads));
+                        askedAt.get() != null ? askedAt.get() : new Denotation(e, reads));
             }
             // And some element of a container being the same value as some piece is that element
             // being one of the pieces, which neither the pieces nor the container turn on.
@@ -7075,13 +7086,13 @@ final class Pullback {
                             instanceof AnElementAmongThePieces ofAnElementAmong) {
                 return leaf(new Derivation.SomeElementEquallingSomePiece(walked, answered,
                         ofAnElementAmong.among(), ofAnElementAmong.present(), Optional.empty()),
-                        askedAt != null ? askedAt : new Denotation(e, reads));
+                        askedAt.get() != null ? askedAt.get() : new Denotation(e, reads));
             }
             Derivation.SomeElementEquallingSomePiece elementInALanguage =
                     someElementBeingAPieceInALanguage(element, within, pieces, answered);
             if (elementInALanguage != null) {
                 return leaf(elementInALanguage,
-                        askedAt != null ? askedAt : new Denotation(e, reads));
+                        askedAt.get() != null ? askedAt.get() : new Denotation(e, reads));
             }
             // The pieces past the first few are not the string's own pieces, so what is said of
             // the string off all of them — which code points they hold — is not said of them.
@@ -7109,7 +7120,7 @@ final class Pullback {
             return leaf(new Derivation.SomePieceMeeting(
                     callOf(pieces.operation(), split, pieces.at(), Set.of(pieces.parted().string())),
                     pieces.separator(), within.depth(), ofTheString, answered),
-                    askedAt != null ? askedAt : new Denotation(e, reads));
+                    askedAt.get() != null ? askedAt.get() : new Denotation(e, reads));
         }
 
         /**
@@ -7205,7 +7216,7 @@ final class Pullback {
                     until == StringsByTheirPieces.TO_THE_LAST ? OptionalInt.empty()
                             : OptionalInt.of(until));
             return leaf(new Derivation.SomePieceInALanguage(string, language, inIt, says,
-                    answered), askedAt != null ? askedAt : new Denotation(e, reads));
+                    answered), askedAt.get() != null ? askedAt.get() : new Denotation(e, reads));
         }
 
         /**
@@ -7218,15 +7229,11 @@ final class Pullback {
         private Derivation aboutAnElement(DeclaredArgument container, DecisionSubject held,
                                           ElementAt element,
                                           LawProposition<DeclaredArgument> ofTheElement) {
-            if (!quantifying.add(held)) {
+            if (quantifying.contains(held)) {
                 return null;
             }
-            ElementsNamed outer = inTheScopeOf(e, reads);
-            try {
+            try (Restore _ = quantifying.adding(held); Restore _ = inTheScopeOf(e, reads)) {
                 return ofAnElement(container, element, ofTheElement);
-            } finally {
-                freeInTheScope = outer;
-                quantifying.remove(held);
             }
         }
 
@@ -7246,15 +7253,11 @@ final class Pullback {
         private Derivation aboutTheValue(DeclaredArgument container, DecisionSubject held,
                                          LawProposition<DeclaredArgument> ofTheElement,
                                          Denotation value) {
-            if (!quantifying.add(held)) {
+            if (quantifying.contains(held)) {
                 return null;
             }
-            ElementsNamed outer = inTheScopeOf(e, reads);
-            try {
+            try (Restore _ = quantifying.adding(held); Restore _ = inTheScopeOf(e, reads)) {
                 return ofTheValue(container, ofTheElement, value);
-            } finally {
-                freeInTheScope = outer;
-                quantifying.remove(held);
             }
         }
 
@@ -7412,7 +7415,7 @@ final class Pullback {
                     if (emitting != null) {
                         return emitting;
                     }
-                    Located inTheLists = inTheListsOfAFlattening && outerEach == null
+                    Located inTheLists = inTheListsOfAFlattening.get() && outerEach == null
                             ? inTheListsOf(at, pending, located) : null;
                     if (inTheLists != null) {
                         return inTheLists;
@@ -8008,13 +8011,8 @@ final class Pullback {
          */
         @Override
         public Derivation compared(LawProposition.Compared<DeclaredArgument> compared) {
-            List<Derivation> outerAnswering = answering;
-            answering = new ArrayList<>();
-            try {
-                return whereItsCountsAnswer(comparedWhereItsCountsAre(compared));
-            } finally {
-                answering = outerAnswering;
-            }
+            return answering.during(new Ledger.OfEntries<>(),
+                    () -> whereItsCountsAnswer(comparedWhereItsCountsAre(compared)));
         }
 
         private Derivation comparedWhereItsCountsAre(
@@ -8094,21 +8092,18 @@ final class Pullback {
                             taking -> new ALawRead(this, taking.apply(reads)).compared(compared));
                 }
             }
-            Map<Quantity, Derivation.AComparisonRead.Counted> outer = counting;
-            List<Derivation.AComparisonRead.Counted> outerAlike = alike;
-            counting = new LinkedHashMap<>();
-            alike = new ArrayList<>();
-            try {
+            Ledger.Keyed<Quantity, Derivation.AComparisonRead.Counted> counts =
+                    new Ledger.Keyed<>();
+            Ledger.OfEntries<Derivation.AComparisonRead.Counted> settledAlike =
+                    new Ledger.OfEntries<>();
+            try (Restore _ = counting.set(counts); Restore _ = alike.set(settledAlike)) {
                 return switch (numbers(form)) {
                     case Numbers.NotRead(WhyUnread why) ->
                             leaf(new Derivation.Stopped(why, fixed(e, reads)), e, reads);
                     case Numbers.EachNumber(Map<LawNumber<?>, LinearForm<Quantity>> each) ->
-                            leaf(Derivation.ALawComparison.of(compared, each, counting, alike),
-                                    e, reads);
+                            leaf(Derivation.ALawComparison.of(compared, each, counts.view(),
+                                    List.copyOf(settledAlike.view())), e, reads);
                 };
-            } finally {
-                counting = outer;
-                alike = outerAlike;
             }
         }
 
@@ -8627,7 +8622,7 @@ final class Pullback {
          */
         private Sized differentAmongTheKept(DecisionSubject.AnInput held,
                                             DecisionSubject.AnInput each, Located located) {
-            if (counting == null) {
+            if (counting.get() == null) {
                 return new Sized.NotSized(
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
             }
@@ -8883,18 +8878,15 @@ final class Pullback {
                 return new Sized.NotSized(
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
             }
-            if (!quantifying.add(held)) {
+            if (quantifying.contains(held)) {
                 return new Sized.NotSized(new WhyUnread.TwoElementsOfOneContainer());
             }
-            elements.put(at, located.each());
-            ElementsNamed outer = inTheScopeOf(e, reads);
             Sized each;
-            try {
+            try (Restore _ = quantifying.adding(held); Restore _ = inTheScopeOf(e, reads)) {
+                elements.put(at, located.each());
                 each = number(LinearForm.atom(ofTheElement));
             } finally {
-                freeInTheScope = outer;
                 elements.remove(at);
-                quantifying.remove(held);
             }
             return each instanceof Sized.AsAForm(LinearForm<Quantity> form)
                     ? addedUpOver(held, form) : each;
@@ -9020,13 +9012,13 @@ final class Pullback {
                             }
                         }
                         if (!answers.isEmpty()) {
-                            if (answering() == null || howItAsks(counted.ofTheElement(),
+                            if (answering.get() == null || howItAsks(counted.ofTheElement(),
                                     occurrences.stream()
                                             .anyMatch(one -> !one.keptWhere().isEmpty()), false)
                                     != HowTheElementsAreAsked.EVERY_ONE) {
                                 yield new Sized.NotSized(new WhyUnread.WhichElementARunStopsAt());
                             }
-                            answering().addAll(answers);
+                            answering.get().addAll(answers);
                         }
                         LinearForm<Quantity> settled = LinearForm.constant(ExactRatio.of(meeting));
                         if (unsettled.isEmpty()) {
@@ -9042,9 +9034,10 @@ final class Pullback {
             }
             // At a position, or a walk's answer over one: as many of its elements meet the
             // statement as elements there whose step's answer does.
-            Located located = counting == null ? null : locate(container, over, in, kept, true);
+            Located located = counting.get() == null ? null
+                    : locate(container, over, in, kept, true);
             if (located == null) {
-                Sized entries = counting == null || beneath != null ? null
+                Sized entries = counting.get() == null || beneath != null ? null
                         : entriesMeeting(counted, container);
                 return entries != null ? entries : new Sized.NotSized(
                         new WhyUnread.AtNoPosition(WhyUnread.AtNoPosition.Place.CONTAINER));
@@ -9065,8 +9058,8 @@ final class Pullback {
             // What is the same for every element counts all of them or none.
             if (!element.mayTurnOnAnElementOf(heldAt)) {
                 if (element instanceof Proposition.Always(boolean holds)) {
-                    if (alike != null) {
-                        alike.add(new Derivation.AComparisonRead.Counted(heldAt, answered,
+                    if (alike.get() != null) {
+                        alike.get().add(new Derivation.AComparisonRead.Counted(heldAt, answered,
                                 Optional.empty()));
                     }
                     DecisionAtom size = sizeOfSubject(heldAt, located.heldType());
@@ -9079,17 +9072,17 @@ final class Pullback {
             // Counted where it holds, on the rows every element answers on: an operation counting
             // them works each of them out.
             if (Proposition.mayAnswerNothing(element)) {
-                if (answering() == null || howItAsks(counted.ofTheElement(),
+                if (answering.get() == null || howItAsks(counted.ofTheElement(),
                         !located.kept().isEmpty(), false) != HowTheElementsAreAsked.EVERY_ONE) {
                     return new Sized.NotSized(new WhyUnread.WhichElementARunStopsAt());
                 }
-                answering().add(new Derivation.WhereItIsAnswered(new Derivation.SomeElementMeeting(
+                answering.get().add(new Derivation.WhereItIsAnswered(new Derivation.SomeElementMeeting(
                         heldAt, answered, true, holdsSomething(heldAt, located, element, over, in),
                         HowTheElementsAreAsked.EVERY_ONE)));
             }
             Quantity.HowManyMeet count =
                     new Quantity.HowManyMeet(heldAt, Proposition.whereItHolds(element));
-            counting.putIfAbsent(count, new Derivation.AComparisonRead.Counted(heldAt, answered,
+            counting.get().putIfAbsent(count, new Derivation.AComparisonRead.Counted(heldAt, answered,
                     Optional.empty()));
             // Read off this call, which is what its law counts of: told to whoever has to know
             // which call a count of the reading is.
@@ -9239,7 +9232,7 @@ final class Pullback {
             if (different == null) {
                 return new Sized.NotSized(new WhyUnread.NotArithmetic());
             }
-            counting.putIfAbsent(different, new Derivation.AComparisonRead.Counted(held, meeting,
+            counting.get().putIfAbsent(different, new Derivation.AComparisonRead.Counted(held, meeting,
                     Optional.of(new Derivation.AComparisonRead.Counted.Different(at,
                             ofEachValue))));
             return new Sized.AsAForm(LinearForm.atom(different));
@@ -9455,255 +9448,13 @@ final class Pullback {
      * {@code tellingOfOperators} asks for them, and nobody else keeps a table of them.
      */
     private <T> T inAComparisonsScope(boolean tellingOfOperators, Supplier<T> reading) {
-        Map<Quantity, Derivation.AComparisonRead.Counted> outer = counting;
-        List<Derivation.AComparisonRead.Counted> outerAlike = alike;
-        List<Derivation> outerAnswering = answering;
-        Operators outerOperated = operated;
-        ElementsMet outerElements = elementsMet;
-        Core outerSide = sideAsWritten;
-        counting = new LinkedHashMap<>();
-        alike = null;
-        answering = new ArrayList<>();
-        operated = tellingOfOperators ? new Operators() : null;
-        elementsMet = new ElementsMet();
-        sideAsWritten = null;
-        try {
+        try (Restore _ = counting.set(new Ledger.Keyed<>());
+             Restore _ = alike.set(null);
+             Restore _ = answering.set(new Ledger.OfEntries<>());
+             Restore _ = operated.set(tellingOfOperators ? new Operators() : null);
+             Restore _ = elementsMet.set(new ElementsMet());
+             Restore _ = sideAsWritten.set(null)) {
             return reading.get();
-        } finally {
-            counting = outer;
-            alike = outerAlike;
-            answering = outerAnswering;
-            operated = outerOperated;
-            elementsMet = outerElements;
-            sideAsWritten = outerSide;
-        }
-    }
-
-    /**
-     * The operators a reading was told of, in the order it was told, each node once for each
-     * application of the closures it is written in.
-     *
-     * <p>Told apart by which node each is and not by the form it came to. An {@code Int} sum and a
-     * {@code Decimal} sum over the same numbers come to one form and answer in different places,
-     * and the form alone would keep whichever came first. A node in the body of a closure is one
-     * operator on each application, worked out over what that application is handed, so the node
-     * alone would keep only the first.
-     */
-    private static final class Operators implements ReadingState.Marked {
-        private final List<Operated> told = new ArrayList<>();
-        /** The nodes told of wherever a run works them out: on every application of the closures
-         *  around them, where there are any. */
-        private final Set<Core> nodes = Collections.newSetFromMap(new IdentityHashMap<>());
-        /** For a node inside a closure, the applications it was told of on. */
-        private final Map<Core, Set<InputReads.Applications.Made>> toldOn = new IdentityHashMap<>();
-        /** The application being read, or null outside every closure. */
-        private InputReads.Applications.Made application;
-        /** The closures no run applies ({@link InputReads.Applications.NoneMade}), whose bodies
-         *  stop no run. */
-        private final Set<Core> neverApplied = Collections.newSetFromMap(new IdentityHashMap<>());
-        /** What the names of the step of a walk around hold, where the walk of what may end a run
-         *  stands now ({@link WhatTheStepsNamesHold}). */
-        private WhatTheStepsNamesHold stepsNames = WhatTheStepsNamesHold.NOTHING;
-        private final List<Set<TermPath>> unsaidGroups = new ArrayList<>();
-        /** For each of {@link #unsaidGroups}, where its operator is worked out. */
-        private final List<WorkedOutWhere> unsaidGroupsWhere = new ArrayList<>();
-        private Set<TermPath> unsaidAt = new LinkedHashSet<>();
-        private boolean unsaidElsewhere;
-        private final List<StopObligation> obligations = new ArrayList<>();
-        private final List<AfterTheFirst> afterTheFirst = new ArrayList<>();
-        private final Map<Core, InputReads> readsAt = new IdentityHashMap<>();
-        private Core within;
-        private Core leftOut;
-
-        /** Where the comparison left out is worked out, as the closures it stands inside say, or
-         *  null while the walk has not got to it. */
-        private WorkedOutWhere relationStands;
-
-        Operators() {
-            unsaidGroups.add(unsaidAt);
-            unsaidGroupsWhere.add(WorkedOutWhere.ALWAYS);
-        }
-
-        /** The walk got to the comparison left out, worked out where {@code inside} says. */
-        void relationIsInside(WorkedOutWhere inside) {
-            relationStands = relationStands == null ? inside : relationStands.and(inside);
-        }
-
-        /**
-         * Where a run works out the comparison: anywhere where none is left out of the part read;
-         * where its closures say where the walk got to it; and not said where one is left out and
-         * the walk did not get to it.
-         */
-        WorkedOutWhere relationStandsWhere() {
-            if (leftOut == null) {
-                return WorkedOutWhere.ALWAYS;
-            }
-            return relationStands == null ? WorkedOutWhere.ALWAYS.notSaid() : relationStands;
-        }
-
-        /**
-         * The operators of the applications of a step after the first, as this has told of them:
-         * the same operators told and the same closures applied to nothing, read in the same tree,
-         * with nothing yet left unsaid or owed.
-         */
-        Operators ofTheApplicationsAfterTheFirst() {
-            Operators out = new Operators();
-            out.told.addAll(told);
-            out.nodes.addAll(nodes);
-            out.toldOn.putAll(toldOn);
-            out.application = application;
-            out.neverApplied.addAll(neverApplied);
-            out.stepsNames = stepsNames;
-            out.within = within;
-            out.leftOut = leftOut;
-            return out;
-        }
-
-        /** What is left unsaid and owed here, with nothing told of where an operator answers. */
-        OperatorsAnswer leftUnsaid() {
-            return new OperatorsAnswer(Optional.empty(), unsaidGroups, unsaidGroupsWhere,
-                    unsaidElsewhere, obligations, afterTheFirst, relationStandsWhere(), List.of(),
-                    Optional.empty());
-        }
-
-        /** What has been told so far, which is the same only while nothing more has. */
-        @Override
-        public Object mark() {
-            return ReadingState.snapshotOfFields(this);
-        }
-
-        void tell(Core operation, Answers where) {
-            boolean first = application == null ? nodes.add(operation)
-                    : toldOn.computeIfAbsent(operation,
-                            _ -> Collections.newSetFromMap(new IdentityHashMap<>()))
-                            .add(application);
-            if (first) {
-                told.add(new Operated(operation, where));
-            }
-        }
-
-        /**
-         * That {@code each}, the applications of one closure, were read, telling what is in
-         * {@link #told} from {@code from} on: a node of its body told of on every one of them is
-         * told of on the application around them, or wherever a run works it out where there is
-         * none.
-         *
-         * <p>Only the nodes told of while they were read are asked. Every node told of on one of
-         * them was told there first on that application, and so is among those.
-         */
-        void toldOnEach(List<InputReads.Applications.Made> each, int from) {
-            Set<InputReads.Applications.Made> all = Collections.newSetFromMap(
-                    new IdentityHashMap<>());
-            all.addAll(each);
-            Set<Core> asked = Collections.newSetFromMap(new IdentityHashMap<>());
-            for (Operated one : told.subList(from, told.size())) {
-                Set<InputReads.Applications.Made> on = toldOn.get(one.operation());
-                if (asked.add(one.operation()) && on != null && on.containsAll(all)) {
-                    if (application == null) {
-                        nodes.add(one.operation());
-                    } else {
-                        on.add(application);
-                    }
-                }
-            }
-        }
-
-        /** What the next operator not said of may stop a run on is one group of places: it ties
-         *  them to one another, which what another operator stops a run on does not. */
-        void beginGroup() {
-            beginGroup(WorkedOutWhere.ALWAYS);
-        }
-
-        /** The same, of an operator a run works out where {@code where} says. */
-        void beginGroup(WorkedOutWhere where) {
-            unsaidAt = new LinkedHashSet<>();
-            unsaidGroups.add(unsaidAt);
-            unsaidGroupsWhere.add(where);
-            visited.clear();
-        }
-
-        /** What a run may stop on, told over a value read at one reading and under one closure's
-         *  names, since the group began: telling it again says nothing more. */
-        private final Set<Visit> visited = new HashSet<>();
-
-        private record Visit(Core node, InputReads reads, Bound bound) {
-
-            @Override
-            public boolean equals(Object other) {
-                return other instanceof Visit that && node == that.node && bound == that.bound
-                        && reads.equals(that.reads);
-            }
-
-            @Override
-            public int hashCode() {
-                return (System.identityHashCode(node) * 31 + reads.hashCode()) * 31
-                        + System.identityHashCode(bound);
-            }
-        }
-
-        /**
-         * Whether what a run may stop on over {@code operand} has not been told yet in this group.
-         * A value several names stand for, or several operands of an operator are made of, is
-         * told once and not once for every way down to it.
-         */
-        boolean firstOverWhereItStands(Core operand, InputReads reads, Bound bound) {
-            return visited.add(new Visit(Core.withoutStanding(operand), reads, bound));
-        }
-
-        /** What was told is taken back out of the group it was told in. */
-        void startAgain() {
-            visited.clear();
-        }
-
-        /** Every place any operator not said of may stop a run on. */
-        Set<TermPath> everyPlaceUnsaid() {
-            Set<TermPath> out = new LinkedHashSet<>();
-            unsaidGroups.forEach(out::addAll);
-            return out;
-        }
-
-        /** An operator that may stop a run where nothing is said, over {@code reads}: the places
-         *  each of them is read off are the ones it may stop on, a remainder's those of its
-         *  dividend ({@link PositionsAStatementReads#ofANumber}), and a quantity read off
-         *  anything else leaves it stopping on no place this can name. */
-        void leaveUnsaid(Collection<? extends Quantity> reads, Bound bound) {
-            leaveUnsaid(reads, bound, null);
-        }
-
-        /** The same, where a name another name was given is the name it was given, read in
-         *  {@code at}. */
-        void leaveUnsaid(Collection<? extends Quantity> reads, Bound bound, InputReads at) {
-            for (Quantity each : reads) {
-                Optional<Set<ReadSubject>> read = PositionsAStatementReads.ofANumber(each);
-                if (read.isEmpty()) {
-                    unsaidElsewhere = true;
-                    continue;
-                }
-                for (ReadSubject subject : read.get()) {
-                    switch (subject) {
-                        case ReadSubject.At(TermPath path) -> unsaidAt.add(path);
-                        case ReadSubject.Bound(var named) ->
-                                leaveUnsaidOver(at != null && bound != null
-                                        && !bound.names().contains(named.binding())
-                                        ? at.namedBy(named.binding()) : named.binding(), bound);
-                    }
-                }
-            }
-        }
-
-        /** The same, over a name: the places of what a closure around binds it to where it is a
-         *  name of one, and no place this can name where it is not. */
-        void leaveUnsaidOver(BindingId name, Bound bound) {
-            if (bound != null && bound.standFor() != null && bound.names().contains(name)) {
-                unsaidAt.addAll(bound.standFor());
-            } else {
-                unsaidElsewhere = true;
-            }
-        }
-
-        /** An operator that may stop a run where nothing is said, over operands no form says. */
-        void leaveUnsaidOverUnreadOperands() {
-            unsaidElsewhere = true;
         }
     }
 
@@ -9883,7 +9634,7 @@ final class Pullback {
 
     /** One operator a reading was told of, and where it answers, which the reading that met it
      *  says once. */
-    private record Operated(Core operation, Answers where) {}
+    record Operated(Core operation, Answers where) {}
 
     /**
      * Where an operator a reading was told of answers.
@@ -9895,7 +9646,7 @@ final class Pullback {
      * no form at all, where the number it comes to is held to what it needs by the operation that
      * made it.
      */
-    private sealed interface Answers {
+    sealed interface Answers {
 
         /** Where the operator answers is a matter of a form of a number. */
         sealed interface ByTheFormOfANumber extends Answers {
@@ -9972,19 +9723,19 @@ final class Pullback {
      * it answers is where the clauses of the type it makes leave the number, which the model
      * states.
      */
-    private List<Derivation> whereEachOperatorAnswers(Operators operated,
+    private List<Derivation> whereEachOperatorAnswers(Operators operators,
                                                       List<ConstructionAsk> asked,
                                                       List<Derivation> atTheEnds) {
         List<Derivation> out = new ArrayList<>();
-        for (Operated each : operated.told) {
+        for (Operated each : operators.told()) {
             if (each.where() instanceof Answers.OfAChoice(var on)) {
                 Derivation answers = whereItStands(on);
                 if (answers != null) {
                     out.add(answers);
                     askedOf(asked, each.operation(), askedBy(on), on.quantities());
                 } else {
-                    operated.beginGroup();
-                    operated.leaveUnsaid(on.quantities(), null);
+                    operators.beginGroup();
+                    operators.leaveUnsaid(on.quantities(), null);
                 }
                 continue;
             }
@@ -10011,8 +9762,8 @@ final class Pullback {
             }
             if (held != null && form.coefs().isEmpty()) {
                 if (!held.holdsOf(form.constant())) {
-                    operated.beginGroup();
-                    operated.leaveUnsaidOverUnreadOperands();
+                    operators.beginGroup();
+                    operators.leaveUnsaidOverUnreadOperands();
                     askedOf(asked, each.operation(), ConstructionAsk.Requirement.NEVER,
                             List.of());
                 }
@@ -10033,8 +9784,8 @@ final class Pullback {
                 }
                 askedOf(asked, each.operation(), askedBy(form, held), form.coefs().keySet());
             } else if (!comesOnlyToWhereItAnswers(over)) {
-                operated.beginGroup();
-                operated.leaveUnsaid(form.coefs().keySet(), null);
+                operators.beginGroup();
+                operators.leaveUnsaid(form.coefs().keySet(), null);
             }
         }
         return out;
@@ -10186,11 +9937,11 @@ final class Pullback {
      */
     private Derivation whereItsCountsAnswer(Derivation stated) {
         if (stated == null || Derivation.readOff(stated) instanceof Derivation.Stopped
-                || answeringContent().isEmpty()) {
+                || answering.contents().isEmpty()) {
             return stated;
         }
         Derivation answered = null;
-        for (Derivation one : answeringContent()) {
+        for (Derivation one : answering.contents().view()) {
             answered = answered == null ? one
                     : new Derivation.Joined(ConditionJoin.BOTH, answered, one);
         }
@@ -10260,7 +10011,7 @@ final class Pullback {
                             if (abortsAt(stopped)) {
                                 return new Derivation.TheRunStopsHere();
                             }
-                            Derivation stop = new Derivation.Stopped(elementsMet.crowded()
+                            Derivation stop = new Derivation.Stopped(elementsMet.get().crowded()
                                     ? new WhyUnread.TwoElementsOfOneContainer()
                                     : noFormOf(stopped), false);
                             return unread != null ? unread : stop;
@@ -10272,20 +10023,17 @@ final class Pullback {
                 pieces.add(null);
                 continue;
             }
-            sideAsWritten = Core.withoutStanding(side.at().standing(side.value(),
-                    read.rules().symbols(), read.rules().newtypes()).value());
             AffineForms.Outcome<Quantity, InputReads> outcome;
-            try {
+            try (Restore _ = sideAsWritten.set(Core.withoutStanding(side.at().standing(
+                    side.value(), read.rules().symbols(), read.rules().newtypes()).value()))) {
                 outcome = AffineForms.outcome(side.value(), side.at(), quantities());
-            } finally {
-                sideAsWritten = null;
             }
             switch (outcome) {
                 case AffineForms.Outcome.Composed<Quantity, InputReads>(var form) -> {
                     // A value a walk was handed, such as a piece a closure wrapped, is a name for a
                     // value and may be a piece of a string.
                     Quantity piece = soleQuantity(form) instanceof Quantity.OfABinding
-                            && !elementsMet.crowded() ? aPieceOrTheOneAtAnIndex(side) : null;
+                            && !elementsMet.get().crowded() ? aPieceOrTheOneAtAnIndex(side) : null;
                     sides.add(form);
                     calls.add(piece == null && madeOfWhereItStopped(form) ? callOf(side) : null);
                     pieces.add(piece);
@@ -10296,13 +10044,13 @@ final class Pullback {
                     }
                     // A comparison of two elements of one container is read of neither: they
                     // stand at one position, and a form would hold them as one number.
-                    Derivation stop = new Derivation.Stopped(elementsMet.crowded()
+                    Derivation stop = new Derivation.Stopped(elementsMet.get().crowded()
                             ? new WhyUnread.TwoElementsOfOneContainer() : noFormOf(stopped), false);
                     // Only the call of an operation may be what one answers, or a piece of the
                     // string a statement about some piece is read of; nothing is read past any
                     // other stop.
-                    Denotation call = elementsMet.crowded() ? null : callOf(side);
-                    Quantity piece = call != null || elementsMet.crowded() ? null
+                    Denotation call = elementsMet.get().crowded() ? null : callOf(side);
+                    Quantity piece = call != null || elementsMet.get().crowded() ? null
                             : aPieceOrTheOneAtAnIndex(side);
                     if (call == null && piece == null) {
                         return unread != null ? unread : stop;
@@ -10337,8 +10085,8 @@ final class Pullback {
             return new Derivation.ACutThatCutsNothing(states.holds(form.constant().signum()),
                     ofTheInputIn(sides));
         }
-        return aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, form, states, counting,
-                Derivation.AComparisonRead.Facing.AS_WRITTEN);
+        return aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, form, states,
+                counting.get().view(), Derivation.AComparisonRead.Facing.AS_WRITTEN);
     }
 
     /** The two sides of a comparison read with what an operation answers, and the form they come
@@ -10981,7 +10729,7 @@ final class Pullback {
         }
         return switch (filed.filed()) {
             case KeyedAccumulation.Filed.Counted counted ->
-                    counting == null ? null
+                    counting.get() == null ? null
                             : counterLookedUp(lookup, applied, whole, filed, counted, at);
             case KeyedAccumulation.Filed.Kept kept -> gatheredLookedUp(applied, whole, filed,
                     kept.value(), kept.compared(),
@@ -11066,7 +10814,7 @@ final class Pullback {
         }
         Quantity.HowManyMeet count = new Quantity.HowManyMeet(meeting.container(),
                 Proposition.whereItHolds(element));
-        counting.putIfAbsent(count,
+        counting.get().putIfAbsent(count,
                 new Derivation.AComparisonRead.Counted(meeting.container(), ofTheElement,
                         Optional.empty()));
         return counted.first().plus(counted.step().negated())
@@ -11327,14 +11075,9 @@ final class Pullback {
         // Said of each element on its own and held in a number of the whole run, so it is read
         // apart from whichever element a reading around it stands at: that element is not one
         // of these, and a container quantified there is not quantified again here.
-        Set<DecisionSubject> around = new HashSet<>(quantifying);
-        quantifying.clear();
         Quantity.HowManyMeet meeting;
-        try {
+        try (Restore _ = quantifying.emptied()) {
             meeting = countKept(call, at);
-        } finally {
-            quantifying.clear();
-            quantifying.addAll(around);
         }
         if (meeting == null) {
             return null;
@@ -11348,13 +11091,7 @@ final class Pullback {
     /** How many elements {@code call}, which keeps some of the elements of a list, keeps, as the
      *  count of those meeting what it keeps them by — or null where its size is no such count. */
     private Quantity.HowManyMeet countKept(Core call, InputReads at) {
-        Sized sized;
-        inTheListsOfAFlattening = true;
-        try {
-            sized = sizeOf(call, at);
-        } finally {
-            inTheListsOfAFlattening = false;
-        }
+        Sized sized = inTheListsOfAFlattening.during(true, () -> sizeOf(call, at));
         return sized instanceof Sized.AsAForm(LinearForm<Quantity> size)
                 && soleQuantity(size) instanceof Quantity.HowManyMeet meeting ? meeting : null;
     }
@@ -11377,28 +11114,24 @@ final class Pullback {
      */
     private Quantity differentAmongTheKept(TermPath container, Quantity.TheValue at,
                                            List<Denotation> keptBy) {
-        if (counting == null || keptBy.isEmpty()) {
+        if (counting.get() == null || keptBy.isEmpty()) {
             return null;
         }
         // Read with a table of its own, so a count of the kept elements, which is no number of
         // the comparison, is in none of the comparison's.
-        Map<Quantity, Derivation.AComparisonRead.Counted> outer = counting;
-        counting = new LinkedHashMap<>();
         DecisionSubject heldAt = null;
         List<Derivation> each = new ArrayList<>();
-        try {
+        try (Restore _ = counting.set(new Ledger.Keyed<>())) {
             for (Denotation call : keptBy) {
                 Quantity.HowManyMeet meeting = countKept(call.value(), call.at());
                 Derivation.AComparisonRead.Counted kept =
-                        meeting == null ? null : counting.get(meeting);
+                        meeting == null ? null : counting.get().get(meeting);
                 if (kept == null || (heldAt != null && !heldAt.equals(meeting.container()))) {
                     return null;
                 }
                 heldAt = meeting.container();
                 each.add(kept.ofTheElement());
             }
-        } finally {
-            counting = outer;
         }
         Derivation keeping = each.size() == 1 ? each.getFirst()
                 : new Derivation.OfWhatWasKept(each.getFirst(), each.subList(1, each.size()));
@@ -11409,7 +11142,7 @@ final class Pullback {
         if (different == null || !heldAt.equals(different.occurrences())) {
             return null;
         }
-        counting.putIfAbsent(different, new Derivation.AComparisonRead.Counted(
+        counting.get().putIfAbsent(different, new Derivation.AComparisonRead.Counted(
                 counted, keeping, Optional.of(
                         new Derivation.AComparisonRead.Counted.Different(at, false))));
         return different;
@@ -11574,8 +11307,8 @@ final class Pullback {
                                  Function<UnaryOperator<InputReads>, Derivation> again) {
         aggregatesKept++;
         Derivation once = total.counted()
-                ? (keptReading == null ? null : countInTheReading(total, again))
-                : (keptReading == null && truthsDecided.isEmpty()
+                ? (keptReading.get() == null ? null : countInTheReading(total, again))
+                : (keptReading.get() == null && truthsDecided.isEmpty()
                         ? keptOnceFor(total, reads, at, fixed, again) : null);
         if (once != null) {
             return once;
@@ -11609,9 +11342,12 @@ final class Pullback {
         }
     }
 
-    /** The reading of a comparison over totals that is being made, or null. */
-    private KeptReading keptReading;
+    /** The reading of a comparison over totals that is being made, or null. Whether there is one,
+     *  and not which, is what another reading is read in: a reading that reads another aggregate
+     *  is not kept. */
+    private final Scoped<KeptReading> keptReading = state.setting(Compared.BY_PRESENCE);
 
+    @NoPartOfAReading(Why.COUNTER)
     private int keptReadings;
 
     /**
@@ -11640,16 +11376,13 @@ final class Pullback {
         Quantity.TheKeptTotal sum = new Quantity.TheKeptTotal(reading.number, false);
         AnAggregateInACase standing = new AnAggregateInACase(total.call(), total.at(),
                 LinearForm.atom(sum));
-        ElementsMet.Mark metBefore = elementsMet.mark();
-        aggregatesInACase.add(standing);
-        keptReading = reading;
+        ElementsMet.Mark metBefore = elementsMet.get().mark();
         Derivation read;
-        try {
+        try (Restore _ = aggregatesInACase.pushing(standing);
+             Restore _ = keptReading.set(reading)) {
             read = again.apply(on -> on);
         } finally {
-            keptReading = null;
-            aggregatesInACase.remove(standing);
-            elementsMet.rewind(metBefore);
+            elementsMet.get().rewind(metBefore);
         }
         if (reading.refused || read == null
                 || !GivenTotals.canBeGiven(new Conclusion(Optional.empty()).of(read))) {
@@ -11711,7 +11444,7 @@ final class Pullback {
      * where one composes into none.
      */
     private List<LinearForm<Quantity>> formsOfTheKept(Inside.ATotalByKeeping total) {
-        ElementsMet.Mark metBefore = elementsMet.mark();
+        ElementsMet.Mark metBefore = elementsMet.get().mark();
         try {
             List<LinearForm<Quantity>> forms = new ArrayList<>();
             for (ReadMeaning.Occurrence occurrence : total.occurrences()) {
@@ -11725,7 +11458,7 @@ final class Pullback {
             }
             return forms;
         } finally {
-            elementsMet.rewind(metBefore);
+            elementsMet.get().rewind(metBefore);
         }
     }
 
@@ -11736,23 +11469,22 @@ final class Pullback {
      */
     private Derivation countInTheReading(Inside.ATotalByKeeping total,
                                          Function<UnaryOperator<InputReads>, Derivation> again) {
-        if (keptReading.counted != null && !keptReading.counted.equals(total.occurrences())) {
-            keptReading.refused = true;
+        KeptReading reading = keptReading.get();
+        if (reading.counted != null && !reading.counted.equals(total.occurrences())) {
+            reading.refused = true;
             return null;
         }
-        if (keptReading.counted == null) {
-            keptReading.counted = total.occurrences();
-            keptReading.count = new Quantity.TheKeptTotal(keptReading.number, true);
+        if (reading.counted == null) {
+            reading.counted = total.occurrences();
+            reading.count = new Quantity.TheKeptTotal(reading.number, true);
         }
         AnAggregateInACase standing = new AnAggregateInACase(total.call(), total.at(),
-                LinearForm.atom(keptReading.count));
-        ElementsMet.Mark metBefore = elementsMet.mark();
-        aggregatesInACase.add(standing);
-        try {
+                LinearForm.atom(reading.count));
+        ElementsMet.Mark metBefore = elementsMet.get().mark();
+        try (Restore _ = aggregatesInACase.pushing(standing)) {
             return again.apply(on -> on);
         } finally {
-            aggregatesInACase.remove(standing);
-            elementsMet.rewind(metBefore);
+            elementsMet.get().rewind(metBefore);
         }
     }
 
@@ -11776,11 +11508,9 @@ final class Pullback {
         for (int way = 0; way < 2; way++) {
             ATruthDecided now = new ATruthDecided(ways.truth(next), way == 0);
             decided[next] = now.holds();
-            truthsDecided.add(now);
-            try {
+            try (Restore _ = truthsDecided.pushing(now)) {
                 conditionsOf(ways, decided, conditions);
             } finally {
-                truthsDecided.remove(now);
                 decided[next] = null;
             }
             if (Arrays.stream(conditions).allMatch(Objects::nonNull)) {
@@ -11796,14 +11526,14 @@ final class Pullback {
      */
     private record ATruthDecided(Denotation truth, boolean holds) {}
 
-    /** The truths decided in the ways of keeping being read, newest last. */
-    private final List<ATruthDecided> truthsDecided = new ArrayList<>();
+    /** The truths decided in the ways of keeping being read, newest on top. */
+    private final Layers<ATruthDecided> truthsDecided = state.stack();
 
     /** {@code ways} with the truths that are decided in the way being read decided as they are. */
     private Boolean[] alreadyDecided(WaysOfKeeping ways) {
         Boolean[] decided = ways.undecided();
         for (int i = 0; i < decided.length; i++) {
-            for (ATruthDecided each : truthsDecided) {
+            for (ATruthDecided each : truthsDecided.oldestFirst()) {
                 if (each.truth().equals(ways.truth(i))) {
                     decided[i] = each.holds();
                 }
@@ -11833,11 +11563,9 @@ final class Pullback {
             for (int way = 0; way < 2; way++) {
                 ATruthDecided now = new ATruthDecided(ways.truth(next), way == 0);
                 decided[next] = now.holds();
-                truthsDecided.add(now);
-                try {
+                try (Restore _ = truthsDecided.pushing(now)) {
                     each[way] = keptAs(total, ways, decided, conditions, at, fixed, again);
                 } finally {
-                    truthsDecided.remove(now);
                     decided[next] = null;
                 }
             }
@@ -11851,9 +11579,10 @@ final class Pullback {
             long there = IntStream.range(0, total.occurrences().size())
                     .filter(i -> ways.isThere(i, decided)).count();
             return readWithTheAggregate(total, LinearForm.constant(ExactRatio.of(there)),
-                    elementsMet.mark(), again);
+                    elementsMet.get().mark(), again);
         }
-        return sumOfKept(total, ways, decided, 0, null, List.of(), elementsMet.mark(), at, fixed,
+        return sumOfKept(total, ways, decided, 0, null, List.of(), elementsMet.get().mark(), at,
+                fixed,
                 again);
     }
 
@@ -11883,7 +11612,7 @@ final class Pullback {
             }
             Denotation element = i == from && replacing != null ? replacing
                     : total.occurrences().get(i).value();
-            ElementsMet.Mark beforeTheElement = elementsMet.mark();
+            ElementsMet.Mark beforeTheElement = elementsMet.get().mark();
             switch (AffineForms.outcome(element.value(), element.at(), quantities())) {
                 case AffineForms.Outcome.Composed<Quantity, InputReads>(
                         LinearForm<Quantity> form) -> sofar.add(form);
@@ -11892,7 +11621,7 @@ final class Pullback {
                         int arms = Choice.of(Core.withoutStanding(chosen.value())).arms().size();
                         WhyUnread past = splitInto(element.at(), arms, chosen);
                         if (past != null) {
-                            elementsMet.rewind(metBefore);
+                            elementsMet.get().rewind(metBefore);
                             return partOf(at, new Derivation.Stopped(past, fixed));
                         }
                         int next = i;
@@ -11901,7 +11630,7 @@ final class Pullback {
                         // The arms are alternatives: each reads the element from where the ones
                         // before it stood, and none from what another arm met.
                         Derivation byArm = byItsCases(chosen, at, Optional.empty(), arm -> {
-                            elementsMet.rewind(beforeTheElement);
+                            elementsMet.get().rewind(beforeTheElement);
                             return sumOfKept(total, ways, decided, next,
                                     new Denotation(element.value(),
                                             application.taking(chosen.value(), arm, arms)),
@@ -11911,7 +11640,7 @@ final class Pullback {
                             return new Derivation.AComparisonOfAChoice(byArm);
                         }
                     }
-                    elementsMet.rewind(metBefore);
+                    elementsMet.get().rewind(metBefore);
                     return partOf(at, abortsAt(stopped) ? new Derivation.TheRunStopsHere()
                             : new Derivation.Stopped(noFormOf(stopped), fixed));
                 }
@@ -11921,7 +11650,7 @@ final class Pullback {
         switch (LinearForm.sum(sofar)) {
             case ExactAnswer.Held<LinearForm<Quantity>>(var held) -> sum = held;
             case ExactAnswer.Unheld<LinearForm<Quantity>>(var why) -> {
-                elementsMet.rewind(metBefore);
+                elementsMet.get().rewind(metBefore);
                 return partOf(at, new Derivation.Stopped(new WhyUnread.ANumberNotHeld(why), fixed));
             }
         }
@@ -11934,14 +11663,12 @@ final class Pullback {
                                             LinearForm<Quantity> form, ElementsMet.Mark metBefore,
                                             Function<UnaryOperator<InputReads>, Derivation> again) {
         AnAggregateInACase inThisWay = new AnAggregateInACase(total.call(), total.at(), form);
-        aggregatesInACase.add(inThisWay);
-        try {
+        try (Restore _ = aggregatesInACase.pushing(inThisWay)) {
             return again.apply(on -> on);
         } finally {
-            aggregatesInACase.remove(inThisWay);
             // The ways are independent readings of one comparison: what one met of the container's
             // elements is no part of what the next meets.
-            elementsMet.rewind(metBefore);
+            elementsMet.get().rewind(metBefore);
         }
     }
 
@@ -11951,142 +11678,15 @@ final class Pullback {
      * named elements no reading taken names, and a later number would be refused beside them.
      */
     private LinearForm<Quantity> unlessUnread(Supplier<LinearForm<Quantity>> reading) {
-        ElementsMet.Mark metBefore = elementsMet.mark();
+        ElementsMet.Mark metBefore = elementsMet.get().mark();
         LinearForm<Quantity> form = reading.get();
         if (form == null) {
-            elementsMet.rewind(metBefore);
+            elementsMet.get().rewind(metBefore);
         }
         return form;
     }
 
-    /**
-     * The state of a reading that readings kept to be taken again depend on and leave alone, by the
-     * roles the fields of this class are given ({@link ReadingRoles}).
-     */
-    private static final ReadingState READING_STATE =
-            new ReadingState(Pullback.class, ReadingRoles.OF_A_PULLBACK);
-
-    /**
-     * The inputs of a reading that a reading kept is taken again without regard to unless it asked
-     * after them, each as the bit it is told by in {@link #consulted}: where a reading never asked
-     * what one of these stood as, what it stood as is no part of what the reading came to. Every
-     * place that asks after one of them is the accessor of it, so that the asking is told
-     * ({@code OnlyTheAccessorsAskAfterWhatAReadingMayLeaveUnconsultedTest}).
-     */
-    private enum InputAskedAfter {
-        SIDE(1), ANSWERING(2), COUNTS(4), TELLING(8),
-        /** What {@code answering} holds, asked after as well as whether there is one. */
-        ANSWERING_CONTENT(16),
-        /** What {@code countsMet} holds, asked after as well as whether there is one. */
-        COUNTS_CONTENT(32);
-
-        private final int bit;
-
-        InputAskedAfter(int bit) {
-            this.bit = bit;
-        }
-
-        /** The bit a set of these is told by that has this in it. */
-        int bit() {
-            return bit;
-        }
-    }
-
-    /** For each set of the inputs above that a reading consulted: where the others stand among the
-     *  inputs, which are not compared. */
-    private static final BitSet[] UNCONSULTED = unconsultedForEachSet();
-
-    /** For each set of the inputs above that a reading consulted: where the inputs whose contents
-     *  it asked after stand among the inputs, whose contents are compared. */
-    private static final BitSet[] CONTENT_ASKED = contentAskedForEachSet();
-
-    private static BitSet[] unconsultedForEachSet() {
-        InputAskedAfter[] inputs = {InputAskedAfter.SIDE, InputAskedAfter.ANSWERING,
-                InputAskedAfter.COUNTS, InputAskedAfter.TELLING};
-        int[] places = {READING_STATE.placeOfTheInput("sideAsWritten"),
-                READING_STATE.placeOfTheInput("answering"),
-                READING_STATE.placeOfTheInput("countsMet"),
-                READING_STATE.placeOfTheInput("telling")};
-        BitSet[] out = new BitSet[1 << InputAskedAfter.values().length];
-        for (int consulted = 0; consulted < out.length; consulted++) {
-            BitSet left = new BitSet();
-            // A reading kept here is made without the operators told so far ({@link #kept}), so
-            // what they hold is no part of what it comes to.
-            left.set(READING_STATE.placeOfTheInput("operated"));
-            for (int each = 0; each < places.length; each++) {
-                if ((consulted & inputs[each].bit()) == 0) {
-                    left.set(places[each]);
-                }
-            }
-            out[consulted] = left;
-        }
-        return out;
-    }
-
-    private static BitSet[] contentAskedForEachSet() {
-        BitSet[] out = new BitSet[1 << InputAskedAfter.values().length];
-        for (int consulted = 0; consulted < out.length; consulted++) {
-            BitSet asked = new BitSet();
-            if ((consulted & InputAskedAfter.ANSWERING_CONTENT.bit()) != 0) {
-                asked.set(READING_STATE.placeOfTheInput("answering"));
-            }
-            if ((consulted & InputAskedAfter.COUNTS_CONTENT.bit()) != 0) {
-                asked.set(READING_STATE.placeOfTheInput("countsMet"));
-            }
-            out[consulted] = asked;
-        }
-        return out;
-    }
-
-    /** Which of the inputs above the reading being made has asked after so far. */
-    private int consulted;
-
-    private Core sideAsWritten() {
-        consulted |= InputAskedAfter.SIDE.bit();
-        return sideAsWritten;
-    }
-
-    private List<Derivation> answering() {
-        consulted |= InputAskedAfter.ANSWERING.bit();
-        return answering;
-    }
-
-    private Map<Quantity.HowManyHold, List<Denotation>> countsMet() {
-        consulted |= InputAskedAfter.COUNTS.bit();
-        return countsMet;
-    }
-
-    /** What {@code answering} holds, which a reading that asks it depends on and not on there being
-     *  one. */
-    private List<Derivation> answeringContent() {
-        consulted |= InputAskedAfter.ANSWERING.bit() | InputAskedAfter.ANSWERING_CONTENT.bit();
-        return answering;
-    }
-
-    /** What {@code countsMet} holds, as {@link #answeringContent} is of {@code answering}. */
-    private Map<Quantity.HowManyHold, List<Denotation>> countsMetContent() {
-        consulted |= InputAskedAfter.COUNTS.bit() | InputAskedAfter.COUNTS_CONTENT.bit();
-        return countsMet;
-    }
-
-    private Set<Notice> telling() {
-        consulted |= InputAskedAfter.TELLING.bit();
-        return telling;
-    }
-
-    private int startConsultingInputs() {
-        int before = consulted;
-        consulted = 0;
-        return before;
-    }
-
-    private int endConsultingInputs(int before) {
-        int mine = consulted;
-        consulted = before | mine;
-        return mine;
-    }
-
-    /** What a reading must leave as it found it: the state its fields say so of, and whether it
+    /** What a reading must leave as it found it: the state its parts say so of, and whether it
      *  read another aggregate. */
     private record Guards(List<Object[]> fields, int aggregatesKept) {}
 
@@ -12107,56 +11707,55 @@ final class Pullback {
 
         @Override
         public boolean mayShare() {
-            return (insideAWatch || !InputReads.watching()) && !elementsMet.crowded()
-                    && READING_STATE.holdsNothing(Pullback.this);
+            return (insideAWatch || !InputReads.watching()) && !elementsMet.get().crowded()
+                    && state.holdsNothing();
         }
 
         @Override
         public ReadingState.Inputs inputs() {
-            return READING_STATE.inputsOf(Pullback.this);
+            return state.inputs();
         }
 
         @Override
         public boolean sameInputs(ReadingState.Inputs then, ReadingState.Inputs now,
                                   boolean askedAggregates, int consulted) {
-            return READING_STATE.sameInputsBut(then, now, askedAggregates, null,
-                    CONTENT_ASKED[consulted]);
+            return state.sameInputs(then, now, askedAggregates, consulted);
         }
 
         @Override
         public int requiredInputsHash(ReadingState.Inputs inputs) {
-            return READING_STATE.requiredInputsHash(inputs);
+            return state.requiredInputsHash(inputs);
         }
 
         @Override
         public int startConsulting() {
-            return startConsultingInputs();
+            return state.startConsulting();
         }
 
         @Override
         public int endConsulting(int before) {
-            return endConsultingInputs(before);
+            return state.endConsulting(before);
         }
 
         @Override
         public void consultAgain(int consulted) {
-            Pullback.this.consulted |= consulted;
+            state.consultAgain(consulted);
         }
 
         @Override
         public Guards guards() {
-            return new Guards(READING_STATE.guardsOf(Pullback.this), aggregatesKept);
+            return new Guards(state.guards(), aggregatesKept);
         }
 
         @Override
         public boolean sameGuards(Guards then, Guards now) {
             return then.aggregatesKept() == now.aggregatesKept()
-                    && READING_STATE.sameGuards(then.fields(), now.fields());
+                    && state.sameGuards(then.fields(), now.fields());
         }
 
         @Override
         public ElementsMet elementsMet() {
-            return elementsMet;
+            return elementsMet.get();
         }
 
         @Override
@@ -12181,14 +11780,17 @@ final class Pullback {
     }
 
     /** The sums of containers the body wrote out, kept ({@link #sumOfWrittenOut}). */
+    @NoPartOfAReading(Why.MEMO)
     private final SharedReads<ReadingState.Inputs, Guards, Met, LinearForm<Quantity>> sharedSums =
             new SharedReads<>(new TheScene());
 
     /** The way into the value an arithmetic stopped at, kept ({@link #aWayInAt}). */
+    @NoPartOfAReading(Why.MEMO)
     private final SharedReads<ReadingState.Inputs, Guards, Met, Spendless<Optional<Inside>>>
             sharedWaysIn = new SharedReads<>(new TheScene(true));
 
     /** What reading a factor of a product as a form comes to, kept ({@link #formOfAFactor}). */
+    @NoPartOfAReading(Why.MEMO)
     private final SharedReads<ReadingState.Inputs, Guards, Met, Spendless<FormRead>>
             sharedForms = new SharedReads<>(new TheScene(true));
 
@@ -12237,15 +11839,19 @@ final class Pullback {
         }
     }
 
+    @NoPartOfAReading(Why.MEMO)
     private final KeptNames sharedNames = new KeptNames();
 
+    @NoPartOfAReading(Why.MEMO)
     private final KeptNames sharedFactorNames = new KeptNames();
 
     /** How the value a name stands for answered each side, kept ({@link #observe}), by the side. */
+    @NoPartOfAReading(Why.MEMO)
     private final SharedReads<ReadingState.Inputs, Guards, Met, Derivation> sharedObservations =
             new SharedReads<>(new TheScene(true));
 
     /** What a law says on each application of a closure, kept ({@link ALawRead#onEachApplication}). */
+    @NoPartOfAReading(Why.MEMO)
     private final SharedReads<ReadingState.Inputs, Guards, Met, WrittenOutRead>
             sharedApplications = new SharedReads<>(new TheScene());
 
@@ -12274,6 +11880,7 @@ final class Pullback {
                 Collections.synchronizedMap(new IdentityHashMap<>());
     }
 
+    @NoPartOfAReading(Why.MEMO)
     private final KeptByTheInput keptByTheInput;
 
     /** Where a test counts the remainders and reasons read afresh rather than taken ({@link
@@ -12281,10 +11888,12 @@ final class Pullback {
     static long[] READINGS_MADE;
 
     /** What the remainders read so far in the reading of one remainder told the candidate, where
-     *  one is being read ({@link #remainderKept}). */
-    private Set<Notice> telling;
+     *  one is being read ({@link #remainderKept}). Whether there is one, which a remainder taken
+     *  tells again, and not what it holds, is what a reading may ask after. */
+    private final Scoped<Set<Notice>> telling = state.askedAfter(Compared.BY_PRESENCE);
 
     /** What the truths that keep an aggregate's elements state, kept ({@link #keptOnceFor}). */
+    @NoPartOfAReading(Why.MEMO)
     private final SharedReads<ReadingState.Inputs, Guards, Met, Derivation[]> sharedConditions =
             new SharedReads<>(new TheScene());
 
@@ -12404,10 +12013,12 @@ final class Pullback {
 
     /** How many aggregates have been read through {@link #keepingOf}, which a reading that
      *  reads none of them is not one of the ones that counted. */
+    @NoPartOfAReading(Why.COUNTER)
     private int aggregatesKept;
 
     /** How many times the aggregates of the way being read were asked after
      *  ({@link #aggregateInACase}), which a reading that asked none of them does not stand in. */
+    @NoPartOfAReading(Why.COUNTER)
     private int aggregatesAsked;
 
     /** Whether {@code now} are the applications {@code then} were, each but for what was handed
@@ -12502,14 +12113,13 @@ final class Pullback {
         }
         BindingId accumulator = walk.accumulator().binding();
         LinearForm<Quantity> carried = seed;
-        try {
-            for (ReadMeaning.Occurrence occurrence : occurrences) {
-                InputReads handing = call.at().handingTheElement(walk.step(), walk.container(),
-                        occurrence.value(), read.rules().newtypes());
-                if (handing == null) {
-                    return null;
-                }
-                carriedSoFar.put(accumulator, carried);
+        for (ReadMeaning.Occurrence occurrence : occurrences) {
+            InputReads handing = call.at().handingTheElement(walk.step(), walk.container(),
+                    occurrence.value(), read.rules().newtypes());
+            if (handing == null) {
+                return null;
+            }
+            try (Restore _ = carriedSoFar.binding(accumulator, carried)) {
                 if (!(AffineForms.outcome(walk.step().body(), handing, quantities())
                         instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(
                                 LinearForm<Quantity> next))) {
@@ -12517,8 +12127,6 @@ final class Pullback {
                 }
                 carried = next;
             }
-        } finally {
-            carriedSoFar.remove(accumulator);
         }
         return carried;
     }
@@ -12636,11 +12244,11 @@ final class Pullback {
         Optional<Quantity.KeptSoFar> kept = keptSoFar(name, at);
         Optional<Quantity.HandedToTheStep> handed = kept.isPresent() ? Optional.of(kept.get())
                 : positionInTheWalk(name, at);
-        if (handed.isEmpty() || askingWhereAStepAnswers) {
+        if (handed.isEmpty() || askingWhereAStepAnswers.get()) {
             return handed;
         }
         Pullback inside = new Pullback(read, Optional.empty());
-        inside.askingWhereAStepAnswers = true;
+        inside.askingWhereAStepAnswers.beginAs(true);
         Core.Block step = at.usesOfTheClosureTaking(name.binding()).applications().getFirst()
                 .step();
         return inside.whereItsOperatorsAnswerApartFrom(step.body(), at, name, null).answers()
@@ -12850,7 +12458,8 @@ final class Pullback {
     // to what was not written. The comparison's own where one is being read, so that its sides
     // are held together; else this form's.
     private ElementsMet elementsOfAForm() {
-        return elementsMet == ElementsMet.NONE ? new ElementsMet() : elementsMet;
+        ElementsMet held = elementsMet.get();
+        return held == ElementsMet.NONE ? new ElementsMet() : held;
     }
 
     private AffineForms.Reading<Quantity, InputReads> quantities(
@@ -12913,13 +12522,9 @@ final class Pullback {
             public LinearForm<Quantity> leafOf(
                     Core node, InputReads at,
                     AffineForms.Outcome.StoppedAt<Quantity, InputReads> inside) {
-                ElementsMet outer = elementsMet;
-                elementsMet = held;
-                try {
+                try (Restore _ = elementsMet.set(held)) {
                     return held.admits(node, at, read.rules().newtypes())
                             ? leafHeld(node, at, inside) : null;
-                } finally {
-                    elementsMet = outer;
                 }
             }
 
@@ -12947,7 +12552,7 @@ final class Pullback {
                     return added;
                 }
                 LinearForm<NumericTerm> numbers = InputNumber.formOf(node, read.domain(), at,
-                        read.rules(), elementsMet);
+                        read.rules(), elementsMet.get());
                 if (numbers != null) {
                     return numbers.over(term ->
                             LinearForm.<Quantity>atom(new DecisionAtom.OfTheInput(term)));
@@ -12958,7 +12563,7 @@ final class Pullback {
                 }
                 // A name for another element of a container the comparison is already read of is
                 // no number of the input, and what it is made of is not followed further.
-                if (elementsMet.crowded()) {
+                if (elementsMet.get().crowded()) {
                     return null;
                 }
                 // How many an operation's answer holds, as its law says of its arguments.
@@ -13507,16 +13112,13 @@ final class Pullback {
                                                                 ValueName.Stdlib summing) {
         Quantity.HowManyCarried soFar = new Quantity.HowManyCarried(ACarriedValue.made());
         BindingId accumulator = walk.accumulator().binding();
-        carriedSoFar.put(accumulator, LinearForm.atom(soFar));
         LinearForm<Quantity> stepped;
-        try {
+        try (Restore _ = carriedSoFar.binding(accumulator, LinearForm.atom(soFar))) {
             if (!(AffineForms.outcome(walk.step().body(), at, quantities())
                     instanceof AffineForms.Outcome.Composed<Quantity, InputReads>(var form))) {
                 return null;
             }
             stepped = form;
-        } finally {
-            carriedSoFar.remove(accumulator);
         }
         LinearForm<Quantity> each = addedBesideOnce(stepped, soFar);
         return each == null ? null
@@ -13590,15 +13192,13 @@ final class Pullback {
      * Every reader of the arms of a choice the comparison asked is read through says it, so that
      * none is read without ({@link #armsOf}, {@link #byItsCases}). A reading of what a condition
      * states of a choice's arms adds none: the layers are state a kept reading is keyed by
-     * ({@link ReadingRoles}), and one on every such reading keeps none from being taken again.
+     * ({@link ReadingState#stack}), and one on every such reading keeps none from being taken
+     * again.
      */
     private <T> T decidingTheArms(Optional<UndividedByARelation.Working> before,
                                   Supplier<T> reading) {
-        decidingTheArms.push(before);
-        try {
+        try (Restore _ = decidingTheArms.pushing(before)) {
             return reading.get();
-        } finally {
-            decidingTheArms.pop();
         }
     }
 
@@ -13610,7 +13210,7 @@ final class Pullback {
      */
     private List<UndividedByARelation.Working> whatDecidedTheArm() {
         List<UndividedByARelation.Working> out = new ArrayList<>();
-        for (Optional<UndividedByARelation.Working> each : decidingTheArms) {
+        for (Optional<UndividedByARelation.Working> each : decidingTheArms.newestFirst()) {
             if (each.isEmpty()) {
                 return List.of();
             }
@@ -13627,7 +13227,7 @@ final class Pullback {
      */
     private void tellWhatItWorksOut(Derivation cut, UndividedByARelation.Working working) {
         List<UndividedByARelation.Working> decided = whatDecidedTheArm();
-        if (decided.isEmpty() || restatingAQuotient
+        if (decided.isEmpty() || restatingAQuotient.get()
                 || !(Derivation.readOff(cut) instanceof Derivation.AComparisonRead)) {
             return;
         }
@@ -13782,11 +13382,8 @@ final class Pullback {
 
     /** {@code reading}, of the arms of choices {@code stated} is read through. */
     private <T> T onTheArmsOf(StatedComparison stated, Supplier<T> reading) {
-        armsOfAComparison.push(stated);
-        try {
+        try (Restore _ = armsOfAComparison.pushing(stated)) {
             return reading.get();
-        } finally {
-            armsOfAComparison.pop();
         }
     }
 
@@ -13811,7 +13408,7 @@ final class Pullback {
         if (read == null || there == null || armsOfAComparison.isEmpty()) {
             return read;
         }
-        StatedComparison stated = armsOfAComparison.peek();
+        StatedComparison stated = armsOfAComparison.newest();
         Trial concluded = triedAndConcluded.get(read);
         Trial theRule = concluded != null ? concluded : trial();
         Once<AffineReading.WorkedOut> worksOut =
@@ -13820,7 +13417,7 @@ final class Pullback {
                 ? UndividedByARelation.Working.NOTHING
                 : AffineReading.workedOutByEvaluating(answered.value(), answered.at(), this.read));
         OnThisArm arm = new OnThisArm(worksOut, evaluated,
-                restatingAQuotient ? List.of() : whatDecidedTheArm());
+                restatingAQuotient.get() ? List.of() : whatDecidedTheArm());
         for (ArmRead each : ArmRead.in(read)) {
             trial().readOnAnArm(each, arm);
         }
@@ -14083,9 +13680,7 @@ final class Pullback {
      */
     private Inside aWayIn(List<Weighed> numbers, Supplier<Sized> rest,
                           BooleanSupplier restMayCount) {
-        Map<Quantity.HowManyHold, List<Denotation>> outer = countsMet;
-        countsMet = new LinkedHashMap<>();
-        try {
+        try (Restore _ = countsMet.set(new Ledger.Grouped<>())) {
             NumbersRead read = aStopIn(numbers.stream().map(Weighed::number).toList());
             if (read.wayIn() != null) {
                 return read.wayIn();
@@ -14096,11 +13691,11 @@ final class Pullback {
             if (read.composed().size() < numbers.size()) {
                 return null;
             }
-            if (countsMetContent().isEmpty() && !restMayCount.getAsBoolean()) {
+            if (countsMet.contents().isEmpty() && !restMayCount.getAsBoolean()) {
                 return null;
             }
             if (!(rest.get() instanceof Sized.AsAForm(LinearForm<Quantity> others))
-                    || countsMetContent().isEmpty()) {
+                    || countsMet.contents().isEmpty()) {
                 return null;
             }
             List<LinearForm<Quantity>> weighed = new ArrayList<>(List.of(others));
@@ -14115,8 +13710,6 @@ final class Pullback {
             LinearForm<Quantity> relation = LinearForm.sum(weighed).orNull();
             return relation == null || relation.coefs().size() < 2 ? null
                     : aCountToKeep(relation.coefs()::containsKey);
-        } finally {
-            countsMet = outer;
         }
     }
 
@@ -14130,12 +13723,12 @@ final class Pullback {
      * the comparison is.
      */
     private Inside.ATotalByKeeping aCountToKeep(Predicate<Quantity.HowManyHold> standsInTheWay) {
-        for (Map.Entry<Quantity.HowManyHold, List<Denotation>> count
-                : countsMetContent().entrySet()) {
-            if (!standsInTheWay.test(count.getKey())) {
+        Ledger.Grouped<Quantity.HowManyHold, Denotation> counted = countsMet.contents();
+        for (Quantity.HowManyHold count : counted.keys()) {
+            if (!standsInTheWay.test(count)) {
                 continue;
             }
-            for (Denotation container : count.getValue()) {
+            for (Denotation container : counted.under(count)) {
                 Inside.ATotalByKeeping kept = keptByTruths(container);
                 if (kept != null) {
                     return kept;
@@ -14779,17 +14372,13 @@ final class Pullback {
         SeededWalk walk = SeededWalk.of(e, blocksAt(new Denotation(e, reads)));
         DecisionSubject container =
                 walk == null ? null : walkedContainer(walk.container(), reads);
-        if (container == null || !quantifying.add(container)) {
+        if (container == null || quantifying.contains(container)) {
             return null;
         }
         ACarriedValue value = ACarriedValue.made();
         Derivation step;
-        ElementsNamed outer = inTheScopeOf(e, reads);
-        try {
+        try (Restore _ = quantifying.adding(container); Restore _ = inTheScopeOf(e, reads)) {
             step = stepCarrying(walk, aspect, value, reads);
-        } finally {
-            freeInTheScope = outer;
-            quantifying.remove(container);
         }
         return closed(observe(walk.seed(), aspect, reads), container, walk.container(), step,
                 value, e, reads);
@@ -14808,13 +14397,11 @@ final class Pullback {
      */
     private Derivation acrossARecursion(Core e, AnswerAspect aspect, InputReads reads) {
         if (!(AnOperationApplied.of(e) instanceof AnOperationApplied(
-                ValueName.Helper helper, List<Core> args)) || !recursing.add(helper)) {
+                ValueName.Helper helper, List<Core> args)) || recursing.contains(helper)) {
             return null;
         }
-        try {
+        try (Restore _ = recursing.adding(helper)) {
             return ofARecursion(helper, args, aspect, e, reads);
-        } finally {
-            recursing.remove(helper);
         }
     }
 
@@ -14841,23 +14428,19 @@ final class Pullback {
         InputReads step = reads.steppingThrough(body, args, walk.element().binding(),
                 list.element(), read.rules().newtypes());
         DecisionSubject container = new DecisionSubject.AnInput(list);
-        if (step == null || !quantifying.add(container)) {
+        if (step == null || quantifying.contains(container)) {
             return null;
         }
         ACarriedValue rest = ACarriedValue.made();
         Derivation end;
         Derivation stepped;
-        ElementsNamed outer = inTheScopeOf(e, reads);
-        try {
+        try (Restore _ = quantifying.adding(container); Restore _ = inTheScopeOf(e, reads)) {
             end = observe(walk.none().body(), aspect, step);
             if (!(tried(end) instanceof Proposition.Always)) {
                 return null;
             }
             stepped = supposing(walk.again(), new Carried(aspect, rest),
                     () -> observe(walk.some().body(), aspect, step));
-        } finally {
-            freeInTheScope = outer;
-            quantifying.remove(container);
         }
         Derivation closed = closed(end, container, args.get(walk.walked()), stepped, rest, e,
                 reads);
@@ -14867,13 +14450,8 @@ final class Pullback {
     /** What {@code reading} reads, with each of {@code calls} supposed to answer {@code supposed}. */
     private Derivation supposing(List<Core.Call> calls, Supposed supposed,
                                  Supplier<Derivation> reading) {
-        for (Core.Call again : calls) {
-            recursed.put(again, supposed);
-        }
-        try {
+        try (Restore _ = recursed.bindingEach(calls, supposed)) {
             return reading.get();
-        } finally {
-            calls.forEach(recursed::remove);
         }
     }
 
@@ -15008,7 +14586,7 @@ final class Pullback {
                 break;
             }
             below.add(leaf(new Derivation.SizeAboveNought(size),
-                    askedAt != null ? askedAt : new Denotation(e, reads)));
+                    askedAt.get() != null ? askedAt.get() : new Denotation(e, reads)));
         }
         return new Derivation.ATreeSearched(node, through, atANode, Optional.ofNullable(below),
                 unfolded, how);
@@ -15041,14 +14619,12 @@ final class Pullback {
             supposed.through().add(field);
             return new Sized.AsAForm(supposed.each());
         }
-        if (!recursing.add(helper)) {
+        if (recursing.contains(helper)) {
             return null;
         }
-        try {
+        try (Restore _ = recursing.adding(helper)) {
             Sized searched = sizeOfASearch(helper, args, reads);
             return searched != null ? searched : sizeOfALine(helper, args, reads);
-        } finally {
-            recursing.remove(helper);
         }
     }
 
@@ -15220,13 +14796,8 @@ final class Pullback {
     private Sized sizedBelowWith(RecursionOverATree search, TermPath from, Set<String> through,
                                  LinearForm<Quantity> each, Supplier<Sized> reading) {
         SizedBelow supposed = new SizedBelow(search.node(), from, through, each);
-        for (Core.Call again : search.again()) {
-            sizedBelow.put(again, supposed);
-        }
-        try {
+        try (Restore _ = sizedBelow.bindingEach(search.again(), supposed)) {
             return reading.get();
-        } finally {
-            search.again().forEach(sizedBelow::remove);
         }
     }
 
@@ -15372,7 +14943,7 @@ final class Pullback {
             DecisionAtom size = sizeOfSubject(container, Core.withoutStanding(walked).type());
             holdsSomething = Optional.of(size != null
                     ? leaf(new Derivation.SizeAboveNought(size),
-                            askedAt != null ? askedAt : new Denotation(e, reads))
+                            askedAt.get() != null ? askedAt.get() : new Denotation(e, reads))
                     : unread(walked, reads, new WhyUnread.NoMeasureOfItsSize()));
         }
         return new Derivation.SomeElementMeeting(container, meeting, holds, holdsSomething,
@@ -15384,15 +14955,8 @@ final class Pullback {
     private Derivation stepCarrying(SeededWalk walk, AnswerAspect aspect, ACarriedValue value,
                                     InputReads reads) {
         BindingId accumulator = walk.accumulator().binding();
-        Carried outer = carried.put(accumulator, new Carried(aspect, value));
-        try {
+        try (Restore _ = carried.binding(accumulator, new Carried(aspect, value))) {
             return observe(walk.step().body(), aspect, reads);
-        } finally {
-            if (outer == null) {
-                carried.remove(accumulator);
-            } else {
-                carried.put(accumulator, outer);
-            }
         }
     }
 
@@ -15611,9 +15175,7 @@ final class Pullback {
         Derivation answers;
         Derivation signed;
         Derivation states;
-        boolean outer = restatingAQuotient;
-        restatingAQuotient = true;
-        try {
+        try (Restore _ = restatingAQuotient.set(true)) {
             answers = restated(quotient.answers(), at, fixed, quotient.at());
             signed = restated(quotient.signed(), at, fixed, quotient.at());
             states = joined(ConditionJoin.EITHER,
@@ -15622,8 +15184,6 @@ final class Pullback {
                     joined(ConditionJoin.BOTH,
                             signed == null ? null : new Derivation.UnderADenial(signed, true),
                             restated(quotient.below(), at, fixed, quotient.at())));
-        } finally {
-            restatingAQuotient = outer;
         }
         if (answers == null || states == null) {
             return null;
@@ -15742,9 +15302,9 @@ final class Pullback {
      *
      * <p>A reading is taken where the inputs it asked after stand as they did. Of the side being
      * read, what an answer is collected into, the counts met and whether the candidate is being
-     * told ({@link InputAskedAfter}), that is the ones it asked after and no others: a reading
-     * that did not look at one comes to the same whatever it stands as, and one that wrote into
-     * the lists is not kept at all, since it changed what it must leave alone. What a reading
+     * told ({@link ReadingState#askedAfter}), that is the ones it asked after and no others: a
+     * reading that did not look at one comes to the same whatever it stands as, and one that wrote
+     * into the lists is not kept at all, since it changed what it must leave alone. What a reading
      * taken again asked after is asked after by the reading it is taken in, so that is told to it,
      * as it is for a reading {@link SharedReads} takes. Every other input is compared as it is, so
      * that which of them are asked after only decides how often a reading is found.
@@ -15756,7 +15316,7 @@ final class Pullback {
      */
     private <R> R kept(Map<Core, List<ReadingTaken<R>>> table, Core node, InputReads at,
                        Supplier<R> fresh) {
-        if (elementsMet.crowded() || !READING_STATE.holdsNothing(this)) {
+        if (elementsMet.get().crowded() || !state.holdsNothing()) {
             return fresh.get();
         }
         // Inside a watch of what is handed, a reading kept is one that said what it asked of it,
@@ -15765,86 +15325,75 @@ final class Pullback {
         // The operators told so far are no part of what a reading kept here comes to, and it is
         // made without them: one that asked for them would stop, and not be taken by a reader
         // whose operators were not the ones it was made with.
-        Supplier<R> reading = () -> {
-            Operators saved = operated;
-            operated = null;
-            try {
-                return fresh.get();
-            } finally {
-                operated = saved;
-            }
-        };
-        Trial told = underTrial.peek();
+        Supplier<R> reading = () -> operated.during(null, fresh);
+        Trial told = underTrial.newest();
         Object said = told == null ? null : told.markBesidesTheRemainders();
-        ReadingState.Inputs inputs = READING_STATE.inputsOf(this);
+        ReadingState.Inputs inputs = state.inputs();
         Setting setting = new Setting(where, freeInTheRoot, theRelationReadsItsOwnDivisions);
         List<ReadingTaken<R>> before =
                 table.computeIfAbsent(node, _ -> new CopyOnWriteArrayList<>());
         for (ReadingTaken<R> each : before) {
             if (each.at() == at && (!watched || each.asked() != null)
                     && each.setting().equals(setting)
-                    && READING_STATE.sameInputsBut(each.inputs(), inputs, false,
-                            UNCONSULTED[each.consulted()], CONTENT_ASKED[each.consulted()])
-                    && elementsMet.agrees(each.footprint())
+                    && state.sameAskedInputsBut(each.inputs(), inputs, each.consulted(), operated)
+                    && elementsMet.get().agrees(each.footprint())
                     && Objects.equals(each.said(), said)) {
                 if (each.asked() != null) {
                     at.takingAgain(each.asked());
                 }
-                elementsMet.takes(each.footprint());
-                consulted |= each.consulted();
+                elementsMet.get().takes(each.footprint());
+                state.consultAgain(each.consulted());
                 met.addAll(each.met());
                 each.told().forEach(this::tell);
                 return each.result();
             }
         }
-        long[] counting = READINGS_MADE;
-        if (counting != null) {
-            counting[0]++;
+        long[] made = READINGS_MADE;
+        if (made != null) {
+            made[0]++;
         }
-        List<Object[]> guards = READING_STATE.guardsOf(this);
+        List<Object[]> guards = state.guards();
         List<Map<Core, Core>> remainders = told == null ? null : told.remaindersRead();
         int metFrom = met.size();
         long spent = readingsLeft;
         int kept = aggregatesKept;
         int asked = aggregatesAsked;
         int keptReadingsBefore = keptReadings;
-        ElementsMet.Noting noting = elementsMet.noting();
-        Set<Notice> outer = telling;
+        // What the reading tells is told to whoever is noting what the reading around tells, and
+        // that there is one is what the reading is made for, so the reading around asks after it;
+        // what the reading reads of its own notes is its own.
+        Set<Notice> outer = telling.get();
         Set<Notice> mine = new LinkedHashSet<>();
-        telling = mine;
-        int consultedBefore = startConsultingInputs();
         int consultedHere;
         R result;
         ElementsMet.Footprint footprint;
         HandedAnswers handed = null;
-        try {
-            if (watched) {
-                Watched<R> read = at.watchingWhatIsHanded(reading);
-                result = read.result();
-                handed = read.asked();
-            } else {
-                result = reading.get();
+        try (ElementsMet.Noting noting = elementsMet.get().noting()) {
+            int consultedBefore = state.startConsulting();
+            try (Restore _ = telling.set(mine)) {
+                if (watched) {
+                    Watched<R> read = at.watchingWhatIsHanded(reading);
+                    result = read.result();
+                    handed = read.asked();
+                } else {
+                    result = reading.get();
+                }
+            } finally {
+                consultedHere = state.endConsulting(consultedBefore);
             }
-        } finally {
-            telling = outer;
-            consultedHere = endConsultingInputs(consultedBefore);
             footprint = noting.ended();
         }
-        // What the reading told is told to whoever is noting it, and that there is one is what the
-        // reading is made for; what it read of the notes was its own.
-        consulted |= InputAskedAfter.TELLING.bit();
         if (outer != null) {
             outer.addAll(mine);
         }
         if (footprint != null && met.size() >= metFrom && readingsLeft == spent
                 && kept == aggregatesKept && asked == aggregatesAsked
                 && keptReadingsBefore == keptReadings
-                && READING_STATE.sameGuardsBut(guards, READING_STATE.guardsOf(this),
-                        guard -> guard instanceof Trial)
+                && state.sameGuardsBut(guards, state.guards(), guard -> guard instanceof Trial)
                 && (told == null || (Objects.equals(said, told.markBesidesTheRemainders())
                         && told.remaindersRead().equals(withTold(remainders, mine))))) {
             before.add(new ReadingTaken<>(result, at, setting, List.copyOf(mine), footprint, inputs,
-                    said, consultedHere & ~InputAskedAfter.TELLING.bit(),
+                    said, ReadingState.without(consultedHere, telling),
                     List.copyOf(met.subList(metFrom, met.size())), handed));
         }
         return result;
@@ -15900,8 +15449,8 @@ final class Pullback {
         } else {
             trial().readByTheFormOf(notice.call(), notice.dividend());
         }
-        if (telling() != null) {
-            telling().add(notice);
+        if (telling.get() != null) {
+            telling.get().add(notice);
         }
     }
 
@@ -16096,7 +15645,7 @@ final class Pullback {
      * by the operator and the operands it was made of.
      */
     private boolean isTheSideAsWritten(Core.Binary written) {
-        Core whole = sideAsWritten();
+        Core whole = sideAsWritten.get();
         return whole != null
                 && AffineForms.asOperator(whole) instanceof Core.Binary side
                 && side.op() == written.op() && side.left() == written.left()
@@ -16188,7 +15737,7 @@ final class Pullback {
             AffineForms.Outcome.StoppedAt<Quantity, InputReads> inside) {
         if (inside == null
                 || !(Core.withoutStanding(node) instanceof Core.PreservedCall written)
-                || inside.node() != written || written != sideAsWritten()
+                || inside.node() != written || written != sideAsWritten.get()
                 || !(inside.why() instanceof AffineForms.Halt.NotLinear<Quantity, InputReads>(
                         NonAffineOperation operation, var _))
                 || operation != NonAffineOperation.REMAINDER_BY_NON_CONSTANT_VALUE) {
@@ -16235,7 +15784,7 @@ final class Pullback {
     private NumericTerm.FromOnePosition aFactor(Core factor, InputReads at) {
         Denotation stands = at.standing(factor, read.rules().symbols(), read.rules().newtypes());
         return InputNumber.of(stands.value(), read.domain(), stands.at(), read.rules(),
-                elementsMet) instanceof NumericTerm.FromOnePosition term ? term : null;
+                elementsMet.get()) instanceof NumericTerm.FromOnePosition term ? term : null;
     }
 
     /** Whether every number of {@code form}, its constant included, is a whole one. */
@@ -17040,7 +16589,7 @@ final class Pullback {
                         && !position.insideAContainer())) {
             return ArmsLeft.BOTH;
         }
-        SearchRegion here = onTheWay != null ? onTheWay : read.quantities().region();
+        SearchRegion here = onTheWay.get() != null ? onTheWay.get() : read.quantities().region();
         Rel holding = holds ? relation : relation.denied();
         // Where the form runs on the way here, worked out once for both arms: an arm whose
         // condition the run leaves no value for is one no run takes, and only an arm that is read
@@ -17090,13 +16639,7 @@ final class Pullback {
         if (there == null) {
             return reading.get();
         }
-        SearchRegion was = onTheWay;
-        onTheWay = there;
-        try {
-            return reading.get();
-        } finally {
-            onTheWay = was;
-        }
+        return onTheWay.during(there, reading);
     }
 
     /**
@@ -17323,7 +16866,7 @@ final class Pullback {
      */
     private Derivation leaf(Derivation step, Denotation from) {
         Derivation part = Derivation.ReadThrough.of(step, from.at().elementsNamedIn(from.value(),
-                read.rules().newtypes()).keepingTheNamesOf(freeInTheScope));
+                read.rules().newtypes()).keepingTheNamesOf(freeInTheScope.get()));
         met.add(new Met(part, from));
         return part;
     }
@@ -17341,24 +16884,16 @@ final class Pullback {
 
     /**
      * Enters {@code owner}, a call read about its own elements, for the parts read inside it: they
-     * are told only the names free in it. Answers the scope it was entered from, which the caller
-     * puts back ({@link #freeInTheScope}) once the part is read.
+     * are told only the names free in it ({@link #freeInTheScope}), until what is returned is
+     * closed.
      */
-    private ElementsNamed inTheScopeOf(Core owner, InputReads reads) {
-        ElementsNamed outer = freeInTheScope;
-        freeInTheScope = reads.elementsNamedIn(owner, read.rules().newtypes());
-        return outer;
+    private Restore inTheScopeOf(Core owner, InputReads reads) {
+        return freeInTheScope.set(reads.elementsNamedIn(owner, read.rules().newtypes()));
     }
 
     /** {@code reading}, with whether a container holds anything asked at {@code where}. */
     private Derivation asking(Denotation where, Supplier<Derivation> reading) {
-        Denotation outer = askedAt;
-        askedAt = where;
-        try {
-            return reading.get();
-        } finally {
-            askedAt = outer;
-        }
+        return askedAt.during(where, reading);
     }
 
     /**
@@ -17579,19 +17114,17 @@ final class Pullback {
         if (division == null) {
             return null;
         }
-        switch (AffineForms.outcome(division.dividend(), division.at(), quantities())) {
-            case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
-                return noFormOf(stopped);
-            }
+        return switch (AffineForms.outcome(division.dividend(), division.at(), quantities())) {
+            case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> noFormOf(stopped);
             case AffineForms.Outcome.Composed<Quantity, InputReads>(LinearForm<Quantity> form) -> {
                 for (Quantity each : form.coefs().keySet()) {
                     if (each instanceof Quantity.OfABinding bound && bound.madeOf().isPresent()) {
-                        return bound.madeOf().get();
+                        yield bound.madeOf().get();
                     }
                 }
-                return null;
+                yield null;
             }
-        }
+        };
     }
 
     /**

@@ -104,8 +104,6 @@ class EveryTableThatOutlivesACompilationSaysWhatItTurnsOnTest {
             Map.entry("souther.compiler.fmt.Spacing#FACES", READ_ONLY),
             Map.entry("souther.compiler.check.WhatALibraryLeavesAsShipped$Shipped#READS",
                     READ_ONLY),
-            Map.entry("souther.compiler.partition.ReadingState#FIELDS",
-                    "the fields of a class, which is no answer of a compilation's"),
             Map.entry("souther.compiler.revision.RevisionWorkDone#DONE",
                     "a count of the work done, which no answer is worked out of"));
 

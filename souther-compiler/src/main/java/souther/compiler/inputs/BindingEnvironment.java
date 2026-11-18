@@ -925,7 +925,7 @@ final class BindingEnvironment {
             // What was handed, whose hash was worked out as each value was handed, and the names
             // of what was selected, as of what was bound: what each of those is picked out by is
             // a tree, and equality reads it where a hash would walk it for every environment made.
-            h = Objects.hash(roots, handed.hashCode(), bound().keySet(), heldHash.get(), callsStand,
+            h = Objects.hash(roots, handed, bound().keySet(), heldHash.get(), callsStand,
                     selected.keySet(), opened.keySet(), answered.keySet());
             hash = h;
         }

@@ -264,7 +264,7 @@ public final class Intervals {
             if (at == null) {
                 continue;   // past every value the other way, which bounds nothing on this side
             }
-            if (best == null || at.compareTo(best) * direction > 0) {
+            if (best == null || Integer.signum(at.compareTo(best)) * direction > 0) {
                 best = at;
             }
         }
@@ -438,7 +438,7 @@ public final class Intervals {
             if (at == null) {
                 continue;   // past every value the other way, which bounds nothing on this side
             }
-            int order = best == null ? 1 : at.compareTo(best) * direction;
+            int order = best == null ? 1 : Integer.signum(at.compareTo(best)) * direction;
             if (order > 0) {
                 best = at;
                 reached = corner.reached();

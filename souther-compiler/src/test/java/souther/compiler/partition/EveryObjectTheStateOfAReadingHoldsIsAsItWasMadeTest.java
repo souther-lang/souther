@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -20,9 +21,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * said here not to.
  *
  * <p>What a reading compares, or leaves alone, is compared by what it holds or as the very object;
- * neither sees a collection inside a record that is added to. The roles say which fields are
- * compared and how, and this asks of the objects in them, for the lookups that go through the
- * readings kept, that none holds a collection which is not immutable.
+ * neither sees a collection inside a record that is added to. The parts say which pieces of the
+ * state are compared and how, and this asks of the objects in them, for the lookups that go
+ * through the readings kept, that none holds a collection which is not immutable.
  *
  * <p>Asked of these models and not of the conformance corpora: the corpora do not go through the
  * readings kept, so a population of them would audit nothing.
@@ -66,10 +67,11 @@ class EveryObjectTheStateOfAReadingHoldsIsAsItWasMadeTest {
             }
             """;
 
-    /** What the report of {@code source} leaves unread, which asks every reading of its rules. */
+    /** What the report of {@code source} leaves unread, which asks every reading of its rules and
+     *  measures none of its rows. */
     private static void readRulesOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
         ACompiledModel.compiles(compilation);
         AdequacyReport.of(compilation).modules().get(0).behaviors()
                 .forEach(each -> each.partition().notRead());
@@ -106,6 +108,8 @@ class EveryObjectTheStateOfAReadingHoldsIsAsItWasMadeTest {
             ReadingState.auditing = false;
         }
 
+        assertFalse(ReadingState.FOUND.isEmpty(),
+                "nothing the lookups hold was looked into, so nothing below is asked");
         Map<String, String> unsaid = new TreeMap<>();
         for (String found : ReadingState.FOUND) {
             String component = found.substring(0, found.indexOf(" is a "));
@@ -122,14 +126,11 @@ class EveryObjectTheStateOfAReadingHoldsIsAsItWasMadeTest {
         ReadingState.FOUND.clear();
         ReadingState.auditing = true;
         try {
-            class AnOwner {
-                final List<AHolder> holders = new ArrayList<>();
+            ReadingState reading = new ReadingState();
+            ReadingState.Layers<AHolder> holders = reading.stack();
+            try (ReadingState.Restore _ = holders.pushing(new AHolder(new ArrayList<>()))) {
+                reading.inputs();
             }
-            ReadingState reading = new ReadingState(AnOwner.class,
-                    Map.of("holders", ReadingRole.INPUT));
-            AnOwner owner = new AnOwner();
-            owner.holders.add(new AHolder(new ArrayList<>()));
-            reading.inputsOf(owner);
         } finally {
             ReadingState.auditing = false;
         }

@@ -1,15 +1,14 @@
 package souther.compiler.partition;
 
-import java.lang.reflect.Field;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -19,15 +18,19 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 /**
- * The state of an object that a reading depends on and the state it must leave alone, taken from
- * the roles its fields are given ({@link ReadingRole}).
+ * The state of one reader that a reading kept to be taken again depends on and must leave alone.
  *
- * <p>Which fields those are is the table's and no hand-written list's: a field with no role stops
- * this where it is first made, so a field added to the object is classified before any reading is
- * kept or taken again, and a field the table calls an input is compared whether or not anyone
- * remembered to.
+ * <p>Each piece of that state is a part made here and held by the reader as a field. The part says
+ * once, where the field is declared, how a reading kept is compared on it when it is taken again
+ * ({@link Compared}), whether a reading must leave it as it found it, and whether it is compared
+ * only for a reading that asked after it. A part is entered for the extent of a reading through
+ * the part, which puts it back however the reading ends ({@link Restore}), and a reading that asks
+ * after it does so through the part, which records the asking. A field of the reader that is no
+ * part says why ({@link NoPartOfAReading}).
  */
 final class ReadingState {
 
@@ -38,108 +41,467 @@ final class ReadingState {
     }
 
     /**
-     * The inputs of a reading as they stood.
-     *
-     * @param values what the inputs were, copied where they are collections so that a later change
-     *               to the collection is not a change to this
-     * @param asked  what the aggregates being read were
-     * @param contents what each input that is written into held, by the place of the input
-     *               among {@code values}, and null for each that is not or that was absent: a
-     *               reading that asked what one holds depends on that and not on its being there
+     * What a field of a reader that is no part of this is, which is why a reading kept is neither
+     * compared on it nor made to leave it alone. Read by a test of the reader's fields, and by
+     * nothing that keeps or takes a reading.
      */
-    record Inputs(List<Object> values, Object asked, List<Object> contents) {}
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.FIELD)
+    @interface NoPartOfAReading {
+        Why value();
 
-    private final Field[] inputs;
-    private final Field asked;
-    private final Field[] guards;
-    private final Field[] flags;
-    private final Field[] identities;
-    private final Field[] absent;
-    /** Whether each of {@link #inputs} is written into by a reading, in the same order. */
-    private final boolean[] writtenInto;
-    /** How each of {@link #inputs} is taken, in the same order. */
-    private final Taken[] howEachInputIsTaken;
-
-    ReadingState(Class<?> owner, Map<String, ReadingRole> roles) {
-        List<Field> inputFields = new ArrayList<>();
-        List<Field> guardFields = new ArrayList<>();
-        List<Field> flagFields = new ArrayList<>();
-        List<Field> identityFields = new ArrayList<>();
-        List<Field> absentFields = new ArrayList<>();
-        Field askedField = null;
-        Field[] declared = owner.getDeclaredFields();
-        Arrays.sort(declared, (one, other) -> one.getName().compareTo(other.getName()));
-        for (Field each : declared) {
-            if (Modifier.isStatic(each.getModifiers()) || each.isSynthetic()) {
-                continue;
-            }
-            ReadingRole role = roles.get(each.getName());
-            if (role == null) {
-                throw new IllegalStateException("the field " + owner.getSimpleName() + "."
-                        + each.getName() + " has no role in a reading kept to be taken again");
-            }
-            each.setAccessible(true);
-            if (IdentityHashMap.class.isAssignableFrom(each.getType()) && role != ReadingRole.ABSENT
-                    && role != ReadingRole.FIXED && role != ReadingRole.MEMO) {
-                throw new IllegalStateException("the field " + owner.getSimpleName() + "."
-                        + each.getName() + " is held by identity, whose values change inside "
-                        + "without a trace: it can be " + ReadingRole.ABSENT + ", and nothing "
-                        + "that is compared or left alone");
-            }
-            switch (role) {
-                case INPUT -> inputFields.add(each);
-                case IDENTITY -> {
-                    inputFields.add(each);
-                    identityFields.add(each);
-                }
-                case ABSENT -> absentFields.add(each);
-                case FLAG -> {
-                    inputFields.add(each);
-                    flagFields.add(each);
-                }
-                case GUARDED -> {
-                    inputFields.add(each);
-                    guardFields.add(each);
-                }
-                case WRITTEN -> {
-                    inputFields.add(each);
-                    flagFields.add(each);
-                    guardFields.add(each);
-                }
-                case TRIAL -> guardFields.add(each);
-                case ASKED -> askedField = each;
-                case FIXED, LEDGER, FOOTPRINT, BUDGET, ACCRUES, CACHE, MEMO, COUNTER -> { }
-            }
-        }
-        this.inputs = inputFields.toArray(Field[]::new);
-        this.flags = flagFields.toArray(Field[]::new);
-        this.guards = guardFields.toArray(Field[]::new);
-        this.identities = identityFields.toArray(Field[]::new);
-        this.absent = absentFields.toArray(Field[]::new);
-        this.asked = askedField;
-        this.howEachInputIsTaken = new Taken[inputs.length];
-        this.writtenInto = new boolean[inputs.length];
-        for (int at = 0; at < inputs.length; at++) {
-            writtenInto[at] = roles.get(inputs[at].getName()) == ReadingRole.WRITTEN;
-            howEachInputIsTaken[at] = isAmong(flags, inputs[at]) ? Taken.AS_PRESENT
-                    : isAmong(identities, inputs[at]) ? Taken.AS_THE_VERY_ONE : Taken.AS_A_COPY;
+        enum Why {
+            /** The same at every reading of one reader. */
+            FIXED,
+            /** The parts met, in order, which the readings kept carry and meet again. */
+            LEDGER,
+            /** The readings left, which a reading is charged and a reading taken again is not. */
+            BUDGET,
+            /** Only added to, and never asked after by a reading: what a reading added is still
+             *  there when it is taken again. */
+            ACCRUES,
+            /** Answers worked out once whatever asked, and so the same however first asked. */
+            CACHE,
+            /** The readings kept. */
+            MEMO,
+            /** A count that tells a reading what it did. */
+            COUNTER,
+            /** This state itself. */
+            STATE
         }
     }
 
-    /** What an input is taken as, which its role settles once. */
-    private enum Taken { AS_PRESENT, AS_THE_VERY_ONE, AS_A_COPY }
+    /** How a reading kept is compared on a part where it is taken again. */
+    enum Compared {
+        /** By what it holds, compared with {@link Object#equals}: a collection is copied, so a
+         *  later change to it is not a change to what was taken. */
+        BY_VALUE,
+        /** As the very object: what the reader looks up by identity is the same only for the same
+         *  object. */
+        BY_IDENTITY,
+        /** Only whether there is one. */
+        BY_PRESENCE,
+        /** By what it says it has been told ({@link Marked#mark}): an object that is changed in
+         *  place is the same only while it has been told nothing more. */
+        BY_MARK,
+        /** Not at all. */
+        NOT
+    }
+
+    /** What a part entered for an extent is put back to when the extent ends. */
+    interface Restore extends AutoCloseable {
+        @Override
+        void close();
+    }
 
     /**
-     * Whether everything the roles call {@link ReadingRole#ABSENT} holds nothing in {@code owner}.
+     * The inputs of a reading as they stood.
+     *
+     * @param values   what the inputs were, as each is compared ({@link Compared})
+     * @param asked    what the aggregates being read were
+     * @param contents what each input whose contents a reading may ask after held, by the place of
+     *                 the input among {@code values}, and null for each other: a reading that
+     *                 asked what one holds depends on that and not on its being there
      */
-    boolean holdsNothing(Object owner) {
-        for (Field each : absent) {
-            Object value = read(each, owner);
-            boolean empty = switch (value) {
-                case null -> true;
+    record Inputs(List<Object> values, Object asked, List<Object> contents) {}
+
+    private final List<Part> inputs = new ArrayList<>();
+    private final List<Part> guards = new ArrayList<>();
+    private final List<Part> searches = new ArrayList<>();
+    private Layers<?> aggregates;
+    /** The next bit a part a reading may leave unasked is told by. */
+    private int nextBit = 1;
+    /** Which of the parts a reading may leave unasked the reading being made has asked after. */
+    private int consulted;
+
+    /**
+     * A piece of the state. Entered and asked after through itself, so what it is to a reading kept
+     * is said where it is made.
+     */
+    abstract static sealed class Part permits Scoped, Members, Bindings, Layers {
+
+        final ReadingState state;
+        final Compared compared;
+        /** The bit asking after this is told by, or 0 where it is compared for every reading. */
+        int askedBit;
+        /** The bit asking what this holds is told by, or 0 where what it holds is not compared. */
+        int contentBit;
+
+        Part(ReadingState state, Compared compared) {
+            this.state = state;
+            this.compared = compared;
+        }
+
+        /** What this holds, unasked: for comparing it and for putting it back. */
+        abstract Object held();
+
+        /** What a reading that must leave this alone is compared on. */
+        Object guarded() {
+            return held();
+        }
+
+        final void asked() {
+            state.consulted |= askedBit;
+        }
+
+        final void askedWhatItHolds() {
+            state.consulted |= askedBit | contentBit;
+        }
+    }
+
+    /**
+     * A value set for the extent of a reading and put back after it.
+     *
+     * @param <T> what it holds; null where nothing is set
+     */
+    static final class Scoped<T> extends Part {
+
+        private T value;
+
+        private Scoped(ReadingState state, Compared compared, T value) {
+            super(state, compared);
+            this.value = value;
+        }
+
+        /** What is set, which a reading that reads it asks after. */
+        T get() {
+            asked();
+            return value;
+        }
+
+        /** What is set, where the reading reads what it holds and not only that there is one. */
+        T contents() {
+            askedWhatItHolds();
+            return value;
+        }
+
+        /** Sets {@code value} until what is returned is closed, which puts back what was set. */
+        Restore set(T value) {
+            T before = this.value;
+            this.value = value;
+            return () -> this.value = before;
+        }
+
+        /** What {@code reading} comes to with {@code value} set for it. */
+        <R> R during(T value, Supplier<R> reading) {
+            try (Restore _ = set(value)) {
+                return reading.get();
+            }
+        }
+
+        /** Sets what this begins as, for a reader just made. */
+        void beginAs(T value) {
+            this.value = value;
+        }
+
+        @Override
+        Object held() {
+            return value;
+        }
+    }
+
+    /** Members, each in for the extent of a reading. */
+    static final class Members<E> extends Part {
+
+        private final Set<E> held;
+
+        private Members(ReadingState state, Compared compared, Set<E> held) {
+            super(state, compared);
+            this.held = held;
+        }
+
+        boolean contains(Object member) {
+            return held.contains(member);
+        }
+
+        boolean isEmpty() {
+            return held.isEmpty();
+        }
+
+        Stream<E> stream() {
+            return held.stream();
+        }
+
+        /**
+         * Puts {@code member} in until what is returned is closed, which takes it out. It is not
+         * in: a member already in is no member entered here, and taking it out would take out the
+         * one around.
+         */
+        Restore adding(E member) {
+            if (!held.add(member)) {
+                throw new IllegalStateException(member + " is already in");
+            }
+            return () -> held.remove(member);
+        }
+
+        /** Holds none until what is returned is closed, which puts back what was held. */
+        Restore emptied() {
+            List<E> before = List.copyOf(held);
+            held.clear();
+            return () -> {
+                held.clear();
+                held.addAll(before);
+            };
+        }
+
+        @Override
+        Object held() {
+            return held;
+        }
+    }
+
+    /** Keys each bound to a value for the extent of a reading. */
+    static final class Bindings<K, V> extends Part {
+
+        private final Map<K, V> held;
+
+        private Bindings(ReadingState state, Compared compared, Map<K, V> held) {
+            super(state, compared);
+            this.held = held;
+        }
+
+        V get(Object key) {
+            return held.get(key);
+        }
+
+        boolean containsKey(Object key) {
+            return held.containsKey(key);
+        }
+
+        int size() {
+            return held.size();
+        }
+
+        boolean isEmpty() {
+            return held.isEmpty();
+        }
+
+        Set<Map.Entry<K, V>> entrySet() {
+            return Collections.unmodifiableMap(held).entrySet();
+        }
+
+        /**
+         * Binds {@code key} to {@code value} until what is returned is closed, which puts back what
+         * the key was bound to before, or leaves it unbound where it was not.
+         */
+        Restore binding(K key, V value) {
+            boolean had = held.containsKey(key);
+            V before = held.put(key, value);
+            return () -> {
+                if (had) {
+                    held.put(key, before);
+                } else {
+                    held.remove(key);
+                }
+            };
+        }
+
+        /** {@link #binding} of each of {@code keys}, all put back together. */
+        Restore bindingEach(Collection<? extends K> keys, V value) {
+            List<Restore> each = new ArrayList<>(keys.size());
+            for (K key : keys) {
+                each.add(binding(key, value));
+            }
+            return () -> {
+                for (Restore one : each.reversed()) {
+                    one.close();
+                }
+            };
+        }
+
+        /** Binds {@code key} to {@code value} for good where it is not bound: the first binding
+         *  of a key is the one it keeps. */
+        void keepFirst(K key, V value) {
+            held.putIfAbsent(key, value);
+        }
+
+        @Override
+        Object held() {
+            return held;
+        }
+    }
+
+    /** Values each on top for the extent of a reading, the newest on top. */
+    static final class Layers<E> extends Part {
+
+        private final List<E> held = new ArrayList<>();
+        private final boolean guardsTheNewest;
+
+        private Layers(ReadingState state, Compared compared, boolean guardsTheNewest) {
+            super(state, compared);
+            this.guardsTheNewest = guardsTheNewest;
+        }
+
+        /** The one on top, or null where there is none. */
+        E newest() {
+            return held.isEmpty() ? null : held.getLast();
+        }
+
+        boolean isEmpty() {
+            return held.isEmpty();
+        }
+
+        List<E> oldestFirst() {
+            return Collections.unmodifiableList(held);
+        }
+
+        List<E> newestFirst() {
+            return Collections.unmodifiableList(held).reversed();
+        }
+
+        /** Puts {@code value} on top until what is returned is closed, which takes it off. */
+        Restore pushing(E value) {
+            held.add(value);
+            return () -> {
+                if (held.isEmpty() || held.getLast() != value) {
+                    throw new IllegalStateException(value + " is not on top to be taken off");
+                }
+                held.removeLast();
+            };
+        }
+
+        @Override
+        Object held() {
+            return held;
+        }
+
+        @Override
+        Object guarded() {
+            return guardsTheNewest ? newest() : held;
+        }
+    }
+
+    private <P extends Part> P input(P part) {
+        inputs.add(part);
+        return part;
+    }
+
+    private <P extends Part> P guarded(P part) {
+        guards.add(part);
+        return part;
+    }
+
+    private void askedFor(Part part) {
+        part.askedBit = nextBit;
+        nextBit <<= 1;
+    }
+
+    /** A value a reading is compared on as {@code compared} says, null until it is set. */
+    <T> Scoped<T> setting(Compared compared) {
+        return setting(compared, null);
+    }
+
+    /** The same, {@code initial} until it is set. */
+    <T> Scoped<T> setting(Compared compared, T initial) {
+        return input(new Scoped<>(this, compared, initial));
+    }
+
+    /** The same, compared only for a reading that asked after it ({@link Scoped#get}): what a
+     *  reading never asked after is no part of what it comes to. */
+    <T> Scoped<T> askedAfter(Compared compared) {
+        Scoped<T> out = setting(compared);
+        askedFor(out);
+        return out;
+    }
+
+    /**
+     * A ledger a reading is compared on by what it holds and must leave as it found it, which is
+     * where it stands ({@link Ledger#mark}). What a reading must leave alone is something that
+     * says what it has been told, and nothing that would have to be looked into to say so.
+     */
+    <T extends Ledger> Scoped<T> guarded() {
+        return guarded(setting(Compared.BY_VALUE));
+    }
+
+    /** An object changed in place that says what it has been told, compared and left alone by
+     *  that ({@link Compared#BY_MARK}). */
+    <T extends Marked> Scoped<T> guardedByItsMark() {
+        return guarded(setting(Compared.BY_MARK));
+    }
+
+    /**
+     * A ledger a reading adds to where there is one: compared by whether there is one, and left
+     * as found.
+     */
+    <T extends Ledger> Scoped<T> writtenInto() {
+        return guarded(setting(Compared.BY_PRESENCE));
+    }
+
+    /**
+     * The same, compared only for a reading that asked after it, and by what it holds where the
+     * reading asked that ({@link Scoped#contents}).
+     */
+    <T extends Ledger> Scoped<T> writtenIntoAndAskedAfter() {
+        Scoped<T> out = writtenInto();
+        askedFor(out);
+        out.contentBit = nextBit;
+        nextBit <<= 1;
+        return out;
+    }
+
+    /** A value set for the extent of a reading that a reading kept is not compared on. */
+    <T> Scoped<T> notCompared(T value) {
+        return new Scoped<>(this, Compared.NOT, value);
+    }
+
+    /** Members a reading is compared on by which they are. */
+    <E> Members<E> members() {
+        return input(new Members<>(this, Compared.BY_VALUE, new HashSet<>()));
+    }
+
+    /** Bindings a reading is compared on by what they bind. */
+    <K, V> Bindings<K, V> bindings() {
+        return input(new Bindings<>(this, Compared.BY_VALUE, new HashMap<>()));
+    }
+
+    /** A stack a reading is compared on by what is on it. */
+    <E> Layers<E> stack() {
+        return input(new Layers<>(this, Compared.BY_VALUE, false));
+    }
+
+    /**
+     * The candidates being tried, newest on top: a reading must not have said anything into the one
+     * on top, nor be read under another.
+     */
+    <E extends Marked> Layers<E> trials() {
+        return guarded(new Layers<>(this, Compared.NOT, true));
+    }
+
+    /**
+     * The aggregates of the way being read, compared for a reading that asked after them, each as
+     * the very aggregate.
+     */
+    <E> Layers<E> aggregates() {
+        Layers<E> out = new Layers<>(this, Compared.NOT, false);
+        aggregates = out;
+        return out;
+    }
+
+    /**
+     * Members of a search whose body is being read, which the reading adds to what the search
+     * reaches: a reading taken would not add it, and a reading made would leave it half of what it
+     * is, so a search in progress is no place to keep or to take one.
+     */
+    <E> Members<E> searchMembers() {
+        Members<E> out = new Members<>(this, Compared.NOT, new HashSet<>());
+        searches.add(out);
+        return out;
+    }
+
+    /** Bindings of such a search, held by the identity of each key. */
+    <K, V> Bindings<K, V> searchBindings() {
+        Bindings<K, V> out = new Bindings<>(this, Compared.NOT, new IdentityHashMap<>());
+        searches.add(out);
+        return out;
+    }
+
+    /** Whether no search is in progress, which is where a reading may be kept or taken. */
+    boolean holdsNothing() {
+        for (Part each : searches) {
+            boolean empty = switch (each.held()) {
                 case Collection<?> collection -> collection.isEmpty();
                 case Map<?, ?> map -> map.isEmpty();
-                default -> false;
+                default -> throw new IllegalStateException("a search holds a collection");
             };
             if (!empty) {
                 return false;
@@ -148,95 +510,108 @@ final class ReadingState {
         return true;
     }
 
-    /** The inputs of {@code owner} as they stand. */
-    Inputs inputsOf(Object owner) {
-        List<Object> values = new ArrayList<>(inputs.length);
-        List<Object> contents = new ArrayList<>(inputs.length);
-        for (int at = 0; at < inputs.length; at++) {
-            Object value = read(inputs[at], owner);
-            contents.add(writtenInto[at] && value != null ? snapshotOf(value) : null);
-            values.add(switch (howEachInputIsTaken[at]) {
-                case AS_PRESENT -> Boolean.valueOf(value != null);
-                case AS_THE_VERY_ONE -> new Same(value);
-                case AS_A_COPY -> copyOf(value);
+    /** The inputs as they stand. */
+    Inputs inputs() {
+        List<Object> values = new ArrayList<>(inputs.size());
+        List<Object> contents = new ArrayList<>(inputs.size());
+        for (Part each : inputs) {
+            Object value = each.held();
+            contents.add(each.contentBit != 0 && value != null
+                    ? ((Ledger) value).asItHolds() : null);
+            values.add(switch (each.compared) {
+                case BY_PRESENCE -> Boolean.valueOf(value != null);
+                case BY_IDENTITY -> new Same(value);
+                case BY_VALUE -> copyOf(value);
+                case BY_MARK -> value == null ? null : ((Marked) value).mark();
+                case NOT -> throw new IllegalStateException("an input is compared");
             });
         }
         return new Inputs(Collections.unmodifiableList(values),
-                asked == null ? null : snapshotOf(read(asked, owner)),
+                aggregates == null ? null : theVeryOnes(aggregates.oldestFirst()),
                 Collections.unmodifiableList(contents));
     }
 
-    private static boolean isAmong(Field[] fields, Field field) {
-        for (Field each : fields) {
-            if (each == field) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     /**
-     * A number that is the same for inputs {@link #sameInputsBut} calls the same, for any
-     * {@code unconsulted}, {@code contentAsked} and {@code askedMatters}: the values are what every
-     * comparison asks, and nothing a reading's having asked after something or not decides is
-     * taken into it.
+     * A number that is the same for inputs either comparison calls the same, whatever was asked
+     * after: the values are what every comparison asks, and nothing a reading's having asked after
+     * something or not decides is taken into it.
      */
     int requiredInputsHash(Inputs inputs) {
         return inputs.values().hashCode();
     }
 
-    /** Whether {@code now} are the inputs {@code then} were; those of the aggregates only where
-     *  the reading {@code then} was of asked after them. */
-    boolean sameInputs(Inputs then, Inputs now, boolean askedMatters) {
-        return sameInputsBut(then, now, askedMatters, null, null);
+    /**
+     * Whether {@code now} are the inputs {@code then} were, every one of them, and what each holds
+     * where the reading {@code then} was of asked what it holds; those of the aggregates only where
+     * {@code askedMatters}.
+     */
+    boolean sameInputs(Inputs then, Inputs now, boolean askedMatters, int consulted) {
+        return same(then, now, consulted, false, null)
+                && (!askedMatters || Objects.equals(then.asked(), now.asked()));
     }
 
     /**
-     * The same, but for the inputs at {@code unconsulted}: where the reading {@code then} never
-     * asked after an input, what it stood as is no part of what the reading comes to.
-     *
-     * <p>An input that is written into stands as it was where it is there or is not, and, where
-     * the reading asked what it holds, where it holds what it did.
-     *
-     * @param unconsulted the places of {@link #inputs} not compared, or null where all are
-     * @param contentAsked the places of {@link #inputs} whose contents are compared as well, or
-     *                     null where none are
+     * The same, but for the inputs a reading may leave unasked that the reading {@code then} was of
+     * never asked after, and for {@code aside}: what an input that was not asked after stood as is
+     * no part of what the reading came to. The aggregates are not compared.
      */
-    boolean sameInputsBut(Inputs then, Inputs now, boolean askedMatters, BitSet unconsulted,
-                          BitSet contentAsked) {
-        for (int at = 0; at < inputs.length; at++) {
-            if (unconsulted != null && unconsulted.get(at)) {
+    boolean sameAskedInputsBut(Inputs then, Inputs now, int consulted, Part aside) {
+        return same(then, now, consulted, true, aside);
+    }
+
+    private boolean same(Inputs then, Inputs now, int consulted, boolean onlyWhereAsked,
+                         Part aside) {
+        for (int at = 0; at < inputs.size(); at++) {
+            Part each = inputs.get(at);
+            if (each == aside
+                    || (onlyWhereAsked && each.askedBit != 0
+                            && (consulted & each.askedBit) == 0)) {
                 continue;
             }
             if (!Objects.equals(then.values().get(at), now.values().get(at))) {
                 return false;
             }
-            if (contentAsked != null && contentAsked.get(at)
+            if ((consulted & each.contentBit) != 0
                     && !Objects.equals(then.contents().get(at), now.contents().get(at))) {
                 return false;
             }
         }
-        return !askedMatters || Objects.equals(then.asked(), now.asked());
+        return true;
     }
 
-    /** Where the input held in the field called {@code name} stands among the inputs. */
-    int placeOfTheInput(String name) {
-        for (int at = 0; at < inputs.length; at++) {
-            if (inputs[at].getName().equals(name)) {
-                return at;
-            }
-        }
-        throw new IllegalArgumentException(name + " is no input of a reading");
+    /** Begins a reading that asks after nothing yet, and returns what the one around had asked. */
+    int startConsulting() {
+        int before = consulted;
+        consulted = 0;
+        return before;
+    }
+
+    /** Ends the reading begun at {@code before}, which the one around has asked after as well,
+     *  and returns what it asked after. */
+    int endConsulting(int before) {
+        int mine = consulted;
+        consulted = before | mine;
+        return mine;
+    }
+
+    /** What a reading taken again asked after, asked after by the reading it is taken in. */
+    void consultAgain(int consulted) {
+        this.consulted |= consulted;
+    }
+
+    /** {@code consulted} with {@code part} not asked after. */
+    static int without(int consulted, Part part) {
+        return consulted & ~part.askedBit;
     }
 
     /** What the state a reading must leave alone is, to be compared with it afterwards: the very
-     *  object it is and everything that can be reached through it. */
-    List<Object[]> guardsOf(Object owner) {
-        List<Object[]> out = new ArrayList<>(guards.length);
-        for (Field each : guards) {
-            Object value = read(each, owner);
-            Object held = value instanceof Deque<?> deque ? deque.peek() : value;
-            out.add(new Object[] {held, snapshotOf(held)});
+     *  object it is and what it says it has been told. Only what says so is guarded
+     *  ({@link #guarded}, {@link #guardedByItsMark}, {@link #writtenInto}, {@link #trials}). */
+    List<Object[]> guards() {
+        List<Object[]> out = new ArrayList<>(guards.size());
+        for (Part each : guards) {
+            Object held = each.guarded();
+            out.add(new Object[] {held, held == null ? null : ((Marked) held).mark()});
         }
         return out;
     }
@@ -261,107 +636,19 @@ final class ReadingState {
         return true;
     }
 
-    /**
-     * What {@code value} is and holds, to be compared with what it is and holds later: the
-     * collections and maps down to the objects in them, and each of those object the very one.
-     *
-     * <p>Compared by what is held and not by how much, so that an object put in place of another
-     * under the same key, or added to a list that is held under a key, is a change. Sets and maps
-     * are held without an order, since no order of theirs is a part of what they hold.
-     */
-    static Object snapshotOf(Object value) {
-        return snapshotOf(value, new ArrayList<>());
-    }
-
-    /**
-     * @param inside the collections and maps being looked into, outermost first: one that holds
-     *               itself is looked into once and is, where it comes again, itself
-     */
-    private static Object snapshotOf(Object value, List<Object> inside) {
-        if (value instanceof Collection<?> || value instanceof Map<?, ?>) {
-            for (Object each : inside) {
-                if (each == value) {
-                    return new Same(value);
-                }
-            }
+    /** {@code each} as the very objects it holds, in its order: what it is compared on where each
+     *  is the same only as itself. */
+    static List<Object> theVeryOnes(Collection<?> each) {
+        List<Object> out = new ArrayList<>(each.size());
+        for (Object one : each) {
+            out.add(theVeryOne(one));
         }
-        return switch (value) {
-            case null -> null;
-            case Marked marked -> marked.mark();
-            case Boolean _, Number _, CharSequence _, Enum<?> _ -> value;
-            case Map<?, ?> map -> {
-                inside.add(map);
-                Map<Object, Object> held = new HashMap<>();
-                for (Map.Entry<?, ?> each : map.entrySet()) {
-                    held.put(new Same(each.getKey()), snapshotOf(each.getValue(), inside));
-                }
-                inside.removeLast();
-                yield held;
-            }
-            case Set<?> set -> {
-                inside.add(set);
-                Set<Object> held = new HashSet<>();
-                for (Object each : set) {
-                    held.add(elementOf(each, inside));
-                }
-                inside.removeLast();
-                yield held;
-            }
-            case Collection<?> collection -> {
-                inside.add(collection);
-                List<Object> held = new ArrayList<>(collection.size());
-                for (Object each : collection) {
-                    held.add(elementOf(each, inside));
-                }
-                inside.removeLast();
-                yield held;
-            }
-            default -> new Same(value);
-        };
+        return out;
     }
 
-    /** An element of a collection: what it holds if it is a collection or a map, and otherwise the
-     *  very one. */
-    private static Object elementOf(Object element, List<Object> inside) {
-        return element instanceof Collection<?> || element instanceof Map<?, ?>
-                ? snapshotOf(element, inside) : new Same(element);
-    }
-
-    /**
-     * What {@code owner} is and holds in every one of its fields.
-     *
-     * <p>Every field and not the fields somebody listed: an object that says what it has been told
-     * ({@link Marked}) says it by this, so that a field added to it is part of what it says.
-     */
-    static Object snapshotOfFields(Object owner) {
-        return snapshotOfFieldsBut(owner, Set.of());
-    }
-
-    /** What {@code owner} is and holds in every field but those named {@code aside}. */
-    static Object snapshotOfFieldsBut(Object owner, Set<String> aside) {
-        List<Object> held = new ArrayList<>();
-        for (Field each : fieldsOf(owner.getClass())) {
-            if (!aside.contains(each.getName())) {
-                held.add(snapshotOf(read(each, owner)));
-            }
-        }
-        return held;
-    }
-
-    private static final Map<Class<?>, Field[]> FIELDS = new ConcurrentHashMap<>();
-
-    private static Field[] fieldsOf(Class<?> of) {
-        return FIELDS.computeIfAbsent(of, type -> {
-            List<Field> out = new ArrayList<>();
-            for (Field each : type.getDeclaredFields()) {
-                if (!Modifier.isStatic(each.getModifiers()) && !each.isSynthetic()) {
-                    each.setAccessible(true);
-                    out.add(each);
-                }
-            }
-            out.sort((one, other) -> one.getName().compareTo(other.getName()));
-            return out.toArray(Field[]::new);
-        });
+    /** {@code one} as itself, the same only as itself whatever it is equal to. */
+    static Object theVeryOne(Object one) {
+        return new Same(one);
     }
 
     /**
@@ -428,17 +715,19 @@ final class ReadingState {
         }
     }
 
-    private static Object read(Field field, Object owner) {
-        try {
-            return field.get(owner);
-        } catch (IllegalAccessException e) {
-            throw new IllegalStateException(field.getName(), e);
-        }
+    /**
+     * What {@code value} holds, as a collection: a ledger's entries, where it is a ledger. A
+     * ledger's revision says which history it stands at and not what it holds, and an input
+     * compared by what it holds is compared on that.
+     */
+    private static Object heldIn(Object value) {
+        return value instanceof Ledger ledger ? ledger.contents() : value;
     }
 
     /** A copy of {@code value} that a later change to it does not reach, where it is something
      *  that is changed. */
-    private static Object copyOf(Object value) {
+    private static Object copyOf(Object held) {
+        Object value = heldIn(held);
         if (auditing) {
             auditEach(value);
         }
