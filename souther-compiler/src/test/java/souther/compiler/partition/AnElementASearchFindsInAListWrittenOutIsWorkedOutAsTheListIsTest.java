@@ -75,6 +75,28 @@ class AnElementASearchFindsInAListWrittenOutIsWorkedOutAsTheListIsTest {
         assertEquals(List.of(), reasonsOtherThanAStop(model));
     }
 
+    /**
+     * Found as the third of three, the two before it are holidays and the third is not: two
+     * elements of the calendar are the first two days, and every element is another day than the
+     * third, which those two are. Read as they are, the comparison is shown over every value, and
+     * only the stop at the end of the calendar is said.
+     */
+    @Test
+    void theHolidaysBeforeTheOneFoundAreElementsApartFromIt() {
+        String model = """
+                module demo
+
+                behavior f : (s: Date, holidays: Set<Date>, from: Date) -> Bool
+
+                let f (s, holidays, from) =
+                    Int.floorMod(Date.daysBetween(s, Option.withDefault(from,
+                        List.find(c -> Bool.not(Set.contains(c, holidays)),
+                            [from, Date.addDays(1, from), Date.addDays(2, from)]))), 7) >= 1
+                """;
+        assertEquals(List.of("from", "holidays[*]"), unread(model).stream().distinct().toList());
+        assertEquals(List.of(), reasonsOtherThanAStop(model));
+    }
+
     /** The lines of the report saying what was not read for any reason but a run that may stop
      *  on the way to the comparison. */
     private static List<String> reasonsOtherThanAStop(String source) {

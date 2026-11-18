@@ -8540,9 +8540,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                    List<OnAWay> conditions, SearchRegion region,
                                                    InputReading read) {
         TermPath container = statement.elementsOf();
+        // What every element meets is met by the one written for this statement too, where that
+        // one is put at a value every element is held apart from by a form nothing but that value
+        // decides ({@link #meetsWhatEveryElementDoes}); anything else asked of every element is
+        // not asked here.
+        List<TakenConstraint.Affine> ofEveryElement = new ArrayList<>();
         for (OnAWay other : conditions) {
             if (container.equals(other.elementsOf()) && other.bySome() == null) {
-                return false;
+                if (other.disequality() == null) {
+                    return false;
+                }
+                ofEveryElement.add(other.disequality());
             }
         }
         // A rule keeping the elements apart reads them, and is met by an element apart from the
@@ -8554,6 +8562,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return false;
         }
         for (List<RowDemand.OfAnElement> way : statement.bySome().ways()) {
+            if (!ofEveryElement.isEmpty()
+                    && !meetsWhatEveryElementDoes(way, container, ofEveryElement)) {
+                continue;
+            }
             List<RowDemand.OfAnElement> ofItsNumbers = new ArrayList<>();
             List<NumericTerm.FromOnePosition> pinned = new ArrayList<>();
             boolean truthsWritten = true;
@@ -8593,6 +8605,38 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     && each.getKey().placesReadOff().stream().noneMatch(place ->
                             apartFrom.stream().anyMatch(place::bearsOn)))) {
                 return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether {@code way}, a way some element of {@code container} meets a statement, puts the
+     * element at a value that meets each of {@code ofEveryElement} whatever the other places are:
+     * it holds the element's number equal to a form of other places, and each of those, with
+     * that form put in for the number, comes to a statement of no number that holds
+     * ({@link #withoutTheNumber}). {@code element == from} meets {@code element /= from + 2},
+     * which is {@code from /= from + 2}.
+     */
+    static boolean meetsWhatEveryElementDoes(List<RowDemand.OfAnElement> way,
+                                                     TermPath container,
+                                                     List<TakenConstraint.Affine> ofEveryElement) {
+        NumericTerm element = new NumericTerm.ValueOf(container.element());
+        for (RowDemand.OfAnElement each : way) {
+            TakenConstraint.Affine definition = switch (each) {
+                case RowDemand.Relational(TakenConstraint.Affine(var form, var rel, var _))
+                        when rel == Rel.EQ && form.coefs().containsKey(element) ->
+                        new TakenConstraint.Affine(form, rel);
+                case RowDemand.SameAs(Operand.At<TermPath>(var at))
+                        when !at.isAtOrUnder(container.element()) ->
+                        new TakenConstraint.Affine(LinearForm.<NumericTerm>difference(
+                                element, new NumericTerm.ValueOf(at)), Rel.EQ);
+                default -> null;
+            };
+            if (definition != null) {
+                List<TakenConstraint.Affine> left = withoutTheNumber(ofEveryElement, definition,
+                        element, definition.form().coefs().get(element));
+                return left != null && left.isEmpty();
             }
         }
         return false;
