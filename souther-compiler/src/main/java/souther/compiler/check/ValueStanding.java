@@ -437,10 +437,46 @@ public final class ValueStanding {
             Core given = ConstructionProjection.given(nd, fa.field());
             if (given != null) {
                 read.add(Core.withoutStanding(given));
+                Set<Core> theFieldTells = Collections.newSetFromMap(new IdentityHashMap<>());
+                worksOut(given, target, theFieldTells);
+                read.addAll(theFieldTells);
+                // A part that names only what the field names is worked out where the field's
+                // reading tells of it, and adds nothing to what a run works out.
+                for (Core.FieldValue each : nd.values()) {
+                    Set<Core> worksOut = Collections.newSetFromMap(new IdentityHashMap<>());
+                    worksOut(each.value(), target, worksOut);
+                    if (theFieldTells.containsAll(worksOut)) {
+                        read.add(Core.withoutStanding(each.value()));
+                    }
+                }
             }
         }
         return endsNoneWhenWorkedOut(new Standing<>(fa.target(), at, names), read,
                 makingEndsNone, following);
+    }
+
+    /**
+     * What reading {@code value}, where {@code from} stands, works out of its own: the expression
+     * itself where it is no name, and the values the names it reads stand for, as the names they
+     * read in turn do — what the reading of a name tells of where the name is read.
+     */
+    private static <E, N extends Names<E, N>> void worksOut(Core value, Standing<E, N> from,
+                                                            Set<Core> out) {
+        if (!(Core.withoutStanding(value) instanceof Core.Read)) {
+            out.add(Core.withoutStanding(value));
+        }
+        followedFrom(value, from, out);
+    }
+
+    private static <E, N extends Names<E, N>> void followedFrom(Core e, Standing<E, N> from,
+                                                                Set<Core> out) {
+        Core node = Core.withoutStanding(e);
+        if (node instanceof Core.Read read
+                && named(read, from.at(), from.names()) instanceof Named.One<E, N>(var one)
+                && out.add(Core.withoutStanding(one.value()))) {
+            followedFrom(one.value(), one, out);
+        }
+        Core.forEachChild(node, child -> followedFrom(child, from, out));
     }
 
     /**

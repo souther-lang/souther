@@ -1,7 +1,10 @@
 package souther.compiler.partition;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.stream.IntStream;
+import java.util.stream.LongStream;
 
 /**
  * Whether some statements of remainders by one divisor can be met together by choosing one
@@ -42,7 +45,7 @@ final class JointResidues {
      * @param x     the remainder the form leaves
      * @param least the least non-negative number the pair uses
      */
-    record Choice(int x, int least) implements Answer {}
+    record Choice(int x, long least) implements Answer {}
 
     /** No pair of remainders is allowed by every statement, so no whole number is. */
     record None() implements Answer {}
@@ -56,17 +59,61 @@ final class JointResidues {
      * allowed, and not searched where the divisor is past {@link #MOST_DIVISOR}.
      */
     static Answer least(int divisor, List<Statement> statements) {
+        return between(divisor, statements, 0, Long.MAX_VALUE);
+    }
+
+    /**
+     * The pair that needs the number no further than any other does among the numbers from
+     * {@code low} to {@code high}, where the number is the whole number itself and not its
+     * remainder. The remainders of the numbers {@code low} through {@code low + divisor - 1} are
+     * every remainder there is, and a number past them leaves one of those again, so the numbers
+     * tried are no more than the divisor: the answer is none where none of them within the bounds
+     * leaves a remainder some pair allows.
+     *
+     * <p>That is the least number the statements are met at inside the bounds, which is no smaller
+     * than {@code low}: a number held from {@code low} up by what else the way says is not
+     * brought down to the remainder.
+     */
+    static Answer between(int divisor, List<Statement> statements, long low, long high) {
         if (divisor < 1 || divisor > MOST_DIVISOR) {
             return new NotSearched();
         }
-        for (int y = 0; y < divisor; y++) {
-            for (int x = 0; x < divisor; x++) {
-                if (meetsEvery(divisor, statements, x, y)) {
-                    return new Choice(x, y);
-                }
+        if (low < 0 || low > high) {
+            return new None();
+        }
+        // Walked as a range closed at both ends, which ends at the last number a long holds where
+        // that is the bound; a count up to the bound would step past it.
+        long last = high - low < divisor - 1 ? high : low + divisor - 1;
+        return LongStream.rangeClosed(low, last)
+                .mapToObj(n -> choiceAt(divisor, statements, n))
+                .flatMap(Optional::stream)
+                .findFirst().orElse(new None());
+    }
+
+    /** The first remainder of the form that meets every statement with the number at {@code n},
+     *  as a choice there, or none. */
+    private static Optional<Answer> choiceAt(int divisor, List<Statement> statements, long n) {
+        int remainder = (int) (n % divisor);
+        return IntStream.range(0, divisor)
+                .filter(x -> meetsEvery(divisor, statements, x, remainder))
+                .mapToObj(x -> (Answer) new Choice(x, n))
+                .findFirst();
+    }
+
+    /**
+     * Whether every statement of the number alone is met at {@code n}: its {@code allowed} holds
+     * of {@code onTheNumber * n + shift}, with the form not in it. A number none of the
+     * statements is of is allowed.
+     */
+    static boolean allowsTheNumber(int divisor, List<Statement> statements, long n) {
+        for (Statement each : statements) {
+            long sum = (long) each.onTheNumber() * Math.floorMod(n, (long) divisor)
+                    + each.shift();
+            if (!each.allowed().contains((int) Math.floorMod(sum, (long) divisor))) {
+                return false;
             }
         }
-        return new None();
+        return true;
     }
 
     /**

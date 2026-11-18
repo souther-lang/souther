@@ -831,7 +831,7 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " call names it"),
             Map.entry("souther.compiler.partition.Pullback#<init>("
                             + "Lsouther/compiler/inputs/InputReading;Ljava/util/Optional;"
-                            + "Lsouther/compiler/inputs/ElementsNamed;Z)V",
+                            + "Lsouther/compiler/inputs/ElementsNamed;ZLjava/util/Set;)V",
                     "how many readings one reading of a condition makes in all, which every split"
                             + " takes its readings from and past which it says which figure"),
             // What a step of a reading concludes, written out. Past the figure the step is
@@ -871,21 +871,24 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " are kept as nobody taking them apart, naming the figure that"
                             + " stopped it"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#<init>("
-                            + "Ljava/util/function/Function;Z)V",
+                            + "Ljava/util/function/Function;"
+                            + "Lsouther/compiler/meaning/CasesOfALineAsked$QuestionsOfAStatement;)V",
                     "how many times the cases one case was said for are asked, which every"
                             + " question spends"),
+            Map.entry("souther.compiler.meaning.CasesOfALineAsked$QuestionsOfAStatement#fresh()"
+                            + "Lsouther/compiler/meaning/CasesOfALineAsked$QuestionsOfAStatement;",
+                    "how many questions the lines of one statement are asked together, past which"
+                            + " every line of it is said to be stopped at that figure"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#asked("
                             + "Lsouther/compiler/meaning/DecidingCase;)"
                             + "Lsouther/compiler/meaning/CasesOfALineAsked$Found;",
                     "how many ways of choosing a case are asked, counted before any is: past the"
                             + " figure, more cases than are taken apart, and none is asked"),
-            // Whether the cases are past the figure as the choices stand, said once for the askings
-            // that stop there and for the reader that holds a statement's derivations only where
-            // a line's cases may be cut off, which omits no work.
-            Map.entry("souther.compiler.meaning.CasesOfALineAsked#pastTheFigureAsTheChoicesStand("
-                            + "Lsouther/compiler/meaning/DecidingCase$Cases;)Z",
-                    "whether the ways of choosing a case are past the figure as the choices stand,"
-                            + " which each asking hands over as the figure it stopped at"),
+            Map.entry("souther.compiler.meaning.CasesOfALineAsked#walkOf("
+                            + "Lsouther/compiler/meaning/DecidingCase$Cases;)"
+                            + "Lsouther/compiler/meaning/CasesOfALineAsked$Walk;",
+                    "how many ways of choosing a case are walked, past which the walk is none and"
+                            + " the asking names the figure with the ways counted"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#pastTheSteps("
                             + "Ljava/util/List;)V",
                     "out of steps, naming them and the cases left nobody took apart"),

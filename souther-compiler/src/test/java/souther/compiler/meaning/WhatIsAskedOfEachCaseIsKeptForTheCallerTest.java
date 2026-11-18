@@ -48,7 +48,8 @@ class WhatIsAskedOfEachCaseIsKeptForTheCallerTest {
             new DecidingCase.Cases.EachOf(List.of(one(A), one(B))),
             new DecidingCase.Cases.EachOf(List.of(one(C), one(D)))));
 
-    /** Asks, answering each condition by {@code answer} and keeping what was asked. */
+    /** Asks of cases a row may be in, every one, answering each condition by {@code answer} and
+     *  keeping what was asked. */
     private record Asking<T>(Function<Proposition, T> answer, List<Proposition> asked) {
 
         Asking(Function<Proposition, T> answer) {
@@ -59,7 +60,7 @@ class WhatIsAskedOfEachCaseIsKeptForTheCallerTest {
             return CasesOfALineAsked.atomsOf(new DecidingCase(SAID, cases), condition -> {
                 asked.add(condition);
                 return answer.apply(condition);
-            });
+            }, _ -> true);
         }
     }
 
@@ -126,8 +127,8 @@ class WhatIsAskedOfEachCaseIsKeptForTheCallerTest {
 
     /**
      * Of the cases some row may be in, a part chosen so far no row is in leaves every case past it
-     * unanswered, and the ways of choosing are not counted: nine choices are more ways than are
-     * taken apart, and the one case no part of which leaves no row is answered.
+     * unanswered: of the ways nine choices make, the one case no part of which leaves no row is
+     * answered.
      */
     @Test
     void aPartNoRowIsInLeavesTheCasesPastItUnanswered() {
@@ -180,7 +181,7 @@ class WhatIsAskedOfEachCaseIsKeptForTheCallerTest {
         return CasesOfALineAsked.someCaseAnswers(new DecidingCase(SAID, cases), condition -> {
             asked.add(condition);
             return condition.equals(wanted);
-        }, _ -> true, answer -> answer);
+        }, _ -> true, answer -> answer, CasesOfALineAsked.QuestionsOfAStatement.fresh());
     }
 
     /** The first case with the answer wanted is found, and the cases chosen after it are not

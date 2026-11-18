@@ -410,6 +410,7 @@ public final class PublicationOrders {
                     CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN,
                     CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
                     CompositionBudget.CASES_A_LINE_IS_ASKED_IN,
+                    CompositionBudget.QUESTIONS_A_STATEMENT_IS_ASKED,
                     CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS));
 
     /**

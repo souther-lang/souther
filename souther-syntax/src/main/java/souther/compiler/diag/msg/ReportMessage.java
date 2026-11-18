@@ -1329,6 +1329,9 @@ public sealed interface ReportMessage extends Message {
 
     record TheCallIsWrittenInsideHelpers(String helpers) implements ReportMessage, Prose {}
 
+    record EveryChoiceIsWrittenInTheHelper(String helper, Message inside)
+            implements ReportMessage, Prose {}
+
     record TheIf() implements ReportMessage, Prose {}
 
     record TheMatch() implements ReportMessage, Prose {}

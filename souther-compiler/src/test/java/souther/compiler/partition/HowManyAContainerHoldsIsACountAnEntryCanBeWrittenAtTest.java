@@ -46,13 +46,18 @@ class HowManyAContainerHoldsIsACountAnEntryCanBeWrittenAtTest {
         assertEquals(List.of(true, false, false, false), heldAt("Set<Never>"));
     }
 
-    /** A date is a type nothing counts out, and a rule written on a number leaves it one value
-     *  the owner shows: neither is taken for a type with more than one. */
+    /** A rule written on a number leaves it one value the owner shows, and is not taken for a
+     *  type with more than one. */
     @Test
-    void aSetOfATypeNothingCountsOutOrARuleHoldsIsShownOneValue() {
-        assertEquals(List.of(true, true, false, false), heldAt("Set<Date>"));
+    void aSetOfATypeARuleHoldsIsShownOneValue() {
         assertEquals(List.of(true, true, false, false), heldAt("Set<Digit>"));
         assertEquals(List.of(true, true, false, false), heldAt("Set<OnlyTrue>"));
+    }
+
+    /** A date has more values than a container has elements, as a number with no end does. */
+    @Test
+    void aSetOfDatesIsHeldAtEveryCount() {
+        assertEquals(List.of(true, true, true, true), heldAt("Set<Date>"));
     }
 
     /** The keys of a map are counted as the elements of a set are: the cases an enumeration

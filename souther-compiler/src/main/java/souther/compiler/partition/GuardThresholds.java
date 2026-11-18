@@ -1255,12 +1255,19 @@ public final class GuardThresholds {
             if (!everywhere && !casesPutOnTheWay) {
                 continue;
             }
+            // An operation another application works out that this one works out as well, as
+            // the list every application is handed is built before any, stops a run where this
+            // one does whichever is made first, so it asks nothing of the rows.
+            List<UndividedByARelation.IntOperation> own =
+                    it.stops().operations().operations();
             List<UndividedByARelation.IntOperation> others = new ArrayList<>();
             boolean othersTold = true;
             for (int other = 0; other < applications.size(); other++) {
                 if (other != at) {
                     othersTold &= applications.get(other).stops().exact();
-                    others.addAll(applications.get(other).stops().operations().operations());
+                    applications.get(other).stops().operations().operations().stream()
+                            .filter(each -> own.stream().noneMatch(each::sameOperationAs))
+                            .forEach(others::add);
                 }
             }
             if (othersTold) {

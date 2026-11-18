@@ -61,6 +61,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * Containers filled so that the occurrences of a path inside them come to a number.
@@ -950,38 +951,17 @@ final class ContainersAddingUp {
      * <p>Which is also what ends this where the rules cap nothing. A range the rules leave open at
      * the top runs to the largest count there is, and what stops the walk before then is the
      * consumer having no room, as it is at every other length.
+     *
+     * <p>Past the sizes the group asks for as well as past the ones the rules leave. A size some
+     * other number of the same location refuses is no candidate at all, so it is stepped over here
+     * rather than handed on and refused — the figure below counts what it was handed, and a count
+     * nobody asked for would spend it.
      */
     static Iterable<Integer> countsAdmitted(DeclaredBounds.CountRange howMany,
-                                                    HowManyIsAskedFor alsoHolding) {
-        int from = Math.max(howMany.least(), 0);
-        return () -> new Iterator<>() {
-
-            private int at = from;
-
-            @Override
-            public boolean hasNext() {
-                // Past the sizes the group asks for as well as past the ones the rules leave. A
-                // size some other number of the same location refuses is no candidate at all, so
-                // it is stepped over here rather than handed on and refused — the figure below
-                // counts what it was handed, and a count nobody asked for would spend it.
-                while (at <= howMany.most() && !asked(at)) {
-                    at++;
-                }
-                return at <= howMany.most();
-            }
-
-            @Override
-            public Integer next() {
-                if (!hasNext()) {
-                    throw new NoSuchElementException();
-                }
-                return at++;
-            }
-
-            private boolean asked(int many) {
-                return alsoHolding == null || alsoHolding.holds(many);
-            }
-        };
+                                            HowManyIsAskedFor alsoHolding) {
+        return () -> IntStream.rangeClosed(Math.max(howMany.least(), 0), howMany.most())
+                .filter(many -> alsoHolding == null || alsoHolding.holds(many))
+                .boxed().iterator();
     }
 
     /**

@@ -85,6 +85,83 @@ class AJointChoiceOfRemaindersIsTheOneAWalkOfNumbersFindsTest {
                 JointResidues.least(JointResidues.MOST_DIVISOR, statements));
     }
 
+    /**
+     * With the number held from {@code low} up to {@code high} by what else the way says, the
+     * choice is the least number inside those bounds that some pair allows, and none where no
+     * number inside them leaves a remainder one does. Every number in the bounds is tried.
+     */
+    @Test
+    void theChoiceInsideBoundsIsTheLeastNumberInsideThemAndNoneWhereNoneIsThere() {
+        Random random = new Random(3271);
+        int found = 0;
+        int none = 0;
+        for (int instance = 0; instance < 5000; instance++) {
+            int divisor = DIVISORS[random.nextInt(DIVISORS.length - 1)];
+            List<JointResidues.Statement> statements = new ArrayList<>();
+            for (int i = 1 + random.nextInt(4); i > 0; i--) {
+                Set<Integer> allowed = new LinkedHashSet<>();
+                for (int r = 0; r < divisor; r++) {
+                    if (random.nextInt(3) == 0) {
+                        allowed.add(r);
+                    }
+                }
+                if (allowed.isEmpty()) {
+                    allowed.add(random.nextInt(divisor));
+                }
+                statements.add(new JointResidues.Statement(random.nextInt(9) - 4,
+                        random.nextInt(9) - 4, allowed));
+            }
+            for (int low = 0; low <= 2 * divisor; low++) {
+                for (int high = low - 1; high <= low + 2 * divisor; high++) {
+                    long expected = -1;
+                    for (int n = low; n <= high && expected < 0; n++) {
+                        if (someFormMeetsEvery(divisor, statements, n)) {
+                            expected = n;
+                        }
+                    }
+                    JointResidues.Answer answer =
+                            JointResidues.between(divisor, statements, low, high);
+                    if (expected < 0) {
+                        assertEquals(new JointResidues.None(), answer,
+                                divisor + " " + statements + " " + low + ".." + high);
+                        none++;
+                    } else {
+                        JointResidues.Choice choice = (JointResidues.Choice) answer;
+                        assertEquals(expected, choice.least(),
+                                divisor + " " + statements + " " + low + ".." + high);
+                        assertTrue(meetsEvery(divisor, statements,
+                                BigInteger.valueOf(choice.x()), BigInteger.valueOf(choice.least())));
+                        found++;
+                    }
+                }
+            }
+        }
+        assertTrue(found > 1000 && none > 1000, found + " found, " + none + " none");
+    }
+
+    /** What the way's own bound on the number makes of the remainder: a statement met only at
+     *  numbers that are multiples of seven is met at seven and not at nought once the way holds
+     *  the number from one. */
+    @Test
+    void aNumberHeldFromOneIsTheNextOfItsRemainderAndNotNought() {
+        List<JointResidues.Statement> statements =
+                List.of(new JointResidues.Statement(0, 1, Set.of(0)),
+                        new JointResidues.Statement(0, 0, Set.of(0)));
+        assertEquals(new JointResidues.Choice(0, 0), JointResidues.between(7, statements, 0, 100));
+        assertEquals(new JointResidues.Choice(0, 7), JointResidues.between(7, statements, 1, 100));
+        assertEquals(new JointResidues.None(), JointResidues.between(7, statements, 1, 6));
+    }
+
+    private static boolean someFormMeetsEvery(int divisor,
+                                              List<JointResidues.Statement> statements, int n) {
+        for (int form = 0; form < divisor; form++) {
+            if (meetsEvery(divisor, statements, BigInteger.valueOf(form), BigInteger.valueOf(n))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** A divisor past what is searched is no answer that the statements cannot be met, and is not
      *  searched. */
     @Test

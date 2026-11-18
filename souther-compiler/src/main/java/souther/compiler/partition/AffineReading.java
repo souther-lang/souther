@@ -67,7 +67,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
@@ -510,6 +509,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** What a total over what an operation makes of a list written out at it comes to,
          *  application by application. */
         Attempt totalOfWhatIsMadeOfAListWrittenOut(Core node, InputReads at);
+
+        /**
+         * Whether what a run works out evaluating {@code value} at {@code at} is told, telling it:
+         * a form read as numbers of the input, what ends no run, a comparison by its two sides,
+         * an option made by closures, the lists written out a call is handed, and a remainder of
+         * a form read. False where none of those reads it, which is a value whose working out
+         * this reading does not tell.
+         */
+        boolean tellsWhatItWorksOut(Core value, InputReads at);
     }
 
     /**
@@ -586,6 +594,30 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             /** What a run works out to reach a value, asked once for each value this reading
              *  asks it of. */
             private final WorkedOutToReachIt reached = WorkedOutToReachIt.of(ofTheInput);
+
+            /** The lists written out whose elements this reading has told as a run builds them,
+             *  each once. */
+            private final Set<Core> built = Collections.newSetFromMap(new IdentityHashMap<>());
+
+            /**
+             * A name an operation handed an element of a list written out on stands for an
+             * element of a list a run built whole before handing it any: what working each
+             * element out may stop a run at is worked out on the way to the name, whichever
+             * element it is handed ({@link #builtFrom}).
+             */
+            @Override
+            public void noticed(Core place, InputReads at) {
+                if (!(Core.withoutStanding(place) instanceof Core.Read name)
+                        || name.binding() == null) {
+                    return;
+                }
+                for (Core handed : at.containersTheElementCameFrom(name)) {
+                    if (Core.withoutStanding(handed) instanceof Core.ListLit list
+                            && built.add(list)) {
+                        builtFrom(list.elements(), at);
+                    }
+                }
+            }
 
             // What a name comes to is a function of the value, the environment, the elements it
             // asks of and what is left of the figure counting elements; the rest this reading
@@ -763,22 +795,46 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             @Override
             public void bound(Core.LetIn binding, InputReads at) {
                 BindingId name = binding.binder() == null ? null : binding.binder().binding();
-                if (name != null && told.readByATerm(name)) {
-                    return;
+                if ((name == null || !told.readByATerm(name))
+                        && !tellsWhatItWorksOut(binding.value(), at)) {
+                    told.exact = false;
                 }
-                if (tried(apart -> Attempt.ofAPart(AffineForms.outcome(binding.value(), at, apart)))
-                        instanceof Attempt.Form) {
-                    return;
+            }
+
+            /**
+             * Told where every part of it a run may stop at is read as a form, its operations
+             * told, and the rest ends no run ({@link WorkedOutToReachIt#besideWhatIsTold}): a
+             * comparison by its sides, a remainder by what it divides, a list written out by its
+             * elements, as anything else. And an option made by closures, by their bodies.
+             */
+            @Override
+            public boolean tellsWhatItWorksOut(Core value, InputReads at) {
+                Denotation whole = new Denotation(value, at);
+                if (readAsAForm(whole) || reached.endsNoRun(whole)) {
+                    return true;
                 }
-                if (reached.endsNoRun(new Denotation(binding.value(), at))) {
-                    return;
-                }
-                if (tellsTheClosuresMakingAnOption(binding.value(), at)
-                        || isARemainderOfAReadForm(binding.value(), at, this, ruleSource,
-                                reached)) {
-                    return;
-                }
-                told.exact = false;
+                return tellsTheClosuresMakingAnOption(value, at)
+                        || reached.besideWhatIsTold(this::toldHere).endsNoRun(whole);
+            }
+
+            /**
+             * Whether what working out {@code part}, a part that may end a run, does is told here:
+             * a name whose value was asked with a node read as numbers of the input, or a part
+             * read as a form. A part read is read as a run works it out, and where it stops is
+             * told whether or not it comes to a form.
+             */
+            private boolean toldHere(Denotation part) {
+                return (Core.withoutStanding(part.value()) instanceof Core.Read read
+                        && told.readByATerm(read.binding()))
+                        || AffineForms.outcome(part.value(), part.at(), this)
+                                instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads>;
+            }
+
+            /** Whether {@code part} reads as a form here, its operations then told. */
+            private boolean readAsAForm(Denotation part) {
+                return tried(apart -> Attempt.ofAPart(
+                        AffineForms.outcome(part.value(), part.at(), apart)))
+                        instanceof Attempt.Form;
             }
 
             /**
@@ -1227,10 +1283,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return true;
                 }
                 // The analysis that owns the stopped value answers for where a sum of the addends
-                // of the comparison passes the ends of an Int, and for no other end: a run that
-                // stops where a construction's rules refuse the number is not one it answers for.
-                if (held.equals(WhereAnOperatorAnswers.WHAT_AN_INT_HOLDS)
-                        && over.size() == 1 && stoppedAt.isAPlainStop(over.get(0))) {
+                // of the comparison passes the ends of the type it answers, an Int or a Date, and
+                // for no other end: a run that stops where a construction's rules refuse the
+                // number is not one it answers for.
+                if (!(Core.withoutStanding(node) instanceof Core.Construct)
+                        && over.size() == 1
+                        && stoppedAt.isAPlainStopOrABoundValue(over.get(0))) {
                     told.sumsOverTheStop.add(new SumOverTheStop(node, form, over.get(0),
                             held.least(), held.greatest(), after));
                     return true;
@@ -2566,68 +2624,25 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         if (WorkedOutToReachIt.of(ofTheInput).endsNoRun(new Denotation(expression, at))) {
             return UndividedByARelation.Working.NOTHING;
         }
-        WhatWasTold told = new WhatWasTold();
-        if (AffineForms.outcome(expression, at,
-                reading(ofTheInput, new LinkedHashSet<>(), new ElementsMet(), told))
-                instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>) {
-            told.exact = false;
-        }
-        return told.workedOut().stops().operations();
+        return toldEvaluating(expression, at, ofTheInput).workedOut().stops().operations();
     }
 
     private static UndividedByARelation.Working workingOfEvaluating(Core expression, InputReads at,
                                                                     InputReading ofTheInput) {
-        if (WorkedOutToReachIt.of(ofTheInput).endsNoRun(new Denotation(expression, at))) {
-            return new UndividedByARelation.Working(List.of(),
-                    WhatARelationLeavesUndivided.Told.EVERY);
-        }
-        if (!(Core.withoutStanding(expression) instanceof Core.Binary comparison)
-                || !comparison.op().compares()) {
-            return UndividedByARelation.Working.UNREAD;
-        }
-        WhatWasTold told = new WhatWasTold();
-        AffineForms.Reading<NumericTerm, InputReads> reading = reading(ofTheInput,
-                new LinkedHashSet<>(), new ElementsMet(), told);
-        for (Core side : List.of(comparison.left(), comparison.right())) {
-            if (AffineForms.outcome(side, at, reading)
-                    instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>
-                    && !isARemainderOfAReadForm(side, at, reading, ofTheInput.rules(),
-                            WorkedOutToReachIt.of(ofTheInput))) {
-                told.exact = false;
-            }
-        }
-        return told.working();
+        return toldEvaluating(expression, at, ofTheInput).working();
     }
 
-    /**
-     * Whether {@code side} is a floor remainder by a positive constant and the number it takes the
-     * remainder of reads as a form. Working it out runs nothing but the number it divides, whose
-     * operations are told as that is read, and the remainder is not an operation a run stops at.
-     *
-     * <p>That the divisor comes to a positive number is a question of values. What is worked out
-     * to reach the divisor, and whatever else {@code side} is written with, is asked of
-     * {@code side} as it is written, apart from the dividend and the remainder itself.
-     */
-    private static boolean isARemainderOfAReadForm(
-            Core side, InputReads reads, AffineForms.Reading<NumericTerm, InputReads> reading,
-            RuleReadingSource rules, WorkedOutToReachIt reached) {
-        Denotation standing = reads.standing(side, rules.symbols(), rules.newtypes());
-        InputReads at = standing.at();
-        if (!(Core.withoutStanding(standing.value()) instanceof Core.PreservedCall call)) {
-            return false;
+    /** What a reading of its own tells of what a run works out evaluating {@code expression}
+     *  ({@link Arithmetic#tellsWhatItWorksOut}): every operation it tells, and short of every one
+     *  where it does not read it. */
+    private static WhatWasTold toldEvaluating(Core expression, InputReads at,
+                                              InputReading ofTheInput) {
+        WhatWasTold told = new WhatWasTold();
+        if (!reading(ofTheInput, new LinkedHashSet<>(), new ElementsMet(), told)
+                .tellsWhatItWorksOut(expression, at)) {
+            told.exact = false;
         }
-        OptionalInt divisor = DefaultBoundOperationFacts.get()
-                .divisorOfAFloorRemainder(call.operation());
-        if (divisor.isEmpty() || call.args().size() != 2) {
-            return false;
-        }
-        int dividend = 1 - divisor.getAsInt();
-        return at.folded(call.args().get(divisor.getAsInt()), rules.symbols(), rules.newtypes())
-                        .orElse(null) instanceof Long by && by > 0
-                && AffineForms.outcome(call.args().get(dividend), at, reading)
-                        instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads>
-                && reached.besideWhatWasRestated(List.of(call.args().get(dividend)), call)
-                        .endsNoRun(new Denotation(side, reads));
+        return told;
     }
 
     /** Whether what {@code expression} works out ends no run, apart from the closures
@@ -2913,10 +2928,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             return new StoppedValues(value, false, read, answersFor);
         }
 
-        /** Whether {@code held} is the stopped expression, and neither a choice nor a quotient by
-         *  a value. */
-        boolean isAPlainStop(Held held) {
-            return held.theStop && !held.aChoice && !quotientAwayFromNought;
+        /** Whether {@code held} is the stopped expression or a bound value the derivation names,
+         *  and neither a choice nor a quotient by a value: an operation over it is one over that
+         *  value, which the analysis that drew the lines answers for. */
+        boolean isAPlainStopOrABoundValue(Held held) {
+            return (held.theStop || held.bound != null) && !held.aChoice
+                    && !quotientAwayFromNought;
         }
 
         boolean quotientAwayFromNought() {

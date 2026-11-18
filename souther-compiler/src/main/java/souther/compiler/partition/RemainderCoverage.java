@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.LongStream;
 
 /**
  * Whether one number can be chosen to bring a form of numbers to a remainder, for every row of
@@ -42,6 +43,109 @@ final class RemainderCoverage {
      * {@code narrowingsMet} hold. They are the only narrowings a reader may leave out.
      */
     record Proof(Set<NumericTerm> universal, List<TakenConstraint.Affine> narrowingsMet) {}
+
+    /**
+     * A statement that holds {@code form + onTheNumber * n + shift}, by the divisor, to one of
+     * {@code allowed}, with {@code shift} and {@code onTheNumber} as the program works them out
+     * and not as the remainders they leave.
+     */
+    record Moved(BigInteger shift, BigInteger onTheNumber, Set<Integer> allowed) {
+
+        /** The remainders the statement is of, which is all of it that a divisor tells. */
+        JointResidues.Statement residues(int divisor) {
+            BigInteger by = BigInteger.valueOf(divisor);
+            return new JointResidues.Statement(shift.mod(by).intValueExact(),
+                    onTheNumber.mod(by).intValueExact(), allowed);
+        }
+    }
+
+    /**
+     * What choosing the pivot shows of statements of remainders that each move the form by a
+     * number {@code n} as well as by a constant, where {@code n} is a number the way's run
+     * chooses and the way's other statements of it leave anywhere from {@code low} to
+     * {@code high}.
+     *
+     * <p>The number is not the claim's to choose: a row of the way without these statements is a
+     * row for whichever number the statements of the number alone ({@code ofTheNumber}) allow,
+     * and the claim is that the pivot meets every statement at each of them. A number at which
+     * the statements leave no remainder of the form, or the form is not shown brought to every
+     * remainder inside the type, is no number the claim holds at, and the claim is not made.
+     *
+     * <p>Once the number is put at one value the statements are those of one remainder moved by
+     * constants, which {@link #prove} shows met. The numbers asked are every one from {@code low}
+     * to {@code high} when they are no more than twice the divisor, and otherwise the first and
+     * the last as many as the divisor, which is every remainder the number may leave at each end
+     * and no more.
+     *
+     * <p>What lies between is not asked, and that rests on two facts. Which remainder the
+     * statements leave is the number's remainder and nothing else, so each remainder is met at an
+     * end if it is met anywhere. And {@link #prove} depends on the number only through the least
+     * and the greatest the statements move the form by, which are the least and the greatest of
+     * functions of the number that are linear with whole slopes: the least is concave in the
+     * number and the greatest convex. Each width the pivot is put in is then concave in the
+     * number, and the numbers at which every width holds one of each remainder lie between two
+     * numbers and are all of those between. A number between two at which the proof holds is one
+     * it holds at.
+     *
+     * @param statements  what each statement allows of the form moved by the number
+     * @param ofTheNumber what the way's statements that name the number and not the form allow of
+     *                    it
+     * @param low         the least the number may be
+     * @param high        the most the number may be
+     */
+    static Optional<Proof> proveJointly(NumericTerm pivot, WholeEnds pivotEnds,
+                                        Map<NumericTerm, Other> others,
+                                        LinearForm<NumericTerm> dividend,
+                                        List<Moved> statements, List<Moved> ofTheNumber,
+                                        BigInteger divisor, List<TakenConstraint> narrowing,
+                                        BigInteger least, BigInteger greatest, long low,
+                                        long high) {
+        // The numbers asked are as many as twice the divisor at most, which is held to the divisors
+        // the remainders are searched for at all.
+        if (statements.isEmpty() || low < 0 || low > high || divisor.signum() <= 0
+                || divisor.compareTo(BigInteger.valueOf(JointResidues.MOST_DIVISOR)) > 0) {
+            return Optional.empty();
+        }
+        int modulus = divisor.intValueExact();
+        List<JointResidues.Statement> ofTheForm = statements.stream()
+                .map(each -> each.residues(modulus)).toList();
+        List<JointResidues.Statement> ofJustTheNumber = ofTheNumber.stream()
+                .map(each -> each.residues(modulus)).toList();
+        List<Long> asked = new ArrayList<>();
+        if (high - low < 2L * modulus) {
+            // A range closed at both ends, which ends at the last number a long holds where that is
+            // the bound.
+            LongStream.rangeClosed(low, high).forEach(asked::add);
+        } else {
+            for (long n = 0; n < modulus; n++) {
+                asked.add(low + n);
+                asked.add(high - n);
+            }
+        }
+        Proof proof = null;
+        for (long n : asked) {
+            if (!JointResidues.allowsTheNumber(modulus, ofJustTheNumber, n)) {
+                continue;
+            }
+            if (!(JointResidues.between(modulus, ofTheForm, n, n)
+                    instanceof JointResidues.Choice)) {
+                return Optional.empty();
+            }
+            // The moves are the numbers themselves and not their remainders: what keeps the form
+            // inside the type is how far it is moved.
+            List<BigInteger> moves = new ArrayList<>();
+            for (Moved each : statements) {
+                moves.add(each.shift().add(each.onTheNumber().multiply(BigInteger.valueOf(n))));
+            }
+            Optional<Proof> shown = prove(pivot, pivotEnds, others, dividend, moves, divisor,
+                    narrowing, least, greatest);
+            if (shown.isEmpty()) {
+                return Optional.empty();
+            }
+            proof = shown.get();
+        }
+        return Optional.ofNullable(proof);
+    }
 
     /**
      * What choosing {@code pivot} shows of the statements, or empty where it shows nothing.

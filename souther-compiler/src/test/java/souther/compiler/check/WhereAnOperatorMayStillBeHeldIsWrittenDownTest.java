@@ -590,9 +590,6 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
                     "asks whether a walk's step adds the entry's value times the lookup of the"
                             + " entry's key in another map, with a written nought where it holds"
                             + " none, as it is written"),
-            new Held("souther.compiler.partition.AffineReading.workingOfEvaluating",
-                    "asks whether what a run evaluates is a comparison, whose two sides are"
-                            + " worked out whichever way it comes out"),
             new Held("souther.compiler.partition.Pullback.divisionBy",
                     "finds the quotient by the divisor a quotient's analysis read, among the"
                             + " expressions the comparison was written with"),

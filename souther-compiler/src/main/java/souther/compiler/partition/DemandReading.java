@@ -1189,10 +1189,15 @@ final class DemandReading {
      * @param relationStands where the relation is worked out, as the closures it stands inside
      *                  say: what a run needs to get to it. Nowhere in particular for what states
      *                  nothing of where the relation stands
+     * @param atTheEnds those of {@link #narrowing} that operators put on a row where the number
+     *                  they come to is one their type holds ({@link Pullback.OperatorsAnswer#atTheEnds}):
+     *                  a run stops past one where the representation does, which is no line of the
+     *                  model, and is still a run that stops
      */
     record Answered(List<TakenConstraint> onTheWay, List<TakenConstraint> ofTheRelation,
                     List<Tie> tied, boolean unsaid, List<Pullback.StopObligation> owed,
-                    List<PriorApplications> before, Pullback.WorkedOutWhere relationStands) {
+                    List<PriorApplications> before, Pullback.WorkedOutWhere relationStands,
+                    List<TakenConstraint> atTheEnds) {
 
         static final Answered NOTHING = new Answered(List.of(), List.of(), false);
 
@@ -1202,6 +1207,16 @@ final class DemandReading {
             tied = List.copyOf(tied);
             owed = List.copyOf(owed);
             before = List.copyOf(before);
+            List<TakenConstraint> narrowing = new ArrayList<>(onTheWay);
+            narrowing.addAll(ofTheRelation);
+            atTheEnds = atTheEnds.stream().filter(narrowing::contains).distinct().toList();
+        }
+
+        /** What a run asks of a row, none of it at the ends of a representation. */
+        Answered(List<TakenConstraint> onTheWay, List<TakenConstraint> ofTheRelation,
+                 List<Tie> tied, boolean unsaid, List<Pullback.StopObligation> owed,
+                 List<PriorApplications> before, Pullback.WorkedOutWhere relationStands) {
+            this(onTheWay, ofTheRelation, tied, unsaid, owed, before, relationStands, List.of());
         }
 
         /** What a run asks of a row, and says nothing of where the relation stands. */
@@ -1210,6 +1225,15 @@ final class DemandReading {
                  List<PriorApplications> before) {
             this(onTheWay, ofTheRelation, tied, unsaid, owed, before,
                     Pullback.WorkedOutWhere.ALWAYS);
+        }
+
+        /** This, with {@code ends} among what it narrows said to be put on it at the ends of a
+         *  representation. */
+        Answered atTheEndsOfARepresentation(List<TakenConstraint> ends) {
+            List<TakenConstraint> all = new ArrayList<>(atTheEnds);
+            all.addAll(ends);
+            return new Answered(onTheWay, ofTheRelation, tied, unsaid, owed, before,
+                    relationStands, all);
         }
 
         /** What the run to a relation asks of a row, with what the applications before it work
@@ -1261,21 +1285,22 @@ final class DemandReading {
         /** The same, where the relation is also worked out where {@code more} says. */
         Answered alsoNeedingToGetToTheRelation(Pullback.WorkedOutWhere more) {
             return new Answered(onTheWay, ofTheRelation, tied, unsaid, owed, before,
-                    relationStands.and(more));
+                    relationStands.and(more), atTheEnds);
         }
 
         /** This, with {@code prior} worked out by the applications before it. */
         Answered after(PriorApplications prior) {
             List<PriorApplications> all = new ArrayList<>(before);
             all.add(prior);
-            return new Answered(onTheWay, ofTheRelation, tied, unsaid, owed, all, relationStands);
+            return new Answered(onTheWay, ofTheRelation, tied, unsaid, owed, all, relationStands,
+                    atTheEnds);
         }
 
         /** The same, without the statements of {@code met} among what the operators narrow; what
          *  the run is owed and what the applications before work out stay. */
         Answered without(Collection<TakenConstraint.Affine> met) {
             return new Answered(notAmong(onTheWay, met), notAmong(ofTheRelation, met), tied,
-                    unsaid, owed, before, relationStands);
+                    unsaid, owed, before, relationStands, atTheEnds);
         }
 
         /** Every container some tie or operator owed here, or among what the applications before
@@ -1298,7 +1323,7 @@ final class DemandReading {
                     owed.stream().filter(each -> !missed.test(each.where())).toList(),
                     before.stream().map(each -> new PriorApplications(each.walked(),
                             each.workedOut().withoutWhatIsWorkedOutWhere(missed))).toList(),
-                    relationStands);
+                    relationStands, atTheEnds);
         }
 
         /** The same, without the operators owed that {@code metBy} says a run got past: a proof
@@ -1306,7 +1331,7 @@ final class DemandReading {
         Answered withoutOwedThat(Predicate<Pullback.StopObligation> metBy) {
             return new Answered(onTheWay, ofTheRelation, tied, unsaid,
                     owed.stream().filter(each -> !metBy.test(each)).toList(), before,
-                    relationStands);
+                    relationStands, atTheEnds);
         }
 
         private static List<TakenConstraint> notAmong(List<TakenConstraint> narrowing,
@@ -1351,7 +1376,8 @@ final class DemandReading {
             return new Answered(List.of(), narrowing().stream()
                     .filter(each -> each.terms().size() == 1
                             || bindsInsideTheDeclaredRuns(each, declarations))
-                    .toList(), List.of(), false, List.of(), List.of());
+                    .toList(), List.of(), false, List.of(), List.of(),
+                    Pullback.WorkedOutWhere.ALWAYS, atTheEnds);
         }
 
         /**
@@ -1408,8 +1434,10 @@ final class DemandReading {
             both.addAll(other.owed);
             List<PriorApplications> priors = new ArrayList<>(before);
             priors.addAll(other.before);
+            List<TakenConstraint> ends = new ArrayList<>(atTheEnds);
+            ends.addAll(other.atTheEnds);
             return new Answered(onTheWayBoth, ofTheRelationBoth, places, unsaid || other.unsaid,
-                    both, priors, relationStands.and(other.relationStands));
+                    both, priors, relationStands.and(other.relationStands), ends);
         }
     }
 

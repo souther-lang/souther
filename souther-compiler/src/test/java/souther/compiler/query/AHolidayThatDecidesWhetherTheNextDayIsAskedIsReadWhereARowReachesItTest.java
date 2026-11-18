@@ -14,9 +14,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * The next day is asked of the holidays only where the day before is one, or on every run. A stop
  * on the step turns on neither the start nor the holidays, so beside it both are read as a run
  * that gets to the question; where the way is that the start is a holiday, a run gets to the
- * question only at the values of both that make it so, and neither is read at every value.
+ * question at every start, with a holiday written at it, so the two are read the same.
  */
-class AHolidayThatDecidesWhetherTheNextDayIsAskedIsNotShownReachedAtEveryValueTest {
+class AHolidayThatDecidesWhetherTheNextDayIsAskedIsReadWhereARowReachesItTest {
 
     private static final String SOURCE = """
             module probe
@@ -41,7 +41,7 @@ class AHolidayThatDecidesWhetherTheNextDayIsAskedIsNotShownReachedAtEveryValueTe
             """;
 
     @Test
-    void aStopOnAnotherPlaceLeavesTheHolidaysReadAndTheWayThatTurnsOnThemDoesNot() {
+    void aStopOnAnotherPlaceLeavesTheHolidaysReadAlsoWhereTheWayTurnsOnThem() {
         Compilation compilation = Compilation.ofSource(SOURCE, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         Map<String, PartitionEvidence> evidence =
@@ -50,10 +50,7 @@ class AHolidayThatDecidesWhetherTheNextDayIsAskedIsNotShownReachedAtEveryValueTe
         assertEquals(Map.of("c.holidays[*]", UndividedPosition.Reason.RULE_RELATING_TWO_VALUES,
                 "c.start", UndividedPosition.Reason.RULE_RELATING_TWO_VALUES),
                 reasonsOf(evidence.get("beside")));
-        assertEquals(Map.of(
-                "c.holidays[*]", UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE,
-                "c.start", UndividedPosition.Reason.RELATION_NOT_SHOWN_TO_REACH_EVERY_VALUE),
-                reasonsOf(evidence.get("afterAHoliday")));
+        assertEquals(reasonsOf(evidence.get("beside")), reasonsOf(evidence.get("afterAHoliday")));
         ACompiledModel.compiles(compilation);
     }
 

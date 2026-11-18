@@ -156,8 +156,6 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         NOT_TOLD.put("productOfTheElements", "the comparison is not read: a product of what a "
                 + "container holds is no term (FormRange.aTotal asks of a sum)");
         FORMS.put("productOfTheElements", "List.product(ds) >= 10");
-        NOT_TOLD.put("maxOfAStep", "the comparison is not read, so there is no range for what "
-                + "it works out");
         FORMS.put("maxOfAStep", "Option.withDefault(0, List.max(List.map(x -> x + 1, ds))) >= 3");
         NOT_TOLD.put("maxPlusOne", "the comparison is not read, so there is no range for what "
                 + "it works out");

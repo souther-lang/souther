@@ -630,6 +630,14 @@ final class Pullback {
      * where that is being asked.
      */
     private boolean askingWhereAStepAnswers;
+    /**
+     * The calls that make what the comparison left out reads, and the answers of their closures:
+     * what each may itself stop a run on is the relation's own arithmetic, said by the relation,
+     * and is not left unsaid ({@link #leaveUnsaidWhatMayEndARunUnder}). A construction a clause of
+     * its type may refuse is no arithmetic of the relation's, and what they work out in their
+     * other parts is not either.
+     */
+    private final Set<Core> callsMakingWhatTheRelationReads;
 
     /** What a value a walk or a recursion hands back to itself is supposed to be. */
     private sealed interface Supposed permits Carried, Descending, Reaching {}
@@ -673,6 +681,17 @@ final class Pullback {
      */
     private Pullback(InputReading read, Optional<ModelOccurrence> where,
                      ElementsNamed freeInTheRoot, boolean theRelationReadsItsOwnDivisions) {
+        this(read, where, freeInTheRoot, theRelationReadsItsOwnDivisions, Set.of());
+    }
+
+    /**
+     * The same, where the calls making what the comparison left out reads are
+     * {@code callsMakingWhatTheRelationReads}.
+     */
+    private Pullback(InputReading read, Optional<ModelOccurrence> where,
+                     ElementsNamed freeInTheRoot, boolean theRelationReadsItsOwnDivisions,
+                     Set<Core> callsMakingWhatTheRelationReads) {
+        this.callsMakingWhatTheRelationReads = callsMakingWhatTheRelationReads;
         this.theRelationReadsItsOwnDivisions = theRelationReadsItsOwnDivisions;
         this.read = read;
         this.keptByTheInput = WhatConditionsState.of(read).readingsKept();
@@ -1556,13 +1575,15 @@ final class Pullback {
      * The same, leaving out what may stop a run under {@code leftOut}, a node of {@code body}: a
      * comparison a closure the body applies holds, which is the relation's own working out and
      * is read as the relation reads it, at the application it is reached in as at every one
-     * before.
+     * before. What the calls {@code makingWhatItReads} may themselves stop a run on is said by the
+     * relation, and left out as well.
      */
     static OperatorsAnswer whereItsOperatorsAnswerLeavingOut(Core body, Core leftOut,
+                                                             Set<Core> makingWhatItReads,
                                                              InputReads reads,
                                                              InputReading read) {
-        return new Pullback(read, Optional.empty()).whereItsOperatorsAnswerApartFrom(body, reads,
-                null, leftOut);
+        return new Pullback(read, Optional.empty(), ElementsNamed.NONE, false, makingWhatItReads)
+                .whereItsOperatorsAnswerApartFrom(body, reads, null, leftOut);
     }
 
     /**
@@ -1580,6 +1601,7 @@ final class Pullback {
                 : WhatABodyReads.namesReadBy(body, comparisonHolding(body, apart));
         Operators[] told = new Operators[1];
         List<ConstructionAsk> asked = new ArrayList<>();
+        List<Derivation> atTheEnds = new ArrayList<>();
         List<Derivation> answers = inAComparisonsScope(true, () -> {
             if (apart == null) {
                 operated.within = body;
@@ -1590,19 +1612,21 @@ final class Pullback {
                 leaveUnsaidWhatMayEndARunUnder(body, reads, null);
             }
             told[0] = operated;
-            return whereEachOperatorAnswers(operated, asked);
+            return whereEachOperatorAnswers(operated, asked, atTheEnds);
         });
-        Derivation answered = null;
-        for (Derivation one : answers) {
-            answered = answered == null ? one
-                    : new Derivation.Joined(ConditionJoin.BOTH, answered, one);
+        return new OperatorsAnswer(bothOf(answers), told[0].unsaidGroups,
+                told[0].unsaidGroupsWhere, told[0].unsaidElsewhere, told[0].obligations,
+                told[0].afterTheFirst, told[0].relationStandsWhere(), asked,
+                bothOf(atTheEnds));
+    }
+
+    /** What {@code parts} state together, or nothing where there are none. */
+    private Optional<Proposition> bothOf(List<Derivation> parts) {
+        Derivation both = null;
+        for (Derivation one : parts) {
+            both = both == null ? one : new Derivation.Joined(ConditionJoin.BOTH, both, one);
         }
-        return new OperatorsAnswer(
-                answered == null ? Optional.empty()
-                        : Optional.of(pulled(answered).proposition()),
-                told[0].unsaidGroups, told[0].unsaidGroupsWhere, told[0].unsaidElsewhere,
-                told[0].obligations, told[0].afterTheFirst, told[0].relationStandsWhere(),
-                asked);
+        return both == null ? Optional.empty() : Optional.of(pulled(both).proposition());
     }
 
     /**
@@ -2029,7 +2053,8 @@ final class Pullback {
             return;
         }
         operated.readsAt.putIfAbsent(e, reads);
-        boolean told = operated.nodes.contains(e) || operated.nodes.contains(standing);
+        boolean told = operated.nodes.contains(e) || operated.nodes.contains(standing)
+                || (!(e instanceof Core.Construct) && callsMakingWhatTheRelationReads.contains(e));
         GetsPast completion = told ? null : completionOf(e, reads);
         if (!told && !(completion instanceof GetsPast.Always)) {
             WorkedOutWhere where = bound == null ? WorkedOutWhere.ALWAYS : bound.where();
@@ -2244,7 +2269,7 @@ final class Pullback {
      * may stop on its operands' sizes ({@link WhereAnOperatorAnswers}), and of a remainder
      * ({@link WhatARunMayEndFor#theOperandItAloneStopsOn}).
      */
-    private static Core theDivisorItAloneStopsOn(Core e) {
+    static Core theDivisorItAloneStopsOn(Core e) {
         return switch (Core.withoutStanding(e)) {
             case Core.Binary quotient -> quotient.op() == BinOp.DIV
                     && WhereAnOperatorAnswers.ofAnOperator(quotient.op(), quotient.type())
@@ -2714,7 +2739,48 @@ final class Pullback {
             containers.addAll(held.get().containers());
             decidedBy.addAll(held.get().decidedBy());
         }
-        return Optional.of(new WorkedOutWhere(List.of(containers), decidedBy, true));
+        // A closure applied over a walk of whole numbers is applied where the walk holds one, and
+        // no container of the input is asked for that: an empty set of containers of which one
+        // holds an entry is no condition at all.
+        return Optional.of(new WorkedOutWhere(containers.isEmpty() ? List.of()
+                : List.of(containers), decidedBy, true));
+    }
+
+    /**
+     * Where a walk of every whole number between two ends holds one, which is where the first end
+     * is not past the second — and a list made of it by operations that keep whether a list holds
+     * anything holds something exactly there: what the library says of the operation that made
+     * the walk
+     * ({@link BoundOperationFacts#holdsEachWholeNumberInTurn}). Whether a run gets to make the list
+     * turns on the same places, the numbers it is made between. Empty where the container is no
+     * such list, or an end is no form of the input's numbers.
+     */
+    private Optional<WorkedOutWhere> whereAWalkOfWholeNumbersHoldsOne(Denotation container) {
+        Denotation stands = container.at().holdingSomethingExactlyWhereThisDoes(
+                container.value(), read.rules().symbols(), read.rules().newtypes());
+        if (!(Core.withoutStanding(stands.value()) instanceof Core.PreservedCall call)
+                || !(call.declared().operation() instanceof ValueName.Stdlib operation)) {
+            return Optional.empty();
+        }
+        BoundOperationFacts.Between between =
+                DefaultBoundOperationFacts.get().holdsEachWholeNumberInTurn(operation);
+        if (between == null) {
+            return Optional.empty();
+        }
+        ElementsMet ends = new ElementsMet();
+        LinearForm<NumericTerm> from = AffineReading.formOf(
+                call.args().get(between.from().position()), stands.at(), read, ends,
+                sharedFactorNames);
+        LinearForm<NumericTerm> to = AffineReading.formOf(
+                call.args().get(between.to().position()), stands.at(), read, ends,
+                sharedFactorNames);
+        if (from == null || to == null) {
+            return Optional.empty();
+        }
+        Set<TermPath> reads = new LinkedHashSet<>();
+        from.coefs().keySet().forEach(term -> reads.addAll(term.placesReadOff()));
+        to.coefs().keySet().forEach(term -> reads.addAll(term.placesReadOff()));
+        return Optional.of(new WorkedOutWhere(List.of(), reads, true));
     }
 
     /**
@@ -2729,6 +2795,10 @@ final class Pullback {
         Optional<TermPath> at = positionHoldingWhatItHolds(container, read);
         if (at.isPresent()) {
             return Optional.of(new WorkedOutWhere(List.of(Set.of(at.get())), Set.of(), true));
+        }
+        Optional<WorkedOutWhere> walk = whereAWalkOfWholeNumbersHoldsOne(container);
+        if (walk.isPresent()) {
+            return walk;
         }
         return whereItHoldsWhat(ofHoldingSomething(container.value(), container.at(), read,
                 Optional.empty()));
@@ -9492,7 +9562,8 @@ final class Pullback {
         /** What is left unsaid and owed here, with nothing told of where an operator answers. */
         OperatorsAnswer leftUnsaid() {
             return new OperatorsAnswer(Optional.empty(), unsaidGroups, unsaidGroupsWhere,
-                    unsaidElsewhere, obligations, afterTheFirst, relationStandsWhere(), List.of());
+                    unsaidElsewhere, obligations, afterTheFirst, relationStandsWhere(), List.of(),
+                    Optional.empty());
         }
 
         /** What has been told so far, which is the same only while nothing more has. */
@@ -9651,12 +9722,15 @@ final class Pullback {
      *                        it out, which is the condition the same operator narrows the run by,
      *                        kept as a condition and not told yet; nothing of one the
      *                        declarations hold
+     * @param atTheEnds       the part of {@code answers} said by operators that answer where the
+     *                        number they come to is one their type holds: where a run stops at one
+     *                        is where the representation stops, and no line of the model's
      */
     record OperatorsAnswer(Optional<Proposition> answers, List<Set<TermPath>> unsaidAt,
                            List<WorkedOutWhere> unsaidWhere,
                            boolean unsaidElsewhere, List<StopObligation> obligations,
                            List<AfterTheFirst> afterTheFirst, WorkedOutWhere relationStands,
-                           List<ConstructionAsk> asks) {
+                           List<ConstructionAsk> asks, Optional<Proposition> atTheEnds) {
 
         OperatorsAnswer {
             if (unsaidAt.size() != unsaidWhere.size()) {
@@ -9890,9 +9964,15 @@ final class Pullback {
      *
      * <p>A rounding held to a run answers where the number before rounding stands as the way of
      * rounding puts the ends of the run ({@link RoundedToAWholeNumber#heldBetween}).
+     *
+     * <p>Of those, the ones that answer where the number they come to is one their type holds are
+     * added to {@code atTheEnds} as well: where a run stops at one is where the representation
+     * stops, which is no line the model draws, and a reader of the relation tells it apart from
+     * the rest.
      */
     private List<Derivation> whereEachOperatorAnswers(Operators operated,
-                                                      List<ConstructionAsk> asked) {
+                                                      List<ConstructionAsk> asked,
+                                                      List<Derivation> atTheEnds) {
         List<Derivation> out = new ArrayList<>();
         for (Operated each : operated.told) {
             if (each.where() instanceof Answers.OfAChoice(var on)) {
@@ -9944,6 +10024,10 @@ final class Pullback {
                     ? null : whereItStands(form, held);
             if (answers != null) {
                 out.add(answers);
+                if (over instanceof Answers.AsAnOperator(var _,
+                        WhereAnOperatorAnswers.WhereItsExactValueIsHeld _)) {
+                    atTheEnds.add(answers);
+                }
                 askedOf(asked, each.operation(), askedBy(form, held), form.coefs().keySet());
             } else if (!comesOnlyToWhereItAnswers(over)) {
                 operated.beginGroup();

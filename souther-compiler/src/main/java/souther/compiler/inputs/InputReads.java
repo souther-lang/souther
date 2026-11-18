@@ -4207,6 +4207,32 @@ public final class InputReads {
         }
     }
 
+    /**
+     * What {@code list} holds something exactly where, as far as the operations it is the answer
+     * of go: the list beneath the steps that keep whether a list holds anything
+     * ({@link ElementQuestion#SAME_EMPTINESS}), or {@code list} itself where there is none. The
+     * walk of {@link #holdingSomethingWhere}, which asks whether where it comes to is a position.
+     */
+    public Denotation holdingSomethingExactlyWhereThisDoes(Core list, Symbols symbols,
+                                                           DeclarationNewtypes newtypes) {
+        Denotation at = standing(list, symbols, newtypes);
+        Set<BindingId> met = new HashSet<>();
+        while (true) {
+            if (Core.withoutStanding(at.value()) instanceof Core.Read name
+                    && !met.add(name.binding())) {
+                return at;
+            }
+            InputReads where = at.at();
+            InputPath.Beneath step = InputPath.oneStepBeneath(at.value(),
+                    ElementQuestion.SAME_EMPTINESS, where.names(), newtypes,
+                    closure -> blockOf(where, closure, symbols, newtypes));
+            if (step == null) {
+                return at;
+            }
+            at = where.standing(step.from(), symbols, newtypes);
+        }
+    }
+
     /** What the walk handing {@code binding} its element answered, as the closure, where a licence
      *  says it answered one value per element ({@link ElementAnswer}). */
     public ElementAnswer answerAt(BindingId binding) {

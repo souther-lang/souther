@@ -60,6 +60,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -232,6 +234,42 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                 new PlaceOfALine(PartOfAComparison.of(WrittenLine.THE_COMPARISON),
                         Spelling.of("relation")),
                 relation(), cases), relation(), inCases::get, _ -> true);
+    }
+
+    /**
+     * The questions the lines of a statement are asked are the statement's: one line asking as
+     * many as there are leaves the other none, and the statement is then read in none of its
+     * lines, the one that asked them among them.
+     */
+    @Test
+    void aStatementPastTheQuestionsItIsAskedIsReadInNoneOfItsLines() {
+        List<DecidingCase> many = IntStream.range(0,
+                        CompositionBudget.QUESTIONS_A_STATEMENT_IS_ASKED.maximum())
+                .mapToObj(i -> caseNamed("c" + i)).toList();
+        ComparisonAssessment.Several statement = new ComparisonAssessment.Several(List.of(
+                new ComparisonAssessment.Several.Part(placeNamed("many"), line(), many),
+                new ComparisonAssessment.Several.Part(placeNamed("one"), line(),
+                        List.of(caseNamed("last")))));
+
+        ComparisonAssessment.Several narrowed = (ComparisonAssessment.Several)
+                ComparisonAssessment.narrowedByWhatArrives(statement, untouched(),
+                        waysTo(_ -> untouched()),
+                        List.of(new ComparisonArrival.Values(N, NumericDomain.Bounds.OPEN)),
+                        false, reading(), ComparisonWitnesses.AtAComparison.NONE);
+
+        CasesWorkedOut pastTheQuestions = new CasesWorkedOut.Stopped(
+                List.of(CompositionBudget.QUESTIONS_A_STATEMENT_IS_ASKED.reached()));
+        assertEquals(Set.of(placeNamed("many"), placeNamed("one")), narrowed.parts().stream()
+                .filter(part -> part.workedOut().equals(pastTheQuestions))
+                .map(ComparisonAssessment.Several.Part::id).collect(Collectors.toSet()));
+        assertTrue(narrowed.parts().stream().noneMatch(part -> !part.cases().isEmpty()
+                        && part.workedOut() == CasesWorkedOut.SHOWN),
+                narrowed::toString);
+    }
+
+    private static PlaceOfALine placeNamed(String name) {
+        return new PlaceOfALine(PartOfAComparison.of(WrittenLine.THE_COMPARISON),
+                Spelling.of(name));
     }
 
     /** A relation that draws no line beside the one it states. */

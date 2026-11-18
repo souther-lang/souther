@@ -8,6 +8,8 @@ import souther.compiler.check.ClosureUses;
 import souther.compiler.check.RecursionOverAList;
 import souther.compiler.check.BooleanMeaning;
 import souther.compiler.check.BoundOperationFacts;
+import souther.compiler.check.CallArguments;
+import souther.compiler.semantics.PieceOfAnElement;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.diag.Citation;
 import souther.compiler.check.DeclarationNewtypes;
@@ -692,17 +694,19 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      */
     private static Past gotPast(Core comparison, Body in, InputReads reads) {
         Set<Core> ofTheRelation = valuesTheComparisonReads(in.root(), comparison);
+        Set<Core> made = callsMakingWhatTheComparisonReads(in.root(), comparison);
+        made.addAll(ofTheRelation);
         WhatARunWorksOutBeforeACount.FirstApplication first =
                 WhatARunWorksOutBeforeACount.workedOutAtTheFirstApplication(in.root(), comparison);
         boolean afterApplications = first != null && !first.entered().isEmpty();
         List<Core> whole = WhatARunWorksOutBeforeACount.alwaysWorkedOutUpTo(in.root(), comparison);
         if (!afterApplications) {
-            return workedOut(whole, comparison, ofTheRelation, in, reads);
+            return workedOut(whole, comparison, ofTheRelation, made, in, reads);
         }
-        Past upToIt = workedOut(first.parts(), comparison, ofTheRelation, in, reads);
+        Past upToIt = workedOut(first.parts(), comparison, ofTheRelation, made, in, reads);
         DemandReading.Answered upTo = upToIt.answered();
-        DemandReading.Answered before = workedOut(whole, comparison, ofTheRelation, in, reads)
-                .answered();
+        DemandReading.Answered before =
+                workedOut(whole, comparison, ofTheRelation, made, in, reads).answered();
         List<DemandReading.Tie> ties = new ArrayList<>(before.tied());
         for (TakenConstraint each : before.narrowing()) {
             if (!upTo.narrowing().contains(each)) {
@@ -751,19 +755,27 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
     /** What a region can carry of every operator of {@code parts} answering, and what each
      *  construction among them asks ({@link #gotPast}). */
     private static Past workedOut(List<Core> parts, Core comparison, Set<Core> ofTheRelation,
-                                  Body in, InputReads reads) {
+                                  Set<Core> made, Body in, InputReads reads) {
         DemandReading.Answered out = DemandReading.Answered.NOTHING;
         List<ConstructionAsk> asks = new ArrayList<>();
         for (Core part : parts) {
             boolean ofTheRelationItself = part == comparison || ofTheRelation.contains(part);
-            Pullback.OperatorsAnswer operators = part != comparison && standsIn(comparison, part)
-                    ? in.conditions().whereItsOperatorsAnswerLeavingOut(part, comparison, reads,
-                            in.read())
+            boolean holdsIt = part != comparison && standsIn(comparison, part);
+            Pullback.OperatorsAnswer operators = holdsIt
+                    ? in.conditions().whereItsOperatorsAnswerLeavingOut(part, comparison, made,
+                            reads, in.read())
                     : ofTheRelationItself
                     ? in.conditions().whereTheRelationsOwnOperatorsAnswer(part, reads, in.read())
+                    : made.contains(Core.withoutStanding(part))
+                    ? in.conditions().whereItsOperatorsAnswerLeavingOut(part, null, made, reads,
+                            in.read())
                     : in.conditions().whereItsOperatorsAnswer(part, reads, in.read());
             DemandReading.Answered ofIt = operators.answers().isPresent()
                     ? DemandReading.regionAnswered(operators.answers().get(), in.read())
+                            .atTheEndsOfARepresentation(operators.atTheEnds()
+                                    .map(ends -> DemandReading.regionAnswered(ends, in.read())
+                                            .narrowing())
+                                    .orElse(List.of()))
                     : DemandReading.Answered.NOTHING;
             if (ofTheRelationItself) {
                 out = out.and(ofIt.ofTheRelationItself(in.read().quantities().region()));
@@ -788,11 +800,176 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      */
     private static Set<Core> valuesTheComparisonReads(Core root, Core comparison) {
         Set<Core> out = Collections.newSetFromMap(new IdentityHashMap<>());
+        if (root != null) {
+            boundTo(root, namesTheComparisonReads(root, comparison, madeOfIn(root)), out);
+        }
+        return out;
+    }
+
+    /**
+     * The calls that make what the comparison reads of the elements of what each makes, and the
+     * answers of their closures: where a call makes each element of what its closure answers on it
+     * alone ({@link PieceOfAnElement#THE_CLOSURES_ANSWER}), the element is that answer, so the
+     * arithmetic in it is the relation's as the arithmetic written in the comparison is. What is
+     * made of the elements by accumulating, or kept by a test, is no term of the comparison.
+     */
+    private static Set<Core> callsMakingWhatTheComparisonReads(Core root, Core comparison) {
+        Set<Core> out = Collections.newSetFromMap(new IdentityHashMap<>());
         if (root == null) {
             return out;
         }
+        Map<BindingId, List<Core>> madeOf = madeOfIn(root);
+        Set<BindingId> names = namesTheComparisonReads(root, comparison, madeOf);
+        ReadOnTheWay way = ReadOnTheWay.of(root, comparison, names, madeOf);
+        for (BindingId name : names) {
+            for (Core source : madeOf.getOrDefault(name, List.of())) {
+                if (Core.withoutStanding(source) instanceof Core.PreservedCall call) {
+                    BoundOperationFacts.Assembled assembled = DefaultBoundOperationFacts.get()
+                            .assembles(call.declared().operation());
+                    if (assembled != null
+                            && assembled.piece() == PieceOfAnElement.THE_CLOSURES_ANSWER
+                            && Core.withoutStanding(CallArguments.of(assembled.closure(), call))
+                                    instanceof Core.Block closure) {
+                        out.add(call);
+                        answerTheComparisonReads(closure.body(), way.fieldsReadOf(name), root,
+                                out);
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What the comparison reads on its way: the comparison, and what each name it reads is made
+     * of or bound to ({@link #namesTheComparisonReads}). The fields it reads of a name are those
+     * read there, and nowhere else in the body: a field another comparison reads is none of this
+     * one's.
+     *
+     * @param path    the comparison, and what each name it reads is made of or bound to
+     * @param aliases the names made of the whole of another, each by the read of that other they
+     *                are made of: what such a name reads of its fields is read of that other
+     */
+    private record ReadOnTheWay(List<Core> path, Map<Core, List<BindingId>> aliases) {
+
+        static ReadOnTheWay of(Core root, Core comparison, Set<BindingId> names,
+                               Map<BindingId, List<Core>> madeOf) {
+            List<Core> path = new ArrayList<>(List.of(comparison));
+            Map<Core, List<BindingId>> aliases = new IdentityHashMap<>();
+            for (BindingId name : names) {
+                Set<Core> bound = Collections.newSetFromMap(new IdentityHashMap<>());
+                boundTo(root, Set.of(name), bound);
+                List<Core> sources = new ArrayList<>(madeOf.getOrDefault(name, List.of()));
+                sources.addAll(bound);
+                for (Core source : sources) {
+                    path.add(source);
+                    if (Core.withoutStanding(source) instanceof Core.Read whole) {
+                        aliases.computeIfAbsent(whole, _ -> new ArrayList<>()).add(name);
+                    }
+                }
+            }
+            return new ReadOnTheWay(path, aliases);
+        }
+
+        /**
+         * The fields of {@code name} read on the way, by the names of them, and those read of a
+         * name bound to the whole of it; null where it is read as a whole any other way.
+         */
+        Set<String> fieldsReadOf(BindingId name) {
+            Set<String> fields = new HashSet<>();
+            for (Core node : path) {
+                Core here = Core.withoutStanding(node);
+                if (here instanceof Core.Read read && name.equals(read.binding())
+                        && aliases.containsKey(here)) {
+                    for (BindingId alias : aliases.get(here)) {
+                        Set<String> through = fieldsReadOf(alias);
+                        if (through == null) {
+                            return null;
+                        }
+                        fields.addAll(through);
+                    }
+                    continue;
+                }
+                if (readsWhole(name, here, fields)) {
+                    return null;
+                }
+            }
+            return fields;
+        }
+    }
+
+    /**
+     * What {@code body}, the body of a closure making each element of its answer, answers that the
+     * comparison reads, added to {@code out}: the answer, or of a construction the fields in
+     * {@code fields} — all of them where that is null — and the values the {@code let}s on the way
+     * to it bind that those read.
+     */
+    private static void answerTheComparisonReads(Core body, Set<String> fields, Core root,
+                                                 Set<Core> out) {
+        List<Core.LetIn> lets = new ArrayList<>();
+        Core answer = body;
+        while (Core.withoutStanding(answer) instanceof Core.LetIn let) {
+            lets.add(let);
+            answer = let.body();
+        }
+        List<Core> read = new ArrayList<>();
+        if (Core.withoutStanding(answer) instanceof Core.Construct construct && fields != null) {
+            for (Core.FieldValue each : construct.values()) {
+                if (fields.contains(each.field())) {
+                    read.add(each.value());
+                }
+            }
+        } else if (!(Core.withoutStanding(answer) instanceof Core.Construct)) {
+            read.add(answer);
+        } else {
+            construct(answer).values().forEach(each -> read.add(each.value()));
+        }
+        Set<BindingId> names = new HashSet<>();
+        for (Core each : read) {
+            out.add(each);
+            out.add(Core.withoutStanding(each));
+            names.addAll(WhatABodyReads.namesReadBy(root, each));
+        }
+        for (Core.LetIn let : lets.reversed()) {
+            if (let.binder() != null && names.contains(let.binder().binding())) {
+                out.add(let.value());
+                out.add(Core.withoutStanding(let.value()));
+                names.addAll(WhatABodyReads.namesReadBy(root, let.value()));
+            }
+        }
+    }
+
+    private static Core.Construct construct(Core e) {
+        return (Core.Construct) Core.withoutStanding(e);
+    }
+
+    /** Whether {@code e} reads {@code name} as a whole, the fields it reads of it added to
+     *  {@code fields}. */
+    private static boolean readsWhole(BindingId name, Core e, Set<String> fields) {
+        Core node = Core.withoutStanding(e);
+        if (node instanceof Core.FieldAccess access
+                && Core.withoutStanding(access.target()) instanceof Core.Read read
+                && name.equals(read.binding())) {
+            fields.add(access.field());
+            return false;
+        }
+        if (node instanceof Core.Read read) {
+            return name.equals(read.binding());
+        }
+        boolean[] whole = {false};
+        Core.forEachChild(node, child -> whole[0] = whole[0] || readsWhole(name, child, fields));
+        return whole[0];
+    }
+
+    private static Map<BindingId, List<Core>> madeOfIn(Core root) {
         Map<BindingId, List<Core>> madeOf = new HashMap<>();
         bindingsIn(root, madeOf);
+        return madeOf;
+    }
+
+    /** The names {@code comparison} reads, and those read by what each is made of. */
+    private static Set<BindingId> namesTheComparisonReads(Core root, Core comparison,
+                                                         Map<BindingId, List<Core>> madeOf) {
         Set<BindingId> read = new HashSet<>(WhatABodyReads.namesReadBy(root, comparison));
         Deque<BindingId> left = new ArrayDeque<>(read);
         while (!left.isEmpty()) {
@@ -804,8 +981,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 }
             }
         }
-        boundTo(root, read, out);
-        return out;
+        return read;
     }
 
     /** Whether {@code node} is {@code e} or under it, by the node it is. */

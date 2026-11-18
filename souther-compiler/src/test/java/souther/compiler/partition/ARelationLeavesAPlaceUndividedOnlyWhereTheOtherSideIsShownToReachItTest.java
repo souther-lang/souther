@@ -985,12 +985,10 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
                 "k: Int, xs: Set<Side>",
                 "data Left\ndata Right\ndata Middle\ndata Side = Left | Right | Middle",
                 "k > Set.size(xs)", "k"));
-        // Two values shown of a type is not that it has no more: a date is shown two, and a set
-        // of them is not capped at two — no size past two is claimed settled, and none is shown.
-        assertEquals(Map.of("Set.size(xs)", RELATES, "k", NOT_SHOWN), left(
+        // A date has more values than a container has elements, so a set of them is held at every
+        // size and the sizes are the ones the number is compared with.
+        assertEquals(Map.of("Set.size(xs)", RELATES), left(
                 "k: Int, xs: Set<Date>", "data Unused = Int", "k > Set.size(xs)", "4:19"));
-        assertEquals(List.of(), classesAt(
-                "k: Int, xs: Set<Date>", "data Unused = Int", "k > Set.size(xs)", "k"));
         // A rule written over the fields of a record is a rule: the record is shown no value.
         assertEquals(Map.of("Set.size(xs)", RELATES, "k", NOT_SHOWN), left(
                 "k: Int, xs: Set<Span>",

@@ -175,6 +175,36 @@ class AFixedValueIsPartOfTheRegionEveryQuestionIsAnsweredAgainstTest {
                 "x held apart from 5 holds x = 6");
     }
 
+    /**
+     * What the conditions taken in pin a position to is pinned whatever else is fixed: {@code x}
+     * held apart from 1 where {@code x = y} and {@code y = 1} are taken in is refused with
+     * {@code z} fixed as without.
+     */
+    @Test
+    void aPinTheConditionsMakeIsRefusedWhateverElseIsFixed() {
+        Count one = Count.of(BigDecimal.ONE);
+        SearchRegion pinned = region().apartFrom(term("x"), one)
+                .assuming(minus("x", "y"), Rel.EQ).taken()
+                .assuming(LinearForm.<NumericTerm>atomMinusConstant(term("y"), ExactRatio.ONE),
+                        Rel.EQ).taken();
+        assertTrue(pinned.emptiness().isPresent());
+        assertTrue(pinned.given(term("z"), Count.of(BigDecimal.TEN)).emptiness().isPresent());
+    }
+
+    /**
+     * A row is no witness where it puts a position on its hole, however the position got there:
+     * {@code x} held apart from 1 with {@code x = y} taken in, and the row fixing {@code y} and
+     * {@code x} at 1, is refused in either order the two are fixed in.
+     */
+    @Test
+    void aRowPuttingAPositionOnItsHoleIsRefusedInEitherOrder() {
+        Count one = Count.of(BigDecimal.ONE);
+        SearchRegion held = region().apartFrom(term("x"), one)
+                .assuming(minus("x", "y"), Rel.EQ).taken();
+        assertTrue(held.given(term("y"), one).given(term("x"), one).emptiness().isPresent());
+        assertTrue(held.given(term("x"), one).given(term("y"), one).emptiness().isPresent());
+    }
+
     /** And a fixing beside the hole is not. */
     @Test
     void andAFixingBesideTheHoleIsNot() {

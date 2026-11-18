@@ -652,6 +652,33 @@ public enum CompositionBudget {
     CASES_A_LINE_IS_ASKED_IN(8192),
 
     /**
+     * How many questions the cases where the lines of one statement of several decide are asked
+     * together: each the way to a line with what a case has chosen so far taken in, or what a case
+     * taken apart to the end comes to — a relation read again over the rows that arrive there.
+     *
+     * <p><b>The questions, and not the steps or the cases.</b> A question walks the whole way to
+     * the comparison, and is what asking costs; the steps between questions are counted for each
+     * case on its own ({@link #CASES_A_LINE_IS_ASKED_IN}), and how many cases a line is taken
+     * apart into before any is asked ({@link #CASES_A_LINE_IS_TAKEN_APART_INTO}). Neither bounds
+     * a statement whose lines are many: each line keeps within its own figures, and a statement
+     * read on each element a list starts with, for each arm of a search, is as many lines as
+     * those multiply to.
+     *
+     * <p>Enough for a statement over the first week of a list of days, each day moved to the first
+     * business day of three, for each rule a calendar may be due under: about six hundred and
+     * forty questions, asked in about a second. A search of eleven days for a business day, read
+     * so, asks past ten thousand, each walking the way the whole search builds.
+     *
+     * <p><b>Reaching it gives the statement up whole and says so.</b> What its lines were shown to
+     * come to before it ran out is put aside, and every line of it is where its cases were not
+     * worked out ({@link souther.compiler.inputs.BlockReason.WhereALineDecidesNotWorkedOut}), so
+     * that what one line asked decides nothing about another's answer
+     * ({@link souther.compiler.meaning.CasesOfALineAsked.QuestionsOfAStatement}). The lines'
+     * points are still owed there, as they are past {@link #CASES_A_LINE_IS_TAKEN_APART_INTO}.
+     */
+    QUESTIONS_A_STATEMENT_IS_ASKED(4096),
+
+    /**
      * How deep a construction plan descends.
      *
      * <p><b>Reaching it stops no search: what it shortens is the plan.</b> The composing runs
@@ -963,6 +990,7 @@ public enum CompositionBudget {
             case STEPS_A_STATEMENT_IS_READ_IN -> new SearchMessage.StepsAStatementIsReadIn();
             case CASES_A_LINE_IS_TAKEN_APART_INTO -> new SearchMessage.CasesALineIsTakenApartInto();
             case CASES_A_LINE_IS_ASKED_IN -> new SearchMessage.CasesALineIsAskedIn();
+            case QUESTIONS_A_STATEMENT_IS_ASKED -> new SearchMessage.QuestionsAStatementIsAsked();
             case NUMBERS_OF_A_SET_TRIED -> new SearchMessage.NumbersOfASetTried();
             case COMBINATIONS_OF_TOTALS_TRIED -> new SearchMessage.CombinationsOfTotalsTried();
             case CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL ->
@@ -1046,7 +1074,7 @@ public enum CompositionBudget {
                  WAYS_A_STATEMENT_IS_WRITTEN_OUT_OVER, PARTS_THE_CHOICES_OF_A_COUNT_COME_TO,
                  ALTERNATIVES_A_PATH_TRIES, STEPS_A_STATEMENT_IS_READ_IN,
                  CASES_A_LINE_IS_TAKEN_APART_INTO, CASES_A_LINE_IS_ASKED_IN,
-                 WAYS_A_WAY_IS_LOOKED_ALONG, WALKS_A_WAY_IS_READ_AGAIN_WITH,
+                 QUESTIONS_A_STATEMENT_IS_ASKED, WAYS_A_WAY_IS_LOOKED_ALONG, WALKS_A_WAY_IS_READ_AGAIN_WITH,
                  PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH, DEPTH_A_CONSTRUCTION_PLAN_DESCENDS, NUMBERS_OF_A_SET_TRIED,
                  COMBINATIONS_OF_TOTALS_TRIED,
                  CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,

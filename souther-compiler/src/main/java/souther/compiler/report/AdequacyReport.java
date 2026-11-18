@@ -4435,7 +4435,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                             caseExpansionSaid(reading.answer(), construct -> writtenInSaid(
                                     construct, parts, page, declaredIn),
                                     copy -> calledAt(callsAt(behavior.conditionPlaces().copies(),
-                                            copy).calls(), page, declaredIn), page))))
+                                            copy).calls(), page, declaredIn), page)
+                                    + reading.answer()
+                                            .helperHoldingEveryChoice(reading.readAt().inOrder())
+                                            .map(declared -> helperToDeclareSaid(declared, page))
+                                            .orElse(""))))
                             .append(NEW_LINE);
                 }
             }
@@ -9657,8 +9661,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         said.put("casesOfTheLine", which.of());
         // What the case came to, at each copy of the rule it was read at: one case, and an
         // answer for each copy that answered it differently.
-        readingsOfACase(said, each, (one, cameTo) ->
-                caseExpansion(one.putObject("caseExpansion"), cameTo, parts, sources));
+        readingsOfACase(said, each, (one, reading) -> {
+            caseExpansion(one.putObject("caseExpansion"), reading.answer(), parts, sources);
+            reading.answer().helperHoldingEveryChoice(reading.readAt().inOrder())
+                    .ifPresent(declared -> {
+                        ObjectNode helper = one.putObject("helperToDeclare");
+                        helper.put("helper", declared.helper().toString());
+                        ArrayNode inside = helper.putArray("calledInside");
+                        declared.calledInside().forEach(caller -> inside.add(caller.toString()));
+                    });
+        });
     }
 
     /** One rule's line read at a cost and the helpers its cases choose among, as a row of
@@ -9669,9 +9681,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                          WhereAPartIs parts, DocumentSources sources) {
         ObjectNode said = caseRowOf(row, RuleHandleSurface.COSTLY_READING_RULE, each, places,
                 sources);
-        readingsOfACase(said, each, (one, helpers) -> {
+        readingsOfACase(said, each, (one, reading) -> {
             ArrayNode out = one.putArray("helpers");
-            helpers.forEach(helper -> multipliedHelper(out.addObject(), helper, parts, sources));
+            reading.answer().forEach(helper ->
+                    multipliedHelper(out.addObject(), helper, parts, sources));
         });
     }
 
@@ -9696,13 +9709,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     /** The readings of a case, each with the copies of the rule it was read at and what it
      *  answered, which {@code answer} writes. */
     private static <A> void readingsOfACase(ObjectNode said, CasesAtARule<A> each,
-                                            BiConsumer<ObjectNode, A> answer) {
+                                            BiConsumer<ObjectNode, CasesAtARule.Reading<A>>
+                                                    answer) {
         ArrayNode readings = said.putArray("readings");
         for (CasesAtARule.Reading<A> reading : each.readings()) {
             ObjectNode one = readings.addObject();
             ArrayNode copies = one.putArray("readAt");
             reading.readAt().forEach(copy -> copyId(copies.addObject(), copy));
-            answer.accept(one, reading.answer());
+            answer.accept(one, reading);
         }
     }
 
@@ -9995,6 +10009,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         : new ReportMessage.TheCallIsWrittenInsideHelpers(
                                 listed(page, inside.stream().map(each -> "`" + each.name() + "`")
                                         .toList()))));
+    }
+
+    /** A helper every choice of a case is written in, as a suggestion an author can take, with
+     *  the helpers its call has to move out of. */
+    private static String helperToDeclareSaid(CaseExpansion.HelperToDeclare declared, Page page) {
+        return page.say(new ReportMessage.EveryChoiceIsWrittenInTheHelper(
+                declared.helper().name(), declared.calledInside().isEmpty()
+                        ? new ReportMessage.Nothing()
+                        : new ReportMessage.TheCallIsWrittenInsideHelpers(listed(page,
+                                declared.calledInside().stream()
+                                        .map(each -> "`" + each.name() + "`").toList()))));
     }
 
     /** One thing that made some of a case's parts, as an author would find it. */
