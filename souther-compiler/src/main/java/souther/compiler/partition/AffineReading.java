@@ -578,6 +578,30 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              *  asks it of. */
             private final WorkedOutToReachIt reached = WorkedOutToReachIt.of(ofTheInput);
 
+            /** The lists written out whose elements this reading has told as a run builds them,
+             *  each once. */
+            private final Set<Core> built = Collections.newSetFromMap(new IdentityHashMap<>());
+
+            /**
+             * A name an operation handed an element of a list written out on stands for an
+             * element of a list a run built whole before handing it any: what working each
+             * element out may stop a run at is worked out on the way to the name, whichever
+             * element it is handed ({@link #builtFrom}).
+             */
+            @Override
+            public void noticed(Core place, InputReads at) {
+                if (!(Core.withoutStanding(place) instanceof Core.Read name)
+                        || name.binding() == null) {
+                    return;
+                }
+                for (Core handed : at.containersTheElementCameFrom(name)) {
+                    if (Core.withoutStanding(handed) instanceof Core.ListLit list
+                            && built.add(list)) {
+                        builtFrom(list.elements(), at);
+                    }
+                }
+            }
+
             // What a name comes to is a function of the value, the environment, the elements it
             // asks of and what is left of the figure counting elements; the rest this reading
             // holds is told, which the reading made by outcomeOf drops. Given only to that
