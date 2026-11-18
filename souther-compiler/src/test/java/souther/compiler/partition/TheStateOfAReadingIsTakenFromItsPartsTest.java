@@ -7,7 +7,7 @@ import souther.compiler.partition.ReadingState.Compared;
 import souther.compiler.partition.ReadingState.Members;
 import souther.compiler.partition.ReadingState.Restore;
 import souther.compiler.partition.ReadingState.Scoped;
-import souther.compiler.partition.ReadingState.Stack;
+import souther.compiler.partition.ReadingState.Layers;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -44,9 +44,9 @@ class TheStateOfAReadingIsTakenFromItsPartsTest {
     private final ReadingState state = new ReadingState();
     private final Members<String> scoped = state.members();
     private final Scoped<Object> holdsOne = state.setting(Compared.BY_PRESENCE);
-    private final Stack<String> aggregates = state.aggregates();
+    private final Layers<String> aggregates = state.aggregates();
     private final Scoped<List<String>> added = state.guarded();
-    private final Stack<ACandidate> trials = state.trials();
+    private final Layers<ACandidate> trials = state.trials();
     private final Scoped<Object> notCompared = state.notCompared(null);
 
     @Test
@@ -177,7 +177,7 @@ class TheStateOfAReadingIsTakenFromItsPartsTest {
     void theAggregatesBeingReadAreTheSameOnlyWhereTheyAreTheVeryOnes() {
         record AnAggregate(String call, int form) {}
         ReadingState watching = new ReadingState();
-        Stack<AnAggregate> held = watching.aggregates();
+        Layers<AnAggregate> held = watching.aggregates();
         ReadingState.Inputs before;
         try (Restore _ = held.pushing(new AnAggregate("List.length(payable)", 1))) {
             before = watching.inputs();
@@ -258,7 +258,7 @@ class TheStateOfAReadingIsTakenFromItsPartsTest {
     @Test
     void whatIsOnTopIsTheNewestAndTheOthersAreUnderItInTheOrderTheyCame() {
         ReadingState watching = new ReadingState();
-        Stack<String> stack = watching.stack();
+        Layers<String> stack = watching.stack();
 
         try (Restore _ = stack.pushing("outer"); Restore _ = stack.pushing("inner")) {
             assertEquals("inner", stack.newest());

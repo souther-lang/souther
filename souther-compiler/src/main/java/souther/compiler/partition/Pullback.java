@@ -137,7 +137,7 @@ import souther.compiler.partition.ReadingState.NoPartOfAReading;
 import souther.compiler.partition.ReadingState.NoPartOfAReading.Why;
 import souther.compiler.partition.ReadingState.Restore;
 import souther.compiler.partition.ReadingState.Scoped;
-import souther.compiler.partition.ReadingState.Stack;
+import souther.compiler.partition.ReadingState.Layers;
 import souther.compiler.regex.StringsByTheirPieces;
 import souther.compiler.semantics.AnswerAspect;
 import souther.compiler.semantics.BuiltFrom;
@@ -493,17 +493,17 @@ final class Pullback {
      * it concludes is said into the one on top, so that what a candidate set aside said is said
      * into nothing the one kept holds ({@link #firstThatReadsIt}).
      */
-    private final Stack<Trial> underTrial = state.trials();
+    private final Layers<Trial> underTrial = state.trials();
     /** What each candidate that concluded something said, by what it concluded. */
     @NoPartOfAReading(Why.ACCRUES)
     private final Map<Derivation, Trial> triedAndConcluded = new IdentityHashMap<>();
     /** What decided each choice whose arms are being read, nearest on top: what every run works
      *  out before it takes an arm, or nothing where the choice was read other than as a fork,
      *  which tells nothing of what decides its arms ({@link #whatDecidedTheArm}). */
-    private final Stack<Optional<UndividedByARelation.Working>> decidingTheArms = state.stack();
+    private final Layers<Optional<UndividedByARelation.Working>> decidingTheArms = state.stack();
     /** The comparisons whose arms are being read, innermost on top: what a run taking an arm
      *  works out is read off the innermost ({@link #readOnAnArm}). */
-    private final Stack<StatedComparison> armsOfAComparison = state.stack();
+    private final Layers<StatedComparison> armsOfAComparison = state.stack();
     /**
      * Whether an element being added up over takes an arm, as the statement read of it, with the
      * reading of the arm being taken ({@link #sizedByTheArmsOfAnElement}): what a count of the
@@ -578,7 +578,7 @@ final class Pullback {
      * in the way of keeping the comparison being read is read in ({@link #keepingOf}): the sum of
      * the elements that way keeps, and how many of them there are. Newest on top.
      */
-    private final Stack<AnAggregateInACase> aggregatesInACase = state.aggregates();
+    private final Layers<AnAggregateInACase> aggregatesInACase = state.aggregates();
     /**
      * While a comparison's numbers are put together to ask how they stand
      * ({@link #aWayIn(List, Supplier, BooleanSupplier)}): each count of the elements a filter
@@ -3157,11 +3157,11 @@ final class Pullback {
         private long remaindersSaid;
 
         /** What a candidate has said, compared by the very candidate and the two counts. */
-        private record Said(Trial by, long besides, long remainders) {
+        private record SaidSoFar(Trial by, long besides, long remainders) {
 
             @Override
             public boolean equals(Object other) {
-                return other instanceof Said that && that.by == by && that.besides == besides
+                return other instanceof SaidSoFar that && that.by == by && that.besides == besides
                         && that.remainders == remainders;
             }
 
@@ -3195,7 +3195,7 @@ final class Pullback {
         /** What the candidate has said so far, which is the same only while it has said no more. */
         @Override
         public Object mark() {
-            return new Said(this, said, remaindersSaid);
+            return new SaidSoFar(this, said, remaindersSaid);
         }
 
         /** What the rows of the comparison get past is {@code told}. */
@@ -11543,7 +11543,7 @@ final class Pullback {
     private record ATruthDecided(Denotation truth, boolean holds) {}
 
     /** The truths decided in the ways of keeping being read, newest on top. */
-    private final Stack<ATruthDecided> truthsDecided = state.stack();
+    private final Layers<ATruthDecided> truthsDecided = state.stack();
 
     /** {@code ways} with the truths that are decided in the way being read decided as they are. */
     private Boolean[] alreadyDecided(WaysOfKeeping ways) {

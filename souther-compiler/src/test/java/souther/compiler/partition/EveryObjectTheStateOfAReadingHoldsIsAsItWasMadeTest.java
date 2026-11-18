@@ -123,7 +123,7 @@ class EveryObjectTheStateOfAReadingHoldsIsAsItWasMadeTest {
         ReadingState.auditing = true;
         try {
             ReadingState reading = new ReadingState();
-            ReadingState.Stack<AHolder> holders = reading.stack();
+            ReadingState.Layers<AHolder> holders = reading.stack();
             try (ReadingState.Restore _ = holders.pushing(new AHolder(new ArrayList<>()))) {
                 reading.inputs();
             }

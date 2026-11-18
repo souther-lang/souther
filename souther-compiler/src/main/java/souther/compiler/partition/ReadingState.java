@@ -108,7 +108,7 @@ final class ReadingState {
     private final List<Part> inputs = new ArrayList<>();
     private final List<Part> guards = new ArrayList<>();
     private final List<Part> searches = new ArrayList<>();
-    private Stack<?> aggregates;
+    private Layers<?> aggregates;
     /** The next bit a part a reading may leave unasked is told by. */
     private int nextBit = 1;
     /** Which of the parts a reading may leave unasked the reading being made has asked after. */
@@ -118,7 +118,7 @@ final class ReadingState {
      * A piece of the state. Entered and asked after through itself, so what it is to a reading kept
      * is said where it is made.
      */
-    abstract static sealed class Part permits Scoped, Members, Bindings, Stack {
+    abstract static sealed class Part permits Scoped, Members, Bindings, Layers {
 
         final ReadingState state;
         final Compared compared;
@@ -322,12 +322,12 @@ final class ReadingState {
     }
 
     /** Values each on top for the extent of a reading, the newest on top. */
-    static final class Stack<E> extends Part {
+    static final class Layers<E> extends Part {
 
         private final List<E> held = new ArrayList<>();
         private final boolean guardsTheNewest;
 
-        private Stack(ReadingState state, Compared compared, boolean guardsTheNewest) {
+        private Layers(ReadingState state, Compared compared, boolean guardsTheNewest) {
             super(state, compared);
             this.guardsTheNewest = guardsTheNewest;
         }
@@ -451,24 +451,24 @@ final class ReadingState {
     }
 
     /** A stack a reading is compared on by what is on it. */
-    <E> Stack<E> stack() {
-        return input(new Stack<>(this, Compared.BY_VALUE, false));
+    <E> Layers<E> stack() {
+        return input(new Layers<>(this, Compared.BY_VALUE, false));
     }
 
     /**
      * The candidates being tried, newest on top: a reading must not have said anything into the one
      * on top, nor be read under another.
      */
-    <E> Stack<E> trials() {
-        return guarded(new Stack<>(this, Compared.NOT, true));
+    <E> Layers<E> trials() {
+        return guarded(new Layers<>(this, Compared.NOT, true));
     }
 
     /**
      * The aggregates of the way being read, compared for a reading that asked after them, each as
      * the very aggregate.
      */
-    <E> Stack<E> aggregates() {
-        Stack<E> out = new Stack<>(this, Compared.NOT, false);
+    <E> Layers<E> aggregates() {
+        Layers<E> out = new Layers<>(this, Compared.NOT, false);
         aggregates = out;
         return out;
     }
