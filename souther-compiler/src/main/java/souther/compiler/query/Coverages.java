@@ -1316,6 +1316,9 @@ final class Coverages {
         List<BorderAssessment> out = new ArrayList<>();
         MeasuredInput.Lines lines = input.lines();
         List<Border> everyLine = everyLineOf(input.partitioning());
+        // One count for every search of the behavior, made in the order the lines are read and
+        // their points given, which is what the answer turns on and nothing else is.
+        SearchesLeft left = new SearchesLeft();
         for (BorderAssessment border : measured.each()) {
             // One for the border. Two borders that reach one region each prove what they are asked
             // of it, which is given up so that the regions a border is searched in are let go with
@@ -1327,8 +1330,8 @@ final class Coverages {
                     otherReadingsOfTheComparison(everyLine, border.border(), lines);
             Function<Proposition, Optional<ReachingCuts.WhatAnAtomSays>> says =
                     atom -> reaching.saysOf(border.border().origin(), atom);
-            OneSearchOfABorder search = searching(border.border(), read, input, probe,
-                    realizer, way, otherReadings, says);
+            OneSearchOfABorder search = left.counting(searching(border.border(), read, input,
+                    probe, realizer, way, otherReadings, says), border.border(), way);
             // A class the line cuts that lies wholly outside the case the line decides in is
             // looked for along the way to the comparison, and a row is read back against it by the
             // answer the comparison came out with, among the rows in no other reading's case.
@@ -1354,10 +1357,11 @@ final class Coverages {
                     OneSearchOfABorder looking = search;
                     if (answeredAs.isPresent()) {
                         if (overTheComparison == null) {
-                            overTheComparison = searching(border.border(), read, input, probe,
-                                    realizer,
-                                    reaching.wayToTheComparison(border.border().origin()),
-                                    otherReadings, says);
+                            WayToTheBorder toTheComparison =
+                                    reaching.wayToTheComparison(border.border().origin());
+                            overTheComparison = left.counting(searching(border.border(), read,
+                                    input, probe, realizer, toTheComparison, otherReadings,
+                                    says), border.border(), toTheComparison);
                         }
                         looking = overTheComparison;
                     }
@@ -1664,6 +1668,71 @@ final class Coverages {
          *  this border. Three answers rather than two: a shape whose rules were never put the
          *  question is not one whose rules failed to answer it. */
         ItemAssessment.WritabilityProjection projection();
+    }
+
+    /**
+     * How many more searches for a row the lines of one behavior may be searched with
+     * ({@link CompositionBudget#SEARCHES_FOR_ROWS_A_BEHAVIOR_MAKES}), counted as they are made.
+     *
+     * <p>Every search passes through {@link #counting}, so a search added to a border is counted
+     * without anybody remembering to. A search past the figure is not made, and what it comes to
+     * is that this figure stopped it.
+     */
+    private static final class SearchesLeft {
+
+        private final int most = CompositionBudget.SEARCHES_FOR_ROWS_A_BEHAVIOR_MAKES.maximum();
+        private int made;
+
+        /** Whether one more search may be made, counting it where it may. */
+        private boolean take() {
+            if (made >= most) {
+                return false;
+            }
+            made++;
+            return true;
+        }
+
+        /** {@code within}, each search of which is counted, and stopped past the figure. */
+        OneSearchOfABorder counting(OneSearchOfABorder within, Border border,
+                                    WayToTheBorder way) {
+            return new OneSearchOfABorder() {
+
+                @Override
+                public SearchOutcomes search(Criterion criterion, String label,
+                                             Optional<Boolean> answeredAs) {
+                    return take() ? within.search(criterion, label, answeredAs)
+                            : SearchOutcomes.of(stopped(label, way));
+                }
+
+                @Override
+                public boolean classLiesOutsideTheCase(Criterion criterion) {
+                    return within.classLiesOutsideTheCase(criterion);
+                }
+
+                @Override
+                public ARowTellingTheLinesApart.AtOneReading tellingApart(
+                        Criterion criterion, String label, AnotherLineTheRowsAllow.Stands line,
+                        UnaryOperator<SearchRegion> narrowing) {
+                    return take() ? within.tellingApart(criterion, label, line, narrowing)
+                            : new ARowTellingTheLinesApart.AtOneReading(border, line, null,
+                                    SearchOutcomes.of(stopped(label, way)), null);
+                }
+            };
+        }
+
+        /** A search at {@code label} along {@code way} the figure did not let be made. */
+        private static ItemAssessment.Attempt stopped(String label, WayToTheBorder way) {
+            Set<CompositionBudget> by = Set.of(CompositionBudget.SEARCHES_FOR_ROWS_A_BEHAVIOR_MAKES);
+            return new ItemAssessment.Attempt.Stopped(
+                    new souther.compiler.partition.Generator.UnresolvedCombination(
+                            List.of(label),
+                            souther.compiler.partition.Generator.UnresolvedCombination.Reason
+                                    .wordFor(by)),
+                    way, souther.compiler.partition.CompositionAccount.NOTHING,
+                    PublicationOrders.COMPOSITION_BUDGETS.keep(by),
+                    PublicationOrders.COMPOSITION_REPERTOIRES.keep(Set.of()),
+                    PublicationOrders.COMPOSITION_CAPACITIES.keep(Set.of()));
+        }
     }
 
     /** What building a row at one point of a border comes to. Its own interface beside the reading

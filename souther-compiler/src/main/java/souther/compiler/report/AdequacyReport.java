@@ -133,6 +133,8 @@ import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.MeasureReason;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.FindingSubject;
+import souther.compiler.query.HelpersReadOnApplicationsAroundThem;
+import souther.compiler.meaning.AHelperReadOnApplicationsAroundIt;
 import souther.compiler.query.InputCaseEvidence;
 import souther.compiler.query.TiltOfADerivedValue;
 import souther.compiler.query.Measure;
@@ -676,6 +678,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *                  name what only such rows cover. The module's and not this behavior's: a row
      *                  of another behavior can be what covers an arm of this one, and a report
      *                  narrowed to this one still names it
+     * @param helpersCalledOnEachElement the helpers this behavior's lines are written in that a
+     *                  function applied outside them calls on more than one element, each with
+     *                  the calls and the helpers calling it
+     *                  ({@link HelpersReadOnApplicationsAroundThem}): what a line not worked out
+     *                  that is written in one of them names. Asked of every line read, and not of
+     *                  the cases of the one stopped, since a case of one candidate is made of
+     *                  nothing the function did
      */
     public record BehaviorReport(String name, BehaviorImplementation implementation,
                                  BehaviorEvidence evidence,
@@ -695,8 +704,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                  Map<RowRef, WhereARowIs.Shown> rowPlaces,
                                  List<TiltOfADerivedValue> weights,
                                  Map<Replacement, Citation> rewritePlaces,
-                                 Map<DecisionReading.Ruled, List<WhereARunStopped>> wayStops) {
+                                 Map<DecisionReading.Ruled, List<WhereARunStopped>> wayStops,
+                                 Map<ValueName.Helper, HelpersReadOnApplicationsAroundThem.Told>
+                                         helpersCalledOnEachElement) {
         public BehaviorReport {
+            helpersCalledOnEachElement = Map.copyOf(helpersCalledOnEachElement);
             weights = List.copyOf(weights);
             wayStops = Map.copyOf(wayStops);
             rewritePlaces = Map.copyOf(rewritePlaces);
@@ -1044,6 +1056,38 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 overall, List.copyOf(modules));
     }
 
+    /**
+     * The helpers {@code behavior}'s lines are written in that a function applied outside them
+     * calls on more than one element, by helper; nothing where its lines were not read.
+     */
+    private static Map<ValueName.Helper, HelpersReadOnApplicationsAroundThem.Told>
+            helpersCalledOnEachElement(Compilation compilation, String name, String behavior) {
+        List<HelpersReadOnApplicationsAroundThem.Told> told = compilation.db()
+                .ask(new HelpersReadOnApplicationsAroundThem(name, behavior)).value();
+        Map<ValueName.Helper, HelpersReadOnApplicationsAroundThem.Told> out =
+                new LinkedHashMap<>();
+        if (told != null) {
+            told.forEach(each -> out.put(each.named().helper(), each));
+        }
+        return out;
+    }
+
+    /**
+     * What {@code helpers} says of the helper the comparison read at {@code readAt} is written in,
+     * or empty where it says nothing of it, or where the case's choices multiply its readings,
+     * which is said of it already.
+     */
+    private static Optional<HelpersReadOnApplicationsAroundThem.Told> calledOnEachElement(
+            Map<ValueName.Helper, HelpersReadOnApplicationsAroundThem.Told> helpers,
+            CaseExpansion.CameTo answer, List<ModelOccurrence> readAt) {
+        Set<Optional<ValueName.Helper>> writers = new LinkedHashSet<>();
+        readAt.forEach(copy -> writers.add(AHelperReadOnApplicationsAroundIt.writtenIn(copy)));
+        return writers.size() != 1 ? Optional.empty()
+                : writers.iterator().next()
+                        .filter(helper -> !answer.multiplies(helper))
+                        .map(helpers::get);
+    }
+
     private static ModuleReport moduleReport(Compilation compilation, String name,
                                              CheckSurface module, Offering offered) {
         // The same reading every measure beside them reads, asked for rather than made again. Two
@@ -1192,7 +1236,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     // Where every run along each way of the decision that stops stops, as the
                     // places a run is said to stop at: resolved here, where the texts are held.
                     wayStops(compilation, decisions == null ? null
-                            : decisions.get(behavior.name()))));
+                            : decisions.get(behavior.name())),
+                    helpersCalledOnEachElement(compilation, name, behavior.name())));
         }
         Adequacy.DeclaredBoundaries declared =
                 compilation.db().ask(new Adequacy.DeclaredBorders(name)).value();
@@ -4439,6 +4484,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                     + reading.answer()
                                             .helperHoldingEveryChoice(reading.readAt().inOrder())
                                             .map(declared -> helperToDeclareSaid(declared, page))
+                                            .orElse("")
+                                    + calledOnEachElement(behavior.helpersCalledOnEachElement(),
+                                            reading.answer(), reading.readAt().inOrder())
+                                            .map(told -> helperOnEachElementSaid(told,
+                                                    construct -> writtenInSaid(construct, parts,
+                                                            page, declaredIn), page))
                                             .orElse(""))))
                             .append(NEW_LINE);
                 }
@@ -8922,7 +8973,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 partition(b, behavior.partition(), behavior.boundaryReadings(),
                         behavior.weights(), behavior.account(), behavior.claimed(), sources,
                         behavior.rulePlace(), behavior.partPlace(),
-                        behavior.evidence().combinations(), behavior.rowPlace());
+                        behavior.evidence().combinations(), behavior.rowPlace(),
+                        behavior.helpersCalledOnEachElement());
                 branch(b, behavior, sources);
                 decision(b, behavior, sources);
                 interaction(b, behavior, sources);
@@ -9231,7 +9283,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                   List<BorderObligationPointAssessment> account,
                                   ClaimAnnotations claimed, DocumentSources sources,
                                   PublishedRuleHandle.WhereARuleIs places, WhereAPartIs parts,
-                                  CombinationCriterion criterion, WhereARowIs rowsAt) {
+                                  CombinationCriterion criterion, WhereARowIs rowsAt,
+                                  Map<ValueName.Helper, HelpersReadOnApplicationsAroundThem.Told>
+                                          helpersCalledOnEachElement) {
         // The one decision, the same one the page reads. Written here as well, the two surfaces
         // answered a reader differently about which behaviors have a section at all.
         if (!(PartitionSection.of(partition) instanceof PartitionSection.Present)) {
@@ -9623,7 +9677,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         List<CaseOfALine> numbered = casesNumbered(told);
         for (int at = 0; at < told.size(); at++) {
             caseExpansionRow(expanded.addObject(), told.get(at), numbered.get(at), places,
-                    parts, sources);
+                    parts, sources, helpersCalledOnEachElement);
         }
         // And, where a line was read all the same at a cost, the helper its cases choose among:
         // beside the entries above, which say why a line was not read, and written only where
@@ -9654,7 +9708,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static void caseExpansionRow(DocumentItem row, CasesAtARule<CaseExpansion.CameTo> each,
                                          CaseOfALine which,
                                          PublishedRuleHandle.WhereARuleIs places,
-                                         WhereAPartIs parts, DocumentSources sources) {
+                                         WhereAPartIs parts, DocumentSources sources,
+                                         Map<ValueName.Helper,
+                                                 HelpersReadOnApplicationsAroundThem.Told>
+                                                 helpersCalledOnEachElement) {
         ObjectNode said = caseRowOf(row, RuleHandleSurface.CASE_EXPANSION_RULE, each, places,
                 sources);
         said.put("case", which.ordinal());
@@ -9669,6 +9726,19 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         helper.put("helper", declared.helper().toString());
                         ArrayNode inside = helper.putArray("calledInside");
                         declared.calledInside().forEach(caller -> inside.add(caller.toString()));
+                    });
+            calledOnEachElement(helpersCalledOnEachElement, reading.answer(),
+                    reading.readAt().inOrder()).ifPresent(told -> {
+                        ObjectNode helper = one.putObject("helperCalledOnEachElement");
+                        helper.put("helper", told.named().helper().toString());
+                        ArrayNode calls = helper.putArray("calls");
+                        for (ModelOccurrence call : told.named().calls()) {
+                            ObjectNode at = calls.addObject();
+                            copyId(at.putObject("construct"), call);
+                            writtenAt(at, call, parts, sources);
+                        }
+                        ArrayNode inside = helper.putArray("calledInside");
+                        told.calledInside().forEach(caller -> inside.add(caller.toString()));
                     });
         });
     }
@@ -10019,6 +10089,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         ? new ReportMessage.Nothing()
                         : new ReportMessage.TheCallIsWrittenInsideHelpers(listed(page,
                                 declared.calledInside().stream()
+                                        .map(each -> "`" + each.name() + "`").toList()))));
+    }
+
+    /**
+     * A helper a comparison is written in that a call outside it applies to each element, as a
+     * suggestion an author can take: where the calls are, and the helpers that call it, which a
+     * call of it has to move out of.
+     */
+    private static String helperOnEachElementSaid(HelpersReadOnApplicationsAroundThem.Told told,
+                                                  Function<ModelOccurrence, Message> writtenIn,
+                                                  Page page) {
+        Set<Message> at = new LinkedHashSet<>();
+        told.named().calls().forEach(call -> at.add(writtenIn.apply(call)));
+        return page.say(new ReportMessage.TheHelperIsCalledOnEachElement(
+                told.named().helper().name(), Joined.reasons(List.copyOf(at)),
+                told.calledInside().isEmpty() ? new ReportMessage.Nothing()
+                        : new ReportMessage.TheCallIsWrittenInsideHelpers(listed(page,
+                                told.calledInside().stream()
                                         .map(each -> "`" + each.name() + "`").toList()))));
     }
 

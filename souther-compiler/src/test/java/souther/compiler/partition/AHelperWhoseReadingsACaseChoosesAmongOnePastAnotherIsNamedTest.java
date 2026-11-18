@@ -94,6 +94,35 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
             """;
 
     /**
+     * Billing's due dates: the comparisons in {@code isBusinessDay}, called inside the
+     * {@code find} of {@code firstBusinessDay}, which each arm of {@code onABusinessDay}'s match
+     * calls and {@code dueDate} calls in turn. The candidates are dates, and several steps reach
+     * one date, so the choices are among dates and not among readings of {@code isBusinessDay}.
+     */
+    private static final String SHAPED_AS_BILLING = """
+            module demo exposing (g, Calendar, Rule)
+            import List ( map, find, rangeInclusive )
+            data Rule = Preceding | Following
+            data Calendar = { holidays: Set<Date>, aSunday: Date, rule: Rule }
+            let weekday (c: Calendar, d: Date): Int =
+                Int.floorMod(Date.daysBetween(c.aSunday, d), 7)
+            let isBusinessDay (c: Calendar, d: Date): Bool =
+                weekday(c, d) >= 1 && weekday(c, d) <= 5 && Bool.not(Set.contains(d, c.holidays))
+            let firstBusinessDay (c: Calendar, from: Date, step: Int): Date =
+                rangeInclusive(0, 10)
+                    |> map(n -> Date.addDays(n * step, from))
+                    |> find(d -> isBusinessDay(c, d))
+                    |> Option.withDefault(from)
+            let onABusinessDay (c: Calendar, nominal: Date): Date =
+                match c.rule with
+                    | Preceding -> firstBusinessDay(c, nominal, 0 - 1)
+                    | Following -> firstBusinessDay(c, nominal, 1)
+            let dueDate (c: Calendar, nominal: Date): Date = onABusinessDay(c, nominal)
+            behavior g : (c: Calendar, nominal: Date) -> Date
+            let g (c, nominal) = dueDate(c, nominal)
+            """;
+
+    /**
      * How many cases a line is taken apart into here: none. The comparisons of one search leave
      * few ways once their numbers are read, so at the figure declared the line would be taken
      * apart and say nothing of a helper; held to none, every line past the figure as the choices
@@ -115,15 +144,27 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
     }
 
     private static List<JsonNode> readings(AdequacyReport report, Compilation compilation) {
+        return told(report, compilation).stream()
+                .map(reading -> reading.path("caseExpansion")).toList();
+    }
+
+    /** Each reading of each case of each line not worked out, whole. */
+    private static List<JsonNode> told(AdequacyReport report, Compilation compilation) {
         JsonNode partition = JSON.readTree(report
                         .json(SourceRendering.namedByIdentity(compilation.texts())))
                 .path("modules").get(0).path("behaviors").get(0).path("partition");
         List<JsonNode> out = new ArrayList<>();
         partition.path("caseExpansions").forEach(each -> each.path("readings")
-                .forEach(reading -> out.add(reading.path("caseExpansion"))));
+                .forEach(out::add));
         assertFalse(out.isEmpty(), "the line on what the search found is past the figure: "
                 + partition);
         return out;
+    }
+
+    /** That no reading of {@code compilation} names a helper a function outside it calls. */
+    private static void namesNoHelperCalledOnEachElement(Compilation compilation) {
+        told(AdequacyReport.of(compilation), compilation).forEach(reading -> assertFalse(
+                reading.has("helperCalledOnEachElement"), reading::toString));
     }
 
     /** What {@code model} has written from {@code construct}'s place to the end of its line. */
@@ -201,6 +242,7 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
         ACompiledModel.compiles(compilation);
         readings(compilation).forEach(reading -> assertEquals(0,
                 reading.path("multipliedHelpers").size(), reading::toString));
+        namesNoHelperCalledOnEachElement(compilation);
     }
 
     @Test
@@ -209,6 +251,7 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
         ACompiledModel.compiles(compilation);
         readings(compilation).forEach(reading -> assertEquals(0,
                 reading.path("multipliedHelpers").size(), reading::toString));
+        namesNoHelperCalledOnEachElement(compilation);
     }
 
     @Test
@@ -217,5 +260,54 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
         ACompiledModel.compiles(compilation);
         readings(compilation).forEach(reading -> assertEquals(0,
                 reading.path("multipliedHelpers").size(), reading::toString));
+        namesNoHelperCalledOnEachElement(compilation);
+    }
+
+    /** Where the choices multiply the helper's readings, that is what is said of it, and not a
+     *  second suggestion of the same helper. */
+    @Test
+    void aHelperTheChoicesMultiplyIsNotNamedAgainForTheFunctionCallingIt() {
+        for (String model : List.of(CALLED_ON_EACH_CANDIDATE, CALLED_INSIDE_HELPERS)) {
+            Compilation compilation = made(model);
+            ACompiledModel.compiles(compilation);
+            namesNoHelperCalledOnEachElement(compilation);
+        }
+    }
+
+    /**
+     * Billing's shape: nothing multiplies the readings of {@code isBusinessDay} and no helper holds
+     * every choice, and the helper named is the one the comparisons are written in, with every
+     * helper that calls it.
+     */
+    @Test
+    void theHelperAFindOutsideItCallsOnEachCandidateIsNamedWithEveryHelperCallingIt() {
+        Compilation compilation = made(SHAPED_AS_BILLING);
+        ACompiledModel.compiles(compilation);
+        AdequacyReport report = AdequacyReport.of(compilation);
+        List<JsonNode> told = told(report, compilation);
+        for (JsonNode reading : told) {
+            assertEquals(0, reading.path("caseExpansion").path("multipliedHelpers").size(),
+                    reading::toString);
+            assertFalse(reading.has("helperToDeclare"), reading::toString);
+            JsonNode named = reading.path("helperCalledOnEachElement");
+            assertEquals("demo.isBusinessDay", named.path("helper").asString(),
+                    reading::toString);
+            assertEquals(List.of("demo.firstBusinessDay", "demo.onABusinessDay", "demo.dueDate"),
+                    JSON.convertValue(named.path("calledInside"), List.class),
+                    "every helper on the way out to the behavior: " + named);
+            for (JsonNode call : named.path("calls")) {
+                assertTrue(writtenAt(SHAPED_AS_BILLING, call).startsWith("find("),
+                        "the find around the call: " + call);
+            }
+        }
+        String text = report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+        List<String> lines = text.lines().filter(line -> line.contains("case expansion")).toList();
+        assertFalse(lines.isEmpty(), text);
+        for (String line : lines) {
+            assertTrue(line.contains("This comparison is written in `isBusinessDay`")
+                            && line.contains("the call written inside `firstBusinessDay`,"
+                            + " `onABusinessDay`, `dueDate` has to move"),
+                    "the helper, and the helpers its call moves out of: " + line);
+        }
     }
 }

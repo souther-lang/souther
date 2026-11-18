@@ -213,7 +213,11 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
                 AMethod.of("souther/compiler/report/AdequacyReport", "partPlaces",
                         "(Lsouther/compiler/query/Compilation;"
                                 + "Lsouther/compiler/query/PartitionEvidence;Ljava/util/List;"
-                                + "Ljava/util/List;)Ljava/util/Map;")));
+                                + "Ljava/util/List;)Ljava/util/Map;"),
+                // Which helper an author is told to declare as a behavior, and nothing a line or
+                // its rows turn on: the applications are what the suggestion says it is about.
+                AMethod.of("souther/compiler/query/HelpersReadOnApplicationsAroundThem$Gathered",
+                        "add", "(Lsouther/compiler/query/BorderAssessment;)V")));
         return by;
     }
 

@@ -577,6 +577,15 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "hands that figure on with the answer where the realizer had a value left to"
                             + " give, which is what says the answer is about fewer values than the"
                             + " point had"),
+            Map.entry("souther.compiler.query.Coverages$SearchesLeft#<init>()V",
+                    "the figure one behavior's searches for rows are counted against, read once"
+                            + " for the behavior; a search past it is not made, and comes back as"
+                            + " the stop below"),
+            Map.entry("souther.compiler.query.Coverages$SearchesLeft#stopped("
+                            + "Ljava/lang/String;Lsouther/compiler/partition/WayToTheBorder;)"
+                            + "Lsouther/compiler/query/ItemAssessment$Attempt;",
+                    "hands the figure over as the stop of the search it did not let be made,"
+                            + " which a point and a row telling a line apart both carry"),
             Map.entry("souther.compiler.partition.LevelRealizer#ofAForm("
                             + "Lsouther/compiler/partition/Standing$OfAForm;"
                             + "Lsouther/compiler/inputs/SearchRegion;"

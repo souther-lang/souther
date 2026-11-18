@@ -30,6 +30,8 @@ import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.HelpersReadOnApplicationsAroundThem;
+import souther.compiler.types.ValueName;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.query.Offering;
 import souther.compiler.report.GeneratedRows;
@@ -622,6 +624,11 @@ public final class Main {
                 err.println(Messages.get(refused.key(), render.locale(), refused.args()));
                 return 2;
             }
+            // Before anything searches the lines' points for rows, which the offering and the
+            // report below both do: a helper whose copies owe that search most of its points is
+            // something the author can act on while it runs, and asking which costs nothing the
+            // search makes.
+            toldBeforeTheSearch(compilation, module, behavior, render.locale());
             // What this run offers, where rows were asked for. Before the report and not after it:
             // a line the rows do not tell from another is answered by whichever offered row tells
             // the two apart, so where the report sends a reader for one is settled by what goes
@@ -682,6 +689,30 @@ public final class Main {
         } catch (CompileException e) {
             reportCompileError(e, contexts, render);
             return 1;
+        }
+    }
+
+    /**
+     * Each helper of the behaviors {@code module} and {@code behavior} select whose copies owe the
+     * search for rows enough points to be told of first, said on the error stream so that a
+     * document on the output stays one document.
+     */
+    private void toldBeforeTheSearch(Compilation compilation, String module, String behavior,
+                                     Locale locale) {
+        for (HelpersReadOnApplicationsAroundThem.Said said
+                : HelpersReadOnApplicationsAroundThem.worthTellingBeforeTheSearch(compilation)) {
+            if ((module != null && !module.equals(said.module()))
+                    || (behavior != null && !behavior.equals(said.behavior()))) {
+                continue;
+            }
+            List<ValueName.Helper> inside = said.told().calledInside();
+            String calledInside = inside.isEmpty() ? ""
+                    : Messages.get("cli.examples.helper.ahead.inside", locale,
+                            String.join(", ", inside.stream()
+                                    .map(each -> "`" + each.name() + "`").toList()));
+            err.println(Messages.get("cli.examples.helper.ahead", locale, said.behavior(),
+                    said.told().named().helper().name(), said.told().readings(),
+                    said.told().points(), calledInside));
         }
     }
 

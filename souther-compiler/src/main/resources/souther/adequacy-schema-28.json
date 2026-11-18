@@ -177,6 +177,7 @@
         "cases_a_line_is_taken_apart_into",
         "cases_a_line_is_asked_in",
         "questions_a_statement_is_asked",
+        "searches_for_rows_a_behavior_makes",
         "depth_a_construction_plan_descends",
         "numbers_of_a_set_tried",
         "combinations_of_totals_tried",
@@ -9349,6 +9350,50 @@
                             "type": "string"
                           },
                           "description": "The helpers its call is written inside, innermost first, as module and name. A helper cannot call a behavior, so the call moves out past every one of them into a behavior's own `let`. Empty where the helper is called in the behavior's own body."
+                        }
+                      }
+                    },
+                    "helperCalledOnEachElement": {
+                      "type": "object",
+                      "description": "The helper the comparison is written in, where a call outside every copy of it applies a function that calls it to more than one element, and those applications made parts of the case: declared as a behavior, it reads the comparison once over its own inputs, and the applications hand it a value each. Absent where the comparison is written in the behavior's own body, where no such call made parts, where what made the parts was not said, and where the helper is one of `caseExpansion`'s `multiplied`.",
+                      "required": [
+                        "helper",
+                        "calls",
+                        "calledInside"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "helper": {
+                          "type": "string",
+                          "description": "The helper, as its module and name."
+                        },
+                        "calls": {
+                          "type": "array",
+                          "minItems": 1,
+                          "description": "Each call that applies the function, in the copy of the body it stands in, in the order they are met.",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "construct"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "construct": {
+                                "$ref": "#/$defs/constructOccurrence"
+                              },
+                              "at": {
+                                "$ref": "#/$defs/at",
+                                "description": "Where the author wrote the call."
+                              }
+                            }
+                          }
+                        },
+                        "calledInside": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Every helper of the module that calls the helper, and every helper that calls one of those, nearest first, as module and name: on every way to it, and not only the ways this line was read through. A helper cannot call a behavior, so each of those calls moves into a behavior's own `let`, or the helper holding it is declared as a behavior as well. Empty where only behaviors call it."
                         }
                       }
                     }
