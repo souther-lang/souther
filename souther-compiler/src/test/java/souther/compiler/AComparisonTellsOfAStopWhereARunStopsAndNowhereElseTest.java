@@ -32,7 +32,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * <p>What is not told though a run stops is written down in {@link #NOT_TOLD}, one form each
  * with why: a stop the compiler learns to tell moves the form out of it, and a form that is not
- * there and is not told is a stop dropped.
+ * there and is not told is a stop dropped. What is told though none of these numbers stops is
+ * in {@link #TOLD_THOUGH_NONE_STOPS}, a stop that cannot be ruled out yet.
+ *
+ * <p>This holds the report and the program to one another on these numbers, and not on every
+ * input: a stop only some other number reaches is not found by it.
  */
 class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
 
@@ -50,6 +54,10 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
 
     /** What a run stops in and no note says, each with why. */
     private static final Map<String, String> NOT_TOLD = new LinkedHashMap<>();
+
+    /** What is told though no run of the numbers tried stops: a stop that cannot be ruled out,
+     *  each with why it cannot. */
+    private static final Map<String, String> TOLD_THOUGH_NONE_STOPS = new LinkedHashMap<>();
 
     static {
         // an operation of the comparison, and the same without it
@@ -72,6 +80,18 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         FORMS.put("armOfAChoice", "(if q > 5 then q + 1 else 3) >= q");
         FORMS.put("armNoRunTakes", "(if q > 5 && q < 3 then q + 1 else 3) >= q");
         FORMS.put("rightOfAnAnd", "q > 0 && q + 1 > 3");
+        // a guard that keeps what is worked out within the type
+        FORMS.put("sumOfANumberGuarded", "q < 100 && q > -100 && q + 1 > 0");
+        FORMS.put("absOfASumGuarded", "q < 100 && q > -100 && Int.abs(q + 1) >= 0");
+        FORMS.put("totalOfNoElements", "List.length(ds) < 1 && List.sum(ds) >= 10");
+        FORMS.put("lengthOfAStepOfNoElements",
+                "List.length(ds) < 1 && List.length(List.map(x -> x + 1, ds)) >= 2");
+        // a comparison no run reaches: what is worked out in it is worked out by no run
+        FORMS.put("sumOfANumberNoRunReaches", "q > 5 && q < 3 && q + 1 > 0");
+        FORMS.put("totalNoRunReaches", "q > 5 && q < 3 && List.sum(ds) >= 10");
+        FORMS.put("lengthOfAStepNoRunReaches",
+                "q > 5 && q < 3 && List.length(List.map(x -> x + 1, ds)) >= 2");
+        FORMS.put("absOfASumNoRunReaches", "q > 5 && q < 3 && Int.abs(q + 1) >= 0");
         // a total, which is worked out exactly before its type holds it
         FORMS.put("totalOfTheElements", "List.sum(ds) >= 10");
         FORMS.put("foldOfTheElements", "List.fold((w, l) -> w + l, 0, ds) >= 10");
@@ -104,6 +124,12 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 "List.length(List.map(x -> if x < 0 then x + 1 else 0, ds)) >= 2");
         FORMS.put("stepBeside", "List.fold((w, l) -> if l > w then l else w, 0, ds) <= q + 1");
 
+        TOLD_THOUGH_NONE_STOPS.put("totalOfNoElements", "a total is worked out exactly and its "
+                + "range is not derived from the ends of the elements and how many there are "
+                + "(FormRange.asWorkedOut says a total is not known), so a way that leaves no "
+                + "element does not rule the stop out");
+        TOLD_THOUGH_NONE_STOPS.put("lengthOfAStepOfNoElements", "the same, for what a step works "
+                + "out at the elements of a list the way leaves none of");
         NOT_TOLD.put("absOfANumber", "a call's own stop, here the least Int having no absolute "
                 + "value, is told by no reading as an operation of the call: only what it is "
                 + "made of is");
@@ -171,8 +197,9 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 toldAndNoRunStops.add(names.get(at));
             }
         }
-        assertEquals(new TreeSet<String>(), toldAndNoRunStops,
-                "told of a stop, and no run of the numbers tried stops");
+        assertEquals(new TreeSet<>(TOLD_THOUGH_NONE_STOPS.keySet()), toldAndNoRunStops,
+                "told of a stop, and no run of the numbers tried stops, beside the stops the "
+                        + "compiler cannot yet rule out");
         assertEquals(new TreeSet<>(NOT_TOLD.keySet()), stopsAndNothingTold,
                 "a run stops and no note says so, beside the forms the compiler cannot yet tell");
     }
