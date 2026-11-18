@@ -677,6 +677,24 @@ class RunnerTest {
     }
 
     /**
+     * A name holding half a surrogate pair is refused by the JSON parser, before any decoder reads
+     * it, so it is told as JSON that is not valid. The same half in a value is valid JSON and is
+     * refused by the decoder as text.
+     */
+    @Test
+    void aNameHoldingHalfAPairIsNotValidJson() throws Exception {
+        Path file = write("keyed.sou", """
+                data Out = Int
+                behavior keyed : (m: Map<String, Int>) -> Out constructs Out
+                let keyed (m) = Out(Map.size(m))
+                """);
+        Runner.Program program = Runner.compile(file);
+        Runner.RunException name = assertThrows(Runner.RunException.class,
+                () -> program.run("keyed", "{\"\\ud800\": 1}"));
+        assertTrue(name.getMessage().contains("not valid JSON"), name.getMessage());
+    }
+
+    /**
      * Output deeper than the boundary writes is reported the same way. A behavior can build a value
      * deeper than anything it was handed, so this is reachable from input the boundary accepted.
      */
