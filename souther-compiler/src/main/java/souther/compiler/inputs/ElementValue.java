@@ -1671,16 +1671,20 @@ public sealed interface ElementValue {
             List<LinearForm<NumericTerm>> out = new ArrayList<>();
             for (LinearForm<Atom> form : reader.operations) {
                 Map<NumericTerm, ExactRatio> terms = new LinkedHashMap<>();
+                // A form with no number in it is a number written out, which a run stops at where
+                // it is past the type — {@code ((x - x) + max) + 1} — and is no form this cannot
+                // hold: whether it can is not whether it has a number.
+                boolean ofPlaces = true;
                 for (Map.Entry<Atom, ExactRatio> each : form.coefs().entrySet()) {
                     if (each.getKey() instanceof Atom.Place(ElementProjection place)) {
                         terms.put(new NumericTerm.ValueOf(place.from(elements.at())),
                                 each.getValue());
                     } else if (!aProductOfTwoFieldsIn(each, terms, elements)) {
-                        terms.clear();
+                        ofPlaces = false;
                         break;
                     }
                 }
-                if (!terms.isEmpty()) {
+                if (ofPlaces) {
                     out.add(new LinearForm<>(form.constant(), terms));
                 }
             }
