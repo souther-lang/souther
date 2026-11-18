@@ -3200,18 +3200,17 @@ public final class InvariantChecker {
      */
     private Set<NumberAt<RuleKey>> numbersALineIsStatedOn(ClauseExpr stated, Denotations at,
                                                           Coordinates byName) {
-        switch (stated) {
-            case ClauseExpr.Scoped it -> {
-                // A binding is crossed and never a leaf of its own: what the part states is what
-                // its body states, read inside it — so a rule stating its line through a helper
-                // states the line the same rule written out states.
-                return numbersALineIsStatedOn(it.body(), terms.inside(it.binding(), at), byName);
-            }
+        return switch (stated) {
+            // A binding is crossed and never a leaf of its own: what the part states is what its
+            // body states, read inside it — so a rule stating its line through a helper states the
+            // line the same rule written out states.
+            case ClauseExpr.Scoped it ->
+                    numbersALineIsStatedOn(it.body(), terms.inside(it.binding(), at), byName);
             case ClauseExpr.Joined it -> {
                 Set<NumberAt<RuleKey>> both =
                         new LinkedHashSet<>(numbersALineIsStatedOn(it.left(), at, byName));
                 both.addAll(numbersALineIsStatedOn(it.right(), at, byName));
-                return both;
+                yield both;
             }
             case ClauseExpr.Leaf it -> {
                 // The one number the rule is over, which is the same answer the attribution of an
@@ -3219,7 +3218,7 @@ public final class InvariantChecker {
                 // and an end at none, so it puts nothing forward.
                 // The clause this leaf was read out of does not reach here either, and what is
                 // asked is which number the rule is over rather than which arms it may come to.
-                return switch (lineStatedIn(it.of(), it.positive(), at, byName,
+                yield switch (lineStatedIn(it.of(), it.positive(), at, byName,
                         Arrivals.everyArmIsTakenForAValue())) {
                     case StatedLines.Statement.OnWhatStandsAtAPosition found ->
                             Set.of(found.number());
@@ -3231,7 +3230,7 @@ public final class InvariantChecker {
                          StatedLines.Statement.OnANumberNotNamed _ -> Set.of();
                 };
             }
-        }
+        };
     }
 
     /**
