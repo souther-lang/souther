@@ -1558,8 +1558,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         // why, as it did before the division was read.
         if (statesARemainderNoRowPuts(stated.proposition())) {
             Read atTheFirst = onEveryElement ? atTheWholeNumbersItStartsWith(behavior, comparison,
-                    read, reads, answering, onTheInput) : null;
-            if (atTheFirst != null) {
+                    read, reads, answering, onTheInput) : null;            if (atTheFirst != null) {
                 return atTheFirst;
             }
             return onTheInput.arithmetic().get()
@@ -1690,8 +1689,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                 Map<ALineRead, List<UndividedByARelation.Working>> workings = new HashMap<>();
                 for (TheWholeNumbersAListStartsWith.OnOne one : each) {
                     List<Read.Several.Part> drawn = onTheElement(behavior, comparison, one,
-                            read, reads, answering, onTheInput);
-                    if (drawn == null) {
+                            read, reads, answering, onTheInput);                    if (drawn == null) {
                         yield null;
                     }
                     for (Read.Several.Part part : drawn) {
@@ -2325,15 +2323,17 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * <p>Read once, under the names of the one application it is asked of: which applications
      * there are, and where each is reached, is what {@link #ofAnApplicationOnEach} walks, so that
      * a comparison read here and a statement read as lines are told apart by the same walk.
+     *
+     * @param onEveryElement whether a run that gets to that application makes it on every element
+     *                       the closure is handed, as a comparison written in the closure is read
+     *                       ({@link #readOnce})
      */
     static Read ofALawComparison(String behavior, StatedComparison comparison,
                                  InputReading read, InputReads reads,
                                  Arrivals answering, WhatConditionsState conditions,
-                                 Optional<ExpansionLineage> writtenIn) {
-        // Nothing is claimed of every element a closure is handed: that is only ever what lets a
-        // comparison of a remainder be read on the elements a list starts with.
+                                 boolean onEveryElement, Optional<ExpansionLineage> writtenIn) {
         Read drawn = readOnce(behavior, comparison, read, reads, answering,
-                conditions.comparison(comparison, reads, read), false, writtenIn);
+                conditions.comparison(comparison, reads, read), onEveryElement, writtenIn);
         // An application states lines, the values it relates, or a stop
         // ({@link ComparisonAssessment#ofAnApplication}), and takes no other reading of a
         // comparison as its own.
