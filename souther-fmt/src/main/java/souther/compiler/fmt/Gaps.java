@@ -236,21 +236,19 @@ final class Gaps {
      */
     private static TokenSlot neighbour(List<Slot> slots, int i, int step, TokenDoc.Break policy) {
         for (int j = i + step; j >= 0 && j < slots.size(); j += step) {
-            switch (slots.get(j)) {
-                case TokenSlot t -> {
-                    return t;
-                }
+            return switch (slots.get(j)) {
+                case TokenSlot t -> t;
                 case TriviaSlot _ -> {
                     if (policy != TokenDoc.Break.MAY) {
                         throw new IllegalStateException(
                                 "a comment stands beside a boundary that cannot break; the line"
                                         + " after it would be written inside the comment");
                     }
-                    return null;   // the comment's line, and this boundary breaks
+                    yield null;   // the comment's line, and this boundary breaks
                 }
                 case GapSlot _ -> throw new IllegalStateException(
                         "two boundaries meet where their tokens have one adjacency");
-            }
+            };
         }
         throw new IllegalStateException(
                 "a boundary with no code token on one side; every boundary joins two of them");
