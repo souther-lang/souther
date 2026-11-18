@@ -2400,7 +2400,12 @@ final class ReadQuantities implements Quantities {
      * settled by {@code under} still keeps its numbers together.
      */
     private ContainerGroups groupsOf(StructuralContext under, Collection<NumericTerm> terms) {
-        NumericDomain<InputAtom> numbers = effectiveConstraints(under).numbers();
+        return groupsOf(under, terms, effectiveConstraints(under).numbers());
+    }
+
+    /** The same, with the parts of the rules {@code numbers} says. */
+    private ContainerGroups groupsOf(StructuralContext under, Collection<NumericTerm> terms,
+                                     NumericDomain<InputAtom> numbers) {
         List<NumericTerm> every = new ArrayList<>(terms);
         every.addAll(fixed.keySet());
         assumed.forEach(each -> every.addAll(each.terms()));
@@ -3280,6 +3285,33 @@ final class ReadQuantities implements Quantities {
      */
     private List<Map.Entry<NumericTerm, Fixed>> inOrder() {
         return NumericTerms.entriesInOrder(fixed);
+    }
+
+    /**
+     * Whether some of {@code these} are in one group with some of {@code those} ({@link #groupsOf}):
+     * weighed by one part of the rules, with what was taken in and what each of them adds up to
+     * ({@link #withWhatItAddsUp}), which a question about it puts on ({@link #holding}), or
+     * walking one container. What the rules leave the numbers of one group does not turn on
+     * another's, which is what a form asked across the groups is split by. Said where they are
+     * not asked together, or one of them is no number this reading answers for, since nothing
+     * then shows they are apart.
+     */
+    boolean relates(Collection<NumericTerm> these, Collection<NumericTerm> those) {
+        List<NumericTerm> all = new ArrayList<>(these);
+        all.addAll(those);
+        if (!all.stream().allMatch(this::answersFor)
+                || !(asking(all) instanceof StructuralContext.Merge.Together(
+                        StructuralContext under))) {
+            return true;
+        }
+        ConstraintState<InputAtom> rules = effectiveConstraints(under);
+        for (NumericTerm each : all) {
+            rules = withWhatItAddsUp(rules, each, under);
+        }
+        ContainerGroups groups = groupsOf(under, all, rules.numbers());
+        Set<Object> ofThese = new HashSet<>();
+        these.forEach(each -> ofThese.add(groups.keyOf(each)));
+        return those.stream().anyMatch(each -> ofThese.contains(groups.keyOf(each)));
     }
 
     /**

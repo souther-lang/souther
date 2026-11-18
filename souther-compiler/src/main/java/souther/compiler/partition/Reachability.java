@@ -274,26 +274,55 @@ public sealed interface Reachability {
     }
 
     /**
-     * The account a way looked along whole was read from, and what the declarations left before
-     * it.
+     * The account a way looked along whole was read from, what the declarations left before it,
+     * what the run to the border got past working out since, in order, and the region the rows
+     * that got past it are in.
      *
      * <p>Kept so that a reader concluding something of some places only reads the way again with
      * each choice as it shows it comes to for those places, and reads it the one way every way is
-     * read ({@link #of}) rather than working out the ways of what it put together itself.
+     * read ({@link #of}) rather than working out the ways of what it put together itself. What was
+     * got past is taken in again as it was the first time ({@link Reaching#gettingPast}), so the
+     * way read again holds each of its regions, and where a representation stopped on it, as the
+     * way it was read from does.
+     *
+     * @param region the declarations narrowed by what the run got past, where a representation
+     *               stops as well: what the rows that get past it may hold
      */
-    record ReadFrom(WayToTheBorder way, SearchRegion declarations) {
+    record ReadFrom(WayToTheBorder way, SearchRegion declarations,
+                    List<DemandReading.Answered> gotPast, SearchRegion region) {
 
         public ReadFrom {
-            if (way == null || declarations == null) {
+            if (way == null || declarations == null || region == null) {
                 throw new IllegalArgumentException("a way is read from an account, over what the"
                         + " declarations leave");
             }
+            gotPast = List.copyOf(gotPast);
+        }
+
+        ReadFrom(WayToTheBorder way, SearchRegion declarations) {
+            this(way, declarations, List.of(), declarations);
+        }
+
+        /** This, with {@code answered} got past after what was, which narrowed the rows' region
+         *  by {@code narrowing}. */
+        ReadFrom gettingPast(DemandReading.Answered answered, List<TakenConstraint> narrowing) {
+            List<DemandReading.Answered> all = new ArrayList<>(gotPast);
+            all.add(answered);
+            return new ReadFrom(way, declarations, all,
+                    TakenConstraint.narrowedBy(narrowing, region));
         }
 
         /** {@code onTheWay}, conditions some of which are this way's, read over the same
-         *  declarations. */
+         *  declarations and past what this way got past. */
         public Reachability readAs(List<OnTheWay> onTheWay) {
-            return Reachability.of(WayToTheBorder.forArrival(onTheWay), declarations);
+            Reachability read = Reachability.of(WayToTheBorder.forArrival(onTheWay), declarations);
+            if (!(read instanceof Reaching reaching)) {
+                return read;
+            }
+            for (DemandReading.Answered each : gotPast) {
+                reaching = reaching.gettingPast(each);
+            }
+            return reaching;
         }
     }
 
@@ -340,9 +369,16 @@ public sealed interface Reachability {
      * @param arrived         the region the way leaves before a run has got past anything: what a
      *                        stop that can be stated is asked of, so that no operator is held by
      *                        what another narrows after it
-     * @param gotPastAtTheEnds those of {@code gotPast} and {@code gotPastOfTheRelation} put on a
-     *                        row where a number is one its type holds
-     *                        ({@link DemandReading.Answered#atTheEnds})
+     * @param gotPastAtTheEnds those of {@code gotPast} put on a row where a number is one its type
+     *                        holds ({@link DemandReading.Answered#atTheEnds})
+     * @param leftByTheModel  the region the model leaves: {@code region} but for where a
+     *                        representation stops on the run to the border, which is no line the
+     *                        model draws ({@link DemandReading.Answered#withoutTheEnds}). Made by
+     *                        the same steps as {@code region}, from the same region the way
+     *                        leaves, so it holds every row {@code region} does. What a relation
+     *                        divides is read off it; a row is searched for in {@code region}
+     * @param narrowedByTheModel what the declarations were narrowed by to make
+     *                        {@code leftByTheModel}, as {@code narrowedBy} is of {@code region}
      */
     record Reaching(SearchRegion region, Requirements requirements, TruthsAsked truths,
                     List<OnTheWay.TakenIn> boundedOnTheWay, Ways ways,
@@ -353,7 +389,8 @@ public sealed interface Reachability {
                     List<Pullback.StopObligation> owed,
                     List<DemandReading.PriorApplications> before,
                     Pullback.WorkedOutWhere relationStands, SearchRegion arrived,
-                    List<TakenConstraint> gotPastAtTheEnds)
+                    List<TakenConstraint> gotPastAtTheEnds, SearchRegion leftByTheModel,
+                    Optional<List<TakenConstraint>> narrowedByTheModel)
             implements Reachability {
 
         public Reaching {
@@ -361,13 +398,15 @@ public sealed interface Reachability {
                     || declined == null || narrowedBy == null || gotPast == null
                     || gotPastOfTheRelation == null
                     || tied == null || owed == null || before == null
-                    || relationStands == null) {
+                    || relationStands == null || leftByTheModel == null
+                    || narrowedByTheModel == null) {
                 throw new IllegalArgumentException(
                         "a way a row reaches leaves it somewhere and asks something of it");
             }
             boundedOnTheWay = List.copyOf(boundedOnTheWay);
             declined = List.copyOf(declined);
             narrowedBy = narrowedBy.map(List::copyOf);
+            narrowedByTheModel = narrowedByTheModel.map(List::copyOf);
             gotPast = List.copyOf(gotPast);
             gotPastOfTheRelation = List.copyOf(gotPastOfTheRelation);
             gotPastAtTheEnds = List.copyOf(gotPastAtTheEnds);
@@ -383,7 +422,7 @@ public sealed interface Reachability {
                         Optional<List<TakenConstraint>> narrowedBy) {
             this(region, requirements, truths, boundedOnTheWay, ways, declined, narrowedBy,
                     List.of(), List.of(), List.of(), false, List.of(), List.of(),
-                    Pullback.WorkedOutWhere.ALWAYS, region, List.of());
+                    Pullback.WorkedOutWhere.ALWAYS, region, List.of(), region, narrowedBy);
         }
 
         /** What a composer is asked of a row on the way: {@link #boundedOnTheWay}, each as the
@@ -451,7 +490,8 @@ public sealed interface Reachability {
         Reaching splitAs(Ways split) {
             return new Reaching(region, requirements, truths, boundedOnTheWay, split, declined,
                     narrowedBy, gotPast, gotPastOfTheRelation, tied, unsaid, owed, before,
-                    relationStands, arrived, gotPastAtTheEnds);
+                    relationStands, arrived, gotPastAtTheEnds, leftByTheModel,
+                    narrowedByTheModel);
         }
 
         /** Whether every row of {@code region} meets {@code each}, shown by no row meeting its
@@ -531,14 +571,11 @@ public sealed interface Reachability {
                 case Ways.One one -> one;
                 case Ways.Each each -> new Ways.Each(each.along().stream()
                         .map(one -> one.gettingPast(answered)).toList(), each.chosenAs());
-                // Read again from the declarations narrowed by what the run got past, so that a
-                // reader reading the way again is as narrow as this one.
+                // Read again past what the run got past, so that a reader reading the way again
+                // is as narrow as this one, in each of its regions.
                 case Ways.Whole whole -> new Ways.Whole(whole.unsplit(), whole.figure(),
                         whole.along().stream().map(one -> one.gettingPast(answered)).toList(),
-                        whole.chosenAs(),
-                        new ReadFrom(whole.from().way(),
-                                TakenConstraint.narrowedBy(narrowing,
-                                        whole.from().declarations())));
+                        whole.chosenAs(), whole.from().gettingPast(answered, narrowing));
             };
             boolean unsaidNow = unsaid || answered.unsaid();
             List<Pullback.StopObligation> owedNow = new ArrayList<>(owed);
@@ -549,18 +586,35 @@ public sealed interface Reachability {
             if (past.leavesNone()) {
                 return new Reaching(region, requirements, truths, boundedOnTheWay, split,
                         declined, narrowedBy, gotPast, gotPastOfTheRelation, ties, unsaidNow,
-                        owedNow, beforeNow, relationNow, arrived, gotPastAtTheEnds);
+                        owedNow, beforeNow, relationNow, arrived, gotPastAtTheEnds,
+                        leftByTheModel, narrowedByTheModel);
             }
             List<TakenConstraint> gotPastNow = new ArrayList<>(gotPast);
             gotPastNow.addAll(past.onTheWay());
             List<TakenConstraint> ofTheRelationNow = new ArrayList<>(gotPastOfTheRelation);
             ofTheRelationNow.addAll(past.ofTheRelation());
             List<TakenConstraint> atTheEndsNow = new ArrayList<>(gotPastAtTheEnds);
-            past.narrowing().stream().filter(answered.atTheEnds()::contains)
+            past.onTheWay().stream().filter(answered.atTheEnds()::contains)
                     .forEach(atTheEndsNow::add);
+            // The model's region is narrowed by the same answers but where a representation
+            // stops, and whether each of them is anything new is asked of it, so that no statement
+            // the model makes is dropped for being met by an end.
+            // Where neither has met an end the two are one region narrowed by one list, which is
+            // the narrowing already done.
+            DemandReading.Answered ofTheModel = answered.withoutTheEnds();
+            NarrowedPast modelPast = ofTheModel == answered && leftByTheModel == region ? past
+                    : OneReading.narrowedPast(leftByTheModel, ofTheModel,
+                            () -> narrowedPast(leftByTheModel, ofTheModel));
+            SearchRegion modelNow = modelPast.leavesNone() ? leftByTheModel : modelPast.narrowed();
+            Optional<List<TakenConstraint>> modelBy = modelPast.leavesNone() ? narrowedByTheModel
+                    : narrowedByTheModel.map(was -> {
+                        List<TakenConstraint> both = new ArrayList<>(was);
+                        both.addAll(modelPast.narrowing());
+                        return both;
+                    });
             return new Reaching(narrowed, requirements, truths, boundedOnTheWay, split, declined,
                     by, gotPastNow, ofTheRelationNow, ties, unsaidNow, owedNow, beforeNow,
-                    relationNow, arrived, atTheEndsNow);
+                    relationNow, arrived, atTheEndsNow, modelNow, modelBy);
         }
 
         /**

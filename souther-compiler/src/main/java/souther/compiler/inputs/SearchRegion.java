@@ -365,6 +365,17 @@ public interface SearchRegion {
     }
 
     /**
+     * Whether what this region was narrowed to relates some of {@code these} to some of
+     * {@code those}: a chain of what it holds names one of each, so that holding one of them
+     * narrower may hold the other narrower too. Numbers no chain relates are free of one another
+     * here but for whether any value is left. True where that is not shown, which is what the
+     * default is.
+     */
+    default boolean relates(Collection<NumericTerm> these, Collection<NumericTerm> those) {
+        return true;
+    }
+
+    /**
      * A run of {@code term} every value of which some row in this region takes, at the term's own
      * spacing — or null where that is not shown.
      *

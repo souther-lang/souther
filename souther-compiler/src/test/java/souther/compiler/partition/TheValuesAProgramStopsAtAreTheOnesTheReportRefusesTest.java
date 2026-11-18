@@ -89,18 +89,18 @@ class TheValuesAProgramStopsAtAreTheOnesTheReportRefusesTest {
 
     /**
      * No run past the stop reaches the membership with the value it stops at or above it, so an
-     * element of the set above what a run reaches is never that value: the report divides the
-     * elements there, as a guard keeping the value below the stop would, and leaves none of them
-     * unanswered.
+     * element of the set above what a run reaches is never that value. The stop is where the
+     * representation does, and no line: the report divides no element there, and says the
+     * membership is not shown reached at every value.
      */
     @Test
-    void theElementsOfTheMembershipAboveWhatNoRunReachesAreDividedThere() {
+    void theElementsOfTheMembershipPastTheStopAreNotShownReached() {
         JsonNode report = JSON.readTree(AdequacyReport.of(compiled())
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         for (String program : List.of("sum", "remainder", "cancelling")) {
             Set<String> found = new TreeSet<>();
             collect(report, program, found);
-            assertEquals(Set.of(), found, program);
+            assertEquals(Set.of("relation_not_shown_reached_at_every_value"), found, program);
         }
     }
 

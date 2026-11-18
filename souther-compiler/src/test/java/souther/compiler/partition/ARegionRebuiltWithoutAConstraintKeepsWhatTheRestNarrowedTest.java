@@ -6,6 +6,7 @@ import souther.compiler.ACompiledModel;
 import souther.compiler.TestDay;
 import souther.compiler.carrier.Membership;
 import souther.compiler.check.DeclaredSig;
+import souther.compiler.check.HeldClass;
 import souther.compiler.check.RuleReadingContext;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.RuleReadings;
@@ -14,18 +15,23 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.meaning.Quantity;
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.partition.UndividedByARelation.OnAWay;
 import souther.compiler.partition.UndividedByARelation.Rebuilding;
 import souther.compiler.query.Bodies;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.ReadAs;
+import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -260,6 +266,55 @@ class ARegionRebuiltWithoutAConstraintKeepsWhatTheRestNarrowedTest {
         assertRuns(rebuilding(BOTH, List.of(saysNothing, THE_SUM), List.of())
                 .without(List.of(THE_SUM), declarations()), run(0, 49), run(1, 12),
                 "a statement of nothing the region took in");
+    }
+
+    /**
+     * The years a remainder of a date's year leaves are part of the region a way was read in, so
+     * a statement of it that stays keeps them in the region made again, and one taken away gives
+     * them back.
+     */
+    @Test
+    void theYearsARemainderStatedOfADateLeavesStayWhileItIsStated() {
+        RuleReadingSource rules = RuleReadings.of(DATED, DATED.modules().get(0));
+        TermPath x = TermPath.of("p").then("x");
+        NumericTerm.TakenOf year = NumericTerm.TakenOf.asItStands(
+                ValueName.Stdlib.operation("Date", "year"), x, Type.DATE, rules.inners(),
+                rules.symbols());
+        OnAWay leapYears = new OnAWay(Set.of(x), false, null, null, null,
+                OnAWay.PartsLeftAlone.NONE, null, new RowDemand.OnARemainder(
+                        Quantity.RemainderOfADividend.ofTheInput(
+                                ValueName.Stdlib.operation("Int", "floorMod"),
+                                LinearForm.atom(year), BigInteger.valueOf(4)),
+                        WholeNumberRuns.one(BigInteger.ZERO, BigInteger.ZERO)));
+        NumericTerm.ValueOf date = new NumericTerm.ValueOf(x);
+        SearchRegion declarations = datedDeclarations(rules);
+
+        assertFalse(rebuilding(List.of(), List.of(leapYears), List.of())
+                .without(List.of(leapYears), declarations).classAt(date)
+                instanceof HeldClass.None, "the years stay while the remainder is stated");
+        assertTrue(rebuilding(List.of(), List.of(leapYears), List.of())
+                .without(List.of(), declarations).classAt(date) instanceof HeldClass.None,
+                "and go with it taken away");
+    }
+
+    private static final Compilation DATED = ACompiledModel.answered("""
+            module example.dated
+
+            data P = { x: Date }
+
+            data Taken
+
+            behavior take : (p: P) -> Taken
+            """);
+
+    private static SearchRegion datedDeclarations(RuleReadingSource rules) {
+        Map<String, DeclaredSig> sigs = DATED.db()
+                .ask(new Bodies.DeclaredSignatures(DATED.modules().get(0))).value();
+        RuleReadingContext reading =
+                RuleReadingContext.unshared(rules, ReadAs.THE_COMPILATION_DOES, TestDay.TODAY);
+        return InputDomain.of(sigs.get("take"), reading,
+                        TypeCardinality.Counts.workedOutIn(reading), Membership.none())
+                .quantities(rules).region();
     }
 
     @Test

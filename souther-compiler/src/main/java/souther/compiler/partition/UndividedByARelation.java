@@ -2353,9 +2353,100 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                     declined, past, each.narrowedBy(), witnesses))
                     : leftAlong(read, sources, carried, each.region(), conditions, remainders,
                             heldWhole, declined, past, each.narrowedBy(), witnesses);
+            // Where a representation stops on the way is no line the model draws: what the
+            // relation divides is read over what the model leaves, beside the ends of the numbers
+            // it reads itself, which it reads on every row. A place it leaves undivided there is
+            // one a run may stop before where the rows that get past every end hold fewer of its
+            // values, or do not leave it undivided. An end no chain of what the way holds relates
+            // to a number the relation reads bounds nothing of it, and the way is read as it is.
+            List<TakenConstraint.Affine> itsOwn = new ArrayList<>();
+            List<TakenConstraint.Affine> stops = new ArrayList<>();
+            for (TakenConstraint end : each.gotPastAtTheEnds()) {
+                if (end instanceof TakenConstraint.Affine affine) {
+                    (endsAnOperationOfTheRelation(affine.form(), affine.rel()) ? itsOwn : stops)
+                            .add(affine);
+                }
+            }
+            if (!stops.isEmpty() && each.region().relates(
+                    stops.stream().flatMap(end -> end.terms().stream()).toList(), numbersRead())) {
+                SearchRegion model = TakenConstraint.narrowedBy(List.copyOf(itsOwn),
+                        each.leftByTheModel());
+                Optional<List<TakenConstraint>> modelBy = each.narrowedByTheModel().map(by -> {
+                    List<TakenConstraint> all = new ArrayList<>(by);
+                    all.addAll(itsOwn);
+                    return all;
+                });
+                DemandReading.Answered stated = past.without(stops);
+                WhatItLeaves overTheRows = along;
+                along = modelBy.isPresent()
+                        ? alike.computeIfAbsent(new Along(modelBy.get(), conditions, remainders,
+                                heldWhole, declined, stated), _ -> leftAlong(read, sources,
+                                        carried, model, conditions, remainders, heldWhole,
+                                        declined, stated, modelBy, witnesses))
+                        : leftAlong(read, sources, carried, model, conditions, remainders,
+                                heldWhole, declined, stated, modelBy, witnesses);
+                // What the rows showed of a run stopping on the way is of the rows, and holds
+                // whatever the model's reading finds.
+                Set<FilingCoordinate> mayStop = new LinkedHashSet<>(overTheRows.mayStopBefore());
+                for (FilingCoordinate at : along.undivided()) {
+                    if (!overTheRows.undivided().contains(at)
+                            || fewerValuesPastTheEnds(at, model, each.region(), read)) {
+                        mayStop.add(at);
+                    }
+                }
+                along = mayStop.isEmpty() ? along
+                        : along.mayStopBefore(mayStop, overTheRows.gettingThere());
+            }
             out = out == null ? along : out.alongBoth(along);
         }
         return out;
+    }
+
+    /**
+     * Whether the rows that get past where a representation stops, {@code pastTheEnds}, hold the
+     * number at {@code at} to fewer values inside its type than the model leaves it,
+     * {@code model}. A value no run gets past the ends with is no value the relation is reached
+     * at, however it comes to be kept out: by an end on the number itself, or on another the way
+     * ties it to. An end is a bound and never a value held apart, so where the run of the number
+     * is is what it moves. A number of more than one position is not shown to keep its values.
+     */
+    private static boolean fewerValuesPastTheEnds(FilingCoordinate at, SearchRegion model,
+                                                  SearchRegion pastTheEnds, InputReading read) {
+        if (!(numberAt(at) instanceof NumericTerm.FromOnePosition one)) {
+            return true;
+        }
+        return !Objects.equals(liesInItsType(pastTheEnds, one, read),
+                liesInItsType(model, one, read));
+    }
+
+    /** The number filed at {@code at}: the term itself, or the value at the position. */
+    private static NumericTerm numberAt(FilingCoordinate at) {
+        return switch (at) {
+            case FilingCoordinate.OfTerm(NumericTerm number) -> number;
+            case FilingCoordinate.AtPosition(TermPath path) -> new NumericTerm.ValueOf(path);
+        };
+    }
+
+    /** The numbers this relation reads, one for each place it files under. */
+    private List<NumericTerm> numbersRead() {
+        return places().stream().map(UndividedByARelation::numberAt).toList();
+    }
+
+    /** Where {@code term} lies in {@code region}, inside where its type stops: null where nothing
+     *  is left of it. */
+    private static NumericDomain.Bounds liesInItsType(SearchRegion region,
+                                                      NumericTerm.FromOnePosition term,
+                                                      InputReading read) {
+        return region.projectionOf(term) instanceof NumericDomain.FormProjection.Within(
+                NumericDomain.Bounds within) ? within.meet(whereItsTypeStops(term, read)) : null;
+    }
+
+    /** Where the type of {@code term} stops, open where its orders do not say. */
+    private static NumericDomain.Bounds whereItsTypeStops(NumericTerm.FromOnePosition term,
+                                                         InputReading read) {
+        TermOrders orders = read.quantities().ordersOf(term);
+        return orders == null || orders.answered() == null
+                ? NumericDomain.Bounds.OPEN : orders.answered().whereItStops();
     }
 
     /**
@@ -3513,23 +3604,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // within them is computed, asked of every side of the relation and not of the two. The
         // values a difference settles are asked of the operations as well, which check themselves.
         boolean sizesAreRowsComputed = operations.theSizesAreRowsComputed(terms, constant);
-        // The places a difference shows past an end where a representation stops: the line is
-        // the model's, and a run may stop on the way to it all the same.
-        Set<FilingCoordinate> pastAnEnd = new LinkedHashSet<>();
         if (!out.containsAll(places()) && !offItsLine) {
-            Set<FilingCoordinate> before = Set.copyOf(out);
             out.addAll(undividedByTheDifference(sources, carriers, stating, heldWhole, read,
-                    declared, independent, operations, sizesAreRowsComputed, entire, pastAnEnd));
-            pastAnEnd.removeAll(before);
+                    declared, independent, operations, sizesAreRowsComputed, entire));
         }
         // A side nothing above showed anything of is asked of the differences the two stand
         // apart by, each in the run the declarations leave it.
         if (!out.containsAll(places()) && !offItsLine) {
-            Set<FilingCoordinate> before = Set.copyOf(out);
             List<WhatARelationLeavesUndivided.Leaves> apart =
                     leftByTheirDifference(sources, carriers, stating, heldWhole, read, along,
-                            independent, operations, sizesAreRowsComputed, entire, pastAnEnd);
-            pastAnEnd.removeAll(before);
+                            independent, operations, sizesAreRowsComputed, entire);
             for (int at = 0; at < apart.size(); at++) {
                 if (leaves.get(at) != null || out.containsAll(sides.get(at).madeOf())) {
                     continue;
@@ -3548,10 +3632,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         WhatItLeaves shown = new WhatItLeaves(out, settled, true, stopped, runsStopped);
-        pastAnEnd.retainAll(out);
-        if (!pastAnEnd.isEmpty()) {
-            shown = shown.mayStopBefore(pastAnEnd);
-        }
         // An equality with a weighed number is true at the values the weighing reaches, which are
         // no run: the places not shown undivided are parted by them.
         if (!offItsLine && heldWhole && sides.size() == 2 && standApart(0, 1, independent)) {
@@ -7598,7 +7678,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         /**
          * {@code declarations} with the list again, less what the statements of {@code written}
-         * that are not among {@code stated} took in. A statement taken away that is a case or an
+         * that are not among {@code stated} took in, and with the years the remainders among
+         * {@code stated} leave a date, as the way's own region was
+         * ({@link WayToTheBorder#withTheYearsLeftBy}). A statement taken away that is a case or an
          * element asked of a container narrowed the region by something it does not carry, so
          * the list cannot be rebuilt without it; no way is read with one taken away.
          */
@@ -7616,7 +7698,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             "a case or an element asked of a container cannot be taken away");
                 }
             }
-            return TakenConstraint.narrowedByAllBut(applied, relations, met, declarations);
+            return WayToTheBorder.withTheYearsLeftBy(
+                    TakenConstraint.narrowedByAllBut(applied, relations, met, declarations),
+                    stated.stream().map(OnAWay::onARemainder).filter(Objects::nonNull).toList());
         }
     }
 
@@ -7632,13 +7716,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param onTheWay  of that, what the run to the relation narrows
      * @param ofTheRelation the rest, what the relation's own working narrows
      * @param others    the statements other elements meet, which say nothing of the sides
-     * @param atTheEnds of what the operators narrow, what is put on a row where a number is one
-     *                  its type holds ({@link DemandReading.Answered#atTheEnds})
      */
     private record WayRead(SearchRegion along, SearchRegion declared, LeftToTheCalendar left,
                            List<List<OnAWay>> stating, List<TakenConstraint> narrowing,
                            List<TakenConstraint> onTheWay, List<TakenConstraint> ofTheRelation,
-                           OthersMeet others, List<TakenConstraint> atTheEnds) {
+                           OthersMeet others) {
 
         List<OnAWay> conditions() {
             return left.conditions();
@@ -7677,8 +7759,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : OthersMeet.NONE;
         return new WayRead(along, declared, left,
                 stating(sources, left.conditions(), heldWhole, read, others),
-                answered.narrowing(), answered.onTheWay(), answered.ofTheRelation(), others,
-                answered.atTheEnds());
+                answered.narrowing(), answered.onTheWay(), answered.ofTheRelation(), others);
     }
 
     /**
@@ -10028,9 +10109,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * of them ties it and none is unread. What the way holds of either is taken only as a
      * form over the two weighed one way and the other. A statement about either that is anything
      * else — an end on one of them alone, a form with a third number in it — leaves nothing shown,
-     * since it may keep a side from values of its own. An end where a representation stops is no
-     * such statement, and the places shown past it are added to {@code mayStopBefore}
-     * ({@link HeldOfTheDifference#pastAnEnd}).
+     * since it may keep a side from values of its own.
      */
     private Set<FilingCoordinate> undividedByTheDifference(List<Source> sources,
                                                          List<Carrier> carriers,
@@ -10042,8 +10121,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                          WhatARelationLeavesUndivided.Operations
                                                                  operations,
                                                          boolean sizesAreRowsComputed,
-                                                         WayRead way,
-                                                         Set<FilingCoordinate> mayStopBefore) {
+                                                         WayRead way) {
         TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, region,
                 independent, way, read) : null;
         if (pair == null || !apartByTheDeclarations(pair.first(), pair.second(), sources, read)) {
@@ -10090,15 +10168,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         NumericDomain.Bounds run = sides.get(pair.first()).number() instanceof NumericTerm.TakenOf
                 ? terms.get(0).realizes()
                 : on.whereItStops();
-        Set<FilingCoordinate> shown = WhatARelationLeavesUndivided.ofTheirDifference(terms,
+        return WhatARelationLeavesUndivided.ofTheirDifference(terms,
                 pair.beside(), relation, held.statements(),
                 new WhatARelationLeavesUndivided.WhereTheRepresentationStops(run),
                 FilingCoordinate::sharesAPlaceWith, greatestOf(on), operations,
                 sizesAreRowsComputed, held.holes());
-        if (held.pastAnEnd()) {
-            mayStopBefore.addAll(shown);
-        }
-        return shown;
     }
 
     /**
@@ -10112,16 +10186,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * differences, which the region holds the two to together and each alone to nothing narrower
      * than they imply, and whatever else the way states, of other places, is a row's to hold as
      * well — so a way no row takes inside where the types stop leaves each side no run
-     * ({@link SearchRegion#wholeRunOf}). The places of the two are added to
-     * {@code mayStopBefore} where they are read past an end a representation stops at
-     * ({@link HeldOfTheDifference#pastAnEnd}).
+     * ({@link SearchRegion#wholeRunOf}).
      */
     private List<WhatARelationLeavesUndivided.Leaves> leftByTheirDifference(
             List<Source> sources, List<Carrier> carriers, List<List<OnAWay>> stating,
             boolean heldWhole, InputReading read, SearchRegion along,
             WhatARelationLeavesUndivided.Independence independent,
             WhatARelationLeavesUndivided.Operations operations, boolean sizesAreRowsComputed,
-            WayRead way, Set<FilingCoordinate> mayStopBefore) {
+            WayRead way) {
         TwoSides pair = heldWhole ? twoSidesStandingApart(sources, carriers, stating, along,
                 independent, way, read) : null;
         if (pair == null || !apartByTheDeclarations(pair.first(), pair.second(), sources, read)) {
@@ -10173,10 +10245,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         out.set(pair.second(), WhatARelationLeavesUndivided.leavesByTheirDifference(terms, 1,
                 pair.beside(), relation, held.statements(), FilingCoordinate::sharesAPlaceWith,
                 greatestOf(on), operations, pair.standing(), sizesAreRowsComputed, holes));
-        if (held.pastAnEnd()) {
-            mayStopBefore.addAll(sides.get(pair.first()).madeOf());
-            mayStopBefore.addAll(sides.get(pair.second()).madeOf());
-        }
         return out;
     }
 
@@ -10285,18 +10353,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *  an operation is more than that, its end is a line the form does not show — the
      *  {@code a + K} of {@code a + K - K == b} stops at an {@code a} the form has a row at — and
      *  is held as an end on one side is. What else that working narrows is asked through the
-     *  operations it carries.
-     *
-     *  <p>An end an operator puts on a row where the number it comes to is one its type holds is
-     *  where the representation stops ({@link WayRead#atTheEnds}), and no line of the model's: it
-     *  is held as nothing about the difference, and said instead of each side that a run may stop
-     *  before the relation ({@link HeldOfTheDifference#pastAnEnd}), since a row there is no row
-     *  that gets to it. */
+     *  operations it carries. */
     private HeldOfTheDifference heldOfTheDifference(
             TwoSides pair, List<List<OnAWay>> stating, WayRead way, boolean sizesAreRowsComputed,
             InputReading read) {
         List<TakenConstraint> onTheWay = way.onTheWay();
-        boolean pastAnEnd = false;
         Set<NumericTerm> ofTheSides = new HashSet<>();
         for (int at : List.of(pair.first(), pair.second())) {
             ofTheSides.add(sides.get(at).statedTerm());
@@ -10336,10 +10397,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     || endsAnOperationOfTheRelation(form, rel))) {
                 continue;
             }
-            if (besideAnEnd(each, way, read)) {
-                pastAnEnd = true;
-                continue;
-            }
             WhatARelationLeavesUndivided.OnTheDifference statement =
                     form == null ? null : onTheDifference(form, rel, pair);
             if (statement != null) {
@@ -10351,55 +10408,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         if (!sizesAreRowsComputed) {
             for (TakenConstraint each : way.ofTheRelation()) {
-                if (each.terms().stream().noneMatch(ofTheSides::contains)) {
-                    continue;
-                }
-                if (!besideAnEnd(each, way, read)) {
+                if (each.terms().stream().anyMatch(ofTheSides::contains)) {
                     return null;
                 }
-                pastAnEnd = true;
             }
         }
-        return new HeldOfTheDifference(held, holes, pastAnEnd);
-    }
-
-    /**
-     * Whether {@code each} is put on a row where a representation stops ({@link WayRead#atTheEnds})
-     * and keeps the one number it names only from values beside an end of its type: it holds
-     * wherever that number is in the middle half of the type. Such an end is where the
-     * representation runs out, as the reading of a difference passes over it; one that keeps the
-     * number from the middle of its type is a line the model's arithmetic draws there, as a guard
-     * stating the same would.
-     */
-    private static boolean besideAnEnd(TakenConstraint each, WayRead way, InputReading read) {
-        return way.atTheEnds().contains(each)
-                && each instanceof TakenConstraint.Affine(var form, var rel, var _)
-                && form.coefs().size() == 1
-                && holdsOverTheMiddleOfTheTypeOfItsNumber(form, rel, read);
-    }
-
-    /**
-     * Whether {@code form}, of one number, held as {@code rel} against nought holds wherever that
-     * number is in the middle half of the run its type leaves it.
-     */
-    private static boolean holdsOverTheMiddleOfTheTypeOfItsNumber(LinearForm<NumericTerm> form,
-                                                                   Rel rel, InputReading read) {
-        Map.Entry<NumericTerm, ExactRatio> only = form.coefs().entrySet().iterator().next();
-        TermOrders orders = only.getKey() instanceof NumericTerm.FromOnePosition number
-                ? read.quantities().ordersOf(number) : null;
-        WholeEnds ends = orders == null ? null : wholeEndsOf(orders.answered().whereItStops());
-        BigInteger by = wholeNumberOf(only.getValue());
-        BigInteger constant = wholeNumberOf(form.constant());
-        if (ends == null || ends.low() == null || ends.high() == null || by == null
-                || constant == null) {
-            return false;
-        }
-        BigInteger quarter = ends.high().subtract(ends.low()).shiftRight(2);
-        BigInteger from = ends.low().add(quarter);
-        BigInteger to = ends.high().subtract(quarter);
-        BigInteger low = constant.add(by.signum() >= 0 ? by.multiply(from) : by.multiply(to));
-        BigInteger high = constant.add(by.signum() >= 0 ? by.multiply(to) : by.multiply(from));
-        return RemainderCoverage.holdsEverywhere(low, high, rel);
+        return new HeldOfTheDifference(held, holes);
     }
 
     /**
@@ -10558,13 +10572,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * @param holes      the values a statement keeps one of the sides from, each as it was stated,
      *                   which is no statement about the difference. Whether a side takes the
      *                   value is the side's to say, and the reading of the difference asks it
-     * @param pastAnEnd  whether an end where a representation stops was held as nothing about
-     *                   the difference: the two sides are then not shown to get to the relation at
-     *                   every value, whatever the difference leaves them
      */
     private record HeldOfTheDifference(
             List<WhatARelationLeavesUndivided.OnTheDifference> statements,
-            List<ExactRatio> holes, boolean pastAnEnd) {}
+            List<ExactRatio> holes) {}
 
     /**
      * Whether {@code form} held as {@code rel} against nought keeps one of {@code sides} away from
