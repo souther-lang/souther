@@ -317,7 +317,8 @@ class WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest {
         assertEquals(Set.of(), found.notWorkedOut());
 
         CasesOfALineAsked.Atoms<Proposition> atoms =
-                CasesOfALineAsked.atomsOf(new DecidingCase(SAID, together), condition -> condition);
+                CasesOfALineAsked.atomsOf(new DecidingCase(SAID, together), condition -> condition,
+                        _ -> true);
         assertEquals(8, atoms.each().size(),
                 "asked of every case, none given up, whichever order they are chosen in");
         assertEquals(every, atoms.each().stream().map(CasesOfALineAsked.Atom::condition)

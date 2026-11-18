@@ -332,9 +332,10 @@ class ASharedSetOfCasesIsWalkedOncePerCaseTest {
     void moreWaysOfChoosingThanAreTakenApartAskForTheFiguresOfTheCasesOnceEach() throws Exception {
         for (DecidingCase.Cases cases : List.of(sharingTheRest(STEPS, NOT_TAKEN_APART),
                 heldTwiceUnderAlternatives(STEPS, NOT_TAKEN_APART))) {
-            CasesOfALineAsked.Atoms<Boolean> found = CasesOfALineAsked.atomsOf(
-                    new DecidingCase(truth("said"), cases), _ -> true);
-            assertTrue(found.each().isEmpty());
+            CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(
+                    new DecidingCase(truth("said"), cases),
+                    _ -> CasesOfALineAsked.Crossing.MAY_CROSS);
+            assertTrue(found.decidesIn().isEmpty());
             assertTrue(found.notWorkedOut()
                     .contains(CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.reached()));
             assertTrue(found.notWorkedOut()
@@ -344,7 +345,8 @@ class ASharedSetOfCasesIsWalkedOncePerCaseTest {
                 steps -> {
                     DecidingCase said = new DecidingCase(truth("said"),
                             heldTwiceUnderAlternatives(steps, NOT_TAKEN_APART));
-                    return () -> CasesOfALineAsked.atomsOf(said, _ -> true);
+                    return () -> CasesOfALineAsked.casesOf(said,
+                            _ -> CasesOfALineAsked.Crossing.MAY_CROSS);
                 });
     }
 }

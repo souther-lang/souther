@@ -1567,10 +1567,29 @@ sealed interface ComparisonAssessment {
             InputReading reading,
             ComparisonWitnesses.AtAComparison witnesses) {
         if (read instanceof Several several) {
-            return several.eachPart(part -> aPartNarrowed(part, way, wayToACase, arrivals,
-                    drawnByAnInvariant, reading, witnesses));
+            // The statement's lines are asked together, and a statement past the questions they
+            // are asked together is asked again of none, so no line of it is read where another
+            // took the questions it would have asked.
+            CasesOfALineAsked.QuestionsOfAStatement questions =
+                    CasesOfALineAsked.QuestionsOfAStatement.fresh();
+            Several asked = partsNarrowed(several, way, wayToACase, arrivals, drawnByAnInvariant,
+                    reading, witnesses, questions);
+            return !questions.ranOut() ? asked : partsNarrowed(several, way, wayToACase, arrivals,
+                    drawnByAnInvariant, reading, witnesses,
+                    CasesOfALineAsked.QuestionsOfAStatement.spent());
         }
         return arrivedAt(read, way, arrivals, drawnByAnInvariant, reading, witnesses, true);
+    }
+
+    /** Each line of {@code several} narrowed by what arrives ({@link #aPartNarrowed}), its cases
+     *  asked in {@code questions}, the questions of the statement it is a line of. */
+    private static Several partsNarrowed(Several several, Reachability way,
+                                         WaysToACase wayToACase, List<ComparisonArrival> arrivals,
+                                         boolean drawnByAnInvariant, InputReading reading,
+                                         ComparisonWitnesses.AtAComparison witnesses,
+                                         CasesOfALineAsked.QuestionsOfAStatement questions) {
+        return several.eachPart(part -> aPartNarrowed(part, way, wayToACase, arrivals,
+                drawnByAnInvariant, reading, witnesses, questions));
     }
 
     /**
@@ -1799,18 +1818,20 @@ sealed interface ComparisonAssessment {
                                                     List<ComparisonArrival> arrivals,
                                                     boolean drawnByAnInvariant,
                                                     InputReading reading,
-                                                    ComparisonWitnesses.AtAComparison witnesses) {
+                                                    ComparisonWitnesses.AtAComparison witnesses,
+                                                    CasesOfALineAsked.QuestionsOfAStatement questions) {
         // A line over a relation is read once, along the ways that decide where there are any and
         // along the way otherwise: read along the way first, it would be read again in the cases.
-        ComparisonAssessment arrived = part.line() instanceof Several
-                ? narrowedByWhatArrives(part.line(), way, wayToACase, arrivals,
-                        drawnByAnInvariant, reading, witnesses)
+        ComparisonAssessment arrived = part.line() instanceof Several lines
+                ? partsNarrowed(lines, way, wayToACase, arrivals, drawnByAnInvariant, reading,
+                        witnesses, questions)
                 : arrivedAt(part.line(), way, arrivals, drawnByAnInvariant, reading, witnesses,
                         false);
         // A relation to another value has no line of its own, and the lines parting the values
         // that settle it are read where the statement turns on it, as a line is.
         if (arrived instanceof AgainstAnotherValue against) {
-            return aRelationPartNarrowed(part, against, wayToACase, arrivals, reading, witnesses);
+            return aRelationPartNarrowed(part, against, wayToACase, arrivals, reading, witnesses,
+                    questions);
         }
         // Only where it is a line at all: a line refused, outside what the declarations leave, or
         // one nothing arrives at, is that whatever the cases are, and is read in none of them.
@@ -1818,7 +1839,8 @@ sealed interface ComparisonAssessment {
             return List.of(new Several.Part(part.id(), arrived, List.of()));
         }
         Cutting cutting = cuttingOf(arrived);
-        CasesReached found = casesTurnedOn(cutting, part.cases(), wayToACase, arrivals, reading);
+        CasesReached found = casesTurnedOn(cutting, part.cases(), wayToACase, arrivals, reading,
+                questions);
         List<DecidingCase> reached = found.reached();
         List<Reachability.Reaching> deciding = found.deciding();
         Set<Figure.Budget> stoppedAt = found.stoppedAt();
@@ -1936,28 +1958,21 @@ sealed interface ComparisonAssessment {
      * the line turns nothing between those ({@link CasesOfALineAsked}). The line is then read in
      * the ones that divide rows and in no other, so that a row in one it turns nothing in is not
      * counted at its points. Counted for each such case on its own, so that what one case spent
-     * decides nothing about another.
+     * decides nothing about another, and for the statement in {@code questions}
+     * ({@link CasesOfALineAsked.QuestionsOfAStatement}).
      */
     private static CasesReached casesTurnedOn(Cutting cutting, List<DecidingCase> cases,
                                               WaysToACase wayToACase,
                                               List<ComparisonArrival> arrivals,
-                                              InputReading reading) {
+                                              InputReading reading,
+                                              CasesOfALineAsked.QuestionsOfAStatement questions) {
         List<DecidingCase> reached = new ArrayList<>();
         List<Reachability.Reaching> deciding = new ArrayList<>();
         List<CasesOfALineAsked.NotWorkedOut> notWorkedOut = new ArrayList<>();
         for (DecidingCase each : cases) {
-            if (each.saidAlone()) {
-                if (wayToACase.crossing(cutting, each.condition(), reading, (toIt, keptTo) ->
-                        crossedAtSomePlace(cutting, toIt, arrivals, keptTo))
-                        == CasesOfALineAsked.Crossing.MAY_CROSS) {
-                    reached.add(each);
-                    deciding.addAll(waysArrivedBy(wayToACase.apply(each.condition()), arrivals));
-                }
-                continue;
-            }
             CasesOfALineAsked.Found found = CasesOfALineAsked.casesOf(each, condition ->
                     wayToACase.crossing(cutting, condition, reading, (toIt, keptTo) ->
-                            crossedAtSomePlace(cutting, toIt, arrivals, keptTo)));
+                            crossedAtSomePlace(cutting, toIt, arrivals, keptTo)), questions);
             for (DecidingCase one : found.decidesIn()) {
                 reached.add(one);
                 deciding.addAll(waysArrivedBy(wayToACase.apply(one.condition()), arrivals));
@@ -1996,7 +2011,8 @@ sealed interface ComparisonAssessment {
     private static List<Several.Part> aRelationPartNarrowed(
             Several.Part part, AgainstAnotherValue against,
             WaysToACase wayToACase, List<ComparisonArrival> arrivals,
-            InputReading reading, ComparisonWitnesses.AtAComparison witnesses) {
+            InputReading reading, ComparisonWitnesses.AtAComparison witnesses,
+            CasesOfALineAsked.QuestionsOfAStatement questions) {
         // What a condition says of the way to it and of the lines it parts is the condition's
         // and not the case's, and a case said for several is asked of each condition in turn.
         Map<Proposition, InACase> asked = new HashMap<>();
@@ -2011,7 +2027,15 @@ sealed interface ComparisonAssessment {
                                             arrivals, line.cutting().keptTo(condition, reading)))
                                     .toList());
                 });
-        return partsOfARelation(part, against, inCase, wayToACase::reaches);
+        return partsOfARelation(part, against, inCase, wayToACase::reaches, questions);
+    }
+
+    /** The same, of a relation that is the one line of its statement. */
+    static List<Several.Part> partsOfARelation(Several.Part part, AgainstAnotherValue against,
+                                               Function<Proposition, InACase> inCase,
+                                               Predicate<Proposition> reachable) {
+        return partsOfARelation(part, against, inCase, reachable,
+                CasesOfALineAsked.QuestionsOfAStatement.fresh());
     }
 
     /**
@@ -2019,11 +2043,13 @@ sealed interface ComparisonAssessment {
      * {@code inCase} is asked of every condition a case is taken apart into that
      * {@code reachable} does not show no row takes the way to. A case no row takes is no case of
      * the statement, and a narrower one is taken by no more rows, so a part chosen so far that no
-     * row takes leaves every case past it out unasked.
+     * row takes leaves every case past it out unasked. The cases are asked in {@code questions},
+     * the questions of the statement the relation is a line of.
      */
     static List<Several.Part> partsOfARelation(Several.Part part, AgainstAnotherValue against,
                                                Function<Proposition, InACase> inCase,
-                                               Predicate<Proposition> reachable) {
+                                               Predicate<Proposition> reachable,
+                                               CasesOfALineAsked.QuestionsOfAStatement questions) {
         // Each case is taken apart to the end and asked by itself: the lines of a narrower case
         // are not the lines of a wider one, so no case is given up or said for several before
         // its own lines are known. Cases are said for several only past that, where they part the
@@ -2033,7 +2059,7 @@ sealed interface ComparisonAssessment {
         boolean someCaseLeftUndrawn = part.cases().isEmpty();
         for (DecidingCase each : part.cases()) {
             CasesOfALineAsked.Atoms<InACase> atoms =
-                    CasesOfALineAsked.atomsOf(each, inCase, reachable);
+                    CasesOfALineAsked.atomsOf(each, inCase, reachable, questions);
             stoppedAt.addAll(atoms.notWorkedOut());
             for (CasesOfALineAsked.Atom<InACase> atom : atoms.each()) {
                 // A case no row takes is no case of the statement.
