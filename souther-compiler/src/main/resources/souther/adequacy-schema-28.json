@@ -176,6 +176,7 @@
         "steps_a_statement_is_read_in",
         "cases_a_line_is_taken_apart_into",
         "cases_a_line_is_asked_in",
+        "questions_a_statement_is_asked",
         "depth_a_construction_plan_descends",
         "numbers_of_a_set_tried",
         "combinations_of_totals_tried",
