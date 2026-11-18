@@ -23,7 +23,6 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A membership after a sum that stops is not read as reached at every value, and the programs the
@@ -101,8 +100,7 @@ class TheValuesAProgramStopsAtAreTheOnesTheReportRefusesTest {
         for (String program : List.of("sum", "remainder", "cancelling")) {
             Set<String> found = new TreeSet<>();
             collect(report, program, found);
-            assertTrue(found.contains("relation_not_shown_reached_at_every_value"),
-                    () -> program + " " + found);
+            assertEquals(Set.of("relation_not_shown_reached_at_every_value"), found, program);
         }
     }
 

@@ -1192,7 +1192,7 @@ final class DemandReading {
      * @param atTheEnds those of {@link #narrowing} that operators put on a row where the number
      *                  they come to is one their type holds ({@link Pullback.OperatorsAnswer#atTheEnds}):
      *                  a run stops past one where the representation does, which is no line of the
-     *                  model, and is still a run that stops
+     *                  model ({@link #withoutTheEnds}), and is still a run that stops
      */
     record Answered(List<TakenConstraint> onTheWay, List<TakenConstraint> ofTheRelation,
                     List<Tie> tied, boolean unsaid, List<Pullback.StopObligation> owed,
@@ -1234,6 +1234,20 @@ final class DemandReading {
             all.addAll(ends);
             return new Answered(onTheWay, ofTheRelation, tied, unsaid, owed, before,
                     relationStands, all);
+        }
+
+        /**
+         * This without what the run to the relation narrows at the ends of a representation
+         * ({@link #atTheEnds}): what the model states of the rows that get to the relation, which
+         * no end of a representation is part of.
+         */
+        Answered withoutTheEnds() {
+            if (atTheEnds.isEmpty() || onTheWay.stream().noneMatch(atTheEnds::contains)) {
+                return this;
+            }
+            return new Answered(onTheWay.stream().filter(each -> !atTheEnds.contains(each))
+                    .toList(), ofTheRelation, tied, unsaid, owed, before, relationStands,
+                    List.of());
         }
 
         /** What the run to a relation asks of a row, with what the applications before it work

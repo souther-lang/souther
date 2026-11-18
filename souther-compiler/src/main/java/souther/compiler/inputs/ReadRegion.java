@@ -98,6 +98,11 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
+    public boolean relates(Collection<NumericTerm> these, Collection<NumericTerm> those) {
+        return within.relates(these, those);
+    }
+
+    @Override
     public NumericDomain.Bounds wholeRunOf(NumericTerm.FromOnePosition term) {
         if (!apartAt(term).isEmpty()
                 || (term instanceof NumericTerm.ValueOf value

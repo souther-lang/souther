@@ -138,13 +138,29 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      * acts on — that the region a search runs over admits every row that meets what was taken in.
      */
     public SearchRegion narrowing(SearchRegion base) {
-        SearchRegion narrowed = base.narrowingsKept().through(base, takenIntoTheRegion(),
-                TakenConstraint::narrowing);
+        List<RowDemand.OnARemainder> remainders = new ArrayList<>();
         for (OnTheWay each : onTheWay) {
             if (each instanceof OnTheWay.TakenIn(var _, RowDemand.OnARemainder remainder, var _,
                     var _)) {
-                narrowed = withTheYearsItLeaves(narrowed, remainder);
+                remainders.add(remainder);
             }
+        }
+        return withTheYearsLeftBy(base.narrowingsKept().through(base, takenIntoTheRegion(),
+                TakenConstraint::narrowing), remainders);
+    }
+
+    /**
+     * {@code region}, narrowed by what a way takes into it ({@link #takenIntoTheRegion}), with the
+     * days of each date held to the years {@code remainders} leave it ({@link #withTheYearsItLeaves}):
+     * what a region is narrowed by that is no constraint a region takes in, and which every reader
+     * that narrows a region by a way's statements again takes in after them, as {@link #narrowing}
+     * does.
+     */
+    static SearchRegion withTheYearsLeftBy(SearchRegion region,
+                                           List<RowDemand.OnARemainder> remainders) {
+        SearchRegion narrowed = region;
+        for (RowDemand.OnARemainder each : remainders) {
+            narrowed = withTheYearsItLeaves(narrowed, each);
         }
         return narrowed;
     }
@@ -206,7 +222,8 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
 
     /**
      * What {@link #narrowing} takes into a region, in the order it takes it in: the region a way
-     * leaves is the base with each of these taken in, and nothing else.
+     * leaves is the base with each of these taken in, and the years the remainders of the way
+     * leave a date ({@link #withTheYearsLeftBy}), and nothing else.
      */
     public List<TakenConstraint> takenIntoTheRegion() {
         List<TakenConstraint> out = new ArrayList<>();

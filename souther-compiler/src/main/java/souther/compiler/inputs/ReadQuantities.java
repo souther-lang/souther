@@ -3283,6 +3283,25 @@ final class ReadQuantities implements Quantities {
     }
 
     /**
+     * Whether a chain of the rules, with what was taken in, relates some of {@code these} to some
+     * of {@code those} ({@link NumericDomain#relates}). Said where they are not asked together,
+     * or one of them is no number this reading answers for, since nothing then shows they are
+     * apart.
+     */
+    boolean relates(Collection<NumericTerm> these, Collection<NumericTerm> those) {
+        List<NumericTerm> all = new ArrayList<>(these);
+        all.addAll(those);
+        if (!all.stream().allMatch(this::answersFor)
+                || !(asking(all) instanceof StructuralContext.Merge.Together(
+                        StructuralContext under))) {
+            return true;
+        }
+        return effectiveConstraints(under).numbers().relates(
+                these.stream().map(each -> called(each, under)).toList(),
+                those.stream().map(each -> called(each, under)).toList());
+    }
+
+    /**
      * The term, where what it sits under is something this behavior takes.
      *
      * <p><b>Owned is not the same as known about.</b> The reading holds the positions the

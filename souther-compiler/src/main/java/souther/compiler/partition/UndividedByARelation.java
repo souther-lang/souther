@@ -2353,82 +2353,79 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                     declined, past, each.narrowedBy(), witnesses))
                     : leftAlong(read, sources, carried, each.region(), conditions, remainders,
                             heldWhole, declined, past, each.narrowedBy(), witnesses);
-            // Where a representation stops is no line the model draws: what the relation divides
-            // is read over what the model leaves. A place it leaves undivided there is one a run
-            // may stop before where an end keeps some of its values out, or where it is not left
-            // undivided over the rows that get past the ends.
-            List<TakenConstraint.Affine> ends = endsNotItsOwn(past);
-            Set<FilingCoordinate> mayStop = placesKeptOut(ends, read);
-            if (!ends.isEmpty() && each.narrowedBy().isPresent()) {
-                List<TakenConstraint> applied = withoutTheLast(each.narrowedBy().get(), ends);
-                DemandReading.Answered stated = past.without(ends);
-                WhatItLeaves overTheRows = along;
-                along = alike.computeIfAbsent(new Along(applied, conditions, remainders,
-                        heldWhole, declined, stated), _ -> leftAlong(read, sources, carried,
-                                TakenConstraint.narrowedBy(applied, read.quantities().region()),
-                                conditions, remainders, heldWhole, declined, stated,
-                                Optional.of(applied), witnesses));
-                along.undivided().stream()
-                        .filter(at -> !overTheRows.undivided().contains(at))
-                        .forEach(mayStop::add);
+            // Where a representation stops on the way is no line the model draws: what the
+            // relation divides is read over what the model leaves, beside the ends of the numbers
+            // it reads itself, which it reads on every row. A place it leaves undivided there is
+            // one a run may stop before where the rows that get past every end hold fewer of its
+            // values, or do not leave it undivided. An end no chain of what the way holds relates
+            // to a number the relation reads bounds nothing of it, and the way is read as it is.
+            List<TakenConstraint.Affine> itsOwn = new ArrayList<>();
+            List<TakenConstraint.Affine> stops = new ArrayList<>();
+            for (TakenConstraint end : each.gotPastAtTheEnds()) {
+                if (end instanceof TakenConstraint.Affine affine) {
+                    (endsAnOperationOfTheRelation(affine.form(), affine.rel()) ? itsOwn : stops)
+                            .add(affine);
+                }
             }
-            mayStop.retainAll(along.undivided());
-            along = mayStop.isEmpty() ? along : along.mayStopBefore(mayStop);
+            if (!stops.isEmpty() && each.region().relates(
+                    stops.stream().flatMap(end -> end.terms().stream()).toList(), numbersRead())) {
+                SearchRegion model = TakenConstraint.narrowedBy(List.copyOf(itsOwn),
+                        each.leftByTheModel());
+                Optional<List<TakenConstraint>> modelBy = each.narrowedByTheModel().map(by -> {
+                    List<TakenConstraint> all = new ArrayList<>(by);
+                    all.addAll(itsOwn);
+                    return all;
+                });
+                DemandReading.Answered stated = past.without(stops);
+                WhatItLeaves overTheRows = along;
+                along = modelBy.isPresent()
+                        ? alike.computeIfAbsent(new Along(modelBy.get(), conditions, remainders,
+                                heldWhole, declined, stated), _ -> leftAlong(read, sources,
+                                        carried, model, conditions, remainders, heldWhole,
+                                        declined, stated, modelBy, witnesses))
+                        : leftAlong(read, sources, carried, model, conditions, remainders,
+                                heldWhole, declined, stated, modelBy, witnesses);
+                Set<FilingCoordinate> mayStop = new LinkedHashSet<>();
+                for (FilingCoordinate at : along.undivided()) {
+                    if (!overTheRows.undivided().contains(at)
+                            || fewerValuesPastTheEnds(at, model, each.region(), read)) {
+                        mayStop.add(at);
+                    }
+                }
+                along = mayStop.isEmpty() ? along : along.mayStopBefore(mayStop);
+            }
             out = out == null ? along : out.alongBoth(along);
         }
         return out;
     }
 
     /**
-     * What the run to this relation narrows at the ends of a representation, and names a number
-     * read off a place it reads ({@link DemandReading.Answered#atTheEnds}): all of it where the
-     * places it reads are not known. Not an end of an operation the relation works out itself,
-     * which the relation reads on every row ({@link #endsAnOperationOfTheRelation}).
+     * Whether the rows that get past where a representation stops, {@code pastTheEnds}, hold the
+     * number at {@code at} to fewer values inside its type than the model leaves it,
+     * {@code model}. A value no run gets past the ends with is no value the relation is reached
+     * at, however it comes to be kept out: by an end on the number itself, or on another the way
+     * ties it to.
      */
-    private List<TakenConstraint.Affine> endsNotItsOwn(DemandReading.Answered past) {
-        if (past.atTheEnds().isEmpty()) {
-            return List.of();
-        }
-        Set<TermPath> reads = positionsRead();
-        List<TakenConstraint.Affine> out = new ArrayList<>();
-        for (TakenConstraint each : past.onTheWay()) {
-            if (past.atTheEnds().contains(each)
-                    && each instanceof TakenConstraint.Affine affine
-                    && !endsAnOperationOfTheRelation(affine.form(), affine.rel())
-                    && (reads == null || affine.terms().stream().anyMatch(term ->
-                            reads.stream().anyMatch(term::isReadOffAPlaceBearingOn)))) {
-                out.add(affine);
-            }
-        }
-        return out;
+    private static boolean fewerValuesPastTheEnds(FilingCoordinate at, SearchRegion model,
+                                                  SearchRegion pastTheEnds, InputReading read) {
+        NumericTerm term = numberAt(at);
+        return !Objects.equals(liesInItsType(pastTheEnds, term, read),
+                liesInItsType(model, term, read));
     }
 
-    /**
-     * The places of this relation one of {@code ends} keeps a value of out: taken into what the
-     * declarations leave on its own, it moves where a number read off the place lies inside that
-     * number's type. A value of the place no run gets past the end with is no value the relation
-     * is reached at.
-     */
-    private Set<FilingCoordinate> placesKeptOut(List<TakenConstraint.Affine> ends,
-                                                InputReading read) {
-        Set<FilingCoordinate> out = new LinkedHashSet<>();
-        SearchRegion declared = read.quantities().region();
-        for (TakenConstraint end : ends) {
-            SearchRegion within = end.narrowing(declared);
-            for (NumericTerm term : end.terms()) {
-                if (Objects.equals(liesInItsType(within, term, read),
-                        liesInItsType(declared, term, read))) {
-                    continue;
-                }
-                for (FilingCoordinate at : places()) {
-                    if (at.placesReadOff().stream().anyMatch(term::isReadOffAPlaceBearingOn)) {
-                        out.add(at);
-                    }
-                }
-            }
-        }
-        return out;
+    /** The number filed at {@code at}: the term itself, or the value at the position. */
+    private static NumericTerm numberAt(FilingCoordinate at) {
+        return switch (at) {
+            case FilingCoordinate.OfTerm(NumericTerm number) -> number;
+            case FilingCoordinate.AtPosition(TermPath path) -> new NumericTerm.ValueOf(path);
+        };
     }
+
+    /** The numbers this relation reads, one for each place it files under. */
+    private List<NumericTerm> numbersRead() {
+        return places().stream().map(UndividedByARelation::numberAt).toList();
+    }
+
 
     /** Where {@code term} lies in {@code region}, inside where its type stops: null where nothing
      *  is left of it. */
@@ -2440,23 +2437,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 ? NumericDomain.Bounds.OPEN : orders.answered().whereItStops();
         return region.projectionOf(term) instanceof NumericDomain.FormProjection.Within(
                 NumericDomain.Bounds within) ? within.meet(stops) : null;
-    }
-
-    /**
-     * {@code narrowedBy} without {@code ends}, each at the last place it was taken in: what the
-     * run got past is taken in after what the way states, so a statement of the way equal to an
-     * end is kept.
-     */
-    private static List<TakenConstraint> withoutTheLast(List<TakenConstraint> narrowedBy,
-                                                        List<? extends TakenConstraint> ends) {
-        List<TakenConstraint> out = new ArrayList<>(narrowedBy);
-        for (TakenConstraint each : ends) {
-            int at = out.lastIndexOf(each);
-            if (at >= 0) {
-                out.remove(at);
-            }
-        }
-        return out;
     }
 
     /**
@@ -7688,7 +7668,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         /**
          * {@code declarations} with the list again, less what the statements of {@code written}
-         * that are not among {@code stated} took in. A statement taken away that is a case or an
+         * that are not among {@code stated} took in, and with the years the remainders among
+         * {@code stated} leave a date, as the way's own region was
+         * ({@link WayToTheBorder#withTheYearsLeftBy}). A statement taken away that is a case or an
          * element asked of a container narrowed the region by something it does not carry, so
          * the list cannot be rebuilt without it; no way is read with one taken away.
          */
@@ -7706,7 +7688,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             "a case or an element asked of a container cannot be taken away");
                 }
             }
-            return TakenConstraint.narrowedByAllBut(applied, relations, met, declarations);
+            return WayToTheBorder.withTheYearsLeftBy(
+                    TakenConstraint.narrowedByAllBut(applied, relations, met, declarations),
+                    stated.stream().map(OnAWay::onARemainder).filter(Objects::nonNull).toList());
         }
     }
 

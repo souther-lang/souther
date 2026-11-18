@@ -396,16 +396,16 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     /**
      * A number the run itself narrows is not free to meet a disequality: past
-     * {@code let unused = p + M}, {@code p} is nought, and {@code a != p} then takes the one
-     * value of {@code b} away that {@code a} could not meet: nought is no value of {@code b} the
-     * comparison holds at. Every {@code a} left meets some {@code b}, so {@code a} is not divided,
-     * and {@code b} is not shown to reach its true side at every value.
+     * {@code let unused = p + M} every run holds {@code p} at nought, and {@code a != p} then
+     * keeps {@code a} from nought, and {@code b} from the one value at which {@code a} could meet
+     * it. That is where the representation stops, and no line of the model: neither is divided
+     * there, and neither is said reached at every value.
      */
     @Test
     void aNumberTheRunNarrowsIsNotFreeToMeetADisequality() {
         String body = "{\n    let unused = p.value + 9223372036854775807\n"
                 + "    if a.value == p.value\n    then false\n    else a.value == b.value\n}";
-        assertEquals(Map.of("a", RELATES, "b", NOT_SHOWN), left("p: Yen, a: Yen, b: Yen",
+        assertEquals(Map.of("a", NOT_REACHED, "b", NOT_REACHED), left("p: Yen, a: Yen, b: Yen",
                 "data Yen = Int invariant value >= 0", body, "8:18"));
     }
 

@@ -101,10 +101,38 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
         }
     }
 
+    /**
+     * A stop on {@code a} bears on {@code b} where the way holds the two equal: the relation of
+     * {@code b} past it is read as it is past the way alone, and is not shown reached at every
+     * value of {@code b}.
+     */
+    @Test
+    void aStopOnANumberTheWayHoldsAnotherToBearsOnTheOther() {
+        String relation = "a == b && Set.size(hs) == b";
+        Map<String, List<String>> past = readingsOf(NUMBERS,
+                "a + " + (Long.MAX_VALUE - 10) + " - a >= 0 && " + relation);
+        assertEquals(readingsOf(NUMBERS, relation).keySet(), past.keySet(), past::toString);
+        assertEquals(List.of(NOT_SHOWN_REACHED), past.get("Set.size(hs)"), past::toString);
+    }
+
     /** A guard keeping {@code a} to ten is a statement of the model, and divides the elements. */
     @Test
     void aGuardAtTheValueTheSumStopsAtDividesTheElements() {
         assertEquals(List.of(), reasonsAt(PARAMETERS, "a <= 10 && " + MEMBERSHIP, "hs[*]"));
+    }
+
+    /**
+     * A relation of each kind that reads the number a stop keeps values of says so, each read by
+     * a reader of its own: a difference and a membership.
+     */
+    @Test
+    void everyKindOfRelationReadingTheNumberSaysTheStop() {
+        for (String target : List.of("a - b > 0", "Bool.not(Set.contains(a, hs))")) {
+            Map<String, List<String>> readings = readingsOf(NUMBERS,
+                    "a + " + FIRST_SUM + " - a >= 0 && " + target);
+            assertTrue(readings.getOrDefault("a", List.of()).contains(NOT_SHOWN_REACHED),
+                    () -> target + " " + readings);
+        }
     }
 
     /** A relation over numbers the stop does not turn on is read as it is with nothing before it. */
@@ -270,9 +298,8 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
             assertEquals(List.of(READ), reasonsOfBehavior(report, "plain", "hs[*]"), order::toString);
             // The sum stops at {@code a} from 1 up, which no statement of the form {@code a - d}
             // says: the membership after it is not shown reached, and is divided nowhere.
-            List<String> stopped = reasonsOfBehavior(report, "cancelled", "hs[*]");
-            assertFalse(stopped.isEmpty() || stopped.equals(List.of(READ)),
-                    () -> order + " " + stopped);
+            assertEquals(List.of(NOT_SHOWN_REACHED),
+                    reasonsOfBehavior(report, "cancelled", "hs[*]"), order::toString);
         }
     }
 
@@ -320,9 +347,8 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
         String plain = "Int.floorMod(a - d, 7) >= 1";
         for (String both : List.of(plain + " && " + THE_SUM_CANCELLING_TO_THE_FORM,
                 THE_SUM_CANCELLING_TO_THE_FORM + " && " + plain)) {
-            List<String> reasons = reasonsAt(PARAMETERS, both + " && " + MEMBERSHIP, "hs[*]");
-            assertFalse(reasons.isEmpty() || reasons.equals(List.of(READ)),
-                    () -> both + " " + reasons);
+            assertEquals(List.of(NOT_SHOWN),
+                    reasonsAt(PARAMETERS, both + " && " + MEMBERSHIP, "hs[*]"), both);
         }
     }
 
