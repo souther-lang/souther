@@ -847,27 +847,27 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      * one's.
      *
      * @param path    the comparison, and what each name it reads is made of or bound to
-     * @param aliases the names bound to the whole of another, each with the node that binds it:
-     *                what such a name reads of its fields is read of that other
+     * @param aliases the names made of the whole of another, each by the read of that other they
+     *                are made of: what such a name reads of its fields is read of that other
      */
     private record ReadOnTheWay(List<Core> path, Map<Core, List<BindingId>> aliases) {
 
         static ReadOnTheWay of(Core root, Core comparison, Set<BindingId> names,
                                Map<BindingId, List<Core>> madeOf) {
-            Map<BindingId, List<Core>> boundTo = new HashMap<>();
-            letsIn(root, names, boundTo);
             List<Core> path = new ArrayList<>(List.of(comparison));
             Map<Core, List<BindingId>> aliases = new IdentityHashMap<>();
             for (BindingId name : names) {
-                for (Core value : boundTo.getOrDefault(name, List.of())) {
-                    path.add(value);
-                    aliases.computeIfAbsent(Core.withoutStanding(value), _ -> new ArrayList<>())
-                            .add(name);
+                Set<Core> bound = Collections.newSetFromMap(new IdentityHashMap<>());
+                boundTo(root, Set.of(name), bound);
+                List<Core> sources = new ArrayList<>(madeOf.getOrDefault(name, List.of()));
+                sources.addAll(bound);
+                for (Core source : sources) {
+                    path.add(source);
+                    if (Core.withoutStanding(source) instanceof Core.Read whole) {
+                        aliases.computeIfAbsent(whole, _ -> new ArrayList<>()).add(name);
+                    }
                 }
-                path.addAll(madeOf.getOrDefault(name, List.of()));
             }
-            // An arm's binding is the whole of what the arm matches, as a let's is of its value.
-            armsIn(root, names, aliases);
             return new ReadOnTheWay(path, aliases);
         }
 
@@ -895,32 +895,6 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 }
             }
             return fields;
-        }
-
-        private static void letsIn(Core e, Set<BindingId> names,
-                                   Map<BindingId, List<Core>> out) {
-            Core node = Core.withoutStanding(e);
-            if (node instanceof Core.LetIn let && let.binder() != null
-                    && names.contains(let.binder().binding())) {
-                out.computeIfAbsent(let.binder().binding(), _ -> new ArrayList<>())
-                        .add(let.value());
-            }
-            Core.forEachChild(node, child -> letsIn(child, names, out));
-        }
-
-        private static void armsIn(Core e, Set<BindingId> names,
-                                   Map<Core, List<BindingId>> out) {
-            Core node = Core.withoutStanding(e);
-            if (node instanceof Core.Match match) {
-                for (Core.Case arm : match.cases()) {
-                    if (arm.binding().binder() != null
-                            && names.contains(arm.binding().binder().binding())) {
-                        out.computeIfAbsent(Core.withoutStanding(match.scrutinee()),
-                                _ -> new ArrayList<>()).add(arm.binding().binder().binding());
-                    }
-                }
-            }
-            Core.forEachChild(node, child -> armsIn(child, names, out));
         }
     }
 
