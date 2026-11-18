@@ -28,7 +28,7 @@ class WhatARunWorksOutIsToldOnlyByTheWalkOfItTest {
 
     private static final String PULLBACK = "souther/compiler/partition/Pullback";
 
-    private static final String OPERATORS = PULLBACK + "$Operators";
+    private static final String OPERATORS = "souther/compiler/partition/Operators";
 
     private static final String CORE = "Lsouther/compiler/core/Core";
 

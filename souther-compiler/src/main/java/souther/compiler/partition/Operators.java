@@ -10,7 +10,6 @@ import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.partition.Pullback.AfterTheFirst;
 import souther.compiler.partition.Pullback.Answers;
-import souther.compiler.partition.Pullback.Bound;
 import souther.compiler.partition.Pullback.Operated;
 import souther.compiler.partition.Pullback.OperatorsAnswer;
 import souther.compiler.partition.Pullback.StopObligation;
@@ -333,7 +332,7 @@ final class Operators implements ReadingState.Marked {
         changed();
     }
 
-    private record Visit(Core node, InputReads reads, Bound bound) {
+    private record Visit(Core node, InputReads reads, Pullback.Bound bound) {
 
         @Override
         public boolean equals(Object other) {
@@ -353,7 +352,7 @@ final class Operators implements ReadingState.Marked {
      * A value several names stand for, or several operands of an operator are made of, is
      * told once and not once for every way down to it.
      */
-    boolean firstOverWhereItStands(Core operand, InputReads reads, Bound bound) {
+    boolean firstOverWhereItStands(Core operand, InputReads reads, Pullback.Bound bound) {
         if (!visited.add(new Visit(Core.withoutStanding(operand), reads, bound))) {
             return false;
         }
@@ -386,13 +385,13 @@ final class Operators implements ReadingState.Marked {
      *  each of them is read off are the ones it may stop on, a remainder's those of its
      *  dividend ({@link PositionsAStatementReads#ofANumber}), and a quantity read off
      *  anything else leaves it stopping on no place this can name. */
-    void leaveUnsaid(Collection<? extends Quantity> reads, Bound bound) {
+    void leaveUnsaid(Collection<? extends Quantity> reads, Pullback.Bound bound) {
         leaveUnsaid(reads, bound, null);
     }
 
     /** The same, where a name another name was given is the name it was given, read in
      *  {@code at}. */
-    void leaveUnsaid(Collection<? extends Quantity> reads, Bound bound, InputReads at) {
+    void leaveUnsaid(Collection<? extends Quantity> reads, Pullback.Bound bound, InputReads at) {
         for (Quantity each : reads) {
             Optional<Set<ReadSubject>> read = PositionsAStatementReads.ofANumber(each);
             if (read.isEmpty()) {
@@ -413,7 +412,7 @@ final class Operators implements ReadingState.Marked {
 
     /** The same, over a name: the places of what a closure around binds it to where it is a
      *  name of one, and no place this can name where it is not. */
-    void leaveUnsaidOver(BindingId name, Bound bound) {
+    void leaveUnsaidOver(BindingId name, Pullback.Bound bound) {
         if (bound != null && bound.standFor() != null && bound.names().contains(name)) {
             unsaidAtEach(bound.standFor());
         } else {
