@@ -20,9 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * said here not to.
  *
  * <p>What a reading compares, or leaves alone, is compared by what it holds or as the very object;
- * neither sees a collection inside a record that is added to. The roles say which fields are
- * compared and how, and this asks of the objects in them, for the lookups that go through the
- * readings kept, that none holds a collection which is not immutable.
+ * neither sees a collection inside a record that is added to. The parts say which pieces of the
+ * state are compared and how, and this asks of the objects in them, for the lookups that go
+ * through the readings kept, that none holds a collection which is not immutable.
  *
  * <p>Asked of these models and not of the conformance corpora: the corpora do not go through the
  * readings kept, so a population of them would audit nothing.
@@ -122,14 +122,11 @@ class EveryObjectTheStateOfAReadingHoldsIsAsItWasMadeTest {
         ReadingState.FOUND.clear();
         ReadingState.auditing = true;
         try {
-            class AnOwner {
-                final List<AHolder> holders = new ArrayList<>();
+            ReadingState reading = new ReadingState();
+            ReadingState.Stack<AHolder> holders = reading.stack();
+            try (ReadingState.Restore _ = holders.pushing(new AHolder(new ArrayList<>()))) {
+                reading.inputs();
             }
-            ReadingState reading = new ReadingState(AnOwner.class,
-                    Map.of("holders", ReadingRole.INPUT));
-            AnOwner owner = new AnOwner();
-            owner.holders.add(new AHolder(new ArrayList<>()));
-            reading.inputsOf(owner);
         } finally {
             ReadingState.auditing = false;
         }
