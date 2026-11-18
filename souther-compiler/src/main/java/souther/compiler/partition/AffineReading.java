@@ -26,7 +26,6 @@ import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
 import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.ElementProjection;
-import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.ElementsMet;
 import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.inputs.InputDomain;
@@ -996,11 +995,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             private void tellWhatTheListsWorkOut(Core node, InputReads at) {
                 for (Evaluated.Step step : Evaluated.inOrder(Core.withoutStanding(node))) {
                     if (step instanceof Evaluated.Step.Always(Core part)) {
-                        LinearForm<NumericTerm> elements =
-                                InputNumber.totalOfTheElementsOf(part, inputs, at, ruleSource);
-                        if (elements != null) {
-                            tellWhatIsWorkedOutAtEachElement(part, addedAsItIs(elements));
-                        }
+                        tellWhatIsWorkedOutAtEachElement(part, at);
                         tellWhatTheListsWorkOut(part, at);
                     }
                 }
@@ -1837,18 +1832,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * ({@link WhatWasTold#leftToTheWitness}). Nothing is told where the elements' places
              * keep it within them, nor where the number is not a whole one.
              */
-            private void tellWhatIsWorkedOutAtEachElement(Core node, NumericTerm total) {
-                if (total instanceof NumericTerm.TakenOver over
-                        && over.source() instanceof RunSource.ComputedOccurrences(
-                                TermPath elements, ElementValue.Affine(var each),
-                                Type computed, _)
-                        && Type.INT.equals(computed)
-                        && WhereAnOperatorAnswers.ofATotal(Type.INT)
-                        instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
-                    LinearForm<NumericTerm> form = each.over(place -> LinearForm.atom(
-                            new NumericTerm.ValueOf(place.from(elements))));
+            private void tellWhatIsWorkedOutAtEachElement(Core walk, InputReads at) {
+                if (!(WhereAnOperatorAnswers.ofATotal(Type.INT)
+                        instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held)) {
+                    return;
+                }
+                for (LinearForm<NumericTerm> form
+                        : InputNumber.operationsAtEachElement(walk, at, ruleSource)) {
                     if (!heldWithinItsEnds(form, held)) {
-                        keepForWhereARunStops(node, UndividedByARelation.IntOperation
+                        keepForWhereARunStops(walk, UndividedByARelation.IntOperation
                                 .overTheInput(form, held.least(), held.greatest(), List.of()));
                     }
                 }

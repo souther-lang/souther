@@ -177,19 +177,35 @@ public final class InputNumber {
     }
 
     /**
-     * The total of the elements of {@code list}, as the term a call of {@code List.sum} over it
-     * reads as — or null where {@code list} is no walk read from a place. What a run works out of
-     * each element to make the list is what the term is computed of
-     * ({@link RunSource.ComputedOccurrences}), whether or not anything is added up.
+     * What a run works out of each element to make {@code walk}, a call of an operation applying
+     * a closure to the elements of a container that stands at a place: each whole-number
+     * operation the closure writes, in the order it works them out, as a form of the numbers at
+     * the places of the elements ({@link ElementValue#operationsOf}). None where {@code walk} is
+     * no such call, or its elements stand at no place.
      */
-    public static LinearForm<NumericTerm> totalOfTheElementsOf(Core list, InputDomain inputs,
-                                                               InputReads reads,
-                                                               RuleReadingSource source) {
-        ValueName.Stdlib sum = ValueName.Stdlib.operation("List", "sum");
-        TakenAs how = DefaultBoundOperationFacts.get().takenAs(sum);
-        return how == null ? null : overARun(
-                new NumericMeasures.Measured(sum, list, TakenArguments.NONE, how), inputs, reads,
-                source);
+    public static List<LinearForm<NumericTerm>> operationsAtEachElement(Core walk,
+                                                                        InputReads reads,
+                                                                        RuleReadingSource source) {
+        Denotation met = reads.denotes(walk, source.symbols(), source.newtypes());
+        if (met == null) {
+            return List.of();
+        }
+        InputReads where = met.at();
+        BindingId element = WalkElements.elementBindingOf(met.value(), where, source.symbols(),
+                source.newtypes());
+        ElementAnswer closure = element == null ? null : where.answerAt(element);
+        if (closure == null || !(where.everyElementAt(element, source.newtypes())
+                instanceof ValuesHeld.At(TermPath stands))) {
+            return List.of();
+        }
+        List<LinearForm<NumericTerm>> out = new ArrayList<>();
+        for (LinearForm<ElementProjection> each : ElementValue.operationsOf(closure,
+                where.heldByTheBody(), source, new ElementValue.ElementsAt(stands,
+                        where.declared()))) {
+            out.add(each.over(place -> LinearForm.atom(
+                    new NumericTerm.ValueOf(place.from(stands)))));
+        }
+        return out;
     }
 
     /**

@@ -1548,6 +1548,21 @@ public sealed interface ElementValue {
     }
 
     /**
+     * Each whole-number operation a closure works out of its element on the way to its answer, in
+     * the order it works them out, as a form of the places of the element: what each comes to
+     * where it is worked out, and not what the answer comes to once the arithmetic has simplified
+     * it — {@code (x + 2) - 1} comes to {@code x + 1}, and a run stops at the {@code x + 2}. Not
+     * what a choice in the answer holds, which some runs do not work out, nor an operation that is
+     * no form of the places of the element.
+     */
+    static List<LinearForm<ElementProjection>> operationsOf(ElementAnswer answer,
+                                                            Map<BindingId, Core> held,
+                                                            RuleReadingSource source,
+                                                            ElementsAt elements) {
+        return Reader.operationsOf(answer, held, source, elements);
+    }
+
+    /**
      * The test of the element a closure answering whether to keep it makes, read as a choice in
      * a closure's answer is ({@link Test}) — or null where it is no such test.
      */
@@ -1624,6 +1639,11 @@ public sealed interface ElementValue {
         /** The number of the input standing the same for every element a leaf is, or null
          *  where no such number is read. */
         private final Function<Core, NumericTerm> invariantAt;
+        /** Each whole-number operation the answer composes, as a form of what it comes to, where
+         *  they are asked for ({@link #operationsOf}); null where they are not. */
+        private List<LinearForm<Atom>> operations;
+        /** How many choices deep the walk is: what a choice holds is worked out on some runs. */
+        private int insideChoices;
 
         private Reader(BindingId element, BindingId position,
                        Map<BindingId, ElementProjection> standing, Map<BindingId, Core> held,
@@ -1636,6 +1656,33 @@ public sealed interface ElementValue {
             this.source = source;
             this.elements = elements;
             this.invariantAt = invariantAt;
+        }
+
+        /** What {@link ElementValue#operationsOf} says: each operation the answer composes, kept
+         *  where it is a form of places of the element alone. */
+        private static List<LinearForm<ElementProjection>> operationsOf(
+                ElementAnswer answer, Map<BindingId, Core> held, RuleReadingSource source,
+                ElementsAt elements) {
+            Reader reader = new Reader(answer.parameter(), answer.position(), Map.of(), held,
+                    source, elements, null);
+            reader.operations = new ArrayList<>();
+            reader.value(answer.body());
+            List<LinearForm<ElementProjection>> out = new ArrayList<>();
+            for (LinearForm<Atom> form : reader.operations) {
+                Map<ElementProjection, ExactRatio> places = new LinkedHashMap<>();
+                for (Map.Entry<Atom, ExactRatio> each : form.coefs().entrySet()) {
+                    if (each.getKey() instanceof Atom.Place(ElementProjection place)) {
+                        places.put(place, each.getValue());
+                    } else {
+                        places.clear();
+                        break;
+                    }
+                }
+                if (!places.isEmpty()) {
+                    out.add(new LinearForm<>(form.constant(), places));
+                }
+            }
+            return out;
         }
 
         /** The same reading, inside an arm whose name {@code bound} stands at {@code at}. */
@@ -2233,15 +2280,31 @@ public sealed interface ElementValue {
                     if (beside != null) {
                         return LinearForm.atom(new Atom.Invariant(beside));
                     }
-                    ElementValue choice = switch (Core.withoutStanding(e)) {
-                        case Core.If branch -> byCondition(branch);
-                        case Core.Match match -> byCase(match);
-                        case null, default -> {
-                            ElementValue rounded = roundingOf(e, at);
-                            yield rounded != null ? rounded : wholeUnitsOf(e, at);
-                        }
-                    };
+                    ElementValue choice;
+                    insideChoices++;
+                    try {
+                        choice = switch (Core.withoutStanding(e)) {
+                            case Core.If branch -> byCondition(branch);
+                            case Core.Match match -> byCase(match);
+                            case null, default -> {
+                                ElementValue rounded = roundingOf(e, at);
+                                yield rounded != null ? rounded : wholeUnitsOf(e, at);
+                            }
+                        };
+                    } finally {
+                        insideChoices--;
+                    }
                     return choice == null ? null : termsOf(choice);
+                }
+
+                /** Told of each operator and not only of the whole, so that {@code (x + 1) - 1},
+                 *  which comes to {@code x}, is a run's to stop in at the {@code x + 1}. */
+                @Override
+                public void composed(Core operation, LinearForm<Atom> form) {
+                    if (operations != null && insideChoices == 0
+                            && Type.INT.equals(Core.withoutStanding(operation).type())) {
+                        operations.add(form);
+                    }
                 }
 
                 /** The position times a form of the places of the element, which is a form of the

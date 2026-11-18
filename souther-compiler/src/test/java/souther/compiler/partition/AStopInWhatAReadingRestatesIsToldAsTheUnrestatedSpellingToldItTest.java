@@ -73,6 +73,16 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
                 "List.length(List.sort(List.map(x -> x + 1, ds))) >= 2");
         CONDITIONS.put("lengthSortOfAStepUnchanged",
                 "List.length(List.sort(List.map(x -> x, ds))) >= 2");
+        CONDITIONS.put("allOfAStep", "List.all(r -> r <= 10, List.map(x -> x + 1, ds))");
+        CONDITIONS.put("allOfAProduct", "List.all(r -> r <= 10, List.map(x -> x * 2, ds))");
+        CONDITIONS.put("allOfACancelledStep",
+                "List.all(r -> r <= 10, List.map(x -> (x + 1) - 1, ds))");
+        CONDITIONS.put("allOfAShiftedStep",
+                "List.all(r -> r <= 10, List.map(x -> (x + 2) - 1, ds))");
+        CONDITIONS.put("lengthOfACancelledStep",
+                "List.length(List.map(x -> (x + 1) - 1, ds)) >= 2");
+        CONDITIONS.put("lengthOfAShiftedStep",
+                "List.length(List.map(x -> (x + 2) - 1, ds)) >= 2");
         CONDITIONS.put("none", "q >= q");
         CONDITIONS.put("armNoStop", "(if q > 5 then q - 1 else 3) >= q");
         CONDITIONS.put("nestedArmNoStop",
@@ -175,6 +185,26 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
             assertEquals(1, TOLD.get(form).size(), form + " " + TOLD);
             assertEquals(List.of(), TOLD.get(form + "Unchanged"), form + " " + TOLD);
         }
+    }
+
+    /**
+     * What an element comes to stops a run at the operation the closure writes, where it comes to
+     * it, whatever the closure's answer is simplified to: {@code (x + 1) - 1} is {@code x} and a
+     * run stops at the {@code x + 1}; {@code (x + 2) - 1} is {@code x + 1} and a run stops at the
+     * {@code x + 2}, an element sooner. The note says the operation and where it is past the type.
+     */
+    @Test
+    void aStopOfAnElementIsToldAtTheOperationTheClosureWritesIt() {
+        assertTrue(TOLD.get("allOfAStep").getFirst().contains(
+                "in ds[*] + 1 where ds[*] is at least 9223372036854775807"), TOLD.toString());
+        assertTrue(TOLD.get("allOfAProduct").getFirst().contains(
+                "in 2 * ds[*] where ds[*] is at least 4611686018427387904"), TOLD.toString());
+        assertTrue(TOLD.get("allOfACancelledStep").getFirst().contains(
+                "in ds[*] + 1 where ds[*] is at least 9223372036854775807"), TOLD.toString());
+        assertTrue(TOLD.get("allOfAShiftedStep").getFirst().contains(
+                "in ds[*] + 2 where ds[*] is at least 9223372036854775806"), TOLD.toString());
+        assertEquals(1, TOLD.get("lengthOfACancelledStep").size(), TOLD.toString());
+        assertEquals(1, TOLD.get("lengthOfAShiftedStep").size(), TOLD.toString());
     }
 
     /** The other side of a comparison of a walk is worked out whatever the walk answers. */
