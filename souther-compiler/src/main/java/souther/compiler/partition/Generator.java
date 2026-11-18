@@ -7347,10 +7347,10 @@ public final class Generator {
             WalkedInOrder came = new InOrder(subject, order, composed, standing, writes,
                     settled, thisWay, check, way.contents(), taking)
                     .from(0, ValuesHandedOn.NONE);
-            switch (came) {
+            return switch (came) {
                 case WalkedInOrder.CameToNothingAt(ParameterCameToNothing why) -> {
                     cameToNothing.add(why);
-                    return false;
+                    yield false;
                 }
                 case WalkedInOrder.RowTaken _, WalkedInOrder.PassedOver _,
                      WalkedInOrder.Halted _ -> {
@@ -7361,14 +7361,14 @@ public final class Generator {
                         if (refusedKept.isEmpty()) {
                             refusedKept.add(kept);
                         }
-                        return false;
+                        yield false;
                     }
                     if (kept != null) {
                         kept.toArray(composed);
-                        return true;
+                        yield true;
                     }
                     if (came instanceof WalkedInOrder.RowTaken) {
-                        return true;
+                        yield true;
                     }
                     // Rows were composed and none was run to an answer: said with the rest of
                     // what the ways came to once they are all tried, as a row passed over and not
@@ -7377,9 +7377,9 @@ public final class Generator {
                         passedFound[0] = passedFound[0].and(its);
                     }
                     noRowAnswered[0] = true;
-                    return false;
+                    yield false;
                 }
-            }
+            };
         });
         // No way reached a row the judge accepts and every way there is was tried: the row it
         // refused first is what comes back, built and marked refused. A walk that left ways
