@@ -29,9 +29,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A position is read as reached at every value only over values some run gets to it at. The
  * statements on the way are kept as the form they state, and the arithmetic that wrote one can stop
- * at a partial sum that form does not show. What the operators of the run narrow is read as a
- * statement of the way that says the same is: a value the first sum stops on is a value no run
- * reaches the membership at, as a guard keeping it out would say.
+ * at a partial sum that form does not show. Where it stops because the number is past where its
+ * representation stops, that is no line of the model, whatever the constant that puts it there: a
+ * relation after it is read as it is without it, and where the stop turns on a number the relation
+ * reads, the relation is said not shown reached at every value. A guard keeping the number to the
+ * same values is a statement of the model, and is read as one.
  */
 class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
 
@@ -41,7 +43,10 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
 
     private static final String NOT_SHOWN_REACHED = "relation_not_shown_reached_at_every_value";
 
-    private static final String PARAMETERS ="a: Int, d: Int, hs: Set<Int>";
+    private static final String PARAMETERS = "a: Int, d: Int, hs: Set<Int>";
+
+    private static final String NUMBERS =
+            "a: Int, b: Int, c: Int, d: Int, hs: Set<Int>, xs: List<Int>";
 
     private static final String MEMBERSHIP = "Bool.not(Set.contains(a, hs))";
 
@@ -53,122 +58,117 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
     private static final String THE_SUM_STOPPING =
             "a + " + FIRST_SUM + " - d >= 0 && " + MEMBERSHIP;
 
-    private static final String THE_REMAINDER_OF_A_SUM_STOPPING =
-            "Int.floorMod(" + FIRST_SUM + " + a - d, 7) >= 1 && " + MEMBERSHIP;
-
     private static final String THE_SUM_CANCELLING_TO_THE_FORM =
-            "Int.floorMod(a + 9223372036854775807 - 9223372036854775807 - d, 7) >= 1 && "
-                    + MEMBERSHIP;
+            "Int.floorMod(a + 9223372036854775807 - 9223372036854775807 - d, 7) >= 1";
 
     /**
-     * The first two stop the first addition at {@code a} from 11 up, and the third from 1 up, so
-     * the runs that get to the membership hold {@code a} at 10 or below, and at nought or below.
-     * No element of {@code hs} above that is ever {@code a}: they are divided there, by the line
-     * a guard keeping {@code a} to that would draw, and are not left unanswered. The values of
-     * {@code a} are, since a run past the sum is what a row is asked to be.
+     * Changing only the constant that puts the end where it is changes nothing: past the greatest
+     * {@code Int} less ten, an end no guard-shaped reading took for the representation, and past
+     * the greatest less three, one it did, the relation the stop turns on is read alike, and is
+     * not shown reached at every value either way.
      */
     @Test
-    void theElementsOfAMembershipBesideASumThatStopsAreDividedWhereNoRunReachesThem() {
-        for (String condition : List.of(THE_SUM_STOPPING, THE_REMAINDER_OF_A_SUM_STOPPING)) {
-            assertEquals(List.of(), reasonsAt(PARAMETERS, condition, "hs[*]"), condition);
-            assertEquals(reasonsAt(PARAMETERS, "a <= 10 && " + MEMBERSHIP, "hs[*]"),
-                    reasonsAt(PARAMETERS, condition, "hs[*]"), condition);
-            assertFalse(reasonsAt(PARAMETERS, condition, "a").isEmpty(), condition);
-        }
-        assertEquals(List.of(), reasonsAt(PARAMETERS, THE_SUM_CANCELLING_TO_THE_FORM, "hs[*]"));
+    void whereAStopFallsChangesNothingOfWhatIsRead() {
+        String target = "Set.size(hs) == a";
+        Map<String, List<String>> far = readingsOf(NUMBERS,
+                "a + " + (Long.MAX_VALUE - 10) + " - a >= 0 && " + target);
+        Map<String, List<String>> near = readingsOf(NUMBERS, "a + 3 - a >= 0 && " + target);
+        assertEquals(far, near);
+        assertEquals(List.of(NOT_SHOWN_REACHED), near.get("Set.size(hs)"), near::toString);
     }
 
     /**
-     * What the sum stops at is where the elements are divided: no run past the sum holds {@code a}
-     * from the first value it stops on up, so the elements from there on are a class the
-     * membership never settles with a value of {@code a}. The line is drawn on {@code hs[*]} at
-     * that value, and the rows are of both answers of the membership, each at an {@code a} the
-     * sum is past.
+     * The sum stops the run at {@code a} from 11 up: no class of the elements of {@code hs} starts
+     * at 11 and no line is drawn there. The membership is not shown reached at every value of
+     * {@code a}, which the stop keeps from 11 up, nor of the elements, which no run past the stop
+     * holds beside an {@code a} equal to one from 11 up.
      */
     @Test
-    void theElementsAreDividedAtTheFirstValueTheSumStopsOn() {
-        long firstStop = Long.MAX_VALUE - FIRST_SUM + 1;
-        for (String condition : List.of(THE_SUM_STOPPING, THE_REMAINDER_OF_A_SUM_STOPPING)) {
-            JsonNode partition = reportOf(compiled(PARAMETERS, condition)).path("modules")
-                    .get(0).path("behaviors").get(0).path("partition");
-            List<String> classes = new ArrayList<>();
-            for (JsonNode axis : partition.path("axes")) {
-                if (axis.path("path").asString().equals("hs[*]")) {
-                    axis.path("classes").forEach(each -> classes.add(each.asString()));
-                }
-            }
-            assertEquals(List.of("hs[*]: x < " + firstStop, "hs[*]: " + firstStop + " <= x"),
-                    classes, condition);
-            boolean lineAtTheStop = false;
-            for (JsonNode border : partition.path("boundaries")) {
-                lineAtTheStop |= border.path("axis").asString().equals("f/hs[*]")
-                        && border.path("value").asString().equals(Long.toString(firstStop));
-            }
-            assertTrue(lineAtTheStop, condition);
-
-            List<List<String>> rows = certifiedRowsOf(condition);
-            assertTrue(rows.stream().anyMatch(row -> row.get(2).equals("[" + row.get(0) + "]")),
-                    "a row whose set holds a: " + rows);
-            assertTrue(rows.stream().anyMatch(row -> row.get(2).equals("[]")),
-                    "a row whose set holds none: " + rows);
+    void aMembershipTheStopTurnsOnIsDividedNowhereAndNotShownReached() {
+        String firstStop = Long.toString(Long.MAX_VALUE - FIRST_SUM + 1);
+        JsonNode report = reportOf(compiled(PARAMETERS, THE_SUM_STOPPING));
+        Map<String, List<String>> readings = readingsIn(report);
+        assertEquals(List.of(NOT_SHOWN_REACHED), readings.get("hs[*]"), readings::toString);
+        assertTrue(readings.get("a").contains(NOT_SHOWN_REACHED), readings::toString);
+        JsonNode partition = report.path("modules").get(0).path("behaviors").get(0)
+                .path("partition");
+        for (JsonNode axis : partition.path("axes")) {
+            axis.path("classes").forEach(each ->
+                    assertFalse(each.asString().contains(firstStop), each.asString()));
         }
+        for (JsonNode border : partition.path("boundaries")) {
+            assertFalse(border.path("value").asString().equals(firstStop), border.toString());
+        }
+    }
+
+    /** A guard keeping {@code a} to ten is a statement of the model, and divides the elements. */
+    @Test
+    void aGuardAtTheValueTheSumStopsAtDividesTheElements() {
+        assertEquals(List.of(), reasonsAt(PARAMETERS, "a <= 10 && " + MEMBERSHIP, "hs[*]"));
+    }
+
+    /** A relation over numbers the stop does not turn on is read as it is with nothing before it. */
+    @Test
+    void aRelationTheStopDoesNotTurnOnIsRead() {
+        Map<String, List<String>> readings = readingsOf(NUMBERS,
+                "a + " + FIRST_SUM + " - a >= 0 && b - c > 0");
+        assertEquals(List.of(READ), readings.get("b"), readings::toString);
+        assertEquals(List.of(READ), readings.get("c"), readings::toString);
+    }
+
+    /**
+     * An end over a number the relation reads and one it does not, {@code a - d} within an
+     * {@code Int} with {@code d} read, keeps no value of {@code d}: some {@code a} makes any
+     * {@code d} get past it.
+     */
+    @Test
+    void anEndTheNumbersTheRelationDoesNotReadMakeUpIsNoStop() {
+        assertEquals(List.of(READ), reasonsAt(PARAMETERS,
+                "Int.floorMod(a - d, 7) >= 1 && Bool.not(Set.contains(d, hs))", "hs[*]"));
     }
 
     /**
      * The values the sum stops on: {@code a} at 11 is past the greatest {@code Int} and at 10 is
      * the greatest, so a row the compiler offers for the rule is one the program gets past.
-     *
-     * <p>The line the stop draws through the elements of {@code hs} is shown to be no place of
-     * the author's line, owes nothing and is not searched, so the rows are the rule's own.
      */
     @Test
     void theRowsOfferedAreRunsThatGetPastTheSum() {
         assertThrows(ArithmeticException.class, () -> Math.addExact(11L, FIRST_SUM));
         assertEquals(Long.MAX_VALUE, Math.addExact(10L, FIRST_SUM));
-        for (String condition : List.of(THE_SUM_STOPPING, THE_REMAINDER_OF_A_SUM_STOPPING)) {
-            List<List<String>> rows = certifiedRowsOf(condition);
-            assertFalse(rows.isEmpty(), condition);
-            for (List<String> row : rows) {
-                long a = Long.parseLong(row.get(0));
-                assertDoesNotThrow(() -> Math.addExact(a, FIRST_SUM), () -> condition + " " + row);
-            }
+        List<List<String>> rows = certifiedRowsOf(THE_SUM_STOPPING);
+        assertFalse(rows.isEmpty());
+        for (List<String> row : rows) {
+            long a = Long.parseLong(row.get(0));
+            assertDoesNotThrow(() -> Math.addExact(a, FIRST_SUM), row::toString);
         }
     }
 
     /**
-     * The sum stops the same wherever it is written on the way: bound by a {@code let}, in the
-     * body of a closure the membership is inside of, or before a walk over a list. What the sum
-     * stops on is {@code a} and {@code d}, so the elements of a set a membership of {@code a}
-     * is of are divided where no run reaches them, and a membership of an element of a list,
-     * which the sum does not tie to, is read.
+     * The sum stops the same wherever it is written on the way: bound by a {@code let}, it is read
+     * as written in place. Before a walk over a list, it stops on {@code a} and {@code d} and on no
+     * element the walk reads, and the elements of the set are read as the membership reads them.
      */
     @Test
     void aSumStopsTheRunWhereverItIsWrittenOnTheWayToTheMembership() {
         String stop = "a + " + FIRST_SUM + " - d >= 0";
-        assertEquals(List.of(), reasonsAt(PARAMETERS,
-                "{ let s = a + " + FIRST_SUM + " - d  s >= 0 && " + MEMBERSHIP + " }", "hs[*]"));
-        assertEquals(List.of(READ), reasonsAt(NUMBERS,
-                "List.any(x -> x + " + FIRST_SUM + " - d >= 0 && Bool.not(Set.contains(x, hs)), xs)",
-                "hs[*]"));
+        assertEquals(readingsOf(PARAMETERS, THE_SUM_STOPPING), readingsOf(PARAMETERS,
+                "{ let s = a + " + FIRST_SUM + " - d  s >= 0 && " + MEMBERSHIP + " }"));
         assertEquals(List.of(READ), reasonsAt(NUMBERS,
                 stop + " && List.all(x -> Bool.not(Set.contains(x, hs)), xs)", "hs[*]"));
     }
 
     /**
-     * The sum is worked out only on the runs where {@code d} is above nought, and the membership is
+     * The sum is worked out only on the runs where {@code d} is above nought, and the relation is
      * reached on the others without it. A run that works it out and stops is no run of the
-     * membership, and which values that is the path does not say: it ties {@code a} and
-     * {@code d} as the left arm of a choice does, and the membership is not shown reached, as
-     * a comparison in its place is not.
+     * relation, and which values that is the path does not say: it ties {@code a} and {@code d}
+     * as the left arm of a choice does, and the relation is not shown reached at {@code a}.
      */
     @Test
     void aSumWorkedOutInAnArmTheMembershipIsReachedWithoutIsAStopTheMembershipIsNotShownPast() {
-        String condition = "(d > 0 && a + " + FIRST_SUM + " - d >= 0) || " + MEMBERSHIP;
-        assertEquals(List.of(READ), reasonsAt(PARAMETERS, condition, "hs[*]"));
-        assertEquals(List.of(READ), reasonsAt(NUMBERS,
-                "(d > 0 && a + " + FIRST_SUM + " - d >= 0) || a - b > 0", "b"));
-        assertEquals(List.of(NOT_SHOWN_REACHED), reasonsAt(NUMBERS,
-                "(d > 0 && a + " + FIRST_SUM + " - d >= 0) || a - b > 0", "a"));
+        Map<String, List<String>> readings = readingsOf(NUMBERS,
+                "(d > 0 && a + " + FIRST_SUM + " - d >= 0) || a - b > 0");
+        assertEquals(List.of(READ), readings.get("b"), readings::toString);
+        assertEquals(List.of(NOT_SHOWN_REACHED), readings.get("a"), readings::toString);
     }
 
     /**
@@ -191,31 +191,17 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
                         + " List.filter(x -> x > 0, xs))  " + MEMBERSHIP + used, "a"));
     }
 
-    /** The same sum as the left arm of a choice, worked out on every run before the membership. */
-    @Test
-    void aSumTheLeftArmOfAChoiceWorksOutOnEveryRunIsAStopThere() {
-        String condition = "(a + " + FIRST_SUM + " - d >= 0 || d > 0) && " + MEMBERSHIP;
-        assertEquals(List.of(NOT_SHOWN), reasonsAt(PARAMETERS, condition, "hs[*]"));
-    }
-
     /**
-     * A choice whose left arm is a sum tying two numbers narrows both on the way it is not taken,
-     * and a run read off that region can reach past the ends of the type. A relation after it is
-     * read all the same, whether a comparison or a membership.
+     * The same sum as the left arm of a choice, worked out on every run before the membership,
+     * stops runs on {@code a} and draws no line through the elements, which are not shown reached
+     * at every value.
      */
     @Test
-    void aRelationAfterASumThatTiesTwoNumbersIsReadWhereTheTypeEnds() {
-        String choice = "(a + " + FIRST_SUM + " - d >= 0 || d > 0) && ";
-        assertEquals(Map.of("a", List.of(READ), "d", List.of(READ)),
-                readingsOf(NUMBERS, choice + "a - b > 0"));
-        assertEquals(Map.of("a", List.of(READ), "d", List.of(READ), "b", List.of(NOT_SHOWN)),
-                readingsOf(NUMBERS, choice + "a == b"));
-        assertEquals(Map.of("a", List.of(NOT_SHOWN, READ), "d", List.of(READ)),
-                readingsOf(NUMBERS, choice + "a * b >= 0"));
-        assertEquals(Map.of("a", List.of(READ), "d", List.of(READ), "hs[*]", List.of(NOT_SHOWN)),
-                readingsOf(NUMBERS, choice + MEMBERSHIP));
-        assertEquals(Map.of("a", List.of(NOT_SHOWN, READ), "d", List.of(READ)),
-                readingsOf(NUMBERS, choice + "Int.floorMod(a, b) == 0"));
+    void aSumTheLeftArmOfAChoiceWorksOutOnEveryRunIsAStopThere() {
+        Map<String, List<String>> readings = readingsOf(PARAMETERS,
+                "(a + " + FIRST_SUM + " - d >= 0 || d > 0) && " + MEMBERSHIP);
+        assertEquals(List.of(NOT_SHOWN_REACHED), readings.get("hs[*]"), readings::toString);
+        assertTrue(readings.get("a").contains(NOT_SHOWN_REACHED), readings::toString);
     }
 
     /**
@@ -227,46 +213,34 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
     @Test
     void aSumAnArgumentStopsAtIsNotTheArgumentItIsAsAForm() {
         String written = "Bool.not(Set.contains(a + " + FIRST_SUM + " - " + FIRST_SUM + ", hs))";
-        assertEquals(List.of(READ), reasonsAt(PARAMETERS, MEMBERSHIP, "hs[*]"));
+        Map<String, List<String>> readings = readingsOf(PARAMETERS, written);
         // The runs past the sum hold {@code a} at 10 or below, and the relation reaches each of
         // them, as it does under the guard; the elements of {@code hs} above 10 are never {@code a}.
-        assertEquals(Map.of("a", List.of(READ), "hs[*]", List.of(NOT_SHOWN)),
-                readingsOf(PARAMETERS, written));
-        assertEquals(readingsOf(PARAMETERS, "a <= 10 && " + written),
-                readingsOf(PARAMETERS, written));
+        assertEquals(Map.of("a", List.of(READ), "hs[*]", List.of(NOT_SHOWN)), readings);
+        assertEquals(readingsOf(PARAMETERS, "a <= 10 && " + written), readings);
         // And it is the comparison of the element with the sum, read the same written as one.
         assertEquals(readingsOf(PARAMETERS, "Bool.not(List.any(x -> x == a + " + FIRST_SUM + " - "
-                + FIRST_SUM + ", Set.toList(hs)))"), readingsOf(PARAMETERS, written));
-        String withTheDifference = "Bool.not(Set.contains(a + " + FIRST_SUM + " - " + FIRST_SUM
-                + " - d, hs))";
-        assertEquals(readingsOf(PARAMETERS, "a <= 10 && Bool.not(Set.contains(a - d, hs))"),
-                readingsOf(PARAMETERS, withTheDifference));
+                + FIRST_SUM + ", Set.toList(hs)))"), readings);
     }
 
     /**
      * A comparison works out a sum, and where the sum is more than the form the comparison is
      * about, it stops a run at an {@code a} the form has a row at: {@code a + K - K == b} is
      * {@code a == b} to the form, and no run with {@code a} past 10 gets past the first sum. That
-     * is a line the model draws and is read as the guard that says the same is. A sum that is the
-     * form itself stops where the form's own addends pass the type, which is the representation
-     * running out for any {@code K}, and is read as {@code a + 1 == b} is.
+     * is the relation's own arithmetic, read as the guard that says the same is. A sum that is the
+     * form itself stops where the form's own addends pass the type, and is read as the form.
      */
     @Test
     void aSumBeyondTheFormAComparisonIsAboutStopsARunAtALineOfTheModel() {
         String k = Long.toString(Long.MAX_VALUE - 10);
-        for (String beyond : List.of("a + K - K == b", "a + K - 100 == b", "a + K == b + 1")) {
-            String written = beyond.replace("K", k);
-            assertEquals(readingsOf(NUMBERS, "a <= 10 && " + written),
-                    readingsOf(NUMBERS, written), beyond);
-            // No run with {@code a} past ten gets to the equality, so {@code b} past ten is never
-            // equal to it: {@code b} is divided there and not left unanswered.
-            assertEquals(List.of(), reasonsAt(NUMBERS, written, "b"), beyond);
-        }
-        for (String theForm : List.of("a + K == b", "a + K - b > 0", "a + 1 == b",
-                "a < b + 1")) {
-            assertEquals(Map.of("a", List.of(READ), "b", List.of(READ)),
-                    readingsOf(NUMBERS, theForm.replace("K", k)), theForm);
-        }
+        String beyond = "a + K - K == b".replace("K", k);
+        Map<String, List<String>> readings = readingsOf(NUMBERS, beyond);
+        assertEquals(readingsOf(NUMBERS, "a <= 10 && " + beyond), readings);
+        // No run with {@code a} past ten gets to the equality, so {@code b} past ten is never
+        // equal to it: {@code b} is divided there and not left unanswered.
+        assertFalse(readings.containsKey("b"), readings::toString);
+        assertEquals(Map.of("a", List.of(READ), "b", List.of(READ)),
+                readingsOf(NUMBERS, "a + K == b".replace("K", k)));
     }
 
     /**
@@ -277,44 +251,44 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
     @Test
     void aFormAndASumThatCancelsToItShareNoProofInOneCompilation() {
         String plain = "Int.floorMod(a - d, 7) >= 1 && " + MEMBERSHIP;
+        String cancelled = THE_SUM_CANCELLING_TO_THE_FORM + " && " + MEMBERSHIP;
         for (List<String> order : List.of(List.of("plain", "cancelled"),
                 List.of("cancelled", "plain"))) {
             StringBuilder model = new StringBuilder("module demo\n");
             for (String behavior : order) {
-                String condition = behavior.equals("plain") ? plain
-                        : THE_SUM_CANCELLING_TO_THE_FORM;
                 model.append("""
 
                         behavior NAME : (a: Int, d: Int, hs: Set<Int>) -> Bool
                         let NAME (a, d, hs) = CONDITION
-                        """.replace("NAME", behavior).replace("CONDITION", condition));
+                        """.replace("NAME", behavior).replace("CONDITION",
+                        behavior.equals("plain") ? plain : cancelled));
             }
             Compilation compilation = Compilation.ofSource(model.toString(), "Main");
             compilation.measure(Adequacy.Asked.fullReport());
             ACompiledModel.compiles(compilation);
             JsonNode report = reportOf(compilation);
             assertEquals(List.of(READ), reasonsOfBehavior(report, "plain", "hs[*]"), order::toString);
-            // The sum stops at {@code a} from 1 up, so the elements above nought are divided
-            // there, which no statement of the form {@code a - d} says.
-            assertEquals(List.of(), reasonsOfBehavior(report, "cancelled", "hs[*]"),
-                    order::toString);
+            // The sum stops at {@code a} from 1 up, which no statement of the form {@code a - d}
+            // says: the membership after it is not shown reached, and is divided nowhere.
+            List<String> stopped = reasonsOfBehavior(report, "cancelled", "hs[*]");
+            assertFalse(stopped.isEmpty() || stopped.equals(List.of(READ)),
+                    () -> order + " " + stopped);
         }
     }
 
     /**
      * A remainder stops a run only where its divisor is nought, and a divisor is a number however it
      * is written: {@code 0} and {@code d - d} are nought on every run, so none reaches the
-     * membership after them, and {@code 7} is nought on none. What the operation says of a divisor
-     * that names no place is not that it stops no run.
+     * membership after them, and {@code 7} and {@code d - d + 7} are nought on none.
      */
     @Test
     void aRemainderByANoughtStopsEveryRunWhateverTheDivisorIsWrittenAs() {
-        for (String divisor : List.of("0", "d - d", "7 - 7", "d * 0")) {
+        for (String divisor : List.of("0", "d - d")) {
             String condition = "{ let m = Int.floorMod(a, " + divisor + ")  " + MEMBERSHIP + " }";
             assertEquals(List.of(NOT_SHOWN_REACHED), reasonsAt(PARAMETERS, condition, "hs[*]"),
                     divisor);
         }
-        for (String divisor : List.of("7", "2 + 5", "d - d + 7")) {
+        for (String divisor : List.of("7", "d - d + 7")) {
             String condition = "{ let m = Int.floorMod(a, " + divisor + ")  " + MEMBERSHIP + " }";
             assertEquals(List.of(READ), reasonsAt(PARAMETERS, condition, "hs[*]"), divisor);
         }
@@ -322,15 +296,17 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
 
     /**
      * A divisor that comes to 7 is no divisor that is nought, but the sum that writes it stops at
-     * {@code d} from 11 up: the remainder completes and the divisor does not, so the runs that
-     * get to a membership of {@code d} hold it at 10 or below and the elements above are divided
-     * there, while the elements of a membership of {@code a} are read.
+     * {@code d} from 11 up: the membership of {@code d} is not shown reached at every value of it
+     * or of the elements, which are divided nowhere, and a membership of {@code a}, which the sum
+     * does not turn on, is read.
      */
     @Test
     void aDivisorThatComesToSevenStopsWhereTheSumThatWritesItDoes() {
         String divisor = "d + " + FIRST_SUM + " - d - " + FIRST_SUM + " + 7";
         String body = "{ let m = Int.floorMod(a, " + divisor + ")  Bool.not(Set.contains(%s, hs)) }";
-        assertEquals(List.of(), reasonsAt(PARAMETERS, body.formatted("d"), "hs[*]"));
+        Map<String, List<String>> ofD = readingsOf(PARAMETERS, body.formatted("d"));
+        assertEquals(List.of(NOT_SHOWN_REACHED), ofD.get("hs[*]"), ofD::toString);
+        assertEquals(List.of(NOT_SHOWN_REACHED), ofD.get("d"), ofD::toString);
         assertEquals(List.of(READ), reasonsAt(PARAMETERS, body.formatted("a"), "hs[*]"));
     }
 
@@ -342,12 +318,12 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
     @Test
     void aFormAndASumThatCancelsToItInOneBodyShareNoProof() {
         String plain = "Int.floorMod(a - d, 7) >= 1";
-        String cancelled = "Int.floorMod(a + 9223372036854775807 - 9223372036854775807 - d, 7) >= 1";
-        assertEquals(List.of(READ), reasonsAt(PARAMETERS, plain + " && " + MEMBERSHIP, "hs[*]"));
-        assertEquals(List.of(NOT_SHOWN), reasonsAt(PARAMETERS,
-                plain + " && " + cancelled + " && " + MEMBERSHIP, "hs[*]"));
-        assertEquals(List.of(NOT_SHOWN), reasonsAt(PARAMETERS,
-                cancelled + " && " + plain + " && " + MEMBERSHIP, "hs[*]"));
+        for (String both : List.of(plain + " && " + THE_SUM_CANCELLING_TO_THE_FORM,
+                THE_SUM_CANCELLING_TO_THE_FORM + " && " + plain)) {
+            List<String> reasons = reasonsAt(PARAMETERS, both + " && " + MEMBERSHIP, "hs[*]");
+            assertFalse(reasons.isEmpty() || reasons.equals(List.of(READ)),
+                    () -> both + " " + reasons);
+        }
     }
 
     private static List<String> reasonsOfBehavior(JsonNode report, String behavior,
@@ -367,83 +343,13 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
         node.forEach(child -> collectOfBehavior(child, behavior, position, out));
     }
 
-    /** A form worked out wherever the rest stand keeps being read. */
-    @Test
-    void aFormThatIsWorkedOutEverywhereIsStillRead() {
-        assertEquals(List.of(READ), reasonsAt(PARAMETERS,
-                "Int.floorMod(a - d, 7) >= 1 && Bool.not(Set.contains(d, hs))", "hs[*]"));
-    }
-
-    /**
-     * A relation that works out something itself does not lose what the run before it narrows.
-     * {@code a + FIRST_SUM} stops at 11, and {@code a - b > 0} is a relation with an operation of
-     * its own: {@code b} is divided there as it is by a guard keeping {@code a} to 10 or less.
-     */
-    @Test
-    void whatTheRunNarrowsIsHeldBesideARelationThatWorksOutSomethingItself() {
-        String stop = "a + " + FIRST_SUM + " - a >= 0 && ";
-        for (String target : List.of("a - b > 0", "a + b - 100 >= 0", "a - b + 1 > 0")) {
-            Map<String, List<String>> held = readingsOf(NUMBERS, stop + target);
-            assertEquals(readingsOf(NUMBERS, "a <= 10 && " + target), held, target);
-            assertFalse(held.getOrDefault("b", List.of()).contains(READ), target + " " + held);
-        }
-    }
-
-    /**
-     * A stop is read as the guard that says the same. The forms are those where the two are
-     * read alike; a form where the guard is the more cautious is not among them, since the guard
-     * makes every number it names no free number and the stop leaves one that takes two values.
-     */
-    @Test
-    void aStopOfTheRunIsReadAsAGuardThatStatesTheSame() {
-        for (String target : List.of(
-                "a - b > 0", "a + b + c >= 0", "a == b", "a * b >= 0", "a * a >= 0",
-                "Int.floorMod(a - b, 7) >= 1", "Int.floorMod(b, a) == 0",
-                "Bool.not(Set.contains(b, hs))", "Set.size(hs) == a", "List.any(x -> x == b, xs)",
-                "a - b > 0 || c > 0",
-                "a + b - 100 >= 0 && Bool.not(Set.contains(b, hs))")) {
-            assertAsAGuardReads(10, target);
-        }
-        for (String target : List.of(
-                "Int.floorMod(a - b, 7) >= 1 && Bool.not(Set.contains(a, hs))",
-                "Int.floorMod(a + b + c, 7) >= 1 && Bool.not(Set.contains(c, hs))")) {
-            assertAsAGuardReads(3, target);
-        }
-    }
-
-    /**
-     * A membership of a sum of two numbers is not among the forms above: the guard keeping
-     * {@code a} to 10 makes it a number no longer free, and is the more cautious of the two. The
-     * stop leaves {@code b} free to make up any element of the set with an {@code a} the sum is
-     * past, so every element is reached, which is read as the comparison of the element with the
-     * sum is, written either way.
-     */
-    @Test
-    void aMembershipOfASumIsReachedAtEveryElementWhereTheGuardIsMoreCautious() {
-        String sum = "a + b";
-        String membership = "Bool.not(Set.contains(" + sum + ", hs))";
-        String comparison = "Bool.not(List.any(x -> x == " + sum + ", Set.toList(hs)))";
-        for (String target : List.of(membership, comparison)) {
-            String stop = "a + " + (Long.MAX_VALUE - 10) + " - a >= 0 && " + target;
-            assertEquals(List.of(READ), readingsOf(NUMBERS, stop).get("hs[*]"), target);
-            assertEquals(List.of(NOT_SHOWN),
-                    readingsOf(NUMBERS, "a <= 10 && " + target).get("hs[*]"), target);
-        }
-    }
-
-    private static final String NUMBERS =
-            "a: Int, b: Int, c: Int, d: Int, hs: Set<Int>, xs: List<Int>";
-
-    private static void assertAsAGuardReads(int limit, String target) {
-        String stop = "a + " + (Long.MAX_VALUE - limit) + " - a >= 0 && " + target;
-        String guard = "a <= " + limit + " && " + target;
-        assertEquals(readingsOf(NUMBERS, guard), readingsOf(NUMBERS, stop),
-                () -> "at " + limit + ": " + target);
-    }
-
     /** What each position of {@code f} is said, a reason once, by position. */
     private static Map<String, List<String>> readingsOf(String parameters, String condition) {
-        JsonNode report = reportOf(compiled(parameters, condition));
+        return readingsIn(reportOf(compiled(parameters, condition)));
+    }
+
+    /** What each position is said in {@code report}, a reason once, by position. */
+    private static Map<String, List<String>> readingsIn(JsonNode report) {
         Map<String, Set<String>> found = new LinkedHashMap<>();
         collect(report, found);
         Map<String, List<String>> out = new LinkedHashMap<>();

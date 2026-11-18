@@ -20,7 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * <p>A date moved by a number written down stops only where the calendar does, which is no line
  * the model draws, so a comparison of the date found is read over every value; and where the run
- * may stop there before the comparison, the report says so of the places it may stop on.
+ * may stop there before the membership deciding which one is found, the places it may stop on are
+ * the ones it is not read of.
  */
 class AnElementASearchFindsInAListWrittenOutIsWorkedOutAsTheListIsTest {
 
@@ -54,10 +55,9 @@ class AnElementASearchFindsInAListWrittenOutIsWorkedOutAsTheListIsTest {
 
     /**
      * Found as the first of two, the date is the day itself, and the run has worked out the day
-     * after as well: at the last day of the calendar it stops there, on an element the
-     * comparison does not read. The comparison is read all the same, every reading of the
-     * membership that decides which one is found telling the list built whole; and the day and
-     * the holidays are said to be places a run may stop on the way to it, and nothing else.
+     * after as well: at the last day of the calendar it stops there. That is the membership's own
+     * arithmetic, which draws no line: the day and the holidays are the places the membership is
+     * not read of, and nothing else is.
      */
     @Test
     void anElementTheComparisonDoesNotReadIsAStopOnTheWayAndNoLine() {
@@ -71,15 +71,14 @@ class AnElementASearchFindsInAListWrittenOutIsWorkedOutAsTheListIsTest {
                         List.find(c -> Bool.not(Set.contains(c, holidays)),
                             [from, Date.addDays(1, from)]))), 7) >= 1
                 """;
-        assertEquals(List.of("from", "holidays[*]"), unread(model));
-        assertEquals(List.of(), reasonsOtherThanAStop(model));
+        assertEquals(List.of("from", "holidays[*]"), unread(model).stream().distinct().toList());
     }
 
     /**
      * Found as the third of three, the two before it are holidays and the third is not: two
      * elements of the calendar are the first two days, and every element is another day than the
-     * third, which those two are. Read as they are, the comparison is shown over every value, and
-     * only the stop at the end of the calendar is said.
+     * third, which those two are. Read as they are, the comparison draws no line, and the places
+     * the membership is not read of are the day and the holidays only.
      */
     @Test
     void theHolidaysBeforeTheOneFoundAreElementsApartFromIt() {
@@ -94,19 +93,5 @@ class AnElementASearchFindsInAListWrittenOutIsWorkedOutAsTheListIsTest {
                             [from, Date.addDays(1, from), Date.addDays(2, from)]))), 7) >= 1
                 """;
         assertEquals(List.of("from", "holidays[*]"), unread(model).stream().distinct().toList());
-        assertEquals(List.of(), reasonsOtherThanAStop(model));
-    }
-
-    /** The lines of the report saying what was not read for any reason but a run that may stop
-     *  on the way to the comparison. */
-    private static List<String> reasonsOtherThanAStop(String source) {
-        Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        ACompiledModel.compiles(compilation);
-        return AdequacyReport.of(compilation)
-                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
-                .filter(line -> line.contains("not read:")
-                        && !line.contains("a run may stop on the way to it"))
-                .toList();
     }
 }

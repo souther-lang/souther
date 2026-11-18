@@ -24,8 +24,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * nothing before it can stop a run, every row reaches it, and the line it draws on the other
  * number is where the fixed part ends. Where something before it stops the runs with some amounts,
  * the rows that reach it hold the others, and the line moves to where those end — so the line says
- * where each operation was held to stop, and not only that it was told. One that is not told ties
- * the places it reads, and the comparison is not shown to be reached at every value of them.
+ * where each operation was held to stop, and not only that it was told. An operation that stops
+ * where the representation does moves no line: that is no line of the model. One that is not told
+ * ties the places it reads, and the comparison is not shown to be reached at every value of them.
  *
  * <p>Each case is a behavior of one model, measured once for the class at the level that reads the
  * lines and what is left of them: no row has to be built and run for what is asked here.
@@ -249,13 +250,13 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
     /**
      * A total read inside a sum is read for the number it comes to, and reading it reads each
      * application's product: that reading is not the run's working out of them. The second
-     * application's product, over the first month, is what holds its base to the most three
-     * thousand million times of which an {@code Int} holds, whoever reads the total first.
+     * application's product, over the first month, stops a run where its base is past what three
+     * thousand million times of which an {@code Int} holds, whoever reads the total first: where
+     * the representation stops, which moves no line.
      */
     @Test
     void aTotalReadInsideASumLeavesEachApplicationToBeTold() {
-        assertEquals(List.of("previous: 0 <= x < 1003074457346", "previous: 1003074457346 <= x"),
-                previous("summedInASum"));
+        assertEquals(NOTHING_STOPS_BEFORE_IT, previous("summedInASum"));
     }
 
     /**
@@ -326,12 +327,12 @@ class WhatARunWorksOutBeforeAComparisonIsToldOperationByOperationTest {
     /**
      * A total of a list written out is held to an {@code Int} once it is added up: four million
      * times the base three times over is one only up to a base of 768614336404, though each of the
-     * three is one for every base the declarations leave.
+     * three is one for every base the declarations leave. That is where the representation stops
+     * and moves no line.
      */
     @Test
     void aTotalIsHeldToAnIntOnceItIsAddedUp() {
-        assertEquals(List.of("previous: 0 <= x < 1768614336405", "previous: 1768614336405 <= x"),
-                previous("total"));
+        assertEquals(NOTHING_STOPS_BEFORE_IT, previous("total"));
     }
 
     /**

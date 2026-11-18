@@ -348,28 +348,31 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     /**
      * A row whose run stops before the comparison is no row at it. Under {@code a + 1 == 0} the
      * only row holding {@code b} at the greatest {@code Int} true is {@code a} there too, which
-     * stops at {@code a + 1}, so that {@code b} settles the comparison false.
+     * stops at {@code a + 1}: no row gets to the comparison with {@code a} there, nor to it true
+     * with {@code b} there. Neither is said reached at every value, and since that is where the
+     * representation stops, no class of {@code b} starts there.
      */
     @Test
     void aRowThatStopsBeforeTheComparisonIsNoRowAtIt() {
         String yen = "data Yen = Int invariant value >= 0";
         String body = "if a.value + 1 == 0 then false else a.value == b.value";
-        assertEquals(Map.of("a", RELATES), left("a: Yen, b: Yen", yen, body, "4:60"));
+        assertEquals(Map.of("a", NOT_REACHED, "b", NOT_REACHED),
+                left("a: Yen, b: Yen", yen, body, "4:60"));
         assertTrue(classesAt("a: Yen, b: Yen", yen, body, "b").stream()
-                        .anyMatch(each -> each.contains("9223372036854775807")),
-                "the greatest Int settles the comparison false");
+                        .noneMatch(each -> each.contains("9223372036854775807")),
+                "where the representation stops is no line");
     }
 
     /**
      * The left operand of {@code &&} is worked out before the right one is reached, and the right
-     * operand of {@code ||} is worked out only where the left came out false: the comparison on
-     * the left of the second is reached by every row, so what stops in the operand beside it
-     * takes none out.
+     * operand of {@code ||} is worked out only where the left came out false: past the first a run
+     * may stop on {@code a}, and the comparison on the left of the second is reached by every
+     * row, so what stops in the operand beside it takes none out.
      */
     @Test
     void aLeftOperandIsWorkedOutBeforeTheRightIsReachedAndNeverTheOtherWayAbout() {
         String yen = "data Yen = Int invariant value >= 0";
-        assertEquals(Map.of("a", RELATES), left("a: Yen, b: Yen", yen,
+        assertEquals(Map.of("a", NOT_REACHED, "b", NOT_REACHED), left("a: Yen, b: Yen", yen,
                 "a.value + 1 >= 0 && a.value == b.value", "4:44"));
         assertEquals(Map.of("a", RELATES, "b", RELATES), left("a: Yen, b: Yen", yen,
                 "a.value == b.value || a.value + 1 == 0", "4:24"));
@@ -377,16 +380,18 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
 
     /**
      * A {@code let} is worked out whether or not anything reads its name: the value of one nothing
-     * reads stops a run at {@code a + 1} as much as one the comparison is over.
+     * reads stops a run at {@code a + 1} as much as one the comparison is over. That is where the
+     * representation stops and no line: no class of {@code b} starts at the greatest {@code Int}.
      */
     @Test
     void aLetNothingReadsStopsARunAsMuchAsOneThatIsRead() {
         String yen = "data Yen = Int invariant value >= 0";
         String body = "{\n    let unused = a.value + 1\n    a.value == b.value\n}";
-        assertEquals(Map.of("a", RELATES), left("a: Yen, b: Yen", yen, body, "6:13"));
+        assertEquals(Map.of("a", NOT_REACHED, "b", NOT_REACHED),
+                left("a: Yen, b: Yen", yen, body, "6:13"));
         assertTrue(classesAt("a: Yen, b: Yen", yen, body, "b").stream()
-                        .anyMatch(each -> each.contains("9223372036854775807")),
-                "the greatest Int settles the comparison false");
+                        .noneMatch(each -> each.contains("9223372036854775807")),
+                "where the representation stops is no line");
     }
 
     /**
@@ -556,7 +561,8 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
      * A run that may stop before the relation on what no region says leaves no value of what the
      * relation reads shown to get to it, and the relation is not read as dividing none of them.
      * A square, a product of the two and a sum in an arm each stop a run on {@code a} where
-     * nothing says, and {@code a} and {@code b} are not shown reached. A sum a region says, a
+     * nothing says, and {@code a} and {@code b} are not shown reached, and so do they past a sum
+     * that keeps {@code a} from every value but nought, where the representation stops. A
      * construction refusing nought, which is said as the run its clauses leave, the same
      * arithmetic after the comparison and a stop on a number the relation does not read leave it
      * relating the two.
@@ -577,7 +583,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         assertEquals(Map.of("a", RELATES, "b", RELATES), left(inputs, yen,
                 "{\n    let r = a.value == b.value\n    let after = a.value * a.value\n    r\n}",
                 "5:21"));
-        assertEquals(Map.of("a", RELATES), left(inputs, yen,
+        assertEquals(notReached, left(inputs, yen,
                 "{\n    let before = a.value + 9223372036854775807\n    a.value == b.value\n}",
                 "6:13"));
         assertEquals(Map.of("a", RELATES), left(inputs, yen,
@@ -798,28 +804,23 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
     }
 
     /**
-     * What the source works out and not what its form comes to is what a statement taken off the
-     * way is asked of. {@code a + M - M != p} is {@code a != p} as a form, and every {@code a}
-     * above nought stops at the first sum: the way holds that as a statement of {@code a}, so the
-     * comparison past it is not divided as it would be for all the {@code a}. And
-     * {@code p + a + (M - 10) - (M - 10) != 0} stops wherever {@code p + a} is above ten, though
-     * the form fits for amounts up to a million: no row has {@code a} above ten, so {@code a} is
-     * related to {@code b} and not divided at thirty as it would be for all the {@code a}, and
-     * {@code b} is divided where {@code a} can no longer settle it: below twenty no {@code a} up
-     * to ten reaches thirty, from thirty on none is needed, and between the two {@code a} and
-     * {@code b} come to either side of thirty.
+     * What the source works out stops runs where its form does not: {@code a + M - M != p} stops
+     * every run with {@code a} above nought, and {@code p + a + (M - 10) - (M - 10) != 0} every
+     * run with {@code p + a} above ten. That is where the representation stops, and no line of the
+     * model: the comparison past each is read as it is past the form, {@code a != p} and
+     * {@code p + a != 0}, which hold {@code a} to nothing narrower.
      */
     @Test
-    void aStatementTheSourceMayNotWorkOutIsNotTakenOffTheWay() {
+    void aStopWhereTheRepresentationStopsDrawsNoLineOnTheWay() {
         String yen = "data Yen = Int invariant value >= 0 && value <= 1000000";
-        assertEquals(Map.of("a", RELATES), pastAWayOffAValue("p: Yen, a: Yen, b: Yen", yen,
-                "a.value + 9223372036854775807 - 9223372036854775807 == p.value"));
         String inputs = "p: Yen, a: Yen, b: Yen";
-        String kept = "p.value + a.value + 9223372036854775797 - 9223372036854775797 == 0";
-        assertEquals(Map.of("a", RELATES), pastAWayOffAValue(inputs, yen, kept));
-        assertEquals(List.of("b: 0 <= x <= 19", "b: 19 < x < 30", "b: 30 <= x <= 1000000"),
-                classesAt(inputs, yen, "if " + kept + " then false else a.value + b.value >= 30",
-                        "b"));
+        assertEquals(pastAWayOffAValue(inputs, yen, "a.value == p.value"),
+                pastAWayOffAValue(inputs, yen,
+                        "a.value + 9223372036854775807 - 9223372036854775807 == p.value"));
+        String relation = " then false else a.value + b.value >= 30";
+        assertEquals(classesAt(inputs, yen, "if p.value + a.value == 0" + relation, "b"),
+                classesAt(inputs, yen, "if p.value + a.value + 9223372036854775797"
+                        + " - 9223372036854775797 == 0" + relation, "b"));
     }
 
     /**

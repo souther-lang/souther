@@ -9968,7 +9968,9 @@ final class Pullback {
      * <p>Of those, the ones that answer where the number they come to is one their type holds are
      * added to {@code atTheEnds} as well: where a run stops at one is where the representation
      * stops, which is no line the model draws, and a reader of the relation tells it apart from
-     * the rest.
+     * the rest. Not a construction: the number it wraps is one its type holds already, so where
+     * it answers is where the clauses of the type it makes leave the number, which the model
+     * states.
      */
     private List<Derivation> whereEachOperatorAnswers(Operators operated,
                                                       List<ConstructionAsk> asked,
@@ -10025,7 +10027,8 @@ final class Pullback {
             if (answers != null) {
                 out.add(answers);
                 if (over instanceof Answers.AsAnOperator(var _,
-                        WhereAnOperatorAnswers.WhereItsExactValueIsHeld _)) {
+                        WhereAnOperatorAnswers.WhereItsExactValueIsHeld _)
+                        && !(Core.withoutStanding(each.operation()) instanceof Core.Construct)) {
                     atTheEnds.add(answers);
                 }
                 askedOf(asked, each.operation(), askedBy(form, held), form.coefs().keySet());
