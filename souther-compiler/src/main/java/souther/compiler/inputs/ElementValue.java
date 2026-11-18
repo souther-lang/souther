@@ -20,6 +20,7 @@ import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Symbols;
 import souther.compiler.cst.CstLexer;
 import souther.compiler.core.Core;
+import souther.compiler.core.Evaluated;
 import souther.compiler.core.WhatABodyReads;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
@@ -1666,7 +1667,7 @@ public sealed interface ElementValue {
             Reader reader = new Reader(answer.parameter(), answer.position(), Map.of(), held,
                     source, elements, null);
             reader.operations = new ArrayList<>();
-            reader.value(answer.body());
+            reader.recordOperationsOf(answer.body());
             List<LinearForm<NumericTerm>> out = new ArrayList<>();
             for (LinearForm<Atom> form : reader.operations) {
                 Map<NumericTerm, ExactRatio> terms = new LinkedHashMap<>();
@@ -1684,6 +1685,28 @@ public sealed interface ElementValue {
                 }
             }
             return out;
+        }
+
+        /**
+         * Records the operations a run works out whenever it works {@code e} out: those of the
+         * number {@code e} is read as, where it is one, and otherwise those of the parts of it
+         * that run whenever it does ({@link Evaluated#inOrder}) and of the body of a
+         * {@code let}, which runs once its value has — so a tuple, a list or a record the answer
+         * makes of arithmetic is asked of what it makes it of.
+         */
+        private void recordOperationsOf(Core e) {
+            if (value(e) != null) {
+                return;
+            }
+            Core here = Core.withoutStanding(e);
+            for (Evaluated.Step step : Evaluated.inOrder(here)) {
+                if (step instanceof Evaluated.Step.Always(Core part)) {
+                    recordOperationsOf(part);
+                }
+            }
+            if (here instanceof Core.LetIn let) {
+                recordOperationsOf(let.body());
+            }
         }
 
         /**

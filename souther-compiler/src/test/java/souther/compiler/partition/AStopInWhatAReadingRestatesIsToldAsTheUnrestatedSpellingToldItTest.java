@@ -75,6 +75,12 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
                 "List.length(List.map(x -> if x > 0 then 1 else 2, ds)) >= 2");
         CONDITIONS.put("lengthOfAnArmStep",
                 "List.length(List.map(x -> if x < 0 then x + 1 else 0, ds)) >= 2");
+        CONDITIONS.put("lengthOfATupleStep",
+                "List.length(List.map(x -> (x + 1, 1), ds)) >= 2");
+        CONDITIONS.put("lengthOfATupleStepUnchanged",
+                "List.length(List.map(x -> (x, 1), ds)) >= 2");
+        CONDITIONS.put("absInALetBody", "Int.abs({ let a = 1 \n q + a }) >= 0");
+        CONDITIONS.put("absInALetBodyUnchanged", "Int.abs({ let a = 1 \n q }) >= 0");
         CONDITIONS.put("sumOfWrittenPastTheType", "List.sum([9223372036854775807, 1]) >= 2");
         CONDITIONS.put("absOfASum", "Int.abs(q + 1) >= 0");
         CONDITIONS.put("absOfAnUnchangedNumber", "Int.abs(q) >= 0");
@@ -201,7 +207,7 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
     @Test
     void aStepWorkedOutAtEachElementOfAListThatIsCountedIsToldAsOneAMayStop() {
         for (String form : List.of("lengthOfAStep", "lengthSortOfAStep", "lengthTakeOfAStep",
-                "lengthOfAProduct")) {
+                "lengthOfAProduct", "lengthOfATupleStep")) {
             assertEquals(1, TOLD.get(form).size(), form + " " + TOLD);
             assertEquals(List.of(), TOLD.get(form + "Unchanged"), form + " " + TOLD);
         }
@@ -239,6 +245,13 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         assertEquals(2, TOLD.get("lengthOfAConditionStep").size(), TOLD.toString());
         assertEquals(List.of(), TOLD.get("lengthOfAConditionStepUnchanged"), TOLD.toString());
         assertEquals(List.of(), TOLD.get("lengthOfAnArmStep"), TOLD.toString());
+    }
+
+    /** The body of a {@code let} runs once its value has, so what it works out is told. */
+    @Test
+    void anOperationInTheBodyOfALetIsToldAsOneAMayStop() {
+        assertEquals(1, TOLD.get("absInALetBody").size(), TOLD.toString());
+        assertEquals(List.of(), TOLD.get("absInALetBodyUnchanged"), TOLD.toString());
     }
 
     /** A total of numbers written out that is past the type stops every run that reaches it. */
