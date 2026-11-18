@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 
@@ -47,6 +48,33 @@ class ACountedPartRefusesWhatItCouldNotCountTest {
 
         assertTrue(table.isEmpty());
         assertTrue(sequence.isEmpty());
+        assertEquals(0, changes.count());
+    }
+
+    @Test
+    void aPartOfAnotherCountIsRefusedAsAKeyAsMuchAsAValue() {
+        Tallied.Changes changes = new Tallied.Changes();
+        Tallied.Group<String> elsewhere = new Tallied.Changes().group(HashSet::new);
+        Tallied.Table<Tallied.Group<String>, String> table = changes.table(HashMap::new);
+
+        assertThrows(IllegalArgumentException.class, () -> table.put(elsewhere, "v"));
+        assertThrows(IllegalArgumentException.class, () -> table.putIfAbsent(elsewhere, "v"));
+        assertThrows(IllegalArgumentException.class,
+                () -> table.computeIfAbsent(elsewhere, _ -> "v"));
+
+        assertTrue(table.isEmpty());
+        assertEquals(0, changes.count());
+    }
+
+    @Test
+    void membersOneOfWhichIsRefusedPutNoneIn() {
+        Tallied.Changes changes = new Tallied.Changes();
+        Tallied.Group<String> group = changes.group(HashSet::new);
+
+        assertThrows(NullPointerException.class,
+                () -> group.addAll(Arrays.asList("admitted", null)));
+
+        assertTrue(group.isEmpty());
         assertEquals(0, changes.count());
     }
 

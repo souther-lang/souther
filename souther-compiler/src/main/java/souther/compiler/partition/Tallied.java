@@ -27,8 +27,13 @@ import java.util.function.Supplier;
  * <p>Whether something changed is read off what the collection answers, so the collections hold
  * no null: an answer of null is then only ever an absence. A part held inside another counts into
  * the same count, and one of another count is refused where it is put in, so a change inside it
- * moves the mark of whoever holds it. Each operation checks what it is handed before it changes
- * anything, so one that is refused leaves the part as it was.
+ * moves the mark of whoever holds it. Everything put into a part, a key as much as a value, comes
+ * through one admission ({@link Changes#admitted}), and an operation admits all it is handed
+ * before it changes anything, so one that is refused leaves the part as it was.
+ *
+ * <p>What is admitted is the part handed in. An object that is no part and holds a part, or
+ * holds anything else it changes in place, is held as the very object it is, and a change inside
+ * it is not counted: what is put into a part is a value or a part, and nothing else.
  *
  * <p>An object made of these says so of every field it has ({@link InTheMark} for the few that
  * are set for an extent and are in the mark as they are), which a test asks of each.
@@ -70,6 +75,21 @@ final class Tallied {
                         "a part counted into another count, whose changes this would not see");
             }
             return held;
+        }
+
+        /** {@code held}, which may be put into a collection of this count as a key, a value or a
+         *  member: something, and no part of another count. */
+        private <T> T admitted(T held) {
+            return ownPart(Objects.requireNonNull(held, "what is put in is something"));
+        }
+
+        /** Each of {@code held}, admitted before any of it is put in. */
+        private <T> List<T> admittedEach(Collection<? extends T> held) {
+            List<T> out = new ArrayList<>(held.size());
+            for (T each : held) {
+                out.add(admitted(each));
+            }
+            return out;
         }
 
         <T> Value<T> value(T initial) {
@@ -138,7 +158,7 @@ final class Tallied {
 
         /** Puts {@code member} in, and answers whether it was not in already. */
         boolean add(E member) {
-            changes.ownPart(Objects.requireNonNull(member, "a member is something put in"));
+            changes.admitted(member);
             if (held == null) {
                 held = made.get();
             }
@@ -149,8 +169,10 @@ final class Tallied {
             return true;
         }
 
+        /** Puts each of {@code members} in, all of them admitted first: one refused puts none
+         *  in. */
         void addAll(Collection<? extends E> members) {
-            for (E each : members) {
+            for (E each : changes.admittedEach(members)) {
                 add(each);
             }
         }
@@ -196,7 +218,7 @@ final class Tallied {
         }
 
         void add(E entry) {
-            changes.ownPart(Objects.requireNonNull(entry, "an entry is something added"));
+            changes.admitted(entry);
             if (held == null) {
                 held = new ArrayList<>();
             }
@@ -248,10 +270,10 @@ final class Tallied {
             return held;
         }
 
-        /** {@code key} and {@code value}, each something that can be put in here. */
+        /** {@code key} and {@code value}, each admitted. */
         private void puttable(K key, V value) {
-            Objects.requireNonNull(key, "a key is something put");
-            changes.ownPart(Objects.requireNonNull(value, "a value is something put"));
+            changes.admitted(key);
+            changes.admitted(value);
         }
 
         V get(Object key) {
@@ -281,7 +303,7 @@ final class Tallied {
 
         /** What is under {@code key}, made by {@code making} and put there where nothing is. */
         V computeIfAbsent(K key, Function<? super K, ? extends V> making) {
-            V had = get(Objects.requireNonNull(key, "a key is something put"));
+            V had = get(changes.admitted(key));
             if (had != null) {
                 return had;
             }

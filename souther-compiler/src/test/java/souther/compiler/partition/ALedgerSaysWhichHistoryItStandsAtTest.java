@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.partition.ReadingState.Restore;
 import souther.compiler.partition.ReadingState.Scoped;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -125,6 +126,18 @@ class ALedgerSaysWhichHistoryItStandsAtTest {
                 () -> new Ledger.Keyed<String, String>().putIfAbsent("k", null));
         assertThrows(NullPointerException.class,
                 () -> new Ledger.OfEntries<String>().add(null));
+    }
+
+    @Test
+    void entriesOneOfWhichIsRefusedAddNone() {
+        Ledger.OfEntries<String> ledger = new Ledger.OfEntries<>();
+        Object before = ledger.mark();
+
+        assertThrows(NullPointerException.class,
+                () -> ledger.addAll(Arrays.asList("admitted", null)));
+
+        assertTrue(ledger.isEmpty());
+        assertEquals(before, ledger.mark());
     }
 
     /** A null refused under a key nothing is under yet leaves no key behind, which no checkpoint

@@ -124,8 +124,9 @@ abstract sealed class Ledger implements ReadingState.Marked
             added();
         }
 
+        /** Adds each of {@code each}, which holds no null: one refused adds none. */
         void addAll(Collection<? extends E> each) {
-            for (E one : each) {
+            for (E one : List.copyOf(each)) {
                 add(one);
             }
         }
