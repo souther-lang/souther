@@ -179,9 +179,10 @@ public final class InputNumber {
     /**
      * What a run works out of each element to make {@code walk}, a call of an operation applying
      * a closure to the elements of a container that stands at a place: each whole-number
-     * operation the closure writes, in the order it works them out, as a form of the numbers at
-     * the places of the elements ({@link ElementValue#operationsOf}). None where {@code walk} is
-     * no such call, or its elements stand at no place.
+     * operation the closure writes, in the order it works them out
+     * ({@link ElementValue#operationsOf}). None where {@code walk} is no such call, or its
+     * elements stand at no place, as the elements a filter keeps stand at none: a run is then
+     * over some of the values at a place, not the values there.
      */
     public static List<LinearForm<NumericTerm>> operationsAtEachElement(Core walk,
                                                                         InputReads reads,
@@ -198,14 +199,8 @@ public final class InputNumber {
                 instanceof ValuesHeld.At(TermPath stands))) {
             return List.of();
         }
-        List<LinearForm<NumericTerm>> out = new ArrayList<>();
-        for (LinearForm<ElementProjection> each : ElementValue.operationsOf(closure,
-                where.heldByTheBody(), source, new ElementValue.ElementsAt(stands,
-                        where.declared()))) {
-            out.add(each.over(place -> LinearForm.atom(
-                    new NumericTerm.ValueOf(place.from(stands)))));
-        }
-        return out;
+        return ElementValue.operationsOf(closure, where.heldByTheBody(), source,
+                new ElementValue.ElementsAt(stands, where.declared()));
     }
 
     /**

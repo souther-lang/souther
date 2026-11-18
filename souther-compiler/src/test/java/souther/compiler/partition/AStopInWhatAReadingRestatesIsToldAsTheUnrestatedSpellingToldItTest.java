@@ -69,6 +69,18 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
                 "List.fold((w, l) -> w + l, 0, List.map(x -> x, ds)) >= 10");
         CONDITIONS.put("lengthOfAStep", "List.length(List.map(x -> x + 1, ds)) >= 2");
         CONDITIONS.put("lengthOfAStepUnchanged", "List.length(List.map(x -> x, ds)) >= 2");
+        CONDITIONS.put("absOfASum", "Int.abs(q + 1) >= 0");
+        CONDITIONS.put("absOfAnUnchangedNumber", "Int.abs(q) >= 0");
+        CONDITIONS.put("maxOfASumAndItsOperand", "Int.max(q + 1, q) >= q");
+        CONDITIONS.put("maxOfAnUnchangedNumber", "Int.max(q, q) >= q");
+        CONDITIONS.put("lengthOfAProduct",
+                "List.length(List.map(r -> r.price * r.qty, rs)) >= 2");
+        CONDITIONS.put("lengthOfAProductUnchanged",
+                "List.length(List.map(r -> r.price, rs)) >= 2");
+        CONDITIONS.put("lengthTakeOfAStep",
+                "List.length(List.take(2, List.map(x -> x + 1, ds))) >= 2");
+        CONDITIONS.put("lengthTakeOfAStepUnchanged",
+                "List.length(List.take(2, List.map(x -> x, ds))) >= 2");
         CONDITIONS.put("lengthSortOfAStep",
                 "List.length(List.sort(List.map(x -> x + 1, ds))) >= 2");
         CONDITIONS.put("lengthSortOfAStepUnchanged",
@@ -181,7 +193,8 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
      */
     @Test
     void aStepWorkedOutAtEachElementOfAListThatIsCountedIsToldAsOneAMayStop() {
-        for (String form : List.of("lengthOfAStep", "lengthSortOfAStep")) {
+        for (String form : List.of("lengthOfAStep", "lengthSortOfAStep", "lengthTakeOfAStep",
+                "lengthOfAProduct")) {
             assertEquals(1, TOLD.get(form).size(), form + " " + TOLD);
             assertEquals(List.of(), TOLD.get(form + "Unchanged"), form + " " + TOLD);
         }
@@ -207,6 +220,19 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         assertEquals(1, TOLD.get("lengthOfAShiftedStep").size(), TOLD.toString());
     }
 
+    /**
+     * What a restated comparison holds aside is worked out all the same: {@code Int.abs} of a
+     * sum is worked out after the sum, and the larger of a sum and a number after both. Each
+     * differs from its negative by the operation alone.
+     */
+    @Test
+    void anOperationUnderAValueTheReadingHoldsAsideIsToldAsOneAMayStop() {
+        assertEquals(1, TOLD.get("absOfASum").size(), TOLD.toString());
+        assertEquals(List.of(), TOLD.get("absOfAnUnchangedNumber"), TOLD.toString());
+        assertEquals(1, TOLD.get("maxOfASumAndItsOperand").size(), TOLD.toString());
+        assertEquals(List.of(), TOLD.get("maxOfAnUnchangedNumber"), TOLD.toString());
+    }
+
     /** The other side of a comparison of a walk is worked out whatever the walk answers. */
     @Test
     void anOperationBesideAWalkThatEndsNoRunIsToldAsTheControlTellsIt() {
@@ -226,10 +252,12 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
 
     /** The notes of each behavior, each of the conditions read once, as the model says them. */
     private static Map<String, List<String>> told() {
-        StringBuilder model = new StringBuilder("module m\n\ndata Tier = Low | High\n");
+        StringBuilder model = new StringBuilder("module m\n\ndata Tier = Low | High\n"
+                + "data Row = { price: Int, qty: Int }\n");
         CONDITIONS.forEach((name, condition) -> model.append("\nbehavior ").append(name)
-                .append(" : (ds: List<Int>, q: Int, t: Tier) -> Int\nlet ").append(name)
-                .append(" (ds, q, t) = if ").append(condition).append(" then 1 else 2\n"));
+                .append(" : (ds: List<Int>, q: Int, t: Tier, rs: List<Row>) -> Int\nlet ")
+                .append(name).append(" (ds, q, t, rs) = if ").append(condition)
+                .append(" then 1 else 2\n"));
         Compilation compilation = ACompiledModel.measured(model.toString(),
                 new Adequacy.Asked(Adequacy.Level.OFF, false));
         Pattern header = Pattern.compile("^(\\w+)\\s+implemented\\b.*");

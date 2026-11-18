@@ -1549,16 +1549,16 @@ public sealed interface ElementValue {
 
     /**
      * Each whole-number operation a closure works out of its element on the way to its answer, in
-     * the order it works them out, as a form of the places of the element: what each comes to
-     * where it is worked out, and not what the answer comes to once the arithmetic has simplified
-     * it — {@code (x + 2) - 1} comes to {@code x + 1}, and a run stops at the {@code x + 2}. Not
-     * what a choice in the answer holds, which some runs do not work out, nor an operation that is
-     * no form of the places of the element.
+     * the order it works them out, as a form of the numbers at the places of the elements, and
+     * the product of two of them: what each comes to where it is worked out, and not what the
+     * answer comes to once the arithmetic has simplified it — {@code (x + 2) - 1} comes to
+     * {@code x + 1}, and a run stops at the {@code x + 2}. Not what a choice in the answer holds,
+     * which some runs do not work out, nor an operation that is no such form.
      */
-    static List<LinearForm<ElementProjection>> operationsOf(ElementAnswer answer,
-                                                            Map<BindingId, Core> held,
-                                                            RuleReadingSource source,
-                                                            ElementsAt elements) {
+    static List<LinearForm<NumericTerm>> operationsOf(ElementAnswer answer,
+                                                      Map<BindingId, Core> held,
+                                                      RuleReadingSource source,
+                                                      ElementsAt elements) {
         return Reader.operationsOf(answer, held, source, elements);
     }
 
@@ -1660,29 +1660,54 @@ public sealed interface ElementValue {
 
         /** What {@link ElementValue#operationsOf} says: each operation the answer composes, kept
          *  where it is a form of places of the element alone. */
-        private static List<LinearForm<ElementProjection>> operationsOf(
+        private static List<LinearForm<NumericTerm>> operationsOf(
                 ElementAnswer answer, Map<BindingId, Core> held, RuleReadingSource source,
                 ElementsAt elements) {
             Reader reader = new Reader(answer.parameter(), answer.position(), Map.of(), held,
                     source, elements, null);
             reader.operations = new ArrayList<>();
             reader.value(answer.body());
-            List<LinearForm<ElementProjection>> out = new ArrayList<>();
+            List<LinearForm<NumericTerm>> out = new ArrayList<>();
             for (LinearForm<Atom> form : reader.operations) {
-                Map<ElementProjection, ExactRatio> places = new LinkedHashMap<>();
+                Map<NumericTerm, ExactRatio> terms = new LinkedHashMap<>();
                 for (Map.Entry<Atom, ExactRatio> each : form.coefs().entrySet()) {
                     if (each.getKey() instanceof Atom.Place(ElementProjection place)) {
-                        places.put(place, each.getValue());
-                    } else {
-                        places.clear();
+                        terms.put(new NumericTerm.ValueOf(place.from(elements.at())),
+                                each.getValue());
+                    } else if (!aProductOfTwoFieldsIn(each, terms, elements)) {
+                        terms.clear();
                         break;
                     }
                 }
-                if (!places.isEmpty()) {
-                    out.add(new LinearForm<>(form.constant(), places));
+                if (!terms.isEmpty()) {
+                    out.add(new LinearForm<>(form.constant(), terms));
                 }
             }
             return out;
+        }
+
+        /**
+         * Whether {@code atom}, at its weight, is the product of two places of the element, and
+         * so put into {@code terms} as the product of the numbers at them, turned as the product
+         * is written ({@link NumericTerm.ProductOf#signed}).
+         */
+        private static boolean aProductOfTwoFieldsIn(Map.Entry<Atom, ExactRatio> atom,
+                                                     Map<NumericTerm, ExactRatio> terms,
+                                                     ElementsAt elements) {
+            if (!(atom.getKey() instanceof Atom.Product(Monomial made))
+                    || made.rounding() != null || made.fields().size() != 2) {
+                return false;
+            }
+            List<ElementProjection> two = List.copyOf(made.fields());
+            NumericTerm.ProductOf.Signed signed = NumericTerm.ProductOf.signed(
+                    LinearForm.atom(new NumericTerm.ValueOf(two.get(0).from(elements.at()))),
+                    LinearForm.atom(new NumericTerm.ValueOf(two.get(1).from(elements.at()))));
+            if (signed == null || !(signed.sign().times(atom.getValue())
+                    instanceof ExactAnswer.Held<ExactRatio>(ExactRatio weight))) {
+                return false;
+            }
+            terms.put(signed.product(), weight);
+            return true;
         }
 
         /** The same reading, inside an arm whose name {@code bound} stands at {@code at}. */

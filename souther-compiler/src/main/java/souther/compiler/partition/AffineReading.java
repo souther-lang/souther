@@ -966,7 +966,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             /**
              * What a run works out in taking {@code node}, a number of a list, of what it holds:
-             * the lists it is made of ({@link #tellWhatTheListsWorkOut}) and, where it is a total,
+             * the lists it is made of ({@link #tellWhatTheStrictPartsWorkOut}) and, where it is a total,
              * the total itself, which stops a run where it is worked out exactly past its type
              * and not where its place, held to the type, is. {@code form} is the number, and
              * {@code total} the total it is, null where it is none.
@@ -975,7 +975,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                                          LinearForm<NumericTerm> form,
                                                          InputReads at) {
                 if (Core.withoutStanding(node) instanceof Core.PreservedCall) {
-                    tellWhatTheListsWorkOut(node, at);
+                    tellWhatTheStrictPartsWorkOut(node, at, false);
                 }
                 if (total != null && FormRange.aTotal(total)
                         && Core.withoutStanding(node).type() == Type.INT) {
@@ -984,21 +984,55 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             /**
-             * What a run works out at each element to make the lists the parts of {@code node}
-             * that it works out whenever it works {@code node} out are, and the lists those are
-             * made of. Asked where the reading did not tell what is made of a list, as where it
-             * gave up on the expression or read it at the place that holds the list: a run stops
-             * where an element it works out passes the type all the same
-             * ({@link #tellWhatIsWorkedOutAtEachElement}). Not a part a call applies a closure to
-             * or a branch holds, which not every run works out.
+             * What a run works out to make {@code node} and the parts of it that it works out
+             * whenever it works {@code node} out, and the parts of those: at each element, where
+             * a part is a list ({@link #tellWhatIsWorkedOutAtEachElement}), and, where
+             * {@code numbersToo}, in the number a part is, read on its own. Asked where the
+             * reading did not tell what is made of a part, as where it gave up on the expression,
+             * holds it aside whichever analysis answers for it, or reads it at the place that
+             * holds a list: a run stops where it passes the type all the same. Not a part a call
+             * applies a closure to or a branch holds, which not every run works out.
              */
-            private void tellWhatTheListsWorkOut(Core node, InputReads at) {
+            private void tellWhatTheStrictPartsWorkOut(Core node, InputReads at,
+                                                       boolean numbersToo) {
+                tellWhatIsWorkedOutAtEachElement(node, at);
                 for (Evaluated.Step step : Evaluated.inOrder(Core.withoutStanding(node))) {
-                    if (step instanceof Evaluated.Step.Always(Core part)) {
-                        tellWhatIsWorkedOutAtEachElement(part, at);
-                        tellWhatTheListsWorkOut(part, at);
+                    if (!(step instanceof Evaluated.Step.Always(Core part))) {
+                        continue;
+                    }
+                    if (!numbersToo) {
+                        tellWhatTheStrictPartsWorkOut(part, at, false);
+                        continue;
+                    }
+                    WhatWasTold apart = told.apart();
+                    ElementsMet.Mark metBefore = met.mark();
+                    // Not what holds a choice: some runs take one arm and some another, which
+                    // the reading of the arms says and a reading of the part alone does not.
+                    LinearForm<NumericTerm> composed = holdsNoChoice(part) ? composedBy(part, at,
+                            reading(ofTheInput, new LinkedHashSet<>(), met, apart, null)) : null;
+                    met.rewind(metBefore);
+                    if (composed == null) {
+                        tellWhatTheStrictPartsWorkOut(part, at, true);
+                    } else if (!apart.operations.isEmpty() && apart.operations.stream()
+                            .noneMatch(each -> told.told(each)
+                                    || told.keptForWhereARunStops(each))) {
+                        // An operation told twice is two to where a run stops, which asks of each
+                        // that the others are within the type.
+                        told.leftToTheWitness(apart);
                     }
                 }
+            }
+
+            /** Whether nothing in {@code e} is a choice between arms. */
+            private static boolean holdsNoChoice(Core e) {
+                Core here = Core.withoutStanding(e);
+                if (here instanceof Core.If || here instanceof Core.IfConstructed
+                        || here instanceof Core.Match) {
+                    return false;
+                }
+                boolean[] none = {true};
+                Core.forEachChild(here, child -> none[0] &= holdsNoChoice(child));
+                return none[0];
             }
 
             /** Whether {@code list}, or what a name it is was given, ends a run only where the
@@ -1318,7 +1352,6 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     if (!aside.theStop) {
                         if (!worksOutNothingBesideTheStop(node, at)
                                 && !roundingWorkedOut(node, at, aside)) {
-                            tellWhatTheListsWorkOut(node, at);
                             told.exact = false;
                         }
                     } else if (stoppedAt.quotientAwayFromNought()) {
@@ -1327,9 +1360,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                             && !roundingWorkedOut(node, at, aside)
                             && !worksOutADividendBesideTheRows(node, at)
                             && !worksOutAMoveByMonths(node)) {
-                        tellWhatTheListsWorkOut(node, at);
                         told.exact = false;
                     }
+                    // Whichever analysis answers for the node, what a run works out to make what
+                    // is in it is worked out all the same, beside what that analysis told of it.
+                    tellWhatTheStrictPartsWorkOut(node, at, true);
                     if (aside.aChoice) {
                         aside.rangeIs(rangeOfTheArms(node, at));
                     }
@@ -2281,9 +2316,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         }
 
         /** Whether {@code operation} is among those kept for where a run stops
-         *  ({@link #leftToTheWitness}). */
+         *  ({@link #leftToTheWitness}, {@link #besideTheRows}). */
         boolean keptForWhereARunStops(UndividedByARelation.IntOperation operation) {
-            return leftToTheWitness.stream().anyMatch(group -> group.told(operation));
+            return Stream.concat(leftToTheWitness.stream(), besideTheRows.stream())
+                    .anyMatch(group -> group.told(operation));
         }
 
         /**
