@@ -48,6 +48,7 @@ import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -1737,12 +1738,13 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         UndividedByARelation sized = UndividedByARelation.ofAForm(
                 new LinearForm<>(ExactRatio.of(-3), Map.of(new DecisionAtom.OfTheInput(rates),
                         ExactRatio.ONE)), Rel.GE);
-        ComparisonAssessment.AgainstAnotherValue both =
+        ComparisonAssessment.AgainstAnotherValue both = assertInstanceOf(
+                ComparisonAssessment.AgainstAnotherValue.class,
                 new ComparisonAssessment.AgainstAnotherValue(
                         List.of(FilingCoordinate.of(deals), FilingCoordinate.of(rates)),
                         List.of(counted, sized), Set.of(), List.of(), Optional.empty(), Map.of(),
                         Map.of(), Set.of(), Map.of(), Map.of())
-                        .whereRowsArrive(read, List.of(), stoppedShort);
+                        .whereRowsArrive(read, List.of(), stoppedShort));
         Map<FilingCoordinate, BlockReason> left = new LinkedHashMap<>();
         both.whatEachPlaceIsLeftWith().forEach(each -> left.put(each.at(), each.why()));
         assertEquals(new BlockReason.RelationNotShownWhereTheSearchStopped(List.of(stopped)),

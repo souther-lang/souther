@@ -760,7 +760,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   are lines on a total of a run — are also among the places shown
      *                   undivided, as the model draws no line on them
      * @param rowsArrive whether any row comes along the way this is of; where none does it says
-     *                   nothing of any row, and a way put beside it is what the two come to
+     *                   nothing of any place — no place is undivided, settled or anything else
+     *                   over rows there are none of, since that holds of every place and shows
+     *                   none — and a way put beside it is what the two come to. A reader asks
+     *                   this before reading anything else of it
      * @param stoppedAt  the figures a search for what would have shown more stopped at: a place
      *                   nothing is shown of here may be one a run allowed more shows undivided
      * @param rowsStopped where the runs of the rows a search for what would have shown more tried
@@ -808,6 +811,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (!mayStopBefore.containsAll(gettingThere.keySet())) {
                 throw new IllegalArgumentException("a row is searched for getting to the relation"
                         + " at a place a run may stop on the way from");
+            }
+            if (!rowsArrive && (!undivided.isEmpty() || !settled.isEmpty()
+                    || !partnered.isEmpty() || !numbersPartnered.isEmpty())) {
+                throw new IllegalArgumentException("a way no row comes along shows nothing of"
+                        + " any place");
             }
         }
 
@@ -913,11 +921,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     stops, strings, shown, numbersPartnered);
         }
 
-        /** What a way that no row comes along shows of {@code places}: every one of them, of the
-         *  rows there are none of. */
-        static WhatItLeaves ofAWayNoRowComesAlong(Set<FilingCoordinate> places) {
-            return new WhatItLeaves(places, Map.of(), false, Set.of());
-        }
+        /** What a way that no row comes along shows: nothing of any place, and that no row comes
+         *  along it ({@link #rowsArrive}). */
+        static final WhatItLeaves NO_ROW_COMES_ALONG =
+                new WhatItLeaves(Set.of(), Map.of(), false, Set.of());
 
         /**
          * This, along a way whose run may stop before the relation on {@code places}: those of
@@ -2108,7 +2115,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * <p>A row comes along one way or another, so a way the relation comes out is reached where
      * it is along one of them, and never reached only where it is along none
-     * ({@link EachWayItComesOut#eitherOf}). A side is said only where every way says it. Empty
+     * ({@link EachWayItComesOut#eitherOf}). A way no row comes along adds no row, and is passed
+     * over ({@link #leavesNoRow}). A side is said only where every way says it. Empty
      * where some way is not taken apart, or this is no relation of numbers weighed and added.
      */
     Map<NumericTerm, EachWayItComesOut> comingOutAlong(InputReading read,
@@ -2126,7 +2134,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         Map<NumericTerm, EachWayItComesOut> out = null;
         for (Reachability.Reaching each : branches) {
-            Map<NumericTerm, EachWayItComesOut> along = comingOutOn(read, declared, each);
+            Optional<Map<NumericTerm, EachWayItComesOut>> rows = comingOutOn(read, declared, each);
+            if (rows.isEmpty()) {
+                continue;
+            }
+            Map<NumericTerm, EachWayItComesOut> along = rows.get();
             if (out == null) {
                 out = along;
                 continue;
@@ -2242,16 +2254,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         };
     }
 
-    /** {@link #comingOutAlong} over the rows of the one way {@code way}. */
-    private Map<NumericTerm, EachWayItComesOut> comingOutOn(InputReading read,
-                                                            SidesAsDeclared declared,
-                                                            Reachability.Reaching way) {
+    /**
+     * {@link #comingOutAlong} over the rows of the one way {@code way} — or nothing where no row
+     * comes along it, which adds no row to the ways beside it ({@link #leavesNoRow}).
+     */
+    private Optional<Map<NumericTerm, EachWayItComesOut>> comingOutOn(InputReading read,
+                                                                      SidesAsDeclared declared,
+                                                                      Reachability.Reaching way) {
         List<OnAWay> written = conditionsOf(way, remainder);
+        if (leavesNoRow(WhatStatementsOfOneFormDecide.of(
+                written.stream().map(OnAWay::affine).toList(), askedAsAStatement()), written,
+                read)) {
+            return Optional.empty();
+        }
         Optional<Set<String>> declined = parametersDeclined(way);
         DemandReading.Answered past = way.gotPastAsAsked();
         if (!nothingUnreadBearsOnIt(way)
                 || mayStopOnWhatItReads(past, read, way.region(), written, declined, Set.of())) {
-            return Map.of();
+            return Optional.of(Map.of());
         }
         List<Source> sources = declared.sources();
         List<Carrier> carriers = declared.carriers();
@@ -2278,7 +2298,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 out.put(sides.get(at).number(), each);
             }
         }
-        return out;
+        return Optional.of(out);
     }
 
     /** What this leaves its places over what the declarations leave. */
@@ -2297,6 +2317,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * here shows what they come to together. A way split at a choice is each of its branches, so
      * each is a way here, and a way some of whose branches were not split out is read again with
      * its choices as they come to for this, or shows nothing ({@link #branchesOf}).
+     *
+     * <p>A way no row comes along adds no row to the others. Where that is every way, no row comes
+     * along at all, and that is what is said, and nothing of any place
+     * ({@link WhatItLeaves#NO_ROW_COMES_ALONG}).
      *
      * @param witnesses where a count of elements meeting a statement is shown to take every value
      *                  beside how many the container holds ({@link #countWithinItsContainer})
@@ -2326,7 +2350,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         if (branches.isEmpty()) {
-            return WhatItLeaves.ofAWayNoRowComesAlong(places());
+            return WhatItLeaves.NO_ROW_COMES_ALONG;
         }
         // Ways read alike are read once: a choice the body works out after reading its input splits
         // the way into as many ways as it has arms, and each states the same. What a way is read by
@@ -2338,7 +2362,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (Reachability.Reaching each : branches) {
             WholeNumberRuns remainders = remaindersLeftAlong(each);
             if (remainders != null && remainders.isNone()) {
-                WhatItLeaves none = WhatItLeaves.ofAWayNoRowComesAlong(places());
+                WhatItLeaves none = WhatItLeaves.NO_ROW_COMES_ALONG;
                 out = out == null ? none : out.alongBoth(none);
                 continue;
             }
@@ -2347,59 +2371,116 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Optional<Set<String>> declined = parametersDeclined(each);
             DemandReading.Answered past = each.gotPastAsAsked();
             WhatItLeaves along = each.narrowedBy().isPresent()
-                    ? alike.computeIfAbsent(new Along(each.narrowedBy().get(), conditions,
-                            remainders, heldWhole, declined, past), _ -> leftAlong(read, sources,
-                                    carried, each.region(), conditions, remainders, heldWhole,
-                                    declined, past, each.narrowedBy(), witnesses))
-                    : leftAlong(read, sources, carried, each.region(), conditions, remainders,
-                            heldWhole, declined, past, each.narrowedBy(), witnesses);
-            // Where a representation stops on the way is no line the model draws: what the
-            // relation divides is read over what the model leaves, beside the ends of the numbers
-            // it reads itself, which it reads on every row. A place it leaves undivided there is
-            // one a run may stop before where the rows that get past every end hold fewer of its
-            // values, or do not leave it undivided. An end no chain of what the way holds relates
-            // to a number the relation reads bounds nothing of it, and the way is read as it is.
-            List<TakenConstraint.Affine> itsOwn = new ArrayList<>();
-            List<TakenConstraint.Affine> stops = new ArrayList<>();
-            for (TakenConstraint end : each.gotPastAtTheEnds()) {
-                if (end instanceof TakenConstraint.Affine affine) {
-                    (endsAnOperationOfTheRelation(affine.form(), affine.rel()) ? itsOwn : stops)
-                            .add(affine);
-                }
-            }
-            if (!stops.isEmpty() && each.region().relates(
-                    stops.stream().flatMap(end -> end.terms().stream()).toList(), numbersRead())) {
-                SearchRegion model = TakenConstraint.narrowedBy(List.copyOf(itsOwn),
-                        each.leftByTheModel());
-                Optional<List<TakenConstraint>> modelBy = each.narrowedByTheModel().map(by -> {
-                    List<TakenConstraint> all = new ArrayList<>(by);
-                    all.addAll(itsOwn);
-                    return all;
-                });
-                DemandReading.Answered stated = past.without(stops);
-                WhatItLeaves overTheRows = along;
-                along = modelBy.isPresent()
-                        ? alike.computeIfAbsent(new Along(modelBy.get(), conditions, remainders,
-                                heldWhole, declined, stated), _ -> leftAlong(read, sources,
-                                        carried, model, conditions, remainders, heldWhole,
-                                        declined, stated, modelBy, witnesses))
-                        : leftAlong(read, sources, carried, model, conditions, remainders,
-                                heldWhole, declined, stated, modelBy, witnesses);
-                // What the rows showed of a run stopping on the way is of the rows, and holds
-                // whatever the model's reading finds.
-                Set<FilingCoordinate> mayStop = new LinkedHashSet<>(overTheRows.mayStopBefore());
-                for (FilingCoordinate at : along.undivided()) {
-                    if (!overTheRows.undivided().contains(at)
-                            || fewerValuesPastTheEnds(at, model, each.region(), read)) {
-                        mayStop.add(at);
-                    }
-                }
-                along = mayStop.isEmpty() ? along
-                        : along.mayStopBefore(mayStop, overTheRows.gettingThere());
-            }
+                    && each.narrowedByTheModel().isPresent()
+                    ? alike.computeIfAbsent(new Along(each.narrowedBy().get(),
+                            each.narrowedByTheModel().get(), conditions, remainders, heldWhole,
+                            declined, past), _ -> leftAlongTheWay(read, sources, carried, each,
+                                    conditions, remainders, heldWhole, declined, witnesses))
+                    : leftAlongTheWay(read, sources, carried, each, conditions, remainders,
+                            heldWhole, declined, witnesses);
             out = out == null ? along : out.alongBoth(along);
         }
         return out;
+    }
+
+    /**
+     * What this leaves its places over the rows that arrive at the relation along {@code way}.
+     *
+     * <p>Where a representation stops on the way is no line the model draws: what the relation
+     * divides is read over what the model leaves, beside the ends of the numbers it reads itself,
+     * which it reads on every row. Whether rows get to it is a question of the rows that get past
+     * every end, and is asked over their region once, of what the model's reading shows; so is
+     * every answer of that kind the model's reading asks on its way ({@link RunToIt}). A place
+     * the model's reading leaves undivided is one a run may stop before as well where the rows
+     * that get past every end hold fewer of its values, or do not leave it undivided
+     * ({@link #undividedOverTheRows}). An end no chain of what the way holds relates to a number
+     * the relation reads bounds nothing of it, and the way is read over the rows' region alone.
+     *
+     * <p>Whether any row comes along is asked first, of the rows' way, and nothing else is asked
+     * where none does ({@link #noRowComesAlong}). The model's way states what the rows' way does,
+     * so it leaves no row only where fewer of its statements were let go; there it is the rows'
+     * way alone that is read.
+     */
+    private WhatItLeaves leftAlongTheWay(InputReading read, List<Source> sources,
+                                         List<Carrier> carriers, Reachability.Reaching way,
+                                         List<OnAWay> conditions, WholeNumberRuns remainders,
+                                         boolean heldWhole, Optional<Set<String>> declined,
+                                         ComparisonWitnesses.AtAComparison witnesses) {
+        DemandReading.Answered past = way.gotPastAsAsked();
+        RowsWay rows = new RowsWay(stated(read, sources, carriers, way.region(), conditions,
+                heldWhole, declined, past, way.narrowedBy()));
+        if (noRowComesAlong(rows, read)) {
+            return WhatItLeaves.NO_ROW_COMES_ALONG;
+        }
+        RunToIt run = rows.run();
+        BiPredicate<TermPath, Set<TermPath>> reaches = reachesWhatItReads(run, read);
+        List<TakenConstraint.Affine> itsOwn = new ArrayList<>();
+        List<TakenConstraint.Affine> stops = new ArrayList<>();
+        for (TakenConstraint end : way.gotPastAtTheEnds()) {
+            if (end instanceof TakenConstraint.Affine affine) {
+                (endsAnOperationOfTheRelation(affine.form(), affine.rel()) ? itsOwn : stops)
+                        .add(affine);
+            }
+        }
+        if (stops.isEmpty() || !way.region().relates(
+                stops.stream().flatMap(end -> end.terms().stream()).toList(), numbersRead())) {
+            return reached(linesAlong(read, sources, carriers, rows.stated(), remainders,
+                    witnesses, run, reaches), run, read, witnesses);
+        }
+        SearchRegion model = TakenConstraint.narrowedBy(List.copyOf(itsOwn),
+                way.leftByTheModel());
+        Optional<List<TakenConstraint>> modelBy = way.narrowedByTheModel().map(by -> {
+            List<TakenConstraint> all = new ArrayList<>(by);
+            all.addAll(itsOwn);
+            return all;
+        });
+        StatedWay ofTheModel = stated(read, sources, carriers, model, conditions, heldWhole,
+                declined, past.without(stops), modelBy);
+        if (leavesNoRow(ofTheModel, read)) {
+            return reached(linesAlong(read, sources, carriers, rows.stated(), remainders,
+                    witnesses, run, reaches), run, read, witnesses);
+        }
+        WhatItLeaves shown = reached(linesAlong(read, sources, carriers, ofTheModel, remainders,
+                witnesses, run, reaches), run, read, witnesses);
+        Set<FilingCoordinate> mayStop = new LinkedHashSet<>();
+        List<FilingCoordinate> asPairs = new ArrayList<>();
+        for (FilingCoordinate at : shown.undivided()) {
+            (fewerValuesPastTheEnds(at, model, way.region(), read) ? mayStop : asPairs).add(at);
+        }
+        if (!asPairs.isEmpty()) {
+            Set<FilingCoordinate> overTheRows = undividedOverTheRows(read, sources, carriers,
+                    rows, remainders, witnesses, run, reaches);
+            asPairs.stream().filter(at -> !overTheRows.contains(at)).forEach(mayStop::add);
+        }
+        return mayStop.isEmpty() ? shown : shown.mayStopBefore(mayStop);
+    }
+
+    /**
+     * The places this leaves undivided over the rows that get past every end of a representation
+     * along {@code rows}: evidence of where those rows keep every value of a place, which is no
+     * line the model draws and is read for nothing else.
+     *
+     * <p>An end can keep out pairs of values and leave each value of either, so a place whose
+     * values the rows hold as the model does may still not be left undivided by them. Nothing but
+     * what the relation divides over those rows shows that: the per-number comparison
+     * ({@link #fewerValuesPastTheEnds}) sees one number at a time.
+     *
+     * <p>Asked only of rows some of which come along ({@link #noRowComesAlong}): over none, every
+     * place would be left undivided and none shown so.
+     */
+    private Set<FilingCoordinate> undividedOverTheRows(InputReading read, List<Source> sources,
+                                                       List<Carrier> carriers, RowsWay rows,
+                                                       WholeNumberRuns remainders,
+                                                       ComparisonWitnesses.AtAComparison witnesses,
+                                                       RunToIt run,
+                                                       BiPredicate<TermPath, Set<TermPath>> reaches) {
+        return switch (linesAlong(read, sources, carriers, rows.stated(), remainders, witnesses,
+                run, reaches)) {
+            case Lines.OneWayWherever(WhatItLeaves shown, Set<FilingCoordinate> countsRead) ->
+                    shown.alsoUndivided(countsRead).undivided();
+            case Lines.Divides(WhatItLeaves shown, var _, Set<FilingCoordinate> countsRead) ->
+                    shown.alsoUndivided(countsRead).undivided();
+        };
     }
 
     /**
@@ -2806,10 +2887,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : remainder.moved().flatMap(own -> own.leftAlong(way)).orElse(null);
     }
 
-    /** What a way is read by: what narrowed its region, what it states, the remainders it leaves
-     *  this relation's remainder, whether nothing unread bears on the relation, which parameters
-     *  what it declined may name and what the run works out asks of a row. */
-    private record Along(List<TakenConstraint> region, List<OnAWay> conditions,
+    /** What a way is read by: what narrowed its region and the one the model leaves, what it
+     *  states, the remainders it leaves this relation's remainder, whether nothing unread bears
+     *  on the relation, which parameters what it declined may name and what the run works out
+     *  asks of a row, the ends it got past among it. */
+    private record Along(List<TakenConstraint> region, List<TakenConstraint> ofTheModel,
+                         List<OnAWay> conditions,
                          WholeNumberRuns remainders, boolean heldWhole,
                          Optional<Set<String>> declined, DemandReading.Answered past) {}
 
@@ -3349,12 +3432,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * What this leaves its places over the rows in {@code region}, a way stating
-     * {@code conditions} there.
-     *
-     * <p>A side whose values are whole numbers and that is not shown undivided is asked which of
-     * its values settle the relation, and whether the rest of them leave it either way
-     * ({@link WhatARelationLeavesUndivided#leavesOf}). A product's two factors are asked that of
-     * the product alone, each against what the other reaches.
+     * {@code written} there: what it divides read over the region, and whether rows get to it
+     * asked over the same region ({@link #linesAlong}, {@link #reached}).
      *
      * @param sources  what the declarations leave the value each side is, or is taken of, in the
      *                 order of the sides
@@ -3378,23 +3457,178 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                    Optional<Set<String>> declined, DemandReading.Answered past,
                                    Optional<List<TakenConstraint>> applied,
                                    ComparisonWitnesses.AtAComparison witnesses) {
-        Set<FilingCoordinate> countsRead = new LinkedHashSet<>();
-        return leftAlong(read, sources, carriers, region, written, remainders, heldWhole,
-                declined, past, applied, witnesses, countsRead).alsoUndivided(countsRead);
+        RowsWay rows = new RowsWay(stated(read, sources, carriers, region, written, heldWhole,
+                declined, past, applied));
+        if (noRowComesAlong(rows, read)) {
+            return WhatItLeaves.NO_ROW_COMES_ALONG;
+        }
+        RunToIt run = rows.run();
+        return reached(linesAlong(read, sources, carriers, rows.stated(), remainders, witnesses,
+                run, reachesWhatItReads(run, read)), run, read, witnesses);
     }
 
     /**
-     * The same, with the places the statements of the counts shown to be reached read in
-     * {@code countsRead}.
+     * The run to this relation along a way, as whether rows get to it is asked of it: every
+     * answer of that kind is read off this, and this is made of the rows that get past every end
+     * of a representation alone ({@link RowsWay}).
+     *
+     * @param past     what the run works out on the way to the relation, ends included
+     * @param along    the region the rows of the way are read in ({@link WayRead#along})
+     * @param written  what the way states
+     * @param declined the parameters what the way declined may name a position under, or empty
+     *                 where it may name any
+     * @param room     what the way leaves of the lengths of the strings the relation is between,
+     *                 the lengths at which the run gets to it among them, or null where that is
+     *                 not worked out ({@link #roomAmongTheSides})
      */
-    private WhatItLeaves leftAlong(InputReading read, List<Source> sources,
-                                   List<Carrier> carriers, SearchRegion region,
-                                   List<OnAWay> written, WholeNumberRuns remainders,
-                                   boolean heldWhole,
-                                   Optional<Set<String>> declined, DemandReading.Answered past,
-                                   Optional<List<TakenConstraint>> applied,
-                                   ComparisonWitnesses.AtAComparison witnesses,
-                                   Set<FilingCoordinate> countsRead) {
+    private record RunToIt(DemandReading.Answered past, SearchRegion along, List<OnAWay> written,
+                           Optional<Set<String>> declined, RoomOnTheWay room) {}
+
+    /**
+     * A way as the rows that get past every end of a representation along it state it: the one
+     * kind of way the run to the relation is read off.
+     */
+    private record RowsWay(StatedWay stated) {
+
+        RunToIt run() {
+            return new RunToIt(stated.past(), stated.entire().along(), stated.written(),
+                    stated.declined(), stated.lengthsRoom());
+        }
+    }
+
+    /**
+     * Whether no row comes along {@code rows}: asked of the rows' way alone, as everything of
+     * whether rows get to the relation is, and before anything is read of the relation along it.
+     * What is read of the relation over rows there are none of holds of every place and shows
+     * none, so it is not read ({@link WhatItLeaves#NO_ROW_COMES_ALONG}).
+     */
+    private boolean noRowComesAlong(RowsWay rows, InputReading read) {
+        return leavesNoRow(rows.stated(), read);
+    }
+
+    /**
+     * Whether what {@code way} states leaves no row: statements of the form this relation is of
+     * that no point of it meets ({@link WhatStatementsOfOneFormDecide.Verdict#noRowArrives}), or
+     * of a piece of a string no string the way holds is, or one no string lacking the separator
+     * the way counts is. Of what the way states alone, and of no region.
+     */
+    private boolean leavesNoRow(StatedWay way, InputReading read) {
+        return leavesNoRow(way.decided(), way.written(), read);
+    }
+
+    /** The same, of a way stating {@code written}, whose statements of this relation's form come
+     *  to {@code decided}. */
+    private boolean leavesNoRow(WhatStatementsOfOneFormDecide.Verdict decided,
+                                List<OnAWay> written, InputReading read) {
+        return decided.noRowArrives() || noStringIsThePieceTheWayHolds(written)
+                || noStringIsWithoutTheSeparatorTheWayCounts(written, read);
+    }
+
+    /**
+     * What this relation divides along a way some row comes along, which asks nothing of whether
+     * rows get to it. Which of two it is decides whether that is asked afterwards
+     * ({@link UndividedByARelation#reached}): only of a relation some of whose places it divides
+     * by their values.
+     */
+    private sealed interface Lines {
+
+        /**
+         * Of a relation that comes out one way wherever a row gets to it, which leaves every
+         * place undivided whichever values get there.
+         *
+         * @param countsRead the places the statements of the counts shown to be reached read,
+         *                   left undivided as well ({@link WhatItLeaves#alsoUndivided})
+         */
+        record OneWayWherever(WhatItLeaves shown, Set<FilingCoordinate> countsRead)
+                implements Lines {
+
+            public OneWayWherever {
+                saysNothingOfTheRun(shown);
+                countsRead = Collections.unmodifiableSet(new LinkedHashSet<>(countsRead));
+            }
+        }
+
+        /**
+         * Of a relation that may divide its places by their values, so that which values get to
+         * it bears on what it shows.
+         *
+         * @param accountedFor the places of strings whose lengths the partnering accounts for
+         *                     ({@link Partnering#accountedFor}), which a tie reading only them
+         *                     does not stop a run on
+         * @param countsRead   the places the statements of the counts shown to be reached read,
+         *                     left undivided once the rest is said
+         */
+        record Divides(WhatItLeaves shown, Set<TermPath> accountedFor,
+                       Set<FilingCoordinate> countsRead) implements Lines {
+
+            public Divides {
+                saysNothingOfTheRun(shown);
+                accountedFor = Set.copyOf(accountedFor);
+                countsRead = Collections.unmodifiableSet(new LinkedHashSet<>(countsRead));
+            }
+        }
+
+        /** What the relation divides says nothing of whether a run gets to it, nor of whether
+         *  any row comes along: those are said by the rows' way alone
+         *  ({@link UndividedByARelation#reached}, {@link UndividedByARelation#noRowComesAlong}). */
+        private static void saysNothingOfTheRun(WhatItLeaves shown) {
+            if (!shown.rowsArrive() || !shown.mayStopBefore().isEmpty()
+                    || !shown.gettingThere().isEmpty()) {
+                throw new IllegalArgumentException("what a relation divides says nothing of a run"
+                        + " stopping before it, or of no row coming along");
+            }
+        }
+    }
+
+    /** Along this way: every place left undivided, the counts the statements read as well. */
+    private Lines.OneWayWherever comesOutOneWay(Set<FilingCoordinate> out,
+                                                Map<NumericTerm,
+                                                        WhatARelationLeavesUndivided.Leaves.Settled>
+                                                        settled,
+                                                Set<FilingCoordinate> countsRead) {
+        out.addAll(places());
+        return new Lines.OneWayWherever(new WhatItLeaves(out, settled), countsRead);
+    }
+
+    /**
+     * {@code lines}, with the places whose values are not all shown getting there along
+     * {@code run} said so ({@link #reachedAlong}) where it divides some by their values; and the
+     * places the counts shown reached read left undivided.
+     */
+    private WhatItLeaves reached(Lines lines, RunToIt run, InputReading read,
+                                 ComparisonWitnesses.AtAComparison witnesses) {
+        return switch (lines) {
+            case Lines.OneWayWherever(WhatItLeaves shown, Set<FilingCoordinate> countsRead) ->
+                    shown.alsoUndivided(countsRead);
+            case Lines.Divides(WhatItLeaves shown, Set<TermPath> accountedFor,
+                               Set<FilingCoordinate> countsRead) ->
+                    reachedAlong(shown, run, read, accountedFor, witnesses)
+                            .alsoUndivided(countsRead);
+        };
+    }
+
+    /**
+     * A way as the readings of it take it before anything is asked of the relation: what it
+     * states once what a free number or value meets is taken away, what it leaves of the lengths
+     * of the strings, and the regions it is read in ({@link WayRead}).
+     *
+     * @param decided what the statements of the form this relation is of left of it decide, asked
+     *                of every one of them before any is taken away for the relation's own reading
+     */
+    private record StatedWay(SearchRegion region, List<OnAWay> written, boolean heldWhole,
+                             Optional<Set<String>> declined, DemandReading.Answered past,
+                             Optional<List<TakenConstraint>> applied,
+                             TakenConstraint.Affine asStated, boolean inWholeSteps,
+                             boolean offItsLine, List<RemainderCoverage.Proof> covered,
+                             List<OnAWay> unfree, RoomOnTheWay lengthsRoom,
+                             Rebuilding rebuilt, WayRead entire,
+                             WhatStatementsOfOneFormDecide.Verdict decided) {}
+
+    /** The way stating {@code written} over {@code region}, as {@link StatedWay} says. */
+    private StatedWay stated(InputReading read, List<Source> sources, List<Carrier> carriers,
+                             SearchRegion region, List<OnAWay> written, boolean heldWhole,
+                             Optional<Set<String>> declined, DemandReading.Answered past,
+                             Optional<List<TakenConstraint>> applied) {
         // A way stating nothing but that the rows are off the line this relation draws — the form
         // held unequal to nought, as `sign == 0` taken the other way holds
         // `Decimal.compare(a, b)` — ties no side to anything: it takes the rows on the line away,
@@ -3421,10 +3655,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             unfree = unfree.stream()
                     .filter(each -> !lengthsRoom.statements().contains(each)).toList();
         }
-        // What the way states of the form asked is decided, or leaves no row, by every statement
-        // of it, so it is asked before any is taken away.
-        WhatStatementsOfOneFormDecide.Verdict decided = WhatStatementsOfOneFormDecide.of(
-                unfree.stream().map(OnAWay::affine).toList(), askedAsAStatement());
         List<TakenConstraint.Affine> coveredNarrowings = new ArrayList<>();
         covered.forEach(each -> coveredNarrowings.addAll(each.narrowingsMet()));
         Rebuilding rebuilt = unfree.size() != written.size()
@@ -3433,6 +3663,53 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         // coverage showed met comes out of it with the statement it was shown for.
         WayRead entire = wayRead(unfree, past.without(coveredNarrowings), rebuilt, region,
                 offItsLine, read, sources, heldWhole);
+        // What the way states of the form asked is decided, or leaves no row, by every statement
+        // of it, so it is asked before any is taken away.
+        WhatStatementsOfOneFormDecide.Verdict decided = WhatStatementsOfOneFormDecide.of(
+                unfree.stream().map(OnAWay::affine).toList(), askedAsAStatement());
+        return new StatedWay(region, written, heldWhole, declined, past, applied, asStated,
+                inWholeSteps, offItsLine, covered, unfree, lengthsRoom, rebuilt, entire, decided);
+    }
+
+    /**
+     * What this relation divides along {@code way}, asking nothing of whether rows get to it but
+     * through {@code reaches}.
+     *
+     * <p>A side whose values are whole numbers and that is not shown undivided is asked which of
+     * its values settle the relation, and whether the rest of them leave it either way
+     * ({@link WhatARelationLeavesUndivided#leavesOf}). A product's two factors are asked that of
+     * the product alone, each against what the other reaches.
+     *
+     * @param run     the run to the relation, whose rows say at which lengths of the strings it
+     *                gets there ({@link RunToIt#room}): the strings a partner can hold part a side
+     *                at those lengths
+     * @param reaches whether the run to the relation is shown to get there at the values it reads
+     *                beside any value of the place handed, given the places whose lengths are
+     *                accounted for ({@link #reachesWhatItReads}): the strings a partner can hold
+     *                part a side only where it is
+     */
+    private Lines linesAlong(InputReading read, List<Source> sources, List<Carrier> carriers,
+                             StatedWay way, WholeNumberRuns remainders,
+                             ComparisonWitnesses.AtAComparison witnesses, RunToIt run,
+                             BiPredicate<TermPath, Set<TermPath>> reaches) {
+        SearchRegion region = way.region();
+        List<OnAWay> written = way.written();
+        boolean heldWhole = way.heldWhole();
+        DemandReading.Answered past = way.past();
+        Optional<List<TakenConstraint>> applied = way.applied();
+        TakenConstraint.Affine asStated = way.asStated();
+        boolean inWholeSteps = way.inWholeSteps();
+        boolean offItsLine = way.offItsLine();
+        List<RemainderCoverage.Proof> covered = way.covered();
+        List<OnAWay> unfree = way.unfree();
+        Rebuilding rebuilt = way.rebuilt();
+        WayRead entire = way.entire();
+        if (leavesNoRow(way, read)) {
+            throw new IllegalArgumentException("what a relation divides is read along a way some"
+                    + " row comes along");
+        }
+        Set<FilingCoordinate> countsRead = new LinkedHashSet<>();
+        WhatStatementsOfOneFormDecide.Verdict decided = way.decided();
         // A statement a row beside this relation's line meets leaves the sides as they stand to
         // one another there, whatever the others hold. Each term is read without it, and no
         // other reading is: they speak of the whole of what the way leaves, and a row beside the
@@ -3474,15 +3751,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled =
                 new LinkedHashMap<>();
-        if (decided.noRowArrives() || noStringIsThePieceTheWayHolds(written)
-                || noStringIsWithoutTheSeparatorTheWayCounts(written, read)) {
-            return WhatItLeaves.ofAWayNoRowComesAlong(places());
-        }
         if (decided.relationIsDecided() || written.stream().anyMatch(each ->
                 asStated != null ? keepsEveryElementOffTheLineOf(each, asStated)
                         : keepsEveryElementApartFromTheTwoStrings(each))) {
-            out.addAll(places());
-            return new WhatItLeaves(out, settled);
+            return comesOutOneWay(out, settled, countsRead);
         }
         // A way that relates a term to other numbers leaves it the run the region answers, and
         // the pair is asked whether the way ties them as well as whether the declarations do.
@@ -3509,8 +3781,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         terms.get(other), constant.negated(), relation, apart,
                         greatestOf(carriers.get(at))), out, settled);
             }
-            return reachedAlong(new WhatItLeaves(out, settled), past, read, along, written,
-                    declined, witnesses);
+            return new Lines.Divides(new WhatItLeaves(out, settled), Set.of(), countsRead);
         }
         if (kind == Kind.DIVISIBILITY) {
             boolean apart = standApart(0, 1, independent);
@@ -3519,8 +3790,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         terms.get(1), at == 0, relation, apart, endsOf(carriers.get(0)),
                         endsOf(carriers.get(1))), out, settled);
             }
-            return reachedAlong(new WhatItLeaves(out, settled), past, read, along, written,
-                    declined, witnesses);
+            return new Lines.Divides(new WhatItLeaves(out, settled), Set.of(), countsRead);
         }
         // A string inside another parts each by the strings the other can be inside, or hold: no
         // string is shown undivided, which is a claim about every pair of values, and the strings
@@ -3529,13 +3799,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             WhatItLeaves shown = new WhatItLeaves(out, settled, true, stopped);
             Set<TermPath> accounted = Set.of();
             if (heldWhole && standApart(0, 1, independent)) {
-                Partnering partnering = stringsAPartnerCanHold(carriers, out, read, lengthsRoom,
-                        written, reachesWhatItReads(past, read, along, written, declined));
+                Partnering partnering = stringsAPartnerCanHold(carriers, out, read, run.room(),
+                        written, reaches);
                 shown = shown.partnered(partnering);
                 accounted = partnering.accountedFor();
             }
-            return reachedAlong(shown, past, read, along, written, declined, accounted,
-                    witnesses);
+            return new Lines.Divides(shown, accounted, countsRead);
         }
         // Where an element stands in a walk, or how many elements meet a statement, lies beside
         // how many the container holds, and the two are asked together and not each apart.
@@ -3558,12 +3827,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     WhatARelationLeavesUndivided.leavesOfTheWhole(asked, within, constant, relation,
                             greatestOf(carriers.get(within.whole())));
             if (settledAtEveryValue(ofTheWhole)) {
-                out.addAll(places());
-                return new WhatItLeaves(out, settled);
+                return comesOutOneWay(out, settled, countsRead);
             }
             putDown(within.whole(), ofTheWhole, out, settled);
-            return reachedAlong(new WhatItLeaves(out, settled), past, read, along, written,
-                    declined, witnesses);
+            return new Lines.Divides(new WhatItLeaves(out, settled), Set.of(), countsRead);
         }
         // Each side asked once: whether another reaches it, and where it does not, which of its
         // values settle the relation.
@@ -3587,8 +3854,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             supports, operations);
             leaves.add(each);
             if (settledAtEveryValue(each)) {
-                out.addAll(places());
-                return new WhatItLeaves(out, settled);
+                return comesOutOneWay(out, settled, countsRead);
             }
             if (each instanceof WhatARelationLeavesUndivided.Leaves.Undivided) {
                 // The remainder is left undivided by every number of its form at once, and a
@@ -3640,13 +3906,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         Set<TermPath> accountedFor = Set.of();
         if (sides.size() == 2 && heldWhole && standApart(0, 1, independent)) {
-            Partnering partnering = stringsAPartnerCanHold(carriers, out, read, lengthsRoom,
-                    written, reachesWhatItReads(past, read, along, written, declined));
+            Partnering partnering = stringsAPartnerCanHold(carriers, out, read, run.room(),
+                    written, reaches);
             shown = shown.partnered(partnering);
             accountedFor = partnering.accountedFor();
         }
-        return reachedAlong(shown, past, read, along, written, declined, accountedFor,
-                witnesses);
+        return new Lines.Divides(shown, accountedFor, countsRead);
     }
 
     /**
@@ -3768,9 +4033,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * ({@link #roomOnTheWay}). A string of another length is shown neither way.
      *
      * @param shown      the places already shown undivided, which need no other word
-     * @param room       what the way leaves of the lengths of the two strings, or null where this
-     *                   is no equality between two strings, nor one string inside another, or
-     *                   that is not worked out
+     * @param room       what the way leaves of the lengths of the two strings as the rows that get
+     *                   to the relation hold them ({@link RunToIt#room}), or null where this is no
+     *                   equality between two strings, nor one string inside another, or that is
+     *                   not worked out
      * @param reaches    whether the run is shown to get to the relation at the values it reads
      *                   beside any value of the place handed, given the places whose lengths are
      *                   accounted for; asked only once a pair of strings is otherwise parted, and
@@ -5223,43 +5489,37 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * {@code shown}, which says what every value of each place does where it gets to this
-     * relation, along a run that works out {@code past} on the way to it: as it is where every
-     * value there is shown to get there, and with the places it shows undivided said not to be
-     * shown getting there at every value where the run may stop on what nothing here says on a
-     * value this relation reads. What it shows of them is kept, since a value that gets there is
-     * left as it says.
+     * relation, along {@code run}: as it is where every value there is shown to get there, and
+     * with the places it shows undivided said not to be shown getting there at every value where
+     * the run may stop on what nothing here says on a value this relation reads. What it shows of
+     * them is kept, since a value that gets there is left as it says.
      *
      * <p>Asked of each place apart ({@link #mayStopOnValueAt}): a place the stops on the way do
      * not turn on is left as it is shown, and only the places a stop may turn on are said not to
      * be shown getting there.
      *
-     * <p>Not asked of a relation that comes out one way wherever a row gets to it, which divides
-     * none of its places whichever values get there. And no line is drawn where a run may stop:
-     * that is no line of the model, and where it falls is what nothing here says.
-     */
-    private WhatItLeaves reachedAlong(WhatItLeaves shown, DemandReading.Answered past,
-                                      InputReading read, SearchRegion region,
-                                      List<OnAWay> conditions, Optional<Set<String>> declined,
-                                      ComparisonWitnesses.AtAComparison witnesses) {
-        return reachedAlong(shown, past, read, region, conditions, declined, Set.of(), witnesses);
-    }
-
-    /**
-     * The same, where the lengths of the strings at {@code accountedFor} are those some value of
-     * the numbers the way ties them to gets the run past, or are parted with the rest left open,
-     * so that a run stopped by a tie reading only such places is not one the relation is
-     * claimed to be reached despite ({@link #roomOnTheWay}).
+     * <p>The lengths of the strings at {@code accountedFor} are those some value of the numbers
+     * the way ties them to gets the run past, or are parted with the rest left open, so that a
+     * run stopped by a tie reading only such places is not one the relation is claimed to be
+     * reached despite ({@link #roomOnTheWay}).
      *
      * <p>Where a run may stop, a row a run of which is shown to get to the relation
      * ({@link ComparisonWitnesses.AtAComparison#reached}) shows the values it holds at a place
      * that the run is shown to have made the relation at ({@link ReachWitnesses.Witness#toldAt}),
      * and nothing of any other value: the place is still not shown reached at every value.
+     *
+     * <p>Not asked of a relation that comes out one way wherever a row gets to it, which divides
+     * none of its places whichever values get there ({@link Lines.OneWayWherever}). And no line is
+     * drawn where a run may stop: that is no line of the model, and where it falls is what
+     * nothing here says.
      */
-    private WhatItLeaves reachedAlong(WhatItLeaves shown, DemandReading.Answered past,
-                                      InputReading read, SearchRegion region,
-                                      List<OnAWay> conditions, Optional<Set<String>> declined,
+    private WhatItLeaves reachedAlong(WhatItLeaves shown, RunToIt run, InputReading read,
                                       Set<TermPath> accountedFor,
                                       ComparisonWitnesses.AtAComparison witnesses) {
+        DemandReading.Answered past = run.past();
+        SearchRegion region = run.along();
+        List<OnAWay> conditions = run.written();
+        Optional<Set<String>> declined = run.declined();
         if (!mayStopOnWhatItReads(past, read, region, conditions, declined, accountedFor)) {
             return shown;
         }
@@ -5390,15 +5650,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * answers are kept by the run asked of, which is {@code past} itself where nothing was let go
      * of, and by the lengths.
      */
-    private BiPredicate<TermPath, Set<TermPath>> reachesWhatItReads(
-            DemandReading.Answered past, InputReading read, SearchRegion along,
-            List<OnAWay> written, Optional<Set<String>> declined) {
+    private BiPredicate<TermPath, Set<TermPath>> reachesWhatItReads(RunToIt run,
+                                                                    InputReading read) {
         Map<DemandReading.Answered, Map<Set<TermPath>, Boolean>> asked = new IdentityHashMap<>();
         return (place, lengths) -> {
-            DemandReading.Answered run = besideAnyValueAt(place, past, read, along, written,
-                    declined);
-            return asked.computeIfAbsent(run, any -> new HashMap<>()).computeIfAbsent(lengths,
-                    any -> !mayStopOnWhatItReads(run, read, along, written, declined, lengths));
+            DemandReading.Answered past = besideAnyValueAt(place, run.past(), read, run.along(),
+                    run.written(), run.declined());
+            return asked.computeIfAbsent(past, any -> new HashMap<>()).computeIfAbsent(lengths,
+                    any -> !mayStopOnWhatItReads(past, read, run.along(), run.written(),
+                            run.declined(), lengths));
         };
     }
 

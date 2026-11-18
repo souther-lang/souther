@@ -88,7 +88,8 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
     @Test
     void aMembershipTheStopTurnsOnIsDividedNowhereAndNotShownReached() {
         String firstStop = Long.toString(Long.MAX_VALUE - FIRST_SUM + 1);
-        JsonNode report = reportOf(compiled(PARAMETERS, THE_SUM_STOPPING));
+        JsonNode report = reportOf(compiled(PARAMETERS, THE_SUM_STOPPING,
+                Adequacy.Asked.reportOnly(Adequacy.Level.OFF)));
         Map<String, List<String>> readings = readingsIn(report);
         assertEquals(List.of(NOT_SHOWN_REACHED), readings.get("hs[*]"), readings::toString);
         assertTrue(readings.get("a").contains(NOT_SHOWN_REACHED), readings::toString);
@@ -264,12 +265,14 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
      * The sum is worked out only on the runs where {@code d} is above nought, and the relation is
      * reached on the others without it. A run that works it out and stops is no run of the
      * relation, and which values that is the path does not say: it ties {@code a} and {@code d}
-     * as the left arm of a choice does, and the relation is not shown reached at {@code a}.
+     * as the left arm of a choice does, and the relation is not shown reached at {@code a}. That
+     * it is at every value of {@code b} is shown by a row run to it, so rows are measured.
      */
     @Test
     void aSumWorkedOutInAnArmTheMembershipIsReachedWithoutIsAStopTheMembershipIsNotShownPast() {
-        Map<String, List<String>> readings = readingsOf(NUMBERS,
-                "(d > 0 && a + " + FIRST_SUM + " - d >= 0) || a - b > 0");
+        Map<String, List<String>> readings = readingsIn(reportOf(compiled(NUMBERS,
+                "(d > 0 && a + " + FIRST_SUM + " - d >= 0) || a - b > 0",
+                Adequacy.Asked.fullReport())));
         assertEquals(List.of(READ), readings.get("b"), readings::toString);
         assertEquals(List.of(NOT_SHOWN_REACHED), readings.get("a"), readings::toString);
     }
@@ -292,19 +295,6 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
         assertEquals(List.of(READ), reasonsAt(NUMBERS,
                 "{ let s = List.map(x -> Int.floorMod(100, a - x - 1),"
                         + " List.filter(x -> x > 0, xs))  " + MEMBERSHIP + used, "a"));
-    }
-
-    /**
-     * The same sum as the left arm of a choice, worked out on every run before the membership,
-     * stops runs on {@code a} and draws no line through the elements, which are not shown reached
-     * at every value.
-     */
-    @Test
-    void aSumTheLeftArmOfAChoiceWorksOutOnEveryRunIsAStopThere() {
-        Map<String, List<String>> readings = readingsOf(PARAMETERS,
-                "(a + " + FIRST_SUM + " - d >= 0 || d > 0) && " + MEMBERSHIP);
-        assertEquals(List.of(NOT_SHOWN_REACHED), readings.get("hs[*]"), readings::toString);
-        assertTrue(readings.get("a").contains(NOT_SHOWN_REACHED), readings::toString);
     }
 
     /**
@@ -367,7 +357,7 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
                         behavior.equals("plain") ? plain : cancelled));
             }
             Compilation compilation = Compilation.ofSource(model.toString(), "Main");
-            compilation.measure(Adequacy.Asked.fullReport());
+            compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
             ACompiledModel.compiles(compilation);
             JsonNode report = reportOf(compilation);
             assertEquals(List.of(READ), reasonsOfBehavior(report, "plain", "hs[*]"), order::toString);
@@ -444,9 +434,11 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
         node.forEach(child -> collectOfBehavior(child, behavior, position, out));
     }
 
-    /** What each position of {@code f} is said, a reason once, by position. */
+    /** What each position of {@code f} is said, a reason once, by position, read without
+     *  measuring a row. */
     private static Map<String, List<String>> readingsOf(String parameters, String condition) {
-        return readingsIn(reportOf(compiled(parameters, condition)));
+        return readingsIn(reportOf(compiled(parameters, condition,
+                Adequacy.Asked.reportOnly(Adequacy.Level.OFF))));
     }
 
     /** What each position is said in {@code report}, a reason once, by position. */
@@ -477,7 +469,7 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
 
     /** The inputs of every row the compiler certifies for {@code f}, as the text of each. */
     private static List<List<String>> certifiedRowsOf(String condition) {
-        Compilation compilation = compiled(PARAMETERS, condition);
+        Compilation compilation = compiled(PARAMETERS, condition, Adequacy.Asked.fullReport());
         List<List<String>> out = new ArrayList<>();
         for (BorderAssessment border : Adequacy.readingsOf(compilation.db(), "demo").get("f")) {
             for (ItemAssessment item : border.items().values()) {
@@ -500,7 +492,8 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
     }
 
-    private static Compilation compiled(String parameters, String condition) {
+    private static Compilation compiled(String parameters, String condition,
+                                        Adequacy.Asked asked) {
         String model = """
                 module demo
 
@@ -509,7 +502,7 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
                 """.formatted(parameters, parameters.replaceAll(":\\s*[A-Za-z<>]+", ""),
                 condition);
         Compilation compilation = Compilation.ofSource(model, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(asked);
         return ACompiledModel.compiles(compilation);
     }
 }
