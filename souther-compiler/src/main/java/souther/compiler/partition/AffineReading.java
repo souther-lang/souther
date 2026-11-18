@@ -779,6 +779,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return;
                 }
                 if (tellsTheClosuresMakingAnOption(binding.value(), at)
+                        || tellsTheListsWrittenOutItIsHanded(binding.value(), at, this, reached,
+                                told)
                         || isARemainderOfAReadForm(binding.value(), at, this, ruleSource,
                                 reached)) {
                     return;

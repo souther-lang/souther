@@ -123,6 +123,9 @@ final class WorkedOutToReachIt {
         if (written instanceof Core.Construct made) {
             return aConstructionEndsNoRun(made, value.at());
         }
+        if (stopsOnlyOnAnOperandThatIsNotNought(value)) {
+            return true;
+        }
         if (!closuresApart) {
             return WhatARunMayEndFor.itself(written).endsNone()
                     || endsARowsRunOnlyPastTheRepresentation(written);
@@ -131,6 +134,17 @@ final class WorkedOutToReachIt {
         // where the library shows it answers whatever it is handed.
         return WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(written).endsNone()
                 || completionOfARowsRun(written) instanceof GetsPast.Always;
+    }
+
+    /**
+     * Whether {@code value} is an operation that ends a run on one operand alone, only where that
+     * operand is nought ({@link WhatARunMayEndFor#theOperandItAloneStopsOn}), and the operand
+     * comes to another whole number whatever the run is: {@code Int.floorMod(x, 7)} ends none.
+     */
+    private boolean stopsOnlyOnAnOperandThatIsNotNought(Denotation value) {
+        Core operand = WhatARunMayEndFor.theOperandItAloneStopsOn(value.value());
+        return operand != null && value.at().folded(operand, read.rules().symbols(),
+                read.rules().newtypes()).orElse(null) instanceof Long by && by != 0;
     }
 
     /**
