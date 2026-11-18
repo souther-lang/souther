@@ -8,6 +8,7 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Rel;
 import souther.compiler.partition.UndividedByARelation.WholeEnds;
+import souther.test.Nightly;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -30,7 +31,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>What the proof does not show is not asked: it is allowed to fall short, and the claim is
  * that what it shows is so.
+ *
+ * <p>Nightly, for what it costs: tens of thousands of instances, each worked out over every row.
+ * Each premise of the proof is a case of
+ * {@link ARemainderIsMetByOneChoiceOnlyWhereTheWindowHoldsEveryRemainderTest}, which asks it of one
+ * instance at every change; this finds the ways of showing too much nobody has thought of yet, and
+ * finding one by morning is soon enough.
  */
+@Nightly
 class AProvenRemainderCoverageHoldsWhenEveryRowIsTriedTest {
 
     private static final int INSTANCES = 60000;

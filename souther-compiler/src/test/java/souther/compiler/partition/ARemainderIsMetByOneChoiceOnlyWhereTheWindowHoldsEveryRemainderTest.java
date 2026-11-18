@@ -120,6 +120,21 @@ class ARemainderIsMetByOneChoiceOnlyWhereTheWindowHoldsEveryRemainderTest {
                 List.of(big(0)), big(7), List.of(), big(-100), big(100)).isEmpty());
     }
 
+    /** A narrowing of a number chosen at nought alone holds of the row only where it holds at
+     *  nought: one that nought breaks leaves no row to bring to a remainder. */
+    @Test
+    void aNarrowingOfANumberChosenAtNoughtHoldsAtNought() {
+        LinearForm<NumericTerm> dividend = withPivot(LinearForm.<NumericTerm>atom(D)
+                .plus(LinearForm.atom(N)).orNull(), -1);
+        Map<NumericTerm, RemainderCoverage.Other> others = new LinkedHashMap<>();
+        others.put(D, kept(0, 10));
+        others.put(N, new RemainderCoverage.Other(ends(0, 5), true));
+        assertTrue(RemainderCoverage.prove(P, ends(-20, 20), others, dividend, List.of(big(0)),
+                big(7), List.of(constraint(Rel.LE, -3, N, 1)), big(-100), big(100)).isPresent());
+        assertTrue(RemainderCoverage.prove(P, ends(-20, 20), others, dividend, List.of(big(0)),
+                big(7), List.of(constraint(Rel.GE, -1, N, 1)), big(-100), big(100)).isEmpty());
+    }
+
     /** The program adds the numbers one at a time: a sum of the pivot and some of the others is a
      *  stop this does not look at. */
     @Test
