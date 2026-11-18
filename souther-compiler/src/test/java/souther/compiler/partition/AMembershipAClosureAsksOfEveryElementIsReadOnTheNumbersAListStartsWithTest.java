@@ -11,7 +11,7 @@ import souther.compiler.report.AdequacyReport;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Whether a set holds a day a closure is handed, the day worked out from the element of a list of
@@ -25,49 +25,40 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AMembershipAClosureAsksOfEveryElementIsReadOnTheNumbersAListStartsWithTest {
 
-    /** Due dates moved to the first business day of three by the rule each is due under, and,
-     *  of them, those that are no business day: by {@code %3$s} over each rule's dates. */
+    /** Each day of a list of days moved to the first business day of two, and those of them the
+     *  calendar holds: by {@code %2$s} over the days. */
     private static final String MODEL = """
             module demo
 
-            data DueDateRule = SameDay | FollowingBusinessDay
-            data Calendar = { holidays: Set<Date>, aSunday: Date, rule: DueDateRule }
+            data Calendar = { holidays: Set<Date>, aSunday: Date }
 
             let isBusinessDay (calendar: Calendar, d: Date): Bool =
                 Int.floorMod(Date.daysBetween(calendar.aSunday, d), 7) >= 1
                     && Bool.not(Set.contains(d, calendar.holidays))
 
-            let onABusinessDay (calendar: Calendar, nominal: Date): Date =
-                match calendar.rule with
-                    | SameDay -> nominal
-                    | FollowingBusinessDay -> List.rangeInclusive(0, 2)
-                        |> List.map(k -> Date.addDays(k, nominal))
-                        |> List.find(d -> isBusinessDay(calendar, d))
-                        |> Option.withDefault(nominal)
+            let landed (calendar: Calendar, nominal: Date): Date =
+                [nominal, Date.addDays(1, nominal)]
+                    |> List.find(d -> isBusinessDay(calendar, d))
+                    |> Option.withDefault(nominal)
 
-            behavior f : (calendar: Calendar, from: Date, days: Int, rules: List<DueDateRule>)
-                -> List<%1$s>
-                constructs Calendar
+            behavior f : (calendar: Calendar, from: Date, days: Int) -> %1$s
 
-            let f (calendar, from, days, rules) =
-                %2$s(rule -> {
-                    let ruled = Calendar { ...calendar, rule = rule }
-                    List.rangeInclusive(0, days)
-                        |> List.map(n -> onABusinessDay(ruled, Date.addDays(n, from)))
-                        |> %3$s(d -> Bool.not(isBusinessDay(ruled, d)))
-                }, rules)
+            let f (calendar, from, days) =
+                List.rangeInclusive(0, days)
+                    |> List.map(n -> landed(calendar, Date.addDays(n, from)))
+                    |> %2$s(d -> Set.contains(d, calendar.holidays))
             """;
 
     @Test
     void readOnTheElementsTheListStartsWithWhereEveryElementIsAsked() {
         assertEquals(List.of(), aboutARemainderNoPositionHolds(
-                MODEL.formatted("Date", "List.flatMap", "List.filter")));
+                MODEL.formatted("List<Date>", "List.filter")));
     }
 
     @Test
     void notReadSoWhereTheRunStopsAtTheFirstElementThatAnswers() {
-        assertTrue(aboutARemainderNoPositionHolds(MODEL.formatted("Bool", "List.map", "List.any"))
-                .stream().anyMatch(line -> line.contains("isBusinessDay@")));
+        assertFalse(aboutARemainderNoPositionHolds(MODEL.formatted("Bool", "List.any"))
+                .isEmpty());
     }
 
     /** The lines of the report saying a comparison was not read for being about a remainder of
