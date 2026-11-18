@@ -3212,24 +3212,22 @@ public final class InvariantChecker {
                 both.addAll(numbersALineIsStatedOn(it.right(), at, byName));
                 yield both;
             }
-            case ClauseExpr.Leaf it -> {
-                // The one number the rule is over, which is the same answer the attribution of an
-                // end to a conjunct is put forward on. A rule over several is a line between them
-                // and an end at none, so it puts nothing forward.
-                // The clause this leaf was read out of does not reach here either, and what is
-                // asked is which number the rule is over rather than which arms it may come to.
-                yield switch (lineStatedIn(it.of(), it.positive(), at, byName,
-                        Arrivals.everyArmIsTakenForAValue())) {
-                    case StatedLines.Statement.OnWhatStandsAtAPosition found ->
-                            Set.of(found.number());
-                    case StatedLines.Statement.OnADerivedNumber found ->
-                            Set.of(found.number().asNumber());
-                    case StatedLines.Statement.NoLine _,
-                         StatedLines.Statement.Between _,
-                         StatedLines.Statement.AdmitsNothing _,
-                         StatedLines.Statement.OnANumberNotNamed _ -> Set.of();
-                };
-            }
+            // The one number the rule is over, which is the same answer the attribution of an end
+            // to a conjunct is put forward on. A rule over several is a line between them and an
+            // end at none, so it puts nothing forward.
+            // The clause this leaf was read out of does not reach here either, and what is asked
+            // is which number the rule is over rather than which arms it may come to.
+            case ClauseExpr.Leaf it -> switch (lineStatedIn(it.of(), it.positive(), at, byName,
+                    Arrivals.everyArmIsTakenForAValue())) {
+                case StatedLines.Statement.OnWhatStandsAtAPosition found ->
+                        Set.of(found.number());
+                case StatedLines.Statement.OnADerivedNumber found ->
+                        Set.of(found.number().asNumber());
+                case StatedLines.Statement.NoLine _,
+                     StatedLines.Statement.Between _,
+                     StatedLines.Statement.AdmitsNothing _,
+                     StatedLines.Statement.OnANumberNotNamed _ -> Set.of();
+            };
         };
     }
 
