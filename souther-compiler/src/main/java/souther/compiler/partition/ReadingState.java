@@ -4,9 +4,7 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -83,6 +81,9 @@ final class ReadingState {
         BY_IDENTITY,
         /** Only whether there is one. */
         BY_PRESENCE,
+        /** By what it says it has been told ({@link Marked#mark}): an object that is changed in
+         *  place is the same only while it has been told nothing more. */
+        BY_MARK,
         /** Not at all. */
         NOT
     }
@@ -408,6 +409,12 @@ final class ReadingState {
         return guarded(setting(Compared.BY_VALUE));
     }
 
+    /** The same, of an object changed in place that says what it has been told: compared on that
+     *  ({@link Compared#BY_MARK}). */
+    <T extends Marked> Scoped<T> guardedByItsMark() {
+        return guarded(setting(Compared.BY_MARK));
+    }
+
     /**
      * A place a reading adds to where there is one: compared by whether there is one, and left as
      * found.
@@ -510,6 +517,7 @@ final class ReadingState {
                 case BY_PRESENCE -> Boolean.valueOf(value != null);
                 case BY_IDENTITY -> new Same(value);
                 case BY_VALUE -> copyOf(value);
+                case BY_MARK -> value == null ? null : ((Marked) value).mark();
                 case NOT -> throw new IllegalStateException("an input is compared");
             });
         }
@@ -689,43 +697,6 @@ final class ReadingState {
     }
 
     /**
-     * What {@code owner} is and holds in every one of its fields.
-     *
-     * <p>Every field and not the fields somebody listed: an object that says what it has been told
-     * ({@link Marked}) says it by this, so that a field added to it is part of what it says.
-     */
-    static Object snapshotOfFields(Object owner) {
-        return snapshotOfFieldsBut(owner, Set.of());
-    }
-
-    /** What {@code owner} is and holds in every field but those named {@code aside}. */
-    static Object snapshotOfFieldsBut(Object owner, Set<String> aside) {
-        List<Object> held = new ArrayList<>();
-        for (Field each : fieldsOf(owner.getClass())) {
-            if (!aside.contains(each.getName())) {
-                held.add(snapshotOf(read(each, owner)));
-            }
-        }
-        return held;
-    }
-
-    private static final Map<Class<?>, Field[]> FIELDS = new ConcurrentHashMap<>();
-
-    private static Field[] fieldsOf(Class<?> of) {
-        return FIELDS.computeIfAbsent(of, type -> {
-            List<Field> out = new ArrayList<>();
-            for (Field each : type.getDeclaredFields()) {
-                if (!Modifier.isStatic(each.getModifiers()) && !each.isSynthetic()) {
-                    each.setAccessible(true);
-                    out.add(each);
-                }
-            }
-            out.sort((one, other) -> one.getName().compareTo(other.getName()));
-            return out.toArray(Field[]::new);
-        });
-    }
-
-    /**
      * Whether the objects the state holds are looked into for a collection that can change inside
      * them.
      *
@@ -786,14 +757,6 @@ final class ReadingState {
         @Override
         public int hashCode() {
             return System.identityHashCode(of);
-        }
-    }
-
-    private static Object read(Field field, Object owner) {
-        try {
-            return field.get(owner);
-        } catch (IllegalAccessException e) {
-            throw new IllegalStateException(field.getName(), e);
         }
     }
 

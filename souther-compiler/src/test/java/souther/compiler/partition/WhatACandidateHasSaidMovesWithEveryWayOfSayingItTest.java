@@ -17,45 +17,28 @@ import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
- * The mark of a candidate is taken once for as long as it says nothing, and is what taking it
- * afresh would give after it says something, whichever way it says it.
+ * What a candidate has said ({@link Pullback.Trial#mark}) moves with every way it says something,
+ * and what it has said besides the remainders it read moves with every way but those.
+ *
+ * <p>A reading must leave the candidate it is read under as it found it, and a remainder read
+ * again is taken where the candidate has said nothing else: a way of saying something that moves
+ * neither would let a reading that said it be taken where it would not be the same.
  */
-class WhatACandidateHasSaidIsMarkedOnceWhileItSaysNothingMoreTest {
+class WhatACandidateHasSaidMovesWithEveryWayOfSayingItTest {
 
     private static final SourcePos POS = new SourcePos(1, 1);
-
-    private static Object afresh(Pullback.Trial trial) {
-        return ReadingState.snapshotOfFieldsBut(trial, Set.of("marked"));
-    }
 
     private static Core number(long value) {
         return new Core.Int(value, Type.INT, POS);
     }
 
     @Test
-    void aCandidateThatSaysNothingIsMarkedOnce() {
+    void aCandidateThatSaysNothingMoreIsMarkedTheSame() {
         Pullback.Trial trial = new Pullback.Trial();
-        assertSame(trial.mark(), trial.mark());
-    }
-
-    @Test
-    void whatItSaysAfterBeingMarkedIsInTheNextMark() {
-        Pullback.Trial trial = new Pullback.Trial();
-        Object before = trial.mark();
-        assertEquals(afresh(trial), before);
-
-        trial.restatedAs(() -> null);
-        Object afterRestating = trial.mark();
-        assertNotEquals(before, afterRestating);
-        assertEquals(afresh(trial), afterRestating);
-
-        trial.answersFor(_ -> true);
-        Object afterAnswering = trial.mark();
-        assertNotEquals(afterRestating, afterAnswering);
-        assertEquals(afresh(trial), afterAnswering);
+        assertEquals(trial.mark(), trial.mark());
+        assertEquals(trial.mark().hashCode(), trial.mark().hashCode());
     }
 
     /** The remainders a candidate reads are the third and the fourth of its ways. */
@@ -81,14 +64,22 @@ class WhatACandidateHasSaidIsMarkedOnceWhileItSaysNothingMoreTest {
     }
 
     @Test
-    void whatItSaysBesidesTheRemaindersIsNeitherTheMarkNorTheRemainders() {
+    void everyWayOfSayingSomethingMovesTheMark() {
+        List<Consumer<Pullback.Trial>> ways = waysOfSaying();
+        for (int i = 0; i < ways.size(); i++) {
+            Pullback.Trial trial = new Pullback.Trial();
+            Object before = trial.mark();
+            ways.get(i).accept(trial);
+            assertNotEquals(before, trial.mark(), "way " + i + " is not in the next mark");
+        }
+    }
+
+    @Test
+    void whatItSaysBesidesTheRemaindersMovesWithEveryWayButTheRemainders() {
         List<Consumer<Pullback.Trial>> ways = waysOfSaying();
         for (int i = 0; i < ways.size(); i++) {
             Pullback.Trial trial = new Pullback.Trial();
             Object before = trial.markBesidesTheRemainders();
-            trial.mark();
-            assertEquals(before, trial.markBesidesTheRemainders(),
-                    "taking the mark is no part of what is said, at way " + i);
             ways.get(i).accept(trial);
             if (REMAINDERS.contains(i)) {
                 assertEquals(before, trial.markBesidesTheRemainders(),
@@ -100,16 +91,27 @@ class WhatACandidateHasSaidIsMarkedOnceWhileItSaysNothingMoreTest {
         }
     }
 
+    /**
+     * A remainder read under one candidate is taken under another where neither said anything
+     * besides remainders; where one has said something, it is taken only under that candidate
+     * while it says nothing more.
+     */
     @Test
-    void everyWayOfSayingSomethingIsInTheNextMark() {
-        List<Consumer<Pullback.Trial>> ways = waysOfSaying();
-        for (int i = 0; i < ways.size(); i++) {
-            Pullback.Trial trial = new Pullback.Trial();
-            Object before = trial.mark();
-            ways.get(i).accept(trial);
-            Object after = trial.mark();
-            assertNotEquals(before, after, "way " + i + " is not in the next mark");
-            assertEquals(afresh(trial), after, "way " + i + " is not what a fresh mark says");
-        }
+    void candidatesThatSaidNothingButRemaindersHaveSaidTheSameAndOthersHaveNot() {
+        Pullback.Trial one = new Pullback.Trial();
+        Pullback.Trial other = new Pullback.Trial();
+        other.readByTheFormOf(number(1), number(2));
+        assertEquals(one.markBesidesTheRemainders(), other.markBesidesTheRemainders());
+
+        one.says(UndividedByARelation.Working.UNREAD);
+        other.says(UndividedByARelation.Working.UNREAD);
+        assertNotEquals(one.markBesidesTheRemainders(), other.markBesidesTheRemainders(),
+                "what another candidate said is not compared with it");
+        assertEquals(one.markBesidesTheRemainders(), one.markBesidesTheRemainders());
+    }
+
+    @Test
+    void twoCandidatesAreMarkedApartWhateverTheySaid() {
+        assertNotEquals(new Pullback.Trial().mark(), new Pullback.Trial().mark());
     }
 }

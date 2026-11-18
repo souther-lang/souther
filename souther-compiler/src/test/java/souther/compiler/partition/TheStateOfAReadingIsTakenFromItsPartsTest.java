@@ -269,61 +269,40 @@ class TheStateOfAReadingIsTakenFromItsPartsTest {
         assertNull(stack.newest());
     }
 
-    /** What a candidate has been told, as it holds it: by relation, with a list under each. */
-    private static final class ATeller implements ReadingState.Marked {
-        final Map<String, Object> told = new HashMap<>();
-        final Map<String, List<Object>> toldOn = new HashMap<>();
-        final Map<String, Set<Object>> toldAt = new HashMap<>();
-        /** Never named by anything that says what has been told. */
-        private final List<Object> forgotten = new ArrayList<>();
-
-        @Override
-        public Object mark() {
-            return ReadingState.snapshotOfFields(this);
-        }
-    }
-
     @Test
     void anObjectPutInPlaceOfAnotherUnderTheSameKeyIsAChange() {
-        ATeller teller = new ATeller();
-        teller.told.put("relation", new Object());
-        Object before = teller.mark();
+        Map<String, Object> told = new HashMap<>();
+        told.put("relation", new Object());
+        Object before = ReadingState.snapshotOf(told);
 
-        teller.told.put("relation", new Object());
+        told.put("relation", new Object());
 
-        assertFalse(before.equals(teller.mark()), "the map has as many entries as it had");
+        assertFalse(before.equals(ReadingState.snapshotOf(told)),
+                "the map has as many entries as it had");
     }
 
     @Test
     void somethingAddedToAListHeldUnderAKeyIsAChange() {
-        ATeller teller = new ATeller();
-        teller.toldOn.put("node", new ArrayList<>());
-        Object before = teller.mark();
+        Map<String, List<Object>> toldOn = new HashMap<>();
+        toldOn.put("node", new ArrayList<>());
+        Object before = ReadingState.snapshotOf(toldOn);
 
-        teller.toldOn.get("node").add(new Object());
+        toldOn.get("node").add(new Object());
 
-        assertFalse(before.equals(teller.mark()), "the map has as many entries as it had");
+        assertFalse(before.equals(ReadingState.snapshotOf(toldOn)),
+                "the map has as many entries as it had");
     }
 
     @Test
     void somethingAddedToASetHeldUnderAKeyIsAChange() {
-        ATeller teller = new ATeller();
-        teller.toldAt.put("node", new HashSet<>());
-        Object before = teller.mark();
+        Map<String, Set<Object>> toldAt = new HashMap<>();
+        toldAt.put("node", new HashSet<>());
+        Object before = ReadingState.snapshotOf(toldAt);
 
-        teller.toldAt.get("node").add(new Object());
+        toldAt.get("node").add(new Object());
 
-        assertFalse(before.equals(teller.mark()), "the map has as many entries as it had");
-    }
-
-    @Test
-    void everyFieldIsLookedAtAndNotTheOnesSomebodyNamed() {
-        ATeller teller = new ATeller();
-        Object before = teller.mark();
-
-        teller.forgotten.add(new Object());
-
-        assertFalse(before.equals(teller.mark()));
+        assertFalse(before.equals(ReadingState.snapshotOf(toldAt)),
+                "the map has as many entries as it had");
     }
 
     @Test
@@ -351,14 +330,12 @@ class TheStateOfAReadingIsTakenFromItsPartsTest {
     void theSameThingsHeldInAnotherOrderAreTheSame() {
         Object one = new Object();
         Object other = new Object();
-        ATeller first = new ATeller();
-        first.toldAt.put("node", new HashSet<>(List.of(one, other)));
-        first.toldOn.put("node", new ArrayList<>(List.of(one)));
-        ATeller second = new ATeller();
-        second.toldAt.put("node", new HashSet<>(List.of(other, one)));
-        second.toldOn.put("node", new ArrayList<>(List.of(one)));
+        Map<String, Set<Object>> first = new HashMap<>();
+        first.put("node", new HashSet<>(List.of(one, other)));
+        Map<String, Set<Object>> second = new HashMap<>();
+        second.put("node", new HashSet<>(List.of(other, one)));
 
-        assertEquals(first.mark(), second.mark());
+        assertEquals(ReadingState.snapshotOf(first), ReadingState.snapshotOf(second));
     }
 
     @Test

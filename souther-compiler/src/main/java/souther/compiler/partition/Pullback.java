@@ -547,7 +547,7 @@ final class Pullback {
      * read is no comparison of numbers. Where each answers is where the comparison is read
      * ({@link #whereEachOperatorAnswers}).
      */
-    private final Scoped<Operators> operated = state.guarded();
+    private final Scoped<Operators> operated = state.guardedByItsMark();
     /**
      * Whether what is walked is what the relation being read itself works out, whose divisions the
      * reader of the relation reads: a division is told only where it is not.
@@ -1637,20 +1637,17 @@ final class Pullback {
         List<Derivation> atTheEnds = new ArrayList<>();
         List<Derivation> answers = inAComparisonsScope(true, () -> {
             if (apart == null) {
-                operated.get().within = body;
+                operated.get().readWithin(body);
             }
             operatorsIn(body, reads, apart, ofTheRelation);
             if (apart == null) {
-                operated.get().leftOut = leftOut == null ? null : Core.withoutStanding(leftOut);
+                operated.get().leaveOut(leftOut == null ? null : Core.withoutStanding(leftOut));
                 leaveUnsaidWhatMayEndARunUnder(body, reads, null);
             }
             told[0] = operated.get();
             return whereEachOperatorAnswers(told[0], asked, atTheEnds);
         });
-        return new OperatorsAnswer(bothOf(answers), told[0].unsaidGroups,
-                told[0].unsaidGroupsWhere, told[0].unsaidElsewhere, told[0].obligations,
-                told[0].afterTheFirst, told[0].relationStandsWhere(), asked,
-                bothOf(atTheEnds));
+        return told[0].answer(bothOf(answers), asked, bothOf(atTheEnds));
     }
 
     /** What {@code parts} state together, or nothing where there are none. */
@@ -1727,8 +1724,8 @@ final class Pullback {
         // Applied on no run, its body works nothing out on any. Said only outside every closure:
         // inside one, another application around it may hand it elements.
         if (applications instanceof InputReads.Applications.NoneMade
-                && operated.get().application == null) {
-            operated.get().neverApplied.add(block);
+                && operated.get().application() == null) {
+            operated.get().appliedOnNoRun(block);
             return;
         }
         if (!(applications instanceof InputReads.Applications.Each(var each, var how))
@@ -1736,15 +1733,11 @@ final class Pullback {
                 || each.stream().anyMatch(one -> !one.keptWhere().isEmpty())) {
             return;
         }
-        InputReads.Applications.Made around = operated.get().application;
-        int from = operated.get().told.size();
-        try {
-            for (InputReads.Applications.Made one : each) {
-                operated.get().application = one;
+        int from = operated.get().toldSoFar();
+        for (InputReads.Applications.Made one : each) {
+            try (Restore _ = operated.get().onTheApplication(one)) {
                 operatorsIn(block.body(), one.reads(), apart, ofTheRelation);
             }
-        } finally {
-            operated.get().application = around;
         }
         operated.get().toldOnEach(each, from);
     }
@@ -2079,22 +2072,23 @@ final class Pullback {
      */
     private void leaveUnsaidWhatMayEndARunUnder(Core standing, InputReads reads, Bound bound) {
         Core e = Core.withoutStanding(standing);
-        if (e == operated.get().leftOut) {
-            operated.get().relationIsInside(bound == null ? WorkedOutWhere.ALWAYS : bound.where());
+        Operators operators = operated.get();
+        if (e == operators.leftOut()) {
+            operators.relationIsInside(bound == null ? WorkedOutWhere.ALWAYS : bound.where());
             return;
         }
-        if (operated.get().neverApplied.contains(e)) {
+        if (operators.isAppliedOnNoRun(e)) {
             return;
         }
-        operated.get().readsAt.putIfAbsent(e, reads);
-        boolean told = operated.get().nodes.contains(e) || operated.get().nodes.contains(standing)
+        operators.readAt(e, reads);
+        boolean told = operators.toldWhereverItRuns(e) || operators.toldWhereverItRuns(standing)
                 || (!(e instanceof Core.Construct) && callsMakingWhatTheRelationReads.contains(e));
         GetsPast completion = told ? null : completionOf(e, reads);
         if (!told && !(completion instanceof GetsPast.Always)) {
             WorkedOutWhere where = bound == null ? WorkedOutWhere.ALWAYS : bound.where();
-            operated.get().beginGroup(where);
+            operators.beginGroup(where);
             boolean[] hasOperands = {false};
-            boolean elsewhereBefore = operated.get().unsaidElsewhere;
+            boolean elsewhereBefore = operators.unsaidElsewhere();
             // A quotient or a remainder stops where its divisor is nought, and what it divides is
             // no part of it.
             Core divisor = theDivisorItAloneStopsOn(e);
@@ -2106,26 +2100,21 @@ final class Pullback {
                 leaveUnsaidOverWhatItReads(operand, reads, bound);
             });
             if (!hasOperands[0]) {
-                operated.get().leaveUnsaidOverUnreadOperands();
+                operators.leaveUnsaidOverUnreadOperands();
             }
             // What stops no run is said by its owner, and a place that is not named is not that: an
             // operation nothing says completes, reading no place, may still stop a run on a
             // number no place holds — a divisor that is nought however it is written.
-            if (!owedAProof(completion) && operated.get().unsaidAt.isEmpty()
-                    && operated.get().unsaidElsewhere == elsewhereBefore
+            if (!owedAProof(completion) && operators.noPlaceUnsaidInTheGroup()
+                    && operators.unsaidElsewhere() == elsewhereBefore
                     && !isProvenToComplete(e, divisor, reads)) {
-                operated.get().leaveUnsaidOverUnreadOperands();
+                operators.leaveUnsaidOverUnreadOperands();
             }
-            if (operated.get().within != null && owedAProof(completion)) {
-                operated.get().obligations.add(new StopObligation(e, operated.get().unsaidAt,
-                        operated.get().unsaidElsewhere != elsewhereBefore, completion, operated.get().within,
-                        operated.get().readsAt, where));
-                operated.get().unsaidAt.clear();
-                operated.get().unsaidElsewhere = elsewhereBefore;
-                operated.get().startAgain();
+            if (operators.owesWithin() && owedAProof(completion)) {
+                operators.owe(e, elsewhereBefore, completion, where);
             }
         }
-        WhatTheStepsNamesHold around = operated.get().stepsNames;
+        WhatTheStepsNamesHold around = operators.stepsNames();
         SeededWalk walk = e instanceof Core.PreservedCall call
                 ? SeededWalk.enteredHoweverFar(call, blocksAt(new Denotation(call, reads))) : null;
         KeyedAccumulation filed = walk == null ? null
@@ -2133,16 +2122,15 @@ final class Pullback {
         Function<Core, WhatTheStepsNamesHold> under = child -> walk != null
                 ? around.inTheWalk(walk.step(), filed, child)
                 : around.under(e, child);
-        try {
-            // What a child is read in is the scope's own answer ({@link ScopeStep}), for every
-            // step but the names this walk accounts for itself: a closure's parameters
-            // ({@link #boundInside}). The same answer is asked where the operand a number is made
-            // of is read ({@link #leaveUnsaidOverWhereItStands}), so a name an arm binds is read
-            // in one world whichever walk meets it.
-            BiConsumer<Core, ScopeStep> visit = (child, step) -> {
-                operated.get().stepsNames = under.apply(child);
-                InputReads within = reads;
-                Bound inside = bound;
+        // What a child is read in is the scope's own answer ({@link ScopeStep}), for every
+        // step but the names this walk accounts for itself: a closure's parameters
+        // ({@link #boundInside}). The same answer is asked where the operand a number is made
+        // of is read ({@link #leaveUnsaidOverWhereItStands}), so a name an arm binds is read
+        // in one world whichever walk meets it.
+        BiConsumer<Core, ScopeStep> visit = (child, step) -> {
+            InputReads within = reads;
+            Bound inside = bound;
+            try (Restore _ = operators.withTheStepsNames(under.apply(child))) {
                 if (Core.withoutStanding(child) instanceof Core.Block block) {
                     inside = boundInside(e, block, reads, bound);
                 } else if (!(step instanceof ScopeStep.Block)) {
@@ -2154,14 +2142,12 @@ final class Pullback {
                 } else {
                     leaveUnsaidWhatMayEndARunUnder(child, within, inside);
                 }
-            };
-            if (e instanceof Core.IfConstructed attempt) {
-                WhatARunMayEndFor.forEachWorkedOut(attempt, visit);
-            } else {
-                ScopeStep.forEachChild(e, visit);
             }
-        } finally {
-            operated.get().stepsNames = around;
+        };
+        if (e instanceof Core.IfConstructed attempt) {
+            WhatARunMayEndFor.forEachWorkedOut(attempt, visit);
+        } else {
+            ScopeStep.forEachChild(e, visit);
         }
     }
 
@@ -2189,7 +2175,7 @@ final class Pullback {
         }
         OperatorsAnswer afterIt = rest.leftUnsaid();
         if (!afterIt.leavesNothingUnsaid()) {
-            first.afterTheFirst.add(new AfterTheFirst(walk.container(), reads, afterIt));
+            first.afterTheFirst(new AfterTheFirst(walk.container(), reads, afterIt));
         }
     }
 
@@ -2622,7 +2608,7 @@ final class Pullback {
      */
     private FormRange exactRangeOfAName(BindingId name, InputReads reads,
                                         Map<BindingId, RangeOfAName> known) {
-        FormRange ofAStep = operated.get().stepsNames.of(name);
+        FormRange ofAStep = operated.get().stepsNames().of(name);
         if (ofAStep != null) {
             return ofAStep;
         }
@@ -2713,7 +2699,7 @@ final class Pullback {
                     }
                 });
             }
-            if (!others.unsaidElsewhere && (outer == null || outer.standFor() != null)) {
+            if (!others.unsaidElsewhere() &&(outer == null || outer.standFor() != null)) {
                 standFor = others.everyPlaceUnsaid();
                 if (outer != null) {
                     standFor.addAll(outer.standFor());
@@ -2892,7 +2878,7 @@ final class Pullback {
      * they stand for nothing this can name; and where a part inside them is worked out
      * ({@link #containersTheClosureIsAppliedOver}).
      */
-    private record Bound(Set<BindingId> names, Set<TermPath> standFor, WorkedOutWhere where) {}
+    record Bound(Set<BindingId> names, Set<TermPath> standFor, WorkedOutWhere where) {}
 
     /**
      * Where a part is worked out: only where, for each set of {@code oneHolds}, one of its
@@ -2979,7 +2965,7 @@ final class Pullback {
             return;
         }
         switch (reads.pathOf(operand, read.rules().newtypes())) {
-            case ValuesAt.At(TermPath path) -> operated.get().unsaidAt.add(path);
+            case ValuesAt.At(TermPath path) -> operated.get().unsaidAt(path);
             default -> {
                 // A value made from positions stands at none, and is as much theirs: it stops a
                 // run on what they hold. So does a name that may stand at one of several places,
@@ -2987,7 +2973,7 @@ final class Pullback {
                 // is made of as well: where it came from says every one.
                 MadeFrom made = reads.cameFrom(operand, read.rules().newtypes());
                 if (!(made instanceof MadeFrom.FromNothing)) {
-                    operated.get().unsaidAt.addAll(made.places());
+                    operated.get().unsaidAtEach(made.places());
                     return;
                 }
                 // A name an arm of a match, an attempt or a let binds stands for what the value it
@@ -3163,37 +3149,65 @@ final class Pullback {
     static final class Trial implements ReadingState.Marked {
 
         /**
-         * What the candidate has said so far, which is the same only while it has said no more.
-         * Taken once for as long as it says nothing: a reading asks after it far more often than
-         * the candidate says anything.
+         * How many times the candidate has said something besides the remainders it read, and how
+         * many times it read a remainder. Every way of saying something counts in one of them, so
+         * what the candidate has said is the same while neither moves.
          */
-        @Override
-        public Object mark() {
-            Object held = marked;
-            if (held == null) {
-                held = ReadingState.snapshotOfFieldsBut(this, Set.of(MARKED));
-                marked = held;
+        private long said;
+        private long remaindersSaid;
+
+        /** What a candidate has said, compared by the very candidate and the two counts. */
+        private record Said(Trial by, long besides, long remainders) {
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof Said that && that.by == by && that.besides == besides
+                        && that.remainders == remainders;
             }
-            return held;
+
+            @Override
+            public int hashCode() {
+                return (System.identityHashCode(by) * 31 + Long.hashCode(besides)) * 31
+                        + Long.hashCode(remainders);
+            }
         }
 
-        /** The name of {@link #marked}, which is no part of what the candidate has said. */
-        private static final String MARKED = "marked";
+        /** What a candidate has said besides the remainders it read, where it has said
+         *  anything. */
+        private record SaidBesides(Trial by, long besides) {
 
-        /** {@link #mark} as it was taken, or null where the candidate has said something since.
-         *  Every way of saying something puts it back to null. */
-        private Object marked;
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof SaidBesides that && that.by == by
+                        && that.besides == besides;
+            }
+
+            @Override
+            public int hashCode() {
+                return System.identityHashCode(by) * 31 + Long.hashCode(besides);
+            }
+        }
+
+        /** What every candidate that has said nothing besides the remainders it read has said:
+         *  one candidate is as good as another for that. */
+        private static final Object NOTHING_BESIDES = new Object();
+
+        /** What the candidate has said so far, which is the same only while it has said no more. */
+        @Override
+        public Object mark() {
+            return new Said(this, said, remaindersSaid);
+        }
 
         /** What the rows of the comparison get past is {@code told}. */
         void says(UndividedByARelation.Working told) {
-            marked = null;
+            said++;
             working = told;
         }
 
         /** The expressions the rule reads the comparison again with each value of are those
          *  {@code answers} holds for. */
         void answersFor(Predicate<Core> answers) {
-            marked = null;
+            said++;
             answersFor = answers;
         }
 
@@ -3230,7 +3244,7 @@ final class Pullback {
         // them: most say nothing, and an identity map holds a table before it holds anything.
 
         void readByTheFormOf(Core call, Core dividend) {
-            marked = null;
+            remaindersSaid++;
             if (readByTheFormOf == null) {
                 readByTheFormOf = new IdentityHashMap<>();
             }
@@ -3244,11 +3258,12 @@ final class Pullback {
         /**
          * What the candidate has said but for the remainders it read, which a remainder taken again
          * says again ({@link Pullback#remainderAt}): a reading that said anything else is not one
-         * to take from another.
+         * to take from another. The same for every candidate that has said nothing else, and
+         * otherwise the same only for this candidate while it says nothing more: what another
+         * candidate said is not compared with it.
          */
         Object markBesidesTheRemainders() {
-            return ReadingState.snapshotOfFieldsBut(this,
-                    Set.of("readByTheFormOf", "dividendBesideTheRows", MARKED));
+            return said == 0 ? NOTHING_BESIDES : new SaidBesides(this, said);
         }
 
         /** The remainders read so far, as two tables apart from the candidate's own. */
@@ -3261,7 +3276,7 @@ final class Pullback {
         }
 
         void dividendBesideTheRows(Core call, Core dividend) {
-            marked = null;
+            remaindersSaid++;
             if (dividendBesideTheRows == null) {
                 dividendBesideTheRows = new IdentityHashMap<>();
             }
@@ -3273,7 +3288,7 @@ final class Pullback {
         }
 
         void landsInAMonth(Core node, UndividedByARelation.IntOperation count) {
-            marked = null;
+            said++;
             if (landsInAMonth == null) {
                 landsInAMonth = new IdentityHashMap<>();
             }
@@ -3285,7 +3300,7 @@ final class Pullback {
         }
 
         void restatedAs(Supplier<UndividedByARelation.Working> working) {
-            marked = null;
+            said++;
             if (restated == null) {
                 restated = new ArrayList<>();
             }
@@ -3295,11 +3310,11 @@ final class Pullback {
         /** What the rule worked out of each comparison it read the written one as; none where it
          *  read it as none. */
         List<Supplier<UndividedByARelation.Working>> restated() {
-            return restated == null ? List.of() : restated;
+            return restated == null ? List.of() : Collections.unmodifiableList(restated);
         }
 
         void readOnAnArm(ArmRead read, OnThisArm arm) {
-            marked = null;
+            said++;
             if (onTheArms == null) {
                 onTheArms = new LinkedHashMap<>();
             }
@@ -3309,7 +3324,8 @@ final class Pullback {
         /** What runs taking the arms {@code read} was read on work out there; none where it was
          *  read on no arm. */
         List<OnThisArm> onTheArms(ArmRead read) {
-            return onTheArms == null ? List.of() : onTheArms.getOrDefault(read, List.of());
+            return onTheArms == null ? List.of()
+                    : Collections.unmodifiableList(onTheArms.getOrDefault(read, List.of()));
         }
 
         /** Whether {@code step} is what the answer of an arm of a choice this candidate read was
@@ -3319,7 +3335,7 @@ final class Pullback {
         }
 
         void tell(Relation relation, UndividedByARelation.Working told) {
-            marked = null;
+            said++;
             if (relations == null) {
                 relations = new LinkedHashMap<>();
             }
@@ -9459,234 +9475,6 @@ final class Pullback {
     }
 
     /**
-     * The operators a reading was told of, in the order it was told, each node once for each
-     * application of the closures it is written in.
-     *
-     * <p>Told apart by which node each is and not by the form it came to. An {@code Int} sum and a
-     * {@code Decimal} sum over the same numbers come to one form and answer in different places,
-     * and the form alone would keep whichever came first. A node in the body of a closure is one
-     * operator on each application, worked out over what that application is handed, so the node
-     * alone would keep only the first.
-     */
-    private static final class Operators implements ReadingState.Marked {
-        private final List<Operated> told = new ArrayList<>();
-        /** The nodes told of wherever a run works them out: on every application of the closures
-         *  around them, where there are any. */
-        private final Set<Core> nodes = Collections.newSetFromMap(new IdentityHashMap<>());
-        /** For a node inside a closure, the applications it was told of on. */
-        private final Map<Core, Set<InputReads.Applications.Made>> toldOn = new IdentityHashMap<>();
-        /** The application being read, or null outside every closure. */
-        private InputReads.Applications.Made application;
-        /** The closures no run applies ({@link InputReads.Applications.NoneMade}), whose bodies
-         *  stop no run. */
-        private final Set<Core> neverApplied = Collections.newSetFromMap(new IdentityHashMap<>());
-        /** What the names of the step of a walk around hold, where the walk of what may end a run
-         *  stands now ({@link WhatTheStepsNamesHold}). */
-        private WhatTheStepsNamesHold stepsNames = WhatTheStepsNamesHold.NOTHING;
-        private final List<Set<TermPath>> unsaidGroups = new ArrayList<>();
-        /** For each of {@link #unsaidGroups}, where its operator is worked out. */
-        private final List<WorkedOutWhere> unsaidGroupsWhere = new ArrayList<>();
-        private Set<TermPath> unsaidAt = new LinkedHashSet<>();
-        private boolean unsaidElsewhere;
-        private final List<StopObligation> obligations = new ArrayList<>();
-        private final List<AfterTheFirst> afterTheFirst = new ArrayList<>();
-        private final Map<Core, InputReads> readsAt = new IdentityHashMap<>();
-        private Core within;
-        private Core leftOut;
-
-        /** Where the comparison left out is worked out, as the closures it stands inside say, or
-         *  null while the walk has not got to it. */
-        private WorkedOutWhere relationStands;
-
-        Operators() {
-            unsaidGroups.add(unsaidAt);
-            unsaidGroupsWhere.add(WorkedOutWhere.ALWAYS);
-        }
-
-        /** The walk got to the comparison left out, worked out where {@code inside} says. */
-        void relationIsInside(WorkedOutWhere inside) {
-            relationStands = relationStands == null ? inside : relationStands.and(inside);
-        }
-
-        /**
-         * Where a run works out the comparison: anywhere where none is left out of the part read;
-         * where its closures say where the walk got to it; and not said where one is left out and
-         * the walk did not get to it.
-         */
-        WorkedOutWhere relationStandsWhere() {
-            if (leftOut == null) {
-                return WorkedOutWhere.ALWAYS;
-            }
-            return relationStands == null ? WorkedOutWhere.ALWAYS.notSaid() : relationStands;
-        }
-
-        /**
-         * The operators of the applications of a step after the first, as this has told of them:
-         * the same operators told and the same closures applied to nothing, read in the same tree,
-         * with nothing yet left unsaid or owed.
-         */
-        Operators ofTheApplicationsAfterTheFirst() {
-            Operators out = new Operators();
-            out.told.addAll(told);
-            out.nodes.addAll(nodes);
-            out.toldOn.putAll(toldOn);
-            out.application = application;
-            out.neverApplied.addAll(neverApplied);
-            out.stepsNames = stepsNames;
-            out.within = within;
-            out.leftOut = leftOut;
-            return out;
-        }
-
-        /** What is left unsaid and owed here, with nothing told of where an operator answers. */
-        OperatorsAnswer leftUnsaid() {
-            return new OperatorsAnswer(Optional.empty(), unsaidGroups, unsaidGroupsWhere,
-                    unsaidElsewhere, obligations, afterTheFirst, relationStandsWhere(), List.of(),
-                    Optional.empty());
-        }
-
-        /** What has been told so far, which is the same only while nothing more has. */
-        @Override
-        public Object mark() {
-            return ReadingState.snapshotOfFields(this);
-        }
-
-        void tell(Core operation, Answers where) {
-            boolean first = application == null ? nodes.add(operation)
-                    : toldOn.computeIfAbsent(operation,
-                            _ -> Collections.newSetFromMap(new IdentityHashMap<>()))
-                            .add(application);
-            if (first) {
-                told.add(new Operated(operation, where));
-            }
-        }
-
-        /**
-         * That {@code each}, the applications of one closure, were read, telling what is in
-         * {@link #told} from {@code from} on: a node of its body told of on every one of them is
-         * told of on the application around them, or wherever a run works it out where there is
-         * none.
-         *
-         * <p>Only the nodes told of while they were read are asked. Every node told of on one of
-         * them was told there first on that application, and so is among those.
-         */
-        void toldOnEach(List<InputReads.Applications.Made> each, int from) {
-            Set<InputReads.Applications.Made> all = Collections.newSetFromMap(
-                    new IdentityHashMap<>());
-            all.addAll(each);
-            Set<Core> asked = Collections.newSetFromMap(new IdentityHashMap<>());
-            for (Operated one : told.subList(from, told.size())) {
-                Set<InputReads.Applications.Made> on = toldOn.get(one.operation());
-                if (asked.add(one.operation()) && on != null && on.containsAll(all)) {
-                    if (application == null) {
-                        nodes.add(one.operation());
-                    } else {
-                        on.add(application);
-                    }
-                }
-            }
-        }
-
-        /** What the next operator not said of may stop a run on is one group of places: it ties
-         *  them to one another, which what another operator stops a run on does not. */
-        void beginGroup() {
-            beginGroup(WorkedOutWhere.ALWAYS);
-        }
-
-        /** The same, of an operator a run works out where {@code where} says. */
-        void beginGroup(WorkedOutWhere where) {
-            unsaidAt = new LinkedHashSet<>();
-            unsaidGroups.add(unsaidAt);
-            unsaidGroupsWhere.add(where);
-            visited.clear();
-        }
-
-        /** What a run may stop on, told over a value read at one reading and under one closure's
-         *  names, since the group began: telling it again says nothing more. */
-        private final Set<Visit> visited = new HashSet<>();
-
-        private record Visit(Core node, InputReads reads, Bound bound) {
-
-            @Override
-            public boolean equals(Object other) {
-                return other instanceof Visit that && node == that.node && bound == that.bound
-                        && reads.equals(that.reads);
-            }
-
-            @Override
-            public int hashCode() {
-                return (System.identityHashCode(node) * 31 + reads.hashCode()) * 31
-                        + System.identityHashCode(bound);
-            }
-        }
-
-        /**
-         * Whether what a run may stop on over {@code operand} has not been told yet in this group.
-         * A value several names stand for, or several operands of an operator are made of, is
-         * told once and not once for every way down to it.
-         */
-        boolean firstOverWhereItStands(Core operand, InputReads reads, Bound bound) {
-            return visited.add(new Visit(Core.withoutStanding(operand), reads, bound));
-        }
-
-        /** What was told is taken back out of the group it was told in. */
-        void startAgain() {
-            visited.clear();
-        }
-
-        /** Every place any operator not said of may stop a run on. */
-        Set<TermPath> everyPlaceUnsaid() {
-            Set<TermPath> out = new LinkedHashSet<>();
-            unsaidGroups.forEach(out::addAll);
-            return out;
-        }
-
-        /** An operator that may stop a run where nothing is said, over {@code reads}: the places
-         *  each of them is read off are the ones it may stop on, a remainder's those of its
-         *  dividend ({@link PositionsAStatementReads#ofANumber}), and a quantity read off
-         *  anything else leaves it stopping on no place this can name. */
-        void leaveUnsaid(Collection<? extends Quantity> reads, Bound bound) {
-            leaveUnsaid(reads, bound, null);
-        }
-
-        /** The same, where a name another name was given is the name it was given, read in
-         *  {@code at}. */
-        void leaveUnsaid(Collection<? extends Quantity> reads, Bound bound, InputReads at) {
-            for (Quantity each : reads) {
-                Optional<Set<ReadSubject>> read = PositionsAStatementReads.ofANumber(each);
-                if (read.isEmpty()) {
-                    unsaidElsewhere = true;
-                    continue;
-                }
-                for (ReadSubject subject : read.get()) {
-                    switch (subject) {
-                        case ReadSubject.At(TermPath path) -> unsaidAt.add(path);
-                        case ReadSubject.Bound(var named) ->
-                                leaveUnsaidOver(at != null && bound != null
-                                        && !bound.names().contains(named.binding())
-                                        ? at.namedBy(named.binding()) : named.binding(), bound);
-                    }
-                }
-            }
-        }
-
-        /** The same, over a name: the places of what a closure around binds it to where it is a
-         *  name of one, and no place this can name where it is not. */
-        void leaveUnsaidOver(BindingId name, Bound bound) {
-            if (bound != null && bound.standFor() != null && bound.names().contains(name)) {
-                unsaidAt.addAll(bound.standFor());
-            } else {
-                unsaidElsewhere = true;
-            }
-        }
-
-        /** An operator that may stop a run where nothing is said, over operands no form says. */
-        void leaveUnsaidOverUnreadOperands() {
-            unsaidElsewhere = true;
-        }
-    }
-
-    /**
      * What the operators a run works out answer, and which of them answer nothing here.
      *
      * @param answers         where each of the operators said answers, or empty where none is
@@ -9862,7 +9650,7 @@ final class Pullback {
 
     /** One operator a reading was told of, and where it answers, which the reading that met it
      *  says once. */
-    private record Operated(Core operation, Answers where) {}
+    record Operated(Core operation, Answers where) {}
 
     /**
      * Where an operator a reading was told of answers.
@@ -9874,7 +9662,7 @@ final class Pullback {
      * no form at all, where the number it comes to is held to what it needs by the operation that
      * made it.
      */
-    private sealed interface Answers {
+    sealed interface Answers {
 
         /** Where the operator answers is a matter of a form of a number. */
         sealed interface ByTheFormOfANumber extends Answers {
@@ -9955,7 +9743,7 @@ final class Pullback {
                                                       List<ConstructionAsk> asked,
                                                       List<Derivation> atTheEnds) {
         List<Derivation> out = new ArrayList<>();
-        for (Operated each : operators.told) {
+        for (Operated each : operators.told()) {
             if (each.where() instanceof Answers.OfAChoice(var on)) {
                 Derivation answers = whereItStands(on);
                 if (answers != null) {
