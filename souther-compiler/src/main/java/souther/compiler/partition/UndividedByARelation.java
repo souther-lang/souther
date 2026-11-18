@@ -12791,16 +12791,27 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * Whether the values of {@code type}, as far as its rules leave them, are more than a
-     * container counts: those with no end, and a date, a date and time or an instant, whose ends
-     * are further apart than the sizes a container has.
+     * container holds ({@link GetsPast#MOST_ELEMENTS}): those with no end, and those of an order
+     * that counts more of them between where it stops than that, as its spacing counts them
+     * ({@link Carrier#whereItStops}). Asked of the order and not of which type it is: a date has
+     * days past any container's size, and a time of day the seconds of one day, which a container
+     * holds.
      */
     private static boolean moreThanAContainerCounts(Type type, InputReading read) {
-        RuleReadingSource rules = read.rules();
-        return withoutEnd(type, read)
-                || (TypeView.shapeOf(type, rules.inners(), rules.symbols(), rules.kinds(),
-                        rules.sums()) instanceof Shape.Scalar(Type.Prim prim)
-                && (prim == Type.Prim.DATE || prim == Type.Prim.DATETIME
-                        || prim == Type.Prim.INSTANT));
+        if (withoutEnd(type, read)) {
+            return true;
+        }
+        Carrier order = Carrier.ofValue(type, read.rules().declarations());
+        if (order == null) {
+            return false;
+        }
+        if (order.spacing() != Granularity.DISCRETE) {
+            return true;
+        }
+        WholeEnds ends = wholeEndsOf(order.whereItStops());
+        return ends == null || ends.low() == null || ends.high() == null
+                || ends.high().subtract(ends.low()).add(BigInteger.ONE)
+                        .compareTo(GetsPast.MOST_ELEMENTS) > 0;
     }
 
     /**
