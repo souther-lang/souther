@@ -46,8 +46,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
 
-    private static final int MOST = CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION.maximum();
-
     /** A figure a compilation may be held to, which a chain of five calls is past. */
     private static final int NARROW = 14;
 
@@ -59,8 +57,6 @@ class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
     private static int within(int most) {
         return 31 - Integer.numberOfLeadingZeros(most + 2);
     }
-
-    private static final int WITHIN = within(MOST);
 
     private static final int WITHIN_NARROW = within(NARROW);
 
@@ -115,10 +111,6 @@ class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
     /** Each chain read once, for every test asking about it. */
     private static final Map<Chain, Read> READ = new ConcurrentHashMap<>();
 
-    private static Read read(int calls) {
-        return read(calls, MOST);
-    }
-
     private static Read read(int calls, int most) {
         return READ.computeIfAbsent(new Chain(calls, most),
                 ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest::readAnew);
@@ -159,18 +151,8 @@ class ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest {
                 .max().orElseThrow();
     }
 
-    /** The figure itself is asked at the declared one, here and nowhere else: the first chain past
-     *  it. The claims about a figure are held at a narrower one, below. */
-    @Test
-    void oneCallMoreGivesTheLastConditionsUpAtTheFigure() {
-        Read past = read(WITHIN + 1);
-
-        assertTrue(past.stated().stream()
-                        .anyMatch(ACaseChainIsReadNoFurtherInAllThanOneConditionIsReadTest::givenUpAtTheTotal),
-                "the conditions of the last call are read more times in all than are made");
-    }
-
-    /** The same claims at a figure of {@value #NARROW}, held for a compilation. */
+    /** The claims at a figure of {@value #NARROW}, held for a compilation: the figure is handed
+     *  in, so what is shown at it is shown at whichever figure a compilation is held to. */
     @Test
     void withinANarrowerFigureNoConditionIsGivenUpForIt() {
         for (Proposition stated : read(WITHIN_NARROW, NARROW).stated()) {
