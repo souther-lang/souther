@@ -124,9 +124,23 @@ class ALedgerSaysWhichHistoryItStandsAtTest {
         assertThrows(NullPointerException.class,
                 () -> new Ledger.Keyed<String, String>().putIfAbsent("k", null));
         assertThrows(NullPointerException.class,
-                () -> new Ledger.Grouped<String, String>().add("k", null));
-        assertThrows(NullPointerException.class,
                 () -> new Ledger.OfEntries<String>().add(null));
+    }
+
+    /** A null refused under a key nothing is under yet leaves no key behind, which no checkpoint
+     *  would take off. */
+    @Test
+    void aGroupedLedgerRefusedANullIsAsItWas() {
+        Ledger.Grouped<String, String> ledger = new Ledger.Grouped<>();
+        Object before = ledger.mark();
+        Ledger.Checkpoint checkpoint = ledger.checkpoint();
+
+        assertThrows(NullPointerException.class, () -> ledger.add("k", null));
+
+        assertEquals(before, ledger.mark());
+        assertTrue(ledger.keys().isEmpty());
+        ledger.rewind(checkpoint);
+        assertTrue(ledger.keys().isEmpty());
     }
 
     @Test

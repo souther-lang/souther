@@ -213,9 +213,9 @@ abstract sealed class Ledger implements ReadingState.Marked
         private final List<K> order = new ArrayList<>();
 
         void add(K key, V value) {
-            held.computeIfAbsent(Objects.requireNonNull(key, "a key is something put"),
-                    _ -> new ArrayList<>()).add(Objects.requireNonNull(value,
-                    "a value is something added"));
+            Objects.requireNonNull(key, "a key is something put");
+            Objects.requireNonNull(value, "a value is something added");
+            held.computeIfAbsent(key, _ -> new ArrayList<>()).add(value);
             order.add(key);
             added();
         }

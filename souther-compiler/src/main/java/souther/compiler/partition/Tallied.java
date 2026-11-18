@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -21,9 +22,16 @@ import java.util.function.Supplier;
  *
  * <p>The count moves because the thing changed and not because whoever changed it remembered to
  * move it: an object holding its state in these cannot change without its mark moving. What they
- * hand out cannot be changed through. An object made of these says so of every field it has
- * ({@link InTheMark} for the few that are set for an extent and are in the mark as they are),
- * which a test asks of each.
+ * hand out cannot be changed through.
+ *
+ * <p>Whether something changed is read off what the collection answers, so the collections hold
+ * no null: an answer of null is then only ever an absence. A part held inside another counts into
+ * the same count, and one of another count is refused where it is put in, so a change inside it
+ * moves the mark of whoever holds it. Each operation checks what it is handed before it changes
+ * anything, so one that is refused leaves the part as it was.
+ *
+ * <p>An object made of these says so of every field it has ({@link InTheMark} for the few that
+ * are set for an extent and are in the mark as they are), which a test asks of each.
  */
 final class Tallied {
 
@@ -34,6 +42,11 @@ final class Tallied {
     @Retention(RetentionPolicy.RUNTIME)
     @Target(ElementType.FIELD)
     @interface InTheMark {}
+
+    /** A part, which counts every change made to it into {@link #changes}. */
+    sealed interface Part permits Value, Group, Sequence, Table {
+        Changes changes();
+    }
 
     /** The count of changes shared by everything made from it. */
     static final class Changes {
@@ -49,8 +62,18 @@ final class Tallied {
             count++;
         }
 
+        /** {@code held}, which may be put inside a part of this count: anything but a part of
+         *  another count. */
+        private <T> T ownPart(T held) {
+            if (held instanceof Part part && part.changes() != this) {
+                throw new IllegalArgumentException(
+                        "a part counted into another count, whose changes this would not see");
+            }
+            return held;
+        }
+
         <T> Value<T> value(T initial) {
-            return new Value<>(this, initial);
+            return new Value<>(this, ownPart(initial));
         }
 
         /** A set, held in what {@code made} makes when the first member is put in. */
@@ -68,8 +91,9 @@ final class Tallied {
         }
     }
 
-    /** A value, changed where another object is put in its place. */
-    static final class Value<T> {
+    /** A value, changed where another object is put in its place. Null where there is none: it
+     *  is compared as the very object, which a null is as well as anything. */
+    static final class Value<T> implements Part {
         private final Changes changes;
         private T held;
 
@@ -78,11 +102,17 @@ final class Tallied {
             this.held = held;
         }
 
+        @Override
+        public Changes changes() {
+            return changes;
+        }
+
         T get() {
             return held;
         }
 
         void set(T value) {
+            changes.ownPart(value);
             if (value != held) {
                 held = value;
                 changes.moved();
@@ -91,7 +121,7 @@ final class Tallied {
     }
 
     /** Members, changed where one is put in or they are emptied. */
-    static final class Group<E> {
+    static final class Group<E> implements Part {
         private final Changes changes;
         private final Supplier<Set<E>> made;
         private Set<E> held;
@@ -101,8 +131,14 @@ final class Tallied {
             this.made = made;
         }
 
+        @Override
+        public Changes changes() {
+            return changes;
+        }
+
         /** Puts {@code member} in, and answers whether it was not in already. */
         boolean add(E member) {
+            changes.ownPart(Objects.requireNonNull(member, "a member is something put in"));
             if (held == null) {
                 held = made.get();
             }
@@ -145,7 +181,7 @@ final class Tallied {
     }
 
     /** Entries in the order they were added, changed where one is added. */
-    static final class Sequence<E> {
+    static final class Sequence<E> implements Part {
         private final Changes changes;
         /** Made when the first entry is added. */
         private List<E> held;
@@ -154,7 +190,13 @@ final class Tallied {
             this.changes = changes;
         }
 
+        @Override
+        public Changes changes() {
+            return changes;
+        }
+
         void add(E entry) {
+            changes.ownPart(Objects.requireNonNull(entry, "an entry is something added"));
             if (held == null) {
                 held = new ArrayList<>();
             }
@@ -184,7 +226,7 @@ final class Tallied {
     }
 
     /** Values under keys, changed where a key is put in or what is under one is replaced. */
-    static final class Table<K, V> {
+    static final class Table<K, V> implements Part {
         private final Changes changes;
         private final Supplier<Map<K, V>> made;
         private Map<K, V> held;
@@ -194,11 +236,22 @@ final class Tallied {
             this.made = made;
         }
 
+        @Override
+        public Changes changes() {
+            return changes;
+        }
+
         private Map<K, V> held() {
             if (held == null) {
                 held = made.get();
             }
             return held;
+        }
+
+        /** {@code key} and {@code value}, each something that can be put in here. */
+        private void puttable(K key, V value) {
+            Objects.requireNonNull(key, "a key is something put");
+            changes.ownPart(Objects.requireNonNull(value, "a value is something put"));
         }
 
         V get(Object key) {
@@ -210,6 +263,7 @@ final class Tallied {
         }
 
         void put(K key, V value) {
+            puttable(key, value);
             if (held().put(key, value) != value) {
                 changes.moved();
             }
@@ -217,6 +271,7 @@ final class Tallied {
 
         /** Puts {@code value} under {@code key} where nothing is, and answers whether it did. */
         boolean putIfAbsent(K key, V value) {
+            puttable(key, value);
             if (held().putIfAbsent(key, value) != null) {
                 return false;
             }
@@ -226,7 +281,7 @@ final class Tallied {
 
         /** What is under {@code key}, made by {@code making} and put there where nothing is. */
         V computeIfAbsent(K key, Function<? super K, ? extends V> making) {
-            V had = get(key);
+            V had = get(Objects.requireNonNull(key, "a key is something put"));
             if (had != null) {
                 return had;
             }
