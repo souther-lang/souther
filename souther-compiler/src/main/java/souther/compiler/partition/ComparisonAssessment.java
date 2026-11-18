@@ -206,13 +206,19 @@ sealed interface ComparisonAssessment {
         }
 
         /** The same, with what it leaves its places over the rows that arrive along
-         *  {@code ways}. The lines parting the settling values are drawn again only where the
-         *  values settling it are not the ones already drawn. */
-        AcrossPositions whereRowsArrive(InputReading reading,
-                                        List<Reachability.Reaching> ways,
-                                        ComparisonWitnesses.AtAComparison witnesses) {
+         *  {@code ways} — or that nothing arrives at its line, where what the relation reads of
+         *  those ways shows no row comes along any of them
+         *  ({@link UndividedByARelation.WhatItLeaves#rowsArrive}). The lines parting the settling
+         *  values are drawn again only where the values settling it are not the ones already
+         *  drawn. */
+        ComparisonAssessment whereRowsArrive(InputReading reading,
+                                             List<Reachability.Reaching> ways,
+                                             ComparisonWitnesses.AtAComparison witnesses) {
             UndividedByARelation.WhatItLeaves arriving =
                     relation.leftWhereRowsArrive(reading, ways, witnesses);
+            if (!arriving.rowsArrive()) {
+                return new NothingArrivesAtItsLine(cutting);
+            }
             return arriving.settled().equals(left.settled())
                     ? new AcrossPositions(cutting, at, places, relation, arriving, settling,
                             authored)
@@ -412,21 +418,46 @@ sealed interface ComparisonAssessment {
         static AgainstAnotherValue of(Cutting.Read.AgainstAnotherValue read,
                                       InputReading reading, Optional<DrawnBeside> beside,
                                       ComparisonWitnesses.AtAComparison witnesses) {
-            return new AgainstAnotherValue(read.over(), read.relations(), Set.of(), List.of(),
-                    beside, Map.of(), Map.of(), Set.of(), Map.of(), Map.of(), Map.of())
-                    .whereRowsArrive(reading, List.of(), witnesses);
+            AgainstAnotherValue bare = new AgainstAnotherValue(read.over(), read.relations(),
+                    Set.of(), List.of(), beside, Map.of(), Map.of(), Set.of(), Map.of(), Map.of(),
+                    Map.of());
+            return bare.leaving(bare.leftWhereRowsArrive(reading, List.of(), witnesses), reading,
+                    witnesses);
         }
 
-        /** The same, with what it leaves undivided over the rows that arrive along {@code ways}. */
-        AgainstAnotherValue whereRowsArrive(InputReading reading,
-                                            List<Reachability.Reaching> ways,
+        /**
+         * The same, with what it leaves undivided over the rows that arrive along {@code ways} —
+         * or that nothing arrives at its relation, where what a relation of it reads of those
+         * ways shows no row comes along any of them
+         * ({@link UndividedByARelation.WhatItLeaves#rowsArrive}). The relations are of one
+         * comparison, reached along the same ways, so one showing no row comes along shows it
+         * of them all.
+         */
+        ComparisonAssessment whereRowsArrive(InputReading reading,
+                                             List<Reachability.Reaching> ways,
+                                             ComparisonWitnesses.AtAComparison witnesses) {
+            List<UndividedByARelation.WhatItLeaves> leaves =
+                    leftWhereRowsArrive(reading, ways, witnesses);
+            return leaves.stream().anyMatch(each -> !each.rowsArrive())
+                    ? new NothingArrivesAtItsRelation(filedAt)
+                    : leaving(leaves, reading, witnesses);
+        }
+
+        /** What each relation leaves its places over the rows that arrive along {@code ways}, in
+         *  the order of the relations. */
+        private List<UndividedByARelation.WhatItLeaves> leftWhereRowsArrive(
+                InputReading reading, List<Reachability.Reaching> ways,
+                ComparisonWitnesses.AtAComparison witnesses) {
+            return relations.stream()
+                    .map(each -> each.leftWhereRowsArrive(reading, ways, witnesses)).toList();
+        }
+
+        /** This, with what each relation leaves its places, {@code leaves}, in their order. */
+        private AgainstAnotherValue leaving(List<UndividedByARelation.WhatItLeaves> leaves,
+                                            InputReading reading,
                                             ComparisonWitnesses.AtAComparison witnesses) {
-            List<Set<FilingCoordinate>> about = new ArrayList<>();
-            List<UndividedByARelation.WhatItLeaves> leaves = new ArrayList<>();
-            for (UndividedByARelation each : relations) {
-                about.add(each.places());
-                leaves.add(each.leftWhereRowsArrive(reading, ways, witnesses));
-            }
+            List<Set<FilingCoordinate>> about = relations.stream()
+                    .map(UndividedByARelation::places).toList();
             Set<FilingCoordinate> shown = new LinkedHashSet<>();
             for (FilingCoordinate at : filedAt) {
                 boolean said = false;
@@ -1910,21 +1941,31 @@ sealed interface ComparisonAssessment {
             ComparisonAssessment read = arrived instanceof AcrossPositions across
                     && !along.isEmpty() ? across.whereRowsArrive(reading, along, witnesses)
                     : arrived;
-            // Read only of what an arm of a choice answers, which is all a reader joins
-            // ({@link Several#shownByItsArms}).
-            // And beside it, how many ways each case asked that was worked out all the same stood
-            // for, where their number was more than are taken apart: what asking them cost, for an
-            // author to find where the model is dear to read.
-            List<CaseExpansion.Counted> walked = new ArrayList<>();
-            for (CasesOfALineAsked.WalkedPast each : found.walkedPast()) {
-                walked.add(new CaseExpansion.Counted(part.id().ofItsCases(),
-                        cutting.of().named(), cutting.at().toString(), each.in(), each.counted(),
-                        true));
+            if (read instanceof NothingArrivesAtItsLine nothing) {
+                // What the relation reads of the ways to the cases the line decides in shows no
+                // row comes along them: no row is in those cases, and the line is read in none of
+                // them. Where those are every way to the line, nothing arrives at it; otherwise
+                // rows that do arrive are in no case it decides, and it turns nothing.
+                if (deciding.isEmpty()) {
+                    out.add(new Several.Part(part.id(), nothing, List.of()));
+                }
+            } else {
+                // Read only of what an arm of a choice answers, which is all a reader joins
+                // ({@link Several#shownByItsArms}).
+                // And beside it, how many ways each case asked that was worked out all the same
+                // stood for, where their number was more than are taken apart: what asking them
+                // cost, for an author to find where the model is dear to read.
+                List<CaseExpansion.Counted> walked = new ArrayList<>();
+                for (CasesOfALineAsked.WalkedPast each : found.walkedPast()) {
+                    walked.add(new CaseExpansion.Counted(part.id().ofItsCases(),
+                            cutting.of().named(), cutting.at().toString(), each.in(),
+                            each.counted(), true));
+                }
+                out.add(new Several.Part(part.id(), read, DecidingCase.saidInAsFewAsMay(reached),
+                        deciding.isEmpty() || Several.choiceAnsweredBy(part.id()) == null
+                                ? Map.of() : comingOutAlong(read, deciding, reading),
+                        CasesWorkedOut.SHOWN, walked));
             }
-            out.add(new Several.Part(part.id(), read, DecidingCase.saidInAsFewAsMay(reached),
-                    deciding.isEmpty() || Several.choiceAnsweredBy(part.id()) == null ? Map.of()
-                            : comingOutAlong(read, deciding, reading),
-                    CasesWorkedOut.SHOWN, walked));
         }
         if (!stoppedAt.isEmpty()) {
             // And beside it, how many ways each case asked stood for, where their number is what
@@ -2085,10 +2126,14 @@ sealed interface ComparisonAssessment {
                         return new InACase(wayToACase.reaches(condition), List.of());
                     }
                     Reachability toIt = wayToACase.apply(condition);
+                    // What the relation reads of the ways to the case may show no row comes
+                    // along them, which no row in the case is.
+                    if (!(against.whereRowsArrive(reading, waysArrivedBy(toIt, arrivals),
+                            witnesses) instanceof AgainstAnotherValue arriving)) {
+                        return new InACase(false, List.of());
+                    }
                     return new InACase(toIt instanceof Reachability.Reaching,
-                            against.whereRowsArrive(reading, waysArrivedBy(toIt, arrivals),
-                                            witnesses)
-                                    .settling().stream()
+                            arriving.settling().stream()
                                     .filter(line -> crossedAtSomePlace(line.cutting(), toIt,
                                             arrivals, line.cutting().keptTo(condition, reading)))
                                     .toList());
