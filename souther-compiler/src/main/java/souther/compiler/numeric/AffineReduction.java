@@ -420,18 +420,12 @@ public final class AffineReduction {
         AffineConstraint.Read<A> read = AffineConstraint.of(
                 Map.of(atom, weight), constant,
                 strict ? Rel.LT : Rel.LE, spacing);
-        switch (read) {
-            case AffineConstraint.Read.HoldsNever<A> _ -> {
-                return false;
-            }
-            case AffineConstraint.Read.HoldsAlways<A> _ -> {
-                return true;
-            }
+        return switch (read) {
+            case AffineConstraint.Read.HoldsNever<A> _ -> false;
+            case AffineConstraint.Read.HoldsAlways<A> _ -> true;
             // A rule this cannot write leaves this position no narrower, and is never read as the
             // rules leaving it nothing.
-            case AffineConstraint.Read.NotWorkedOut<A> _ -> {
-                return true;
-            }
+            case AffineConstraint.Read.NotWorkedOut<A> _ -> true;
             case AffineConstraint.Read.Stated<A> stated
                     when stated.constraint() instanceof AffineConstraint.HalfSpace<A> alone -> {
                 ExactCut cut = alone.bound();
@@ -444,13 +438,13 @@ public final class AffineReduction {
                     atLeast.merge(atom, new ExactCut(cut.at().negated(), cut.inclusive()),
                             ExactCut::tighterLower);
                 }
-                return holdsAValue(atom, from, atLeast, atMost);
+                yield holdsAValue(atom, from, atLeast, atMost);
             }
             // A rule weighing one position is a bound on it, always. Said as a stop rather than left
             // to fall through, because the shape came back from the one place that decides shapes.
             case AffineConstraint.Read.Stated<A> stated -> throw new IllegalStateException(
                     "a rule about one position came back as " + stated.constraint());
-        }
+        };
     }
 
     /**

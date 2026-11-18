@@ -17114,19 +17114,17 @@ final class Pullback {
         if (division == null) {
             return null;
         }
-        switch (AffineForms.outcome(division.dividend(), division.at(), quantities())) {
-            case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> {
-                return noFormOf(stopped);
-            }
+        return switch (AffineForms.outcome(division.dividend(), division.at(), quantities())) {
+            case AffineForms.Outcome.StoppedAt<Quantity, InputReads> stopped -> noFormOf(stopped);
             case AffineForms.Outcome.Composed<Quantity, InputReads>(LinearForm<Quantity> form) -> {
                 for (Quantity each : form.coefs().keySet()) {
                     if (each instanceof Quantity.OfABinding bound && bound.madeOf().isPresent()) {
-                        return bound.madeOf().get();
+                        yield bound.madeOf().get();
                     }
                 }
-                return null;
+                yield null;
             }
-        }
+        };
     }
 
     /**

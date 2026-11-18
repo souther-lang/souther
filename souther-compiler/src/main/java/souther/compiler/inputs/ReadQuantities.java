@@ -1602,27 +1602,25 @@ final class ReadQuantities implements Quantities {
     private ConstraintState<InputAtom> alsoStating(ConstraintState<InputAtom> rules,
                                                    StructuralContext.Assumption said,
                                                    StructuralContext under) {
-        switch (said) {
-            case StructuralContext.Assumption.TheCaseAt _ -> {
-                return rules;
-            }
+        return switch (said) {
+            case StructuralContext.Assumption.TheCaseAt _ -> rules;
             case StructuralContext.Assumption.HoldingSomething it -> {
                 NumericTerm counted = howManyItHolds(it.container());
                 if (counted == null) {
-                    return rules;
+                    yield rules;
                 }
                 InputAtom atom = called(counted, under);
                 NumberSpace space = spaceOf(rules.numbers(), counted, atom);
-                return space == null ? rules : rules.taking(
+                yield space == null ? rules : rules.taking(
                         LinearForm.<InputAtom>atomMinusConstant(atom, ExactRatio.ONE),
                         Rel.GE, Map.of(atom, space));
             }
             // And that it holds none is a number as well, said where the same count is.
             case StructuralContext.Assumption.HoldingNothing it -> {
                 NumericTerm counted = howManyItHolds(it.container());
-                return counted == null ? rules : startedAt(rules, counted, Count.of(0), under);
+                yield counted == null ? rules : startedAt(rules, counted, Count.of(0), under);
             }
-        }
+        };
     }
 
     /** {@code rules} with {@code term} standing at {@code at}, or as they were where nothing

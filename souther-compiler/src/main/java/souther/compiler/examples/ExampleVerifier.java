@@ -432,22 +432,19 @@ public final class ExampleVerifier {
         // Through the run's deadline, as a row is — which is what decides where the work runs and
         // what bounds it, and is the same answer for both. An observation reaching the applied code
         // by a different route would be the binding meaning two things again.
-        switch (deadline.given(new Deadline.Work.Table(behavior, entry.at()),
+        return switch (deadline.given(new Deadline.Work.Table(behavior, entry.at()),
                 () -> observing(behavior, entry))) {
-            case Deadline.Outcome.Finished(StandinObservation observed) -> {
-                return observed;
-            }
+            case Deadline.Outcome.Finished(StandinObservation observed) -> observed;
             case Deadline.Outcome.Overran(Runnable abandon) -> {
                 abandon.run();
-                return new StandinObservation.Unobserved(
+                yield new StandinObservation.Unobserved(
                         new StandinObservation.Reason.TheObservationRanOut(
                                 "the observation did not answer within "
                                         + within(deadline) + "ms of this compile's own time"));
             }
-            case Deadline.Outcome.Threw(Throwable cause) -> {
-                return new StandinObservation.Unobserved(whatTheWorkerThrew(cause));
-            }
-        }
+            case Deadline.Outcome.Threw(Throwable cause) ->
+                    new StandinObservation.Unobserved(whatTheWorkerThrew(cause));
+        };
     }
 
     /**
@@ -469,22 +466,20 @@ public final class ExampleVerifier {
      * the binding meaning three things.
      */
     ContractObservation contractOnly(String behavior, Hir.ExampleRow row) {
-        switch (deadline.given(new Deadline.Work.WholeRow(behavior, row.pos(), row.identity()),
+        return switch (deadline.given(
+                new Deadline.Work.WholeRow(behavior, row.pos(), row.identity()),
                 () -> checkingContract(behavior, row))) {
-            case Deadline.Outcome.Finished(ContractObservation observed) -> {
-                return observed;
-            }
+            case Deadline.Outcome.Finished(ContractObservation observed) -> observed;
             case Deadline.Outcome.Overran(Runnable abandon) -> {
                 abandon.run();
-                return new ContractObservation.Unobserved(
+                yield new ContractObservation.Unobserved(
                         new StandinObservation.Reason.TheObservationRanOut(
                                 "the observation did not answer within "
                                         + within(deadline) + "ms of this compile's own time"));
             }
-            case Deadline.Outcome.Threw(Throwable cause) -> {
-                return new ContractObservation.Unobserved(whatTheWorkerThrew(cause));
-            }
-        }
+            case Deadline.Outcome.Threw(Throwable cause) ->
+                    new ContractObservation.Unobserved(whatTheWorkerThrew(cause));
+        };
     }
 
     private ContractObservation checkingContract(String behavior, Hir.ExampleRow row) {
@@ -909,19 +904,14 @@ public final class ExampleVerifier {
          * a path that quietly hands the values over anyway.
          */
         Handing handing() {
-            switch (answer) {
-                case Answerer.Answer.Nothing _ -> {
-                    return new Handing.NothingApplies();
-                }
-                case Answerer.Answer.Unavailable _ -> {
-                    return new Handing.NotMade();
-                }
-                case Answerer.Answer.Something applies -> {
-                    return agreement != null && !(agreement instanceof Agreement.Agree)
-                            ? new Handing.NotEstablished(agreement)
-                            : new Handing.MayApply(applies);
-                }
-            }
+            return switch (answer) {
+                case Answerer.Answer.Nothing _ -> new Handing.NothingApplies();
+                case Answerer.Answer.Unavailable _ -> new Handing.NotMade();
+                case Answerer.Answer.Something applies ->
+                        agreement != null && !(agreement instanceof Agreement.Agree)
+                                ? new Handing.NotEstablished(agreement)
+                                : new Handing.MayApply(applies);
+            };
         }
     }
 

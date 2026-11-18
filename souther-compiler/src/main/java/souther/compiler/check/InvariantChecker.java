@@ -4251,12 +4251,10 @@ public final class InvariantChecker {
      */
     private Run placed(ValueSet set, NumberAt<RuleKey> value, InvariantStatementId statement,
                        ReadingPlace stands, List<Direct> out) {
-        switch (extentOf(set)) {
+        return switch (extentOf(set)) {
             // A run holding one string is the rule naming a value rather than bounding a range, and
             // a value it names is a distinction of the position rather than an edge on it.
-            case TextExtent.One run when run.holdsOneValue() -> {
-                return new Run.NotBounding();
-            }
+            case TextExtent.One run when run.holdsOneValue() -> new Run.NotBounding();
             case TextExtent.One run -> {
                 boolean placed = false;
                 if (run.holdsFromAbove()) {
@@ -4269,21 +4267,16 @@ public final class InvariantChecker {
                     out.add(new Direct(value, statement,
                             new InvariantBound(false, Endpoint.exclusive(run.after())), stands));
                 }
-                return placed ? new Run.Bounding(value) : new Run.NotBounding();
+                yield placed ? new Run.Bounding(value) : new Run.NotBounding();
             }
-            case TextExtent.NoNamedRun _ -> {
-                return new Run.NotBounding();
-            }
+            case TextExtent.NoNamedRun _ -> new Run.NotBounding();
             // The strings are a run, and an end of it is no value a line can be drawn at. That is
             // not the rule drawing no line: it is what was not established about the run.
-            case TextExtent.NotEstablished _ -> {
-                return new Run.Undecided(List.of(new BlockReason.OrderedExtentEndIsNoValue()));
-            }
-            case TextExtent.NotBuilt it -> {
-                return new Run.Undecided(
-                        List.of(new BlockReason.OrderedExtentTooCostly(it.stopped())));
-            }
-        }
+            case TextExtent.NotEstablished _ ->
+                    new Run.Undecided(List.of(new BlockReason.OrderedExtentEndIsNoValue()));
+            case TextExtent.NotBuilt it ->
+                    new Run.Undecided(List.of(new BlockReason.OrderedExtentTooCostly(it.stopped())));
+        };
     }
 
     /**

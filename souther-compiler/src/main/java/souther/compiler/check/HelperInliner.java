@@ -2006,12 +2006,12 @@ public final class HelperInliner {
 
     /** The same, for the block a name or a binding was expanded into. */
     private ExpansionSite etaSiteOf(EtaOrigin cause, Hir.Apply call) {
-        switch (cause) {
+        return switch (cause) {
             case EtaOrigin.Declaration(ReferenceOrigin reference) -> {
                 // The reference the author wrote, counted within what wrote it. A reference this
                 // compiler composed carries a number and nothing else, so it names no copy.
                 if (reference instanceof SourceReferenceOrigin written) {
-                    return new ExpansionSite.Named(written);
+                    yield new ExpansionSite.Named(written);
                 }
                 throw new IllegalStateException(
                         "a copy of a body made at a name this compiler composed: " + reference
@@ -2025,20 +2025,20 @@ public final class HelperInliner {
                 // handed on through since.
                 ExpansionSite.Supplied.Handover handed = writing.suppliedFrom().get(binding);
                 if (handed != null) {
-                    return new ExpansionSite.Supplied(handed, appliedAt(call));
+                    yield new ExpansionSite.Supplied(handed, appliedAt(call));
                 }
                 // And a lambda the author bound to a name and then wrote where a value goes. No
                 // call handed it to anything, so there is no copy and no parameter to name it by —
                 // what the author wrote is the name, which is what every other name written where a
                 // value goes is named by.
                 if (reference instanceof SourceReferenceOrigin written) {
-                    return new ExpansionSite.Named(written);
+                    yield new ExpansionSite.Named(written);
                 }
                 throw new IllegalStateException(
                         "a copy of a body made at a binding no call handed to a parameter and no"
                                 + " source wrote a name for: " + binding + " at " + call.pos());
             }
-        }
+        };
     }
 
     /**

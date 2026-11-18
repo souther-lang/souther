@@ -855,7 +855,7 @@ public final class InteractionCells {
      */
     static Cell admittedAt(souther.compiler.reading.Condition condition, List<Axis> axes,
                            int axis, TermPath standing) {
-        switch (condition) {
+        return switch (condition) {
             case souther.compiler.reading.Condition.Case one -> {
                 // Every case the arm answers for. Where the axis is the union itself, its classes
                 // are the cases a value there can be, so a case the arm names and the axis has no
@@ -879,10 +879,10 @@ public final class InteractionCells {
                     if (at >= 0) {
                         cell.allowed()[axis][at] = true;
                     } else if (!ofTheUnion) {
-                        return null;
+                        yield null;
                     }
                 }
-                return cell;
+                yield cell;
             }
             case souther.compiler.reading.Condition.Side one -> {
                 // Which construct of the model the decision was about, since a rule is stated at
@@ -893,18 +893,16 @@ public final class InteractionCells {
                 ModelOccurrence states =
                         ModelOccurrence.statedAt(one.statedAt()).orElse(null);
                 if (states == null) {
-                    return null;
+                    yield null;
                 }
                 boolean onAVisit = one.visit().isPresent();
                 Cut line = cutAt(axes.get(axis), states, onAVisit);
-                return line == null ? null
+                yield line == null ? null
                         : sideOf(axes, axis, line, guardOf(line, states, onAVisit), one.held());
             }
             // A fork this reading could not name a position for narrows nothing.
-            case souther.compiler.reading.Condition.Arm _ -> {
-                return null;
-            }
-        }
+            case souther.compiler.reading.Condition.Arm _ -> null;
+        };
     }
 
     /** Everything open, and {@code axis} every class but {@code but}. */
