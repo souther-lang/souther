@@ -505,7 +505,7 @@ final class ReadingState {
         List<Object> contents = new ArrayList<>(inputs.size());
         for (Part each : inputs) {
             Object value = each.held();
-            contents.add(each.contentBit != 0 && value != null ? snapshotOf(value) : null);
+            contents.add(each.contentBit != 0 && value != null ? snapshotOf(heldIn(value)) : null);
             values.add(switch (each.compared) {
                 case BY_PRESENCE -> Boolean.valueOf(value != null);
                 case BY_IDENTITY -> new Same(value);
@@ -797,9 +797,19 @@ final class ReadingState {
         }
     }
 
+    /**
+     * What {@code value} holds, as a collection: a ledger's entries, where it is a ledger. A
+     * ledger's revision says which history it stands at and not what it holds, and an input
+     * compared by what it holds is compared on that.
+     */
+    private static Object heldIn(Object value) {
+        return value instanceof Ledger ledger ? ledger.contents() : value;
+    }
+
     /** A copy of {@code value} that a later change to it does not reach, where it is something
      *  that is changed. */
-    private static Object copyOf(Object value) {
+    private static Object copyOf(Object held) {
+        Object value = heldIn(held);
         if (auditing) {
             auditEach(value);
         }

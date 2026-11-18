@@ -476,7 +476,7 @@ final class Pullback {
      * read is no comparison that keeps them, and a count is not read there. Added to by a reading
      * and taken back from, and asked what is in.
      */
-    private final Scoped<Map<Quantity, Derivation.AComparisonRead.Counted>> counting =
+    private final Scoped<Ledger.Keyed<Quantity, Derivation.AComparisonRead.Counted>> counting =
             state.guarded();
     /**
      * The call each count of elements meeting a statement was read off, where a law of what the
@@ -531,14 +531,16 @@ final class Pullback {
      * comparison. Added to by a reading where there is one, and never asked what is in: whoever
      * set it up reads it after.
      */
-    private final Scoped<List<Derivation.AComparisonRead.Counted>> alike = state.writtenInto();
+    private final Scoped<Ledger.OfEntries<Derivation.AComparisonRead.Counted>> alike =
+            state.writtenInto();
     /**
      * Where each count the comparison being read needed is a number at all, as they are read
      * ({@link Derivation.WhereItIsAnswered}): a count of statements some of which answer nothing on
      * some rows counts only where every one of them answers, and the comparison is read there — or
      * null where what is read is no comparison of numbers, and such a count is not read there.
      */
-    private final Scoped<List<Derivation>> answering = state.writtenIntoAndAskedAfter();
+    private final Scoped<Ledger.OfEntries<Derivation>> answering =
+            state.writtenIntoAndAskedAfter();
     /**
      * Each operator the sides of the comparison being read were worked out through, with the form
      * it came to, as they are read ({@link AffineForms.Reading#composed}) — or null where what is
@@ -583,7 +585,7 @@ final class Pullback {
      * keeps that how many a container holds came to ({@link #sizeOf}), with the containers it was
      * asked of, in the order met. Null elsewhere.
      */
-    private final Scoped<Map<Quantity.HowManyHold, List<Denotation>>> countsMet =
+    private final Scoped<Ledger.Grouped<Quantity.HowManyHold, Denotation>> countsMet =
             state.writtenIntoAndAskedAfter();
 
     /**
@@ -5314,8 +5316,7 @@ final class Pullback {
         if (countsMet.get() != null && sized instanceof Sized.AsAForm(LinearForm<Quantity> form)) {
             for (Quantity atom : form.coefs().keySet()) {
                 if (atom instanceof Quantity.HowManyHold count) {
-                    countsMet.get().computeIfAbsent(count, _ -> new ArrayList<>())
-                            .add(new Denotation(value, at));
+                    countsMet.get().add(count, new Denotation(value, at));
                 }
             }
         }
@@ -5754,26 +5755,26 @@ final class Pullback {
      *         reading of how many a recursion answers does
      */
     private Sized tentatively(Quantity.HowManyCarried carried, Supplier<Sized> reading) {
-        Map<Quantity, Derivation.AComparisonRead.Counted> counts = counting.get();
-        List<Derivation.AComparisonRead.Counted> settledAlike = alike.get();
-        Set<Quantity> countedBefore = counts == null ? null : Set.copyOf(counts.keySet());
-        int alikeBefore = settledAlike == null ? 0 : settledAlike.size();
+        Ledger.Keyed<Quantity, Derivation.AComparisonRead.Counted> counts = counting.get();
+        Ledger.OfEntries<Derivation.AComparisonRead.Counted> settledAlike = alike.get();
+        Ledger.Checkpoint countedBefore = counts == null ? null : counts.checkpoint();
+        Ledger.Checkpoint alikeBefore = settledAlike == null ? null : settledAlike.checkpoint();
         ElementsMet.Mark metBefore = elementsMet.get().mark();
         Sized read = reading.get();
         if (read instanceof Sized.AsAForm(LinearForm<Quantity> form)) {
             if (carried.isIn(form)) {
                 throw carried.reachedAReader();
             }
-            if (counts == null || counts.keySet().stream().noneMatch(carried::isIn)) {
+            if (counts == null || counts.keys().stream().noneMatch(carried::isIn)) {
                 return read;
             }
             read = null;
         }
         if (counts != null) {
-            counts.keySet().retainAll(countedBefore);
+            counts.rewind(countedBefore);
         }
         if (settledAlike != null) {
-            settledAlike.subList(alikeBefore, settledAlike.size()).clear();
+            settledAlike.rewind(alikeBefore);
         }
         elementsMet.get().rewind(metBefore);
         return read;
@@ -8010,7 +8011,7 @@ final class Pullback {
          */
         @Override
         public Derivation compared(LawProposition.Compared<DeclaredArgument> compared) {
-            return answering.during(new ArrayList<>(),
+            return answering.during(new Ledger.OfEntries<>(),
                     () -> whereItsCountsAnswer(comparedWhereItsCountsAre(compared)));
         }
 
@@ -8091,15 +8092,17 @@ final class Pullback {
                             taking -> new ALawRead(this, taking.apply(reads)).compared(compared));
                 }
             }
-            Map<Quantity, Derivation.AComparisonRead.Counted> counts = new LinkedHashMap<>();
-            List<Derivation.AComparisonRead.Counted> settledAlike = new ArrayList<>();
+            Ledger.Keyed<Quantity, Derivation.AComparisonRead.Counted> counts =
+                    new Ledger.Keyed<>();
+            Ledger.OfEntries<Derivation.AComparisonRead.Counted> settledAlike =
+                    new Ledger.OfEntries<>();
             try (Restore _ = counting.set(counts); Restore _ = alike.set(settledAlike)) {
                 return switch (numbers(form)) {
                     case Numbers.NotRead(WhyUnread why) ->
                             leaf(new Derivation.Stopped(why, fixed(e, reads)), e, reads);
                     case Numbers.EachNumber(Map<LawNumber<?>, LinearForm<Quantity>> each) ->
-                            leaf(Derivation.ALawComparison.of(compared, each, counts,
-                                    settledAlike), e, reads);
+                            leaf(Derivation.ALawComparison.of(compared, each, counts.view(),
+                                    List.copyOf(settledAlike.view())), e, reads);
                 };
             }
         }
@@ -9445,9 +9448,9 @@ final class Pullback {
      * {@code tellingOfOperators} asks for them, and nobody else keeps a table of them.
      */
     private <T> T inAComparisonsScope(boolean tellingOfOperators, Supplier<T> reading) {
-        try (Restore _ = counting.set(new LinkedHashMap<>());
+        try (Restore _ = counting.set(new Ledger.Keyed<>());
              Restore _ = alike.set(null);
-             Restore _ = answering.set(new ArrayList<>());
+             Restore _ = answering.set(new Ledger.OfEntries<>());
              Restore _ = operated.set(tellingOfOperators ? new Operators() : null);
              Restore _ = elementsMet.set(new ElementsMet());
              Restore _ = sideAsWritten.set(null)) {
@@ -10166,7 +10169,7 @@ final class Pullback {
             return stated;
         }
         Derivation answered = null;
-        for (Derivation one : answering.contents()) {
+        for (Derivation one : answering.contents().view()) {
             answered = answered == null ? one
                     : new Derivation.Joined(ConditionJoin.BOTH, answered, one);
         }
@@ -10311,7 +10314,7 @@ final class Pullback {
                     ofTheInputIn(sides));
         }
         return aRelation(Derivation.ComparisonReading.OVER_BOUND_VALUES, form, states,
-                counting.get(), Derivation.AComparisonRead.Facing.AS_WRITTEN);
+                counting.get().view(), Derivation.AComparisonRead.Facing.AS_WRITTEN);
     }
 
     /** The two sides of a comparison read with what an operation answers, and the form they come
@@ -11346,7 +11349,7 @@ final class Pullback {
         // the comparison, is in none of the comparison's.
         DecisionSubject heldAt = null;
         List<Derivation> each = new ArrayList<>();
-        try (Restore _ = counting.set(new LinkedHashMap<>())) {
+        try (Restore _ = counting.set(new Ledger.Keyed<>())) {
             for (Denotation call : keptBy) {
                 Quantity.HowManyMeet meeting = countKept(call.value(), call.at());
                 Derivation.AComparisonRead.Counted kept =
@@ -13905,7 +13908,7 @@ final class Pullback {
      */
     private Inside aWayIn(List<Weighed> numbers, Supplier<Sized> rest,
                           BooleanSupplier restMayCount) {
-        try (Restore _ = countsMet.set(new LinkedHashMap<>())) {
+        try (Restore _ = countsMet.set(new Ledger.Grouped<>())) {
             NumbersRead read = aStopIn(numbers.stream().map(Weighed::number).toList());
             if (read.wayIn() != null) {
                 return read.wayIn();
@@ -13948,12 +13951,12 @@ final class Pullback {
      * the comparison is.
      */
     private Inside.ATotalByKeeping aCountToKeep(Predicate<Quantity.HowManyHold> standsInTheWay) {
-        for (Map.Entry<Quantity.HowManyHold, List<Denotation>> count
-                : countsMet.contents().entrySet()) {
-            if (!standsInTheWay.test(count.getKey())) {
+        Ledger.Grouped<Quantity.HowManyHold, Denotation> counted = countsMet.contents();
+        for (Quantity.HowManyHold count : counted.keys()) {
+            if (!standsInTheWay.test(count)) {
                 continue;
             }
-            for (Denotation container : count.getValue()) {
+            for (Denotation container : counted.under(count)) {
                 Inside.ATotalByKeeping kept = keptByTruths(container);
                 if (kept != null) {
                     return kept;
