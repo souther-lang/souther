@@ -100,8 +100,10 @@ final class RemainderCoverage {
                                         BigInteger divisor, List<TakenConstraint> narrowing,
                                         BigInteger least, BigInteger greatest, long low,
                                         long high) {
-        if (statements.isEmpty() || low < 0 || low > high
-                || divisor.bitLength() > Integer.SIZE - 2) {
+        // The numbers asked are as many as twice the divisor at most, which is held to the divisors
+        // the remainders are searched for at all.
+        if (statements.isEmpty() || low < 0 || low > high || divisor.signum() <= 0
+                || divisor.compareTo(BigInteger.valueOf(JointResidues.MOST_DIVISOR)) > 0) {
             return Optional.empty();
         }
         int modulus = divisor.intValueExact();
