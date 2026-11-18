@@ -819,7 +819,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             return out;
         }
         Map<BindingId, List<Core>> madeOf = madeOfIn(root);
-        for (BindingId name : namesTheComparisonReads(root, comparison, madeOf)) {
+        Set<BindingId> names = namesTheComparisonReads(root, comparison, madeOf);
+        ReadOnTheWay way = ReadOnTheWay.of(root, comparison, names, madeOf);
+        for (BindingId name : names) {
             for (Core source : madeOf.getOrDefault(name, List.of())) {
                 if (Core.withoutStanding(source) instanceof Core.PreservedCall call) {
                     BoundOperationFacts.Assembled assembled = DefaultBoundOperationFacts.get()
@@ -829,13 +831,97 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             && Core.withoutStanding(CallArguments.of(assembled.closure(), call))
                                     instanceof Core.Block closure) {
                         out.add(call);
-                        answerTheComparisonReads(closure.body(),
-                                fieldsReadOf(name, root), root, out);
+                        answerTheComparisonReads(closure.body(), way.fieldsReadOf(name), root,
+                                out);
                     }
                 }
             }
         }
         return out;
+    }
+
+    /**
+     * What the comparison reads on its way: the comparison, and what each name it reads is made
+     * of or bound to ({@link #namesTheComparisonReads}). The fields it reads of a name are those
+     * read there, and nowhere else in the body: a field another comparison reads is none of this
+     * one's.
+     *
+     * @param path    the comparison, and what each name it reads is made of or bound to
+     * @param aliases the names bound to the whole of another, each with the node that binds it:
+     *                what such a name reads of its fields is read of that other
+     */
+    private record ReadOnTheWay(List<Core> path, Map<Core, List<BindingId>> aliases) {
+
+        static ReadOnTheWay of(Core root, Core comparison, Set<BindingId> names,
+                               Map<BindingId, List<Core>> madeOf) {
+            Map<BindingId, List<Core>> boundTo = new HashMap<>();
+            letsIn(root, names, boundTo);
+            List<Core> path = new ArrayList<>(List.of(comparison));
+            Map<Core, List<BindingId>> aliases = new IdentityHashMap<>();
+            for (BindingId name : names) {
+                for (Core value : boundTo.getOrDefault(name, List.of())) {
+                    path.add(value);
+                    aliases.computeIfAbsent(Core.withoutStanding(value), _ -> new ArrayList<>())
+                            .add(name);
+                }
+                path.addAll(madeOf.getOrDefault(name, List.of()));
+            }
+            // An arm's binding is the whole of what the arm matches, as a let's is of its value.
+            armsIn(root, names, aliases);
+            return new ReadOnTheWay(path, aliases);
+        }
+
+        /**
+         * The fields of {@code name} read on the way, by the names of them, and those read of a
+         * name bound to the whole of it; null where it is read as a whole any other way.
+         */
+        Set<String> fieldsReadOf(BindingId name) {
+            Set<String> fields = new HashSet<>();
+            for (Core node : path) {
+                Core here = Core.withoutStanding(node);
+                if (here instanceof Core.Read read && name.equals(read.binding())
+                        && aliases.containsKey(here)) {
+                    for (BindingId alias : aliases.get(here)) {
+                        Set<String> through = fieldsReadOf(alias);
+                        if (through == null) {
+                            return null;
+                        }
+                        fields.addAll(through);
+                    }
+                    continue;
+                }
+                if (readsWhole(name, here, fields)) {
+                    return null;
+                }
+            }
+            return fields;
+        }
+
+        private static void letsIn(Core e, Set<BindingId> names,
+                                   Map<BindingId, List<Core>> out) {
+            Core node = Core.withoutStanding(e);
+            if (node instanceof Core.LetIn let && let.binder() != null
+                    && names.contains(let.binder().binding())) {
+                out.computeIfAbsent(let.binder().binding(), _ -> new ArrayList<>())
+                        .add(let.value());
+            }
+            Core.forEachChild(node, child -> letsIn(child, names, out));
+        }
+
+        private static void armsIn(Core e, Set<BindingId> names,
+                                   Map<Core, List<BindingId>> out) {
+            Core node = Core.withoutStanding(e);
+            if (node instanceof Core.Match match) {
+                for (Core.Case arm : match.cases()) {
+                    if (arm.binding().binder() != null
+                            && names.contains(arm.binding().binder().binding())) {
+                        out.computeIfAbsent(Core.withoutStanding(match.scrutinee()),
+                                _ -> new ArrayList<>()).add(arm.binding().binder().binding());
+                    }
+                }
+            }
+            Core.forEachChild(node, child -> armsIn(child, names, out));
+        }
     }
 
     /**
@@ -883,15 +969,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         return (Core.Construct) Core.withoutStanding(e);
     }
 
-    /**
-     * The fields of {@code name} the body reads, by the names of them; null where it is read
-     * as a whole.
-     */
-    private static Set<String> fieldsReadOf(BindingId name, Core root) {
-        Set<String> fields = new HashSet<>();
-        return readsWhole(name, root, fields) ? null : fields;
-    }
-
+    /** Whether {@code e} reads {@code name} as a whole, the fields it reads of it added to
+     *  {@code fields}. */
     private static boolean readsWhole(BindingId name, Core e, Set<String> fields) {
         Core node = Core.withoutStanding(e);
         if (node instanceof Core.FieldAccess access
