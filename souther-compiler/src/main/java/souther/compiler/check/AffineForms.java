@@ -1142,8 +1142,22 @@ public final class AffineForms {
      * {@link Reading} take an operation to be told of by nobody, so a reading that wants every one
      * and answers some of the hooks compiles and drops the rest; one that is a {@code RunTelling}
      * is made to answer each, and to say, where it tells nothing, that it does and why.
+     *
+     * <p>What this holds is that each hook is answered, and not that every operation is told: a
+     * reading that answers a hook by telling nothing still leaves what it works out untold, and
+     * says so where it does.
      */
     public interface RunTelling<A, E> extends Reading<A, E> {
+
+        /** A total over a list written out, which the reading reads as the sum of those numbers
+         *  ({@link Reading#totalled}). */
+        @Override
+        void totalled(Core call, LinearForm<A> total, List<Core> elements);
+
+        /** A count of a list written out, whose elements are worked out as the list is built
+         *  ({@link Reading#counted}). */
+        @Override
+        void counted(Core call, List<Core> elements, E at);
 
         /** An operation composed, with the forms of its operands ({@link Reading#composed}). */
         @Override

@@ -2412,6 +2412,21 @@ public sealed interface ElementValue {
                 public void folded(Core e, Map<BindingId, Core> at) {
                 }
 
+                /** Never asked: a total of a list written out is read as no form here
+                 *  ({@link Reading#readsATotalOfWhatIsWrittenOut} is false), and the elements of
+                 *  that list are parts a run works out whenever it works the call out, which
+                 *  {@link #recordOperationsOf} asks of. */
+                @Override
+                public void totalled(Core call, LinearForm<Atom> total, List<Core> elements) {
+                }
+
+                /** The elements of a list written out that a count is taken of are parts a run
+                 *  works out whenever it works the call out, which {@link #recordOperationsOf}
+                 *  asks of. */
+                @Override
+                public void counted(Core call, List<Core> elements, Map<BindingId, Core> at) {
+                }
+
                 /** A newtype's construction stops a run by the clauses of its type, which is told
                  *  of the comparison that stands over the number and not of an element's answer. */
                 @Override
