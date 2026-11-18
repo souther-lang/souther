@@ -641,6 +641,8 @@ public sealed interface ReportMessage extends Message {
 
     record ItIsAboutARemainderNoPositionHolds() implements ReportMessage, Prose {}
 
+    record WhatARunWorksOutToEvaluateItIsNotReadToTheEnd() implements ReportMessage, Prose {}
+
     record ItComparesWhatARunWorksOut() implements ReportMessage, Prose {}
 
     record ItRestrictsThePosition() implements ReportMessage, Prose {}

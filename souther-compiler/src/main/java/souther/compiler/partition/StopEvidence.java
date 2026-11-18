@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.core.Core;
 import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.SearchRegion;
@@ -24,13 +25,31 @@ import java.util.Objects;
  * every one only where it says so ({@link UndividedByARelation.Working#exact}), and where it does
  * not, nothing is said of where a run stops.
  *
+ * <p>An operation the reading met and could place nowhere in the input, because the value it is
+ * over is no number of the input and no name, is not among {@code operations}, and a run may stop
+ * in it. It is held in {@code unplaced}, by the node that works it out, so that what is said of
+ * where a run stops is not read as having left it out for want of one. What a reading answers
+ * for in another way, the addends of the form a total is read as, is not held there.
+ *
  * @param operations every operation of whole numbers the run works out, in the order it does, and
  *                   whether that is every one and is worked out on every run getting there
+ * @param unplaced   the nodes working out an operation that may stop a run and is among no
+ *                   operation told
  */
-record StopEvidence(UndividedByARelation.Working operations) {
+record StopEvidence(UndividedByARelation.Working operations, List<Core> unplaced) {
 
     StopEvidence {
         Objects.requireNonNull(operations, "what a run works out, or that it is not known");
+        unplaced = List.copyOf(unplaced);
+    }
+
+    StopEvidence(UndividedByARelation.Working operations) {
+        this(operations, List.of());
+    }
+
+    /** Whether a run working this out may stop in an operation told of nowhere. */
+    boolean someStopIsUnplaced() {
+        return !unplaced.isEmpty();
     }
 
     /**

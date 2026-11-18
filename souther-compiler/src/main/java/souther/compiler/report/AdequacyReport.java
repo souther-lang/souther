@@ -4704,6 +4704,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     new ReportMessage.ItRelatesTwoElementsOfOneContainer();
             case RULE_ABOUT_A_REMAINDER_NO_POSITION_HOLDS ->
                     new ReportMessage.ItIsAboutARemainderNoPositionHolds();
+            case EVALUATION_STOPS_NOT_FULLY_READ ->
+                    new ReportMessage.WhatARunWorksOutToEvaluateItIsNotReadToTheEnd();
             case RULE_ABOUT_A_RUN -> new ReportMessage.ItIsAboutWhatTheValuesComeTo();
             case RULE_ABOUT_A_REMAINDER -> new ReportMessage.ItIsAboutARemainder();
             case RULE_MEASURED_ON_ITS_RUNS -> new ReportMessage.ItComparesWhatARunWorksOut();

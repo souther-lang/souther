@@ -334,6 +334,14 @@ public record UndividedPosition(TermPath at, Why why) {
          */
         RULE_ABOUT_A_REMAINDER_NO_POSITION_HOLDS,
         /**
+         * The comparison was read, and what a run works out to evaluate it was not read to the
+         * end: an operation it works out may end a run, and the stops of it are not all told.
+         *
+         * <p>Neither a stop nor a proof that none ends a run. The line the comparison draws stands
+         * where it was read; what is open is which rows a run gets to it past.
+         */
+        EVALUATION_STOPS_NOT_FULLY_READ,
+        /**
          * The rule relates the value here to another value rather than dividing the values here.
          *
          * <p>{@code x < y} says where one position stands against another, and a class here is a

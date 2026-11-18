@@ -1,0 +1,119 @@
+package souther.compiler.partition;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.ACompiledModel;
+import souther.compiler.diag.SourceRendering;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * An operation a run works out over a value that is no number of the input — what a walk came to,
+ * what an option holds — may end the run where nothing says. Where a run gets to the comparison and
+ * works one out, the report does not say the measurement is complete: it says the stops of what is
+ * worked out are not all told, and the line the comparison draws stays where it was read. Where no
+ * run works the operation out, or it cannot stop, it says nothing of the kind.
+ */
+class AnOperationOverWhatAWalkCameToIsNotReadAsOneThatStopsNothingTest {
+
+    private static final String THE_WALK = "List.fold((w, l) -> if l > w then l else w, 0, ds)";
+
+    private static final String NOT_ALL_TOLD = "an operation that may end the run where nothing"
+            + " here says";
+
+    @Test
+    void aSumOverWhatAFoldCameToIsNotReadAsOneThatStopsNothing() {
+        String report = reportOf(THE_WALK + " + 1 <= 10");
+        assertTrue(report.contains(NOT_ALL_TOLD), report);
+        assertTrue(report.contains("measurement: partial"), report);
+    }
+
+    @Test
+    void aSumOverWhatAnOptionHoldsIsNotReadAsOneThatStopsNothing() {
+        String report = reportOf("Option.withDefault(0, List.max(ds)) + 1 <= 10");
+        assertTrue(report.contains(NOT_ALL_TOLD), report);
+        assertTrue(report.contains("measurement: partial"), report);
+    }
+
+    @Test
+    void aStopThatIsToldIsToldAsItWas() {
+        String report = reportOf("q + 1 <= 10");
+        assertTrue(report.contains("every run stops in q + 1"), report);
+        assertFalse(report.contains(NOT_ALL_TOLD), report);
+        assertTrue(report.contains("measurement: complete"), report);
+    }
+
+    @Test
+    void nothingIsToldWhereTheOperationAddsNothing() {
+        String report = reportOf(THE_WALK + " + 0 <= 10");
+        assertFalse(report.contains(NOT_ALL_TOLD), report);
+    }
+
+    @Test
+    void nothingIsToldWhereAGuardKeepsTheOperationWithinItsType() {
+        String report = reportOf(
+                "(if q == 9223372036854775807 then 0 else q) + 1 <= 10");
+        assertFalse(report.contains(NOT_ALL_TOLD), report);
+    }
+
+    @Test
+    void nothingIsToldWhereARemainderByAWrittenNumberKeepsTheOperationWithinItsType() {
+        String report = reportOf("Int.floorMod(" + THE_WALK + ", 11) + 1 <= 10");
+        assertFalse(report.contains(NOT_ALL_TOLD), report);
+    }
+
+    /** A comparison whose arithmetic is not read says what it could not read, and nothing of
+     *  what a run works out to evaluate it. */
+    @Test
+    void aComparisonWhoseArithmeticIsNotReadSaysNothingOfWhatIsWorkedOut() {
+        String report = reportOf("Int.floorMod(" + THE_WALK + ", q) + 1 <= 10");
+        assertFalse(report.contains(NOT_ALL_TOLD), report);
+        assertTrue(report.contains("not a constant"), report);
+    }
+
+    /** What the report says of the line the comparison draws is what it says without the
+     *  operation: the reason holds the border open and takes no line from it. */
+    @Test
+    void theReasonIsAddedToWhatTheReportSaysAndTakesNothingFromIt() {
+        assertEquals(withoutTheReason(reportOf(THE_WALK + " + 0 <= 10")),
+                withoutTheReason(reportOf(THE_WALK + " + 1 <= 10")));
+    }
+
+    private static List<String> withoutTheReason(String report) {
+        return report.lines().filter(line -> line.contains("no line:")
+                        || line.contains("divided no way")
+                        || line.contains("whether a row is at")
+                        || line.contains("read as "))
+                .map(line -> line.replaceAll("@\\d+:\\d+", "@")).toList();
+    }
+
+    @Test
+    void nothingIsToldWhereNoRunGetsToTheOperation() {
+        String report = reportOf("(if q > 5 && q < 3 then " + THE_WALK + " + 1 else 3) >= q");
+        assertFalse(report.contains(NOT_ALL_TOLD), report);
+    }
+
+    @Test
+    void nothingIsToldWhereTheClosureIsAppliedToNothing() {
+        String report = reportOf("List.all(r -> " + THE_WALK + " + 1 <= 10, [])");
+        assertFalse(report.contains(NOT_ALL_TOLD), report);
+    }
+
+    private static String reportOf(String condition) {
+        Compilation compilation = ACompiledModel.measured("""
+                module m
+
+                behavior role : (ds: List<Int>, q: Int) -> Int
+                let role (ds, q) = if %s then 1 else 2
+                """.formatted(condition), new Adequacy.Asked(Adequacy.Level.OFF, false));
+        return AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+}

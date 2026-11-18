@@ -924,6 +924,17 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 }
                 if (!stopsNoRowOrIsTheOwners(node, where, form, over, after)) {
                     told.exact = false;
+                    // One value that is no stop of the input and no bound value is the one the
+                    // operation is over; with several, what each is held to is a question of the
+                    // numbers they are, asked of no owner here.
+                    if (over.size() == 1 && over.get(0).theStop
+                            && !stoppedAt.isAPlainStopOrABoundValue(over.get(0))) {
+                        // Whether it adds up the addends of the comparison, which the analysis
+                        // that drew the lines answers for, is asked once the comparison has been
+                        // read ({@link WhatLiesBesideTheStop#beside}).
+                        told.operationsOverTheStopValue.add(
+                                new OverTheStopValue(Core.withoutStanding(node), form));
+                    }
                 }
                 return true;
             }
@@ -1455,6 +1466,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     tellWhatIsWorkedOutBesideWhatIsHeldAside(node, at);
                     if (aside.aChoice) {
                         aside.rangeIs(rangeOfTheArms(node, at));
+                    } else if (aside.range == null) {
+                        aside.rangeIs(rangeOfAFloorRemainder(node, at));
                     }
                 }
                 return new AffineForms.Leaf.Form<>(LinearForm.atom(aside.atom));
@@ -2132,6 +2145,27 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             /**
+             * The numbers {@code node} comes to where it stands for {@code Int.floorMod(x, k)}
+             * with {@code k} a written number above nought: the whole numbers from nought to one
+             * below {@code k}, whatever {@code x} is. Null where it stands for no such call.
+             */
+            private FormRange rangeOfAFloorRemainder(Core node, InputReads at) {
+                Core stands = Core.withoutStanding(node);
+                if (stands instanceof Core.Read name) {
+                    Denotation given = at.givenTo(name);
+                    stands = given == null ? stands : Core.withoutStanding(given.value());
+                }
+                if (stands instanceof Core.PreservedCall call
+                        && call.operation().equals(ValueName.Stdlib.operation("Int", "floorMod"))
+                        && call.args().size() == 2
+                        && Core.withoutStanding(call.args().get(1)) instanceof Core.Int divisor
+                        && divisor.value() > 0) {
+                    return new FormRange(ExactRatio.of(0), ExactRatio.of(divisor.value() - 1));
+                }
+                return null;
+            }
+
+            /**
              * The numbers the arms of the choice {@code node} answer between them, or null where
              * an arm is no form of places with ends.
              */
@@ -2281,6 +2315,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         }
     }
 
+    /** An operation of whole numbers over the value the reading stopped at, worked out by
+     *  {@code node} as {@code form}, that no owner of the stopped value placed. */
+    private record OverTheStopValue(Core node, LinearForm<NumericTerm> form) {}
+
     /** What a reading of a comparison was told as it went: the operations of whole numbers, and
      *  whether nothing it read could stop a run without telling. */
     static final class WhatWasTold {
@@ -2295,6 +2333,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** The operations over a stopped value that are told of nowhere, to be asked of the form
          *  of the comparison. */
         private final List<SumOverTheStop> sumsOverTheStop = new ArrayList<>();
+        /** The nodes working out an operation over an expression held aside that may stop a run,
+         *  and that neither the form of the comparison nor a bound value answers for
+         *  ({@link StopEvidence#unplaced}). */
+        private final List<Core> unplaced = new ArrayList<>();
+        /** The operations over the value the reading stopped at that no owner placed, to be asked
+         *  of the form of the comparison before they are {@link #unplaced}. */
+        private final List<OverTheStopValue> operationsOverTheStopValue = new ArrayList<>();
         /** The counts of a list whose working out is answered for only where the line the
          *  comparison draws on the count is at a count a list holds, to be asked of the form of
          *  the comparison. */
@@ -2424,6 +2469,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 add(apart.at.get(i), apart.operations.get(i).shifted(ofWholeNumbers));
             }
             sumsOverTheStop.addAll(apart.sumsOverTheStop);
+            unplaced.addAll(apart.unplaced);
+            operationsOverTheStopValue.addAll(apart.operationsOverTheStopValue);
             countsOverTheStop.addAll(apart.countsOverTheStop);
             readByATerm.addAll(apart.readByATerm);
             leftToTheWitness.addAll(apart.leftToTheWitness);
@@ -2481,7 +2528,22 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
         /** What a row of a line gets past, and what a run works out, off what the walk told. */
         WorkedOut workedOut() {
-            return new WorkedOut(working(), new StopEvidence(everyOperation(true)));
+            return new WorkedOut(working(),
+                    new StopEvidence(everyOperation(true), unplacedEverywhere()));
+        }
+
+        /** The nodes working out an operation that may stop a run and is placed nowhere in the
+         *  input, here and in the readings of parts of the comparison kept beside it
+         *  ({@link StopEvidence#unplaced}). */
+        List<Core> unplacedEverywhere() {
+            List<Core> every = new ArrayList<>(unplaced);
+            for (WhatWasTold group : leftToTheWitness) {
+                every.addAll(group.unplacedEverywhere());
+            }
+            for (WhatWasTold group : besideTheRows) {
+                every.addAll(group.unplacedEverywhere());
+            }
+            return every;
         }
 
         /**
@@ -3043,6 +3105,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 // it is asked to get past.
                 if (!sum.toldOverItsValue(told, ofTheInput) && !areAddendsOf(sum.form(), whole)) {
                     told.exact = false;
+                    told.unplaced.add(Core.withoutStanding(sum.node()));
+                }
+            }
+            for (OverTheStopValue each : told.operationsOverTheStopValue) {
+                if (!areAddendsOf(each.form(), whole)) {
+                    told.unplaced.add(each.node());
                 }
             }
             for (NumericTerm count : told.countsOverTheStop) {
@@ -3063,7 +3131,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     && WorkedOutToReachIt.of(ofTheInput).endsNoRun(new Denotation(node, reads));
             return new WorkedOut(aName ? told.working() : told.working().notOnEveryRun(),
                     new StopEvidence(told.everyOperation(
-                            aName || endsNoRun || stoppedAt.theStopWorksOutTheFormItIsReadAs())));
+                            aName || endsNoRun || stoppedAt.theStopWorksOutTheFormItIsReadAs()),
+                            told.unplacedEverywhere()));
         }
 
         /**
