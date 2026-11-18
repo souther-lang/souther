@@ -703,8 +703,12 @@
                                      which a search misses and a snapshot writes down. The name
                                      check is not
                                      against writing one name for one distinction at two levels — it
-                                     is against a use that does not say which of them it means. -->
-                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:BadInstanceof:OFF -Xep:ReferenceEquality:OFF -Xep:StringSplitter:OFF -Xep:UnnecessaryParentheses:OFF -Xep:BooleanLiteral:OFF -Xep:IdentityHashMapUsage:OFF -Xep:ClassInitializationDeadlock:OFF -Xep:ArrayRecordComponent:OFF -Xep:ImmutableEnumChecker:OFF -Xep:StringConcatToTextBlock:OFF -Xep:EffectivelyPrivate:OFF -Xep:VoidUsed:OFF -Xep:NotJavadoc:OFF -Xep:AvoidCommonTypeNames:OFF -Xep:InlineFormatString:OFF -Xep:RethrowReflectiveOperationExceptionAsLinkageError:OFF -Xep:JavaLocalTimeGetNano:OFF -Xep:JavaLocalDateTimeGetNano:OFF -Xep:RemoveUnusedImports:ERROR -Xep:ObjectToString:ERROR -Xep:DuplicateBranches:ERROR -Xep:UnusedVariable:ERROR -Xep:UnusedMethod:ERROR -Xep:SameNameButDifferent:ERROR -Xep:MissingOverride:ERROR -Xep:OperatorPrecedence:ERROR -Xep:StringCaseLocaleUsage:ERROR ${nullaway.args}</arg>
+                                     is against a use that does not say which of them it means.
+                                     RefactorSwitch as well: as a warning it failed the build through
+                                     -Werror one switch a run, each run naming a switch the one
+                                     before had not; as an error it is said where it is found, as
+                                     the others above are. -->
+                                <arg>-Xplugin:ErrorProne -Xep:UnicodeInCode:OFF -Xep:BadInstanceof:OFF -Xep:ReferenceEquality:OFF -Xep:StringSplitter:OFF -Xep:UnnecessaryParentheses:OFF -Xep:BooleanLiteral:OFF -Xep:IdentityHashMapUsage:OFF -Xep:ClassInitializationDeadlock:OFF -Xep:ArrayRecordComponent:OFF -Xep:ImmutableEnumChecker:OFF -Xep:StringConcatToTextBlock:OFF -Xep:EffectivelyPrivate:OFF -Xep:VoidUsed:OFF -Xep:NotJavadoc:OFF -Xep:AvoidCommonTypeNames:OFF -Xep:InlineFormatString:OFF -Xep:RethrowReflectiveOperationExceptionAsLinkageError:OFF -Xep:JavaLocalTimeGetNano:OFF -Xep:JavaLocalDateTimeGetNano:OFF -Xep:RemoveUnusedImports:ERROR -Xep:ObjectToString:ERROR -Xep:DuplicateBranches:ERROR -Xep:UnusedVariable:ERROR -Xep:UnusedMethod:ERROR -Xep:SameNameButDifferent:ERROR -Xep:MissingOverride:ERROR -Xep:OperatorPrecedence:ERROR -Xep:StringCaseLocaleUsage:ERROR -Xep:RefactorSwitch:ERROR ${nullaway.args}</arg>
                             </compilerArgs>
                             <annotationProcessorPaths>
                                 <path>
