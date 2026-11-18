@@ -2385,14 +2385,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                         declined, stated, modelBy, witnesses))
                         : leftAlong(read, sources, carried, model, conditions, remainders,
                                 heldWhole, declined, stated, modelBy, witnesses);
-                Set<FilingCoordinate> mayStop = new LinkedHashSet<>();
+                // What the rows showed of a run stopping on the way is of the rows, and holds
+                // whatever the model's reading finds.
+                Set<FilingCoordinate> mayStop = new LinkedHashSet<>(overTheRows.mayStopBefore());
                 for (FilingCoordinate at : along.undivided()) {
                     if (!overTheRows.undivided().contains(at)
                             || fewerValuesPastTheEnds(at, model, each.region(), read)) {
                         mayStop.add(at);
                     }
                 }
-                along = mayStop.isEmpty() ? along : along.mayStopBefore(mayStop);
+                along = mayStop.isEmpty() ? along
+                        : along.mayStopBefore(mayStop, overTheRows.gettingThere());
             }
             out = out == null ? along : out.alongBoth(along);
         }
@@ -2404,13 +2407,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * number at {@code at} to fewer values inside its type than the model leaves it,
      * {@code model}. A value no run gets past the ends with is no value the relation is reached
      * at, however it comes to be kept out: by an end on the number itself, or on another the way
-     * ties it to.
+     * ties it to. An end is a bound and never a value held apart, so where the run of the number
+     * is is what it moves. A number of more than one position is not shown to keep its values.
      */
     private static boolean fewerValuesPastTheEnds(FilingCoordinate at, SearchRegion model,
                                                   SearchRegion pastTheEnds, InputReading read) {
-        NumericTerm term = numberAt(at);
-        return !Objects.equals(liesInItsType(pastTheEnds, term, read),
-                liesInItsType(model, term, read));
+        if (!(numberAt(at) instanceof NumericTerm.FromOnePosition one)) {
+            return true;
+        }
+        return !Objects.equals(liesInItsType(pastTheEnds, one, read),
+                liesInItsType(model, one, read));
     }
 
     /** The number filed at {@code at}: the term itself, or the value at the position. */
@@ -2426,17 +2432,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return places().stream().map(UndividedByARelation::numberAt).toList();
     }
 
-
     /** Where {@code term} lies in {@code region}, inside where its type stops: null where nothing
      *  is left of it. */
-    private static NumericDomain.Bounds liesInItsType(SearchRegion region, NumericTerm term,
+    private static NumericDomain.Bounds liesInItsType(SearchRegion region,
+                                                      NumericTerm.FromOnePosition term,
                                                       InputReading read) {
-        TermOrders orders = term instanceof NumericTerm.FromOnePosition one
-                ? read.quantities().ordersOf(one) : null;
-        NumericDomain.Bounds stops = orders == null || orders.answered() == null
-                ? NumericDomain.Bounds.OPEN : orders.answered().whereItStops();
         return region.projectionOf(term) instanceof NumericDomain.FormProjection.Within(
-                NumericDomain.Bounds within) ? within.meet(stops) : null;
+                NumericDomain.Bounds within) ? within.meet(whereItsTypeStops(term, read)) : null;
+    }
+
+    /** Where the type of {@code term} stops, open where its orders do not say. */
+    private static NumericDomain.Bounds whereItsTypeStops(NumericTerm.FromOnePosition term,
+                                                         InputReading read) {
+        TermOrders orders = read.quantities().ordersOf(term);
+        return orders == null || orders.answered() == null
+                ? NumericDomain.Bounds.OPEN : orders.answered().whereItStops();
     }
 
     /**

@@ -247,7 +247,7 @@ final class AWayReadForARelation {
         if (bounded.isEmpty()) {
             return false;
         }
-        OrderedRuns everyValue = forms.declared(bounded.get().form(), whole.from().declarations());
+        OrderedRuns everyValue = forms.declared(bounded.get().form(), whole.from().region());
         return everyValue != null
                 && everyValue.meet(bounded.get().runs()).sameValuesAs(everyValue);
     }
@@ -996,7 +996,7 @@ final class AWayReadForARelation {
             bounded.add(taken);
             constraints.add(affine);
         }
-        SearchRegion region = TakenConstraint.narrowedBy(constraints, whole.from().declarations());
+        SearchRegion region = TakenConstraint.narrowedBy(constraints, whole.from().region());
         if (TakenConstraint.nothingIsLeftFor(constraints, region)) {
             return ByItsNumbers.NOT_MET;
         }
@@ -1096,7 +1096,7 @@ final class AWayReadForARelation {
          */
         static Parted of(OnTheWay choice, AWayReadForARelation reading) {
             return OneReading.choiceParted(choice, reading.bearing,
-                    reading.whole.from().declarations(), () -> partedBy(choice, reading));
+                    reading.whole.from().region(), () -> partedBy(choice, reading));
         }
 
         /**

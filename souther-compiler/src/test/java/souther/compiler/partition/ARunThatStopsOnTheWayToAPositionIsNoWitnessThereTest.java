@@ -43,6 +43,8 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
 
     private static final String NOT_SHOWN_REACHED = "relation_not_shown_reached_at_every_value";
 
+    private static final String NOTHING_ARRIVES = "nothing_arrives_at_the_rules_line";
+
     private static final String PARAMETERS = "a: Int, d: Int, hs: Set<Int>";
 
     private static final String NUMBERS =
@@ -113,6 +115,79 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
                 "a + " + (Long.MAX_VALUE - 10) + " - a >= 0 && " + relation);
         assertEquals(readingsOf(NUMBERS, relation).keySet(), past.keySet(), past::toString);
         assertEquals(List.of(NOT_SHOWN_REACHED), past.get("Set.size(hs)"), past::toString);
+    }
+
+    /**
+     * A stop that keeps out values of a number between the ends of its run, and not the ends:
+     * past {@code c + K} only a {@code c} of nought or one gets on, so of {@code a == 3 * b + c}
+     * every third value of {@code a} up to 199 is reached by no run, and the run of {@code a}
+     * from nought to 199 is as it was. The membership is not said reached at every value.
+     */
+    @Test
+    void aStopThatThinsANumberOutWithoutMovingItsEndsBearsOnIt() {
+        String condition = "a >= 0 && a <= 199 && b >= 0 && c >= 0 && c <= 2 && a == 3 * b + c"
+                + " && c + 9223372036854775806 - c >= 0 && " + MEMBERSHIP;
+        assertEquals(List.of(NOT_SHOWN), reasonsAt(NUMBERS, condition, "hs[*]"));
+    }
+
+    /**
+     * A stop on a number a remainder ties to the one the relation reads keeps some classes of it
+     * from every run, which no rule the region holds says: the membership is not said reached
+     * at every value.
+     */
+    @Test
+    void aStopOnANumberARemainderTiesToTheOneReadBearsOnIt() {
+        String condition = "Int.floorMod(a - b, 20) == 0 && b >= 0 && b + "
+                + (Long.MAX_VALUE - 10) + " - b >= 0 && " + MEMBERSHIP;
+        assertEquals(List.of(NOT_SHOWN), reasonsAt(NUMBERS, condition, "hs[*]"));
+    }
+
+    /**
+     * A choice whose left arm is a sum tying two numbers is worked out on every run, so
+     * {@code a + K} stops every run past ten whichever arm is taken. A relation after it reads
+     * the numbers as the model leaves them: {@code a} is one a run may stop before, and the line
+     * at ten that the stop alone puts on {@code b} is drawn nowhere.
+     */
+    @Test
+    void aRelationAfterASumThatTiesTwoNumbersIsReadWhereTheTypeEnds() {
+        String choice = "(a + " + FIRST_SUM + " - d >= 0 || d > 0) && ";
+        assertEquals(Map.of("a", List.of(NOT_SHOWN_REACHED, READ), "d", List.of(READ),
+                        "b", List.of(NOT_SHOWN_REACHED)),
+                readingsOf(NUMBERS, choice + "a - b > 0"));
+        assertEquals(Map.of("a", List.of(NOT_SHOWN_REACHED, READ), "d", List.of(READ),
+                        "hs[*]", List.of(NOT_SHOWN_REACHED)),
+                readingsOf(NUMBERS, choice + MEMBERSHIP));
+    }
+
+    /**
+     * A way with more choices on it than are looked along one by one is read again for the
+     * relation, past what the run got past: the stop is where the representation stops there as
+     * well, and the membership is read as it is on a way of no choices.
+     */
+    @Test
+    void aWayReadAgainPastItsChoicesKeepsWhereTheRepresentationStops() {
+        List<String> alternatives = new ArrayList<>();
+        for (int b = 1; b <= CompositionBudget.WAYS_A_WAY_IS_LOOKED_ALONG.maximum() + 1; b++) {
+            alternatives.add("b == " + b);
+        }
+        String choice = "(" + String.join(" || ", alternatives) + ") && ";
+        assertEquals(List.of(NOT_SHOWN_REACHED), reasonsAt(NUMBERS,
+                choice + "a + " + FIRST_SUM + " - a >= 0 && " + MEMBERSHIP, "hs[*]"));
+    }
+
+    /**
+     * An end over two numbers that moves the run of neither keeps out pairs of them: past
+     * {@code a - d + K} no run holds {@code a - d} above ten. A relation over the pair is read as
+     * the model leaves it, and where the end keeps every row from one of its sides, that nothing
+     * arrives there is said.
+     */
+    @Test
+    void anEndKeepingOutPairsAloneIsReadThroughTheRowsThatArrive() {
+        String past = "a - d + " + FIRST_SUM + " >= 0 && ";
+        assertEquals(readingsOf(NUMBERS, "a - d < -20"),
+                readingsOf(NUMBERS, past + "a - d < -20"));
+        List<String> cutOff = List.of(NOTHING_ARRIVES, READ);
+        assertEquals(Map.of("a", cutOff, "d", cutOff), readingsOf(NUMBERS, past + "a - d > 20"));
     }
 
     /** A guard keeping {@code a} to ten is a statement of the model, and divides the elements. */

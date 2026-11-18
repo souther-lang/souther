@@ -9,7 +9,6 @@ import java.math.RoundingMode;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -789,26 +788,6 @@ public final class NumericDomain<A> {
             }
         }
         return reaches;
-    }
-
-    /**
-     * Whether a chain of the rules relates some of {@code these} to some of {@code those}: they
-     * are in one group of the positions the rules relate ({@link #related}). Positions in no group
-     * together are systems written beside one another, which bound nothing of each other but
-     * whether any value is left at all ({@link #leavesTheWholeOfItsRun}).
-     */
-    public boolean relates(Collection<A> these, Collection<A> those) {
-        Map<A, A> reaches = related();
-        Set<A> groups = new HashSet<>();
-        for (A each : these) {
-            groups.add(groupOf(reaches, each));
-        }
-        for (A each : those) {
-            if (groups.contains(groupOf(reaches, each))) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /** Whether each of {@code atoms} has its values spaced as every other of its group has. */
