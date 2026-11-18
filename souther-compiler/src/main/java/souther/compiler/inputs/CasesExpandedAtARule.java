@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -76,6 +77,23 @@ public record CasesExpandedAtARule(RuleRef rule, Set<RuleReportAnchor> reachedBy
         public Reading {
             Objects.requireNonNull(readAt, "a reading is made at some copies, if only none");
             Objects.requireNonNull(cameTo, "and came to something");
+        }
+
+        /**
+         * The helper an author is told to declare as a behavior, so that none of the choices the
+         * case is made of is expanded where the rule was read
+         * ({@link CaseExpansion#theHelperHoldingEveryChoice}): empty where no helper holds them
+         * all, where what made the parts was not said, and where the helper is one the choices
+         * multiply the readings of, which is said of it already.
+         */
+        public Optional<CaseExpansion.HelperToDeclare> helperHoldingEveryChoice() {
+            if (!(cameTo.attributed() instanceof CaseExpansion.Attributed attributed)) {
+                return Optional.empty();
+            }
+            return CaseExpansion.theHelperHoldingEveryChoice(attributed.factors(),
+                            readAt.inOrder())
+                    .filter(declared -> attributed.multiplied().stream()
+                            .noneMatch(each -> each.helper().equals(declared.helper())));
         }
     }
 

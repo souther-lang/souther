@@ -155,8 +155,9 @@ public final class CasesOfALineAsked {
      *
      * @param in        the case asked
      * @param stoppedAt the figures its cases were stopped at; one or more
-     * @param counted   how many ways of choosing its cases there were, where their number is what
-     *                  stopped them; empty where none was taken apart for another reason
+     * @param counted   how many ways of choosing its cases there were, where their number, or the
+     *                  questions of the statement they are a line's cases of, is what stopped
+     *                  them; empty where none was taken apart for another reason
      */
     public record NotWorkedOut(DecidingCase in, Set<Figure.Budget> stoppedAt,
                                Optional<CaseCount> counted) {
@@ -421,19 +422,6 @@ public final class CasesOfALineAsked {
         return new Atoms<>(out, stopped);
     }
 
-    /**
-     * Whether {@code cases} are more ways of choosing one than
-     * {@link CompositionBudget#CASES_A_LINE_IS_TAKEN_APART_INTO} as the choices stand: where they
-     * are not, every case is asked; where they are, each case is answered for none, and a line is
-     * asked in them only where the ways the intervals leave, or the ways the remainders leave as
-     * well, are no more than that. So every line whose cases are not taken apart is one of these,
-     * and not every one of these is such a line.
-     */
-    public static boolean pastTheFigureAsTheChoicesStand(DecidingCase.Cases cases) {
-        long most = CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO.maximum();
-        return cases.waysOfChoosing(most) > most;
-    }
-
     private Found asked(DecidingCase said) {
         if (!aStepIsLeft()) {
             pastTheSteps(List.of(said.standsFor()));
@@ -655,7 +643,14 @@ public final class CasesOfALineAsked {
     /** Where the cases of {@code said} nobody worked out are, if there are any: where it holds,
      *  stopped at every figure the asking met ({@link NotWorkedOut}). */
     private List<NotWorkedOut> notWorkedOutIn(DecidingCase said) {
-        return stopped.isEmpty() ? List.of() : List.of(new NotWorkedOut(said, stopped, counted));
+        if (stopped.isEmpty()) {
+            return List.of();
+        }
+        // Cases the statement's questions ran out on were too dear to be asked, as cases past the
+        // figure are too many: how many ways they stood for is what a reader is told either way.
+        Optional<CaseCount> ways = counted.isPresent() || !ofTheStatement.ranOut() ? counted
+                : Optional.of(CaseCount.of(said.standsFor()));
+        return List.of(new NotWorkedOut(said, stopped, ways));
     }
 
     /** The cases of {@code said} were more ways of choosing one than are taken apart: none is

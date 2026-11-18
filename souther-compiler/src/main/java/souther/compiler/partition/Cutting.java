@@ -31,7 +31,6 @@ import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.AuthorsLines;
 import souther.compiler.meaning.CaseExpansion;
 import souther.compiler.meaning.StatementReading;
-import souther.compiler.meaning.CasesOfALineAsked;
 import souther.compiler.meaning.CountsWrittenOut;
 import souther.compiler.meaning.DecidingCase;
 import souther.compiler.meaning.DecisionAtom;
@@ -367,19 +366,6 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
              *  these lines' statement was. */
             Several eachPart(UnaryOperator<Part> each) {
                 return new Several(parts.stream().map(each).toList(), derivedBy);
-            }
-
-            /**
-             * Whether some line's cases are past the figure as the choices stand
-             * ({@link CasesOfALineAsked#pastTheFigureAsTheChoicesStand}), which every line whose
-             * cases are not taken apart is, and the only lines what made their parts is told of.
-             * Some are taken apart still, where the ways their numbers leave are few; telling
-             * them apart here would count the ways a second time, for a reading that is only
-             * kept.
-             */
-            boolean mayBePastTheCasesTakenApart() {
-                return parts.stream().anyMatch(part -> part.cases().stream().anyMatch(
-                        one -> CasesOfALineAsked.pastTheFigureAsTheChoicesStand(one.standsFor())));
             }
 
             /**
@@ -945,12 +931,12 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
 
     /**
      * {@code lines}, drawn of the applications {@code derived} are each application's statement
-     * of, held with those derivations where the lines are past the cases taken apart: cases where
-     * a line read on several applications decides are the cases of each, any one of them, and
-     * what made their parts is read off the application each was read on.
+     * of, held with those derivations: cases where a line read on several applications decides
+     * are the cases of each, any one of them, and what made their parts is read off the
+     * application each was read on.
      */
     private static Read.Several derivedOnEach(Read.Several lines, List<Derivation> derived) {
-        return lines.mayBePastTheCasesTakenApart() ? lines.derivedAs(derived) : lines;
+        return lines.derivedAs(derived);
     }
 
     /**
@@ -1475,9 +1461,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
                         Optional.of(comparison.claim()))));
         Read drawn = readAsAWhole(behavior, comparison, read, reads, answering, onTheInput,
                 onEveryElement, lines);
-        // How the statement was derived is held only where some line's cases may be too many to
-        // be taken apart, which is the one place a reader reads what made their parts off it.
-        if (drawn instanceof Read.Several several && several.mayBePastTheCasesTakenApart()) {
+        // How the statement was derived is held with its lines, for what made the parts of cases
+        // too many or too dear to be asked, which only asking them shows; what does not tell of
+        // any lets it go ({@link ComparisonAssessment.Several#withTheDerivationsItTellsOf}).
+        if (drawn instanceof Read.Several several) {
             return several.derivedAs(List.of(stated.meaning().how()));
         }
         if (writtenIn.isEmpty() || !(stated.proposition() instanceof Proposition.Compared compared)

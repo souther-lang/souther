@@ -778,6 +778,14 @@ sealed interface ComparisonAssessment {
                     .toList(), derivedBy);
         }
 
+        /** The same lines, holding how the statement was derived only where some line tells of
+         *  what made the parts of its cases ({@link #caseExpansions}), which is the one reading
+         *  of it. */
+        Several withTheDerivationsItTellsOf() {
+            return parts.stream().anyMatch(part -> !part.expanded().isEmpty()) ? this
+                    : new Several(parts, List.of());
+        }
+
         /**
          * What each line not worked out because its cases were too many was told of them: each
          * case asked counted on its own, with what made the parts it is taken apart on read off
@@ -1574,9 +1582,10 @@ sealed interface ComparisonAssessment {
                     CasesOfALineAsked.QuestionsOfAStatement.fresh();
             Several asked = partsNarrowed(several, way, wayToACase, arrivals, drawnByAnInvariant,
                     reading, witnesses, questions);
-            return !questions.ranOut() ? asked : partsNarrowed(several, way, wayToACase, arrivals,
-                    drawnByAnInvariant, reading, witnesses,
-                    CasesOfALineAsked.QuestionsOfAStatement.spent());
+            return (!questions.ranOut() ? asked : partsNarrowed(several, way, wayToACase,
+                    arrivals, drawnByAnInvariant, reading, witnesses,
+                    CasesOfALineAsked.QuestionsOfAStatement.spent()))
+                    .withTheDerivationsItTellsOf();
         }
         return arrivedAt(read, way, arrivals, drawnByAnInvariant, reading, witnesses, true);
     }

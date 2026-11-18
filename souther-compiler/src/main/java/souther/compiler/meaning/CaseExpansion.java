@@ -5,6 +5,7 @@ import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -214,17 +215,90 @@ public record CaseExpansion(Which which, String line, String cutAt, CameTo cameT
          * helper cannot call a behavior, so a call declared as one has to move out past them all.
          */
         public static List<ValueName.Helper> calledInside(ModelOccurrence at) {
-            List<ValueName.Helper> out = new ArrayList<>();
-            if (at.lineage() instanceof ExpansionLineage.Expansion copy) {
-                for (ExpansionLineage each = copy.within();
-                        each instanceof ExpansionLineage.Expansion step; each = step.within()) {
-                    if (step.expanded() instanceof ValueName.Helper helper) {
-                        out.add(helper);
-                    }
-                }
-            }
-            return List.copyOf(out);
+            return at.lineage() instanceof ExpansionLineage.Expansion copy
+                    ? helpersOut(copy.within()) : List.of();
         }
+    }
+
+    /**
+     * The helpers whose copies the copy {@code at} stands in, innermost first: the helper it is
+     * written in, then each helper the call of that one is written in, out to the behavior's own
+     * body.
+     */
+    public static List<ValueName.Helper> writtenInside(ModelOccurrence at) {
+        return helpersOut(at.lineage());
+    }
+
+    /** The helpers {@code from} is a copy of and is inside, innermost first. */
+    private static List<ValueName.Helper> helpersOut(ExpansionLineage from) {
+        List<ValueName.Helper> out = new ArrayList<>();
+        for (ExpansionLineage each = from;
+                each instanceof ExpansionLineage.Expansion step; each = step.within()) {
+            if (step.expanded() instanceof ValueName.Helper helper) {
+                out.add(helper);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * The helper to declare as a behavior so that none of the choices {@code factors} made is
+     * expanded where a comparison read at {@code readAt} is: the innermost helper every construct
+     * of {@code factors} is written in a copy of, and no copy of the comparison is. Empty where no
+     * helper is.
+     *
+     * <p>A helper the comparison is written in as well is not one: declared as a behavior, it
+     * reads the comparison in its own body, beside the same choices.
+     */
+    public static Optional<HelperToDeclare> theHelperHoldingEveryChoice(
+            List<Factor> factors, Collection<ModelOccurrence> readAt) {
+        List<List<ValueName.Helper>> made = factors.stream()
+                .flatMap(each -> each.constructs().stream())
+                .map(CaseExpansion::writtenInside).toList();
+        return innermostHoldingEvery(made,
+                readAt.stream().map(CaseExpansion::writtenInside).toList())
+                .map(helper -> new HelperToDeclare(helper, outside(helper, made)));
+    }
+
+    /**
+     * What {@code inside}, which every one of {@code made} is inside, is itself inside in any of
+     * them, each given innermost first: each once, in the order they are met.
+     */
+    static <H> List<H> outside(H inside, List<List<H>> made) {
+        List<H> out = new ArrayList<>();
+        for (List<H> each : made) {
+            each.subList(each.indexOf(inside) + 1, each.size()).stream()
+                    .filter(outer -> !out.contains(outer))
+                    .forEach(out::add);
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * A helper to declare as a behavior, and the helpers its call is written inside: a helper
+     * cannot call a behavior, so the call has to move out past them all.
+     */
+    public record HelperToDeclare(ValueName.Helper helper, List<ValueName.Helper> calledInside) {
+
+        public HelperToDeclare {
+            Objects.requireNonNull(helper, "some helper to declare");
+            calledInside = List.copyOf(calledInside);
+        }
+    }
+
+    /**
+     * The innermost of what every one of {@code made} is inside and no one of {@code read} is,
+     * each given innermost first, as the first of {@code made} orders them; empty where nothing is,
+     * or where {@code made} is nothing.
+     */
+    static <H> Optional<H> innermostHoldingEvery(List<List<H>> made, List<List<H>> read) {
+        if (made.isEmpty()) {
+            return Optional.empty();
+        }
+        List<H> common = new ArrayList<>(made.getFirst());
+        made.forEach(common::retainAll);
+        read.forEach(common::removeAll);
+        return common.stream().findFirst();
     }
 
     /** Nothing is said of what the parts came from, for the reason {@code why}. */

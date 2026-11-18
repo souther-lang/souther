@@ -9256,6 +9256,28 @@
                     },
                     "caseExpansion": {
                       "$ref": "#/$defs/caseExpansion"
+                    },
+                    "helperToDeclare": {
+                      "type": "object",
+                      "description": "The helper every choice the case is made of is written in, and the comparison is not, the innermost of those: declared as a behavior, it is not expanded where the comparison is read at these copies, and the comparison reads its answer as one value. Absent where no helper holds every choice, where what made the parts was not said, and where the helper is one of `caseExpansion`'s `multiplied`.",
+                      "required": [
+                        "helper",
+                        "calledInside"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "helper": {
+                          "type": "string",
+                          "description": "The helper, as its module and name."
+                        },
+                        "calledInside": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "The helpers its call is written inside, innermost first, as module and name. A helper cannot call a behavior, so the call moves out past every one of them into a behavior's own `let`. Empty where the helper is called in the behavior's own body."
+                        }
+                      }
                     }
                   }
                 }
