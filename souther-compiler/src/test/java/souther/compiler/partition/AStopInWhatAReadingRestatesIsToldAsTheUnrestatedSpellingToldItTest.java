@@ -57,57 +57,20 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
                 "List.all(r -> r <= 10, List.map(x -> x + 1, List.map(y -> y * 2, ds)))");
         CONDITIONS.put("beside",
                 "List.fold((w, l) -> if l > w then l else w, 0, ds) <= q + 1");
-        CONDITIONS.put("sumOfAStep", "List.sum(List.map(x -> x + 1, ds)) >= 10");
-        CONDITIONS.put("sumOfAStepWithAProduct", "List.sum(List.map(x -> x * 2, ds)) >= 10");
-        CONDITIONS.put("sumOfAnUnchangedStep", "List.sum(List.map(x -> x, ds)) >= 10");
-        CONDITIONS.put("sumOfTheElements", "List.sum(ds) >= 10");
-        CONDITIONS.put("foldOfTheElements", "List.fold((w, l) -> w + l, 0, ds) >= 10");
-        CONDITIONS.put("sumOfNothing", "List.sum([1, 2]) >= 2");
-        CONDITIONS.put("foldOfAStep",
-                "List.fold((w, l) -> w + l, 0, List.map(x -> x + 1, ds)) >= 10");
-        CONDITIONS.put("foldOfAnUnchangedStep",
-                "List.fold((w, l) -> w + l, 0, List.map(x -> x, ds)) >= 10");
-        CONDITIONS.put("lengthOfAStep", "List.length(List.map(x -> x + 1, ds)) >= 2");
-        CONDITIONS.put("lengthOfAStepUnchanged", "List.length(List.map(x -> x, ds)) >= 2");
-        CONDITIONS.put("lengthOfAConditionStep",
-                "List.length(List.map(x -> if x + 1 > 0 then 1 else 2, ds)) >= 2");
-        CONDITIONS.put("lengthOfAConditionStepUnchanged",
-                "List.length(List.map(x -> if x > 0 then 1 else 2, ds)) >= 2");
-        CONDITIONS.put("lengthOfAnArmStep",
-                "List.length(List.map(x -> if x < 0 then x + 1 else 0, ds)) >= 2");
-        CONDITIONS.put("lengthOfATupleStep",
-                "List.length(List.map(x -> (x + 1, 1), ds)) >= 2");
-        CONDITIONS.put("lengthOfATupleStepUnchanged",
-                "List.length(List.map(x -> (x, 1), ds)) >= 2");
-        CONDITIONS.put("absInALetBody", "Int.abs({ let a = 1 \n q + a }) >= 0");
-        CONDITIONS.put("absInALetBodyUnchanged", "Int.abs({ let a = 1 \n q }) >= 0");
-        CONDITIONS.put("sumOfWrittenPastTheType", "List.sum([9223372036854775807, 1]) >= 2");
-        CONDITIONS.put("absOfASum", "Int.abs(q + 1) >= 0");
-        CONDITIONS.put("absOfAnUnchangedNumber", "Int.abs(q) >= 0");
-        CONDITIONS.put("maxOfASumAndItsOperand", "Int.max(q + 1, q) >= q");
-        CONDITIONS.put("maxOfAnUnchangedNumber", "Int.max(q, q) >= q");
-        CONDITIONS.put("lengthOfAProduct",
-                "List.length(List.map(r -> r.price * r.qty, rs)) >= 2");
-        CONDITIONS.put("lengthOfAProductUnchanged",
-                "List.length(List.map(r -> r.price, rs)) >= 2");
-        CONDITIONS.put("lengthTakeOfAStep",
-                "List.length(List.take(2, List.map(x -> x + 1, ds))) >= 2");
-        CONDITIONS.put("lengthTakeOfAStepUnchanged",
-                "List.length(List.take(2, List.map(x -> x, ds))) >= 2");
-        CONDITIONS.put("lengthSortOfAStep",
-                "List.length(List.sort(List.map(x -> x + 1, ds))) >= 2");
-        CONDITIONS.put("lengthSortOfAStepUnchanged",
-                "List.length(List.sort(List.map(x -> x, ds))) >= 2");
         CONDITIONS.put("allOfAStep", "List.all(r -> r <= 10, List.map(x -> x + 1, ds))");
         CONDITIONS.put("allOfAProduct", "List.all(r -> r <= 10, List.map(x -> x * 2, ds))");
         CONDITIONS.put("allOfACancelledStep",
                 "List.all(r -> r <= 10, List.map(x -> (x + 1) - 1, ds))");
         CONDITIONS.put("allOfAShiftedStep",
                 "List.all(r -> r <= 10, List.map(x -> (x + 2) - 1, ds))");
-        CONDITIONS.put("lengthOfACancelledStep",
-                "List.length(List.map(x -> (x + 1) - 1, ds)) >= 2");
-        CONDITIONS.put("lengthOfAShiftedStep",
-                "List.length(List.map(x -> (x + 2) - 1, ds)) >= 2");
+        CONDITIONS.put("lengthOfAConditionStep",
+                "List.length(List.map(x -> if x + 1 > 0 then 1 else 2, ds)) >= 2");
+        CONDITIONS.put("lengthOfAnArmStepNoStop",
+                "List.length(List.map(x -> if x < 0 then x + 1 else 0, ds)) >= 2");
+        CONDITIONS.put("lengthOfAProduct",
+                "List.length(List.map(r -> r.price * r.qty, rs)) >= 2");
+        CONDITIONS.put("lengthOfAProductUnchanged",
+                "List.length(List.map(r -> r.price, rs)) >= 2");
         CONDITIONS.put("none", "q >= q");
         CONDITIONS.put("armNoStop", "(if q > 5 then q - 1 else 3) >= q");
         CONDITIONS.put("nestedArmNoStop",
@@ -184,40 +147,11 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
     }
 
     /**
-     * A total of what a container holds stops a run where the exact total is past an
-     * {@code Int}, whatever the elements are, and so does one of what a step makes of them, a
-     * step that changes nothing included. A total of numbers written out that lie within the
-     * type stops none.
-     */
-    @Test
-    void aTotalOfWhatAContainerHoldsIsToldAsOneAMayStop() {
-        for (String form : List.of("sumOfTheElements", "foldOfTheElements", "sumOfAStep",
-                "sumOfAStepWithAProduct", "foldOfAStep", "sumOfAnUnchangedStep",
-                "foldOfAnUnchangedStep")) {
-            assertEquals(1, TOLD.get(form).size(), form + " " + TOLD);
-        }
-        assertEquals(List.of(), TOLD.get("sumOfNothing"), TOLD.toString());
-    }
-
-    /**
-     * What a step works out at each element is a run's to stop in where nothing is added up, as
-     * where the list it makes is counted or asked to be empty, whatever is made of it between.
-     * Each differs from its negative by the operation of the step alone.
-     */
-    @Test
-    void aStepWorkedOutAtEachElementOfAListThatIsCountedIsToldAsOneAMayStop() {
-        for (String form : List.of("lengthOfAStep", "lengthSortOfAStep", "lengthTakeOfAStep",
-                "lengthOfAProduct", "lengthOfATupleStep")) {
-            assertEquals(1, TOLD.get(form).size(), form + " " + TOLD);
-            assertEquals(List.of(), TOLD.get(form + "Unchanged"), form + " " + TOLD);
-        }
-    }
-
-    /**
      * What an element comes to stops a run at the operation the closure writes, where it comes to
      * it, whatever the closure's answer is simplified to: {@code (x + 1) - 1} is {@code x} and a
      * run stops at the {@code x + 1}; {@code (x + 2) - 1} is {@code x + 1} and a run stops at the
-     * {@code x + 2}, an element sooner. The note says the operation and where it is past the type.
+     * {@code x + 2}, an element sooner. The note says the operation and where it is past the type,
+     * which a program run says only as that it stops.
      */
     @Test
     void aStopOfAnElementIsToldAtTheOperationTheClosureWritesIt() {
@@ -229,48 +163,26 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
                 "in ds[*] + 1 where ds[*] is at least 9223372036854775807"), TOLD.toString());
         assertTrue(TOLD.get("allOfAShiftedStep").getFirst().contains(
                 "in ds[*] + 2 where ds[*] is at least 9223372036854775806"), TOLD.toString());
-        assertEquals(1, TOLD.get("lengthOfACancelledStep").size(), TOLD.toString());
-        assertEquals(1, TOLD.get("lengthOfAShiftedStep").size(), TOLD.toString());
     }
 
     /**
-     * What decides a choice is worked out before it picks an arm, on every run; what an arm holds
-     * on some. So a stop in the condition of the closure's answer is told, and an operation only
-     * an arm works out is not told as one every run works out.
+     * What decides a choice in a closure's answer is worked out on every run: a stop in it is
+     * told by the comparison of the length as well as by the condition's own comparison, which a
+     * program run cannot tell apart. An operation only an arm works out, which cannot stop here,
+     * is told of none.
      */
     @Test
-    void aConditionIsWorkedOutBeforeTheArmIsPickedAndTheArmOnlyWhereItIsTaken() {
-        // The condition is a comparison of its own, which is told, and the comparison of the
-        // length is the other: a run that works the closure out stops in the condition.
+    void aConditionIsToldByTheComparisonOfTheListAndByItsOwn() {
         assertEquals(2, TOLD.get("lengthOfAConditionStep").size(), TOLD.toString());
-        assertEquals(List.of(), TOLD.get("lengthOfAConditionStepUnchanged"), TOLD.toString());
-        assertEquals(List.of(), TOLD.get("lengthOfAnArmStep"), TOLD.toString());
+        assertEquals(List.of(), TOLD.get("lengthOfAnArmStepNoStop"), TOLD.toString());
     }
 
-    /** The body of a {@code let} runs once its value has, so what it works out is told. */
+    /** What a program run cannot reach without a record: the product of two fields of an
+     *  element, and the same of one field. */
     @Test
-    void anOperationInTheBodyOfALetIsToldAsOneAMayStop() {
-        assertEquals(1, TOLD.get("absInALetBody").size(), TOLD.toString());
-        assertEquals(List.of(), TOLD.get("absInALetBodyUnchanged"), TOLD.toString());
-    }
-
-    /** A total of numbers written out that is past the type stops every run that reaches it. */
-    @Test
-    void aTotalOfNumbersWrittenOutThatIsPastTheTypeIsToldAsOneAMayStop() {
-        assertEquals(1, TOLD.get("sumOfWrittenPastTheType").size(), TOLD.toString());
-    }
-
-    /**
-     * What a restated comparison holds aside is worked out all the same: {@code Int.abs} of a
-     * sum is worked out after the sum, and the larger of a sum and a number after both. Each
-     * differs from its negative by the operation alone.
-     */
-    @Test
-    void anOperationUnderAValueTheReadingHoldsAsideIsToldAsOneAMayStop() {
-        assertEquals(1, TOLD.get("absOfASum").size(), TOLD.toString());
-        assertEquals(List.of(), TOLD.get("absOfAnUnchangedNumber"), TOLD.toString());
-        assertEquals(1, TOLD.get("maxOfASumAndItsOperand").size(), TOLD.toString());
-        assertEquals(List.of(), TOLD.get("maxOfAnUnchangedNumber"), TOLD.toString());
+    void theProductOfTwoFieldsOfAnElementIsTold() {
+        assertEquals(1, TOLD.get("lengthOfAProduct").size(), TOLD.toString());
+        assertEquals(List.of(), TOLD.get("lengthOfAProductUnchanged"), TOLD.toString());
     }
 
     /** The other side of a comparison of a walk is worked out whatever the walk answers. */

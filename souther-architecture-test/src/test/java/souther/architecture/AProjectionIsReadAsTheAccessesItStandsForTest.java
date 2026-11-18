@@ -758,7 +758,8 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks each operand of a node for the shifts of a date a taking of it stands for,"
                         + " which the reading of the input answers: a projection is one operand,"
                         + " its base");
-        row(out, c + "partition/AffineReading$1", "holdsNoChoice", "(" + core + ")Z",
+        row(out, c + "partition/AffineReading$1", "holdsNoChoice",
+                "(" + core + "Ljava/util/Map;)Z",
                 Reading.STRUCTURE,
                 "asks whether anything in a value is a choice between arms: a field read off a"
                         + " value is no choice, so what a projection holds is what its base"

@@ -253,6 +253,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return true;
         }
 
+        /** Whether {@code other} is this operation told again: the same number held to the same
+         *  ends, whatever it is worked out after. */
+        boolean sameOperationAs(IntOperation other) {
+            return form.equals(other.form) && least.equals(other.least)
+                    && greatest.equals(other.greatest);
+        }
+
         /** An operation over numbers of the input alone. */
         static IntOperation overTheInput(LinearForm<NumericTerm> form, BigInteger least,
                                          BigInteger greatest, List<Integer> after) {
@@ -2376,7 +2383,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             List<Bounded> before = new ArrayList<>(besides);
             for (int other = 0; other < operations.size(); other++) {
                 IntOperation one = operations.get(other);
-                if (other != at && !one.after().contains(at) && !withinItsEnds(one, before)) {
+                // An operation told twice is one a run works out, and is not another that has to
+                // be within the type before this one is asked.
+                if (other != at && !one.sameOperationAs(it) && !one.after().contains(at)
+                        && !withinItsEnds(one, before)) {
                     before = null;
                     break;
                 }
