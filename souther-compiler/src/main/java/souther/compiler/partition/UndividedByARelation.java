@@ -267,17 +267,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         /**
-         * Whether the rows a run stops at in this can be said as forms of numbers each at one
-         * position of the input, as {@code rowsWhere} says them. Where they cannot, as for a
-         * total over a container, which stops a run where it is worked out exactly past its
-         * type and not where its place is, that no row stops is not shown, and a run may stop in
-         * it.
+         * Whether the rows a run stops at in this can be said as {@link #placedOnRows} says them.
+         * Where they cannot, as for a total over a container, which stops a run where it is
+         * worked out exactly past its type and not where its place is, or for a number written
+         * out that is past the type, that no row stops is not shown, and a run may stop in it.
          */
         boolean stopsOnRowsOfTheInput() {
             LinearForm<NumericTerm> over = overTheInput();
-            return over != null && over.coefs().keySet().stream()
-                    .allMatch(term -> term instanceof NumericTerm.FromOnePosition
-                            && !FormRange.aTotal(term));
+            return over != null && placedOnRows(over)
+                    && over.coefs().keySet().stream().noneMatch(FormRange::aTotal);
         }
 
         /**
@@ -2465,6 +2463,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return true;
     }
 
+    /**
+     * Whether the rows a form stops at can be said as forms of numbers each at one position of
+     * the input ({@link #rowsWhere}): it has some number, each at a position, and a constant and
+     * a weight of one number that are whole.
+     */
+    static boolean placedOnRows(LinearForm<NumericTerm> form) {
+        Map<NumericTerm, ExactRatio> coefs = form.coefs();
+        return !coefs.isEmpty() && wholeOf(form.constant()) != null
+                && (coefs.size() != 1 || wholeOf(coefs.values().iterator().next()) != null)
+                && coefs.keySet().stream()
+                .allMatch(term -> term instanceof NumericTerm.FromOnePosition);
+    }
+
     /** A form over numbers of the input, constant and all, from {@code least} to
      *  {@code greatest}, either of which may be null where nothing bounds it there. */
     private record Bounded(LinearForm<NumericTerm> form, BigInteger least, BigInteger greatest) { }
@@ -2480,15 +2491,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Map<Map<NumericTerm, ExactRatio>, BigInteger[]> met = new LinkedHashMap<>();
         Set<NumericTerm.FromOnePosition> numbers = new LinkedHashSet<>();
         for (Bounded each : bounds) {
+            if (!placedOnRows(each.form())) {
+                return null;
+            }
             Map<NumericTerm, ExactRatio> coefs = each.form().coefs();
             BigInteger weight = coefs.size() == 1 ? wholeOf(coefs.values().iterator().next())
                     : BigInteger.ONE;
             BigInteger shift = wholeOf(each.form().constant());
-            if (coefs.isEmpty() || weight == null || shift == null
-                    || !coefs.keySet().stream().allMatch(term ->
-                            term instanceof NumericTerm.FromOnePosition)) {
-                return null;
-            }
             coefs.keySet().forEach(term -> numbers.add((NumericTerm.FromOnePosition) term));
             BigInteger least = each.least() == null ? null : each.least().subtract(shift);
             BigInteger greatest = each.greatest() == null ? null

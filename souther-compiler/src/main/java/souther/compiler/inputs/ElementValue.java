@@ -1938,9 +1938,21 @@ public sealed interface ElementValue {
          *  not read. */
         private ElementValue byCondition(Core.If branch) {
             Test test = testOf(branch.cond());
-            ElementValue yes = test == null ? null : value(branch.then());
-            ElementValue no = yes == null ? null : value(branch.els());
+            ElementValue yes = test == null ? null : inAnArm(branch.then());
+            ElementValue no = yes == null ? null : inAnArm(branch.els());
             return no == null ? null : ElementValue.choosing(test, yes, no);
+        }
+
+        /** What {@code arm}, the body of one arm of a choice, comes to: what it works out is
+         *  worked out on the runs that take it and on no others. What decides the choice is
+         *  worked out before any arm, on every run. */
+        private ElementValue inAnArm(Core arm) {
+            insideChoices++;
+            try {
+                return value(arm);
+            } finally {
+                insideChoices--;
+            }
         }
 
         /**
@@ -2305,20 +2317,14 @@ public sealed interface ElementValue {
                     if (beside != null) {
                         return LinearForm.atom(new Atom.Invariant(beside));
                     }
-                    ElementValue choice;
-                    insideChoices++;
-                    try {
-                        choice = switch (Core.withoutStanding(e)) {
-                            case Core.If branch -> byCondition(branch);
-                            case Core.Match match -> byCase(match);
-                            case null, default -> {
-                                ElementValue rounded = roundingOf(e, at);
-                                yield rounded != null ? rounded : wholeUnitsOf(e, at);
-                            }
-                        };
-                    } finally {
-                        insideChoices--;
-                    }
+                    ElementValue choice = switch (Core.withoutStanding(e)) {
+                        case Core.If branch -> byCondition(branch);
+                        case Core.Match match -> byCase(match);
+                        case null, default -> {
+                            ElementValue rounded = roundingOf(e, at);
+                            yield rounded != null ? rounded : wholeUnitsOf(e, at);
+                        }
+                    };
                     return choice == null ? null : termsOf(choice);
                 }
 

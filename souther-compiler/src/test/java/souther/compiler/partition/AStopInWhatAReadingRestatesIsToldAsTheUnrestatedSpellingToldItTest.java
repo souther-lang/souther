@@ -69,6 +69,13 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
                 "List.fold((w, l) -> w + l, 0, List.map(x -> x, ds)) >= 10");
         CONDITIONS.put("lengthOfAStep", "List.length(List.map(x -> x + 1, ds)) >= 2");
         CONDITIONS.put("lengthOfAStepUnchanged", "List.length(List.map(x -> x, ds)) >= 2");
+        CONDITIONS.put("lengthOfAConditionStep",
+                "List.length(List.map(x -> if x + 1 > 0 then 1 else 2, ds)) >= 2");
+        CONDITIONS.put("lengthOfAConditionStepUnchanged",
+                "List.length(List.map(x -> if x > 0 then 1 else 2, ds)) >= 2");
+        CONDITIONS.put("lengthOfAnArmStep",
+                "List.length(List.map(x -> if x < 0 then x + 1 else 0, ds)) >= 2");
+        CONDITIONS.put("sumOfWrittenPastTheType", "List.sum([9223372036854775807, 1]) >= 2");
         CONDITIONS.put("absOfASum", "Int.abs(q + 1) >= 0");
         CONDITIONS.put("absOfAnUnchangedNumber", "Int.abs(q) >= 0");
         CONDITIONS.put("maxOfASumAndItsOperand", "Int.max(q + 1, q) >= q");
@@ -218,6 +225,26 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
                 "in ds[*] + 2 where ds[*] is at least 9223372036854775806"), TOLD.toString());
         assertEquals(1, TOLD.get("lengthOfACancelledStep").size(), TOLD.toString());
         assertEquals(1, TOLD.get("lengthOfAShiftedStep").size(), TOLD.toString());
+    }
+
+    /**
+     * What decides a choice is worked out before it picks an arm, on every run; what an arm holds
+     * on some. So a stop in the condition of the closure's answer is told, and an operation only
+     * an arm works out is not told as one every run works out.
+     */
+    @Test
+    void aConditionIsWorkedOutBeforeTheArmIsPickedAndTheArmOnlyWhereItIsTaken() {
+        // The condition is a comparison of its own, which is told, and the comparison of the
+        // length is the other: a run that works the closure out stops in the condition.
+        assertEquals(2, TOLD.get("lengthOfAConditionStep").size(), TOLD.toString());
+        assertEquals(List.of(), TOLD.get("lengthOfAConditionStepUnchanged"), TOLD.toString());
+        assertEquals(List.of(), TOLD.get("lengthOfAnArmStep"), TOLD.toString());
+    }
+
+    /** A total of numbers written out that is past the type stops every run that reaches it. */
+    @Test
+    void aTotalOfNumbersWrittenOutThatIsPastTheTypeIsToldAsOneAMayStop() {
+        assertEquals(1, TOLD.get("sumOfWrittenPastTheType").size(), TOLD.toString());
     }
 
     /**

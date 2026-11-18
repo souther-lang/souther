@@ -2234,6 +2234,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** What readings of parts of the comparison tried on their own were told where nothing
          *  says a row is made, in the order they were read ({@link #besideTheRows}). */
         private final List<WhatWasTold> besideTheRows = new ArrayList<>();
+        /** Every operation of the groups kept for where a run stops, asked whether one is
+         *  among them without going through each group. */
+        private final Set<UndividedByARelation.IntOperation> keptOnce = new HashSet<>();
 
         WhatWasTold() {
             this(new int[2]);
@@ -2318,8 +2321,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** Whether {@code operation} is among those kept for where a run stops
          *  ({@link #leftToTheWitness}, {@link #besideTheRows}). */
         boolean keptForWhereARunStops(UndividedByARelation.IntOperation operation) {
-            return Stream.concat(leftToTheWitness.stream(), besideTheRows.stream())
-                    .anyMatch(group -> group.told(operation));
+            return keptOnce.contains(operation);
         }
 
         /**
@@ -2338,6 +2340,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             readByATerm.addAll(apart.readByATerm);
             leftToTheWitness.addAll(apart.leftToTheWitness);
             besideTheRows.addAll(apart.besideTheRows);
+            keptOnce.addAll(apart.keptOnce);
             exact &= apart.exact;
             partials.addAll(apart.partials);
         }
@@ -2349,6 +2352,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          */
         void leftToTheWitness(WhatWasTold apart) {
             leftToTheWitness.add(apart);
+            keptOnce.addAll(apart.toldOnce);
         }
 
         /**
@@ -2359,6 +2363,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          */
         void besideTheRows(WhatWasTold apart) {
             besideTheRows.add(apart);
+            keptOnce.addAll(apart.toldOnce);
         }
 
         /**
