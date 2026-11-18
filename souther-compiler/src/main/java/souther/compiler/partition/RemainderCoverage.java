@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.LongStream;
 
 /**
  * Whether one number can be chosen to bring a form of numbers to a remainder, for every row of
@@ -110,9 +111,9 @@ final class RemainderCoverage {
                 .map(each -> each.residues(modulus)).toList();
         List<Long> asked = new ArrayList<>();
         if (high - low < 2L * modulus) {
-            for (long n = low; n <= high; n++) {
-                asked.add(n);
-            }
+            // A range closed at both ends, which ends at the last number a long holds where that is
+            // the bound.
+            LongStream.rangeClosed(low, high).forEach(asked::add);
         } else {
             for (long n = 0; n < modulus; n++) {
                 asked.add(low + n);

@@ -1,7 +1,10 @@
 package souther.compiler.partition;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.stream.IntStream;
+import java.util.stream.LongStream;
 
 /**
  * Whether some statements of remainders by one divisor can be met together by choosing one
@@ -78,16 +81,23 @@ final class JointResidues {
         if (low < 0 || low > high) {
             return new None();
         }
+        // Walked as a range closed at both ends, which ends at the last number a long holds where
+        // that is the bound; a count up to the bound would step past it.
         long last = high - low < divisor - 1 ? high : low + divisor - 1;
-        for (long n = low; n <= last; n++) {
-            int remainder = (int) (n % divisor);
-            for (int x = 0; x < divisor; x++) {
-                if (meetsEvery(divisor, statements, x, remainder)) {
-                    return new Choice(x, n);
-                }
-            }
-        }
-        return new None();
+        return LongStream.rangeClosed(low, last)
+                .mapToObj(n -> choiceAt(divisor, statements, n))
+                .flatMap(Optional::stream)
+                .findFirst().orElse(new None());
+    }
+
+    /** The first remainder of the form that meets every statement with the number at {@code n},
+     *  as a choice there, or none. */
+    private static Optional<Answer> choiceAt(int divisor, List<Statement> statements, long n) {
+        int remainder = (int) (n % divisor);
+        return IntStream.range(0, divisor)
+                .filter(x -> meetsEvery(divisor, statements, x, remainder))
+                .mapToObj(x -> (Answer) new Choice(x, n))
+                .findFirst();
     }
 
     /**
