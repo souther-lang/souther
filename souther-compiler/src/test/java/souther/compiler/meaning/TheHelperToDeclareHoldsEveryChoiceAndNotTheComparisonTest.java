@@ -2,6 +2,14 @@ package souther.compiler.meaning;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.types.ExpansionLineage;
+import souther.compiler.types.ExpansionSite;
+import souther.compiler.types.ModelOccurrence;
+import souther.compiler.types.SourceConstruct;
+import souther.compiler.types.SourceConstructOrigin;
+import souther.compiler.types.ValueName;
+import souther.compiler.types.WrittenOwner;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -43,5 +51,29 @@ class TheHelperToDeclareHoldsEveryChoiceAndNotTheComparisonTest {
     void aChoiceWrittenInNoHelperLeavesNoneToName() {
         assertEquals(Optional.empty(), CaseExpansion.innermostHoldingEvery(
                 List.of(List.of("first", "on"), List.of()), List.of()));
+    }
+
+    /** A part nothing was found to have made is a choice written in no helper anyone knows of, so
+     *  the helper the others are written in is not shown to hold every choice. */
+    @Test
+    void aPartNothingWasFoundToHaveMadeLeavesNoneToName() {
+        CaseExpansion.Factor inOn = new CaseExpansion.Choice(new ModelOccurrence(
+                construct(1, SourceConstruct.IF), new ExpansionLineage.Expansion(
+                        ExpansionLineage.ORIGINAL, new ValueName.Helper("m", "on"),
+                        new ExpansionSite.Written(construct(2, SourceConstruct.CALL)))),
+                CaseExpansion.ChoiceKind.IF, 2, 1, Optional.empty());
+        ModelOccurrence comparison = new ModelOccurrence(
+                construct(3, SourceConstruct.BINARY), ExpansionLineage.ORIGINAL);
+        assertEquals(Optional.of(new ValueName.Helper("m", "on")),
+                CaseExpansion.theHelperHoldingEveryChoice(new CaseExpansion.Attributed(
+                        List.of(inOn), 2, 0, List.of()), List.of(comparison))
+                        .map(CaseExpansion.HelperToDeclare::helper));
+        assertEquals(Optional.empty(), CaseExpansion.theHelperHoldingEveryChoice(
+                new CaseExpansion.Attributed(List.of(inOn), 2, 1, List.of()),
+                List.of(comparison)));
+    }
+
+    private static SourceConstructOrigin construct(int ordinal, SourceConstruct kind) {
+        return SourceConstructOrigin.written(new WrittenOwner.Body("m", "f"), ordinal, kind);
     }
 }

@@ -93,18 +93,12 @@ public record CaseExpansion(Which which, String line, String cutAt, CameTo cameT
         /**
          * The helper an author is told to declare as a behavior, so that none of the choices the
          * case is made of is expanded where the rule was read at {@code readAt}
-         * ({@link #theHelperHoldingEveryChoice}): empty where no helper holds them all, where what
-         * made the parts was not said, and where the helper is one the choices multiply the
-         * readings of, which is said of it already.
+         * ({@link #theHelperHoldingEveryChoice}): empty where what made the parts was not said.
          */
         public Optional<HelperToDeclare> helperHoldingEveryChoice(
                 Collection<ModelOccurrence> readAt) {
-            if (!(attributed instanceof Attributed made)) {
-                return Optional.empty();
-            }
-            return theHelperHoldingEveryChoice(made.factors(), readAt)
-                    .filter(declared -> made.multiplied().stream()
-                            .noneMatch(each -> each.helper().equals(declared.helper())));
+            return attributed instanceof Attributed made
+                    ? theHelperHoldingEveryChoice(made, readAt) : Optional.empty();
         }
     }
 
@@ -322,21 +316,33 @@ public record CaseExpansion(Which which, String line, String cutAt, CameTo cameT
     }
 
     /**
-     * The helper to declare as a behavior so that none of the choices {@code factors} made is
-     * expanded where a comparison read at {@code readAt} is: the innermost helper every construct
-     * of {@code factors} is written in a copy of, and no copy of the comparison is. Empty where no
-     * helper is.
+     * The helper to declare as a behavior so that none of the choices the parts of
+     * {@code attributed} came from is expanded where a comparison read at {@code readAt} is: the
+     * innermost helper every one of them is written in a copy of, and no copy of the comparison
+     * is. Empty where no helper is.
      *
-     * <p>A helper the comparison is written in as well is not one: declared as a behavior, it
-     * reads the comparison in its own body, beside the same choices.
+     * <p>Every one, so a part nothing was found to have made, and a factor naming no construct of
+     * the model, are a choice written in no helper anyone knows of: where there is one, no helper
+     * is shown to hold every choice. A helper the comparison is written in as well is not one:
+     * declared as a behavior, it reads the comparison in its own body, beside the same choices.
+     * Nor is a helper the choices multiply the readings of, which is said of it already.
      */
     public static Optional<HelperToDeclare> theHelperHoldingEveryChoice(
-            List<Factor> factors, Collection<ModelOccurrence> readAt) {
-        List<List<ValueName.Helper>> made = factors.stream()
-                .flatMap(each -> each.constructs().stream())
-                .map(CaseExpansion::writtenInside).toList();
+            Attributed attributed, Collection<ModelOccurrence> readAt) {
+        List<List<ValueName.Helper>> made = new ArrayList<>();
+        for (Factor each : attributed.factors()) {
+            if (each.constructs().isEmpty()) {
+                made.add(List.of());
+            }
+            each.constructs().forEach(construct -> made.add(writtenInside(construct)));
+        }
+        if (attributed.unattributed() > 0) {
+            made.add(List.of());
+        }
         return innermostHoldingEvery(made,
                 readAt.stream().map(CaseExpansion::writtenInside).toList())
+                .filter(helper -> attributed.multiplied().stream()
+                        .noneMatch(each -> each.helper().equals(helper)))
                 .map(helper -> new HelperToDeclare(helper, outside(helper, made)));
     }
 
