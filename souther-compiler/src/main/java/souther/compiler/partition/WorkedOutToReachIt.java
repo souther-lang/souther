@@ -137,12 +137,13 @@ final class WorkedOutToReachIt {
     }
 
     /**
-     * Whether {@code value} is an operation that ends a run on one operand alone, only where that
-     * operand is nought ({@link WhatARunMayEndFor#theOperandItAloneStopsOn}), and the operand
-     * comes to another whole number whatever the run is: {@code Int.floorMod(x, 7)} ends none.
+     * Whether {@code value} is an operation that ends a run on its divisor alone, only where that
+     * is nought, as the operation's owner says ({@link Pullback#theDivisorItAloneStopsOn}), and
+     * the divisor comes to another whole number whatever the run is: {@code Int.floorMod(x, 7)}
+     * ends none.
      */
     private boolean stopsOnlyOnAnOperandThatIsNotNought(Denotation value) {
-        Core operand = WhatARunMayEndFor.theOperandItAloneStopsOn(value.value());
+        Core operand = Pullback.theDivisorItAloneStopsOn(value.value());
         return operand != null && value.at().folded(operand, read.rules().symbols(),
                 read.rules().newtypes()).orElse(null) instanceof Long by && by != 0;
     }

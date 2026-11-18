@@ -2269,7 +2269,7 @@ final class Pullback {
      * may stop on its operands' sizes ({@link WhereAnOperatorAnswers}), and of a remainder
      * ({@link WhatARunMayEndFor#theOperandItAloneStopsOn}).
      */
-    private static Core theDivisorItAloneStopsOn(Core e) {
+    static Core theDivisorItAloneStopsOn(Core e) {
         return switch (Core.withoutStanding(e)) {
             case Core.Binary quotient -> quotient.op() == BinOp.DIV
                     && WhereAnOperatorAnswers.ofAnOperator(quotient.op(), quotient.type())
