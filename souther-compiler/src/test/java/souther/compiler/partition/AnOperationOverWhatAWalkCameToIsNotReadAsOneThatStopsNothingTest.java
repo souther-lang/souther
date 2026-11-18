@@ -63,10 +63,35 @@ class AnOperationOverWhatAWalkCameToIsNotReadAsOneThatStopsNothingTest {
         assertFalse(report.contains(NOT_ALL_TOLD), report);
     }
 
+    /** A remainder by a number written, given to a name, lies below it, so one more is still an
+     *  {@code Int}. */
     @Test
-    void nothingIsToldWhereARemainderByAWrittenNumberKeepsTheOperationWithinItsType() {
-        String report = reportOf("Int.floorMod(" + THE_WALK + ", 11) + 1 <= 10");
+    void aRemainderByANameGivenAWrittenNumberKeepsTheOperationWithinItsType() {
+        String report = reportOf("let k = 11", "Int.floorMod(" + THE_WALK + ", k) + 1 <= 10");
         assertFalse(report.contains(NOT_ALL_TOLD), report);
+    }
+
+    private static final String ANOTHER_WALK = "List.fold((w, l) -> if l > w then l else w, 1, ds)";
+
+    @Test
+    void aSumOverTwoValuesHeldAsideIsNotReadAsOneThatStopsNothing() {
+        String report = reportOf(THE_WALK + " + " + ANOTHER_WALK + " + 1 <= 10");
+        assertTrue(report.contains(NOT_ALL_TOLD), report);
+        assertTrue(report.contains("measurement: partial"), report);
+    }
+
+    /** What adds up the addends of the comparison is answered for by what drew its line. */
+    @Test
+    void aSumOfTheAddendsOfTheComparisonIsTheAnswerOfWhatDrewItsLine() {
+        String report = reportOf(THE_WALK + " + " + ANOTHER_WALK + " <= 10");
+        assertFalse(report.contains(NOT_ALL_TOLD), report);
+    }
+
+    /** The operation is over a value that is not the first the reading stopped at. */
+    @Test
+    void aSumOverAnotherValueHeldAsideIsNotReadAsOneThatStopsNothing() {
+        String report = reportOf(THE_WALK + " <= Option.withDefault(0, List.max(ds)) + 1");
+        assertTrue(report.contains(NOT_ALL_TOLD), report);
     }
 
     /** A comparison whose arithmetic is not read says what it could not read, and nothing of
@@ -107,12 +132,19 @@ class AnOperationOverWhatAWalkCameToIsNotReadAsOneThatStopsNothingTest {
     }
 
     private static String reportOf(String condition) {
+        return reportOf("let unused = 0", condition);
+    }
+
+    private static String reportOf(String given, String condition) {
         Compilation compilation = ACompiledModel.measured("""
                 module m
 
                 behavior role : (ds: List<Int>, q: Int) -> Int
-                let role (ds, q) = if %s then 1 else 2
-                """.formatted(condition), new Adequacy.Asked(Adequacy.Level.OFF, false));
+                let role (ds, q) = {
+                    %s
+                    if %s then 1 else 2
+                }
+                """.formatted(given, condition), new Adequacy.Asked(Adequacy.Level.OFF, false));
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }

@@ -924,17 +924,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 }
                 if (!stopsNoRowOrIsTheOwners(node, where, form, over, after)) {
                     told.exact = false;
-                    // One value that is no stop of the input and no bound value is the one the
-                    // operation is over; with several, what each is held to is a question of the
-                    // numbers they are, asked of no owner here.
-                    if (over.size() == 1 && over.get(0).theStop
-                            && !stoppedAt.isAPlainStopOrABoundValue(over.get(0))) {
-                        // Whether it adds up the addends of the comparison, which the analysis
-                        // that drew the lines answers for, is asked once the comparison has been
-                        // read ({@link WhatLiesBesideTheStop#beside}).
-                        told.operationsOverTheStopValue.add(
-                                new OverTheStopValue(Core.withoutStanding(node), form));
-                    }
+                    // Whether it adds up the addends of the comparison, which the analysis that
+                    // drew the lines answers for, is asked once the comparison has been read
+                    // ({@link WhatLiesBesideTheStop#beside}).
+                    told.operationsOverTheStopValue.add(
+                            new OverTheStopValue(Core.withoutStanding(node), form));
                 }
                 return true;
             }
@@ -2144,21 +2138,24 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         .endsNoRun(new Denotation(node, at));
             }
 
+            /** {@code node}, or what the body gave it where it is a name that was given
+             *  something. */
+            private static Core valueGivenTo(Core node, InputReads at) {
+                Core bare = Core.withoutStanding(node);
+                Denotation given = bare instanceof Core.Read name ? at.givenTo(name) : null;
+                return given == null ? bare : Core.withoutStanding(given.value());
+            }
+
             /**
              * The numbers {@code node} comes to where it stands for {@code Int.floorMod(x, k)}
              * with {@code k} a written number above nought: the whole numbers from nought to one
              * below {@code k}, whatever {@code x} is. Null where it stands for no such call.
              */
             private FormRange rangeOfAFloorRemainder(Core node, InputReads at) {
-                Core stands = Core.withoutStanding(node);
-                if (stands instanceof Core.Read name) {
-                    Denotation given = at.givenTo(name);
-                    stands = given == null ? stands : Core.withoutStanding(given.value());
-                }
-                if (stands instanceof Core.PreservedCall call
+                if (valueGivenTo(node, at) instanceof Core.PreservedCall call
                         && call.operation().equals(ValueName.Stdlib.operation("Int", "floorMod"))
                         && call.args().size() == 2
-                        && Core.withoutStanding(call.args().get(1)) instanceof Core.Int divisor
+                        && valueGivenTo(call.args().get(1), at) instanceof Core.Int divisor
                         && divisor.value() > 0) {
                     return new FormRange(ExactRatio.of(0), ExactRatio.of(divisor.value() - 1));
                 }
@@ -2528,8 +2525,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
         /** What a row of a line gets past, and what a run works out, off what the walk told. */
         WorkedOut workedOut() {
-            return new WorkedOut(working(),
-                    new StopEvidence(everyOperation(true), unplacedEverywhere()));
+            return new WorkedOut(working(), new StopEvidence(everyOperation(true)));
         }
 
         /** The nodes working out an operation that may stop a run and is placed nowhere in the
@@ -2642,7 +2638,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             return new UndividedByARelation.Working(told, everyOne
                     ? WhatARelationLeavesUndivided.Told.EVERY
                     : WhatARelationLeavesUndivided.Told.SOME,
-                    true, exact ? partials : List.of());
+                    true, exact ? partials : List.of(), unplacedEverywhere());
         }
     }
 
@@ -3103,13 +3099,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             for (SumOverTheStop sum : told.sumsOverTheStop) {
                 // An operation over a bound value is one over that value, which a relation over
                 // it is asked to get past.
-                if (!sum.toldOverItsValue(told, ofTheInput) && !areAddendsOf(sum.form(), whole)) {
-                    told.exact = false;
-                    told.unplaced.add(Core.withoutStanding(sum.node()));
+                if (!sum.toldOverItsValue(told, ofTheInput)) {
+                    told.operationsOverTheStopValue.add(
+                            new OverTheStopValue(Core.withoutStanding(sum.node()), sum.form()));
                 }
             }
             for (OverTheStopValue each : told.operationsOverTheStopValue) {
                 if (!areAddendsOf(each.form(), whole)) {
+                    told.exact = false;
                     told.unplaced.add(each.node());
                 }
             }
@@ -3131,8 +3128,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     && WorkedOutToReachIt.of(ofTheInput).endsNoRun(new Denotation(node, reads));
             return new WorkedOut(aName ? told.working() : told.working().notOnEveryRun(),
                     new StopEvidence(told.everyOperation(
-                            aName || endsNoRun || stoppedAt.theStopWorksOutTheFormItIsReadAs()),
-                            told.unplacedEverywhere()));
+                            aName || endsNoRun || stoppedAt.theStopWorksOutTheFormItIsReadAs())));
         }
 
         /**

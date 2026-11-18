@@ -23,33 +23,17 @@ import java.util.Objects;
  *
  * <p>Not having read an operation is not having shown none stops a run: {@code operations} tells
  * every one only where it says so ({@link UndividedByARelation.Working#exact}), and where it does
- * not, nothing is said of where a run stops.
- *
- * <p>An operation the reading met and could place nowhere in the input, because the value it is
- * over is no number of the input and no name, is not among {@code operations}, and a run may stop
- * in it. It is held in {@code unplaced}, by the node that works it out, so that what is said of
- * where a run stops is not read as having left it out for want of one. What a reading answers
- * for in another way, the addends of the form a total is read as, is not held there.
+ * not, nothing is said of where a run stops. An operation the reading met and could place
+ * nowhere is one of {@link #unplaced}: it is among no operation told, a run may stop in it, and
+ * it is not shown that none does.
  *
  * @param operations every operation of whole numbers the run works out, in the order it does, and
  *                   whether that is every one and is worked out on every run getting there
- * @param unplaced   the nodes working out an operation that may stop a run and is among no
- *                   operation told
  */
-record StopEvidence(UndividedByARelation.Working operations, List<Core> unplaced) {
+record StopEvidence(UndividedByARelation.Working operations) {
 
     StopEvidence {
         Objects.requireNonNull(operations, "what a run works out, or that it is not known");
-        unplaced = List.copyOf(unplaced);
-    }
-
-    StopEvidence(UndividedByARelation.Working operations) {
-        this(operations, List.of());
-    }
-
-    /** Whether a run working this out may stop in an operation told of nowhere. */
-    boolean someStopIsUnplaced() {
-        return !unplaced.isEmpty();
     }
 
     /**
@@ -74,9 +58,21 @@ record StopEvidence(UndividedByARelation.Working operations, List<Core> unplaced
         return new StopEvidence(working);
     }
 
-    /** Whether every operation that can stop a run is among {@link #operations}. */
+    /** The nodes working out an operation that may stop a run and is placed nowhere in the
+     *  input. */
+    List<Core> unplaced() {
+        return operations.unplaced();
+    }
+
+    /** Whether a run working this out may stop in an operation told of nowhere. */
+    boolean someStopIsUnplaced() {
+        return !operations.unplaced().isEmpty();
+    }
+
+    /** Whether every operation that can stop a run is among {@link #operations}: not where one
+     *  is {@link #unplaced}. */
     boolean exact() {
-        return operations.exact();
+        return operations.exact() && !someStopIsUnplaced();
     }
 
     /**
@@ -93,16 +89,18 @@ record StopEvidence(UndividedByARelation.Working operations, List<Core> unplaced
     /**
      * Whether a run on a row {@code regions} leave may stop in what it works out here
      * ({@link UndividedByARelation#aRunMayStopIn}): said where no region of the rows it stops on
-     * can be, as on an arm whose condition is no bound of what it works out.
+     * can be, as on an arm whose condition is no bound of what it works out. Of the operations
+     * told: a stop {@link #unplaced} is in no region.
      */
     boolean aRunMayStopIn(InputReading read, List<SearchRegion> regions) {
         return UndividedByARelation.aRunMayStopIn(operations, read, regions);
     }
 
     /** Whether {@link #aRunMayStopIn} is false over every region, so that no region need be
-     *  worked out to ask it ({@link UndividedByARelation#noRunMayStopIn}). */
+     *  worked out to ask it ({@link UndividedByARelation#noRunMayStopIn}). Not said where a stop
+     *  is {@link #unplaced}, which is not shown to be none. */
     boolean noRunMayStopAnywhere() {
-        return UndividedByARelation.noRunMayStopIn(operations);
+        return !someStopIsUnplaced() && UndividedByARelation.noRunMayStopIn(operations);
     }
 
     /**
