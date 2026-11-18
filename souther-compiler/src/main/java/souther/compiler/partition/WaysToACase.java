@@ -116,14 +116,40 @@ final class WaysToACase {
 
     private final Map<Proposition, Reached> reached = new HashMap<>();
 
+    /** How the way came out for what a case puts on it that a region or a way says anything of,
+     *  by the entries themselves ({@link #withoutWhatOnlyARunChecks}). */
+    private final Map<OneReading.Conditions, Reached> reachedAlong = new HashMap<>();
+
     private Reached reached(Proposition decides) {
         Reached had = reached.get(decides);
         if (had == null) {
-            Reachability way = apply(decides);
-            had = new Reached(way instanceof Reachability.Reaching, way.leavesARow());
+            List<OnTheWay> asked = withoutWhatOnlyARunChecks(put.apply(decides));
+            OneReading.Conditions key = new OneReading.Conditions(asked);
+            had = reachedAlong.get(key);
+            if (had == null) {
+                Reachability way = reading.apply(asked);
+                had = new Reached(way instanceof Reachability.Reaching, way.leavesARow());
+                reachedAlong.put(key, had);
+            }
             reached.put(decides, had);
         }
         return had;
+    }
+
+    /**
+     * {@code entries} less each statement only a run checks. It narrows no region, asks no truth
+     * or case of a position, and closes no way ({@link WayToTheBorder}), so whether a region or a
+     * way leaves a row is asked without it, and cases that differ in nothing else are one
+     * question. What a row is composed to meet is still all of them.
+     */
+    private static List<OnTheWay> withoutWhatOnlyARunChecks(List<OnTheWay> entries) {
+        List<OnTheWay> out = new ArrayList<>(entries.size());
+        for (OnTheWay each : entries) {
+            if (!(each instanceof OnTheWay.TakenIn(var _, RowDemand.ForTheRun _, var _, var _))) {
+                out.add(each);
+            }
+        }
+        return out.size() == entries.size() ? entries : List.copyOf(out);
     }
 
     /**
@@ -176,11 +202,12 @@ final class WaysToACase {
      * comparison, and everything else it puts on, is shown to ask nothing of.
      */
     private List<OnTheWay> askedOfTheRegions(List<OnTheWay> putOn) {
-        List<OnTheWay> out = new ArrayList<>(putOn.size());
-        for (int at = 0; at < putOn.size(); at++) {
-            OnTheWay entry = putOn.get(at);
+        List<OnTheWay> asked = withoutWhatOnlyARunChecks(putOn);
+        List<OnTheWay> out = new ArrayList<>(asked.size());
+        for (int at = 0; at < asked.size(); at++) {
+            OnTheWay entry = asked.get(at);
             if (!(entry instanceof OnTheWay.TakenIn(var _, RowDemand.ATruth(TermPath of, var _),
-                    var _, var _) && aloneIn(of, putOn, at))) {
+                    var _, var _) && aloneIn(of, asked, at))) {
                 out.add(entry);
             }
         }

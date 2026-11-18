@@ -11,15 +11,21 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.meaning.PositionsAStatementReads;
 import souther.compiler.meaning.PositionsAStatementReads.ReadSubject;
 import souther.compiler.meaning.Quantity;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.partition.OneOfEach.Step;
+import souther.compiler.semantics.TakenAs;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -132,8 +138,71 @@ public record WayToTheBorder(List<OnTheWay> onTheWay) {
      * acts on — that the region a search runs over admits every row that meets what was taken in.
      */
     public SearchRegion narrowing(SearchRegion base) {
-        return base.narrowingsKept().through(base, takenIntoTheRegion(), TakenConstraint::narrowing);
+        SearchRegion narrowed = base.narrowingsKept().through(base, takenIntoTheRegion(),
+                TakenConstraint::narrowing);
+        for (OnTheWay each : onTheWay) {
+            if (each instanceof OnTheWay.TakenIn(var _, RowDemand.OnARemainder remainder, var _,
+                    var _)) {
+                narrowed = withTheYearsItLeaves(narrowed, remainder);
+            }
+        }
+        return narrowed;
     }
+
+    /**
+     * {@code region} with the days of a date held to the ones whose year leaves a remainder
+     * {@code remainder} does, where it is a remainder of the year of one date alone.
+     *
+     * <p>The class a remainder leaves is no run, so {@link #takenInBy} gives a region nothing of
+     * it, and a search for the date chose it first and met the remainder after: a date standing
+     * where the year leaves another one. Held here, the days the search offers are ones the year
+     * of which leaves it.
+     */
+    private static SearchRegion withTheYearsItLeaves(SearchRegion region,
+                                                     RowDemand.OnARemainder remainder) {
+        LinearForm<NumericTerm> dividend = remainder.remainder().overTheInput();
+        if (dividend.coefs().size() != 1 || !dividend.constant().isWhole()
+                || !(dividend.constant().floor() instanceof ExactAnswer.Held<BigInteger>(
+                        BigInteger moved))
+                || remainder.remainder().divisor().compareTo(MOST_DIVISOR_A_YEAR_IS_HELD_BY) > 0) {
+            return region;
+        }
+        Map.Entry<NumericTerm, ExactRatio> only = dividend.coefs().entrySet().iterator().next();
+        if (!only.getValue().equals(ExactRatio.ONE)
+                || !(only.getKey() instanceof NumericTerm.TakenOf year)
+                || !(year.takenAs() instanceof TakenAs.PartOfDate(var part))
+                || part != TakenAs.DatePart.YEAR
+                || year.transformation().translation().offsetDays() != 0) {
+            return region;
+        }
+        int divisor = remainder.remainder().divisor().intValueExact();
+        return region.assumingTheYearLeaves(new NumericTerm.ValueOf(year.position()), divisor,
+                yearsLeaving(moved, divisor, remainder.leaves()));
+    }
+
+    /**
+     * The remainders by {@code divisor} a year may leave where the year moved by {@code moved}
+     * leaves one that {@code leaves} holds: each such remainder less the move.
+     *
+     * <p>The move is any whole number, so it is reduced by the divisor before it is taken from
+     * anything, and not narrowed to the bits a machine integer holds, which leaves another
+     * remainder.
+     */
+    static Set<Integer> yearsLeaving(BigInteger moved, int divisor, WholeNumberRuns leaves) {
+        int shift = moved.mod(BigInteger.valueOf(divisor)).intValueExact();
+        Set<Integer> years = new TreeSet<>();
+        for (int left = 0; left < divisor; left++) {
+            if (leaves.holds(BigInteger.valueOf(left))) {
+                years.add(Math.floorMod(left - shift, divisor));
+            }
+        }
+        return years;
+    }
+
+    /** How large a divisor of a year a date is held to what it leaves of: the walk of the days of
+     *  the class goes no further than a few cycles of the calendar, and says some may be left
+     *  where the class repeats in more than that. */
+    private static final BigInteger MOST_DIVISOR_A_YEAR_IS_HELD_BY = BigInteger.valueOf(400);
 
     /**
      * What {@link #narrowing} takes into a region, in the order it takes it in: the region a way

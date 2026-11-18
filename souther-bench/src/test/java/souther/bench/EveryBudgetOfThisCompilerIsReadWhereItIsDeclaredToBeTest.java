@@ -329,13 +329,18 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + "Lsouther/compiler/partition/AWayReadForARelation$WaysFound;)Z",
                     "keeps a choice as it stands past the ways walked to show them met, and"
                             + " hands the figure to what the relation says it stopped at"),
-            Map.entry("souther.compiler.partition.AWayReadForARelation$ChoiceRead#of("
+            Map.entry("souther.compiler.partition.AWayReadForARelation$ChoiceRead#partedBy("
                             + "Lsouther/compiler/partition/OnTheWay;"
                             + "Lsouther/compiler/partition/AWayReadForARelation;)"
-                            + "Lsouther/compiler/partition/AWayReadForARelation$ChoiceRead;",
+                            + "Lsouther/compiler/partition/AWayReadForARelation$ChoiceRead$Parted;",
                     "past the leaves a choice is opened into, asks of each alternative what its"
-                            + " choices are to meet at once, and hands the figure to what the"
-                            + " relation says it stopped at"),
+                            + " choices are to meet at once, and hands the figure back with the"
+                            + " choice parted, so that what keeps it keeps the stop with it"),
+            Map.entry("souther.compiler.partition.AWayReadForARelation#readAgain()"
+                            + "Ljava/util/Optional;",
+                    "takes the choices figure from each choice parted, where parting it was"
+                            + " stopped there, and hands it to what the relation says it stopped"
+                            + " at"),
             Map.entry("souther.compiler.partition.AWayReadForARelation#walked("
                             + "Ljava/util/List;)Lsouther/compiler/partition/Reachability;",
                     "stops walking a way read again at the walks it is read again with, and hands"
@@ -866,21 +871,24 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " are kept as nobody taking them apart, naming the figure that"
                             + " stopped it"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#<init>("
-                            + "Ljava/util/function/Function;Z)V",
+                            + "Ljava/util/function/Function;"
+                            + "Lsouther/compiler/meaning/CasesOfALineAsked$QuestionsOfAStatement;)V",
                     "how many times the cases one case was said for are asked, which every"
                             + " question spends"),
+            Map.entry("souther.compiler.meaning.CasesOfALineAsked$QuestionsOfAStatement#fresh()"
+                            + "Lsouther/compiler/meaning/CasesOfALineAsked$QuestionsOfAStatement;",
+                    "how many questions the lines of one statement are asked together, past which"
+                            + " every line of it is said to be stopped at that figure"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#asked("
                             + "Lsouther/compiler/meaning/DecidingCase;)"
                             + "Lsouther/compiler/meaning/CasesOfALineAsked$Found;",
                     "how many ways of choosing a case are asked, counted before any is: past the"
                             + " figure, more cases than are taken apart, and none is asked"),
-            // Whether the cases are past the figure as the choices stand, said once for the askings
-            // that stop there and for the reader that holds a statement's derivations only where
-            // a line's cases may be cut off, which omits no work.
-            Map.entry("souther.compiler.meaning.CasesOfALineAsked#pastTheFigureAsTheChoicesStand("
-                            + "Lsouther/compiler/meaning/DecidingCase$Cases;)Z",
-                    "whether the ways of choosing a case are past the figure as the choices stand,"
-                            + " which each asking hands over as the figure it stopped at"),
+            Map.entry("souther.compiler.meaning.CasesOfALineAsked#walkOf("
+                            + "Lsouther/compiler/meaning/DecidingCase$Cases;)"
+                            + "Lsouther/compiler/meaning/CasesOfALineAsked$Walk;",
+                    "how many ways of choosing a case are walked, past which the walk is none and"
+                            + " the asking names the figure with the ways counted"),
             Map.entry("souther.compiler.meaning.CasesOfALineAsked#pastTheSteps("
                             + "Ljava/util/List;)V",
                     "out of steps, naming them and the cases left nobody took apart"),
@@ -1046,12 +1054,13 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "walks the denials of a statement as far as the readings figure to name the"
                             + " column it and its denial are, and hands back none past it, for the"
                             + " condition to be a column said not read at it"),
-            Map.entry("souther.compiler.meaning.TheWholeNumbersAListStartsWith#of("
+            Map.entry("souther.compiler.meaning.TheWholeNumbersAListStartsWith#planFor("
                             + "Lsouther/compiler/meaning/Proposition;)"
-                            + "Lsouther/compiler/meaning/TheWholeNumbersAListStartsWith$Read;",
-                    "reads a comparison on no element of a list of whole numbers where its"
+                            + "Lsouther/compiler/meaning/TheWholeNumbersAListStartsWith$Plan;",
+                    "plans a comparison on no element of a list of whole numbers where its"
                             + " divisors come round in more elements than the readings figure, and"
-                            + " hands that over for the comparison to be said not read at it"),
+                            + " the plan hands that over as what it reads, for the comparison to be"
+                            + " said not read at it"),
             Map.entry("souther.compiler.partition.DecisionReading#<clinit>()V",
                     "how many paths through one body a decision is read for"),
             Map.entry("souther.compiler.partition.WaysNoInputTakes#<init>()V",

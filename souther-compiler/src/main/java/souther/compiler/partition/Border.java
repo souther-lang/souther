@@ -488,8 +488,8 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
                 }
                 yield new AuthoredPlacement.Placed(points);
             }
-            case AuthoredPointMapping.NotAnAuthoredBoundary _ ->
-                    new AuthoredPlacement.NoPlaceOfTheLine();
+            case AuthoredPointMapping.NotAnAuthoredBoundary _,
+                 AuthoredPointMapping.SelectsACase _ -> new AuthoredPlacement.NoPlaceOfTheLine();
             case AuthoredPointMapping.Undetermined _ -> new AuthoredPlacement.NotShown();
         };
     }
@@ -1403,6 +1403,11 @@ public record Border(BoundaryTarget cut, LineOrigin origin, Map<DomainPoint, Poi
         }
         List<Border> out = new ArrayList<>();
         for (LineDrawn each : drawn) {
+            // A line that only selects a case of a library's definition has parted the values
+            // above and owes no row at its points.
+            if (each.by().onlySelectsACase()) {
+                continue;
+            }
             // And read back into the units this rule wrote, which is what its own quantity measures
             // a row in. A border reads rows through the form it was written as, so a run handed to
             // it in another scale would be held against numbers of a different size.

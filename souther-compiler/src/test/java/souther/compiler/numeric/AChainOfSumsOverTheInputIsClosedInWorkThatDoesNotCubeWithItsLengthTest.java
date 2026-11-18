@@ -27,14 +27,21 @@ class AChainOfSumsOverTheInputIsClosedInWorkThatDoesNotCubeWithItsLengthTest {
 
     /** A link of the chain and the input it is over. */
     private enum Shape {
-        DOUBLING("Pair = { x: Int, j: Int }", "Pair", "# + # + p.j", 5),
-        ADDING_ONE("Pair = { x: Int, j: Int }", "Pair", "# + p.j", 5),
-        OVER_THREE("Tri = { x: Int, j: Int, k: Int }", "Tri", "# + p.j + p.k", 7),
-        OVER_THREE_AGAINST_EACH_OTHER("Tri = { x: Int, j: Int, k: Int }", "Tri", "# + p.j - p.k", 7);
+        DOUBLING("Pair = { x: Int, j: Int }", "Pair", "# + # + p.j", 12, 5),
+        ADDING_ONE("Pair = { x: Int, j: Int }", "Pair", "# + p.j", 3, 5),
+        OVER_THREE("Tri = { x: Int, j: Int, k: Int }", "Tri", "# + p.j + p.k", 3, 6),
+        OVER_THREE_AGAINST_EACH_OTHER("Tri = { x: Int, j: Int, k: Int }", "Tri", "# + p.j - p.k",
+                3, 6);
 
         private final String data;
         private final String type;
         private final String link;
+
+        /** How many links the shorter chain has: the fewest at which the work of reading every
+         *  premise for every question comes to more than {@link #limit} times the work of the
+         *  chain, and the work of the chain to less. What the weighed form doubles with each link
+         *  settles to the square only past a few links, so it is held at more. */
+        private final int links;
 
         /** How many times the work of twice the links may come to the work of the links: the cube
          *  is eight. Over three positions a question of the tree reads about the two-thirds power of
@@ -42,10 +49,11 @@ class AChainOfSumsOverTheInputIsClosedInWorkThatDoesNotCubeWithItsLengthTest {
          *  another, as the rest of a rule over equal bounds does, so the work is not the square. */
         private final int limit;
 
-        Shape(String data, String type, String link, int limit) {
+        Shape(String data, String type, String link, int links, int limit) {
             this.data = data;
             this.type = type;
             this.link = link;
+            this.links = links;
             this.limit = limit;
         }
 
@@ -72,8 +80,8 @@ class AChainOfSumsOverTheInputIsClosedInWorkThatDoesNotCubeWithItsLengthTest {
     @Test
     void twiceTheLinksCostLessThanFiveTimesTheWorkInEveryShape() {
         for (Shape shape : Shape.values()) {
-            long shorter = workClosing(shape, 12);
-            long longer = workClosing(shape, 24);
+            long shorter = workClosing(shape, shape.links);
+            long longer = workClosing(shape, 2 * shape.links);
             assertTrue(shorter > 0, "nothing was counted, so this holds nothing");
             // The square is four times and the cube eight; closing every link in work that reads
             // every premise for every question is the cube.

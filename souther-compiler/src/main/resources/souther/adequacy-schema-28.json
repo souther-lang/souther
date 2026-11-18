@@ -9163,6 +9163,78 @@
             }
           }
         },
+        "costlyReadings": {
+          "type": "array",
+          "minItems": 1,
+          "description": "For each rule a line of which was read all the same although the cases where it decides were more ways of choosing one than are taken apart, the helper whose readings those cases choose among one beside another: one entry per line and per case asked, only where the cases are shown to choose so. A reader is told where the model is dear to read and which helper declared as a behavior is not expanded there. It is no reason a line was not read, and says nothing of how many ways the cases were. Beside `caseExpansions` and no part of them. Absent where there is none.",
+          "items": {
+            "type": "object",
+            "required": [
+              "rule",
+              "ruleId",
+              "line",
+              "cutAt",
+              "arms",
+              "readings"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "rule": {
+                "$ref": "#/$defs/ruleHandle",
+                "description": "How a reader finds the rule, the same handle the entries about it elsewhere carry."
+              },
+              "ruleId": {
+                "$ref": "#/$defs/ruleId",
+                "description": "Which rule."
+              },
+              "line": {
+                "type": "string",
+                "description": "The quantity the line is on, named the way a boundary on it is named."
+              },
+              "cutAt": {
+                "type": "string",
+                "description": "Where on the quantity the line is, written as a boundary's level is written."
+              },
+              "arms": {
+                "type": "array",
+                "description": "Which of the author's lines it is, as the arms the comparison's definition takes on the way to it.",
+                "items": {
+                  "$ref": "#/$defs/writtenArm"
+                }
+              },
+              "readings": {
+                "type": "array",
+                "minItems": 1,
+                "description": "The helpers the cases choose among, an answer for each copy of the rule that answered it differently.",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "readAt",
+                    "helpers"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "readAt": {
+                      "type": "array",
+                      "description": "The copies of the rule's comparison this answer was read at, as `constructOccurrence` names a copy.",
+                      "items": {
+                        "$ref": "#/$defs/constructOccurrence"
+                      }
+                    },
+                    "helpers": {
+                      "type": "array",
+                      "minItems": 1,
+                      "description": "The helpers whose readings the cases choose among one beside another, as `multipliedHelpers` of a `caseExpansion` names them.",
+                      "items": {
+                        "$ref": "#/$defs/caseExpansion/properties/multipliedHelpers/items"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         "stopsPastTheRepresentation": {
           "type": "array",
           "minItems": 1,

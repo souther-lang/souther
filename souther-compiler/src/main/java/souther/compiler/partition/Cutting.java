@@ -695,14 +695,17 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      *                this out
      * @param working what the comparison works out on it, as a row of its lines gets past it
      * @param stops   what a run making it works out there, for where a run stops in it
+     * @param arms    what a run taking each arm of a choice the comparison is read through works
+     *                out on it, where the application is made
      */
     record OnAnApplication(Proposition reached, UndividedByARelation.Working working,
-                           StopEvidence stops) {
+                           StopEvidence stops, List<StopEvidence.OnAnArm> arms) {
 
         OnAnApplication {
             Objects.requireNonNull(reached, "an application is made somewhere");
             Objects.requireNonNull(working, "and works something out");
             Objects.requireNonNull(stops, "and a run making it works something out");
+            Objects.requireNonNull(arms, "and what it works out on each arm it takes, if any");
         }
     }
 
@@ -727,7 +730,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             }
             Pullback.OnTheInput onTheInput = conditions.comparison(comparison, one.reads(), read);
             out.add(new OnAnApplication(one.reached(), workingOf(onTheInput),
-                    onTheInput.stops().get()));
+                    onTheInput.stops().get(), onTheInput.onTheArms().get()));
         }
         return Optional.of(out);
     }
@@ -1511,13 +1514,18 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
     private static Map<PartOfAComparison, AuthoredPointMapping> authorsLines(
             AuthorsLines lines, List<Proposition.Compared> scales, ComparisonClaim written) {
         Map<PartOfAComparison, AuthoredPointMapping> out = new LinkedHashMap<>();
+        // A relation that only selects a case of a library's definition parts the values like any
+        // other and is no place of a line the author wrote.
         for (Proposition.Compared relation : scales) {
             // The author's lines were read at positions, before any name was told.
-            Map<WrittenLine, AuthoredPointMapping> under = lines.of(((Proposition.Compared)
-                    ReadThroughNames.atThePositions(relation)).heldSpelling());
+            Spelling at = ((Proposition.Compared) ReadThroughNames.atThePositions(relation))
+                    .heldSpelling();
+            Map<WrittenLine, AuthoredPointMapping> under = lines.of(at);
             if (under != null) {
-                under.forEach((line, mapping) ->
-                        out.putIfAbsent(PartOfAComparison.of(line), mapping));
+                boolean selectsACase = lines.selectsOnlyACase(at);
+                under.forEach((line, mapping) -> out.putIfAbsent(PartOfAComparison.of(line),
+                        selectsACase ? new AuthoredPointMapping.SelectsACase(line,
+                                mapping.claims()) : mapping));
             }
         }
         if (out.isEmpty()) {
@@ -2311,9 +2319,10 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      * there are, and where each is reached, is what {@link #ofAnApplicationOnEach} walks, so that
      * a comparison read here and a statement read as lines are told apart by the same walk.
      *
-     * @param onEveryElement whether a run that gets to that application makes it on every element
-     *                       the closure is handed, as a comparison written in the closure is read
-     *                       ({@link #readOnce})
+     * @param onEveryElement whether a run that gets to the closure the application stands in
+     *                       makes it on every element the closure is handed, which is what lets a
+     *                       comparison of a remainder be read on the elements a list starts with.
+     *                       False where the applications are not said
      */
     static Read ofALawComparison(String behavior, StatedComparison comparison,
                                  InputReading read, InputReads reads,
@@ -2364,7 +2373,8 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return null;
         }
         List<WhereEachLineDecides.Decides> lines =
-                WhereEachLineDecides.in(stated, read.quantities()::countsWhole);
+                WhereEachLineDecides.in(stated, read.quantities()::countsWhole,
+                        read.quantities()::countsInWholeUnits);
         if (lines.isEmpty()) {
             return null;
         }
@@ -2791,7 +2801,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             return TheParts.READ_TO_THE_END;
         }
         List<WhereEachLineDecides.Decides> lines = WhereEachLineDecides.in(stated,
-                read.quantities()::countsWhole);
+                read.quantities()::countsWhole, read.quantities()::countsInWholeUnits);
         if (lines.isEmpty()) {
             return TheParts.READ_TO_THE_END;
         }

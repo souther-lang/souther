@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Which copies of the model's code put each thing on one way to a line or a rule.
@@ -224,6 +225,19 @@ public record SaidOnTheWay(Map<OnTheWay, ModelOccurrences> entries,
                 told.add(entries -> entries
                         .computeIfAbsent(entry, _ -> new ModelOccurrences.Gathering()).add(by));
             }
+        }
+
+        /** The same, with what {@code entry} was put on the way by worked out when who put each
+         *  entry is, and not when the entry is made: the entries of a way are asked for far more
+         *  often than who put them. */
+        void alone(OnTheWay entry, Supplier<ModelOccurrences> by) {
+            told.add(entries -> {
+                ModelOccurrences copies = by.get();
+                if (!copies.isEmpty()) {
+                    entries.computeIfAbsent(entry, _ -> new ModelOccurrences.Gathering())
+                            .add(copies);
+                }
+            });
         }
 
         /** {@code by}, for each of {@code these} and every entry inside an alternative of

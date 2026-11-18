@@ -29,17 +29,19 @@ import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
-import souther.compiler.inputs.PathResolution;
+import souther.compiler.inputs.MadeFrom;
 import souther.compiler.inputs.Quantities;
 import souther.compiler.inputs.RuleSite;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.RulesWithNoLine;
 import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WhyUnread;
 import souther.compiler.numeric.Place;
 import souther.compiler.check.Symbols;
@@ -351,8 +353,13 @@ public final class GuardThresholds {
                             // nothing out. Where those rows cannot be put on the way, the
                             // application is taken as made. That is asked of what a run works
                             // out, and not of what a row of a line gets past.
-                            boolean aRunStops = !(arrived instanceof ComparisonAssessment
-                                    .AnswersNowhere)
+                            // Whatever a run works out on the way to the comparison it works out
+                            // only if it gets there: where no row arrives, nothing below is a
+                            // run's, whichever of the ways to it says what.
+                            boolean aRowArrives = ComparisonAssessment.someRowArrives(beforeIt,
+                                    arrivals);
+                            boolean aRunStops = aRowArrives
+                                    && !(arrived instanceof ComparisonAssessment.AnswersNowhere)
                                     && ((each.stopsWhere().isPresent()
                                     && ComparisonAssessment.someRowArrives(
                                             wayToACase.apply(each.stopsWhere().get()), arrivals))
@@ -372,14 +379,21 @@ public final class GuardThresholds {
                                                     .orElseGet(() -> arrived.relationsRead()
                                                             .stream().anyMatch(UndividedByARelation
                                                                     ::aRunMayStopOverABoundValue)))
-                                    || aRunTakingAnArmMayStop(each, read, arrivals, wayToACase,
-                                            aCase));
+                                    || each.stopsIn().map(stops -> !stops.noRunMayStopAnywhere()
+                                            && stops.aRunMayStopIn(read,
+                                            regionsOf(beforeIt))).orElse(false)
+                                    || aRunTakingAnArmMayStop(each, each.onTheArms(), null, read,
+                                            arrivals, wayToACase, aCase)
+                                    || each.worksOutOnEach().map(applications -> applications
+                                            .stream().anyMatch(one -> aRunTakingAnArmMayStop(each,
+                                                    one.arms(), one.reached(), read, arrivals,
+                                                    wayToACase, aCase))).orElse(false));
                             // And the values at which every run getting to it stops in what it
                             // works out, asked of the way before a row is narrowed to getting
                             // past that: a row that got past holds none of them.
                             List<SearchRegion> before = regionsOf(beforeIt);
-                            List<EveryRunStops> stops =
-                                    arrived instanceof ComparisonAssessment.AnswersNowhere
+                            List<EveryRunStops> stops = !aRowArrives
+                                    || arrived instanceof ComparisonAssessment.AnswersNowhere
                                             ? List.<EveryRunStops>of()
                                             : everyRunStops(arrived, each.worksOutOnEach(),
                                                     each.stopsIn(), read,
@@ -393,7 +407,8 @@ public final class GuardThresholds {
                                     whereMet(each, helper -> runsOnce.computeIfAbsent(helper,
                                             called -> plan.runsOnce(called, emitted))),
                                     reaches, arrived, each.readOn(), aRunStops, stops,
-                                    asksOfARunReaching(each.asks(), before, read, arrived), found,
+                                    aRowArrives ? asksOfARunReaching(each.asks(), before, read,
+                                            arrived) : List.of(), found,
                                     between, throughADerivedValue, partnered, withoutALine,
                                     readOn);
                         }
@@ -595,17 +610,39 @@ public final class GuardThresholds {
             // position is that place's to say: where a value came from is asked of a side that
             // names none, which is the only side it is a different question about. A side that may
             // stand at one of several is not that, and where it came from is which of them.
-            if (reads.pathOf(side, newtypes) instanceof PathResolution.At) {
+            if (reads.pathOf(side, newtypes) instanceof ValuesAt.At) {
                 continue;
             }
             // Where a side's values came from, and nothing where they came from nowhere.
-            PathResolution came = reads.cameFrom(side, newtypes);
-            if (came instanceof PathResolution.At(var at)) {
-                out.putIfAbsent(FilingCoordinate.at(at), new BlockReason.RuleAboutADerivedValue());
-            } else if (OwedWhereItCameFrom.ofSeveral(came) instanceof OwedWhereItCameFrom owed) {
-                owed.places().forEach(each ->
-                        out.putIfAbsent(FilingCoordinate.at(each), owed.why()));
+            filedWhereItCameFrom(reads.cameFrom(side, newtypes), out);
+        }
+    }
+
+    /**
+     * Where the sides of a comparison a reading stopped at and filed nowhere came from, through
+     * what each is made of: a value worked out of ones that came from somewhere came from there as
+     * well, and a rule no reading followed is about them and not about nothing. Asked of the side
+     * whose own origin says none, beside {@link #cameFrom}; for a reading that has filed a place
+     * already, what it filed is what says where it stopped.
+     */
+    static void cameFromThroughWhatTheSidesAreMadeOf(
+            StatedComparison comparison, InputReads reads, DeclarationNewtypes newtypes,
+            SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
+        for (Core side : List.of(comparison.left(), comparison.right())) {
+            if (!(reads.pathOf(side, newtypes) instanceof ValuesAt.At)
+                    && reads.cameFrom(side, newtypes) instanceof MadeFrom.FromNothing) {
+                filedWhereItCameFrom(reads.madeOf(side, newtypes), out);
             }
+        }
+    }
+
+    private static void filedWhereItCameFrom(
+            MadeFrom came,
+            SequencedMap<FilingCoordinate, BlockReason.RuleReadingStopped> out) {
+        if (came instanceof MadeFrom.FromOne(var at)) {
+            out.putIfAbsent(FilingCoordinate.at(at), new BlockReason.RuleAboutADerivedValue());
+        } else if (OwedWhereItCameFrom.ofSeveral(came) instanceof OwedWhereItCameFrom owed) {
+            owed.places().forEach(each -> out.putIfAbsent(FilingCoordinate.at(each), owed.why()));
         }
     }
 
@@ -677,22 +714,22 @@ public final class GuardThresholds {
                 // Which position the expression is, and none where it is none: the walk this
                 // answers for reads through what names nothing.
                 return switch (at.pathOf(here, newtypes)) {
-                    case PathResolution.At(var stands) -> stands;
-                    case PathResolution.NotAPosition _ -> null;
+                    case ValuesAt.At(var stands) -> stands;
+                    case ValuesAt.NotAPosition _ -> null;
                     // A name that only may stand at a position is a term over no one of them. What
                     // this answers for is a number a line can be drawn on, and a line drawn on this
                     // would be drawn at whichever place was picked out of the ones it may be.
-                    case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
+                    case ValuesAt.MayStandAt _ -> null;
                 };
             }
 
             @Override
             public TermPath madeFrom(Core here, InputReads at) {
                 return switch (at.cameFrom(here, newtypes)) {
-                    case PathResolution.At(var from) -> from;
-                    case PathResolution.NotAPosition _ -> null;
+                    case MadeFrom.FromOne(var from) -> from;
+                    case MadeFrom.FromNothing _ -> null;
                     // One place is what a line is drawn on, and a value made of several is at none.
-                    case PathResolution.MayStandAt _, PathResolution.MadeOf _ -> null;
+                    case MadeFrom.FromOneOf _, MadeFrom.FromEvery _ -> null;
                 };
             }
 
@@ -1218,12 +1255,19 @@ public final class GuardThresholds {
             if (!everywhere && !casesPutOnTheWay) {
                 continue;
             }
+            // An operation another application works out that this one works out as well, as
+            // the list every application is handed is built before any, stops a run where this
+            // one does whichever is made first, so it asks nothing of the rows.
+            List<UndividedByARelation.IntOperation> own =
+                    it.stops().operations().operations();
             List<UndividedByARelation.IntOperation> others = new ArrayList<>();
             boolean othersTold = true;
             for (int other = 0; other < applications.size(); other++) {
                 if (other != at) {
                     othersTold &= applications.get(other).stops().exact();
-                    others.addAll(applications.get(other).stops().operations().operations());
+                    applications.get(other).stops().operations().operations().stream()
+                            .filter(each -> own.stream().noneMatch(each::sameOperationAs))
+                            .forEach(others::add);
                 }
             }
             if (othersTold) {
@@ -1235,22 +1279,29 @@ public final class GuardThresholds {
     }
 
     /**
-     * Whether a run taking an arm of a choice {@code each} is read through may stop in what it
-     * works out there ({@link StopEvidence.OnAnArm}): asked over the rows the way to the arm
-     * leaves, the arm's condition put on it, of an arm some row is shown to arrive at. An arm no
-     * row takes works nothing out, and an arm whose condition cannot be put on the way is asked
-     * nothing, since what the rows of the whole way would say is said of runs that do not take it.
+     * Whether a run taking an arm of {@code arms}, those of a choice {@code each} is read through,
+     * may stop in what it works out there ({@link StopEvidence.OnAnArm}): asked over the rows the
+     * way to the arm leaves, the arm's condition put on it, of an arm some row is shown to arrive
+     * at. An arm no row takes works nothing out, and an arm whose condition cannot be put on the
+     * way is asked nothing, since what the rows of the whole way would say is said of runs that do
+     * not take it. {@code within} is where the arms are read where that is one application of the
+     * closure the comparison stands in, which a run makes only where that is made, and null where
+     * they are read wherever the comparison is.
      */
     private static boolean aRunTakingAnArmMayStop(
-            ComparisonReadings.Reading each, InputReading read, List<ComparisonArrival> arrivals,
-            WaysToACase wayToACase, Function<Proposition, ReachingCuts.Stating> aCase) {
+            ComparisonReadings.Reading each, List<StopEvidence.OnAnArm> arms, Proposition within,
+            InputReading read, List<ComparisonArrival> arrivals, WaysToACase wayToACase,
+            Function<Proposition, ReachingCuts.Stating> aCase) {
         if (each.statedAsACondition().isEmpty()) {
             return false;
         }
-        for (StopEvidence.OnAnArm arm : each.onTheArms()) {
-            if (!arm.stops().noRunMayStopAnywhere() && ComparisonAssessment.someRowArrives(wayToACase.apply(arm.reached()), arrivals)
+        for (StopEvidence.OnAnArm arm : arms) {
+            Proposition reached = within == null ? arm.reached()
+                    : WhereAnApplicationIsMade.past(within, arm.reached());
+            if (!arm.stops().noRunMayStopAnywhere()
+                    && ComparisonAssessment.someRowArrives(wayToACase.apply(reached), arrivals)
                     && arm.stops().aRunMayStopIn(read, regionsOf(Reachability.of(
-                            new WayToTheBorder(each.wayToACase(aCase.apply(arm.reached()))),
+                            new WayToTheBorder(each.wayToACase(aCase.apply(reached))),
                             read.quantities().region())))) {
                 return true;
             }
@@ -1345,6 +1396,8 @@ public final class GuardThresholds {
         read.whatEachPlaceIsLeftWith().forEach(left -> left.filedIn(cited, readAt, out));
         // And, beside what a line not worked out leaves, what its cases were.
         read.caseExpansions().forEach(each -> out.expanded(cited, readAt, each));
+        // And, beside what a line read at a cost leaves, which helper its cases choose among.
+        read.costlyReadings().forEach(each -> out.costly(cited, readAt, each));
     }
 
     /** How a row meets a line a body's condition drew, which is a guard's own answer: what it takes

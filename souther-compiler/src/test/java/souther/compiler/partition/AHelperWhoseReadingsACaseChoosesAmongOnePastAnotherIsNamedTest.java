@@ -188,8 +188,9 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
         List<String> told = text.lines().filter(line -> line.contains("case expansion")).toList();
         assertFalse(told.isEmpty(), text);
         for (String line : told) {
-            assertTrue(line.contains("the helper `ok`") && line.contains("written inside `first`,"
-                            + " `pick`, so it moves into a behavior's own let"),
+            assertTrue(line.contains("The helper `ok` is read more than once")
+                            && line.contains("the call written inside `first`, `pick` has to move"
+                            + " into the `let` of the behavior itself"),
                     "the helper, and the helpers its call moves out of: " + line);
         }
     }

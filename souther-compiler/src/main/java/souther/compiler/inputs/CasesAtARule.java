@@ -11,26 +11,29 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 
 /**
- * What a rule's line not worked out because its cases were too many was told of one of those
- * cases, for a report to say beside why the line was not worked out.
+ * What a rule's line was told of one of its cases, for a report to say beside the line: what the
+ * case came to when the line was not worked out because its cases were too many
+ * ({@code CasesAtARule<CaseExpansion.CameTo>}), or the helpers its choices stand among when the
+ * line was read all the same ({@code CasesAtARule<List<CaseExpansion.MultipliedHelper>>}). The two
+ * are kept in lists of their own, since a line read at a cost has no count and no reason it was not
+ * read; what they share is how accounts of one case are put together, and that is held here once.
  *
  * <p>Beside the finding and not in it. The finding is why the line was not worked out, and two of
- * them about one rule at one place are put together as one; a count of one case of one line is
+ * them about one rule at one place are put together as one; an account of one case of one line is
  * put together with nothing, since the ways of one case are none of another's. So this is its own
  * entry, about the rule and the case, and a report joins the two by the rule.
  *
  * <p>One entry for each case of each line of the rule, and nothing else tells two apart
  * ({@link #key}). A comparison written in a helper is one rule read once per call, and each
- * reading answers what the case came to there: the counts, and what in that copy of the model made
- * the parts. Those answers are kept as readings of the one case, each with the copies it was read
- * at, and never numbered as cases of their own. Readings that came to the same are one reading
- * read at each of their copies; one copy reads a case once, so a copy answered two ways is two of
- * this compiler's answers disagreeing, and is raised.
+ * reading answers what the case came to there. Those answers are kept as readings of the one case,
+ * each with the copies it was read at, and never numbered as cases of their own. Readings that came
+ * to the same are one reading read at each of their copies; one copy reads a case once, so a copy
+ * answered two ways is two of this compiler's answers disagreeing, and is raised.
  *
+ * @param <A>       what a reading of a case answers
  * @param rule      which rule of the model
  * @param reachedBy every question a reader was offered for the rule, as a finding about it holds
  *                  ({@link RuleWithoutALine#reachedBy})
@@ -40,11 +43,11 @@ import java.util.Set;
  * @param readings  what the case came to, each answer with every copy it was read at, in the
  *                  order they were first read
  */
-public record CasesExpandedAtARule(RuleRef rule, Set<RuleReportAnchor> reachedBy,
-                                   CaseExpansion.Which which, String line, String cutAt,
-                                   List<Reading> readings) {
+public record CasesAtARule<A>(RuleRef rule, Set<RuleReportAnchor> reachedBy,
+                              CaseExpansion.Which which, String line, String cutAt,
+                              List<Reading<A>> readings) {
 
-    public CasesExpandedAtARule {
+    public CasesAtARule {
         Objects.requireNonNull(rule, "cases are a rule's");
         Objects.requireNonNull(which, "some case of some line");
         Objects.requireNonNull(line, "cases are a line's");
@@ -56,7 +59,7 @@ public record CasesExpandedAtARule(RuleRef rule, Set<RuleReportAnchor> reachedBy
             throw new IllegalArgumentException("a case told of was read somewhere: " + which);
         }
         Set<ModelOccurrence> seen = new HashSet<>();
-        for (Reading each : readings) {
+        for (Reading<A> each : readings) {
             for (ModelOccurrence copy : each.readAt()) {
                 if (!seen.add(copy)) {
                     throw new IllegalStateException("one copy of " + rule + " answered what "
@@ -70,30 +73,13 @@ public record CasesExpandedAtARule(RuleRef rule, Set<RuleReportAnchor> reachedBy
      * What one case came to, read at {@code readAt}.
      *
      * @param readAt every copy of the model's code it was read at with this answer
-     * @param cameTo the answer
+     * @param answer the answer
      */
-    public record Reading(ModelOccurrences readAt, CaseExpansion.CameTo cameTo) {
+    public record Reading<A>(ModelOccurrences readAt, A answer) {
 
         public Reading {
             Objects.requireNonNull(readAt, "a reading is made at some copies, if only none");
-            Objects.requireNonNull(cameTo, "and came to something");
-        }
-
-        /**
-         * The helper an author is told to declare as a behavior, so that none of the choices the
-         * case is made of is expanded where the rule was read
-         * ({@link CaseExpansion#theHelperHoldingEveryChoice}): empty where no helper holds them
-         * all, where what made the parts was not said, and where the helper is one the choices
-         * multiply the readings of, which is said of it already.
-         */
-        public Optional<CaseExpansion.HelperToDeclare> helperHoldingEveryChoice() {
-            if (!(cameTo.attributed() instanceof CaseExpansion.Attributed attributed)) {
-                return Optional.empty();
-            }
-            return CaseExpansion.theHelperHoldingEveryChoice(attributed.factors(),
-                            readAt.inOrder())
-                    .filter(declared -> attributed.multiplied().stream()
-                            .noneMatch(each -> each.helper().equals(declared.helper())));
+            Objects.requireNonNull(answer, "and came to something");
         }
     }
 
@@ -103,12 +89,12 @@ public record CasesExpandedAtARule(RuleRef rule, Set<RuleReportAnchor> reachedBy
     /** Which line of which rule, which is what its cases are numbered among. */
     public record LineOfARule(RuleRef rule, CaseExpansion.Line line) {}
 
-    /** One reader's account of it, read at {@code readAt}. */
-    public static CasesExpandedAtARule of(RuleCitation cited, ModelOccurrences readAt,
-                                          CaseExpansion expansion) {
-        return new CasesExpandedAtARule(cited.rule(), RuleCitation.anchorOf(cited),
-                expansion.which(), expansion.line(), expansion.cutAt(),
-                List.of(new Reading(readAt, expansion.cameTo())));
+    /** One reader's account of {@code which}, read at {@code readAt}. */
+    public static <A> CasesAtARule<A> of(RuleCitation cited, ModelOccurrences readAt,
+                                         CaseExpansion.Which which, String line, String cutAt,
+                                         A answer) {
+        return new CasesAtARule<>(cited.rule(), RuleCitation.anchorOf(cited), which, line, cutAt,
+                List.of(new Reading<>(readAt, answer)));
     }
 
     /** What makes two of these one. */
@@ -130,7 +116,7 @@ public record CasesExpandedAtARule(RuleRef rule, Set<RuleReportAnchor> reachedBy
      * Two accounts of one case as one: every handle either was reached by, and every reading
      * either made — a reading that came to what one already did is that one, read at more copies.
      */
-    public CasesExpandedAtARule mergedWith(CasesExpandedAtARule other) {
+    public CasesAtARule<A> mergedWith(CasesAtARule<A> other) {
         if (!key().equals(other.key())) {
             throw new IllegalArgumentException("two accounts put together are of one case: "
                     + this + " and " + other);
@@ -142,21 +128,21 @@ public record CasesExpandedAtARule(RuleRef rule, Set<RuleReportAnchor> reachedBy
         }
         Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
         both.addAll(other.reachedBy);
-        List<Reading> all = new ArrayList<>(readings);
-        for (Reading more : other.readings) {
-            int at = indexOf(all, more.cameTo());
+        List<Reading<A>> all = new ArrayList<>(readings);
+        for (Reading<A> more : other.readings) {
+            int at = indexOf(all, more.answer());
             if (at < 0) {
                 all.add(more);
             } else {
-                all.set(at, new Reading(all.get(at).readAt().and(more.readAt()), more.cameTo()));
+                all.set(at, new Reading<>(all.get(at).readAt().and(more.readAt()), more.answer()));
             }
         }
-        return new CasesExpandedAtARule(rule, both, which, line, cutAt, all);
+        return new CasesAtARule<>(rule, both, which, line, cutAt, all);
     }
 
-    private static int indexOf(List<Reading> readings, CaseExpansion.CameTo cameTo) {
+    private static <A> int indexOf(List<Reading<A>> readings, A answer) {
         for (int at = 0; at < readings.size(); at++) {
-            if (readings.get(at).cameTo().equals(cameTo)) {
+            if (readings.get(at).answer().equals(answer)) {
                 return at;
             }
         }

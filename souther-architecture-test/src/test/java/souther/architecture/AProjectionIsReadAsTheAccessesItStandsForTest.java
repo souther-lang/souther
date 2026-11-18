@@ -259,6 +259,10 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
     private static final String ASKS_EACH = "asks each node it meets what it is, and asks it of"
             + " every subexpression standing there, as the descent would have met them";
 
+    /** Answers each part of a value for itself. */
+    private static final String ASKS_EACH_PART = "asks the question of each part of a value, which"
+            + " reads a projection's names itself: the part of a projection is its base";
+
     /** Reads the names off the projection, a name at a time. */
     private static final String READS_THE_NAMES = "the rule for a field access, read along the"
             + " projection's names rather than down the stack";
@@ -611,16 +615,17 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
         row(out, c + "inputs/InputPath", "introducing", "(" + core + "L" + c
                 + "inputs/BindingEnvironment;L" + c + "inputs/InputPath$OfAConstruction;)L" + c
                 + "inputs/PathResolution;", Reading.NAMES, READS_THE_NAMES);
-        row(out, c + "inputs/InputPath", "named", "(" + core + "L" + c
+        row(out, c + "inputs/InputPath", "nameOf", "(" + core + "L" + c
                 + "inputs/BindingEnvironment;)L" + c + "inputs/PathResolution;",
                 Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "inputs/InputPath", "madeOfTheParts", "(" + core + "L" + c
+                + "inputs/BindingEnvironment;)L" + c + "inputs/PathResolution;",
+                Reading.STRUCTURE, ASKS_EACH_PART);
         row(out, c + "inputs/InputPath", "through", "(" + core + "L" + c
                 + "inputs/InputPath$Wanted;L" + c + "inputs/BindingEnvironment;)L" + c
                 + "inputs/PathResolution;", Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/AffineReading$1", "readsThrough",
                 "(L" + CORE + "$FieldAccess;" + reads + ")Z", Reading.ONE_ACCESS, ONE);
-        row(out, c + "partition/ComparisonAssessment", "readsAnswer", "(" + core + "L" + c
-                + "types/BindingId;)Z", Reading.STRUCTURE, BINDINGS);
         row(out, c + "partition/ComparisonReadings", "walk", "(" + core + "L" + c
                 + "partition/ComparisonReadings$Body;" + reads + "L" + c
                 + "partition/ClosureApplications;L" + c
@@ -763,6 +768,12 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "asks each operand of a node for the shifts of a date a taking of it stands for,"
                         + " which the reading of the input answers: a projection is one operand,"
                         + " its base");
+        row(out, c + "partition/AffineReading$1", "holdsNoChoice",
+                "(" + core + "Ljava/util/Map;)Z",
+                Reading.STRUCTURE,
+                "asks whether anything in a value is a choice between arms: a field read off a"
+                        + " value is no choice, so what a projection holds is what its base"
+                        + " holds");
         row(out, c + "partition/AffineReading$WhatWasTold", "readByATerm", "(" + core + ")V",
                 Reading.STRUCTURE,
                 "records each name under a node read as numbers of the input: a projection reads"

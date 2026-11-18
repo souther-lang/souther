@@ -85,11 +85,16 @@ class ReadingsChosenOneBesideAnotherTest {
 
     /** The readings found for each group, by name. */
     private static Map<String, List<String>> found(DecidingCase.Cases cases) {
+        return found(cases, ReadingsChosenOneBesideAnother.PAIRS_ASKED_OF_ALTERNATIVES);
+    }
+
+    /** The same, asking no more than {@code mostPairs} pairs of alternatives. */
+    private static Map<String, List<String>> found(DecidingCase.Cases cases, int mostPairs) {
         Map<Spelling, BitSet> madeBy = madeBy(PARTS, READINGS);
         Map<String, List<String>> out = new HashMap<>();
         ReadingsChosenOneBesideAnother.of(cases,
                 spelling -> madeBy.getOrDefault(spelling, new BitSet()), GROUP::get,
-                ReadingsChosenOneBesideAnotherTest::mayBeOne)
+                ReadingsChosenOneBesideAnotherTest::mayBeOne, mostPairs)
                 .forEach((group, readings) -> out.put(group,
                         readings.stream().mapToObj(READINGS::get).toList()));
         return out;
@@ -135,6 +140,73 @@ class ReadingsChosenOneBesideAnotherTest {
         DecidingCase.Cases next = anyOf(one("h2a"), not("h2a"));
         assertEquals(Map.of("H", List.of("h1", "h2")),
                 found(anyOf(together(one("h1a"), next), together(not("h1a"), next))));
+    }
+
+    /**
+     * Three alternatives each followed by the same choice of {@code h2}: told apart by {@code h1}
+     * where the first two are compared, and by {@code h2} only where the third is one of the two.
+     * Some two of them are told apart by {@code h1} alone, and the choice after them is of
+     * {@code h2}, so the two readings multiply there however the third is told apart.
+     */
+    @Test
+    void twoAlternativesToldApartByAnotherReadingMultiplyWithTheChoiceAfterThemWhateverTheThirdIs() {
+        DecidingCase.Cases next = anyOf(one("h2a"), one("h2b"));
+        assertEquals(Map.of("H", List.of("h1", "h2")), found(anyOf(
+                together(one("h1a"), next),
+                together(one("h1b"), next),
+                together(one("h2c"), next))));
+    }
+
+    /**
+     * The reading the choice after the alternatives is of tells the two alternatives apart too:
+     * one reading may tell both choices apart, and nothing is said, however the readings are
+     * counted off the alternatives.
+     */
+    @Test
+    void theReadingTheChoiceAfterIsOfTellingTheAlternativesApartIsNotSaidToMultiply() {
+        DecidingCase.Cases next = anyOf(one("h2a"), one("h2b"));
+        assertEquals(Map.of(), found(anyOf(
+                together(one("h1a"), next),
+                together(one("h2c"), next))));
+    }
+
+    /**
+     * What is asked of pairs of alternatives is bounded, and what is found stands: of four
+     * alternatives, six pairs, the last of which is the only one the readings of {@code h1} alone
+     * tell apart: the others are told apart by {@code h2}, which is the reading of the choice
+     * after them. Asked five, nothing is shown; asked all six, it is.
+     */
+    @Test
+    void pairsOfAlternativesAreAskedUpToAFigureAndNothingIsSaidOfThosePastIt() {
+        DecidingCase.Cases next = anyOf(one("h2a"), one("h2b"));
+        DecidingCase.Cases cases = anyOf(
+                together(one("h2c"), next),
+                together(one("h2a"), next),
+                together(one("h1a"), next),
+                together(one("h1b"), next));
+        assertEquals(Map.of(), found(cases, 5));
+        assertEquals(Map.of("H", List.of("h1", "h2")), found(cases, 6));
+    }
+
+    /** An alternative holding what another holds is that one: said again, it changes no answer. */
+    @Test
+    void anAlternativeHoldingWhatAnotherHoldsChangesNoAnswerWhenSaidAgain() {
+        DecidingCase.Cases next = anyOf(one("h2a"), one("h2b"));
+        assertEquals(Map.of("H", List.of("h1", "h2")), found(anyOf(
+                together(one("h1a"), next),
+                together(one("h1a"), next),
+                together(one("h1b"), next))));
+    }
+
+    /** Alternatives told apart by the reading {@code h0} and a choice after them of {@code h1},
+     *  which may be one reading: nothing is said of any two of them. */
+    @Test
+    void alternativesToldApartByAReadingTheChoiceAfterMayBeAreNotSaidToMultiply() {
+        DecidingCase.Cases next = anyOf(one("h1a"), one("h1b"));
+        assertEquals(Map.of(), found(anyOf(
+                together(one("h0a"), next),
+                together(not("h0a"), next),
+                together(one("h0a"), one("ga"), next))));
     }
 
     /**

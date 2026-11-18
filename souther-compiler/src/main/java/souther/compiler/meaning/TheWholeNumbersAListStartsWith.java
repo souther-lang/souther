@@ -77,46 +77,93 @@ public final class TheWholeNumbersAListStartsWith {
 
     /** What {@code stated} comes to on the elements the list its element is of starts with. */
     public static Read of(Proposition stated) {
-        Optional<TheElementComesRound> round = TheElementComesRound.in(stated);
-        boolean whole = round.isPresent();
-        if (!whole) {
-            round = TheElementComesRound.inItsRemainders(stated);
+        return planFor(stated).on(stated);
+    }
+
+    /**
+     * How the comparison {@code whole} is read on the elements its list starts with, worked out
+     * once: which elements, and whether the element is put everywhere it is weighed or only inside
+     * remainders. A part of {@code whole} is read as the whole is by {@link Plan#on}, so what a
+     * part comes to on each element is what it contributes to what the whole comes to there.
+     */
+    public static Plan planFor(Proposition whole) {
+        Optional<TheElementComesRound> round = TheElementComesRound.in(whole);
+        boolean everywhere = round.isPresent();
+        if (!everywhere) {
+            round = TheElementComesRound.inItsRemainders(whole);
         }
         if (round.isEmpty()) {
-            return new Read.NotOfThatKind();
+            return new Plan.Refused(new Read.NotOfThatKind());
         }
-        Quantity.OfABinding element = round.get().element();
-        Quantity.AWholeNumberInTurn number = round.get().number();
         if (round.get().every().compareTo(BigInteger.valueOf(
                 CompositionBudget.READINGS_OF_ONE_CONDITION.maximum())) > 0) {
-            return new Read.PastTheReadings();
+            return new Plan.Refused(new Read.PastTheReadings());
         }
-        LinearForm<Quantity> from = ofTheInputsNumbers(number.from());
+        Quantity.AWholeNumberInTurn number = round.get().number();
         LinearForm<Quantity> past = number.to().minus(number.from()).orNull()
                 instanceof LinearForm<NumericTerm> gap ? ofTheInputsNumbers(gap) : null;
         if (past == null) {
-            return new Read.NotOfThatKind();
+            return new Plan.Refused(new Read.NotOfThatKind());
         }
-        List<OnOne> out = new ArrayList<>();
-        for (int at = 0; at < round.get().every().intValueExact(); at++) {
-            ExactRatio step = ExactRatio.of(at);
-            Proposition holding = heldAtOrPast(past, step);
-            if (holding instanceof Proposition.Always(boolean some) && !some) {
-                break;
+        return new Plan.OnTheFirstElements(round.get(), everywhere,
+                ofTheInputsNumbers(number.from()), past);
+    }
+
+    /** A comparison's reading on the elements its list starts with, from {@link #planFor}. */
+    public sealed interface Plan {
+
+        /** What {@code part} comes to on each of those elements: the whole's own, where
+         *  {@code part} is the whole. */
+        Read on(Proposition part);
+
+        /** A comparison that is not read on those elements, and what is said of it. */
+        record Refused(Read why) implements Plan {
+
+            @Override
+            public Read on(Proposition part) {
+                return why;
             }
-            LinearForm<Quantity> there = from.plus(LinearForm.constant(step)).orNull();
-            Proposition on = there == null ? null : whole ? OnOneElement.at(stated, element, there)
-                    : OnOneElement.inItsRemainders(stated, element, there);
-            if (on == null) {
-                return new Read.NotOfThatKind();
-            }
-            if (on instanceof Proposition.Always) {
-                continue;
-            }
-            out.add(new OnOne(on, Proposition.all(List.of(holding,
-                    OnOneElement.comesRoundTo(round.get(), at)))));
         }
-        return new Read.OnEach(out);
+
+        /**
+         * A comparison read on the first elements of its list.
+         *
+         * @param round      how many elements apart the statement comes out the same
+         * @param everywhere whether the element is put wherever it is weighed, and not only
+         *                   inside remainders
+         * @param from       where the list starts
+         * @param past       how far its end is past its start
+         */
+        record OnTheFirstElements(TheElementComesRound round, boolean everywhere,
+                                  LinearForm<Quantity> from, LinearForm<Quantity> past)
+                implements Plan {
+
+            @Override
+            public Read on(Proposition part) {
+                Quantity.OfABinding element = round.element();
+                List<OnOne> out = new ArrayList<>();
+                for (int at = 0; at < round.every().intValueExact(); at++) {
+                    ExactRatio step = ExactRatio.of(at);
+                    Proposition holding = heldAtOrPast(past, step);
+                    if (holding instanceof Proposition.Always(boolean some) && !some) {
+                        break;
+                    }
+                    LinearForm<Quantity> there = from.plus(LinearForm.constant(step)).orNull();
+                    Proposition on = there == null ? null
+                            : everywhere ? OnOneElement.at(part, element, there)
+                            : OnOneElement.inItsRemainders(part, element, there);
+                    if (on == null) {
+                        return new Read.NotOfThatKind();
+                    }
+                    if (on instanceof Proposition.Always) {
+                        continue;
+                    }
+                    out.add(new OnOne(on, Proposition.all(List.of(holding,
+                            OnOneElement.comesRoundTo(round, at)))));
+                }
+                return new Read.OnEach(out);
+            }
+        }
     }
 
     /** {@code form}, a form of the input's numbers, as a form of quantities. */

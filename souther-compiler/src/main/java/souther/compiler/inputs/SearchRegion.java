@@ -174,6 +174,19 @@ public interface SearchRegion {
     SearchRegion assuming(NumericTerm.FromOnePosition term, Place at, Rel rel);
 
     /**
+     * The same region, with the date at {@code date} held to the days whose year leaves one of
+     * {@code remainders} by {@code divisor}.
+     *
+     * <p>A class of the days and no run of them, so it narrows which days a search offers
+     * ({@link #classAt}) and leaves {@link #projectionOf} as it was. A region that reads no date
+     * has none to hold, which is what the default is.
+     */
+    default SearchRegion assumingTheYearLeaves(NumericTerm.ValueOf date, int divisor,
+                                               Set<Integer> remainders) {
+        return this;
+    }
+
+    /**
      * The same region, with {@code term} held away from {@code at}.
      *
      * <p>A hole, which is what a disequality states and is not an end: the values either side of it

@@ -170,7 +170,7 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
      * many numbers of a type is past the ends of the type on some runs. A count is not one, and
      * comes to no more than a container holds.
      */
-    private static boolean aTotal(NumericTerm term) {
+    static boolean aTotal(NumericTerm term) {
         return switch (term) {
             case NumericTerm.TakenOver over -> over.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
             case NumericTerm.TakenOf of -> of.takenAs() instanceof TakenAs.TheSumOfWhatItHolds;
@@ -277,7 +277,26 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
     static boolean liesWithin(LinearForm<NumericTerm> form, InputReading read,
                               Map<NumericTerm, FormRange> standIns, BigInteger leastAllowed,
                               BigInteger greatestAllowed) {
-        FormRange ends = of(form, read, standIns);
+        return liesWithin(of(form, read, standIns), form, read, standIns, leastAllowed,
+                greatestAllowed);
+    }
+
+    /**
+     * Whether every number {@code form} comes to as a run works it out lies from
+     * {@code leastAllowed} to {@code greatestAllowed}: each number of the input as it is worked
+     * out ({@link #asWorkedOut}), and not as a place holds it. A total is worked out exactly
+     * before its type holds it, so its place says nothing of whether the run gets there.
+     */
+    static boolean worksOutWithin(LinearForm<NumericTerm> form, InputReading read,
+                                  Map<NumericTerm, FormRange> standIns, BigInteger leastAllowed,
+                                  BigInteger greatestAllowed) {
+        return liesWithin(of(form, term -> standIns.containsKey(term) ? standIns.get(term)
+                : asWorkedOut(term, read)), form, read, standIns, leastAllowed, greatestAllowed);
+    }
+
+    private static boolean liesWithin(FormRange ends, LinearForm<NumericTerm> form,
+                                      InputReading read, Map<NumericTerm, FormRange> standIns,
+                                      BigInteger leastAllowed, BigInteger greatestAllowed) {
         return ends != null && (ends.liesWithin(leastAllowed, greatestAllowed)
                 || ends.within(form, read, standIns).liesWithin(leastAllowed, greatestAllowed));
     }

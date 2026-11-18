@@ -11,6 +11,9 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 
 /**
  * Where the rules of a value leave each part of the date standing at one of its positions.
@@ -30,23 +33,57 @@ import java.util.Map;
  *
  * @param byPart the range each part the rules spoke of is left in. A part they said nothing of is
  *               absent, and runs as far as the calendar has it
+ * @param yearsLeave what the year leaves by each divisor the rules spoke of: the remainders it may
+ *                   leave. A divisor they said nothing of is absent
  */
-public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart) {
+public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart,
+                            Map<Integer, Set<Integer>> yearsLeave) {
 
     /** The days of one cycle of the Gregorian calendar, which repeats every four hundred years: a
-     *  walk that went this far and met no date has met every combination of parts there is. */
+     *  walk of the parts of a date that went this far has met every combination of them there is.
+     *  The remainders a year leaves repeat in no cycle of this length unless their divisors divide
+     *  four hundred ({@link #cyclesBeforeTheClassRepeats}). */
     public static final long DAYS_OF_A_CYCLE = 146_097;
+
+    /** The years of one cycle of the calendar. */
+    private static final int YEARS_OF_A_CYCLE = 400;
+
+    /** How many cycles of the calendar a walk goes without meeting a day before it says it stopped
+     *  short, where the cycle of the class it walks is more than that: ten thousand years, in each
+     *  of which a walk takes at most a step for the year and one for each month. */
+    static final int MOST_CYCLES_WALKED = 25;
 
     /** The first and last days the calendar has. */
     public static final long FIRST_DAY = LocalDate.MIN.toEpochDay();
     public static final long LAST_DAY = LocalDate.MAX.toEpochDay();
 
     public DatePartsLeft {
-        if (byPart.isEmpty()) {
+        if (byPart.isEmpty() && yearsLeave.isEmpty()) {
             throw new IllegalArgumentException("a date nothing was said of the parts of leaves"
                     + " every date, which is no class of them");
         }
-        byPart = Collections.unmodifiableMap(new EnumMap<>(byPart));
+        byPart = Collections.unmodifiableMap(new EnumMap<>(
+                byPart.isEmpty() ? new EnumMap<>(TakenAs.DatePart.class) : byPart));
+        Map<Integer, Set<Integer>> copied = new TreeMap<>();
+        yearsLeave.forEach((divisor, remainders) -> {
+            if (divisor <= 0) {
+                throw new IllegalArgumentException("a year leaves a remainder by a divisor above"
+                        + " nought: " + divisor);
+            }
+            copied.put(divisor, Set.copyOf(remainders));
+        });
+        yearsLeave = Collections.unmodifiableMap(copied);
+    }
+
+    /** What the rules leave of the parts of a date, where they said nothing of the year's
+     *  remainders. */
+    public DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart) {
+        this(byPart, Map.of());
+    }
+
+    /** The date whose year leaves one of {@code remainders} by {@code divisor}. */
+    public static DatePartsLeft yearLeaving(int divisor, Set<Integer> remainders) {
+        return new DatePartsLeft(Map.of(), Map.of(divisor, remainders));
     }
 
     /**
@@ -65,13 +102,30 @@ public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart) 
         Map<TakenAs.DatePart, NumericDomain.Bounds> both = new EnumMap<>(TakenAs.DatePart.class);
         both.putAll(byPart);
         other.byPart.forEach((part, bounds) -> both.merge(part, bounds, NumericDomain.Bounds::meet));
-        return new DatePartsLeft(both);
+        Map<Integer, Set<Integer>> remainders = new TreeMap<>(yearsLeave);
+        other.yearsLeave.forEach((divisor, left) -> remainders.merge(divisor, left, (one, two) -> {
+            Set<Integer> shared = new TreeSet<>(one);
+            shared.retainAll(two);
+            return shared;
+        }));
+        return new DatePartsLeft(both, remainders);
     }
 
     /** Whether {@code part} is left at {@code value}. */
     public boolean leaves(TakenAs.DatePart part, int value) {
         NumericDomain.Bounds left = byPart.get(part);
-        return left == null || left.admits(ExactRatio.of(value));
+        if (left != null && !left.admits(ExactRatio.of(value))) {
+            return false;
+        }
+        if (part != TakenAs.DatePart.YEAR) {
+            return true;
+        }
+        for (Map.Entry<Integer, Set<Integer>> each : yearsLeave.entrySet()) {
+            if (!each.getValue().contains(Math.floorMod(value, each.getKey()))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Whether the date {@code day} counts to has parts these leave. */
@@ -85,9 +139,28 @@ public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart) 
                 && leaves(TakenAs.DatePart.DAY, TakenAs.DatePart.DAY.of(date));
     }
 
-    /** Whether some date the calendar has has parts these leave. */
+    /**
+     * How many cycles of the calendar the parts these leave repeat in: the years the calendar
+     * repeats in and each divisor the year is held to divide a whole number of them, and the days
+     * these leave at one day they leave at the day that many cycles on.
+     */
+    BigInteger cyclesBeforeTheClassRepeats() {
+        BigInteger years = BigInteger.valueOf(YEARS_OF_A_CYCLE);
+        for (int divisor : yearsLeave.keySet()) {
+            BigInteger by = BigInteger.valueOf(divisor);
+            years = years.multiply(by).divide(years.gcd(by));
+        }
+        return years.divide(BigInteger.valueOf(YEARS_OF_A_CYCLE));
+    }
+
+    /** Whether some date the calendar has may have parts these leave: not where a walk over them
+     *  met none and went as far as there is. */
     public boolean leaveADate() {
-        return !walk(null, null, true, 1).days().isEmpty();
+        if (yearsLeave.values().stream().anyMatch(Set::isEmpty)) {
+            return false;
+        }
+        Walked first = walk(null, null, true, 1);
+        return !first.days().isEmpty() || first.leftSome();
     }
 
     /**
@@ -98,8 +171,10 @@ public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart) 
      * where they have none. A run reaching past the calendar holds no day there, and cut to the
      * calendar end by end it would name the calendar's last day for a run that lies wholly after it.
      * The years first, since a year is the one part that does not come round again. Past that, a walk
-     * that went a whole cycle of the calendar beyond the last day it met has met every combination
-     * of a month and a day there is, so it ends there and says it left none.
+     * that went a whole cycle of the class beyond the last day it met has met every combination of
+     * the parts there is ({@link #cyclesBeforeTheClassRepeats}), so it ends there and says it left
+     * none. A class whose cycle is more than {@link #MOST_CYCLES_WALKED} cycles of the calendar is
+     * walked no further than that, and says it left some, for the days past it are not met.
      *
      * @param from the day the walk starts at, or null for the calendar's end on that side
      * @param to   the day it goes no further than, or null for the calendar's end on that side
@@ -122,6 +197,10 @@ public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart) 
         if (lowest.compareTo(highest) > 0) {
             return new Walked(out, false);
         }
+        BigInteger cycles = cyclesBeforeTheClassRepeats();
+        boolean wholeClass = cycles.compareTo(BigInteger.valueOf(MOST_CYCLES_WALKED)) <= 0;
+        long unmetToTheEnd = DAYS_OF_A_CYCLE * (wholeClass ? cycles.longValueExact()
+                : MOST_CYCLES_WALKED);
         long end = (upward ? highest : lowest).longValueExact();
         long unmet = 0;
         long day = (upward ? lowest : highest).longValueExact();
@@ -130,9 +209,15 @@ public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart) 
                 return new Walked(out, true);
             }
             LocalDate date = LocalDate.ofEpochDay(day);
+            int year = TakenAs.DatePart.YEAR.of(date);
             long next;
-            if (!leaves(TakenAs.DatePart.YEAR, TakenAs.DatePart.YEAR.of(date))
-                    || !leaves(TakenAs.DatePart.MONTH, TakenAs.DatePart.MONTH.of(date))) {
+            if (!leaves(TakenAs.DatePart.YEAR, year)) {
+                // Nothing of this year is held, so the walk goes to the first day of the next one,
+                // or the last day of the one before. The last year the calendar has has no next.
+                next = !upward ? LocalDate.of(year, 1, 1).toEpochDay() - 1
+                        : year == LocalDate.MAX.getYear() ? LAST_DAY + 1
+                        : LocalDate.of(year + 1, 1, 1).toEpochDay();
+            } else if (!leaves(TakenAs.DatePart.MONTH, TakenAs.DatePart.MONTH.of(date))) {
                 // Nothing of this month is held, so the walk goes to the first day of the next one,
                 // or the last day of the one before. The last month the calendar has has no next.
                 next = !upward ? date.withDayOfMonth(1).toEpochDay() - 1
@@ -147,8 +232,8 @@ public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart) 
                 next = upward ? day + 1 : day - 1;
             }
             unmet += Math.abs(next - day);
-            if (unmet > DAYS_OF_A_CYCLE) {
-                return new Walked(out, false);
+            if (unmet > unmetToTheEnd) {
+                return new Walked(out, !wholeClass);
             }
             day = next;
         }

@@ -167,6 +167,7 @@ public final class OperationFacts {
                 case OperationFact.AnswersTheValueFiledUnder(var _, ArgumentRef container) ->
                         container;
                 case OperationFact.AnswersTheElementAt(var _, ArgumentRef list) -> list;
+                case OperationFact.AnswersAnExtremeElementOf(ArgumentRef of, var _) -> of;
                 default -> null;
             };
             if (source != null) {
@@ -350,6 +351,7 @@ public final class OperationFacts {
             about("Date", "addMonths", new OperationFact.MovesADateByMonths(at(0), at(1),
                     ValueName.Stdlib.operation("Date", "year"),
                     ValueName.Stdlib.operation("Date", "month"),
+                    ValueName.Stdlib.operation("Date", "day"),
                     ValueName.Stdlib.operation("Int", "floorMod"))),
 
             // The operations answering the order of their two arguments as the sign of a number.
@@ -616,10 +618,12 @@ public final class OperationFacts {
             about("Option", "map", new OperationFact.AnswersTheClosureOnWhatItHolds(CONTAINER)),
             about("List", "max", law(AnswerAspect.PRESENCE, holdsSomething(at(0)))),
             about("List", "min", law(AnswerAspect.PRESENCE, holdsSomething(at(0)))),
-            // And which value they answer, which a law of presence does not say: one of the
-            // elements the list holds.
-            about("List", "max", new OperationFact.AnswersAnElementOf(at(0))),
-            about("List", "min", new OperationFact.AnswersAnElementOf(at(0))),
+            // And which value they answer, which a law of presence does not say: the greatest or
+            // the least of the elements the list holds.
+            about("List", "max", new OperationFact.AnswersAnExtremeElementOf(at(0),
+                    OperationFact.AnswersAnExtremeElementOf.End.GREATEST)),
+            about("List", "min", new OperationFact.AnswersAnExtremeElementOf(at(0),
+                    OperationFact.AnswersAnExtremeElementOf.End.LEAST)),
             about("List", "get", new OperationFact.AnswersTheElementAt(at(0), at(1))),
             // A value filed under the key asked for, which is one of the values the map holds.
             about("Map", "get", new OperationFact.AnswersTheValueFiledUnder(at(0), at(1))),

@@ -76,4 +76,20 @@ class ACountOfALinesCasesLeavesWhatItsPlacesAreLeftWithAsItWasTest {
                     "and the counts, each as it was");
         }
     }
+
+    @Test
+    void aCaseWorkedOutAllTheSameIsCountedAndNeverToldOfAsOneNotWorkedOut() {
+        CaseExpansion.Counted stopped = expansion(new CaseCount.Ways.Exactly(BigInteger.TEN),
+                new NumericallyConsistentWays.Counted.AtMost(BigInteger.ONE));
+        CaseExpansion.Counted worked = new CaseExpansion.Counted(LINE.ofItsCases(), "g/x", "3",
+                DecidingCase.alone(new Proposition.Always(false)),
+                new CaseCount(new CaseCount.Ways.Exactly(BigInteger.valueOf(729)),
+                        new NumericallyConsistentWays.Counted.AtMost(BigInteger.TEN)), true);
+        ComparisonAssessment.Several read = read(List.of(stopped, worked));
+
+        assertEquals(List.of(worked), read.countedWorkedOut(), "kept as it was counted");
+        assertEquals(List.of(stopped.counted()),
+                read.caseExpansions().stream().map(one -> one.cameTo().counted()).toList(),
+                "and what a line not worked out is told of its cases is the cases not worked out");
+    }
 }

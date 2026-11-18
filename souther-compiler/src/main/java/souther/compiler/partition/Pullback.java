@@ -25,6 +25,7 @@ import souther.compiler.check.CallArguments;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.ClosureUses;
 import souther.compiler.check.DateMonthMoves;
+import souther.compiler.check.DateShifts;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredArgument;
@@ -79,14 +80,16 @@ import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.InputTruth;
+import souther.compiler.inputs.MadeFrom;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.OnePerElement;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermOrders;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
+import souther.compiler.inputs.ValuesHeld;
 import souther.compiler.inputs.Watched;
 import souther.compiler.inputs.WhatAConstructionAsks;
 import souther.compiler.inputs.WrittenOutElements;
@@ -1081,8 +1084,23 @@ final class Pullback {
         }
         List<StopEvidence.OnAnArm> out = new ArrayList<>();
         for (Meaning.ReadOnAnArm each : stated.meaning().relationsDownTheArms()) {
-            for (OnThisArm arm : theRule.onTheArms(each.relation())) {
+            for (OnThisArm arm : theRule.onTheArms(new ArmRead.OfARelation(each.relation()))) {
                 out.add(new StopEvidence.OnAnArm(each.reached(), arm.stops()));
+            }
+        }
+        for (Meaning.StepOnAnArm each : stated.meaning().stepsDownTheArms(
+                ArmRead::isAComparisonThatCutsNothing)) {
+            for (OnThisArm arm : theRule.onTheArms(new ArmRead.OfACutThatCutsNothing(
+                    each.step()))) {
+                out.add(new StopEvidence.OnAnArm(each.reached(), arm.stops()));
+            }
+        }
+        // What a run works out evaluating the answer of an arm is the arm's own, and is asked
+        // where the arm is taken: the comparison made of the answer is read where it stands.
+        for (Meaning.StepOnAnArm each : stated.meaning().stepsDownTheArms(
+                theRule::isTheAnswerOfAnArm)) {
+            for (OnThisArm arm : theRule.onTheArms(new ArmRead.OfTheAnswerOfAnArm(each.step()))) {
+                out.add(new StopEvidence.OnAnArm(each.reached(), arm.evaluatedStops()));
             }
         }
         return List.copyOf(out);
@@ -2934,20 +2952,15 @@ final class Pullback {
             return;
         }
         switch (reads.pathOf(operand, read.rules().newtypes())) {
-            case PathResolution.At(TermPath path) -> operated.unsaidAt.add(path);
-            case PathResolution.MayStandAt(List<TermPath> among) -> operated.unsaidAt.addAll(among);
+            case ValuesAt.At(TermPath path) -> operated.unsaidAt.add(path);
             default -> {
                 // A value made from positions stands at none, and is as much theirs: it stops a
-                // run on what they hold.
-                PathResolution made = reads.cameFrom(operand, read.rules().newtypes());
-                if (made instanceof PathResolution.At(TermPath path)) {
-                    operated.unsaidAt.add(path);
-                    return;
-                } else if (made instanceof PathResolution.MayStandAt(List<TermPath> among)) {
-                    operated.unsaidAt.addAll(among);
-                    return;
-                } else if (made instanceof PathResolution.MadeOf places) {
-                    operated.unsaidAt.addAll(places.places());
+                // run on what they hold. So does a name that may stand at one of several places,
+                // which is theirs and which a block handed to a walk over a list made of another
+                // is made of as well: where it came from says every one.
+                MadeFrom made = reads.cameFrom(operand, read.rules().newtypes());
+                if (!(made instanceof MadeFrom.FromNothing)) {
+                    operated.unsaidAt.addAll(made.places());
                     return;
                 }
                 // A name an arm of a match, an attempt or a let binds stands for what the value it
@@ -2961,10 +2974,10 @@ final class Pullback {
                 Core node = Core.withoutStanding(operand);
                 Core skipped = switch (node) {
                     case Core.Match match -> {
-                        PathResolution selects = reads.pathOf(match.scrutinee(),
+                        ValuesAt selects = reads.pathOf(match.scrutinee(),
                                 read.rules().newtypes());
-                        yield selects instanceof PathResolution.At
-                                || selects instanceof PathResolution.MayStandAt
+                        yield selects instanceof ValuesAt.At
+                                || selects instanceof ValuesAt.MayStandAt
                                 ? match.scrutinee() : null;
                     }
                     case Core.LetIn li -> li.value();
@@ -3064,6 +3077,7 @@ final class Pullback {
                 () -> partOf(at, ofItsArguments(stated, fixed, reads)),
                 () -> readingTheComparisonAgain(ofASizeInCases(stated, at, reads)),
                 () -> readingTheComparisonAgain(ofAWalkKeepingAnEnd(stated, at, reads)),
+                () -> readingTheComparisonAgain(ofTheEndOfAContainer(stated, at, reads)),
                 () -> readingTheComparisonAgain(ofAWalkChoosingAnElement(stated, at, reads)),
                 () -> {
                     Derivation read = ofAChoice(stated, at, reads);
@@ -3181,9 +3195,9 @@ final class Pullback {
          *  that says the written one works out the same ({@link #worksOutWhatItIsRestatedAs}). */
         private List<Supplier<UndividedByARelation.Working>> restated;
 
-        /** What a run taking an arm of a choice works out there, by each relation the comparison
-         *  was read as with the choice standing as that arm ({@link Pullback#readOnAnArm}). */
-        private Map<Relation, List<OnThisArm>> onTheArms;
+        /** What a run taking an arm of a choice works out there, by each comparison the written
+         *  one was read as with the choice standing as that arm ({@link Pullback#readOnAnArm}). */
+        private Map<ArmRead, List<OnThisArm>> onTheArms;
 
         // The maps and lists of a candidate are made when the candidate first says something into
         // them: most say nothing, and an identity map holds a table before it holds anything.
@@ -3257,18 +3271,24 @@ final class Pullback {
             return restated == null ? List.of() : restated;
         }
 
-        void readOnAnArm(Relation relation, OnThisArm arm) {
+        void readOnAnArm(ArmRead read, OnThisArm arm) {
             marked = null;
             if (onTheArms == null) {
                 onTheArms = new LinkedHashMap<>();
             }
-            onTheArms.computeIfAbsent(relation, _ -> new ArrayList<>()).add(arm);
+            onTheArms.computeIfAbsent(read, _ -> new ArrayList<>()).add(arm);
         }
 
-        /** What runs taking the arms {@code relation} was read on work out there; none where it
-         *  was read on no arm. */
-        List<OnThisArm> onTheArms(Relation relation) {
-            return onTheArms == null ? List.of() : onTheArms.getOrDefault(relation, List.of());
+        /** What runs taking the arms {@code read} was read on work out there; none where it was
+         *  read on no arm. */
+        List<OnThisArm> onTheArms(ArmRead read) {
+            return onTheArms == null ? List.of() : onTheArms.getOrDefault(read, List.of());
+        }
+
+        /** Whether {@code step} is what the answer of an arm of a choice this candidate read was
+         *  read as. */
+        boolean isTheAnswerOfAnArm(Derivation step) {
+            return !onTheArms(new ArmRead.OfTheAnswerOfAnArm(step)).isEmpty();
         }
 
         void tell(Relation relation, UndividedByARelation.Working told) {
@@ -3288,7 +3308,7 @@ final class Pullback {
          */
         UndividedByARelation.Working workingOf(Relation relation) {
             UndividedByARelation.Working told = relations == null ? null : relations.get(relation);
-            List<OnThisArm> arms = onTheArms(relation);
+            List<OnThisArm> arms = onTheArms(new ArmRead.OfARelation(relation));
             if (told != null || arms.isEmpty() || !arms.stream().allMatch(OnThisArm::tellsEvery)) {
                 return told;
             }
@@ -3304,9 +3324,65 @@ final class Pullback {
                 kept.relations.forEach(this::tell);
             }
             if (kept.onTheArms != null) {
-                kept.onTheArms.forEach((relation, arms) -> arms.forEach(each ->
-                        readOnAnArm(relation, each)));
+                kept.onTheArms.forEach((read, arms) -> arms.forEach(each ->
+                        readOnAnArm(read, each)));
             }
+        }
+    }
+
+    /**
+     * What a candidate read the written comparison as, which what a run taking an arm works out
+     * is kept by. One read as a relation is told by the relation. One read as cutting nothing
+     * draws none, and is told by the step that reads it; and what a run works out evaluating the
+     * answer of an arm is told by that answer. A step stands for itself and no other that reads
+     * alike: two arms can cut nothing alike and work different things out.
+     */
+    sealed interface ArmRead {
+
+        /** The comparison read as {@code relation}. */
+        record OfARelation(Relation relation) implements ArmRead {}
+
+        /** The step {@code step}, a comparison read as cutting nothing. */
+        record OfACutThatCutsNothing(Derivation step) implements ArmRead {
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof OfACutThatCutsNothing(Derivation same) && same == step;
+            }
+
+            @Override
+            public int hashCode() {
+                return System.identityHashCode(step);
+            }
+        }
+
+        /** The step {@code step}, what the answer of an arm is read as. */
+        record OfTheAnswerOfAnArm(Derivation step) implements ArmRead {
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof OfTheAnswerOfAnArm(Derivation same) && same == step;
+            }
+
+            @Override
+            public int hashCode() {
+                return System.identityHashCode(step);
+            }
+        }
+
+        /** Whether {@code step} reads a comparison as cutting nothing. */
+        static boolean isAComparisonThatCutsNothing(Derivation step) {
+            return step instanceof Derivation.ACutThatCutsNothing;
+        }
+
+        /** Every comparison read in {@code derivation} that a run taking an arm works things out
+         *  of. */
+        static List<ArmRead> in(Derivation derivation) {
+            List<ArmRead> out = new ArrayList<>();
+            Meaning.relationsReadIn(derivation).forEach(each -> out.add(new OfARelation(each)));
+            Meaning.stepsIn(derivation, ArmRead::isAComparisonThatCutsNothing)
+                    .forEach(each -> out.add(new OfACutThatCutsNothing(each)));
+            return out;
         }
     }
 
@@ -3316,12 +3392,14 @@ final class Pullback {
      *
      * @param worksOut   what the comparison works out with the choice standing as the arm; worked
      *                   out only when asked
+     * @param evaluated  what a run taking the arm works out evaluating the answer of the arm
      * @param decidedBy  what every run works out before it takes the arm, the nearest choice
      *                   first: what decided the arm. None where the arm's choice was not read as a
      *                   fork, which is taken after what nothing here says, so that what a row
      *                   taking it gets past is not told
      */
     record OnThisArm(Supplier<AffineReading.WorkedOut> worksOut,
+                     Supplier<UndividedByARelation.Working> evaluated,
                      List<UndividedByARelation.Working> decidedBy) {
 
         /** What a row taking the arm gets past: what the arm works out, after what decided it. */
@@ -3345,6 +3423,11 @@ final class Pullback {
 
         StopEvidence stops() {
             return worksOut.get().stops();
+        }
+
+        /** What a run taking the arm works out evaluating the answer of the arm. */
+        StopEvidence evaluatedStops() {
+            return new StopEvidence(evaluated.get());
         }
     }
 
@@ -3499,7 +3582,7 @@ final class Pullback {
                 () -> inTheCalledBody(e, new Asked.OnASide(AnswerAspect.EMPTINESS), reads),
                 () -> {
                     DecisionSubject held = reads.pathOf(e, read.rules().newtypes())
-                            instanceof PathResolution.At(TermPath at)
+                            instanceof ValuesAt.At(TermPath at)
                             ? new DecisionSubject.AnInput(at) : answerAt(e, reads);
                     if (held == null) {
                         return null;
@@ -3533,7 +3616,7 @@ final class Pullback {
                 () -> inTheCalledBody(e, new Asked.OnASide(AnswerAspect.PRESENCE), reads),
                 () -> {
                     DecisionSubject subject = reads.pathOf(e, read.rules().newtypes())
-                            instanceof PathResolution.At(TermPath at)
+                            instanceof ValuesAt.At(TermPath at)
                             ? new DecisionSubject.AnInput(at) : answerAt(e, reads);
                     return subject == null ? null
                             : leaf(new Derivation.PresentInASubject(subject), e, reads);
@@ -3651,7 +3734,7 @@ final class Pullback {
                                                          InputReading read) {
         Symbols symbols = read.rules().symbols();
         DeclarationNewtypes newtypes = read.rules().newtypes();
-        if (container.at().pathOf(container.value(), newtypes) instanceof PathResolution.At(
+        if (container.at().pathOf(container.value(), newtypes) instanceof ValuesAt.At(
                 TermPath at)) {
             return Optional.of(at);
         }
@@ -3659,7 +3742,7 @@ final class Pullback {
         KeyedAccumulation filed = KeyedAccumulation.of(whole.value(), whole.at(),
                 new Pullback(read, Optional.empty()).sides(), blocksAt(whole, symbols, newtypes));
         return filed != null && whole.at().holdingSomethingWhere(filed.walked(), symbols, newtypes)
-                instanceof PathResolution.At(TermPath at) ? Optional.of(at) : Optional.empty();
+                instanceof ValuesHeld.At(TermPath at) ? Optional.of(at) : Optional.empty();
     }
 
     /**
@@ -3869,7 +3952,7 @@ final class Pullback {
      *  a dependency the row stands in answered. */
     private DecisionSubject subjectOf(Denotation value) {
         return value.at().pathOf(value.value(), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath at)
+                instanceof ValuesAt.At(TermPath at)
                 ? new DecisionSubject.AnInput(at) : answerAt(value.value(), value.at());
     }
 
@@ -3921,7 +4004,7 @@ final class Pullback {
             return new WhichCase.Written(written);
         }
         if (value.at().pathOf(value.value(), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath at)) {
+                instanceof ValuesAt.At(TermPath at)) {
             return new WhichCase.AtAnInput(at);
         }
         DecisionSubject.AnAnswer answer = answerAt(value.value(), value.at());
@@ -5140,7 +5223,7 @@ final class Pullback {
                                                                InputReads at) {
         InputReads.PickedAtAnIndex picked = at.pickedAtAnIndex(name);
         if (picked == null || !(picked.list().at().pathOf(picked.list().value(),
-                read.rules().newtypes()) instanceof PathResolution.At(var list))
+                read.rules().newtypes()) instanceof ValuesAt.At(var list))
                 || list.insideAContainer()) {
             return Optional.empty();
         }
@@ -5226,7 +5309,7 @@ final class Pullback {
         // Where it stands once the names and the arms taken are followed.
         Denotation made = at.standing(value, read.rules().symbols(), read.rules().newtypes());
         if (made.at().pathOf(made.value(), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath held)) {
+                instanceof ValuesAt.At(TermPath held)) {
             NumericTerm.TakenOf size = sizeAt(held);
             return size == null ? new Sized.NotSized(new WhyUnread.NoMeasureOfItsSize())
                     : new Sized.AsAForm(LinearForm.atom(new DecisionAtom.OfTheInput(size)));
@@ -6001,7 +6084,7 @@ final class Pullback {
         for (DeclaredArgument each : named) {
             Core argument = applied.argument(each);
             if (argument != null && reads.pathOf(argument, read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath at)) {
+                    instanceof ValuesAt.At(TermPath at)) {
                 standingAt.put(each, at);
             }
         }
@@ -6590,7 +6673,7 @@ final class Pullback {
                 case LawSubject.Argument<DeclaredArgument>(DeclaredArgument at) -> {
                     Core value = applied.argument(at);
                     yield reads.pathOf(value, read.rules().newtypes())
-                            instanceof PathResolution.At(TermPath held)
+                            instanceof ValuesAt.At(TermPath held)
                             ? new DecisionSubject.AnInput(held) : answerAt(value, reads);
                 }
                 case LawSubject.ElementOf<DeclaredArgument>(DeclaredArgument at) ->
@@ -6602,7 +6685,7 @@ final class Pullback {
                                     list.element();
                             case ElementAt.AValue(Core value, InputReads in) ->
                                     in.pathOf(value, read.rules().newtypes())
-                                            instanceof PathResolution.At(TermPath held)
+                                            instanceof ValuesAt.At(TermPath held)
                                             ? new DecisionSubject.AnInput(held)
                                             : answerAt(value, in);
                             case ElementAt.AKey(DecisionSubject key) -> key;
@@ -7573,7 +7656,7 @@ final class Pullback {
                     || !(stated.statement() instanceof PredicateStatement.Applying(
                             var operation, var written))
                     || !(reads.pathOf(stated.subject(), read.rules().newtypes())
-                            instanceof PathResolution.At(TermPath at))) {
+                            instanceof ValuesAt.At(TermPath at))) {
                 return null;
             }
             return new Derivation.AStringInALanguage(at, new StringsLanguage(accepts), operation,
@@ -7638,7 +7721,7 @@ final class Pullback {
             }
             if (!(container.at().holdingSomethingWhere(filed.walked(),
                     read.rules().symbols(), read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath held))) {
+                    instanceof ValuesHeld.At(TermPath held))) {
                 return entriesOfWhatWasKept(container, filed, pending, located, outerEach,
                         outerHanded);
             }
@@ -8320,7 +8403,7 @@ final class Pullback {
          * what an operation answered and none of those, the reason names the operation.
          */
         private Sized codePointsOfTheValue(Core value, InputReads in, CodePointClass counted) {
-            if (in.pathOf(value, read.rules().newtypes()) instanceof PathResolution.At(TermPath at)) {
+            if (in.pathOf(value, read.rules().newtypes()) instanceof ValuesAt.At(TermPath at)) {
                 return codePointsAt(at, counted, CaseMapping.NONE);
             }
             Denotation standing = in.standing(value, read.rules().symbols(),
@@ -8364,7 +8447,7 @@ final class Pullback {
                 cursor = where.standing(inner, read.rules().symbols(), read.rules().newtypes());
             }
             if (inner == null || !(where.pathOf(inner, read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath at))) {
+                    instanceof ValuesAt.At(TermPath at))) {
                 return null;
             }
             CaseMapping through = CaseMapping.NONE;
@@ -8458,7 +8541,7 @@ final class Pullback {
                                                  boolean _) -> null;
                     case ElementAt.AValue(Core value, InputReads in) ->
                             in.pathOf(value, read.rules().newtypes())
-                                    instanceof PathResolution.At(TermPath inside)
+                                    instanceof ValuesAt.At(TermPath inside)
                                     && inside.isAtOrUnder(held.element()) ? inside : null;
                     case ElementAt.AKey(DecisionSubject.AnInput(TermPath key, var _)) -> key;
                     case ElementAt.AKey(DecisionSubject.AnAnswer _) -> null;
@@ -10414,7 +10497,7 @@ final class Pullback {
 
     private Quantity valueOfAString(Core argument, InputReads at, OperationsAnswered answered) {
         if (at.pathOf(argument, read.rules().newtypes())
-                instanceof PathResolution.At(TermPath held)) {
+                instanceof ValuesAt.At(TermPath held)) {
             return new DecisionAtom.OfTheInput(new NumericTerm.ValueOf(held));
         }
         return callOf(new Denotation(argument, at)) instanceof Denotation inner
@@ -10599,7 +10682,7 @@ final class Pullback {
         if (filed.filed() instanceof KeyedAccumulation.Filed.Counted counted
                 && counted.step().signum() == 0) {
             return whole.at().holdingSomethingWhere(filed.walked(), symbols, newtypes)
-                    instanceof PathResolution.At ? LinearForm.constant(counted.first()) : null;
+                    instanceof ValuesHeld.At ? LinearForm.constant(counted.first()) : null;
         }
         return switch (filed.filed()) {
             case KeyedAccumulation.Filed.Counted counted ->
@@ -10936,7 +11019,7 @@ final class Pullback {
             InputReads at) {
         if (applied.args().size() != 2
                 || !(at.pathOf(applied.args().getFirst(), read.rules().newtypes())
-                        instanceof PathResolution.At(TermPath asked))) {
+                        instanceof ValuesAt.At(TermPath asked))) {
             return null;
         }
         ElementsGathered gathered = elementsGathered(whole, filed, value, alike);
@@ -11200,7 +11283,7 @@ final class Pullback {
     private NumericTerm.OccurrencesOfAKey occurrencesOfTheKeyAskedFor(
             Denotation whole, KeyedAccumulation filed, Core asked, InputReads at) {
         if (asked == null || !(at.pathOf(asked, read.rules().newtypes())
-                instanceof PathResolution.At(TermPath key))) {
+                instanceof ValuesAt.At(TermPath key))) {
             return null;
         }
         // Every occurrence across the containers, since a count of a value asked for says nothing
@@ -13043,7 +13126,7 @@ final class Pullback {
                 // A field of a value that stands nowhere is arithmetic's to walk into, as it is for
                 // the reading of the input's own numbers ({@link AffineReading}).
                 boolean stands = !(at.pathOf(fa.target(), read.rules().newtypes())
-                        instanceof PathResolution.NotAPosition);
+                        instanceof ValuesAt.NotAPosition);
                 return !stands && !Location.isStep(fa.target().type(), fa.field(),
                         read.rules().newtypes());
             }
@@ -13156,7 +13239,7 @@ final class Pullback {
     /** The subject a row controls that {@code e} stands for: a position the input is written at, or
      *  what a dependency answered — or null where it is neither. */
     private DecisionSubject subjectOf(Core e, InputReads reads) {
-        return reads.pathOf(e, read.rules().newtypes()) instanceof PathResolution.At(TermPath at)
+        return reads.pathOf(e, read.rules().newtypes()) instanceof ValuesAt.At(TermPath at)
                 ? new DecisionSubject.AnInput(at) : answerAt(e, reads);
     }
 
@@ -13457,8 +13540,8 @@ final class Pullback {
      *  {@code fork} is no {@code match} or {@code if}. */
     private static boolean decidedByWhatItCarried(Core fork, BindingId carried) {
         return switch (Core.withoutStanding(fork)) {
-            case Core.If iff -> ComparisonAssessment.readsAnswer(iff.cond(), carried);
-            case Core.Match match -> ComparisonAssessment.readsAnswer(match.scrutinee(), carried);
+            case Core.If iff -> WhatABodyReads.binding(iff.cond(), carried);
+            case Core.Match match -> WhatABodyReads.binding(match.scrutinee(), carried);
             default -> true;
         };
     }
@@ -13474,7 +13557,7 @@ final class Pullback {
     private Derivation asACut(StatedComparison comparison,
                               AffineReading.OfAComparison arithmetic, boolean fixed) {
         return switch (arithmetic) {
-            case AffineReading.OfAComparison.Cuts(var affine, var mirrored, var working) -> {
+            case AffineReading.OfAComparison.Cuts(var affine, var mirrored, var worked) -> {
                 Rel states = affine.claim().statedRelation();
                 LinearForm<NumericTerm> against;
                 switch (affine.form().minus(LinearForm.constant(affine.cut()))) {
@@ -13487,7 +13570,7 @@ final class Pullback {
                         asQuantities(DecisionAtom.ofTheInput(against)), states,
                         mirrored ? Derivation.AComparisonRead.Facing.TURNED
                                 : Derivation.AComparisonRead.Facing.AS_WRITTEN);
-                tellWhatItWorksOut(cut, working);
+                tellWhatItWorksOut(cut, worked.toGetPast());
                 yield cut;
             }
             case AffineReading.OfAComparison.CutsNothing constant ->
@@ -13648,7 +13731,7 @@ final class Pullback {
         Map<DeclaredArgument, TermPath> standingAt = new HashMap<>();
         for (int i = 0; i < arguments.size(); i++) {
             if (ordered.at().pathOf(terms.get(i), read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath at)) {
+                    instanceof ValuesAt.At(TermPath at)) {
                 standingAt.put(arguments.get(i), at);
             }
         }
@@ -13713,6 +13796,15 @@ final class Pullback {
      * arm concluded, or the one it is read under. Worked out only when asked.
      */
     private Derivation readOnAnArm(Derivation read, InputReads there) {
+        return readOnAnArm(read, there, null);
+    }
+
+    /**
+     * The same, where the arm is the answer {@code answered} of a choice: what a run taking it
+     * works out evaluating that answer is worked out before the comparison it is made of, and a
+     * reading that stops at the choice (as an argument of an operation) does not tell it.
+     */
+    private Derivation readOnAnArm(Derivation read, InputReads there, Denotation answered) {
         if (read == null || there == null || armsOfAComparison.isEmpty()) {
             return read;
         }
@@ -13721,10 +13813,16 @@ final class Pullback {
         Trial theRule = concluded != null ? concluded : trial();
         Once<AffineReading.WorkedOut> worksOut =
                 new Once<>(() -> worksOut(theRule, arithmeticOf(stated, there)));
-        OnThisArm arm = new OnThisArm(worksOut,
+        Once<UndividedByARelation.Working> evaluated = new Once<>(() -> answered == null
+                ? UndividedByARelation.Working.NOTHING
+                : AffineReading.workedOutByEvaluating(answered.value(), answered.at(), this.read));
+        OnThisArm arm = new OnThisArm(worksOut, evaluated,
                 restatingAQuotient ? List.of() : whatDecidedTheArm());
-        for (Relation each : Meaning.relationsReadIn(read)) {
+        for (ArmRead each : ArmRead.in(read)) {
             trial().readOnAnArm(each, arm);
+        }
+        if (answered != null) {
+            trial().readOnAnArm(new ArmRead.OfTheAnswerOfAnArm(read), arm);
         }
         return read;
     }
@@ -13813,7 +13911,7 @@ final class Pullback {
                         Optional.of(AffineReading.workingOfWhatDecides(iff, choiceAt.at(), read)),
                         iff, choiceAt.at(), condition, left,
                         arm -> readOnAnArm(again.apply(on -> on.taking(choice, arm, 1)),
-                                reads.taking(choice, arm, 1)))));
+                                reads.taking(choice, arm, 1), arm))));
             }
             case Inside.AChoice(Denotation chosen) -> {
                 int arms = Choice.of(Core.withoutStanding(chosen.value())).arms().size();
@@ -13826,7 +13924,7 @@ final class Pullback {
                         Optional.of(AffineReading.workingOfWhatDecides(
                                 Core.withoutStanding(chosen.value()), chosen.at(), read)),
                         arm -> readOnAnArm(again.apply(on -> on.taking(choice, arm, arms)),
-                                reads.taking(choice, arm, arms))));
+                                reads.taking(choice, arm, arms), arm)));
             }
             case Inside.ACall(Core call, ValueName.Behavior behavior, Denotation body) ->
                     new Derivation.ABehaviorsBody(behavior,
@@ -14203,6 +14301,12 @@ final class Pullback {
         if (!gone.firstGoingInto(stands.value(), stands.at())) {
             return null;
         }
+        // A move by months, or a number of a date, that this reading takes as the arithmetic of a
+        // case has been gone into: what is left to go into is what that arithmetic is made of,
+        // which the reading of it reaches.
+        if (stands.at().takenAsAForm(e) != null && isAMoveOrANumberOfADate(e, stands.at())) {
+            return null;
+        }
         // Every value it may be handed on some row: what is read on each is a statement of an
         // application it may be handed ({@link Proposition.OnAnApplication}), and one dropped on
         // every row is handed on none. Where none is left there is no value to go into.
@@ -14215,6 +14319,12 @@ final class Pullback {
         // A closure's body is read where it is applied, and is no part of this value.
         if (e instanceof Core.Block) {
             return null;
+        }
+        // A date moved by months, and the day, the month or the year of one, is read in the cases
+        // of the move before what it is made of is: what it is made of is stated by the cases.
+        Inside.ACallDefinedByCases ofAMove = aMoveOrANumberOfOneInCases(e, stands.at());
+        if (ofAMove != null) {
+            return ofAMove;
         }
         Inside[] found = {null};
         Core.forEachChild(e, child -> {
@@ -14341,6 +14451,166 @@ final class Pullback {
     }
 
     /**
+     * {@code e}, where it is a date moved by months written out, or the day, the month or the year
+     * of one, as a call defined in the cases the calendar tells apart ({@link MonthMovesInCases})
+     * — or null where it is neither.
+     */
+    private Inside.ACallDefinedByCases aMoveOrANumberOfOneInCases(Core e, InputReads at) {
+        return isAMoveOrANumberOfADate(e, at) ? inCases(e, at) : null;
+    }
+
+    /** Whether {@code e} is a date moved by months written out, or a day, a month or a year. */
+    private boolean isAMoveOrANumberOfADate(Core e, InputReads at) {
+        if (!(Core.withoutStanding(e) instanceof Core.PreservedCall call)) {
+            return false;
+        }
+        if (DateMonthMoves.stepOf(call, each -> at.folded(each, read.rules().symbols(),
+                read.rules().newtypes())) != null) {
+            return true;
+        }
+        return call.args().size() == 1
+                && call.operation() instanceof ValueName.Stdlib operation
+                && DefaultBoundOperationFacts.get().takenAs(operation)
+                        instanceof TakenAs.PartOfDate;
+    }
+
+    private Inside.ACallDefinedByCases inCases(Core e, InputReads at) {
+        MonthMovesInCases.Read cases = MonthMovesInCases.of(e, at, read.rules().symbols(),
+                read.rules().newtypes(), move -> theMonthStartOf(move.date(), at,
+                        move.law().day().operation(), 0));
+        return cases == null ? null
+                : new Inside.ACallDefinedByCases(cases.call(), cases.move(), cases.cases(), at);
+    }
+
+    /** How many steps from a date to the date whose month it is the first of are followed. */
+    private static final int MOST_STEPS_TO_A_MONTH = 8;
+
+    /**
+     * The date whose month {@code date} is the first of, and how many months on from the first of
+     * that month it is — or null where {@code date} is not the first of a month, or the moves
+     * are not a chain read in cases ({@link souther.compiler.numeric.MonthMoveCases#chained}).
+     *
+     * <p>The first of a month is a date moved by one less than its own day of the month, and a
+     * date the first of a month is moved by months is the first of the month it lands in
+     * ({@link MonthMovesInCases.MonthStart}). So the first of a month of a date moved by months
+     * is the first of the month of what it moves, moved by the same months.
+     */
+    private MonthMovesInCases.MonthStart theMonthStartOf(Core date, InputReads at,
+                                                         ValueName dayOfTheMonth, int steps) {
+        if (steps > MOST_STEPS_TO_A_MONTH) {
+            return null;
+        }
+        Denotation stands = at.standing(date, read.rules().symbols(), read.rules().newtypes());
+        Denotation whose = theDateWhoseMonthItStarts(stands, dayOfTheMonth);
+        if (whose != null) {
+            return theMonthOf(whose, dayOfTheMonth, steps + 1);
+        }
+        DateMonthMoves.Step moved = DateMonthMoves.stepOf(stands.value(),
+                each -> stands.at().folded(each, read.rules().symbols(),
+                        read.rules().newtypes()));
+        MonthMovesInCases.MonthStart inner = moved == null ? null
+                : theMonthStartOf(moved.date(), stands.at(), dayOfTheMonth, steps + 1);
+        return inner == null ? null : inner.movedBy(moved.months());
+    }
+
+    /**
+     * The date whose month the first of the month of {@code date} is the first of, and how many
+     * months on it is: {@code date} itself where it is a date no more is known of, and what it
+     * moves or is the first of the month of otherwise — or null where the moves are not a chain
+     * read in cases.
+     */
+    private MonthMovesInCases.MonthStart theMonthOf(Denotation date, ValueName dayOfTheMonth,
+                                                    int steps) {
+        Denotation stands = date.at().standing(date.value(), read.rules().symbols(),
+                read.rules().newtypes());
+        Denotation whose = steps > MOST_STEPS_TO_A_MONTH ? null
+                : theDateWhoseMonthItStarts(stands, dayOfTheMonth);
+        if (whose != null) {
+            return theMonthOf(whose, dayOfTheMonth, steps + 1);
+        }
+        DateMonthMoves.Step moved = steps > MOST_STEPS_TO_A_MONTH ? null
+                : DateMonthMoves.stepOf(stands.value(), each -> stands.at().folded(each,
+                        read.rules().symbols(), read.rules().newtypes()));
+        if (moved == null) {
+            return new MonthMovesInCases.MonthStart(writtenOutside(date).value(), 0);
+        }
+        MonthMovesInCases.MonthStart inner = theMonthOf(
+                writtenOutside(new Denotation(moved.date(), stands.at())), dayOfTheMonth,
+                steps + 1);
+        return inner == null ? null : inner.movedBy(moved.months());
+    }
+
+    /**
+     * The date {@code stands}, a date moved by a count of days, is the first of the month of — or
+     * null where it is not the first of any month.
+     *
+     * <p>A date moved by a count of days that is one less than the day of the month of the date it
+     * moves is the first of that date's month, however the call is written: read as the
+     * arithmetic reads a count, the count is one and the day of the month of that date taken
+     * away. A date the month starts on is in that date's month and year, and has no day of its own
+     * to state.
+     */
+    private Denotation theDateWhoseMonthItStarts(Denotation stands, ValueName dayOfTheMonth) {
+        DateShifts.Moved shifted = DateShifts.movedBy(stands.value());
+        if (shifted == null || shifted.weight().compareTo(ExactRatio.ONE) != 0) {
+            return null;
+        }
+        Denotation datum = writtenOutside(new Denotation(shifted.date(), stands.at()));
+        LinearForm<AffineForms.ACall<InputReads>> count = sides().overTheCalls(shifted.count(),
+                stands.at(), call -> AnOperationApplied.of(call) instanceof AnOperationApplied
+                        applied && applied.operation().equals(dayOfTheMonth)
+                        && applied.args().size() == 1);
+        if (count == null || count.coefs().size() != 1
+                || count.constant().compareTo(ExactRatio.ONE) != 0) {
+            return null;
+        }
+        Map.Entry<AffineForms.ACall<InputReads>, ExactRatio> day =
+                count.coefs().entrySet().iterator().next();
+        return day.getValue().compareTo(ExactRatio.ONE.negated()) == 0
+                && AnOperationApplied.of(day.getKey().call()) instanceof AnOperationApplied taken
+                && isTheSameDate(taken.args().getFirst(), day.getKey().at(), datum.value(),
+                        datum.at()) ? datum : null;
+    }
+
+    /**
+     * {@code date} as it is written outside what a helper was expanded into: a name a helper's
+     * parameter was given is the value it was given, which is written where the helper was called
+     * and is read the same wherever the call is.
+     */
+    private Denotation writtenOutside(Denotation date) {
+        Denotation datum = date;
+        Set<BindingId> met = new HashSet<>();
+        while (Core.withoutStanding(datum.value()) instanceof Core.Read name
+                && met.add(name.binding()) && datum.at().givenTo(name) instanceof Denotation given) {
+            datum = given;
+        }
+        return datum;
+    }
+
+    /** Whether {@code one}, read at {@code atOne}, and {@code other}, read at {@code atOther},
+     *  are one date: a name for the same binding, or what stands at one place. */
+    private boolean isTheSameDate(Core one, InputReads atOne, Core other, InputReads atOther) {
+        Denotation first = atOne.standing(one, read.rules().symbols(), read.rules().newtypes());
+        Denotation second = atOther.standing(other, read.rules().symbols(),
+                read.rules().newtypes());
+        Core a = Core.withoutStanding(first.value());
+        Core b = Core.withoutStanding(second.value());
+        if (a == b && first.at().standsInTheNamesOf(second.at())) {
+            return true;
+        }
+        if (a instanceof Core.Read nameA && b instanceof Core.Read nameB
+                && nameA.binding().equals(nameB.binding())
+                && first.at().standsInTheNamesOf(second.at())) {
+            return true;
+        }
+        return first.at().pathOf(a, read.rules().newtypes())
+                instanceof ValuesAt.At(TermPath placeA)
+                && second.at().pathOf(b, read.rules().newtypes())
+                        instanceof ValuesAt.At(TermPath placeB)
+                && placeA.equals(placeB);
+    }
+
+    /**
      * {@code value}, where it is a call of a behavior no row stands in, entered: the behavior's body
      * read with its parameters standing for what the call handed ({@link InputReads#calling}) — or
      * null where it is no such call, or the body is not read there: it has none, or it is entered
@@ -14394,8 +14664,8 @@ final class Pullback {
         Core selected = keptThen ? step.els() : step.then();
         if (keptThen == keptElse || !WhatARunMayEndFor.of(step.cond()).endsNone()
                 || !WhatARunMayEndFor.of(selected).endsNone()
-                || ComparisonAssessment.readsAnswer(step.cond(), carried)
-                || ComparisonAssessment.readsAnswer(selected, carried)) {
+                || WhatABodyReads.binding(step.cond(), carried)
+                || WhatABodyReads.binding(selected, carried)) {
             return null;
         }
         Denotation container = call.at().standing(walk.container(), read.rules().symbols(),
@@ -14560,7 +14830,7 @@ final class Pullback {
         }
         Core walked = args.get(walk.walked());
         TermPath list = reads.pathOf(walked, read.rules().newtypes())
-                instanceof PathResolution.At(TermPath at) ? at
+                instanceof ValuesAt.At(TermPath at) ? at
                         : reads.containerWhoseEveryElementIsIn(walked, read.rules().newtypes());
         if (list == null) {
             return null;
@@ -14641,7 +14911,7 @@ final class Pullback {
      * stands at none, so a call handed it is on no node one step below.
      */
     private String belowOneStep(Core node, TermPath from, InputReads reads) {
-        if (!(reads.pathOf(node, read.rules().newtypes()) instanceof PathResolution.At(
+        if (!(reads.pathOf(node, read.rules().newtypes()) instanceof ValuesAt.At(
                 TermPath at)) || at.steps().size() != from.steps().size() + 2
                 || !(at.steps().get(from.steps().size()) instanceof TermPath.Step.Field(
                         String field))) {
@@ -14668,7 +14938,7 @@ final class Pullback {
                                    RecursionOverATree search, List<Core> args, AnswerAspect aspect,
                                    Core e, InputReads reads) {
         if (!(reads.pathOf(args.get(search.node()), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath node))) {
+                instanceof ValuesAt.At(TermPath node))) {
             return null;
         }
         List<TermPath> staying = new ArrayList<>();
@@ -14678,7 +14948,7 @@ final class Pullback {
             }
             // One under the node or holding it is refused before the body is read.
             if (!(reads.pathOf(args.get(at), read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath stays))
+                    instanceof ValuesAt.At(TermPath stays))
                     || !WrittenOfANode.apart(stays, node)) {
                 return null;
             }
@@ -14899,12 +15169,12 @@ final class Pullback {
         // Asked before the body is read: no run is over the nodes below a root that is one tree of
         // many.
         if (search == null || !(reads.pathOf(args.get(search.node()), read.rules().newtypes())
-                instanceof PathResolution.At(TermPath node)) || !RunSource.oneTreeStandsAt(node)) {
+                instanceof ValuesAt.At(TermPath node)) || !RunSource.oneTreeStandsAt(node)) {
             return null;
         }
         for (int at = 0; at < args.size(); at++) {
             if (at != search.node() && !(reads.pathOf(args.get(at), read.rules().newtypes())
-                    instanceof PathResolution.At(TermPath stays)
+                    instanceof ValuesAt.At(TermPath stays)
                     && WrittenOfANode.apart(stays, node))) {
                 return null;
             }
@@ -15073,7 +15343,25 @@ final class Pullback {
     private Derivation acrossTheElements(Derivation start, DecisionSubject container, Core walked,
                                          Derivation meets, Derivation keeps, ConditionJoin how,
                                          HowTheElementsAreAsked asked, Core e, InputReads reads) {
-        boolean holds = how == ConditionJoin.EITHER;
+        return new Derivation.AcrossAWalk(start,
+                someElementMeeting(container, walked, meets, how == ConditionJoin.EITHER, asked,
+                        e, reads),
+                keeps, how);
+    }
+
+    /**
+     * Some element of {@code container} meeting {@code meets}, where {@code holds}, and some
+     * element failing it where not: the quantifier a walk keeping an end, and an end of a
+     * container, are read through.
+     *
+     * @param walked the expression the container is, whose size is read where some element meeting
+     *               the statement has the container's holding anything as a part
+     */
+    private Derivation.SomeElementMeeting someElementMeeting(DecisionSubject container,
+                                                             Core walked, Derivation meets,
+                                                             boolean holds,
+                                                             HowTheElementsAreAsked asked, Core e,
+                                                             InputReads reads) {
         Derivation meeting = ofItsOwnElement(container, e, reads, meets);
         Proposition element = holds ? tried(meeting) : tried(meeting).denied();
         Optional<Derivation> holdsSomething = Optional.empty();
@@ -15084,11 +15372,8 @@ final class Pullback {
                             askedAt != null ? askedAt : new Denotation(e, reads))
                     : unread(walked, reads, new WhyUnread.NoMeasureOfItsSize()));
         }
-        return new Derivation.AcrossAWalk(start,
-                new Derivation.SomeElementMeeting(container, meeting, holds, holdsSomething,
-                        Proposition.mayAnswerNothing(element) ? asked
-                                : HowTheElementsAreAsked.NOT_SAID),
-                keeps, how);
+        return new Derivation.SomeElementMeeting(container, meeting, holds, holdsSomething,
+                Proposition.mayAnswerNothing(element) ? asked : HowTheElementsAreAsked.NOT_SAID);
     }
 
     /** {@code walk}'s step coming out on {@code aspect}, with what it was carried standing as
@@ -16004,7 +16289,7 @@ final class Pullback {
         }
         Core date = call.args().getFirst();
         return Type.DATE.equals(date.type()) && reads.pathOf(date, read.rules().newtypes())
-                instanceof PathResolution.NotAPosition ? call : null;
+                instanceof ValuesAt.NotAPosition ? call : null;
     }
 
     /**
@@ -16270,8 +16555,7 @@ final class Pullback {
             return partOf(at, new Derivation.Stopped(past, false));
         }
         Function<Rel, Derivation> endedSo = rel -> {
-            boolean every = (rel == Rel.LT || rel == Rel.LE)
-                    == (kept.extreme() instanceof Extreme.Greatest);
+            boolean every = everyElementMeets(rel, kept.extreme() instanceof Extreme.Greatest);
             ConditionJoin how = every ? ConditionJoin.BOTH : ConditionJoin.EITHER;
             // Past the elements that decide it, the step answers the side of what it carried. It
             // still compares every element's value with what it carried, so every element is
@@ -16283,6 +16567,23 @@ final class Pullback {
                             !every),
                     how, HowTheElementsAreAsked.EVERY_ONE, ends.value(), ends.at());
         };
+        return readAtEachEndOf(states, endedSo);
+    }
+
+    /**
+     * Whether the greatest (or the least) of some elements is related to a number by {@code rel}
+     * where every element is, and not where some element is: the greatest is at or below a number
+     * where every element is, the least at or above it.
+     */
+    private static boolean everyElementMeets(Rel rel, boolean greatest) {
+        return (rel == Rel.LT || rel == Rel.LE) == greatest;
+    }
+
+    /**
+     * {@code states} as an end of some elements is read at it: an order as itself, equality as the
+     * end at or below and at or above, and a difference as the end below or above.
+     */
+    private static Derivation readAtEachEndOf(Rel states, Function<Rel, Derivation> endedSo) {
         return switch (states) {
             case LT, LE, GT, GE -> endedSo.apply(states);
             case EQ -> new Derivation.Joined(ConditionJoin.BOTH, endedSo.apply(Rel.LE),
@@ -16291,6 +16592,158 @@ final class Pullback {
                     endedSo.apply(Rel.GT));
         };
     }
+
+    /**
+     * A comparison one side of which is the greatest or the least element of a container, as an
+     * operation answering one says ({@link BoundOperationFacts#answersAnExtremeElementOf}), read
+     * at the elements — or null where neither side is such an element, or the container stands on
+     * no binding a name for its element can be owned by.
+     *
+     * <p>The greatest is at or below a number exactly where every element is, and at or above it
+     * where some element is; the least is the other way round. Equality is the end at or below and
+     * at or above, and a difference is the end below or above. Each is read as a comparison of an
+     * element is ({@link #comparedCase}), the element standing as the name the container's own
+     * elements are given. Where the container is empty the operation answers no value, which the
+     * statement the end is read under says.
+     */
+    private Derivation ofTheEndOfAContainer(StatedComparison stated, Denotation at,
+                                            InputReads reads) {
+        StatedComparison.Numbered<AnEndOfAContainer> numbered = stated.at(side -> {
+            ValueStanding.ReadThrough<InputReads> resolved =
+                    Extreme.comparedAs(side, reads, sides());
+            return endOfAContainer(resolved.value(), resolved.at());
+        });
+        if (numbered == null) {
+            return null;
+        }
+        return theEndCompared(numbered.number(), ASide.of(new Denotation(numbered.other(), reads)),
+                numbered.claim().statedRelation(), at);
+    }
+
+    /**
+     * {@code end} related to {@code other} by {@code states}, as every element or some element is.
+     */
+    private Derivation theEndCompared(AnEndOfAContainer end, ASide other, Rel states,
+                                      Denotation at) {
+        Function<Rel, Derivation> endedSo = rel -> {
+            boolean every = everyElementMeets(rel, end.end() == BoundOperationFacts.End.GREATEST);
+            Derivation some = someElementMeeting(end.container(), end.held(),
+                    comparedCase(ASide.of(end.element()), other, rel, at), !every,
+                    HowTheElementsAreAsked.EVERY_ONE, end.call().value(), end.call().at());
+            return every ? new Derivation.UnderADenial(some, true) : some;
+        };
+        return readAtEachEndOf(states, endedSo);
+    }
+
+    /**
+     * {@code left states right} where one side is the greatest or the least of a container, which
+     * the side as one value is — or null where neither is.
+     */
+    private Derivation comparedAsAnEnd(ASide left, ASide right, Rel states, Denotation at) {
+        for (boolean onTheLeft : new boolean[] {true, false}) {
+            ASide side = onTheLeft ? left : right;
+            // The end of a container is a name an arm bound, worn or not by a newtype: no other
+            // shape is resolved.
+            if (side.whole() == null || !(Core.withoutStanding(side.whole().value())
+                    instanceof Core.Read || Core.withoutStanding(side.whole().value())
+                    instanceof Core.FieldAccess || Core.withoutStanding(side.whole().value())
+                    instanceof Core.FieldProjection)) {
+                continue;
+            }
+            ValueStanding.ReadThrough<InputReads> resolved = Extreme.comparedAs(
+                    side.whole().value(), side.whole().at(), sides());
+            AnEndOfAContainer end = endOfAContainer(resolved.value(), resolved.at());
+            if (end != null) {
+                return onTheLeft ? theEndCompared(end, right, states, at)
+                        : theEndCompared(end, left, states.turned(), at);
+            }
+        }
+        return null;
+    }
+
+    /** {@code value}, read where {@code where} stands, as the end of a container it answers —
+     *  or null where it is no such call. */
+    private AnEndOfAContainer endOfAContainer(Core value, InputReads reads) {
+        // The value is the payload of the call an arm opened, a name that is no expression.
+        if (!(Core.withoutStanding(value) instanceof Core.Read name) || name.binding() == null
+                || reads.elementOpenedBy(name.binding()) == null) {
+            return null;
+        }
+        Denotation opened = reads.elementOpenedBy(name.binding()).call();
+        if (!(Core.withoutStanding(opened.value()) instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        InputReads where = opened.at();
+        AnOperationApplied applied = AnOperationApplied.of(call);
+        if (applied == null) {
+            return null;
+        }
+        BoundOperationFacts.Extremity extremity = DefaultBoundOperationFacts.get()
+                .answersAnExtremeElementOf(applied.operation());
+        Core held = extremity == null ? null : applied.argument(extremity.container());
+        if (held == null) {
+            return null;
+        }
+        // The elements of a container made of each element of another by a step are what the step
+        // answers on the elements of that other, so the end is read at the elements of the
+        // container that stands on the input, and each step is read on the element it is handed.
+        List<ElementBindings.StepOnEachElement> steps = new ArrayList<>();
+        Core base = held;
+        ElementBindings.StepOnEachElement step;
+        while ((step = ElementBindings.stepAnsweredOnEachElement(base,
+                blocksAt(new Denotation(base, where)))) != null) {
+            // A step that may end a run does so on every run that hands it such an element,
+            // whatever the comparison of its answers comes to, and what ends the run is told by
+            // the reading of the step's own application, which this one does not make.
+            if (!WhatARunMayEndFor.endsNoneBeneath(step.step().body())) {
+                return null;
+            }
+            steps.add(step);
+            base = step.walked();
+        }
+        Shape shape = TypeView.shapeOf(base.type(), read.rules().inners(),
+                read.rules().symbols(), read.rules().kinds(), read.rules().sums());
+        // The name for an element is owned within the call that answers the end, which says where
+        // it is: the binding the container stands on, or one it is made of.
+        BindingOwner within = ownerOfTheRootOf(base);
+        if (within == null) {
+            within = WhatABodyReads.freeIn(base).stream().filter(Objects::nonNull).findFirst()
+                    .map(BindingId::owner).orElse(null);
+        }
+        if (!(shape instanceof Shape.Container holding) || within == null
+                || !(call.application() instanceof ApplicationOrigin.Identified site)) {
+            return null;
+        }
+        DecisionSubject container = subjectOf(base, where);
+        if (container == null) {
+            return null;
+        }
+        InputReads.ElementNamed named = where.holdingAnElement(
+                new BindingOwner.Expansion(within, applied.operation(), site),
+                new HeldIn(base, HeldIn.Part.ELEMENT, HowAClosureIsApplied.TO_EVERY_ELEMENT,
+                        false));
+        Core element = new Core.Read("own", named.name(), holding.element(), call.pos());
+        InputReads at = named.reads();
+        for (ElementBindings.StepOnEachElement each : steps.reversed()) {
+            at = at.handing(each.element().binding(), new Denotation(element, at),
+                    read.rules().newtypes());
+            element = each.step().body();
+        }
+        return new AnEndOfAContainer(new Denotation(call, where), base, container,
+                new Denotation(element, at), extremity.end());
+    }
+
+    /**
+     * The greatest or the least element of a container.
+     *
+     * @param call      the call that answers it, where it stands
+     * @param held      the container, as the call was handed it
+     * @param container what the container is, as a decision is about it
+     * @param element   an element of the container, standing as the name its own are given
+     * @param end       which end of the elements it is
+     */
+    private record AnEndOfAContainer(Denotation call, Core held, DecisionSubject container,
+                                     Denotation element, BoundOperationFacts.End end) {}
 
     /**
      * A side of a comparison that is what a walk keeping an end ends with.
@@ -16331,6 +16784,10 @@ final class Pullback {
                         taking -> comparedCase(left.in(taking.apply(left.at())),
                                 right.in(taking.apply(right.at())), states, at));
             }
+        }
+        Derivation asAnEnd = comparedAsAnEnd(left, right, states, at);
+        if (asAnEnd != null) {
+            return asAnEnd;
         }
         Derivation byLeft = left.whole() == null ? null : byItsCases(left.whole(), at,
                 Optional.empty(),

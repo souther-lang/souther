@@ -31,8 +31,8 @@ import souther.compiler.inputs.Denotation;
 import souther.compiler.inputs.ElementsNamed;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
-import souther.compiler.inputs.PathResolution;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
@@ -1060,7 +1060,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     case Stated.AComparison(var comparison) -> {
                         ComparisonAssessment.Assessed assessed = ComparisonAssessment.ofEach(
                                 in.behavior(), comparison, where, in.read(), reads, applying,
-                                null, in.answering(), false, in.conditions(),
+                                Set.of(), in.answering(), false, in.conditions(),
                                 Optional.of(stands.lineage().expansionProjection()), witnesses);
                         readOn = assessed.readOn();
                         standing = new BoundaryPolicy.Standing.Admitted(onItsRunsWhereUnread(
@@ -1254,7 +1254,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // reading's to say ({@link ArmsNamed}).
             case Core.Match match -> {
                 if (reads.pathOf(match.scrutinee(), in.newtypes())
-                        instanceof PathResolution.At(TermPath at)) {
+                        instanceof ValuesAt.At(TermPath at)) {
                     List<souther.compiler.reading.Condition.Case> cases = new ArrayList<>();
                     for (Core.Case arm : match.cases()) {
                         cases.add(souther.compiler.reading.Condition.Case.of(at, arm));
@@ -1451,7 +1451,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         RecursionOverAList walk = recursion == null ? null : recursion.walk().orElse(null);
         if (walk == null || buildsAValue(recursion.body().body())
                 || !(reads.pathOf(args.get(walk.walked()), in.newtypes())
-                        instanceof PathResolution.At(TermPath list))) {
+                        instanceof ValuesAt.At(TermPath list))) {
             return null;
         }
         Way made = wayTo(in.root(), call, in.atTheRoot(), in);
@@ -1747,9 +1747,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      */
     private static final class StatedHere {
 
-        /** A construct, by the node it is, under a reading of its names, by what that holds, and
-         *  whether a run getting to it makes it on every element the closure around it is
-         *  handed. */
+        /** A construct, by the node it is, under a reading of its names, by what that holds. */
         private record Asked(Core node, InputReads reads, boolean onEveryElement) {
 
             @Override
@@ -1760,8 +1758,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
 
             @Override
             public int hashCode() {
-                return (System.identityHashCode(node) * 31 + reads.hashCode()) * 2
-                        + (onEveryElement ? 1 : 0);
+                return (System.identityHashCode(node) * 31 + reads.hashCode()) * 31
+                        + Boolean.hashCode(onEveryElement);
             }
         }
 
@@ -1842,12 +1840,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
 
         /** What {@code application} reads as under the names {@code standing} holds, or null where
-         *  it states nothing of its own; {@code onEveryElement} as {@link Cutting#ofALawComparison}
-         *  takes it. */
+         *  it states nothing of its own. {@code onEveryElement} is whether a run that gets to the
+         *  closure it stands in makes it on every element the closure is handed. */
         private Cutting.AppliedOn appliedOn(Core.PreservedCall application,
                                             WhatNamesStandFor standing, boolean onEveryElement) {
-            return applications.computeIfAbsent(new Asked(application, standing.reads(),
-                    onEveryElement), _ -> {
+            return applications.computeIfAbsent(
+                    new Asked(application, standing.reads(), onEveryElement), _ -> {
                 // Whether an optional holds a value is what it states, as a truth is what it
                 // answers.
                 WhatConditionsState state = WhatConditionsState.of(standing.read());
@@ -1862,8 +1860,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     // holds against the value it was handed, that comparison is the application's
                     // own and says why at the places it compares. What stopped elsewhere in what
                     // the application states is a fork's to say.
-                    return itsOwn ? unreadAsItsLawComparison(application, stated, standing,
-                            onEveryElement) : Optional.empty();
+                    return itsOwn
+                            ? unreadAsItsLawComparison(application, stated, standing, onEveryElement)
+                            : Optional.empty();
                 }
                 if (!itsOwn) {
                     return Optional.of(new Cutting.AppliedOn(null, stated.meaning().how(),
@@ -2086,7 +2085,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // Which rule the part is, by the node; where it stands, in the reading it is written in.
             if (statedAt(part.value(), () -> WhatNamesStandFor.in(part.at(), read), here) == null
                     && !(part.at().pathOf(part.value(), read.rules().newtypes())
-                            instanceof PathResolution.At)) {
+                            instanceof ValuesAt.At)) {
                 left.add(part);
             }
         }

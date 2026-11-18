@@ -133,6 +133,7 @@ public sealed interface OperationFact {
      */
     record MovesADateByMonths(ArgumentRef months, ArgumentRef date,
                               ValueName.Stdlib.Operation year, ValueName.Stdlib.Operation month,
+                              ValueName.Stdlib.Operation day,
                               ValueName.Stdlib.Operation remainder)
             implements OperationFact {
 
@@ -141,6 +142,7 @@ public sealed interface OperationFact {
             Objects.requireNonNull(date, "and moves a date");
             Objects.requireNonNull(year, "counted by the year it falls in");
             Objects.requireNonNull(month, "and the month");
+            Objects.requireNonNull(day, "and the day of it, which a shorter month lands on its last");
             Objects.requireNonNull(remainder, "and lands in the month a remainder says");
         }
     }
@@ -289,6 +291,28 @@ public sealed interface OperationFact {
 
         public AnswersAnElementOf {
             Objects.requireNonNull(source, "an element is one of some container's");
+        }
+    }
+
+    /**
+     * What the operation answers holds, where it holds a value, the greatest or the least element
+     * of {@code source}: {@code List.max(xs)} is {@code Some(x)} only for an {@code x} of
+     * {@code xs} that no element of {@code xs} is above.
+     *
+     * <p>The stronger of two statements, and the weaker is stated from it and never beside it
+     * ({@link AnswersAnElementOf}): written twice, the two could be changed apart.
+     */
+    record AnswersAnExtremeElementOf(ArgumentRef source, End end) implements OperationFact {
+
+        public AnswersAnExtremeElementOf {
+            Objects.requireNonNull(source, "an extreme is one of some container's elements");
+            Objects.requireNonNull(end, "which end of the elements it is");
+        }
+
+        /** Which end of the elements the answer is. */
+        public enum End {
+            GREATEST,
+            LEAST
         }
     }
 

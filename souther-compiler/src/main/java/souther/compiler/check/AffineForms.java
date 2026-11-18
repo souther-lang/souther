@@ -34,6 +34,7 @@ import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * Reading an expression as {@code const + Σ coef·atom}, over whatever a caller counts as an atom.
@@ -167,6 +168,16 @@ public final class AffineForms {
          * {@code a}, and a run stops at {@code a + b} all the same.
          */
         default void composed(Core operation, LinearForm<A> form) {
+        }
+
+        /**
+         * {@code read}, the walk reading the value {@code name} was given. A reader that tells of
+         * the operations composed ({@link #composed}) learns from it which of them a run works
+         * out to give the name its value, and so what an operation over the name is worked out
+         * after.
+         */
+        default <T> T readingTheValueOf(BindingId name, Supplier<T> read) {
+            return read.get();
         }
 
         /**
@@ -507,6 +518,11 @@ public final class AffineForms {
         @Override
         public void composed(Core operation, LinearForm<A> form) {
             of.composed(operation, form);
+        }
+
+        @Override
+        public <T> T readingTheValueOf(BindingId name, Supplier<T> read) {
+            return of.readingTheValueOf(name, read);
         }
 
         @Override
@@ -985,11 +1001,12 @@ public final class AffineForms {
                     ValueStanding.Standing<E, Reading<A, E>> one) ->
                     ValueStanding.answered(one.names(), ValueStanding.NameQuestion.FORM,
                             one.value(), one.at(),
-                            () -> following.readingOf(r.binding(), one.value(),
+                            () -> reading.readingTheValueOf(r.binding(),
+                                    () -> following.readingOf(r.binding(), one.value(),
                                     readAs(r, at, one.at(), reading), () -> {
                                         countANameRead();
                                         return of(one.value(), one.at(), one.names(), following);
-                                    }));
+                                    })));
             case ValueStanding.Named.OneOf<E, Reading<A, E>>(
                     List<ValueStanding.Standing<E, Reading<A, E>>> members) -> {
                 // Several values the name may stand for, each read apart from the operations the
@@ -1115,6 +1132,63 @@ public final class AffineForms {
         public boolean readsThrough(Core.FieldAccess fa, E at) {
             return of.readsThrough(fa, at);
         }
+    }
+
+    /**
+     * A reading that says what a run works out as the walk composes a value: each operation, and
+     * what is worked out without being read as a part of the value.
+     *
+     * <p>Every way the walk has of telling of an operation is abstract here. The defaults of
+     * {@link Reading} take an operation to be told of by nobody, so a reading that wants every one
+     * and answers some of the hooks compiles and drops the rest; one that is a {@code RunTelling}
+     * is made to answer each, and to say, where it tells nothing, that it does and why.
+     *
+     * <p>What this holds is that each hook is answered, and not that every operation is told: a
+     * reading that answers a hook by telling nothing still leaves what it works out untold, and
+     * says so where it does.
+     */
+    public interface RunTelling<A, E> extends Reading<A, E> {
+
+        /** A total over a list written out, which the reading reads as the sum of those numbers
+         *  ({@link Reading#totalled}). */
+        @Override
+        void totalled(Core call, LinearForm<A> total, List<Core> elements);
+
+        /** A count of a list written out, whose elements are worked out as the list is built
+         *  ({@link Reading#counted}). */
+        @Override
+        void counted(Core call, List<Core> elements, E at);
+
+        /** An operation composed, with the forms of its operands ({@link Reading#composed}). */
+        @Override
+        void composed(Core operation, LinearForm<A> form, List<LinearForm<A>> operands);
+
+        /** A product composed into a number of its own ({@link Reading#composedAsAProduct}). */
+        @Override
+        void composedAsAProduct(Core operation, LinearForm<A> form, List<LinearForm<A>> operands);
+
+        /** A call of the library read as arithmetic over its arguments
+         *  ({@link Reading#answeredByTheLibrary}). */
+        @Override
+        void answeredByTheLibrary(Core call, LinearForm<A> form, WhereAnOperatorAnswers where);
+
+        /** A value bound that the body read without reading the name: a run works it out first
+         *  all the same ({@link Reading#bound}). */
+        @Override
+        void bound(Core.LetIn binding, E at);
+
+        /** A node read without telling of every operation it works out
+         *  ({@link Reading#unobserved}). */
+        @Override
+        void unobserved(Core node);
+
+        /** A call that folds to a number ({@link Reading#folded}). */
+        @Override
+        void folded(Core e, E at);
+
+        /** A newtype's construction, whose clauses a run is held to ({@link Reading#constructed}). */
+        @Override
+        void constructed(Core.Construct construct, TypeView type, LinearForm<A> value);
     }
 
     /** {@code of} with no plurality in it, which is what the members of one are read with. */

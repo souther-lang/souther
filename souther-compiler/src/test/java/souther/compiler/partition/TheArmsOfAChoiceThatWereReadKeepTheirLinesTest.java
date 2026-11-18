@@ -39,10 +39,10 @@ class TheArmsOfAChoiceThatWereReadKeepTheirLinesTest {
     private static final String READ_FIRST = """
                     | Net15 -> Date.addDays(15, d)
                     | Net30 -> Date.addDays(30, d)
-                    | Eom -> Date.addDays(0 - 1, Date.addMonths(1, d))""";
+                    | Eom -> Date.addDays(0 - 1, Date.addMonths(Int.floorMod(Date.day(d), 5), d))""";
 
     private static final String NOT_READ_FIRST = """
-                    | Eom -> Date.addDays(0 - 1, Date.addMonths(1, d))
+                    | Eom -> Date.addDays(0 - 1, Date.addMonths(Int.floorMod(Date.day(d), 5), d))
                     | Net15 -> Date.addDays(15, d)
                     | Net30 -> Date.addDays(30, d)""";
 
@@ -90,7 +90,8 @@ class TheArmsOfAChoiceThatWereReadKeepTheirLinesTest {
     @Test
     void aLineDecidingOnlyBesideWhatWasNotReadIsNone() {
         String model = decides(READ_FIRST,
-                "Int.max(weekday(c, d), weekday(c, Date.addMonths(1, d))) >= 3");
+                "Int.max(weekday(c, d), weekday(c,"
+                        + " Date.addMonths(Int.floorMod(Date.day(d), 5), d))) >= 3");
         assertEquals(Set.of(), linesOf(model));
         assertTrue(notRead(model).containsAll(Set.of("c", "d")), notRead(model).toString());
     }

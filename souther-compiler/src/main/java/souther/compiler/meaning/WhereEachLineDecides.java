@@ -140,6 +140,17 @@ public final class WhereEachLineDecides {
      * line's.
      */
     public static List<Decides> in(Proposition writtenAs, Predicate<NumericTerm> measuredWhole) {
+        return in(writtenAs, measuredWhole, measuredWhole);
+    }
+
+    /**
+     * The same, where {@code wholeInItsUnit} says which numbers are whole numbers of their own
+     * unit — more than {@code measuredWhole}, which a date is not: it is a count of days, and the
+     * days are whole. That is what a proof that a line decides nowhere reads a number as
+     * ({@link NoCaseCrosses}).
+     */
+    public static List<Decides> in(Proposition writtenAs, Predicate<NumericTerm> measuredWhole,
+                                   Predicate<NumericTerm> wholeInItsUnit) {
         Map<Spelling, Proposition.Compared> lines = new TreeMap<>();
         Map<Spelling, List<List<List<DecidingCase>>>> standings = new TreeMap<>();
         OneSpellingPerLine spellings = new OneSpellingPerLine(measuredWhole);
@@ -152,8 +163,32 @@ public final class WhereEachLineDecides {
         }
         List<Decides> out = new ArrayList<>();
         lines.forEach((key, line) -> out.add(new Decides(line,
-                whereItStands(line, casesOf(standings.get(key))), spellings.scalesOf(line))));
+                withoutWhatNoRowCrosses(line, whereItStands(line, casesOf(standings.get(key))),
+                        wholeInItsUnit),
+                spellings.scalesOf(line))));
         return List.copyOf(out);
+    }
+
+    /**
+     * {@code stated} with every quantifier in it said the way the lines are read ({@link Lifting}),
+     * or {@code stated} itself where the steps ran out and nothing is taken apart: the form the
+     * parts a quantifier makes are told apart in.
+     */
+    static Proposition lifted(Proposition stated) {
+        Proposition lifted = new Lifting().of(stated);
+        return lifted == null ? stated : lifted;
+    }
+
+    /**
+     * {@code cases} less each that is proved to hold no row on each side of {@code line}
+     * ({@link NoCaseCrosses}): a line decides in none of those, and asking them is what a line
+     * decides nowhere in costs.
+     */
+    private static List<DecidingCase> withoutWhatNoRowCrosses(
+            Proposition.Compared line, List<DecidingCase> cases,
+            Predicate<NumericTerm> wholeInItsUnit) {
+        return cases.stream().filter(each -> !NoCaseCrosses.proves(line, each, wholeInItsUnit))
+                .toList();
     }
 
     /**
@@ -623,9 +658,23 @@ public final class WhereEachLineDecides {
 
         private int left = CompositionBudget.STEPS_A_STATEMENT_IS_READ_IN.maximum();
 
+        /** What each statement met was said as, by the statement itself: one that stands in
+         *  several places is said once, so the work is as many as there are statements and not
+         *  as many as the ways down to them. */
+        private final Map<Proposition, Optional<Proposition>> said = new IdentityHashMap<>();
+
         /** {@code stated}, every quantifier in it said this way — itself where none has a part to
          *  say outside, and null where the steps ran out. */
         Proposition of(Proposition stated) {
+            Optional<Proposition> known = said.get(stated);
+            if (known == null) {
+                known = Optional.ofNullable(ofAnew(stated));
+                said.put(stated, known);
+            }
+            return known.orElse(null);
+        }
+
+        private Proposition ofAnew(Proposition stated) {
             return switch (stated) {
                 case Proposition.All all -> {
                     List<Proposition> parts = each(all.parts());
@@ -842,7 +891,7 @@ public final class WhereEachLineDecides {
             for (int i = 0; i < named.size(); i++) {
                 index.put(named.get(i).spelling(), i);
             }
-            this.twice = askedTwice(named);
+            this.twice = askedTwice(named, ReadThroughNames.holdsOneValueAtEachElement(stated));
             this.ways = new WhatAStatementComesTo();
             this.canBe = lifted ? canBe(named, twice) : List.of();
             if (!lifted) {
@@ -1702,12 +1751,21 @@ public final class WhereEachLineDecides {
      */
     private record AskedTwice(DecisionSubject value, List<Integer> parts, List<Refinement> atoms) {}
 
-    /** Every value of the row {@code named} asks the case of more than once, in the order they are
-     *  first asked. */
-    private static List<AskedTwice> askedTwice(List<Proposition> named) {
+    /**
+     * Every value of the row {@code named} asks the case of more than once, in the order they are
+     * first asked.
+     *
+     * <p>A value at an element of a container is one of them where the statement holds one value
+     * at each element's position ({@code oneValueEach}): two parts asking the cases of one value
+     * there ask it of the one element the statement is about, and a statement about two elements
+     * holds two values at that position and says so.
+     */
+    private static List<AskedTwice> askedTwice(List<Proposition> named, boolean oneValueEach) {
         Map<DecisionSubject, List<Integer>> byValue = new LinkedHashMap<>();
         for (int i = 0; i < named.size(); i++) {
-            if (named.get(i) instanceof Proposition.InCases cases && oneValueOfTheRow(cases)) {
+            if (named.get(i) instanceof Proposition.InCases cases && cases.holds()
+                    && (aValueOfTheRow(cases.of())
+                    || (oneValueEach && aValueAtAnElement(cases.of())))) {
                 byValue.computeIfAbsent(cases.of(), _ -> new ArrayList<>()).add(i);
             }
         }
@@ -1911,19 +1969,30 @@ public final class WhereEachLineDecides {
 
     /**
      * Whether {@code cases}, held, asks which case one value of the row is. A value inside the
-     * elements or the keys of a container is one of them, and two parts asking it may ask it of two
-     * elements.
+     * elements or the keys of a container is one of them where nothing says which element, and
+     * two parts asking it may ask it of two elements.
      */
     private static boolean oneValueOfTheRow(Proposition.InCases cases) {
         return cases.holds() && aValueOfTheRow(cases.of());
     }
 
-    /** Whether {@code value} is one value of the row, and not one inside the elements or the keys
-     *  of a container. */
+    /**
+     * Whether {@code value} is one value of the row: one at no element or key of a container, or
+     * one an element read through a name stands for, which is one value wherever the name is read
+     * ({@link ValueIdentity.OfAnElement}).
+     */
     private static boolean aValueOfTheRow(DecisionSubject value) {
+        return value instanceof DecisionSubject.AnInput(TermPath at, var identity)
+                && (identity instanceof ValueIdentity.OfAnElement
+                || at.steps().stream().noneMatch(step -> step instanceof TermPath.Step.Element
+                        || step instanceof TermPath.Step.Key));
+    }
+
+    /** Whether {@code value} is at an element of a container and at no key of one. */
+    private static boolean aValueAtAnElement(DecisionSubject value) {
         return value instanceof DecisionSubject.AnInput(TermPath at, var _)
-                && at.steps().stream().noneMatch(step -> step instanceof TermPath.Step.Element
-                        || step instanceof TermPath.Step.Key);
+                && at.steps().stream().anyMatch(step -> step instanceof TermPath.Step.Element)
+                && at.steps().stream().noneMatch(step -> step instanceof TermPath.Step.Key);
     }
 
     /**

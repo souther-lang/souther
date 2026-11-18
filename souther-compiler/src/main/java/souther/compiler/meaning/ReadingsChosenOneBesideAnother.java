@@ -60,7 +60,6 @@ final class ReadingsChosenOneBesideAnother {
 
     private ReadingsChosenOneBesideAnother() {
     }
-
     /**
      * The readings of each group {@code cases} choose among one beside another reading of the same
      * group, in the order the groups are first found.
@@ -75,7 +74,33 @@ final class ReadingsChosenOneBesideAnother {
     static <G> Map<G, BitSet> of(DecidingCase.Cases cases, Function<Spelling, BitSet> madeBy,
                                  IntFunction<G> groupOf,
                                  BiPredicate<Integer, Integer> mayBeOne) {
-        return multiplied(cases, heldOnEveryWay(cases), madeBy, groupOf, mayBeOne);
+        return of(cases, madeBy, groupOf, mayBeOne, PAIRS_ASKED_OF_ALTERNATIVES);
+    }
+
+    /**
+     * How many pairs of alternatives are asked what tells them apart, over all the choices of
+     * the cases, before no more are: what a reader telling an author where a model is dear to
+     * read spends on one case is bounded, as {@link TheChoicesACaseIsMadeOf#STEPS_A_READING_TAKES}
+     * bounds what the derivations cost. What was found stands and nothing is said of the pairs
+     * past it, which is the answer of a reader that says only what it is shown.
+     *
+     * <p>A pair costs about a microsecond, measured by execution samples over alternatives of
+     * eight parts each: two hundred and sixty thousand of them are some fifth of a second, which
+     * is what one case may spend, and is the pairs of about seven hundred alternatives each told
+     * apart from the others. The most one case asked, of the models measured, is 81 pairs: a
+     * search over four days through a helper that says whether a day is a business day, each
+     * day with a comparison of its weekday and of the holidays.
+     */
+    static final int PAIRS_ASKED_OF_ALTERNATIVES = 1 << 18;
+
+    /**
+     * The same, asking no more than {@code mostPairs} pairs of alternatives what tells them
+     * apart.
+     */
+    static <G> Map<G, BitSet> of(DecidingCase.Cases cases, Function<Spelling, BitSet> madeBy,
+                                 IntFunction<G> groupOf, BiPredicate<Integer, Integer> mayBeOne,
+                                 int mostPairs) {
+        return multiplied(cases, heldOnEveryWay(cases), madeBy, groupOf, mayBeOne, mostPairs);
     }
 
     /**
@@ -126,17 +151,29 @@ final class ReadingsChosenOneBesideAnother {
         return held.isEmpty() ? Set.of() : Collections.unmodifiableSequencedSet(held);
     }
 
-    /**
-     * The readings of each group two choices made together are told apart by, no reading of the
-     * one maybe a reading of the other.
-     *
-     * @param held what each case holds on every way ({@link #heldOnEveryWay})
-     */
+    /** The same, asking as many pairs of alternatives as {@link #PAIRS_ASKED_OF_ALTERNATIVES}. */
     static <G> Map<G, BitSet> multiplied(DecidingCase.Cases cases,
                                          Map<DecidingCase.Cases, Set<Proposition>> held,
                                          Function<Spelling, BitSet> madeBy,
                                          IntFunction<G> groupOf,
                                          BiPredicate<Integer, Integer> mayBeOne) {
+        return multiplied(cases, held, madeBy, groupOf, mayBeOne, PAIRS_ASKED_OF_ALTERNATIVES);
+    }
+
+    /**
+     * The readings of each group two choices made together are told apart by, no reading of the
+     * one maybe a reading of the other.
+     *
+     * @param held      what each case holds on every way ({@link #heldOnEveryWay})
+     * @param mostPairs how many pairs of alternatives are asked what tells them apart
+     */
+    static <G> Map<G, BitSet> multiplied(DecidingCase.Cases cases,
+                                         Map<DecidingCase.Cases, Set<Proposition>> held,
+                                         Function<Spelling, BitSet> madeBy,
+                                         IntFunction<G> groupOf,
+                                         BiPredicate<Integer, Integer> mayBeOne,
+                                         int mostPairs) {
+        int[] pairsLeft = {mostPairs};
         Map<G, BitSet> found = new LinkedHashMap<>();
         Map<Proposition, BitSet> madeThe = new HashMap<>();
         Function<Set<Proposition>, BitSet> readingsOf = parts -> {
@@ -179,16 +216,31 @@ final class ReadingsChosenOneBesideAnother {
                             past.computeIfAbsent(again, _ -> new ArrayList<>()).add(place));
                 }
                 past.forEach((again, those) -> {
-                    if (those.size() > 1) {
-                        List<Set<Proposition>> theirs = those.stream()
-                                .map(at -> alternatives.get(at).held()).toList();
-                        Set<Proposition> alikeThere = alike(theirs);
-                        BitSet by = new BitSet();
-                        theirs.forEach(each -> by.or(readingsOf.apply(apart(each, alikeThere))));
-                        BitSet inner = new BitSet();
-                        inner.set(again);
-                        madeTogether(byGroup(by, groupOf), byGroup(inner, groupOf), mayBeOne,
-                                found);
+                    BitSet inner = new BitSet();
+                    inner.set(again);
+                    Map<G, BitSet> after = byGroup(inner, groupOf);
+                    // Two of the alternatives the choice follows, told apart by what each holds
+                    // on every way that the other does not: a pair is a choice of its own, and
+                    // the readings that tell it apart are all that can be said to tell it apart.
+                    // Taken together, the readings that tell some pair apart would stand in the way
+                    // of a pair another reading alone tells apart.
+                    // Alternatives that hold the same on every way tell nothing apart, so each way
+                    // of holding it is one alternative here.
+                    List<Set<Proposition>> held = new ArrayList<>(new LinkedHashSet<>(
+                            those.stream().map(at -> alternatives.get(at).held()).toList()));
+                    for (int first = 0; first < held.size() && pairsLeft[0] > 0; first++) {
+                        for (int second = first + 1; second < held.size(); second++) {
+                            if (pairsLeft[0] == 0) {
+                                break;
+                            }
+                            pairsLeft[0]--;
+                            Set<Proposition> one = held.get(first);
+                            Set<Proposition> other = held.get(second);
+                            Set<Proposition> alikeThere = alike(List.of(one, other));
+                            BitSet by = readingsOf.apply(apart(one, alikeThere));
+                            by.or(readingsOf.apply(apart(other, alikeThere)));
+                            madeTogether(byGroup(by, groupOf), after, mayBeOne, found);
+                        }
                     }
                 });
                 return new Chosen(ways, chosen, alike);

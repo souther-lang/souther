@@ -57,20 +57,20 @@ class AnElementIsAnsweredByItsContainerAndNotByWhatItHoldsTest {
         return read("n", PARAMETER);
     }
 
-    private static PathResolution readingOf(Core e, ElementBindings elements,
-                                            Map<BindingId, Core> bound) {
+    private static ValuesAt readingOf(Core e, ElementBindings elements,
+                                      Map<BindingId, Core> bound) {
         return InputReads.written(Map.of(PARAMETER, TermPath.of("n")), bound, elements)
                 .pathOf(e, DeclarationNewtypes.asWritten(Symbols.none(DefaultStdlib.get())));
     }
 
-    private static PathResolution readingOf(Core e) {
+    private static ValuesAt readingOf(Core e) {
         return readingOf(e, ElementBindings.NONE, Map.of());
     }
 
     /** The parameter itself is where it is. */
     @Test
     void aParameterIsAtItsPosition() {
-        assertEquals(new PathResolution.At(TermPath.of("n")), readingOf(parameter()));
+        assertEquals(new ValuesAt.At(TermPath.of("n")), readingOf(parameter()));
     }
 
     /** Arithmetic over it stands at no position, which is what the model says. */
@@ -79,7 +79,7 @@ class AnElementIsAnsweredByItsContainerAndNotByWhatItHoldsTest {
         Core sum = new Core.Binary(BinOp.ADD, parameter(), new Core.Int(1, Type.INT, POS),
                 Core.BinaryReading.AS_THEY_STAND, ConstructOccurrence.unwritten(), Type.INT, POS);
 
-        assertEquals(new PathResolution.NotAPosition(), readingOf(sum));
+        assertEquals(new ValuesAt.NotAPosition(), readingOf(sum));
     }
 
     /**
@@ -95,7 +95,7 @@ class AnElementIsAnsweredByItsContainerAndNotByWhatItHoldsTest {
         Core through = new Core.LetIn(new Core.Binder("x", LOCAL), Type.INT, parameter(),
                 read("x", LOCAL), Type.INT, POS);
 
-        assertEquals(new PathResolution.At(TermPath.of("n")), readingOf(through));
+        assertEquals(new ValuesAt.At(TermPath.of("n")), readingOf(through));
     }
 
     /**
@@ -109,7 +109,7 @@ class AnElementIsAnsweredByItsContainerAndNotByWhatItHoldsTest {
     void howManyNamesAnExpressionBindsDoesNotDecideWhatIsRead() {
         assertEquals(readingOf(nested(1)), readingOf(nested(4)),
                 "one name and four are the same reading");
-        assertEquals(new PathResolution.At(TermPath.of("n")), readingOf(nested(4)));
+        assertEquals(new ValuesAt.At(TermPath.of("n")), readingOf(nested(4)));
     }
 
     /** The parameter under {@code depth} bindings, each naming the one outside it. */
@@ -133,7 +133,7 @@ class AnElementIsAnsweredByItsContainerAndNotByWhatItHoldsTest {
      */
     @Test
     void anElementBoundToAValueThatReachesAPositionIsNotThere() {
-        assertEquals(new PathResolution.NotAPosition(),
+        assertEquals(new ValuesAt.NotAPosition(),
                 readingOf(read("x", ELEMENT), handedAnElementOf(read("xs", CONTAINER)),
                         Map.of(ELEMENT, parameter())));
     }
@@ -147,7 +147,7 @@ class AnElementIsAnsweredByItsContainerAndNotByWhatItHoldsTest {
      */
     @Test
     void andWhatItHoldsWouldHaveReachedOne() {
-        assertEquals(new PathResolution.At(TermPath.of("n")),
+        assertEquals(new ValuesAt.At(TermPath.of("n")),
                 readingOf(read("x", ELEMENT), ElementBindings.NONE,
                         Map.of(ELEMENT, parameter())));
     }

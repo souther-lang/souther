@@ -129,9 +129,11 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
                         + "Lsouther/compiler/partition/ComparisonWitnesses$AtAComparison;)"
                         + "Lsouther/compiler/partition/ComparisonAssessment;")));
         by.put(DERIVED_BY_THE_LINES_ASSESSED, Set.of());
-        by.put(EXPANDED_OF_A_LINE, Set.of(AMethod.of(
-                "souther/compiler/partition/ComparisonAssessment$Several", "caseExpansions",
-                "()Ljava/util/List;")));
+        by.put(EXPANDED_OF_A_LINE, Set.of(
+                AMethod.of("souther/compiler/partition/ComparisonAssessment$Several",
+                        "caseExpansions", "()Ljava/util/List;"),
+                AMethod.of("souther/compiler/partition/ComparisonAssessment$Several",
+                        "countedWorkedOut", "()Ljava/util/List;")));
         by.put(COUNTED_OF_A_LINE, Set.of(AMethod.of(
                 "souther/compiler/partition/ComparisonAssessment", "aPartNarrowed",
                 "(Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
@@ -145,7 +147,7 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
                         + "Lsouther/compiler/diag/Citation;Lsouther/compiler/inputs/InputReading;"
                         + "Lsouther/compiler/inputs/InputReads;"
                         + "Lsouther/compiler/partition/ClosureApplications;"
-                        + "Lsouther/compiler/types/BindingId;Lsouther/compiler/coverage/Arrivals;Z"
+                        + "Ljava/util/Set;Lsouther/compiler/coverage/Arrivals;Z"
                         + "Lsouther/compiler/partition/WhatConditionsState;Ljava/util/Optional;"
                         + "Lsouther/compiler/partition/ComparisonWitnesses$AtAComparison;)"
                         + "Lsouther/compiler/partition/ComparisonAssessment$Assessed;")));
