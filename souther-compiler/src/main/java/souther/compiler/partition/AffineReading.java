@@ -67,7 +67,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalInt;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
@@ -510,6 +509,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** What a total over what an operation makes of a list written out at it comes to,
          *  application by application. */
         Attempt totalOfWhatIsMadeOfAListWrittenOut(Core node, InputReads at);
+
+        /**
+         * Whether what a run works out evaluating {@code value} at {@code at} is told, telling it:
+         * a form read as numbers of the input, what ends no run, a comparison by its two sides,
+         * an option made by closures, the lists written out a call is handed, and a remainder of
+         * a form read. False where none of those reads it, which is a value whose working out
+         * this reading does not tell.
+         */
+        boolean tellsWhatItWorksOut(Core value, InputReads at);
     }
 
     /**
@@ -787,24 +795,46 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             @Override
             public void bound(Core.LetIn binding, InputReads at) {
                 BindingId name = binding.binder() == null ? null : binding.binder().binding();
-                if (name != null && told.readByATerm(name)) {
-                    return;
+                if ((name == null || !told.readByATerm(name))
+                        && !tellsWhatItWorksOut(binding.value(), at)) {
+                    told.exact = false;
                 }
-                if (tried(apart -> Attempt.ofAPart(AffineForms.outcome(binding.value(), at, apart)))
-                        instanceof Attempt.Form) {
-                    return;
+            }
+
+            /**
+             * Told where every part of it a run may stop at is read as a form, its operations
+             * told, and the rest ends no run ({@link WorkedOutToReachIt#besideWhatIsTold}): a
+             * comparison by its sides, a remainder by what it divides, a list written out by its
+             * elements, as anything else. And an option made by closures, by their bodies.
+             */
+            @Override
+            public boolean tellsWhatItWorksOut(Core value, InputReads at) {
+                Denotation whole = new Denotation(value, at);
+                if (readAsAForm(whole) || reached.endsNoRun(whole)) {
+                    return true;
                 }
-                if (reached.endsNoRun(new Denotation(binding.value(), at))) {
-                    return;
-                }
-                if (tellsTheClosuresMakingAnOption(binding.value(), at)
-                        || tellsTheListsWrittenOutItIsHanded(binding.value(), at, this, reached,
-                                told)
-                        || isARemainderOfAReadForm(binding.value(), at, this, ruleSource,
-                                reached)) {
-                    return;
-                }
-                told.exact = false;
+                return tellsTheClosuresMakingAnOption(value, at)
+                        || reached.besideWhatIsTold(this::toldHere).endsNoRun(whole);
+            }
+
+            /**
+             * Whether what working out {@code part}, a part that may end a run, does is told here:
+             * a name whose value was asked with a node read as numbers of the input, or a part
+             * read as a form. A part read is read as a run works it out, and where it stops is
+             * told whether or not it comes to a form.
+             */
+            private boolean toldHere(Denotation part) {
+                return (Core.withoutStanding(part.value()) instanceof Core.Read read
+                        && told.readByATerm(read.binding()))
+                        || AffineForms.outcome(part.value(), part.at(), this)
+                                instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads>;
+            }
+
+            /** Whether {@code part} reads as a form here, its operations then told. */
+            private boolean readAsAForm(Denotation part) {
+                return tried(apart -> Attempt.ofAPart(
+                        AffineForms.outcome(part.value(), part.at(), apart)))
+                        instanceof Attempt.Form;
             }
 
             /**
@@ -1478,7 +1508,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * works out is worked out.
              */
             private void builtFrom(List<Core> elements, InputReads at) {
-                AffineReading.builtFrom(elements, at, this, reached, told);
+                for (Core element : elements) {
+                    if (AffineForms.outcome(element, at, this)
+                            instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>
+                            && !reached.endsNoRun(new Denotation(element, at))) {
+                        told.exact = false;
+                    }
+                }
             }
 
             /**
@@ -2588,119 +2624,25 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         if (WorkedOutToReachIt.of(ofTheInput).endsNoRun(new Denotation(expression, at))) {
             return UndividedByARelation.Working.NOTHING;
         }
-        WhatWasTold told = new WhatWasTold();
-        if (AffineForms.outcome(expression, at,
-                reading(ofTheInput, new LinkedHashSet<>(), new ElementsMet(), told))
-                instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>) {
-            told.exact = false;
-        }
-        return told.workedOut().stops().operations();
+        return toldEvaluating(expression, at, ofTheInput).workedOut().stops().operations();
     }
 
     private static UndividedByARelation.Working workingOfEvaluating(Core expression, InputReads at,
                                                                     InputReading ofTheInput) {
-        WorkedOutToReachIt reached = WorkedOutToReachIt.of(ofTheInput);
-        if (reached.endsNoRun(new Denotation(expression, at))) {
-            return new UndividedByARelation.Working(List.of(),
-                    WhatARelationLeavesUndivided.Told.EVERY);
-        }
+        return toldEvaluating(expression, at, ofTheInput).working();
+    }
+
+    /** What a reading of its own tells of what a run works out evaluating {@code expression}
+     *  ({@link Arithmetic#tellsWhatItWorksOut}): every operation it tells, and short of every one
+     *  where it does not read it. */
+    private static WhatWasTold toldEvaluating(Core expression, InputReads at,
+                                              InputReading ofTheInput) {
         WhatWasTold told = new WhatWasTold();
-        AffineForms.Reading<NumericTerm, InputReads> reading = reading(ofTheInput,
-                new LinkedHashSet<>(), new ElementsMet(), told);
-        Denotation standing = at.standing(expression, ofTheInput.rules().symbols(),
-                ofTheInput.rules().newtypes());
-        if (tellsTheListsWrittenOutItIsHanded(standing.value(), standing.at(), reading, reached,
-                told)) {
-            return told.working();
+        if (!reading(ofTheInput, new LinkedHashSet<>(), new ElementsMet(), told)
+                .tellsWhatItWorksOut(expression, at)) {
+            told.exact = false;
         }
-        if (!(Core.withoutStanding(expression) instanceof Core.Binary comparison)
-                || !comparison.op().compares()) {
-            return UndividedByARelation.Working.UNREAD;
-        }
-        for (Core side : List.of(comparison.left(), comparison.right())) {
-            if (AffineForms.outcome(side, at, reading)
-                    instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>
-                    && !isARemainderOfAReadForm(side, at, reading, ofTheInput.rules(),
-                            WorkedOutToReachIt.of(ofTheInput))) {
-                told.exact = false;
-            }
-        }
-        return told.working();
-    }
-
-    /**
-     * Whether {@code value} is a call that ends no run of its own and is handed lists written out,
-     * and nothing else that may end one: what it works out is the elements of those lists, each
-     * worked out as a run builds the list ({@link #builtFrom}), read by {@code reading} and told
-     * to {@code told}. Which element it then answers is decided by what it is handed as well,
-     * which ends no run.
-     */
-    private static boolean tellsTheListsWrittenOutItIsHanded(
-            Core value, InputReads at, AffineForms.Reading<NumericTerm, InputReads> reading,
-            WorkedOutToReachIt reached, WhatWasTold told) {
-        if (!(Core.withoutStanding(value) instanceof Core.PreservedCall call)
-                || !WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(call).endsNone()) {
-            return false;
-        }
-        List<Core.ListLit> written = new ArrayList<>();
-        for (Core argument : call.args()) {
-            if (Core.withoutStanding(argument) instanceof Core.ListLit list) {
-                written.add(list);
-            } else if (!reached.endsNoRun(new Denotation(argument, at))) {
-                return false;
-            }
-        }
-        written.forEach(list -> builtFrom(list.elements(), at, reading, reached, told));
-        return !written.isEmpty();
-    }
-
-    /**
-     * Reads {@code elements}, the list a walk, a total or a search is over, as a run builds it
-     * before anything is made of it: whether or not anything reads an element, what it works out
-     * is worked out, and an element whose working out may end a run that nothing reads as a form
-     * leaves {@code told} short of every operation.
-     */
-    private static void builtFrom(List<Core> elements, InputReads at,
-                                  AffineForms.Reading<NumericTerm, InputReads> reading,
-                                  WorkedOutToReachIt reached, WhatWasTold told) {
-        for (Core element : elements) {
-            if (AffineForms.outcome(element, at, reading)
-                    instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>
-                    && !reached.endsNoRun(new Denotation(element, at))) {
-                told.exact = false;
-            }
-        }
-    }
-
-    /**
-     * Whether {@code side} is a floor remainder by a positive constant and the number it takes the
-     * remainder of reads as a form. Working it out runs nothing but the number it divides, whose
-     * operations are told as that is read, and the remainder is not an operation a run stops at.
-     *
-     * <p>That the divisor comes to a positive number is a question of values. What is worked out
-     * to reach the divisor, and whatever else {@code side} is written with, is asked of
-     * {@code side} as it is written, apart from the dividend and the remainder itself.
-     */
-    private static boolean isARemainderOfAReadForm(
-            Core side, InputReads reads, AffineForms.Reading<NumericTerm, InputReads> reading,
-            RuleReadingSource rules, WorkedOutToReachIt reached) {
-        Denotation standing = reads.standing(side, rules.symbols(), rules.newtypes());
-        InputReads at = standing.at();
-        if (!(Core.withoutStanding(standing.value()) instanceof Core.PreservedCall call)) {
-            return false;
-        }
-        OptionalInt divisor = DefaultBoundOperationFacts.get()
-                .divisorOfAFloorRemainder(call.operation());
-        if (divisor.isEmpty() || call.args().size() != 2) {
-            return false;
-        }
-        int dividend = 1 - divisor.getAsInt();
-        return at.folded(call.args().get(divisor.getAsInt()), rules.symbols(), rules.newtypes())
-                        .orElse(null) instanceof Long by && by > 0
-                && AffineForms.outcome(call.args().get(dividend), at, reading)
-                        instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads>
-                && reached.besideWhatWasRestated(List.of(call.args().get(dividend)), call)
-                        .endsNoRun(new Denotation(side, reads));
+        return told;
     }
 
     /** Whether what {@code expression} works out ends no run, apart from the closures

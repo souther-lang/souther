@@ -48,8 +48,9 @@ final class WorkedOutToReachIt {
      *  being worked out as part of the call that applies it; otherwise a closure is a value made
      *  and the call that applies it answers for its body. */
     private final boolean closuresApart;
-    /** Expressions whose working out another reading told, whole: nothing here asks them. */
-    private final Set<Core> toldElsewhere;
+    /** Expressions whose working out another reading told, whole: one that may end a run here
+     *  gets past it all the same. */
+    private final Predicate<Denotation> toldElsewhere;
 
     /**
      * One question asked of what a run works out, for as long as it is asked: what each
@@ -68,11 +69,11 @@ final class WorkedOutToReachIt {
 
     private WorkedOutToReachIt(InputReading read, Predicate<Denotation> beyond,
                                boolean closuresApart) {
-        this(read, beyond, closuresApart, Set.of());
+        this(read, beyond, closuresApart, _ -> false);
     }
 
     private WorkedOutToReachIt(InputReading read, Predicate<Denotation> beyond,
-                               boolean closuresApart, Set<Core> toldElsewhere) {
+                               boolean closuresApart, Predicate<Denotation> toldElsewhere) {
         this.read = Objects.requireNonNull(read);
         this.beyond = Objects.requireNonNull(beyond);
         this.closuresApart = closuresApart;
@@ -94,7 +95,17 @@ final class WorkedOutToReachIt {
         Predicate<Denotation> before = beyond;
         return new WorkedOutToReachIt(read,
                 value -> before.test(value) || Core.withoutStanding(value.value()) == answered,
-                closuresApart, told);
+                closuresApart, value -> told.contains(Core.withoutStanding(value.value())));
+    }
+
+    /**
+     * The same, with every expression {@code told} says another reading told the working out of,
+     * whole, wherever it is met: what such an expression is made of is not asked here.
+     */
+    WorkedOutToReachIt besideWhatIsTold(Predicate<Denotation> told) {
+        Predicate<Denotation> before = toldElsewhere;
+        return new WorkedOutToReachIt(read, beyond, closuresApart,
+                value -> before.test(value) || told.test(value));
     }
 
     /**
@@ -253,11 +264,14 @@ final class WorkedOutToReachIt {
         return endsNone;
     }
 
+    /** Asked of what {@code value} is made of first, so that what another reading tells is only
+     *  ever the least of it that may end a run: telling a value names what it reads. */
     private boolean worksOutWithoutEndingARun(Denotation value, Question question) {
+        return worksOutOfItselfWithoutEndingARun(value, question) || toldElsewhere.test(value);
+    }
+
+    private boolean worksOutOfItselfWithoutEndingARun(Denotation value, Question question) {
         Core written = Core.withoutStanding(value.value());
-        if (toldElsewhere.contains(written)) {
-            return true;
-        }
         if (closuresApart && written instanceof Core.Block closure) {
             return endsNoRun(new Denotation(closure.body(), value.at()), question);
         }
