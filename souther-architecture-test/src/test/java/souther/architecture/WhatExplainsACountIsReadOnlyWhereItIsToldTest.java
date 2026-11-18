@@ -133,14 +133,21 @@ class WhatExplainsACountIsReadOnlyWhereItIsToldTest {
                 AMethod.of("souther/compiler/partition/ComparisonAssessment$Several",
                         "caseExpansions", "()Ljava/util/List;"),
                 AMethod.of("souther/compiler/partition/ComparisonAssessment$Several",
-                        "countedWorkedOut", "()Ljava/util/List;")));
+                        "countedWorkedOut", "()Ljava/util/List;"),
+                // Whether any line tells of what made its parts, which is whether how the
+                // statement was derived is kept for telling it.
+                AMethod.of("souther/compiler/partition/ComparisonAssessment$Several",
+                        "lambda$withTheDerivationsItTellsOf$0",
+                        "(Lsouther/compiler/partition/ComparisonAssessment$Several$Part;)Z")));
         by.put(COUNTED_OF_A_LINE, Set.of(AMethod.of(
                 "souther/compiler/partition/ComparisonAssessment", "aPartNarrowed",
                 "(Lsouther/compiler/partition/ComparisonAssessment$Several$Part;"
                         + "Lsouther/compiler/partition/Reachability;"
                         + "Lsouther/compiler/partition/WaysToACase;Ljava/util/List;Z"
                         + "Lsouther/compiler/inputs/InputReading;"
-                        + "Lsouther/compiler/partition/ComparisonWitnesses$AtAComparison;)Ljava/util/List;")));
+                        + "Lsouther/compiler/partition/ComparisonWitnesses$AtAComparison;"
+                        + "Lsouther/compiler/meaning/CasesOfALineAsked$QuestionsOfAStatement;)"
+                        + "Ljava/util/List;")));
         by.put(READ_ON_BY_THE_LINES_DRAWN, Set.of(AMethod.of(
                 "souther/compiler/partition/ComparisonAssessment", "ofEach",
                 "(Ljava/lang/String;Lsouther/compiler/check/StatedComparison;"

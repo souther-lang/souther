@@ -8539,7 +8539,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (each.bySome() != null && terms.stream().allMatch(term ->
                     term.placesReadOff().stream().allMatch(place ->
                             place.isAtOrUnder(each.elementsOf().element()))
-                    || (heldEqualToOthers(each, read) && touches(term, each.positions())))) {
+                    || (heldEqualToOthers(each) && touches(term, each.positions())))) {
                 met.computeIfAbsent(each.elementsOf(), _ -> new ArrayList<>()).add(each);
             }
         }
@@ -8620,7 +8620,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             && apartFrom.stream().noneMatch(at::bearsOn);
                 } else {
                     NumericTerm.FromOnePosition held =
-                            numberHeldEqualToOthers(each, container, read);
+                            numberHeldEqualToOthers(each, container);
                     if (held != null) {
                         pinned.add(held);
                     } else {
@@ -8688,9 +8688,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /** Whether {@code statement} asks some element of a container only to be equal to what is
      *  stated of other places, in every way it may be met. */
-    private static boolean heldEqualToOthers(OnAWay statement, InputReading read) {
+    private static boolean heldEqualToOthers(OnAWay statement) {
         return statement.bySome().ways().stream().allMatch(way -> way.stream().allMatch(demand ->
-                numberHeldEqualToOthers(demand, statement.elementsOf(), read) != null));
+                numberHeldEqualToOthers(demand, statement.elementsOf()) != null));
     }
 
     /**
@@ -8705,13 +8705,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * no value, so only the same value is written there ({@link #writtenWhereTheOthersPutIt}).
      */
     private static NumericTerm.FromOnePosition numberHeldEqualToOthers(
-            RowDemand.OfAnElement demand, TermPath container, InputReading read) {
-        NumericTerm.FromOnePosition held = numberPutAtOthers(demand, container, read);
+            RowDemand.OfAnElement demand, TermPath container) {
+        NumericTerm.FromOnePosition held = numberPutAtOthers(demand, container);
         return held instanceof NumericTerm.ValueOf ? held : null;
     }
 
     private static NumericTerm.FromOnePosition numberPutAtOthers(
-            RowDemand.OfAnElement demand, TermPath container, InputReading read) {
+            RowDemand.OfAnElement demand, TermPath container) {
         return switch (demand) {
             case RowDemand.SameAs(Operand.At<TermPath>(var at))
                     when !at.isAtOrUnder(container.element()) ->
@@ -8730,7 +8730,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                         term.placesReadOff().stream().noneMatch(place ->
                                                 place.isAtOrUnder(container.element())))
                         && under.getFirst() instanceof NumericTerm.ValueOf number
-                        && writtenWhereTheOthersPutIt(form, number, read)
+                        && writtenWhereTheOthersPutIt(form, number)
                         ? number : null;
             }
             default -> null;
@@ -10482,7 +10482,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (others.size() != 1 || !(others.getFirst().getKey()
                     instanceof NumericTerm.ValueOf number)
                     || !isDefinedByTheSides(number, aboutEither, ofTheSides, way, read)
-                    || !writtenWhereTheOthersPutIt(definition.form(), number, read)) {
+                    || !writtenWhereTheOthersPutIt(definition.form(), number)) {
                 continue;
             }
             List<TakenConstraint.Affine> without = withoutTheNumber(out, definition, number,
@@ -10787,8 +10787,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * has, or none for a type that counts in whole steps.
      */
     private static boolean writtenWhereTheOthersPutIt(LinearForm<NumericTerm> form,
-                                                      NumericTerm.ValueOf held,
-                                                      InputReading read) {
+                                                      NumericTerm.ValueOf held) {
         if (form.coefs().size() == 2 && form.constant().isZero() && sumsToNothing(form)) {
             return true;
         }
@@ -10830,7 +10829,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         boolean some = statement.bySome() != null;
         TermPath container = statement.elementsOf();
         Set<NumericTerm> kept = statement.whatStands() ? null
-                : numbersKeptBeside(term, statement, some ? Rel.EQ : Rel.NE, read);
+                : numbersKeptBeside(term, statement, some ? Rel.EQ : Rel.NE);
         if (kept == null || kept.isEmpty()) {
             return false;
         }
@@ -10859,8 +10858,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * where it states anything else of the term.
      */
     private static Set<NumericTerm> numbersKeptBeside(NumericTerm.FromOnePosition term,
-                                                      OnAWay statement, Rel rel,
-                                                      InputReading read) {
+                                                      OnAWay statement, Rel rel) {
         RowDemand.AnElementMeets meets = rel == Rel.EQ ? statement.bySome() : statement.byEvery();
         TermPath container = statement.elementsOf();
         if (meets == null) {
@@ -10880,7 +10878,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     when each == rel && form.coefs().containsKey(term)
                     && (rel != Rel.EQ || othersOf(form, term).stream().allMatch(other ->
                             other instanceof NumericTerm.ValueOf held
-                                    && writtenWhereTheOthersPutIt(form, held, read))) ->
+                                    && writtenWhereTheOthersPutIt(form, held))) ->
                     othersOf(form, term);
             case RowDemand.SameAs(Operand.At<TermPath>(var at))
                     when rel == Rel.EQ && term.equals(new NumericTerm.ValueOf(at)) ->
