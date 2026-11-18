@@ -412,14 +412,14 @@ public final class GuardThresholds {
                                             .orElse(false)
                                     || each.worksOutOnEach().map(applications -> applications
                                             .stream().anyMatch(one -> stopsNotAllTold(one.stops())
-                                                    && (one.reached() instanceof Proposition
-                                                            .Always(boolean holds) && holds
+                                                    && ((one.reached() instanceof Proposition
+                                                            .Always(boolean holds) && holds)
                                                             ? ComparisonAssessment.someRowArrives(
                                                                     toIt, arrivals)
-                                                            : each.statedAsACondition().isEmpty()
+                                                            : (each.statedAsACondition().isEmpty()
                                                             || ComparisonAssessment.someRowArrives(
                                                                     wayToACase.apply(one.reached()),
-                                                                    arrivals)))).orElse(false)
+                                                                    arrivals))))).orElse(false)
                                     || (each.statedAsACondition().isPresent()
                                     && each.onTheArms().stream().anyMatch(arm ->
                                             stopsNotAllTold(arm.stops())
