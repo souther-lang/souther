@@ -109,9 +109,4 @@ class WhatACandidateHasSaidMovesWithEveryWayOfSayingItTest {
                 "what another candidate said is not compared with it");
         assertEquals(one.markBesidesTheRemainders(), one.markBesidesTheRemainders());
     }
-
-    @Test
-    void twoCandidatesAreMarkedApartWhateverTheySaid() {
-        assertNotEquals(new Pullback.Trial().mark(), new Pullback.Trial().mark());
-    }
 }

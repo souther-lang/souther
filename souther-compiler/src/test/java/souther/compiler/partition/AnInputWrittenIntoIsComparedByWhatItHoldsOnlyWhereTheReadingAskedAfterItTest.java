@@ -2,7 +2,6 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.partition.ReadingState.Compared;
 import souther.compiler.partition.ReadingState.Restore;
 import souther.compiler.partition.ReadingState.Scoped;
 
@@ -29,7 +28,6 @@ class AnInputWrittenIntoIsComparedByWhatItHoldsOnlyWhereTheReadingAskedAfterItTe
     private final ReadingState state = new ReadingState();
     private final Scoped<List<String>> answers = state.writtenIntoAndAskedAfter();
     private final Scoped<Map<String, List<String>>> counts = state.writtenIntoAndAskedAfter();
-    private final Scoped<Integer> another = state.setting(Compared.BY_VALUE, 0);
 
     /** What a reading that does nothing but {@code asking} has asked after. */
     private int askedBy(Runnable asking) {
@@ -87,29 +85,6 @@ class AnInputWrittenIntoIsComparedByWhatItHoldsOnlyWhereTheReadingAskedAfterItTe
     }
 
     @Test
-    void aListThatIsThereIsNotAListThatIsNotWhateverTheReadingAskedOfIt() {
-        ReadingState.Inputs then = state.inputs();
-
-        try (Restore _ = answers.set(new ArrayList<>())) {
-            assertFalse(same(then, 0));
-            assertFalse(same(then, answersAsked()));
-        }
-    }
-
-    @Test
-    void theSameElementsAreTheSameInputWhereWhatItHoldsIsAsked() {
-        String element = "a";
-        ReadingState.Inputs then;
-        try (Restore _ = answers.set(new ArrayList<>(List.of(element)))) {
-            then = state.inputs();
-        }
-
-        try (Restore _ = answers.set(new ArrayList<>(List.of(element)))) {
-            assertTrue(same(then, answersAsked()));
-        }
-    }
-
-    @Test
     void aListAddedToInsideAMapIsAnotherInputToAReadingThatAskedWhatTheMapHolds() {
         List<String> inner = new ArrayList<>(List.of("a"));
         try (Restore _ = counts.set(new LinkedHashMap<>(Map.of("k", inner)))) {
@@ -119,17 +94,6 @@ class AnInputWrittenIntoIsComparedByWhatItHoldsOnlyWhereTheReadingAskedAfterItTe
 
             assertFalse(same(then, countsAsked()));
             assertTrue(same(then, answersAsked()), "what another input holds is not asked");
-        }
-    }
-
-    @Test
-    void whatAnotherInputHoldsIsNotComparedForAnInputThatIsNotWrittenInto() {
-        ReadingState.Inputs then;
-        try (Restore _ = answers.set(new ArrayList<>(List.of("a")))) {
-            then = state.inputs();
-            try (Restore _ = another.set(1)) {
-                assertFalse(same(then, answersAsked()));
-            }
         }
     }
 

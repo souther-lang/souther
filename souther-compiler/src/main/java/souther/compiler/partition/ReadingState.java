@@ -631,69 +631,31 @@ final class ReadingState {
     }
 
     /**
-     * What {@code value} is and holds, to be compared with what it is and holds later: the
-     * collections and maps down to the objects in them, and each of those object the very one.
-     *
-     * <p>Compared by what is held and not by how much, so that an object put in place of another
-     * under the same key, or added to a list that is held under a key, is a change. Sets and maps
-     * are held without an order, since no order of theirs is a part of what they hold.
+     * What {@code value} is and holds, to be compared with what it is and holds later: what an
+     * object that says what it has been told says ({@link Marked#mark}), and otherwise the lists
+     * and maps of lists a ledger or the aggregates hold, down to each object in them as the very
+     * one. An object added to a list held under a key is a change.
      */
     static Object snapshotOf(Object value) {
-        return snapshotOf(value, new ArrayList<>());
-    }
-
-    /**
-     * @param inside the collections and maps being looked into, outermost first: one that holds
-     *               itself is looked into once and is, where it comes again, itself
-     */
-    private static Object snapshotOf(Object value, List<Object> inside) {
-        if (value instanceof Collection<?> || value instanceof Map<?, ?>) {
-            for (Object each : inside) {
-                if (each == value) {
-                    return new Same(value);
-                }
-            }
-        }
         return switch (value) {
             case null -> null;
             case Marked marked -> marked.mark();
-            case Boolean _, Number _, CharSequence _, Enum<?> _ -> value;
             case Map<?, ?> map -> {
-                inside.add(map);
                 Map<Object, Object> held = new HashMap<>();
                 for (Map.Entry<?, ?> each : map.entrySet()) {
-                    held.put(new Same(each.getKey()), snapshotOf(each.getValue(), inside));
+                    held.put(new Same(each.getKey()), snapshotOf(each.getValue()));
                 }
-                inside.removeLast();
-                yield held;
-            }
-            case Set<?> set -> {
-                inside.add(set);
-                Set<Object> held = new HashSet<>();
-                for (Object each : set) {
-                    held.add(elementOf(each, inside));
-                }
-                inside.removeLast();
                 yield held;
             }
             case Collection<?> collection -> {
-                inside.add(collection);
                 List<Object> held = new ArrayList<>(collection.size());
                 for (Object each : collection) {
-                    held.add(elementOf(each, inside));
+                    held.add(new Same(each));
                 }
-                inside.removeLast();
                 yield held;
             }
             default -> new Same(value);
         };
-    }
-
-    /** An element of a collection: what it holds if it is a collection or a map, and otherwise the
-     *  very one. */
-    private static Object elementOf(Object element, List<Object> inside) {
-        return element instanceof Collection<?> || element instanceof Map<?, ?>
-                ? snapshotOf(element, inside) : new Same(element);
     }
 
     /**

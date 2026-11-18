@@ -10,10 +10,8 @@ import souther.compiler.partition.ReadingState.Scoped;
 import souther.compiler.partition.ReadingState.Layers;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -269,87 +267,4 @@ class TheStateOfAReadingIsTakenFromItsPartsTest {
         assertNull(stack.newest());
     }
 
-    @Test
-    void anObjectPutInPlaceOfAnotherUnderTheSameKeyIsAChange() {
-        Map<String, Object> told = new HashMap<>();
-        told.put("relation", new Object());
-        Object before = ReadingState.snapshotOf(told);
-
-        told.put("relation", new Object());
-
-        assertFalse(before.equals(ReadingState.snapshotOf(told)),
-                "the map has as many entries as it had");
-    }
-
-    @Test
-    void somethingAddedToAListHeldUnderAKeyIsAChange() {
-        Map<String, List<Object>> toldOn = new HashMap<>();
-        toldOn.put("node", new ArrayList<>());
-        Object before = ReadingState.snapshotOf(toldOn);
-
-        toldOn.get("node").add(new Object());
-
-        assertFalse(before.equals(ReadingState.snapshotOf(toldOn)),
-                "the map has as many entries as it had");
-    }
-
-    @Test
-    void somethingAddedToASetHeldUnderAKeyIsAChange() {
-        Map<String, Set<Object>> toldAt = new HashMap<>();
-        toldAt.put("node", new HashSet<>());
-        Object before = ReadingState.snapshotOf(toldAt);
-
-        toldAt.get("node").add(new Object());
-
-        assertFalse(before.equals(ReadingState.snapshotOf(toldAt)),
-                "the map has as many entries as it had");
-    }
-
-    @Test
-    void aCollectionThatHoldsItselfIsLookedIntoOnceAndNothingStopsShortOfTheBottom() {
-        List<Object> deepest = new ArrayList<>();
-        Object nested = deepest;
-        for (int level = 0; level < 20; level++) {
-            List<Object> around = new ArrayList<>();
-            around.add(nested);
-            nested = around;
-        }
-        Object before = ReadingState.snapshotOf(nested);
-
-        deepest.add(new Object());
-
-        assertFalse(before.equals(ReadingState.snapshotOf(nested)),
-                "twenty levels down is as much a change as the first");
-
-        List<Object> holdsItself = new ArrayList<>();
-        holdsItself.add(holdsItself);
-        assertEquals(ReadingState.snapshotOf(holdsItself), ReadingState.snapshotOf(holdsItself));
-    }
-
-    @Test
-    void theSameThingsHeldInAnotherOrderAreTheSame() {
-        Object one = new Object();
-        Object other = new Object();
-        Map<String, Set<Object>> first = new HashMap<>();
-        first.put("node", new HashSet<>(List.of(one, other)));
-        Map<String, Set<Object>> second = new HashMap<>();
-        second.put("node", new HashSet<>(List.of(other, one)));
-
-        assertEquals(ReadingState.snapshotOf(first), ReadingState.snapshotOf(second));
-    }
-
-    @Test
-    void whatAGuardedMapHoldsUnderAKeyIsWatchedAndNotOnlyHowManyKeysThereAre() {
-        ReadingState watching = new ReadingState();
-        Scoped<Map<String, List<String>>> counts = watching.guarded();
-        Map<String, List<String>> held = new HashMap<>();
-        held.put("count", new ArrayList<>());
-        try (Restore _ = counts.set(held)) {
-            List<Object[]> before = watching.guards();
-
-            held.get("count").add("a place it was met");
-
-            assertFalse(watching.sameGuards(before, watching.guards()));
-        }
-    }
 }

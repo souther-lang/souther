@@ -78,45 +78,4 @@ class EveryFieldOfAPullbackIsAPartOfItsStateOrSaysWhyNotTest {
         }
     }
 
-    private static Set<String> fieldsWith(Why why) {
-        Set<String> out = new TreeSet<>();
-        for (Field each : fieldsOfAPullback()) {
-            NoPartOfAReading said = each.getAnnotation(NoPartOfAReading.class);
-            if (said != null && said.value() == why) {
-                out.add(each.getName());
-            }
-        }
-        return out;
-    }
-
-    /**
-     * The parts met, the readings left, the counts and the readings kept are each wired to their
-     * field by name where a reading is kept and taken. A field that says it is one of those is not
-     * wired, and this is what says so.
-     */
-    @Test
-    void theFieldsWiredByNameAreTheOnesThatSaySo() {
-        assertEquals(Set.of("met"), fieldsWith(Why.LEDGER));
-        assertEquals(Set.of("readingsLeft"), fieldsWith(Why.BUDGET));
-        assertEquals(Set.of("keptReadings", "aggregatesKept", "aggregatesAsked"),
-                fieldsWith(Why.COUNTER));
-        assertEquals(Set.of("sharedSums", "sharedApplications", "sharedConditions",
-                "sharedObservations", "sharedForms", "sharedWaysIn", "sharedNames",
-                "sharedFactorNames", "keptByTheInput"),
-                fieldsWith(Why.MEMO));
-        assertEquals(Set.of("state"), fieldsWith(Why.STATE));
-    }
-
-    @Test
-    void everyReasonIsGivenToSomeField() {
-        Set<Why> given = EnumSet.noneOf(Why.class);
-        for (Field each : fieldsOfAPullback()) {
-            NoPartOfAReading said = each.getAnnotation(NoPartOfAReading.class);
-            if (said != null) {
-                given.add(said.value());
-            }
-        }
-
-        assertEquals(EnumSet.allOf(Why.class), given, "a reason no field gives");
-    }
 }

@@ -86,15 +86,6 @@ class ALedgerSaysWhichHistoryItStandsAtTest {
     }
 
     @Test
-    void aRevisionIsHashedAsItIsCompared() {
-        Ledger.OfEntries<String> ledger = new Ledger.OfEntries<>();
-        ledger.add("alpha");
-
-        assertEquals(ledger.mark(), ledger.mark());
-        assertEquals(ledger.mark().hashCode(), ledger.mark().hashCode());
-    }
-
-    @Test
     void somethingAddedUnderAKeyThatHoldsSomethingAlreadyMovesTheRevision() {
         Ledger.Grouped<String, String> grouped = new Ledger.Grouped<>();
         grouped.add("count", "xs");

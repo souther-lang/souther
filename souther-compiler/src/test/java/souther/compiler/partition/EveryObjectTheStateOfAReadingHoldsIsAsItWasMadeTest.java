@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -66,10 +67,11 @@ class EveryObjectTheStateOfAReadingHoldsIsAsItWasMadeTest {
             }
             """;
 
-    /** What the report of {@code source} leaves unread, which asks every reading of its rules. */
+    /** What the report of {@code source} leaves unread, which asks every reading of its rules and
+     *  measures none of its rows. */
     private static void readRulesOf(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
+        compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
         ACompiledModel.compiles(compilation);
         AdequacyReport.of(compilation).modules().get(0).behaviors()
                 .forEach(each -> each.partition().notRead());
@@ -106,6 +108,8 @@ class EveryObjectTheStateOfAReadingHoldsIsAsItWasMadeTest {
             ReadingState.auditing = false;
         }
 
+        assertFalse(ReadingState.FOUND.isEmpty(),
+                "nothing the lookups hold was looked into, so nothing below is asked");
         Map<String, String> unsaid = new TreeMap<>();
         for (String found : ReadingState.FOUND) {
             String component = found.substring(0, found.indexOf(" is a "));
