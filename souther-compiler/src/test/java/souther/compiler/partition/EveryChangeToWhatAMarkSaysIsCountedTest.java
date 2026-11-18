@@ -12,17 +12,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * What the operators of a reading and a candidate under trial hold is held in counted parts
- * ({@link Counted}), so that no change to them leaves their mark where it was.
+ * ({@link Tallied}), so that no change to them leaves their mark where it was.
  *
  * <p>A mark that a hand moves on each change is a mark that a change added without the hand
  * leaves behind, and a reading kept under the old mark is taken where it would not be the same. A
  * field of one of these that is neither a counted part nor in the mark as it is
- * ({@link Counted.InTheMark}) is that change.
+ * ({@link Tallied.InTheMark}) is that change.
  */
 class EveryChangeToWhatAMarkSaysIsCountedTest {
 
-    private static final Set<Class<?>> COUNTED = Set.of(Counted.Changes.class,
-            Counted.Value.class, Counted.Group.class, Counted.Sequence.class, Counted.Table.class);
+    private static final Set<Class<?>> COUNTED = Set.of(Tallied.Changes.class,
+            Tallied.Value.class, Tallied.Group.class, Tallied.Sequence.class, Tallied.Table.class);
 
     @Test
     void everyFieldOfWhatSaysWhatItHasBeenToldIsCountedOrInTheMark() {
@@ -34,7 +34,7 @@ class EveryChangeToWhatAMarkSaysIsCountedTest {
                 }
                 boolean counted = COUNTED.contains(each.getType())
                         && Modifier.isFinal(each.getModifiers());
-                if (!counted && !each.isAnnotationPresent(Counted.InTheMark.class)) {
+                if (!counted && !each.isAnnotationPresent(Tallied.InTheMark.class)) {
                     neither.add(owner.getSimpleName() + "." + each.getName());
                 }
             }

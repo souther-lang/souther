@@ -25,9 +25,9 @@ import java.util.function.Supplier;
  * ({@link InTheMark} for the few that are set for an extent and are in the mark as they are),
  * which a test asks of each.
  */
-final class Counted {
+final class Tallied {
 
-    private Counted() {}
+    private Tallied() {}
 
     /** A field that is no counted part and is in its owner's mark as the very value it is: set
      *  for an extent and put back, so that putting it back puts the mark back. */

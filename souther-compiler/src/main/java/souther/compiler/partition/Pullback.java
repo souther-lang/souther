@@ -3151,10 +3151,10 @@ final class Pullback {
         /**
          * The changes to what the candidate has said besides the remainders it read, and to the
          * remainders it read. What it says is held in parts counted into one or the other
-         * ({@link Counted}), so what the candidate has said is the same while neither moves.
+         * ({@link Tallied}), so what the candidate has said is the same while neither moves.
          */
-        private final Counted.Changes said = new Counted.Changes();
-        private final Counted.Changes remaindersSaid = new Counted.Changes();
+        private final Tallied.Changes said = new Tallied.Changes();
+        private final Tallied.Changes remaindersSaid = new Tallied.Changes();
 
         /** What a candidate has said, compared by the very candidate and the two counts. */
         private record SaidSoFar(Trial by, long besides, long remainders) {
@@ -3226,36 +3226,36 @@ final class Pullback {
 
         /** What the rows of the comparison get past, as the rule worked it out; null where the
          *  rule worked out none. */
-        private final Counted.Value<UndividedByARelation.Working> working = said.value(null);
+        private final Tallied.Value<UndividedByARelation.Working> working = said.value(null);
         /** The expressions the rule reads the comparison again with each value of, the one the
          *  arithmetic stopped at among them, which tells what working them out may stop a run at;
          *  null where it reads none so. */
-        private final Counted.Value<Predicate<Core>> answersFor = said.value(null);
+        private final Tallied.Value<Predicate<Core>> answersFor = said.value(null);
         /** The expressions the rule read as the form of one operand of theirs, each with that
          *  operand ({@link AffineReading.WhatTheAnalysisAnswersFor#readByTheFormOf}). */
-        private final Counted.Table<Core, Core> readByTheFormOf =
+        private final Tallied.Table<Core, Core> readByTheFormOf =
                 remaindersSaid.table(IdentityHashMap::new);
         /** The remainders the rule read without saying their rows are made where the dividend is
          *  worked out, each with its dividend
          *  ({@link AffineReading.WhatTheAnalysisAnswersFor#dividendBesideTheRows}). */
-        private final Counted.Table<Core, Core> dividendBesideTheRows =
+        private final Tallied.Table<Core, Core> dividendBesideTheRows =
                 remaindersSaid.table(IdentityHashMap::new);
         /** The months a date at a place lands in moved by months, as the rule read them, each
          *  with the count of months the move comes to
          *  ({@link AffineReading.WhatTheAnalysisAnswersFor#landsInAMonth}). */
-        private final Counted.Table<Core, UndividedByARelation.IntOperation> landsInAMonth =
+        private final Tallied.Table<Core, UndividedByARelation.IntOperation> landsInAMonth =
                 said.table(IdentityHashMap::new);
         /** What each relation read under an arm of a choice works out, off the comparison read
          *  with the choice standing as that arm ({@link Pullback#tellWhatItWorksOut}). */
-        private final Counted.Table<Relation, UndividedByARelation.Working> relations =
+        private final Tallied.Table<Relation, UndividedByARelation.Working> relations =
                 said.table(LinkedHashMap::new);
         /** What each comparison the rule read the written one as works out, asked only by a rule
          *  that says the written one works out the same ({@link #worksOutWhatItIsRestatedAs}). */
-        private final Counted.Sequence<Supplier<UndividedByARelation.Working>> restated =
+        private final Tallied.Sequence<Supplier<UndividedByARelation.Working>> restated =
                 said.sequence();
         /** What a run taking an arm of a choice works out there, by each comparison the written
          *  one was read as with the choice standing as that arm ({@link Pullback#readOnAnArm}). */
-        private final Counted.Table<ArmRead, Counted.Sequence<OnThisArm>> onTheArms =
+        private final Tallied.Table<ArmRead, Tallied.Sequence<OnThisArm>> onTheArms =
                 said.table(LinkedHashMap::new);
 
         void readByTheFormOf(Core call, Core dividend) {
@@ -3316,7 +3316,7 @@ final class Pullback {
         /** What runs taking the arms {@code read} was read on work out there; none where it was
          *  read on no arm. */
         List<OnThisArm> onTheArms(ArmRead read) {
-            Counted.Sequence<OnThisArm> arms = onTheArms.get(read);
+            Tallied.Sequence<OnThisArm> arms = onTheArms.get(read);
             return arms == null ? List.of() : arms.view();
         }
 
