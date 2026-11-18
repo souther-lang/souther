@@ -54,7 +54,7 @@ class AJointCoverageHoldsWhenEveryRowIsTriedTest {
             Instance instance = Instance.random(random);
             if (instance.prove().isPresent()) {
                 shown++;
-                if (instance.high() - instance.low() >= 2 * instance.divisor().intValue()) {
+                if (instance.high() - instance.low() >= 2L * instance.divisor().intValue()) {
                     wide++;
                 }
                 assertTrue(instance.holdsAtEveryRowAndNumber(), instance.toString());
