@@ -215,6 +215,12 @@ public final class AffineForms {
         default void unobserved(Core node) {
         }
 
+        /** The same, of {@code node} read in {@code at}, for a reader that asks the node's owner
+         *  where working it out ends a run. */
+        default void unobserved(Core node, E at) {
+            unobserved(node);
+        }
+
         /**
          * That the walk read {@code e} as the number it folds to, the same on every run, or a
          * carrier writes it as, and went no further into it. Either says what the number is
@@ -539,6 +545,11 @@ public final class AffineForms {
         @Override
         public void unobserved(Core node) {
             of.unobserved(node);
+        }
+
+        @Override
+        public void unobserved(Core node, E at) {
+            of.unobserved(node, at);
         }
 
         @Override
@@ -1024,7 +1035,7 @@ public final class AffineForms {
                     List<ValueStanding.Standing<E, Reading<A, E>>> members) -> {
                 // Several values the name may stand for, each read apart from the operations the
                 // run works out to give it: which of them it is, is not said.
-                reading.unobserved(e);
+                reading.unobserved(e, at);
                 Stop<A, E> stopped = new Stop<>();
                 LinearForm<A> agreed = commonForm(members, e, at, following, stopped);
                 yield agreed != null ? new Outcome.Composed<>(agreed) : stopped.at;
@@ -1571,10 +1582,10 @@ public final class AffineForms {
      * ({@link WhereAnOperatorAnswers}).
      */
     private static <A, E> LinearForm<A> quotientTold(Core.Binary division, LinearForm<A> form,
-                                                     Reading<A, E> reading) {
+                                                     E at, Reading<A, E> reading) {
         if (form != null && !(WhereAnOperatorAnswers.ofAnOperator(division.op(), division.type())
                 instanceof WhereAnOperatorAnswers.WhereTheDivisorIsNotNought)) {
-            reading.unobserved(division);
+            reading.unobserved(division, at);
         }
         return form;
     }
@@ -1638,7 +1649,7 @@ public final class AffineForms {
             case Core.Binary b when b.op() == BinOp.DIV -> quotientTold(b,
                     operated(e, at, formOf(b.left(), at, reading, following, stopped),
                             formOf(b.right(), at, reading, following, stopped), Terms::quotient,
-                            stopped), reading);
+                            stopped), at, reading);
             // An operation the library says answers arithmetic over what it was given is that
             // arithmetic here: `Decimal.fromInt(n)` is `n`, `Date.daysBetween(a, b)` is `b - a`,
             // and a rule about the arguments is a rule about the call. Composed here beside the
@@ -1697,7 +1708,7 @@ public final class AffineForms {
                     // out all the same: untold where one of them can end a run.
                     if (!ValueStanding.theConstructionAndItsRestEndNone(fa, at, reading,
                             following, reading::makingEndsNoRunOver)) {
-                        reading.unobserved(e);
+                        reading.unobserved(e, at);
                     }
                     yield commonForm(eliminated, e, at, following, stopped);
                 }
@@ -1714,7 +1725,7 @@ public final class AffineForms {
                 List<ValueStanding.Standing<E, Reading<A, E>>> eliminated =
                         ValueStanding.eliminated(get, at, reading, following);
                 if (eliminated != null) {
-                    reading.unobserved(e);
+                    reading.unobserved(e, at);
                 }
                 yield eliminated == null ? null
                         : commonForm(eliminated, e, at, following, stopped);
@@ -1766,7 +1777,7 @@ public final class AffineForms {
                                                      Stop<A, E> stopped) {
         LinearForm<A> wrapped = formOf(nd.values().get(0).value(), at, reading, following, stopped);
         if (wrapped == null) {
-            reading.unobserved(nd);
+            reading.unobserved(nd, at);
         } else {
             reading.constructed(nd, made, wrapped);
         }
@@ -1820,7 +1831,7 @@ public final class AffineForms {
             List<ValueStanding.Standing<E, Reading<A, E>>> eliminated =
                     ValueStanding.eliminated(here, at, reading, following);
             if (eliminated != null) {
-                reading.unobserved(here);
+                reading.unobserved(here, at);
                 form = commonForm(eliminated, here, at, following, stop);
                 break;
             }

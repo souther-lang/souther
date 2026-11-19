@@ -49,8 +49,13 @@ class ATotalOfWhatTheElementDecidesIsOneNumberHoweverItIsWrittenTest {
             }
             """;
 
-    /** What each of {@code judged} leaves unread, by the behavior's name: of the total, and of
-     *  the rule past it. */
+    /**
+     * What each of {@code judged} leaves unread, by the behavior's name: of the total, and of the
+     * rule past it. Not that a run may stop where nothing says, which is said of the run and not of
+     * how the total is read: a fold's running totals may pass an {@code Int} where no one
+     * operation tells, and a total adds up exactly and passes it only at its end, so the two are
+     * read alike and stop apart.
+     */
     private static Map<String, List<String>> unread(Map<String, String> judged) {
         StringBuilder source = new StringBuilder(DECLARATIONS);
         judged.forEach((name, rule) -> source.append(JUDGED.formatted(name, rule)));
@@ -60,6 +65,8 @@ class ATotalOfWhatTheElementDecidesIsOneNumberHoweverItIsWrittenTest {
                 compilation.db().ask(new Adequacy.Coverage("probe")).value();
         Map<String, List<String>> out = new LinkedHashMap<>();
         judged.keySet().forEach(name -> out.put(name, evidence.get(name).notRead().stream()
+                .filter(each -> each.reason()
+                        != UndividedPosition.Reason.EVALUATION_STOPS_NOT_FULLY_READ)
                 .map(each -> each.at() + "=" + each.reason()).sorted().toList()));
         // A body that does not type is no body read, and leaves nothing unread.
         ACompiledModel.compiles(compilation);

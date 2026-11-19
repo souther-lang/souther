@@ -130,9 +130,10 @@
                     </execution>
                 </executions>
             </plugin>
-            <!-- The one test class every module's tests go through to ask that a model compiles
-                 before they read what is said of it. Only that class ships, so a module reaches
-                 the helper without taking the compiler's tests with it. -->
+            <!-- The test classes other modules' tests go through: the one that asks that a model
+                 compiles before they read what is said of it, and the one that reads a report's
+                 unread lines beside a stop nothing tells. Only those ship, so a module reaches
+                 them without taking the compiler's tests with it. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
@@ -145,6 +146,7 @@
                         <configuration>
                             <includes>
                                 <include>souther/compiler/ACompiledModel*.class</include>
+                                <include>souther/compiler/UnreadBesideItsStops*.class</include>
                             </includes>
                         </configuration>
                     </execution>

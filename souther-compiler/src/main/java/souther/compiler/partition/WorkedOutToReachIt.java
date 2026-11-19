@@ -99,18 +99,57 @@ final class WorkedOutToReachIt {
      */
     private static final class Question {
 
-        private final Map<Core, Boolean> answered = new IdentityHashMap<>();
+        /** What each expression was answered, wherever it was read: the node written, and where it
+         *  was read told apart by what each name in it stands for, which is what the answer turns
+         *  on once the numbers are asked. */
+        private final Map<Core, List<Answered>> answered = new IdentityHashMap<>();
         private final FoldedValue.Kept folds = new FoldedValue.Kept();
         private final boolean byTheNumbers;
+        /** The bodies of the closures shown to end no run where the call being asked applies them
+         *  ({@link #closuresHeldOverTheirElements}): of that call and no other, so they are held
+         *  only by a question asked of its parts, and what that question answers is not kept. */
+        private final Set<Core> heldWhereApplied;
 
         Question() {
             this(false);
         }
 
         Question(boolean byTheNumbers) {
+            this(byTheNumbers, Set.of());
+        }
+
+        private Question(boolean byTheNumbers, Set<Core> heldWhereApplied) {
             this.byTheNumbers = byTheNumbers;
+            this.heldWhereApplied = heldWhereApplied;
+        }
+
+        /** A question of the parts of a call that applies the closures {@code held} is shown of,
+         *  beside those this one holds. */
+        Question applying(Set<Core> held) {
+            Set<Core> both = Collections.newSetFromMap(new IdentityHashMap<>());
+            both.addAll(heldWhereApplied);
+            both.addAll(held);
+            return new Question(byTheNumbers, both);
+        }
+
+        Boolean answerOf(Core written, InputReads at) {
+            for (Answered each : answered.getOrDefault(written, List.of())) {
+                if (each.at().equals(at)) {
+                    return each.endsNone();
+                }
+            }
+            return null;
+        }
+
+        void answer(Core written, InputReads at, boolean endsNone) {
+            List<Answered> where = answered.computeIfAbsent(written, _ -> new ArrayList<>());
+            where.removeIf(each -> each.at().equals(at));
+            where.add(new Answered(at, endsNone));
         }
     }
+
+    /** What {@link #endsNoRun} answered of an expression read where it is ({@code at}). */
+    private record Answered(InputReads at, boolean endsNone) {}
 
     private WorkedOutToReachIt(InputReading read, Predicate<Denotation> beyond,
                                boolean closuresApart) {
@@ -299,21 +338,24 @@ final class WorkedOutToReachIt {
     }
 
     /** Whether working out {@code closure} where {@code call} applies it ends no run: asked with
-     *  what the call hands it ({@link #closureHeldOverItsElements}). */
+     *  what the call hands it ({@link #closuresHeldOverTheirElements}). */
     boolean endsNoRunWhereApplied(Denotation call, Core.Block closure) {
         Question question = new Question(true);
-        closureHeldOverItsElements(call, question);
-        return endsNoRun(new Denotation(closure, call.at()), question);
+        return endsNoRun(new Denotation(closure, call.at()),
+                question.applying(closuresHeldOverTheirElements(call, question)));
     }
 
     private boolean endsNoRun(Denotation value, Question question) {
         Core written = Core.withoutStanding(value.value());
-        Boolean known = question.answered.get(written);
+        if (question.heldWhereApplied.contains(written)) {
+            return true;
+        }
+        Boolean known = question.answerOf(written, value.at());
         if (known != null) {
             return known;
         }
         boolean endsNone = worksOutWithoutEndingARun(value, question);
-        question.answered.put(written, endsNone);
+        question.answer(written, value.at(), endsNone);
         return endsNone;
     }
 
@@ -344,7 +386,12 @@ final class WorkedOutToReachIt {
             return defined != null && endsNoRun(defined, question);
         }
         if (question.byTheNumbers) {
-            closureHeldOverItsElements(value, question);
+            Set<Core> held = closuresHeldOverTheirElements(value, question);
+            if (!held.isEmpty()) {
+                Question applying = question.applying(held);
+                return ownWorkingEndsNoRun(value, applying)
+                        && partsAndNamesEndNoRun(value, applying);
+            }
         }
         return ownWorkingEndsNoRun(value, question) && partsAndNamesEndNoRun(value, question);
     }
@@ -445,22 +492,23 @@ final class WorkedOutToReachIt {
     }
 
     /**
-     * Takes the closure {@code value} applies to each element as ending no run where every
-     * operation it works out of an element lies within an {@code Int}, from what the element comes
-     * to ({@link #whatEachElementIsWorth}); and a walk's step, where every number the walk works
-     * out from its seed over the most elements there are does
+     * The body of the closure {@code value} applies to each element, shown to end no run where
+     * every operation it works out of an element lies within an {@code Int}, from what the
+     * element comes to ({@link #whatEachElementIsWorth}); and a walk's step, where every number
+     * the walk works out from its seed over the most elements there are does
      * ({@link AddedOfEachElement#heldOverEveryStep}). Asked where the call is, which knows the
-     * elements, and not where the closure's body is met, which knows nothing of them.
+     * elements, and not where the closure's body is met, which knows nothing of them: what it
+     * shows is of this call, whose question holds it ({@link Question#applying}), and of no other
+     * call the same closure is handed to. None where it shows nothing.
      */
-    private void closureHeldOverItsElements(Denotation value, Question question) {
+    private Set<Core> closuresHeldOverTheirElements(Denotation value, Question question) {
         if (!closuresApart || !(Core.withoutStanding(value.value()) instanceof Core.PreservedCall)) {
-            return;
+            return Set.of();
         }
         Worth each = whatEachElementIsWorth(value, question);
         if (each != null && each.added().holdsEveryOperation(each.rangeOf(), AN_INT.least(),
                 AN_INT.greatest())) {
-            question.answered.put(Core.withoutStanding(each.body()), true);
-            return;
+            return Set.of(Core.withoutStanding(each.body()));
         }
         Symbols symbols = read.rules().symbols();
         DeclarationNewtypes newtypes = read.rules().newtypes();
@@ -476,8 +524,9 @@ final class WorkedOutToReachIt {
                 && step.heldOverEveryStep(BigInteger.valueOf(seed), rangesOfTheElements(where,
                         walk.element().binding(), null, walk.container(), step.aliases(), most),
                         most, AN_INT.least(), AN_INT.greatest())) {
-            question.answered.put(Core.withoutStanding(walk.step().body()), true);
+            return Set.of(Core.withoutStanding(walk.step().body()));
         }
+        return Set.of();
     }
 
     /**

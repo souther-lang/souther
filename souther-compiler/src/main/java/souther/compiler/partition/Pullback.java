@@ -11695,16 +11695,7 @@ final class Pullback {
         try (Restore _ = aggregatesInACase.pushing(inThisWay)) {
             Derivation read = again.apply(on -> on);
             if (!total.counted() && Core.withoutStanding(total.call()).type() == Type.INT) {
-                UndividedByARelation.Working worked = whatAnIntTotalWorksOut(form);
-                trial().tellsWhereItStops(total.call(), worked != null);
-                if (worked != null && read != null) {
-                    OnThisArm arm = new OnThisArm(() -> AffineReading.WorkedOut.ofWhatIsToldOf(
-                            worked), () -> UndividedByARelation.Working.NOTHING,
-                            whatDecidedTheArm());
-                    for (ArmRead each : ArmRead.in(read)) {
-                        trial().readOnAnArm(each, arm);
-                    }
-                }
+                trial().tellsWhereItStops(total.call(), toldOnTheArms(read, form));
             }
             return read;
         } finally {
@@ -11712,6 +11703,33 @@ final class Pullback {
             // elements is no part of what the next meets.
             elementsMet.get().rewind(metBefore);
         }
+    }
+
+    /**
+     * Whether where a total of whole numbers that comes to {@code form} stops is told on the way
+     * {@code read} reads it in: nowhere, where every number it may come to is an {@code Int}; and
+     * otherwise as what a run taking the way works out, recorded on each arm the reading has
+     * ({@link #readOnAnArm}). Not told where there is no reading, no arm to record it on, or no
+     * form of the input's numbers to tell: what says it was told is what was recorded.
+     */
+    private boolean toldOnTheArms(Derivation read, LinearForm<Quantity> form) {
+        UndividedByARelation.Working worked = whatAnIntTotalWorksOut(form);
+        if (worked == null) {
+            return false;
+        }
+        if (worked.operations().isEmpty()) {
+            return true;
+        }
+        List<ArmRead> arms = read == null ? List.of() : ArmRead.in(read);
+        if (arms.isEmpty()) {
+            return false;
+        }
+        OnThisArm arm = new OnThisArm(() -> AffineReading.WorkedOut.ofWhatIsToldOf(worked),
+                () -> UndividedByARelation.Working.NOTHING, whatDecidedTheArm());
+        for (ArmRead each : arms) {
+            trial().readOnAnArm(each, arm);
+        }
+        return true;
     }
 
     /**

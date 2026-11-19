@@ -228,6 +228,12 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 "List.sum(List.map(p -> 2 * p, List.map(x -> x, ds))) >= 10");
         FORMS.put("foldStartingAgain",
                 "List.fold((n, x) -> if x == 0 then n + 1 else 0, 0, ds) >= 3");
+        // a walk adding a choice of the element, one arm of which works out an operation, and the
+        // same total added up exactly
+        FORMS.put("foldAddingAChoice",
+                "List.fold((acc, x) -> acc + (if x > 0 then x else 0 - x), 0, ds) >= 3");
+        FORMS.put("totalOfTheSameChoice",
+                "List.sum(List.map(x -> if x > 0 then x else 0 - x, ds)) >= 3");
         // a part of what a walk carries in a tuple, counted and summed
         FORMS.put("countCarriedInATuple", "{ let (s, _) = List.fold((acc, x) -> { "
                 + "let (s, c) = acc \n if x > 0 then (s + 1, c) else acc }, (0, 0), ds) \n s }"

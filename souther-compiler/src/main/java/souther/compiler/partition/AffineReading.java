@@ -371,7 +371,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                             reading(ofTheInput, named, met, told));
             if (read instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads> stopped) {
                 return new OfAComparison.Stopped(stopped,
-                        new WhatLiesBesideTheStop(comparison, reads, ofTheInput, stopped.node()));
+                        new WhatLiesBesideTheStop(comparison, reads, ofTheInput, stopped.node(),
+                                stopped.at()));
             }
             if (left == null) {
                 left = ((AffineForms.Outcome.Composed<NumericTerm, InputReads>) read).form();
@@ -687,7 +688,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     told.add(mul, UndividedByARelation.IntOperation.overTheInput(atom,
                             held.least(), held.greatest(), told.workedOutOf(mul)));
                 } else {
-                    told.exact = false;
+                    told.passedOverWhatMayEndARun();
                 }
             }
 
@@ -738,7 +739,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 }
                 if (!(DeclaredBounds.whereMakingSucceeds(construct, type, ofTheInput.ruleReading())
                         instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld where)) {
-                    told.exact = false;
+                    told.passedOverWhatMayEndARun();
                     return;
                 }
                 tell(construct, value, where);
@@ -756,27 +757,31 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
                     tellHeld(operation, held, form, told.workedOutOf(operation));
                 } else if (!(where instanceof WhereAnOperatorAnswers.Everywhere)) {
-                    told.exact = false;
+                    told.passedOverWhatMayEndARun();
                 }
             }
 
             /**
-             * A node read without telling of every operation it works out. One written around the
-             * expression the reading stopped at is the analysis that owns the expression's to
-             * answer for, as the expression is.
+             * A node read without telling of every operation it works out, and with no word of
+             * where it is read: passed over as one that may end a run.
              */
             @Override
             public void unobserved(Core node) {
-                told.exact = false;
+                told.passedOverWhatMayEndARun();
+            }
+
+            /** The same, read in {@code at}: passed over, its owner asked whether working it out
+             *  ends a run ({@link WhatWasTold#passedOver}). */
+            @Override
+            public void unobserved(Core node, InputReads at) {
+                told.passedOver(reached, new Denotation(node, at));
             }
 
             /** A number read as what it folds to, which says nothing of what working it out runs on
-             *  the way: where that may end a run, not every operation is told. */
+             *  the way: passed over, its owner asked whether that may end a run. */
             @Override
             public void folded(Core e, InputReads at) {
-                if (!reached.endsNoRun(new Denotation(e, at))) {
-                    told.exact = false;
-                }
+                told.passedOver(reached, new Denotation(e, at));
             }
 
             /** A call of the library read as arithmetic over its arguments, told as the operation
@@ -806,7 +811,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 BindingId name = binding.binder() == null ? null : binding.binder().binding();
                 if ((name == null || !told.readByATerm(name))
                         && !tellsWhatItWorksOut(binding.value(), at)) {
-                    told.exact = false;
+                    told.passedOver(reached, new Denotation(binding.value(), at));
                 }
             }
 
@@ -896,11 +901,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     if (AffineForms.outcome(closure.value(), closure.at(), this)
                             instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>
                             && !reached.endsNoRun(closure)) {
-                        told.exact = false;
+                        told.passedOver(reached, closure);
                     }
                 }
                 if (!restEndsNoRun(value, at, reached, closures)) {
-                    told.exact = false;
+                    told.passedOver(reached, new Denotation(value, at));
                 }
                 return true;
             }
@@ -924,14 +929,17 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             /**
              * The length of a list written out, whose elements are worked out as the list is
-             * built. Past the figure a list is read element by element up to, they are not told.
+             * built. Past the figure a list is read element by element up to, they are not told:
+             * each is passed over.
              */
             @Override
             public void counted(Core call, List<Core> elements, InputReads at) {
                 if (told.declinedAtCounting(elements.size()).isEmpty()) {
                     builtFrom(elements, at);
                 } else {
-                    told.exact = false;
+                    for (Core element : elements) {
+                        told.passedOver(reached, new Denotation(element, at));
+                    }
                 }
             }
 
@@ -948,7 +956,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
                     tellHeld(node, held, total, after);
                 } else {
-                    told.exact = false;
+                    told.passedOverWhatMayEndARun();
                 }
             }
 
@@ -965,11 +973,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return false;
                 }
                 if (!stopsNoRowOrIsTheOwners(node, where, form, over, after)) {
-                    told.exact = false;
-                    // Whether it adds up the addends of the comparison, which the analysis that
-                    // drew the lines answers for, is asked once the comparison has been read
-                    // ({@link WhatLiesBesideTheStop#beside}).
-                    told.operationsOverTheStopValue.add(form);
+                    told.overTheStopValue(form);
                 }
                 return true;
             }
@@ -1044,8 +1048,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     // row is, and no operation told here says so — the analysis may tell it on
                     // each way it reads the node in. Of the node's own working: what a name in it
                     // was given is told where it was given.
-                    told.aStopUntold |= !stoppedAt.toldWhereItStops(node)
-                            && !reached.ownWorkingEndsNoRun(worked);
+                    if (!stoppedAt.toldWhereItStops(node) && !reached.ownWorkingEndsNoRun(worked)) {
+                        told.aStopWhereNoRowIs();
+                    }
                     return true;
                 }
                 return stoppedAt.answersFor(node)
@@ -1145,6 +1150,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     }
                 }
                 return false;
+            }
+
+            /** That what {@code node} works out of its own, apart from what it is made of and what a
+             *  name in it was given, was passed over: a stop told by nothing, unless its owner
+             *  shows it ends none ({@link WorkedOutToReachIt#ownWorkingEndsNoRun}). */
+            private void ownWorkingPassedOver(Core node, InputReads at) {
+                if (!reached.ownWorkingEndsNoRun(new Denotation(node, at))) {
+                    told.passedOverWhatMayEndARun();
+                }
             }
 
             /**
@@ -1259,7 +1273,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 } else {
                     told.leftToTheWitness(apart);
                 }
-                stoppedAt.worksOutTheFormItIsReadAs(node);
+                stoppedAt.worksOutTheFormItIsReadAs(node, at);
                 return true;
             }
 
@@ -1307,7 +1321,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return false;
                 }
                 told.besideTheRows(apart);
-                stoppedAt.worksOutTheFormItIsReadAs(node);
+                stoppedAt.worksOutTheFormItIsReadAs(node, at);
                 return true;
             }
 
@@ -1319,7 +1333,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * first or last year: told as an operation of its own, which a row of a line gets past
              * and a run stops in, unless the dates the place holds keep it within the calendar.
              */
-            private boolean worksOutAMoveByMonths(Core node) {
+            private boolean worksOutAMoveByMonths(Core node, InputReads at) {
                 UndividedByARelation.IntOperation landed = stoppedAt.landsInAMonth(node);
                 if (landed == null) {
                     return false;
@@ -1327,7 +1341,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (!UndividedByARelation.stopsNoRow(landed, ofTheInput)) {
                     told.add(node, landed);
                 }
-                stoppedAt.worksOutTheFormItIsReadAs(node);
+                stoppedAt.worksOutTheFormItIsReadAs(node, at);
                 return true;
             }
 
@@ -1507,13 +1521,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         AddedOfEachElement each = closure == null ? null
                                 : AddedOfEachElement.ofAClosure(closure);
                         if (each == null || !preparedWithoutAStop(node, at, closure, node)) {
-                            told.exact = false;
+                            told.passedOver(reached, new Denotation(node, at));
                         } else if (Core.withoutStanding(node).type() == Type.INT
                                 && (!(total instanceof NumericTerm.TakenOver)
                                 || !tellAnIntTotalThrough(throughOverWholeNumbers(each,
                                         BigInteger.ZERO, closure.params().getFirst().binding(),
                                         total), node, numbers, total))) {
-                            told.exact = false;
+                            told.passedOver(reached, new Denotation(node, at));
                         }
                     }
                     told.readByATerm(node);
@@ -1530,18 +1544,20 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 StoppedValues.Held aside = stoppedAt.holdAside(node, at);
                 if (aside.firstMeeting()) {
                     aside.boundIs(stoppedAt.boundAs(node, at));
+                    // Where no owner answers for it, what the node works out of its own is passed
+                    // over; what its parts work out is told beside it, below.
                     if (!aside.theStop) {
                         if (!worksOutNothingBesideTheStop(node, at)
                                 && !roundingWorkedOut(node, at, aside)) {
-                            told.exact = false;
+                            ownWorkingPassedOver(node, at);
                         }
                     } else if (stoppedAt.quotientAwayFromNought()) {
                         operandsOfTheQuotient(node, at);
                     } else if (!theStopIsAnsweredFor(node, at)
                             && !roundingWorkedOut(node, at, aside)
                             && !worksOutADividendBesideTheRows(node, at)
-                            && !worksOutAMoveByMonths(node)) {
-                        told.exact = false;
+                            && !worksOutAMoveByMonths(node, at)) {
+                        ownWorkingPassedOver(node, at);
                     }
                     // Whichever analysis answers for the node, what a run works out to make what
                     // is in it is worked out all the same, beside what that analysis told of it —
@@ -1611,7 +1627,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     if (AffineForms.outcome(element, at, this)
                             instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>
                             && !reached.endsNoRun(new Denotation(element, at))) {
-                        told.exact = false;
+                        told.passedOver(reached, new Denotation(element, at));
                     }
                 }
             }
@@ -1647,7 +1663,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 }
                 // What the walk does itself, apart from the step it applies.
                 if (!WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(node).endsNone()) {
-                    told.exact = false;
+                    told.passedOver(reached, new Denotation(node, at));
                 }
                 BindingId accumulator = walk.accumulator().binding();
                 LinearForm<NumericTerm> so = seed;
@@ -1849,7 +1865,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return new Attempt.NotApplicable();
                 }
                 if (!theOperandEndsNoRunApartFromTheApplications(operand, making)) {
-                    told.exact = false;
+                    told.passedOver(reached, operand);
                 }
                 Optional<WhyUnread> declined = told.declinedAtCounting(walked.indices().size());
                 if (declined.isPresent()) {
@@ -1935,7 +1951,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     tellAnIntTotal(node, answer, List.of());
                 } else if (seeded == null
                         || !toldTheWalk(node, at, node, seeded.step(), seeded, walk, answer)) {
-                    told.exact = false;
+                    told.passedOver(reached, new Denotation(node, at));
                 }
                 told.readByATerm(node);
                 return answer;
@@ -2381,13 +2397,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         || quotient.op() != BinOp.DIV
                         || !(WhereAnOperatorAnswers.ofAnOperator(quotient.op(), quotient.type())
                                 instanceof WhereAnOperatorAnswers.WhereTheDivisorIsNotNought)) {
-                    told.exact = false;
+                    told.passedOver(reached, new Denotation(node, at));
                     return;
                 }
                 for (Core operand : List.of(quotient.left(), quotient.right())) {
                     if (AffineForms.outcome(operand, at, this)
                             instanceof AffineForms.Outcome.StoppedAt<NumericTerm, InputReads>) {
-                        told.exact = false;
+                        told.passedOver(reached, new Denotation(operand, at));
                     }
                 }
             }
@@ -2727,6 +2743,58 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         }
 
         /**
+         * That something a run works out was passed over unread, and its owner shows working it
+         * out ends no run: not every operation is read, and no stop is left untold.
+         */
+        void passedOverWhatEndsNoRun() {
+            exact = false;
+        }
+
+        /**
+         * That a run may stop where an answer read here has no place: no row of a line is at it,
+         * so what a row gets past is told in full, and the stop is told by nothing.
+         */
+        void aStopWhereNoRowIs() {
+            aStopUntold = true;
+        }
+
+        /**
+         * That {@code form}, an operation over the expressions held aside, no owner of them places:
+         * whether it adds up the addends of the comparison, which the analysis that drew the lines
+         * answers for, is asked once the comparison has been read ({@link #askedOfTheComparison}).
+         */
+        void overTheStopValue(LinearForm<NumericTerm> form) {
+            exact = false;
+            operationsOverTheStopValue.add(form);
+        }
+
+        /**
+         * What was left to the form {@code whole} of the comparison, asked now that it is read: a
+         * sum over a bound value not told over that value, or any other operation over the
+         * stopped value, that is no sum of the comparison's addends, and a count over the stop
+         * whose line is at no count a list holds, are a stop told by nothing.
+         */
+        void askedOfTheComparison(LinearForm<NumericTerm> whole, InputReading ofTheInput) {
+            // An operation over a bound value is one over that value, which a relation over it is
+            // asked to get past.
+            for (SumOverTheStop sum : sumsOverTheStop) {
+                if (!sum.toldOverItsValue(this, ofTheInput)) {
+                    operationsOverTheStopValue.add(sum.form());
+                }
+            }
+            for (LinearForm<NumericTerm> each : operationsOverTheStopValue) {
+                if (!WhatLiesBesideTheStop.areAddendsOf(each, whole)) {
+                    passedOverWhatMayEndARun();
+                }
+            }
+            for (NumericTerm count : countsOverTheStop) {
+                if (!WhatLiesBesideTheStop.lineIsAtACountAListHolds(whole, count)) {
+                    passedOverWhatMayEndARun();
+                }
+            }
+        }
+
+        /**
          * That the step about to be read is handed the answer so far on {@code accumulator}, so
          * what it works out of that is worked out after every operation told so far: the seed's,
          * the elements', and the steps before.
@@ -2890,8 +2958,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         Arithmetic reading = reading(ofTheInput, new LinkedHashSet<>(), new ElementsMet(), told);
         if (!reading.tellsWhatItWorksOut(expression, at)) {
             // Not told only where something in it that may end a run is read by nothing.
-            told.exact = false;
-            told.aStopUntold = !reading.passedOverEndsNoRun(expression, at);
+            if (reading.passedOverEndsNoRun(expression, at)) {
+                told.passedOverWhatEndsNoRun();
+            } else {
+                told.passedOverWhatMayEndARun();
+            }
         }
         return told;
     }
@@ -3020,6 +3091,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     private static final class StoppedValues {
 
         private final Core stop;
+        /** Where the reading met {@code stop}; null where it is the stop wherever it is read, as
+         *  a quotient or a name's value a reading holds aside is. */
+        private final InputReads stopAt;
         private final boolean quotientAwayFromNought;
         private final InputReading read;
         private final WhatTheAnalysisAnswersFor answersFor;
@@ -3028,9 +3102,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private Held theStop;
         private boolean stopWorksOutItsForm;
 
-        StoppedValues(Core stop, boolean quotientAwayFromNought, InputReading read,
-                      WhatTheAnalysisAnswersFor answersFor) {
+        StoppedValues(Core stop, InputReads stopAt, boolean quotientAwayFromNought,
+                      InputReading read, WhatTheAnalysisAnswersFor answersFor) {
             this.stop = Objects.requireNonNull(stop);
+            this.stopAt = stopAt;
             this.quotientAwayFromNought = quotientAwayFromNought;
             this.read = Objects.requireNonNull(read);
             this.answersFor = Objects.requireNonNull(answersFor);
@@ -3094,10 +3169,16 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
         /** That working {@code node} out adds up the form of one operand of it and ends a run
          *  nowhere else ({@link #theStopWorksOutTheFormItIsReadAs}). */
-        void worksOutTheFormItIsReadAs(Core node) {
-            if (stop.equals(node)) {
+        void worksOutTheFormItIsReadAs(Core node, InputReads at) {
+            if (isTheStop(node, at)) {
                 stopWorksOutItsForm = true;
             }
+        }
+
+        /** Whether {@code expression}, read in {@code at}, is the one the reading stopped at:
+         *  the same expression, where the reading met it. */
+        private boolean isTheStop(Core expression, InputReads at) {
+            return stop.equals(expression) && (stopAt == null || stopAt.equals(at));
         }
 
         /** Whether working the expression the reading stopped at out is adding up the form of one
@@ -3114,7 +3195,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * values, as in a closure's body applied to another element, is another value.
          */
         Held holdAside(Core expression, InputReads at) {
-            if (stop.equals(expression)) {
+            if (isTheStop(expression, at)) {
                 if (theStop == null) {
                     theStop = newHeld(expression, true);
                 }
@@ -3187,7 +3268,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** The same reading, holding {@code value} aside as the expression it stopped at: a name
          *  read whose value is a bound value. */
         StoppedValues heldAt(Core value) {
-            return new StoppedValues(value, false, read, answersFor);
+            return new StoppedValues(value, null, false, read, answersFor);
         }
 
         /** Whether {@code held} is the stopped expression or a bound value the derivation names,
@@ -3217,13 +3298,17 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private final InputReads reads;
         private final InputReading ofTheInput;
         private final Core node;
+        /** Where the reading met {@code node}: the same expression read where its names stand for
+         *  other values, as in another application of a closure, is another value. */
+        private final InputReads nodeAt;
 
         WhatLiesBesideTheStop(StatedComparison comparison, InputReads reads,
-                              InputReading ofTheInput, Core node) {
+                              InputReading ofTheInput, Core node, InputReads nodeAt) {
             this.comparison = Objects.requireNonNull(comparison);
             this.reads = Objects.requireNonNull(reads);
             this.ofTheInput = Objects.requireNonNull(ofTheInput);
             this.node = Objects.requireNonNull(node);
+            this.nodeAt = Objects.requireNonNull(nodeAt);
         }
 
         /**
@@ -3240,7 +3325,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * the operations left to a witness as well, which a run works out all the same.
          */
         WorkedOut worksOut(WhatTheAnalysisAnswersFor answersFor) {
-            WorkedOut beside = beside(new StoppedValues(node, false, ofTheInput, answersFor));
+            WorkedOut beside = beside(new StoppedValues(node, nodeAt, false, ofTheInput,
+                    answersFor));
             return beside.toGetPast().operations().isEmpty() && beside.toGetPast().exact()
                     ? new WorkedOut(UndividedByARelation.Working.NOTHING, beside.stops())
                     : beside;
@@ -3253,7 +3339,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             Set<Core> under = Collections.newSetFromMap(new IdentityHashMap<>());
             collectUnder(division, under);
             collectUnder(node, under);
-            return beside(new StoppedValues(division, true, ofTheInput,
+            return beside(new StoppedValues(division, null, true, ofTheInput,
                     WhatTheAnalysisAnswersFor.readingAgain(
                             node -> under.contains(Core.withoutStanding(node))))).toGetPast();
         }
@@ -3290,36 +3376,17 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     new LinkedHashSet<>(), new ElementsMet(), told, stoppedAt);
             List<LinearForm<NumericTerm>> sides = new ArrayList<>();
             for (Core side : List.of(comparison.left(), comparison.right())) {
-                // A second stop is one more expression nothing is told of.
+                // A second stop is one more expression nothing here reads: passed over.
                 if (AffineForms.outcome(side, reads, reading)
                         instanceof AffineForms.Outcome.Composed<NumericTerm, InputReads> read) {
                     sides.add(read.form());
                 } else {
-                    told.exact = false;
+                    told.passedOver(WorkedOutToReachIt.of(ofTheInput), new Denotation(side, reads));
                 }
             }
             LinearForm<NumericTerm> whole = sides.size() == 2 ? sides.get(0).minus(sides.get(1))
                     .orNull() : null;
-            for (SumOverTheStop sum : told.sumsOverTheStop) {
-                // An operation over a bound value is one over that value, which a relation over
-                // it is asked to get past.
-                if (!sum.toldOverItsValue(told, ofTheInput)) {
-                    told.operationsOverTheStopValue.add(sum.form());
-                }
-            }
-            for (LinearForm<NumericTerm> each : told.operationsOverTheStopValue) {
-                if (!areAddendsOf(each, whole)) {
-                    // An operation over the stopped value that may pass its type, which no owner
-                    // of the value places: told of nowhere.
-                    told.exact = false;
-                    told.aStopUntold = true;
-                }
-            }
-            for (NumericTerm count : told.countsOverTheStop) {
-                if (!lineIsAtACountAListHolds(whole, count)) {
-                    told.exact = false;
-                }
-            }
+            told.askedOfTheComparison(whole, ofTheInput);
             // The stopped expression is worked out too, and a run may stop in it before any
             // operation told — unless it is a name read, which works nothing out. Where all it
             // works out is the form it is read by, those sums are what a run stops in there, and

@@ -416,24 +416,49 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
     }
 
     /**
-     * The whole numbers of this that stand in {@code rel} to {@code number}, or null where none
-     * does. A number this is not ended at by the relation leaves it as it is: a range has no hole.
+     * The whole numbers of this that stand in {@code rel} to {@code number}, as the range from the
+     * least to the greatest of them, or null where none does. A range is of rationals and the
+     * numbers asked of are whole, so both ends of this and {@code number} are taken to the whole
+     * numbers they bound: below {@code 1.5} is up to {@code 1}, and a range from {@code 0.5} to
+     * {@code 2.5} holds {@code 1} and {@code 2}. A number not equal to an end of those leaves them
+     * as they are, since a range has no hole; and where a bound is past what can be held, this is
+     * left as it is, which holds every number the relation keeps.
      */
     FormRange heldTo(Rel rel, ExactRatio number) {
-        ExactRatio below = number.minus(ExactRatio.ONE).orNull();
-        ExactRatio above = number.plus(ExactRatio.ONE).orNull();
+        ExactRatio from = whole(least.ceiling());
+        ExactRatio to = whole(greatest.floor());
+        ExactRatio floor = whole(number.floor());
+        ExactRatio ceiling = whole(number.ceiling());
+        if (from == null || to == null || floor == null || ceiling == null) {
+            return this;
+        }
+        if (from.compareTo(to) > 0) {
+            return null;
+        }
+        FormRange whole = new FormRange(from, to);
+        ExactRatio below = ceiling.minus(ExactRatio.ONE).orNull();
+        ExactRatio above = floor.plus(ExactRatio.ONE).orNull();
+        if (below == null || above == null) {
+            return this;
+        }
         return switch (rel) {
-            case EQ -> holds(number) ? new FormRange(number, number) : null;
-            case NE -> number.equals(least) && !number.equals(greatest)
-                    ? meet(new FormRange(above, greatest))
-                    : number.equals(greatest) && !number.equals(least)
-                    ? meet(new FormRange(least, below))
-                    : (holds(number) && least.equals(greatest)) ? null : this;
-            case LT -> meet(new FormRange(least, below));
-            case LE -> meet(new FormRange(least, number));
-            case GT -> meet(new FormRange(above, greatest));
-            case GE -> meet(new FormRange(number, greatest));
+            case EQ -> number.isWhole() ? whole.meet(new FormRange(number, number)) : null;
+            case NE -> !number.isWhole() ? whole
+                    : number.equals(from) && number.equals(to) ? null
+                    : number.equals(from) ? new FormRange(above, to)
+                    : number.equals(to) ? new FormRange(from, below)
+                    : whole;
+            case LT -> whole.meet(new FormRange(from, below));
+            case LE -> whole.meet(new FormRange(from, floor));
+            case GT -> whole.meet(new FormRange(above, to));
+            case GE -> whole.meet(new FormRange(ceiling, to));
         };
+    }
+
+    /** {@code end} as a number, or null where it is past what can be held. */
+    private static ExactRatio whole(ExactAnswer<BigInteger> end) {
+        return end instanceof ExactAnswer.Held<BigInteger>(BigInteger held)
+                ? ExactRatio.of(held) : null;
     }
 
     /** The smallest range holding this and {@code other}. */

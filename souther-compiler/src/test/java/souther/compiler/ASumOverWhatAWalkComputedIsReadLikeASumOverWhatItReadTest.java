@@ -299,7 +299,9 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
                 """);
         assertTrue(folded.contains("List.sum({if debit then 1·q + 0 else -1·q + 0 | xs[*]})"),
                 folded);
-        assertFalse(folded.contains("not read"), folded);
+        // Nought less the least Int, and a running total, pass an Int where no operation tells:
+        // that is said of the run, and the fold is read to the end all the same.
+        assertFalse(UnreadBesideItsStops.in(folded), folded);
     }
 
     /**
