@@ -444,7 +444,7 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
         return switch (rel) {
             case EQ -> number.isWhole() ? whole.meet(new FormRange(number, number)) : null;
             case NE -> !number.isWhole() ? whole
-                    : number.equals(from) && number.equals(to) ? null
+                    : (number.equals(from) && number.equals(to)) ? null
                     : number.equals(from) ? new FormRange(above, to)
                     : number.equals(to) ? new FormRange(from, below)
                     : whole;
