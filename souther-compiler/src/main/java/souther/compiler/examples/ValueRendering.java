@@ -384,10 +384,9 @@ final class ValueRendering {
             case ObservedValue.Integer i -> String.valueOf(i.value());
             case ObservedValue.Decimal d -> ExactRatio.spelledBounded(d.value());
             case ObservedValue.Text t -> CstLexer.literalOf(t.value());
-            // Written as the construction a fixture writes one with, so it is never read as the text
-            // that spells it — which is the difference a row writing a date as a string is told about.
-            case ObservedValue.Temporal t ->
-                    t.primitive().shown() + "(" + CstLexer.literalOf(t.iso()) + ")";
+            // Never as the text that spells it, which is the difference a row writing a date as a
+            // string is told about.
+            case ObservedValue.Temporal t -> t.written();
             case ObservedValue.Unit u -> u.type().name();
             case ObservedValue.Absent _ -> "None";
             case ObservedValue.Constructed c -> constructed(c);

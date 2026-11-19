@@ -1,6 +1,7 @@
 package souther.compiler.semantics;
 
 import souther.compiler.numeric.Count;
+import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.ValueTransformation;
@@ -83,16 +84,40 @@ public sealed interface TakenAs {
 
     /**
      * Where the numbers of this account run when they are taken of a value made from the one at a
-     * position by {@code from}, as far as that alone says.
+     * position by {@code from}, where that value lies in {@code values}: every number taken of
+     * such a value lies here, and this says nothing of whether each is taken.
      *
      * <p>A transformation that is defined at some of the values and not others leaves the account
      * fewer numbers than it has of every value: the year of a date moved a year's days back never
-     * reaches the last year there is, because no date moved that far back is the last date. What
-     * the operation declares of its answer is what it answers of any value, so this is met with
-     * it, and everything that asks how far a number runs is asked of one place.
+     * reaches the last year there is, because no date moved that far back is the last date. And a
+     * value held between ends leaves fewer still: the year of a date from 1900 on is never before
+     * 1900. What the operation declares of its answer is what it answers of any value, so this is
+     * met with it, and everything that asks how far a number runs is asked of one place.
+     *
+     * @param values where the value at the position lies, on the order its type is counted on;
+     *               {@link NumericDomain.Bounds#OPEN} where nothing holds it
      */
-    default NumericDomain.Bounds reachedFrom(ValueTransformation from) {
+    default NumericDomain.Bounds reachedFrom(ValueTransformation from,
+                                             NumericDomain.Bounds values) {
         return NumericDomain.Bounds.OPEN;
+    }
+
+    /**
+     * A run every number of which this account answers of some value made by {@code from} from
+     * one in {@code values}, or null where that is not shown.
+     *
+     * <p>Not {@link #reachedFrom}, which is where the numbers lie. This is that each of them is
+     * answered: given that every value of {@code values} is one some row holds, every number of
+     * the run is one some row's number is. A month of the dates from the thirtieth of December to
+     * the second of January lies from one to twelve and is only ever one or twelve, so no run of
+     * it is shown.
+     *
+     * @param values a run of the value at the position every value of which some row holds, on
+     *               the order its type is counted on
+     */
+    default NumericDomain.Bounds answeredWholeFrom(ValueTransformation from,
+                                                   NumericDomain.Bounds values) {
+        return null;
     }
 
     /**
@@ -403,8 +428,8 @@ public sealed interface TakenAs {
         }
 
         /**
-         * The least and the most this part comes to over the dates a chain of shifts is defined
-         * at, moved by it.
+         * The least and the most this part comes to over the dates in {@code values} a chain of
+         * shifts is defined at, moved by it.
          *
          * <p>The dates are one run of days, from the first the chain can answer to the last. The
          * years they fall in are a run between the year of the first and of the last. A month or a
@@ -412,14 +437,79 @@ public sealed interface TakenAs {
          * fall in: the dates from the twenty-seventh of February to the second of March in a
          * common year fall on days from the first to the twenty-eighth. A year of days or more
          * holds every month and every day of one, and is left to what the operation declares.
+         * Dates nothing holds and moved by nothing are every date, and are left to it as well.
          */
         @Override
-        public NumericDomain.Bounds reachedFrom(ValueTransformation from) {
-            return switch (from) {
-                case ValueTransformation.Identity _ -> NumericDomain.Bounds.OPEN;
-                case ValueTransformation.DateShift shift -> over(
-                        shift.translation().firstMoved(), shift.translation().lastMoved());
+        public NumericDomain.Bounds reachedFrom(ValueTransformation from,
+                                                NumericDomain.Bounds values) {
+            if (from instanceof ValueTransformation.Identity && values.saysNothing()) {
+                return NumericDomain.Bounds.OPEN;
+            }
+            long[] moved = movedDays(from, values);
+            return moved == null ? NumericDomain.Bounds.OPEN
+                    : over(LocalDate.ofEpochDay(moved[0]), LocalDate.ofEpochDay(moved[1]));
+        }
+
+        /**
+         * Every number from the least to the most this part comes to over the dates in
+         * {@code values} the chain is defined at, moved by it, where each of them is the part of
+         * one of those dates.
+         *
+         * <p>The moved dates are one run of days. Each year from the first of them to the last has
+         * a date of the run in it: its first of January, or the run's first date in the first
+         * year. A year of days holds every month and every day of one, since it misses at most one
+         * day of the calendar's round and every month and every day of a month falls on more days
+         * than that. A shorter run is counted a day at a time, and its numbers are a run only where
+         * none is missed between the least and the most.
+         */
+        @Override
+        public NumericDomain.Bounds answeredWholeFrom(ValueTransformation from,
+                                                      NumericDomain.Bounds values) {
+            long[] moved = movedDays(from, values);
+            if (moved == null) {
+                return null;
+            }
+            LocalDate first = LocalDate.ofEpochDay(moved[0]);
+            LocalDate last = LocalDate.ofEpochDay(moved[1]);
+            if (part == DatePart.YEAR) {
+                return run(part.of(first), part.of(last));
+            }
+            if (moved[1] - moved[0] + 1 >= DAYS_A_YEAR_HOLDS_AT_LEAST) {
+                return run(1, part == DatePart.MONTH ? MONTHS_A_YEAR_HAS : DAYS_A_MONTH_HAS_AT_MOST);
+            }
+            boolean[] seen = new boolean[DAYS_A_MONTH_HAS_AT_MOST + 1];
+            for (LocalDate at = first; !at.isAfter(last); at = at.plusDays(1)) {
+                seen[part.of(at)] = true;
+            }
+            int least = 1;
+            while (!seen[least]) {
+                least++;
+            }
+            int most = least;
+            while (most + 1 < seen.length && seen[most + 1]) {
+                most++;
+            }
+            for (int after = most + 1; after < seen.length; after++) {
+                if (seen[after]) {
+                    return null;
+                }
+            }
+            return run(least, most);
+        }
+
+        /**
+         * The first and the last day of the dates in {@code values} the chain {@code from} is
+         * defined at, moved by it, or null where it is defined at none of them or an end of
+         * {@code values} is no number of days.
+         */
+        private static long[] movedDays(ValueTransformation from, NumericDomain.Bounds values) {
+            DateTranslation chain = switch (from) {
+                case ValueTransformation.Identity _ -> DateTranslation.none();
+                case ValueTransformation.DateShift shift -> shift.translation();
             };
+            DateTranslation within = chain.definedOnlyWithin(values);
+            return within == null ? null : new long[] {within.first() + within.offsetDays(),
+                    within.last() + within.offsetDays()};
         }
 
         /** What this part runs between over the dates from {@code first} to {@code last}. */
@@ -451,6 +541,10 @@ public sealed interface TakenAs {
         /** How few days a year has, which every run of them that long holds every month of and
          *  every day of a month of. */
         private static final int DAYS_A_YEAR_HOLDS_AT_LEAST = 365;
+
+        private static final int MONTHS_A_YEAR_HAS = 12;
+
+        private static final int DAYS_A_MONTH_HAS_AT_MOST = 31;
 
         private static NumericDomain.Bounds run(int least, int most) {
             return new NumericDomain.Bounds(Endpoint.inclusive(Count.of(least)),

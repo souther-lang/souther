@@ -2,6 +2,8 @@ package souther.compiler.inputs;
 
 import souther.compiler.inputs.WhatARelationLeavesUndivided.Operations;
 import souther.compiler.inputs.WhatARelationLeavesUndivided.Term;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 
@@ -97,6 +99,51 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
      */
     boolean nothingStopsARow() {
         return greatest == null && !mayStopARow();
+    }
+
+    /**
+     * Whether every row with each of {@code terms} at a value of its run is computed: what the
+     * program works out keeps inside the sizes of the form's addends
+     * ({@link Operations#theSizesAreRowsComputed}), and those addends, at the ends of the runs,
+     * keep inside the size the sizes stop at ({@link Operations#sizesStopAt}). Asked of the runs,
+     * so of every row in them at once; false where a run has no end on a side and the sizes stop
+     * somewhere.
+     */
+    <P> boolean computesEveryRowWithin(List<Term<P>> terms, ExactRatio constant) {
+        if (!operations.theSizesAreRowsComputed(terms, constant)) {
+            return false;
+        }
+        BigInteger limit = operations.sizesStopAt(greatest);
+        if (limit == null) {
+            return true;
+        }
+        // The most the positive addends come to together and the least the negative ones do, each
+        // term at whichever end of its run puts it furthest out.
+        ExactRatio up = constant.signum() > 0 ? constant : ExactRatio.ZERO;
+        ExactRatio down = constant.signum() < 0 ? constant : ExactRatio.ZERO;
+        for (Term<P> each : terms) {
+            ExactRatio low = numberAt(each.holds().min());
+            ExactRatio high = numberAt(each.holds().max());
+            ExactRatio atLow = low == null ? null : each.weight().times(low).orNull();
+            ExactRatio atHigh = high == null ? null : each.weight().times(high).orNull();
+            if (atLow == null || atHigh == null) {
+                return false;
+            }
+            ExactRatio most = atLow.compareTo(atHigh) >= 0 ? atLow : atHigh;
+            ExactRatio least = atLow.compareTo(atHigh) >= 0 ? atHigh : atLow;
+            up = most.signum() > 0 ? up.plus(most).orNull() : up;
+            down = least.signum() < 0 ? down.plus(least).orNull() : down;
+            if (up == null || down == null) {
+                return false;
+            }
+        }
+        ExactRatio size = ExactRatio.of(limit);
+        return up.compareTo(size) <= 0 && down.negated().compareTo(size) <= 0;
+    }
+
+    /** The number {@code end} is at, or null where there is no end or it is no number. */
+    private static ExactRatio numberAt(Endpoint end) {
+        return (end != null && end.at() instanceof Count count) ? count.exactly() : null;
     }
 
 

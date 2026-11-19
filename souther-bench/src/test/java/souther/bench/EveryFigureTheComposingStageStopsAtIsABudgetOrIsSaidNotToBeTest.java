@@ -56,8 +56,6 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
 
             // The calendar's cycle and the stretch of years a proof about it is made over: what has
             // to be looked at for an answer to hold of every year, not how far a search goes.
-            Map.entry("souther.compiler.partition.DatesThatStandInEveryYear.FIRST_YEAR",
-                    "where the four hundred years that stand for every year start"),
             Map.entry("souther.compiler.partition.DatesThatStandInEveryYear.YEARS_OF_A_CYCLE",
                     "how many years the calendar's pattern repeats over"),
             Map.entry("souther.compiler.partition.YearsAWayAllows.YEARS_OF_A_CYCLE",
