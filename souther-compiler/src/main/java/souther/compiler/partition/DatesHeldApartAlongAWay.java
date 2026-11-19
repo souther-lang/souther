@@ -6,6 +6,7 @@ import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.semantics.TakenAs;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -170,7 +171,8 @@ final class DatesHeldApartAlongAWay {
         List<DateTranslation> days = new ArrayList<>();
         List<DatesThatHoldEveryStatement.Statement> asked = new ArrayList<>();
         for (TakenConstraint.Affine each : statements) {
-            Map<DatesThatHoldEveryStatement.Part, Long> parts = new LinkedHashMap<>();
+            // Two terms may be one part of one date, and their weights are that part's together.
+            Map<DatesThatHoldEveryStatement.Part, BigInteger> weighed = new LinkedHashMap<>();
             for (Map.Entry<NumericTerm, ExactRatio> term : each.form().coefs().entrySet()) {
                 if (!(term.getKey() instanceof NumericTerm.TakenOf taken)
                         || !(taken.takenAs() instanceof TakenAs.PartOfDate(
@@ -191,8 +193,17 @@ final class DatesHeldApartAlongAWay {
                 if (weight == null) {
                     return false;
                 }
-                parts.merge(new DatesThatHoldEveryStatement.Part(date, part,
-                        taken.transformation().translation()), weight, Math::addExact);
+                weighed.merge(new DatesThatHoldEveryStatement.Part(date, part,
+                        taken.transformation().translation()), BigInteger.valueOf(weight),
+                        BigInteger::add);
+            }
+            Map<DatesThatHoldEveryStatement.Part, Long> parts = new LinkedHashMap<>();
+            for (Map.Entry<DatesThatHoldEveryStatement.Part, BigInteger> part
+                    : weighed.entrySet()) {
+                if (part.getValue().bitLength() >= Long.SIZE) {
+                    return false;
+                }
+                parts.put(part.getKey(), part.getValue().longValue());
             }
             Long constant = YearsAWayAllows.asLongOrNull(each.form().constant());
             if (constant == null) {

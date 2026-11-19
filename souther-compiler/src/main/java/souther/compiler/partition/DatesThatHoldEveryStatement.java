@@ -93,7 +93,7 @@ final class DatesThatHoldEveryStatement {
             allowed.add(new int[] {LocalDate.ofEpochDay(every.first()).getYear(),
                     LocalDate.ofEpochDay(every.last()).getYear()});
             Map<List<Long>, Kind> ofIt = kindsOf(statements, partsOf.get(date));
-            if (ofIt == null || ofIt.isEmpty()) {
+            if (ofIt.isEmpty()) {
                 return null;
             }
             kinds.add(ofIt);
@@ -114,7 +114,9 @@ final class DatesThatHoldEveryStatement {
 
     /**
      * The kinds of a date's days, by what the date's parts come to in each statement beside the
-     * weighed year, or null where a sum is past what a whole number holds.
+     * weighed year. Days at which a sum is past what a whole number holds are of no kind: no date
+     * found there holds every statement as {@link #everyStatementHoldsAt} asks it, and the other
+     * days are kinds all the same.
      */
     private static Map<List<Long>, Kind> kindsOf(List<Statement> statements, List<Part> parts) {
         List<PartsOfADateOverACycle.Moved> asked = parts.stream().map(part ->
@@ -122,29 +124,38 @@ final class DatesThatHoldEveryStatement {
                 .toList();
         Map<List<Long>, Kind> out = new LinkedHashMap<>();
         for (PartsOfADateOverACycle.Given each : PartsOfADateOverACycle.of(asked)) {
-            List<Long> sums = new ArrayList<>(statements.size());
-            for (Statement statement : statements) {
-                long sum = 0;
-                for (int at = 0; at < parts.size(); at++) {
-                    Long weight = statement.parts().get(parts.get(at));
-                    if (weight == null) {
-                        continue;
-                    }
-                    try {
-                        sum = Math.addExact(sum, Math.multiplyExact(weight,
-                                (long) each.values().get(at)));
-                    } catch (ArithmeticException _) {
-                        return null;
-                    }
-                }
-                sums.add(sum);
+            List<Long> sums = sumsOf(statements, parts, each.values());
+            if (sums != null) {
+                Kind kind = out.computeIfAbsent(sums, _ -> new Kind(
+                        new BitSet(PartsOfADateOverACycle.YEARS_OF_A_CYCLE),
+                        new LinkedHashSet<>()));
+                kind.years().or(each.years());
+                kind.beside().add(each.values());
             }
-            Kind kind = out.computeIfAbsent(List.copyOf(sums), _ -> new Kind(
-                    new BitSet(PartsOfADateOverACycle.YEARS_OF_A_CYCLE), new LinkedHashSet<>()));
-            kind.years().or(each.years());
-            kind.beside().add(each.values());
         }
         return out;
+    }
+
+    /** What {@code parts} coming to {@code values} come to in each statement, or null where a
+     *  sum is past what a whole number holds. */
+    private static List<Long> sumsOf(List<Statement> statements, List<Part> parts,
+                                     List<Integer> values) {
+        List<Long> out = new ArrayList<>(statements.size());
+        for (Statement statement : statements) {
+            BigInteger sum = BigInteger.ZERO;
+            for (int at = 0; at < parts.size(); at++) {
+                Long weight = statement.parts().get(parts.get(at));
+                if (weight != null) {
+                    sum = sum.add(BigInteger.valueOf(weight)
+                            .multiply(BigInteger.valueOf(values.get(at))));
+                }
+            }
+            if (sum.bitLength() >= Long.SIZE) {
+                return null;
+            }
+            out.add(sum.longValue());
+        }
+        return List.copyOf(out);
     }
 
     /**

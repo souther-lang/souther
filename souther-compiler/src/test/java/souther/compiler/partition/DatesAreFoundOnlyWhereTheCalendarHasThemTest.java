@@ -156,6 +156,15 @@ class DatesAreFoundOnlyWhereTheCalendarHasThemTest {
         assertNotNull(found(List.of(acrossTheNewYear), statement(-3, Rel.EQ, 1, month(0))));
     }
 
+    /** A month weighed by a billion billion is past what a whole number holds from October on,
+     *  and January, where it is not, is found all the same. */
+    @Test
+    void aDateIsFoundAmongTheDaysWhoseSumsAWholeNumberHolds() {
+        long weight = 1_000_000_000_000_000_000L;
+
+        assertNotNull(found(statement(-weight, Rel.EQ, weight, month(0))));
+    }
+
     /** The year of a date moved a day back is the year before on the first of January: the
      *  move is read where the part is taken, and the date found is the one it moves from. */
     @Test
