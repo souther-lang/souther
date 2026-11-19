@@ -9,8 +9,10 @@ import java.time.Month;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.LongStream;
 
@@ -95,6 +97,24 @@ final class DatesThatStandInEveryYear {
      * @param yearShifts the moves of the date whose years are asked, defined the same way
      */
     static List<List<Origin>> byTheYearsOf(List<Part> parts, List<DateTranslation> yearShifts) {
+        return KINDS.computeIfAbsent(new KindsAsked(List.copyOf(parts), List.copyOf(yearShifts)),
+                asked -> Optional.ofNullable(kindsOfYear(asked.parts(), asked.yearShifts())))
+                .orElse(null);
+    }
+
+    /** What the kinds of year are asked of: the parts and the year shifts, each with the dates it
+     *  is defined at, which is all there is to the answer. */
+    private record KindsAsked(List<Part> parts, List<DateTranslation> yearShifts) {}
+
+    /** Answers by what was asked. A pure function of its key; the same dates and moves are asked
+     *  again by every way of every relation over them, and each answer counts the days of the
+     *  years at the ends. */
+    private static final Map<KindsAsked, Optional<List<List<Origin>>>> KINDS =
+            new ConcurrentHashMap<>();
+
+    /** {@link #byTheYearsOf}, worked out. */
+    private static List<List<Origin>> kindsOfYear(List<Part> parts,
+                                                  List<DateTranslation> yearShifts) {
         DateTranslation year = yearShifts.isEmpty() ? DateTranslation.none()
                 : yearShifts.getFirst();
         for (DateTranslation each : yearShifts) {
@@ -130,7 +150,7 @@ final class DatesThatStandInEveryYear {
             }
             out.add(held);
         }
-        return out;
+        return List.copyOf(out);
     }
 
     /**
@@ -212,27 +232,25 @@ final class DatesThatStandInEveryYear {
                 LocalDate.of(year, 1, 1).toEpochDay() - within.offsetDays());
         long to = Math.min(within.last(),
                 LocalDate.of(year, 12, 31).toEpochDay() - within.offsetDays());
-        List<Origin> out = new ArrayList<>();
-        List<List<ExactRatio>> seen = new ArrayList<>();
+        // Keyed by what the parts come to, the first origin to come to it kept.
+        Map<List<Integer>, Origin> out = new LinkedHashMap<>();
         LongStream.rangeClosed(from, to).forEach(origin -> {
             for (DateTranslation each : yearShifts) {
                 if (LocalDate.ofEpochDay(origin + each.offsetDays()).getYear() != year) {
                     return;
                 }
             }
-            int[] here = new int[parts.size()];
-            for (int i = 0; i < here.length; i++) {
-                Part part = parts.get(i);
-                here[i] = part.of(LocalDate.ofEpochDay(origin + part.moved().offsetDays()));
+            List<Integer> taken = new ArrayList<>(parts.size());
+            for (Part part : parts) {
+                taken.add(part.of(LocalDate.ofEpochDay(origin + part.moved().offsetDays())));
             }
-            List<ExactRatio> taken = ratiosOf(here);
-            if (!seen.contains(taken)) {
-                seen.add(taken);
+            out.computeIfAbsent(taken, _ -> {
                 LocalDate at = LocalDate.ofEpochDay(origin);
-                out.add(new Origin(at.getMonthValue(), at.getDayOfMonth(), taken));
-            }
+                return new Origin(at.getMonthValue(), at.getDayOfMonth(),
+                        ratiosOf(taken.stream().mapToInt(Integer::intValue).toArray()));
+            });
         });
-        return out;
+        return List.copyOf(out.values());
     }
 
     private static List<ExactRatio> ratiosOf(int[] numbers) {

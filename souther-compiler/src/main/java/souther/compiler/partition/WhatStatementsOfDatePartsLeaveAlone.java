@@ -64,8 +64,15 @@ final class WhatStatementsOfDatePartsLeaveAlone {
                 || !stayInsideTheType(statements)) {
             return false;
         }
-        List<List<NumericTerm.TakenOf>> terms = new ArrayList<>();
-        List<List<List<DatesThatStandInEveryYear.Origin>>> kinds = new ArrayList<>();
+        long[] constants = new long[statements.size()];
+        for (int i = 0; i < constants.length; i++) {
+            Long constant = YearsAWayAllows.asLongOrNull(statements.get(i).form().constant());
+            if (constant == null) {
+                return false;
+            }
+            constants[i] = constant;
+        }
+        List<List<Set<List<Long>>>> kinds = new ArrayList<>();
         for (Map.Entry<TermPath, Set<NumericTerm.TakenOf>> date : partsOfEachDate.entrySet()) {
             List<NumericTerm.TakenOf> parts = List.copyOf(date.getValue());
             DateTranslation held = days.get(date.getKey());
@@ -88,13 +95,14 @@ final class WhatStatementsOfDatePartsLeaveAlone {
             }
             List<List<DatesThatStandInEveryYear.Origin>> ofTheYears =
                     DatesThatStandInEveryYear.byTheYearsOf(asked, shifts);
-            if (ofTheYears == null) {
+            List<Set<List<Long>>> sums = ofTheYears == null ? null
+                    : partsOfTheSums(statements, parts, ofTheYears);
+            if (sums == null) {
                 return false;
             }
-            terms.add(parts);
-            kinds.add(ofTheYears);
+            kinds.add(sums);
         }
-        return everyKindHoldsAll(statements, terms, kinds, new ArrayList<>());
+        return everyKindHoldsAll(statements, constants, kinds, new ArrayList<>());
     }
 
     /** {@code move}, defined only at the dates {@code days} says the date may be, or null where
@@ -104,17 +112,18 @@ final class WhatStatementsOfDatePartsLeaveAlone {
     }
 
     /** Whether some choice holds every statement at each kind of year of each date, taken with
-     *  each kind of the dates after it: {@code chosen} holds the kinds taken of those before. */
-    private static boolean everyKindHoldsAll(
-            List<TakenConstraint.Affine> statements, List<List<NumericTerm.TakenOf>> terms,
-            List<List<List<DatesThatStandInEveryYear.Origin>>> kinds,
-            List<List<DatesThatStandInEveryYear.Origin>> chosen) {
+     *  each kind of the dates after it: {@code chosen} holds the kinds taken of those before, as
+     *  the parts of the sums their months and days come to ({@link #partsOfTheSums}). */
+    private static boolean everyKindHoldsAll(List<TakenConstraint.Affine> statements,
+                                             long[] constants,
+                                             List<List<Set<List<Long>>>> kinds,
+                                             List<Set<List<Long>>> chosen) {
         if (chosen.size() == kinds.size()) {
-            return someChoiceHoldsAll(statements, terms, chosen);
+            return someChoiceHolds(statements, chosen, 0, constants);
         }
-        for (List<DatesThatStandInEveryYear.Origin> kind : kinds.get(chosen.size())) {
+        for (Set<List<Long>> kind : kinds.get(chosen.size())) {
             chosen.add(kind);
-            boolean holds = everyKindHoldsAll(statements, terms, kinds, chosen);
+            boolean holds = everyKindHoldsAll(statements, constants, kinds, chosen);
             chosen.removeLast();
             if (!holds) {
                 return false;
@@ -190,60 +199,55 @@ final class WhatStatementsOfDatePartsLeaveAlone {
                        Map<TermPath, List<DateTranslation>> shiftsOf) {}
 
     /**
-     * Whether every statement holds at some choice of a month and a day for each date.
+     * For each kind of year of one date, the choices of a month and a day it gives, as what
+     * {@code terms} come to in each statement there; null where a weight or a part is not a whole
+     * number.
      *
      * <p>A statement is a sum over the dates, so what a month and day of one date does to it is
      * the part of the sum its terms come to there, one number for each statement. Months and days
      * that come to the same numbers are one choice, and the choices of the dates are put
-     * together on those numbers and not on the several hundred origins each date has.
+     * together on those numbers and not on the several hundred origins each date has. Worked out
+     * once per date, and not again for every kind of the other dates it is taken with.
      */
-    private static boolean someChoiceHoldsAll(
-            List<TakenConstraint.Affine> statements, List<List<NumericTerm.TakenOf>> terms,
-            List<List<DatesThatStandInEveryYear.Origin>> standing) {
-        long[] constants = new long[statements.size()];
-        for (int i = 0; i < constants.length; i++) {
-            Long constant = YearsAWayAllows.asLongOrNull(statements.get(i).form().constant());
-            if (constant == null) {
-                return false;
-            }
-            constants[i] = constant;
-        }
-        List<Set<List<Long>>> choices = new ArrayList<>();
-        for (int date = 0; date < standing.size(); date++) {
-            Set<List<Long>> here = new LinkedHashSet<>();
-            for (DatesThatStandInEveryYear.Origin origin : standing.get(date)) {
-                List<Long> part = partOfTheSums(statements, terms.get(date), origin);
-                if (part == null) {
-                    return false;
-                }
-                here.add(part);
-            }
-            choices.add(here);
-        }
-        return someChoiceHolds(statements, choices, 0, constants);
-    }
-
-    /** What the terms of one date come to in each statement at {@code origin}, or null where a
-     *  weight or a part is not a whole number. */
-    private static List<Long> partOfTheSums(List<TakenConstraint.Affine> statements,
-                                            List<NumericTerm.TakenOf> terms,
-                                            DatesThatStandInEveryYear.Origin origin) {
-        List<Long> out = new ArrayList<>();
-        for (TakenConstraint.Affine statement : statements) {
-            long sum = 0;
+    private static List<Set<List<Long>>> partsOfTheSums(
+            List<TakenConstraint.Affine> statements, List<NumericTerm.TakenOf> terms,
+            List<List<DatesThatStandInEveryYear.Origin>> kinds) {
+        // Each weight once, nought where a statement does not weigh the term.
+        long[][] weights = new long[statements.size()][terms.size()];
+        for (int i = 0; i < weights.length; i++) {
             for (int j = 0; j < terms.size(); j++) {
-                ExactRatio weight = statement.form().coefs().get(terms.get(j));
-                if (weight == null) {
-                    continue;
-                }
-                Long weighed = YearsAWayAllows.asLongOrNull(weight);
-                Long part = YearsAWayAllows.asLongOrNull(origin.parts().get(j));
-                if (weighed == null || part == null) {
+                ExactRatio weight = statements.get(i).form().coefs().get(terms.get(j));
+                Long weighed = weight == null ? Long.valueOf(0)
+                        : YearsAWayAllows.asLongOrNull(weight);
+                if (weighed == null) {
                     return null;
                 }
-                sum += weighed * part;
+                weights[i][j] = weighed;
             }
-            out.add(sum);
+        }
+        List<Set<List<Long>>> out = new ArrayList<>();
+        for (List<DatesThatStandInEveryYear.Origin> kind : kinds) {
+            Set<List<Long>> here = new LinkedHashSet<>();
+            for (DatesThatStandInEveryYear.Origin origin : kind) {
+                long[] parts = new long[terms.size()];
+                for (int j = 0; j < parts.length; j++) {
+                    Long part = YearsAWayAllows.asLongOrNull(origin.parts().get(j));
+                    if (part == null) {
+                        return null;
+                    }
+                    parts[j] = part;
+                }
+                List<Long> sums = new ArrayList<>(weights.length);
+                for (long[] weighs : weights) {
+                    long sum = 0;
+                    for (int j = 0; j < parts.length; j++) {
+                        sum += weighs[j] * parts[j];
+                    }
+                    sums.add(sum);
+                }
+                here.add(sums);
+            }
+            out.add(here);
         }
         return out;
     }
