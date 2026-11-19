@@ -2421,7 +2421,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         Optional<Set<String>> declined = parametersDeclined(way);
         DemandReading.Answered past = way.gotPastAsAsked();
-        if (!heldWhole(way, written)
+        if (!nothingUnreadBearsOnIt(way)
                 || mayStopOnWhatItReads(past, read, way.region(), written, declined, Set.of())) {
             return Optional.of(Map.of());
         }
@@ -2431,9 +2431,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Map<NumericTerm, EachWayItComesOut> out = new LinkedHashMap<>();
         for (int at = 0; at < sides.size(); at++) {
             if (sides.get(at).number() == null
-                    || (sides.get(at).number() instanceof NumericTerm.FromOnePosition number
-                            && !whatTheRegionShowsOfItIsARow(number, along.conditions(), past,
-                                    declined, read))) {
+                    || !whatTheRegionShowsOfItIsARow(sides.get(at).number(), along.conditions(),
+                            past, declined, read)) {
                 continue;
             }
             EachWayItComesOut each = WhatARelationLeavesUndivided.eachWayItComesOut(
@@ -2543,7 +2542,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             List<OnAWay> conditions = conditionsOf(each, remainder);
-            boolean heldWhole = heldWhole(each, conditions);
+            boolean heldWhole = nothingUnreadBearsOnIt(each);
             Optional<Set<String>> declined = parametersDeclined(each);
             DemandReading.Answered past = each.gotPastAsAsked();
             WhatItLeaves along = each.narrowedBy().isPresent()
@@ -3169,18 +3168,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * Whether what {@code way} states, as {@code conditions}, is held by its region as far as this
-     * relation goes: nothing it declined bears on the relation ({@link #nothingUnreadBearsOnIt}),
-     * and every statement says which places it turns on ({@link OnAWay#turnsOn}). One whose places
-     * are not said may turn on any of them, which no reader of the way can hold apart from what
-     * the relation reads.
-     */
-    private boolean heldWhole(Reachability.Reaching way, List<OnAWay> conditions) {
-        return nothingUnreadBearsOnIt(way)
-                && conditions.stream().allMatch(each -> each.turnsOn().isPresent());
-    }
-
-    /**
      * The parameters this relation reads a place under: those of every place it is read off
      * ({@link #positionsRead}) — or empty where some side is read off no place this names, as what
      * an operation answered of something unnamed is, since that side may be read off any of them.
@@ -3487,22 +3474,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The positions {@code demand} turns on: the ones it places a row at, and, of a statement the
-     * run says whether it held, every place what it states reads — the strings a statement about
-     * their pieces is made of among them ({@link PositionsAStatementReads#everyPlaceItTurnsOn}).
-     * Those are what it depends on and not what a composer places, so a reader asking whether a
-     * statement reaches a place sees them, and the composer does not. Where what it states reads
-     * something other than places, which places it turns on is not said
-     * ({@link OnAWay#turnsOn}), and a way stating it is not held whole
-     * ({@link #leftWhereRowsArrive}).
+     * The positions {@code demand} turns on: the ones it places a row at, and the strings a
+     * statement about their pieces is made of. The second are what it depends on and not what a
+     * composer places, so a reader asking whether a statement reaches a place sees them, and the
+     * composer does not.
      */
     private static Set<TermPath> positionsADemandTurnsOn(RowDemand.OfACondition demand) {
-        if (!(demand instanceof RowDemand.ForTheRun run)) {
+        if (!(demand instanceof RowDemand.ForTheRun run) || run.fromStringsAt().isEmpty()) {
             return demand.positions();
         }
         Set<TermPath> out = new LinkedHashSet<>(demand.positions());
         out.addAll(run.fromStringsAt());
-        PositionsAStatementReads.everyPlaceItTurnsOn(run.statement()).ifPresent(out::addAll);
         return out;
     }
 
@@ -3593,17 +3575,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         /**
-         * Every place this turns on, which is its {@link #positions} — or empty where that is not
-         * said: a statement the run says whether it held turns on the places what it states reads
-         * ({@link PositionsAStatementReads#everyPlaceItTurnsOn}), and on any place at all where
-         * that reads something other than places.
+         * Every place this turns on, or empty where that is not said. Its {@link #positions} are
+         * where it places a row, which a statement the run says whether it held does not do: it
+         * places none, and turns on the places what it states reads ({@link
+         * PositionsAStatementReads#everyPlaceItTurnsOn}) — any place at all where that reads
+         * something other than places. A reader that asks of the places alone, and not of the
+         * rows that meet the statement, asks here.
          */
         Optional<Set<TermPath>> turnsOn() {
-            if (statedOfTheRun != null
-                    && PositionsAStatementReads.everyPlaceItTurnsOn(statedOfTheRun).isEmpty()) {
-                return Optional.empty();
+            if (statedOfTheRun == null) {
+                return Optional.of(positions);
             }
-            return Optional.of(positions);
+            return PositionsAStatementReads.everyPlaceItTurnsOn(statedOfTheRun).map(places -> {
+                Set<TermPath> out = new LinkedHashSet<>(positions);
+                out.addAll(places);
+                return out;
+            });
         }
 
         /** What it states as a form of the input's numbers held against nought, or null where it
@@ -4254,7 +4241,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * condition declined under a named place's parameter — any, where which parameters it may
      * name is not said.
      */
-    private boolean whatTheRegionShowsOfItIsARow(NumericTerm.FromOnePosition side,
+    private boolean whatTheRegionShowsOfItIsARow(NumericTerm side,
                                                  List<OnAWay> conditions,
                                                  DemandReading.Answered past,
                                                  Optional<Set<String>> declined,
@@ -9703,10 +9690,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             // asked of a position's, and of a total only as the totals of its elements, each shown
             // to take its run (summedOverTheElements): a total of evens lies at nought or more and
             // is never odd.
-            // With the other sides still to be chosen: a row puts every side somewhere, so where
-            // one lies is bounded by where the others can be.
+            // In a row: every number the way's statements tie it to is somewhere it can be, as it
+            // is where what the term is shown to take is read (SearchRegion#wholeRunOf).
             NumericDomain.Bounds holds = asARelationReadsIt(each.number() != null
-                    && region.projectionOf(each.number(), theOtherSides(i))
+                    && region.projectionOfARow(each.number())
                     instanceof NumericDomain.FormProjection.Within(NumericDomain.Bounds within)
                     ? within : each.position() != null ? positionsLie(each.position(), region)
                     : NumericDomain.Bounds.OPEN, carriers.get(i));
@@ -9788,18 +9775,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             terms.add(stepped == null ? term : term.takingEvery(stepped));
         }
         return terms;
-    }
-
-    /** The numbers of one place the sides other than the one at {@code at} are. */
-    private List<NumericTerm> theOtherSides(int at) {
-        List<NumericTerm> out = new ArrayList<>();
-        for (int i = 0; i < sides.size(); i++) {
-            if (i != at && sides.get(i).number() instanceof NumericTerm.FromOnePosition one
-                    && !one.equals(sides.get(at).number())) {
-                out.add(one);
-            }
-        }
-        return out;
     }
 
     /**

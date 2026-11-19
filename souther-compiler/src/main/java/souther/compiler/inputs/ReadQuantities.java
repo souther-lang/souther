@@ -2658,15 +2658,28 @@ final class ReadQuantities implements Quantities {
      */
     private ConstraintState<InputAtom> rulesAlong(NumericTerm term, StructuralContext way) {
         ConstraintState<InputAtom> rules = holding(effectiveConstraints(way), term, way);
-        Set<NumericTerm> taken = new LinkedHashSet<>();
-        assumed.forEach(each -> taken.addAll(each.terms()));
-        taken.remove(term);
-        for (NumericTerm each : NumericTerms.inOrder(taken)) {
+        for (NumericTerm each : takenInBeside(term)) {
             if (stands(List.of(each), way)) {
                 rules = holding(rules, each, way);
             }
         }
         return insideItsOrder(rules, NumericTerms.ordered(List.of(term)), way);
+    }
+
+    /** Every number a condition taken in names but {@code term}, each once, in the one order. */
+    private List<NumericTerm> takenInBeside(NumericTerm term) {
+        Set<NumericTerm> taken = new LinkedHashSet<>();
+        assumed.forEach(each -> taken.addAll(each.terms()));
+        taken.remove(term);
+        return NumericTerms.inOrder(taken);
+    }
+
+    /**
+     * Where {@code term} runs in a row: with every number taken in still to be chosen, the
+     * numbers a run shown whole holds where they can be ({@link #rulesAlong}).
+     */
+    public NumericDomain.FormProjection projectionOfARow(NumericTerm term) {
+        return projectionOf(term, takenInBeside(term));
     }
 
     private NumericDomain.Bounds runShownWhole(NumericTerm term) {
