@@ -264,6 +264,97 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
         assertFalse(report.contains("not worked out"), report);
     }
 
+    /**
+     * The same over dates. Along the way the first reading decided true, the year of {@code on}
+     * is shown only from 1960, where a birthday from 1900 is sixty: the region holds the year of
+     * the birthday where the birthday lies, so the years before have no row along it.
+     */
+    @Test
+    void aComparisonOfYearsReadAgainIsReadOverTheYearsTheBoundLeaves() {
+        Compilation compilation = compiled("""
+                module d
+
+                data P = { birthday: Date, disabled: Bool }
+                    invariant birthday >= Date("1900-01-01")
+
+                let old (p: P, on: Date): Int =
+                    if Date.year(on) - Date.year(p.birthday) >= 60 || p.disabled
+                    then 1800 else 1300
+
+                behavior ceiling : (p: P, on: Date, r: Int) -> Int
+                let ceiling (p, on, r) =
+                    if r >= old(p, on) then old(p, on) else 3
+                """);
+        String report = report(compilation);
+
+        assertTrue(report.contains("measurement: complete"), report);
+        assertFalse(report.contains("not read"), report);
+        assertEquals(List.of("Date.year(on): -999999999 <= x <= 1959",
+                "Date.year(on): 1959 < x <= 999999999"),
+                classes(compilation).get("Date.year(on)"), report);
+    }
+
+    /**
+     * An age worked out through the months and days, read again. The statements of months and
+     * days on each way hold at some month and day in every year the dates may be in, so the
+     * years are read through the statements of years alone.
+     */
+    @Test
+    void anAgeThroughTheMonthsAndDaysReadAgainIsRead() {
+        String report = report(compiled("""
+                module d
+
+                data P = { birthday: Date, disabled: Bool }
+                    invariant birthday >= Date("1900-01-01")
+
+                let ageOn (birthday: Date, on: Date): Int =
+                    Date.year(on) - Date.year(birthday)
+                        - (if Date.month(on) * 100 + Date.day(on)
+                                < Date.month(birthday) * 100 + Date.day(birthday)
+                           then 1 else 0)
+
+                let old (p: P, on: Date): Int =
+                    if ageOn(Date.addDays(0 - 1, p.birthday), on) >= 60 || p.disabled
+                    then 1800 else 1300
+
+                behavior ceiling : (p: P, on: Date, r: Int) -> Int
+                let ceiling (p, on, r) =
+                    if r >= old(p, on) then old(p, on) else 3
+                """));
+
+        assertTrue(report.contains("measurement: complete"), report);
+        assertFalse(report.contains("not read"), report);
+    }
+
+    /**
+     * A way whose statements no date meets shows no row. The comparison is read again only along
+     * ways through the thirtieth of February, which the region holds as a month and a day it
+     * leaves and no date is. Along the way that decided it true, the region leaves a birthday's
+     * year up to sixty before the calendar's last, and those years are no row's: no class of the
+     * birthday's years is made of them.
+     */
+    @Test
+    void aYearAWaysMonthsAndDaysKeepFromEveryDateIsNoRowAlongIt() {
+        Compilation compilation = compiled("""
+                module d
+
+                data P = { birthday: Date }
+                    invariant birthday >= Date("1900-01-01")
+
+                let old (p: P, on: Date): Int =
+                    if Date.year(on) - Date.year(p.birthday) >= 60 then 1800 else 1300
+
+                behavior ceiling : (p: P, on: Date, r: Int) -> Int
+                let ceiling (p, on, r) =
+                    if Date.month(on) * 100 + Date.day(on) == 230 then
+                        (if r >= old(p, on) then old(p, on) else 3)
+                    else 4
+                """);
+
+        assertFalse(classes(compilation).containsKey("Date.year(p.birthday)"),
+                classes(compilation) + "\n" + report(compilation));
+    }
+
     /** The same comparison over whole numbers, which is how the section reads it. */
     @Test
     void aBoundOnOneNumberSettlesTheOtherWhereItIsAWholeNumber() {

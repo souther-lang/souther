@@ -129,6 +129,23 @@ class ATermIsProjectedWithTheTermsStillToBeChosenTest {
                 contradicting.projectionOf(second));
     }
 
+    /**
+     * A run shown whole is of rows, and a row holds every term where it can be: the earlier year
+     * is a year, so the later is taken from the first year the calendar has and seventy on, and
+     * not from the calendar's first, which no row with the earlier a year has.
+     */
+    @Test
+    void aRunShownWholeIsOfRowsThatHoldTheOtherTermWhereItCanBe() {
+        NumericTerm first = year("pair", "p.first");
+        NumericTerm second = year("pair", "p.second");
+        SearchRegion region = apart(region("pair"), second, first, 70);
+
+        NumericDomain.Bounds run = region.wholeRunOf((NumericTerm.FromOnePosition) second);
+
+        assertNotNull(run, "the later year takes every year from seventy on");
+        assertEquals(floorOf(within(region.projectionOf(first))) + 70, floorOf(run));
+    }
+
     /** {@code later - earlier >= years}, taken in as a condition of a way is. */
     private static SearchRegion apart(SearchRegion region, NumericTerm later, NumericTerm earlier,
                                       long years) {

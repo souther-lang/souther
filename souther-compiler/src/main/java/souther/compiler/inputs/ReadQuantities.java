@@ -2647,11 +2647,26 @@ final class ReadQuantities implements Quantities {
 
     /**
      * The rules of {@code way} that a run of {@code term} is read of: those it holds, inside where
-     * the order of every number they speak of stops ({@link #insideItsOrder}).
+     * the order of every number they speak of stops ({@link #insideItsOrder}), with what
+     * {@code term} and every number taken in is on its own ({@link #holding}).
+     *
+     * <p>Every number taken in, and not only the one asked. A run is of values some row takes,
+     * and a row holds each number where it can be: a condition tying the year of one date to the
+     * year of another leaves the first a value only where the second has one, and the second's
+     * own run — the years its date lies in — is no rule anybody took in. Asked of {@code term}
+     * alone, the second is any number, and a year no row has is shown taken.
      */
     private ConstraintState<InputAtom> rulesAlong(NumericTerm term, StructuralContext way) {
-        return insideItsOrder(holding(effectiveConstraints(way), term, way),
-                NumericTerms.ordered(List.of(term)), way);
+        ConstraintState<InputAtom> rules = holding(effectiveConstraints(way), term, way);
+        Set<NumericTerm> taken = new LinkedHashSet<>();
+        assumed.forEach(each -> taken.addAll(each.terms()));
+        taken.remove(term);
+        for (NumericTerm each : NumericTerms.inOrder(taken)) {
+            if (stands(List.of(each), way)) {
+                rules = holding(rules, each, way);
+            }
+        }
+        return insideItsOrder(rules, NumericTerms.ordered(List.of(term)), way);
     }
 
     private NumericDomain.Bounds runShownWhole(NumericTerm term) {
