@@ -5,7 +5,6 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
-import souther.compiler.report.AdequacyReport;
 
 import java.lang.classfile.ClassFile;
 import java.lang.constant.ClassDesc;
@@ -17,9 +16,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -339,19 +336,20 @@ class AComparisonSomeRunReachesIsNeverSaidToHaveNoLineTest {
         return out;
     }
 
-    /** For each behavior, whether the comparison on the gate was said to have no line. */
+    /**
+     * For each behavior, whether the comparison on the gate was said to have no line: what the
+     * rules divide is derived with no rows measured, so no row is searched for.
+     */
     private static Map<String, Boolean> noLineAtTheGate(String source) {
         Compilation made = Compilation.ofSource(source, "Main");
-        made.measure(Adequacy.Asked.fullReport());
+        made.measure(Adequacy.Asked.reportOnly(Adequacy.Level.OFF));
         ACompiledModel.compiles(made);
         Map<String, Boolean> out = new LinkedHashMap<>();
-        AdequacyReport.of(made).modules().getFirst().behaviors().forEach(behavior -> {
-            Set<String> without = behavior.partition().notRead().stream()
-                    .filter(PartitionEvidence.NotRead.ARule.class::isInstance)
-                    .map(PartitionEvidence.NotRead::at)
-                    .collect(Collectors.toUnmodifiableSet());
-            out.put(behavior.name(), without.contains("x.gate"));
-        });
+        made.db().ask(new Adequacy.Coverage(MODULE)).value().forEach((behavior, partition) ->
+                out.put(behavior, partition.notRead().stream()
+                        .filter(PartitionEvidence.NotRead.ARule.class::isInstance)
+                        .map(PartitionEvidence.NotRead::at)
+                        .anyMatch("x.gate"::equals)));
         return out;
     }
 }
