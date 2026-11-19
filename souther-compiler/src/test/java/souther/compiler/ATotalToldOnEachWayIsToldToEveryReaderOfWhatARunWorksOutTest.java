@@ -16,37 +16,53 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * A total whose stop the rule that read it tells on each way of keeping its elements is told so to
+ * A total whose stop the rule that read it says on each way of keeping its elements is said so to
  * every reader of what a run works out, and not only to the reading that stopped at it: the
- * evaluation of the answer of an arm, the condition of a choice, and the quotient a mean is. Each
- * comparison below may stop a run where two of {@code q} pass an {@code Int}, and is told so and
- * nothing else: no reader says a run may stop where nothing here says.
+ * evaluation of the answer of an arm, the condition of a choice, and the quotient a mean is.
  *
- * <p>Each form is held against the same total written as choices, which the rule reads way by
- * way, so that a reader that asks only one of the two readings is found.
+ * <p>Each form is written twice. Keeping {@code q} where it is above nought, a way keeps two of
+ * it and a run may pass an {@code Int} there: the stop is told, and no reader says a run may stop
+ * where nothing here says. Keeping it only where it is below a hundred, no way a run takes passes
+ * the type: nothing is told, and nothing is said to be untold. A reader that told the stop on
+ * rows no way it is worked out on reaches, or said it untold where it is said on the ways, is
+ * found by one of the two; one that told nothing, or everything, by the other.
+ *
+ * <p>Each is held against the same total written as choices, which the rule reads way by way,
+ * so that a reader that asks only one of the two readings is found. What a mean divides by is
+ * no stop told here: the quotient is read as answering where the count is not nought, and the
+ * rows are kept to that.
  */
 class ATotalToldOnEachWayIsToldToEveryReaderOfWhatARunWorksOutTest {
 
-    private static final String FILTERED = "List.sum(List.filter(x -> x > 0, [q, q]))";
-
-    private static final String CHOSEN = "List.sum(List.map(x -> if x > 0 then x else 0, [q, q]))";
-
     private static final Map<String, String> FORMS = new LinkedHashMap<>();
 
+    private static final Map<String, String> EXPECTED = new LinkedHashMap<>();
+
     static {
-        for (Map.Entry<String, String> total : Map.of("filtered", FILTERED, "chosen", CHOSEN)
-                .entrySet()) {
-            FORMS.put("theAnswerOfAnArm " + total.getKey(),
-                    "(if q > 3 then " + total.getValue() + " else 0) >= 10");
-            FORMS.put("theConditionOfAChoice " + total.getKey(),
-                    "(if " + total.getValue() + " > 5 then 1 else 2) >= 2");
+        for (Map.Entry<String, String> kept : Map.of("past the type", "x > 0",
+                "within the type", "x > 0 && x < 100").entrySet()) {
+            String filtered = "List.sum(List.filter(x -> " + kept.getValue() + ", [q, q]))";
+            String chosen = "List.sum(List.map(x -> if " + kept.getValue()
+                    + " then x else 0, [q, q]))";
+            String said = kept.getKey().equals("past the type") ? "told true, untold 0"
+                    : "told false, untold 0";
+            for (Map.Entry<String, String> total : Map.of("filtered", filtered, "chosen", chosen)
+                    .entrySet()) {
+                String suffix = " " + total.getKey() + " " + kept.getKey();
+                FORMS.put("theAnswerOfAnArm" + suffix,
+                        "(if q > 3 then " + total.getValue() + " else 0) >= 10");
+                FORMS.put("theConditionOfAChoice" + suffix,
+                        "(if " + total.getValue() + " > 5 then 1 else 2) >= 2");
+                FORMS.put("aMean" + suffix, total.getValue() + " / List.length(List.filter(x -> "
+                        + kept.getValue() + ", [q, q])) >= 10");
+            }
+            FORMS.keySet().stream().filter(name -> name.endsWith(kept.getKey()))
+                    .forEach(name -> EXPECTED.put(name, said));
         }
-        FORMS.put("aMean filtered", FILTERED + " / List.length(List.filter(x -> x > 0, [q, q]))"
-                + " >= 10");
     }
 
     @Test
-    void everyReaderTellsTheStopAndLeavesNoneUntold() {
+    void everyReaderTellsTheStopWhereAWayPassesTheTypeAndLeavesNoneUntold() {
         List<String> names = new ArrayList<>(FORMS.keySet());
         StringBuilder model = new StringBuilder(
                 "module demo\n\ndata In = { q: Int }\ndata Out = Int\n");
@@ -62,14 +78,12 @@ class ATotalToldOnEachWayIsToldToEveryReaderOfWhatARunWorksOutTest {
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         Map<String, String> said = new LinkedHashMap<>();
-        Map<String, String> expected = new LinkedHashMap<>();
         Map<String, int[]> notes = notes(report);
         for (int at = 0; at < names.size(); at++) {
             int[] counts = notes.getOrDefault("b" + at, new int[2]);
             said.put(names.get(at), "told " + (counts[0] > 0) + ", untold " + counts[1]);
-            expected.put(names.get(at), "told true, untold 0");
         }
-        assertEquals(expected, said, report);
+        assertEquals(EXPECTED, said, report);
     }
 
     /** How many {@code may stop a run} notes, and how many said to stop where nothing says, each

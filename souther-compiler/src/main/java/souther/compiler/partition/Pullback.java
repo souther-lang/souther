@@ -1137,8 +1137,15 @@ final class Pullback {
                 out.add(new StopEvidence.OnAnArm(each.reached(), arm.evaluatedStops()));
             }
         }
-        // A total read once for every way of keeping its elements is worked out way by way: each
-        // way's at where a run takes it, whatever the comparison over it comes to there.
+        // A total is worked out way by way, each way's where a run takes it, whatever the
+        // comparison over it comes to there: read on each way, where the way's reading stands,
+        for (Meaning.StepOnAnArm each : stated.meaning().stepsDownTheArms(
+                theRule::isAWayOfATotal)) {
+            for (OnThisArm arm : theRule.onTheArms(new ArmRead.OfAWayOfATotal(each.step()))) {
+                out.add(new StopEvidence.OnAnArm(each.reached(), arm.stops()));
+            }
+        }
+        // and read once for every way, where the ways are written out from.
         for (Meaning.StepOnAnArm each : stated.meaning().stepsDownTheArms(
                 theRule::tellsOnTheWays)) {
             out.addAll(theRule.onTheWays((Derivation.WaysWrittenWhenAsked) each.step(),
@@ -3239,10 +3246,10 @@ final class Pullback {
          *  arithmetic stopped at among them, which tells what working them out may stop a run at;
          *  null where it reads none so. */
         private final Tallied.Value<Predicate<Core>> answersFor = said.value(null);
-        /** The totals the rule reads once for each way of keeping their elements and tells, on
-         *  each way, where working them out stops
-         *  ({@link AffineReading.WhatTheAnalysisAnswersFor#toldWhereItStops}). */
-        private final Tallied.Table<Core, Boolean> toldWhereItStops =
+        /** The totals the rule reads once for each way of keeping their elements, each with
+         *  whether what working it out may stop a run at is said on every way it reads it in
+         *  ({@link #saidOnItsWays}). */
+        private final Tallied.Table<Core, Boolean> saidOnItsWays =
                 said.table(IdentityHashMap::new);
         /** The expressions the rule read as the form of one operand of theirs, each with that
          *  operand ({@link AffineReading.WhatTheAnalysisAnswersFor#readByTheFormOf}). */
@@ -3280,19 +3287,26 @@ final class Pullback {
             readByTheFormOf.put(call, dividend);
         }
 
-        /** That the rule read {@code total} in one more way, and {@code told} whether it told
-         *  where working it out stops there. One way it did not tell it in is every way's. */
-        void tellsWhereItStops(Core total, boolean told) {
+        /** That the rule read {@code total} in one more way, and {@code said} whether what
+         *  working it out may stop a run at is said there. One way it is not said in is every
+         *  way's. */
+        void saysOnItsWays(Core total, boolean said) {
             Core bare = Core.withoutStanding(total);
-            if (!told || toldWhereItStops.get(bare) == null) {
-                toldWhereItStops.put(bare, told);
+            if (!said || saidOnItsWays.get(bare) == null) {
+                saidOnItsWays.put(bare, said);
             }
         }
 
-        /** Whether the rule tells where working out {@code held} stops, on every way it read it
-         *  in ({@link #tellsWhereItStops}). */
-        boolean toldWhereItStops(Core held) {
-            return Boolean.TRUE.equals(toldWhereItStops.get(held));
+        /**
+         * Whether what working out {@code held} may stop a run at, of its own, is said on every way
+         * the rule read it in, by what a run taking each way is kept to work out
+         * ({@link #saysOnItsWays}): told as the operation it is, or said to be left untold. Neither
+         * that no run stops in it nor that every stop is told; only that a reader need not say it
+         * again. A reader that asks it so takes it as no stop of its own left untold, and nothing a
+         * row is shown to get past.
+         */
+        boolean saidOnItsWays(Core held) {
+            return Boolean.TRUE.equals(saidOnItsWays.get(held));
         }
 
         Core readByTheFormOf(Core held) {
@@ -3359,17 +3373,24 @@ final class Pullback {
             return !onTheArms(new ArmRead.OfTheAnswerOfAnArm(step)).isEmpty();
         }
 
+        /** Whether {@code step} is the reading of a comparison on a way of keeping the elements
+         *  of a total this candidate read way by way ({@link ArmRead.OfAWayOfATotal}). */
+        boolean isAWayOfATotal(Derivation step) {
+            return !onTheArms(new ArmRead.OfAWayOfATotal(step)).isEmpty();
+        }
+
         /**
          * That a run taking a way of {@code ways} works out what {@code totalOfAWay} says of the
-         * total {@code total} that way comes to: where working the total out stops is told on
-         * each way, by this and nothing else ({@link #tellsWhereItStops}), so it is told exactly
-         * where what each way works out is kept.
+         * total {@code total} that way comes to: what working the total out may stop a run at is
+         * said on each way, by this and nothing else ({@link #saysOnItsWays}), so it is said
+         * exactly where what each way works out is kept — told, or left untold where a way's
+         * total is no form of the input's numbers ({@link #onTheWays}).
          */
         void readOnTheWays(Derivation.WaysWrittenWhenAsked ways, Core total,
                            Function<LinearForm<Quantity>, UndividedByARelation.Working>
                                    totalOfAWay) {
             onTheWays.put(ways, totalOfAWay);
-            tellsWhereItStops(total, true);
+            saysOnItsWays(total, true);
         }
 
         /** Whether {@code step} is a comparison over a total this candidate tells, on each way of
@@ -3440,8 +3461,8 @@ final class Pullback {
             kept.onTheArms.view().forEach((read, arms) -> arms.view().forEach(each ->
                     readOnAnArm(read, each)));
             kept.onTheWays.view().forEach(onTheWays::put);
-            // Where a total's stop is told goes with what tells it on each way.
-            kept.toldWhereItStops.view().forEach(this::tellsWhereItStops);
+            // That a total's stop is said on its ways goes with what says it on each way.
+            kept.saidOnItsWays.view().forEach(this::saysOnItsWays);
         }
     }
 
@@ -3477,6 +3498,21 @@ final class Pullback {
             @Override
             public boolean equals(Object other) {
                 return other instanceof OfTheAnswerOfAnArm(Derivation same) && same == step;
+            }
+
+            @Override
+            public int hashCode() {
+                return System.identityHashCode(step);
+            }
+        }
+
+        /** The step {@code step}, the reading of a comparison on one way of keeping the elements
+         *  of a total, read way by way: where a run taking the way works the total out. */
+        record OfAWayOfATotal(Derivation step) implements ArmRead {
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof OfAWayOfATotal(Derivation same) && same == step;
             }
 
             @Override
@@ -3628,7 +3664,7 @@ final class Pullback {
     /**
      * What the analysis of the candidate {@code theRule} answers for, as every reader of what a
      * run works out under it asks: the one place what the candidate said is made into what a
-     * reading takes as answered, and where it tells a total's stop on each way among it.
+     * reading takes as answered, and the totals whose stop it says on each way among it.
      */
     private AffineReading.WhatTheAnalysisAnswersFor answersOf(Trial theRule) {
         Predicate<Core> readAgain = theRule.answersFor();
@@ -3638,7 +3674,7 @@ final class Pullback {
                 held -> theRule.dividendBesideTheRows(Core.withoutStanding(held)),
                 this::boundValueOf,
                 held -> theRule.landsInAMonth(Core.withoutStanding(held)),
-                held -> theRule.toldWhereItStops(Core.withoutStanding(held)));
+                held -> theRule.saidOnItsWays(Core.withoutStanding(held)));
     }
 
     /**
@@ -11796,7 +11832,7 @@ final class Pullback {
         try (Restore _ = aggregatesInACase.pushing(inThisWay)) {
             Derivation read = again.apply(on -> on);
             if (!total.counted() && Core.withoutStanding(total.call()).type() == Type.INT) {
-                trial().tellsWhereItStops(total.call(), toldOnTheArms(read, form));
+                trial().saysOnItsWays(total.call(), toldOnTheArms(read, form));
             }
             return read;
         } finally {
@@ -11809,9 +11845,13 @@ final class Pullback {
     /**
      * Whether where a total of whole numbers that comes to {@code form} stops is told on the way
      * {@code read} reads it in: nowhere, where every number it may come to is an {@code Int}; and
-     * otherwise as what a run taking the way works out, recorded on each arm the reading has
-     * ({@link #readOnAnArm}). Not told where there is no reading, no arm to record it on, or no
-     * form of the input's numbers to tell: what says it was told is what was recorded.
+     * otherwise as what a run taking the way works out, recorded on the way's reading itself
+     * ({@link ArmRead.OfAWayOfATotal}), which stands where the way is taken. Not by a relation
+     * the reading holds: one may be the condition of a choice inside the way, worked out before
+     * any way is taken, and a relation alike may be read where no way is. Each relation it holds
+     * is told what a row of it gets past, and nothing of where a run stops. Not told where there
+     * is no reading, or no form of the input's numbers to tell: what says it was told is what was
+     * recorded.
      */
     private boolean toldOnTheArms(Derivation read, LinearForm<Quantity> form) {
         UndividedByARelation.Working worked = whatAnIntTotalWorksOut(form, this.read);
@@ -11821,14 +11861,18 @@ final class Pullback {
         if (worked.operations().isEmpty()) {
             return true;
         }
-        List<ArmRead> arms = read == null ? List.of() : ArmRead.in(read);
-        if (arms.isEmpty()) {
+        if (read == null) {
             return false;
         }
-        OnThisArm arm = new OnThisArm(() -> AffineReading.WorkedOut.ofWhatIsToldOf(worked),
-                () -> UndividedByARelation.Working.NOTHING, whatDecidedTheArm());
-        for (ArmRead each : arms) {
-            trial().readOnAnArm(each, arm);
+        List<UndividedByARelation.Working> decided = whatDecidedTheArm();
+        trial().readOnAnArm(new ArmRead.OfAWayOfATotal(read),
+                new OnThisArm(() -> AffineReading.WorkedOut.ofWhatIsToldOf(worked),
+                        () -> UndividedByARelation.Working.NOTHING, decided));
+        OnThisArm forTheRows = new OnThisArm(() -> new AffineReading.WorkedOut(worked,
+                StopEvidence.ofWhatIsToldOf(UndividedByARelation.Working.NOTHING)),
+                () -> UndividedByARelation.Working.NOTHING, decided);
+        for (ArmRead each : ArmRead.in(read)) {
+            trial().readOnAnArm(each, forTheRows);
         }
         return true;
     }

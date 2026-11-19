@@ -93,14 +93,22 @@ class AWayOfATotalNothingTellsLeavesItsStopUntoldTest {
         assertTrue(said.getFirst().stops().operations().aStopUntold());
     }
 
-    /** Told where it is kept, and carried with it to the candidate it is kept under. */
+    /**
+     * Said on its ways where what each way works out is kept, and carried with it to the
+     * candidate it is kept under — whatever the ways come to: said is not told, and a way whose
+     * total no reading tells is said to be untold.
+     */
     @Test
-    void whereTheStopIsToldGoesWithWhatTellsIt() {
+    void thatTheStopIsSaidOnItsWaysGoesWithWhatSaysIt() {
         Pullback.Trial read = new Pullback.Trial();
-        read.readOnTheWays(waysOf(1), TOTAL, _ -> UndividedByARelation.Working.NOTHING);
-        assertTrue(read.toldWhereItStops(TOTAL));
+        Derivation.WaysWrittenWhenAsked ways = waysOf(1);
+        read.readOnTheWays(ways, TOTAL, _ -> null);
+        assertTrue(read.saidOnItsWays(TOTAL));
+        assertTrue(read.onTheWays(ways, ANYWHERE).stream()
+                        .allMatch(each -> each.stops().operations().aStopUntold()),
+                "said on its ways, as untold on each");
         Pullback.Trial keeping = new Pullback.Trial();
         keeping.absorb(read);
-        assertTrue(keeping.toldWhereItStops(TOTAL));
+        assertTrue(keeping.saidOnItsWays(TOTAL));
     }
 }
