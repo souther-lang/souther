@@ -2421,7 +2421,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         Optional<Set<String>> declined = parametersDeclined(way);
         DemandReading.Answered past = way.gotPastAsAsked();
-        if (!nothingUnreadBearsOnIt(way)
+        if (!heldWhole(way, written)
                 || mayStopOnWhatItReads(past, read, way.region(), written, declined, Set.of())) {
             return Optional.of(Map.of());
         }
@@ -2430,7 +2430,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 declared.sources(), carriers);
         Map<NumericTerm, EachWayItComesOut> out = new LinkedHashMap<>();
         for (int at = 0; at < sides.size(); at++) {
-            if (sides.get(at).number() == null) {
+            if (sides.get(at).number() == null
+                    || (sides.get(at).number() instanceof NumericTerm.FromOnePosition number
+                            && !whatTheRegionShowsOfItIsARow(number, along.conditions(), past,
+                                    declined, read))) {
                 continue;
             }
             EachWayItComesOut each = WhatARelationLeavesUndivided.eachWayItComesOut(
@@ -2540,7 +2543,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 continue;
             }
             List<OnAWay> conditions = conditionsOf(each, remainder);
-            boolean heldWhole = nothingUnreadBearsOnIt(each);
+            boolean heldWhole = heldWhole(each, conditions);
             Optional<Set<String>> declined = parametersDeclined(each);
             DemandReading.Answered past = each.gotPastAsAsked();
             WhatItLeaves along = each.narrowedBy().isPresent()
@@ -3166,6 +3169,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
+     * Whether what {@code way} states, as {@code conditions}, is held by its region as far as this
+     * relation goes: nothing it declined bears on the relation ({@link #nothingUnreadBearsOnIt}),
+     * and every statement says which places it turns on ({@link OnAWay#turnsOn}). One whose places
+     * are not said may turn on any of them, which no reader of the way can hold apart from what
+     * the relation reads.
+     */
+    private boolean heldWhole(Reachability.Reaching way, List<OnAWay> conditions) {
+        return nothingUnreadBearsOnIt(way)
+                && conditions.stream().allMatch(each -> each.turnsOn().isPresent());
+    }
+
+    /**
      * The parameters this relation reads a place under: those of every place it is read off
      * ({@link #positionsRead}) — or empty where some side is read off no place this names, as what
      * an operation answered of something unnamed is, since that side may be read off any of them.
@@ -3472,17 +3487,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The positions {@code demand} turns on: the ones it places a row at, and the strings a
-     * statement about their pieces is made of. The second are what it depends on and not what a
-     * composer places, so a reader asking whether a statement reaches a place sees them, and the
-     * composer does not.
+     * The positions {@code demand} turns on: the ones it places a row at, and, of a statement the
+     * run says whether it held, every place what it states reads — the strings a statement about
+     * their pieces is made of among them ({@link PositionsAStatementReads#everyPlaceItTurnsOn}).
+     * Those are what it depends on and not what a composer places, so a reader asking whether a
+     * statement reaches a place sees them, and the composer does not. Where what it states reads
+     * something other than places, which places it turns on is not said
+     * ({@link OnAWay#turnsOn}), and a way stating it is not held whole
+     * ({@link #leftWhereRowsArrive}).
      */
     private static Set<TermPath> positionsADemandTurnsOn(RowDemand.OfACondition demand) {
-        if (!(demand instanceof RowDemand.ForTheRun run) || run.fromStringsAt().isEmpty()) {
+        if (!(demand instanceof RowDemand.ForTheRun run)) {
             return demand.positions();
         }
         Set<TermPath> out = new LinkedHashSet<>(demand.positions());
         out.addAll(run.fromStringsAt());
+        PositionsAStatementReads.everyPlaceItTurnsOn(run.statement()).ifPresent(out::addAll);
         return out;
     }
 
@@ -3573,22 +3593,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         /**
-         * Every place this turns on, or empty where that is not said. Its {@link #positions} are
-         * where it places a row, which a statement the run says whether it held does not do: it
-         * places none, and turns on the places what it states reads ({@link
-         * PositionsAStatementReads#everyPlaceItTurnsOn}) — any place at all where that reads
-         * something other than places. A reader that asks of the places alone, and not of the
-         * rows that meet the statement, asks here.
+         * Every place this turns on, which is its {@link #positions} — or empty where that is not
+         * said: a statement the run says whether it held turns on the places what it states reads
+         * ({@link PositionsAStatementReads#everyPlaceItTurnsOn}), and on any place at all where
+         * that reads something other than places.
          */
         Optional<Set<TermPath>> turnsOn() {
-            if (statedOfTheRun == null) {
-                return Optional.of(positions);
+            if (statedOfTheRun != null
+                    && PositionsAStatementReads.everyPlaceItTurnsOn(statedOfTheRun).isEmpty()) {
+                return Optional.empty();
             }
-            return PositionsAStatementReads.everyPlaceItTurnsOn(statedOfTheRun).map(places -> {
-                Set<TermPath> out = new LinkedHashSet<>(positions);
-                out.addAll(places);
-                return out;
-            });
+            return Optional.of(positions);
         }
 
         /** What it states as a form of the input's numbers held against nought, or null where it
@@ -4191,8 +4206,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Map<NumericTerm, OfASide> out = new LinkedHashMap<>();
         for (int at : asked) {
             if (!(sides.get(at).number() instanceof NumericTerm.FromOnePosition number)
-                    || !theRegionHoldsEveryDateWhole(number, along.conditions(),
-                            run.past().narrowing(), read)) {
+                    || !whatTheRegionShowsOfItIsARow(number, along.conditions(), run.past(),
+                            run.declined(), read)) {
                 continue;
             }
             EachWayItComesOut rows = comesOut != null
@@ -4214,35 +4229,45 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * Whether a value the region shows {@code side} at along a way stating {@code conditions} is
-     * one a row along it holds, as far as dates go: every date a part of which the side is, or a
-     * statement weighs, is one number of the region, and every value the region lets that number
-     * be is the part of a date the declarations leave.
+     * one a row along it holds: every place the side, a statement the region took in, or what the
+     * run narrows names is one number of the region; a part of a date is, at every value it may
+     * lie at, the part of a date the declarations leave; and nothing the region does not hold
+     * turns on a place named.
      *
-     * <p>The region holds each number taken of a date as a number of its own, with what the date
-     * it is taken of leaves it; what ties the parts of one date to one another is the calendar's,
-     * and the region knows nothing of it. So a date the way names by two numbers — a month and a
-     * day, a year and the date itself — may be put by the region where no date is, at the thirtieth
-     * of February, and a date named by one is put only where a date is.
+     * <p>The region holds each number of a place as a number of its own — a string beside its
+     * length, a date beside its year, the month of a date beside its day — and nothing ties them
+     * there ({@link #inTheRegion}). What ties two numbers of one place is the representation's, the
+     * calendar's for the parts of a date, so a way naming a place by two numbers, in one statement
+     * or in two, may be put by the region where no value is: at the thirtieth of February. A place
+     * named by one number is put only where some value of it gives that number.
      *
-     * <p>Statements of months and days that leave the years to the calendar are not asked of the
-     * year of a date ({@link OnAWay.PartsLeftAlone#YEARS}): some month and day holds them in every
-     * year each date may be in, with every year the other dates may be in. That is of the year of
-     * the date the sides' years are of, or of the date itself where no side is a year of it, so
-     * a number the rest of the way takes of such a date is that year and nothing else.
+     * <p>Statements the calendar was shown to leave a part to are not asked of that part
+     * ({@link OnAWay.PartsLeftAlone}). Of a year: some month and day holds the statements of
+     * months and days in every year each date may be in, with every year the other dates may be
+     * in, of the year after the moves the sides' years are taken after — or of the date's own
+     * where no side is a year of it. Of a month or a day: the statements of years hold together
+     * in years in which every month and day the sides take of each date is one. Either way the
+     * rest of the way names such a date by that part and nothing else.
      *
-     * @param narrowing what the run to the relation narrows, which the region holds as well
+     * <p>Nothing the region does not hold: a statement it did not take in, or whose places are not
+     * said ({@link OnAWay#turnsOn}); what the run ties or owes ({@link #theRunTiesTheValueAt}); a
+     * condition declined under a named place's parameter — any, where which parameters it may
+     * name is not said.
      */
-    private boolean theRegionHoldsEveryDateWhole(NumericTerm.FromOnePosition side,
+    private boolean whatTheRegionShowsOfItIsARow(NumericTerm.FromOnePosition side,
                                                  List<OnAWay> conditions,
-                                                 List<TakenConstraint> narrowing,
+                                                 DemandReading.Answered past,
+                                                 Optional<Set<String>> declined,
                                                  InputReading read) {
-        boolean ofAYear = side instanceof NumericTerm.TakenOf taken
-                && taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part)
-                && part == TakenAs.DatePart.YEAR;
+        OnAWay.PartsLeftAlone notAsked = !(side instanceof NumericTerm.TakenOf taken)
+                || !(taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part))
+                ? OnAWay.PartsLeftAlone.NONE
+                : part == TakenAs.DatePart.YEAR ? OnAWay.PartsLeftAlone.YEARS
+                : OnAWay.PartsLeftAlone.MONTHS_AND_DAYS;
         Set<TermPath> leftToTheCalendar = new LinkedHashSet<>();
         List<OnAWay> asked = new ArrayList<>();
         for (OnAWay each : conditions) {
-            if (ofAYear && each.leavesAlone() == OnAWay.PartsLeftAlone.YEARS) {
+            if (notAsked != OnAWay.PartsLeftAlone.NONE && each.leavesAlone() == notAsked) {
                 each.affine().form().coefs().keySet().forEach(term ->
                         leftToTheCalendar.add(((NumericTerm.TakenOf) term).position()));
             } else {
@@ -4252,9 +4277,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Map<TermPath, Set<NumericTerm>> namedBy = new LinkedHashMap<>();
         List<Collection<NumericTerm>> weighed = new ArrayList<>();
         weighed.add(List.of(side));
-        asked.stream().filter(each -> each.affine() != null)
-                .forEach(each -> weighed.add(each.affine().form().coefs().keySet()));
-        narrowing.forEach(each -> weighed.add(each.terms()));
+        List<OnAWay> notTakenIn = new ArrayList<>();
+        for (OnAWay each : asked) {
+            Set<NumericTerm> held = numbersTheRegionHolds(each);
+            if (held == null) {
+                notTakenIn.add(each);
+            } else {
+                weighed.add(held);
+            }
+        }
+        past.narrowing().forEach(each -> weighed.add(each.terms()));
         for (Collection<NumericTerm> terms : weighed) {
             for (NumericTerm term : terms) {
                 if (term instanceof NumericTerm.FromOnePosition one) {
@@ -4262,37 +4294,76 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
             }
         }
-        Map<TermPath, List<DateTranslation>> yearShifts = yearShiftsOfTheSides();
-        for (Map.Entry<TermPath, Set<NumericTerm>> date : namedBy.entrySet()) {
-            boolean ofADate = date.getValue().stream().anyMatch(term ->
-                    term instanceof NumericTerm.TakenOf taken
-                            && taken.takenAs() instanceof TakenAs.PartOfDate);
-            if (!ofADate && !leftToTheCalendar.contains(date.getKey())) {
-                continue;
-            }
-            if (date.getValue().size() != 1
-                    || !(date.getValue().iterator().next() instanceof NumericTerm.TakenOf taken)
-                    || !(taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part))
-                    || !everyValueItLiesAtIsOfADate(taken, sourceOf(taken, read))) {
+        Set<TermPath> named = new LinkedHashSet<>(namedBy.keySet());
+        named.addAll(leftToTheCalendar);
+        for (TermPath place : named) {
+            Set<NumericTerm> numbers = namedBy.getOrDefault(place, Set.of());
+            if (numbers.size() > 1) {
                 return false;
             }
-            if (leftToTheCalendar.contains(date.getKey())
-                    && (part != TakenAs.DatePart.YEAR || !yearShifts.getOrDefault(date.getKey(),
-                            List.of(DateTranslation.none()))
-                            .contains(taken.transformation().translation()))) {
+            NumericTerm number = numbers.isEmpty() ? null : numbers.iterator().next();
+            if (number instanceof NumericTerm.TakenOf taken
+                    && taken.takenAs() instanceof TakenAs.PartOfDate
+                    && !everyValueItLiesAtIsOfADate(taken, sourceOf(taken, read))) {
+                return false;
+            }
+            if (leftToTheCalendar.contains(place) && number != null
+                    && !theCalendarLeavesIt(number, notAsked)) {
+                return false;
+            }
+            if (theRunTiesTheValueAt(place, past) || declined.isEmpty()
+                    || declined.get().contains(place.head())) {
                 return false;
             }
         }
-        // A statement the region did not take in as a form, or one of anything but a form, that
-        // turns on a date asked here may tie its parts as well.
-        for (OnAWay each : asked) {
-            if (each.affine() == null && each.positions().stream().anyMatch(at ->
-                    namedBy.keySet().stream().anyMatch(at::bearsOn)
-                            || leftToTheCalendar.stream().anyMatch(at::bearsOn))) {
+        for (OnAWay each : notTakenIn) {
+            Optional<Set<TermPath>> turnsOn = each.turnsOn();
+            if (turnsOn.isEmpty() || named.stream().anyMatch(place ->
+                    touchesAny(turnsOn.get(), List.of(place))
+                            || turnsOn.get().stream().anyMatch(place::bearsOn))) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * The numbers the region holds a relation over in {@code statement}, as it took it in, or
+     * null where it did not take it in: none of a statement of only what stands at a value, the
+     * form's of a relation over a form held against nought or of one number held off a value,
+     * the term of an end on one position's own order. As {@link #inTheRegion} reads a statement.
+     */
+    private static Set<NumericTerm> numbersTheRegionHolds(OnAWay statement) {
+        return switch (statement.relation()) {
+            case null -> statement.whatStands() ? Set.of() : null;
+            case TakenConstraint.Affine affine -> (affine.rel() != Rel.NE
+                    || affine.form().coefs().size() == 1) ? affine.form().coefs().keySet() : null;
+            case TakenConstraint.Ordered ordered -> Set.of(ordered.term());
+            case TakenConstraint.AwayFrom _ -> null;
+        };
+    }
+
+    /**
+     * Whether {@code number} is what a part of its date a statement the calendar was shown to leave
+     * {@code alone} is kept to: of the years, the year after the first move a side's year of the
+     * date is taken after, or the date's own year where none is; of the months and days, a month
+     * or a day the sides take of the date.
+     */
+    private boolean theCalendarLeavesIt(NumericTerm number, OnAWay.PartsLeftAlone alone) {
+        if (!(number instanceof NumericTerm.TakenOf taken)
+                || !(taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part))) {
+            return false;
+        }
+        DateTranslation moved = taken.transformation().translation();
+        return switch (alone) {
+            case YEARS -> part == TakenAs.DatePart.YEAR && yearShiftsOfTheSides()
+                    .getOrDefault(taken.position(), List.of(DateTranslation.none()))
+                    .contains(moved);
+            case MONTHS_AND_DAYS -> part != TakenAs.DatePart.YEAR && monthsAndDaysTheSidesTake()
+                    .getOrDefault(taken.position(), List.of())
+                    .contains(new DatesThatStandInEveryYear.Part(part, moved));
+            case NONE -> false;
+        };
     }
 
     /**
@@ -6110,19 +6181,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return false;
         }
         for (OnAWay each : conditions) {
-            Set<TermPath> turnsOn = new LinkedHashSet<>(each.positions());
-            if (each.statedOfTheRun() != null) {
-                Optional<List<TermPath>> stated =
-                        PositionsAStatementReads.everyPlaceItTurnsOn(each.statedOfTheRun());
-                if (stated.isEmpty()) {
-                    return false;
-                }
-                turnsOn.addAll(stated.get());
-            } else if (turnsOn.isEmpty()) {
+            // A statement placing a row at no position, and saying nothing the run decides, is
+            // one whose places are not told by its positions.
+            Optional<Set<TermPath>> turnsOn = each.turnsOn();
+            if (turnsOn.isEmpty() || (each.statedOfTheRun() == null && turnsOn.get().isEmpty())) {
                 return false;
             }
-            if (touchesAny(turnsOn, List.of(place))
-                    || turnsOn.stream().anyMatch(place::bearsOn)) {
+            if (touchesAny(turnsOn.get(), List.of(place))
+                    || turnsOn.get().stream().anyMatch(place::bearsOn)) {
                 return false;
             }
         }
@@ -6132,6 +6198,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /** Whether a stop, a tie, a statement the operators narrow by, or what the applications before
      *  work out may turn on the value at {@code place}. */
     private static boolean mayStopOnTheValueAt(TermPath place, DemandReading.Answered past) {
+        if (theRunTiesTheValueAt(place, past)) {
+            return true;
+        }
+        for (TakenConstraint narrowing : past.narrowing()) {
+            if (narrowing.terms().stream().anyMatch(term ->
+                    term.isReadOffAPlaceBearingOn(place))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether what the run works out beside what the operators narrow may turn on the value at
+     * {@code place}: a tie or an owed stop on it, a stop on what no place holds or on what nothing
+     * says, or anything the applications before work out. None of it is a statement the region
+     * holds, which what the operators narrow is.
+     */
+    private static boolean theRunTiesTheValueAt(TermPath place, DemandReading.Answered past) {
         if (past.unsaid()) {
             return true;
         }
@@ -6142,12 +6227,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         for (Pullback.StopObligation owed : past.owed()) {
             if (owed.onWhatNoPlaceHolds() || stopTurnsOn(place, owed.places(), owed.where())) {
-                return true;
-            }
-        }
-        for (TakenConstraint narrowing : past.narrowing()) {
-            if (narrowing.terms().stream().anyMatch(term ->
-                    term.isReadOffAPlaceBearingOn(place))) {
                 return true;
             }
         }

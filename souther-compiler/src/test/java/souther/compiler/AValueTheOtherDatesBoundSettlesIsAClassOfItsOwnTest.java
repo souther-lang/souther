@@ -335,6 +335,30 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
     }
 
     /**
+     * A comparison of months read again along ways that state a year of the same date. The
+     * statement of the year holds in years every month is in, so the months are read through
+     * the statements of months alone.
+     */
+    @Test
+    void aComparisonOfMonthsReadAgainUnderAYearIsRead() {
+        List<String> unread = unread(divided("""
+                module d
+
+                let old (on: Date, b: Date): Int =
+                    if Date.month(on) - Date.month(b) >= 3 then 1800 else 1300
+
+                behavior ceiling : (on: Date, b: Date, r: Int) -> Int
+                let ceiling (on, b, r) =
+                    if Date.year(on) >= 2000 then
+                        (if r >= old(on, b) then old(on, b) else 3)
+                    else 4
+                """));
+
+        assertTrue(unread.stream().noneMatch(at -> at.startsWith("Date.month")),
+                unread.toString());
+    }
+
+    /**
      * A way whose statements no date meets shows no row. The comparison is read again only along
      * ways through the thirtieth of February, which the region holds as a month and a day it
      * leaves and no date is. Along the way that decided it true, the region leaves a birthday's
