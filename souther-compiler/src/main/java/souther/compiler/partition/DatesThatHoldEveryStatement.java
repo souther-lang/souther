@@ -33,9 +33,6 @@ import java.util.Set;
  */
 final class DatesThatHoldEveryStatement {
 
-    /** The dates a way may state the parts of for them to be looked for together. */
-    static final int MOST_DATES = 2;
-
     /** How many choices of what the parts come to beside the years are looked through, over all
      *  the dates together. */
     static final int MOST_CHOICES = 4_096;
@@ -57,7 +54,8 @@ final class DatesThatHoldEveryStatement {
      */
     static LocalDate[] some(List<Statement> statements, List<DateTranslation> days) {
         int dates = days.size();
-        if (dates == 0 || dates > MOST_DATES) {
+        // The years are chosen together by YearsAWayAllows, which chooses them for so many dates.
+        if (dates == 0 || dates > YearsAWayAllows.MOST_DATES) {
             return null;
         }
         List<List<Part>> partsOf = new ArrayList<>();

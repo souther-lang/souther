@@ -4307,11 +4307,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         for (TermPath place : named) {
             if (!heldApart.contains(place)) {
-                Set<NumericTerm> numbers = namedBy.getOrDefault(place, Set.of());
-                if (numbers.size() > 1) {
-                    return false;
-                }
-                NumericTerm number = numbers.isEmpty() ? null : numbers.iterator().next();
+                // Named by one number at most: a place named by more is held apart or refused.
+                NumericTerm number = namedBy.getOrDefault(place, Set.of()).stream().findFirst()
+                        .orElse(null);
                 if (number instanceof NumericTerm.TakenOf taken
                         && taken.takenAs() instanceof TakenAs.PartOfDate
                         && !everyValueItLiesAtIsOfADate(taken, sourceOf(taken, read))) {

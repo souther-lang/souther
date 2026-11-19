@@ -61,7 +61,7 @@ final class YearsAWayAllows {
 
     /** The dates a way may state the years of for them to be chosen together: the years of one
      *  are looked for among those of the other, so the choices multiply. */
-    private static final int MOST_DATES = 2;
+    static final int MOST_DATES = 2;
 
     private YearsAWayAllows() {
     }

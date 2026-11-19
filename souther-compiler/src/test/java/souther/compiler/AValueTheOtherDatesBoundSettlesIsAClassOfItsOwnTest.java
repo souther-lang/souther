@@ -2,6 +2,7 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.RuleRef;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -9,6 +10,7 @@ import souther.compiler.query.OfferingRequest;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
+import souther.compiler.types.WrittenOwner;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -67,6 +69,18 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
     private static List<String> unread(Compilation compilation) {
         return compilation.db().ask(new Adequacy.Coverage("d")).value().get("ceiling").notRead()
                 .stream().map(PartitionEvidence.NotRead::at).toList();
+    }
+
+    /** What the reading of the comparisons written in {@code definition} left unread, as the
+     *  position and the reason. */
+    private static List<String> unreadOfTheComparisonsIn(Compilation compilation,
+                                                         String definition) {
+        return compilation.db().ask(new Adequacy.Coverage("d")).value().get("ceiling").notRead()
+                .stream().filter(each -> each.cited().stream().anyMatch(cited ->
+                        cited.rule() instanceof RuleRef.Comparison comparison
+                                && comparison.origin().owner() instanceof WrittenOwner.Body body
+                                && body.definition().equals(definition)))
+                .map(each -> each.at() + " " + each.reason()).toList();
     }
 
     /** The classes of each axis of {@code ceiling}, by the axis. */
@@ -439,37 +453,30 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
     }
 
     /**
-     * The other date tied to the day by a product of their years, both dates of this century so
-     * that the product is an {@code Int} at every row and no run stops at it. The product is
-     * 2001 times 2050 only where the years are those two, neither a leap year, so no date is the
-     * twenty-ninth of February there: {@code d} is not apart from the day, and the ages are not
-     * read off what the region leaves along the way.
+     * The day itself the twenty-ninth of February, which some date is: along the way the day's
+     * year is a leap year, which the region does not hold, and the birthday is tied to the day by
+     * the age the first reading decided. Each side is of a date the way names by two numbers and
+     * ties to it, so neither is read off what the region leaves there.
      */
     @Test
-    void aDateTiedToTheDayThroughAProductOfTheirYearsIsNotHeldApartFromIt() {
-        List<String> unread = unread(divided("""
+    void aDateTheWayNamesByTwoNumbersAndTiesToTheSideLeavesTheSideUnread() {
+        List<String> unread = unreadOfTheComparisonsIn(divided("""
                 module d
 
-                data Century = Date
-                    invariant value >= Date("2000-01-01") && value <= Date("2099-12-31")
-
-                data P = { birthday: Date, disabled: Bool }
-                    invariant birthday >= Date("1900-01-01")
+                data P = { birthday: Date }
 
                 let old (p: P, on: Date): Int =
-                    if Date.year(on) - Date.year(p.birthday) >= 60 || p.disabled
-                    then 1800 else 1300
+                    if Date.year(on) - Date.year(p.birthday) >= 60 then 1800 else 1300
 
-                behavior ceiling : (p: P, on: Century, d: Century, r: Int) -> Int
-                let ceiling (p, on, d, r) =
-                    if Date.year(d.value) * Date.year(on.value) == 4102050
-                            && Date.month(d.value) == 2 && Date.day(d.value) == 29 then
-                        (if r >= old(p, on.value) then old(p, on.value) else 3)
+                behavior ceiling : (p: P, on: Date, r: Int) -> Int
+                let ceiling (p, on, r) =
+                    if Date.month(on) == 2 && Date.day(on) == 29 then
+                        (if r >= old(p, on) then old(p, on) else 3)
                     else 4
-                """));
+                """), "old");
 
-        assertTrue(unread.containsAll(List.of("Date.year(on)", "Date.year(p.birthday)")),
-                unread.toString());
+        assertTrue(unread.containsAll(List.of("Date.year(on) RULE_RELATING_TWO_VALUES",
+                "Date.year(p.birthday) RULE_RELATING_TWO_VALUES")), unread.toString());
     }
 
     /** The same comparison over whole numbers, which is how the section reads it. */

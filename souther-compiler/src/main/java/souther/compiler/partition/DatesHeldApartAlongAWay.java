@@ -111,9 +111,8 @@ final class DatesHeldApartAlongAWay {
                 return Optional.empty();
             }
         }
-        Set<TermPath> places = tiedTo(place);
-        return held.computeIfAbsent(top(place), _ -> someDatesHold(places))
-                ? Optional.of(places) : Optional.empty();
+        return held.computeIfAbsent(top(place), this::someDatesHold)
+                ? Optional.of(tiedTo(place)) : Optional.empty();
     }
 
     /** The places the way ties to {@code place}, itself among them; none where the way was not
@@ -131,11 +130,15 @@ final class DatesHeldApartAlongAWay {
         return out;
     }
 
-    /** Whether some dates hold every statement and narrowing of the way reading {@code places}. */
-    private boolean someDatesHold(Set<TermPath> places) {
+    /**
+     * Whether some dates hold every statement and narrowing of the way reading the set filed under
+     * {@code filed}. Every place one of them reads is tied to the others it reads, so each is of
+     * one set, and the set of any place it reads is the set it is of.
+     */
+    private boolean someDatesHold(TermPath filed) {
         List<TakenConstraint.Affine> stated = new ArrayList<>();
         for (UndividedByARelation.OnAWay statement : conditions) {
-            if (readsAny(placesOf(statement), places)) {
+            if (isOf(placesOf(statement), filed)) {
                 if (statement.affine() == null) {
                     return false;
                 }
@@ -143,7 +146,7 @@ final class DatesHeldApartAlongAWay {
             }
         }
         for (TakenConstraint each : narrowing) {
-            if (readsAny(placesReadOff(each.terms()), places)) {
+            if (isOf(placesReadOff(each.terms()), filed)) {
                 if (!(each instanceof TakenConstraint.Affine affine)) {
                     return false;
                 }
@@ -153,15 +156,8 @@ final class DatesHeldApartAlongAWay {
         return someDatesHoldAll(stated);
     }
 
-    private static boolean readsAny(Set<TermPath> read, Set<TermPath> places) {
-        for (TermPath one : read) {
-            for (TermPath other : places) {
-                if (one.bearsOn(other)) {
-                    return true;
-                }
-            }
-        }
-        return false;
+    private boolean isOf(Set<TermPath> read, TermPath filed) {
+        return !read.isEmpty() && top(read.iterator().next()).equals(filed);
     }
 
     /**
