@@ -855,9 +855,10 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                             + " overTheWays and everyWayIsWrittenOut"),
             Map.entry("souther.compiler.meaning.Conclusion#everyWayIsWrittenOut("
                             + "Lsouther/compiler/meaning/KeptWays;)Z",
-                    "past the figure answers that the ways are not written out, and the total"
-                            + " over them is not told to stop on each way: the statement is a"
-                            + " part nothing read, naming it, where overTheWays concludes it"),
+                    "past the figure answers that the ways are not written out, and what a run"
+                            + " reaching them works out making the total over them is a stop"
+                            + " left untold: the statement is a part nothing read, naming it,"
+                            + " where overTheWays concludes it"),
             // Where one line of a statement of several decides: the statement read, its cases
             // taken apart, and each asked whether rows stand on both sides of the line. Past any
             // of the figures the line is one where it decides was not worked out, naming the

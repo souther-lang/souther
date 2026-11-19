@@ -3377,25 +3377,32 @@ final class Pullback {
         /**
          * What a run taking each way of {@code ways}, read where {@code reached} holds, works out
          * making the total the way comes to, at where the way is taken. A way whose total is within
-         * the type works out nothing that stops a run, and is not said; one whose sum cannot be
-         * held leaves its stop untold.
+         * the type works out nothing that stops a run, and is not said; one whose total is no form
+         * of the input's numbers, or whose sum cannot be held, leaves its stop untold. Ways too
+         * many to write out are not taken one by one: what a run reaching them works out is left
+         * untold where they are read.
          */
         List<StopEvidence.OnAnArm> onTheWays(Derivation.WaysWrittenWhenAsked ways,
                                              Proposition reached) {
+            if (!Conclusion.everyWayIsWrittenOut(ways.kept())) {
+                return List.of(new StopEvidence.OnAnArm(reached,
+                        StopEvidence.ofWhatIsToldOf(A_TOTAL_UNTOLD)));
+            }
             Function<LinearForm<Quantity>, UndividedByARelation.Working> totalOfAWay =
                     onTheWays.get(ways);
             List<StopEvidence.OnAnArm> out = new ArrayList<>();
-            ways.eachWay(reached, (taken, there) -> {
+            ways.eachWay(() -> reached, (taken, there) -> {
                 UndividedByARelation.Working worked = switch (LinearForm.sum(there)) {
                     case ExactAnswer.Held<LinearForm<Quantity>>(var total) ->
                             totalOfAWay.apply(total);
                     case ExactAnswer.Unheld<LinearForm<Quantity>> _ -> null;
                 };
                 if (worked == null) {
-                    out.add(new StopEvidence.OnAnArm(taken, StopEvidence.ofWhatIsToldOf(
-                            UndividedByARelation.Working.UNREAD)));
+                    out.add(StopEvidence.OnAnArm.takenWhere(taken,
+                            StopEvidence.ofWhatIsToldOf(A_TOTAL_UNTOLD)));
                 } else if (!worked.operations().isEmpty()) {
-                    out.add(new StopEvidence.OnAnArm(taken, StopEvidence.ofWhatIsToldOf(worked)));
+                    out.add(StopEvidence.OnAnArm.takenWhere(taken,
+                            StopEvidence.ofWhatIsToldOf(worked)));
                 }
                 return taken;
             });
@@ -11529,21 +11536,30 @@ final class Pullback {
         return written;
     }
 
+    /** What a run works out making a total whose stop no reading tells: no operation told, and a
+     *  stop that may be left, which the report says as not every one told. */
+    private static final UndividedByARelation.Working A_TOTAL_UNTOLD =
+            new UndividedByARelation.Working(List.of(), WhatARelationLeavesUndivided.Told.EVERY,
+                    true, List.of(), true);
+
     /**
      * That where working out the total of whole numbers {@code total} stops is told on each way
      * {@code written} keeps its elements in: what a run taking a way works out is the sum of the
      * forms that way keeps, held to an {@code Int}, which the comparison read once need not be
-     * read again for. Told where every way is written out and every way's total is a form of the
-     * input's numbers: each way's sum is over some of the quantities of all the elements, so where
-     * every one of those is one number of the input, so is every way's.
+     * read again for. Told where every way's total is a form of the input's numbers: each way's
+     * sum is over some of the quantities of all the elements, so where every one of those is one
+     * number of the input, so is every way's. Which ways there are, and what each works out, is
+     * asked where a reader asks what a run taking them works out ({@link Trial#onTheWays}).
      */
     private void tellWhereTheTotalStopsOnEachWay(Inside.ATotalByKeeping total,
                                                  Derivation.WaysWrittenWhenAsked written) {
         Map<Quantity, ExactRatio> every = new LinkedHashMap<>();
         written.forms().forEach(form -> form.coefs().keySet().forEach(each ->
                 every.put(each, ExactRatio.ONE)));
-        boolean told = Conclusion.everyWayIsWrittenOut(written.kept())
-                && whatAnIntTotalWorksOut(new LinearForm<>(ExactRatio.ZERO, every), read) != null;
+        boolean told = WhatTheDeclarationsLeave.ofTheInput(
+                new LinearForm<>(ExactRatio.ZERO, every)) != null
+                && WhereAnOperatorAnswers.ofATotal(Type.INT)
+                        instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld;
         trial().tellsWhereItStops(total.call(), told);
         if (told) {
             InputReading reading = read;

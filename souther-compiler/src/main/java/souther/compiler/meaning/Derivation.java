@@ -49,6 +49,7 @@ import java.util.OptionalInt;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.BiFunction;
+import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
 
 /**
@@ -836,11 +837,12 @@ public sealed interface Derivation {
          * the elements it keeps, whose sum its total is.
          *
          * <p>A run taking a way works out that way's total and no other's, so what is said of a
-         * way is said where it is taken. What each truth states is concluded once for every way
-         * it decides.
+         * way is said where it is taken. Where it is taken is worked out when {@code at} asks for
+         * it, and what each truth states is concluded once for every way it decides.
          */
-        public <R> List<R> eachWay(Proposition reached,
-                                   BiFunction<Proposition, List<LinearForm<Quantity>>, R> at) {
+        public <R> List<R> eachWay(
+                Supplier<Proposition> reached,
+                BiFunction<Supplier<Proposition>, List<LinearForm<Quantity>>, R> at) {
             Map<Integer, Proposition> stated = new HashMap<>();
             return kept.made(new KeptWays.Making<List<R>>() {
                 @Override
@@ -852,21 +854,29 @@ public sealed interface Derivation {
 
                 @Override
                 public List<R> leaf(Boolean[] decided) {
-                    List<Proposition> taken = new ArrayList<>();
-                    taken.add(reached);
-                    for (int truth = 0; truth < decided.length; truth++) {
-                        Derivation condition = conditions.get(truth);
-                        if (decided[truth] == null || condition == null) {
-                            continue;
-                        }
-                        Proposition holds = stated.computeIfAbsent(truth,
-                                _ -> condition.concludes(Optional.empty()));
-                        taken.add(decided[truth] ? holds : holds.denied());
-                    }
-                    return List.of(at.apply(Proposition.all(taken),
+                    Boolean[] way = decided.clone();
+                    return List.of(at.apply(() -> takenWhere(reached.get(), way, stated),
                             kept.thereOf(forms, decided)));
                 }
             }, kept.undecided());
+        }
+
+        /** Where the way {@code decided} is taken: {@code reached}, and what decides each truth
+         *  it is split on holding or not as it has it, each concluded once into {@code stated}. */
+        private Proposition takenWhere(Proposition reached, Boolean[] decided,
+                                       Map<Integer, Proposition> stated) {
+            List<Proposition> taken = new ArrayList<>();
+            taken.add(reached);
+            for (int truth = 0; truth < decided.length; truth++) {
+                Derivation condition = conditions.get(truth);
+                if (decided[truth] == null || condition == null) {
+                    continue;
+                }
+                Proposition holds = stated.computeIfAbsent(truth,
+                        _ -> condition.concludes(Optional.empty()));
+                taken.add(decided[truth] ? holds : holds.denied());
+            }
+            return Proposition.all(taken);
         }
 
         /**
