@@ -48,7 +48,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.function.BiFunction;
+import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
 
@@ -832,7 +832,7 @@ public sealed interface Derivation {
         }
 
         /**
-         * What {@code at} makes of each way: where the way is taken — {@code reached}, and what
+         * Each way handed to {@code at}: where the way is taken — {@code reached}, and what
          * decides each truth it is split on holding or not as the way has it — and the forms of
          * the elements it keeps, whose sum its total is.
          *
@@ -840,23 +840,21 @@ public sealed interface Derivation {
          * way is said where it is taken. Where it is taken is worked out when {@code at} asks for
          * it, and what each truth states is concluded once for every way it decides.
          */
-        public <R> List<R> eachWay(
-                Supplier<Proposition> reached,
-                BiFunction<Supplier<Proposition>, List<LinearForm<Quantity>>, R> at) {
+        public void forEachWay(Supplier<Proposition> reached,
+                               BiConsumer<Supplier<Proposition>, List<LinearForm<Quantity>>> at) {
             Map<Integer, Proposition> stated = new HashMap<>();
-            return kept.made(new KeptWays.Making<List<R>>() {
+            kept.made(new KeptWays.Making<Void>() {
                 @Override
-                public List<R> split(int truth, List<R> where, List<R> otherwise) {
-                    List<R> both = new ArrayList<>(where);
-                    both.addAll(otherwise);
-                    return both;
+                public Void split(int truth, Void where, Void otherwise) {
+                    return null;
                 }
 
                 @Override
-                public List<R> leaf(Boolean[] decided) {
+                public Void leaf(Boolean[] decided) {
                     Boolean[] way = decided.clone();
-                    return List.of(at.apply(() -> takenWhere(reached.get(), way, stated),
-                            kept.thereOf(forms, decided)));
+                    at.accept(() -> takenWhere(reached.get(), way, stated),
+                            kept.thereOf(forms, decided));
+                    return null;
                 }
             }, kept.undecided());
         }

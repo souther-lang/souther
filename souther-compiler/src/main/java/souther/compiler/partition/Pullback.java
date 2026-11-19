@@ -3359,12 +3359,17 @@ final class Pullback {
             return !onTheArms(new ArmRead.OfTheAnswerOfAnArm(step)).isEmpty();
         }
 
-        /** That a run taking a way of {@code ways} works out what {@code totalOfAWay} says of
-         *  the total that way comes to. */
-        void readOnTheWays(Derivation.WaysWrittenWhenAsked ways,
+        /**
+         * That a run taking a way of {@code ways} works out what {@code totalOfAWay} says of the
+         * total {@code total} that way comes to: where working the total out stops is told on
+         * each way, by this and nothing else ({@link #tellsWhereItStops}), so it is told exactly
+         * where what each way works out is kept.
+         */
+        void readOnTheWays(Derivation.WaysWrittenWhenAsked ways, Core total,
                            Function<LinearForm<Quantity>, UndividedByARelation.Working>
                                    totalOfAWay) {
             onTheWays.put(ways, totalOfAWay);
+            tellsWhereItStops(total, true);
         }
 
         /** Whether {@code step} is a comparison over a total this candidate tells, on each way of
@@ -3376,11 +3381,11 @@ final class Pullback {
 
         /**
          * What a run taking each way of {@code ways}, read where {@code reached} holds, works out
-         * making the total the way comes to, at where the way is taken. A way whose total is within
-         * the type works out nothing that stops a run, and is not said; one whose total is no form
-         * of the input's numbers, or whose sum cannot be held, leaves its stop untold. Ways too
-         * many to write out are not taken one by one: what a run reaching them works out is left
-         * untold where they are read.
+         * making the total the way comes to, at where the way is taken. A way where no run may stop
+         * ({@link StopEvidence#noRunMayStopAnywhere}) is not said; one whose total is no form of
+         * the input's numbers, or whose sum cannot be held, leaves its stop untold. Ways too many
+         * to write out are not taken one by one: what a run reaching them works out is left untold
+         * where they are read.
          */
         List<StopEvidence.OnAnArm> onTheWays(Derivation.WaysWrittenWhenAsked ways,
                                              Proposition reached) {
@@ -3391,20 +3396,17 @@ final class Pullback {
             Function<LinearForm<Quantity>, UndividedByARelation.Working> totalOfAWay =
                     onTheWays.get(ways);
             List<StopEvidence.OnAnArm> out = new ArrayList<>();
-            ways.eachWay(() -> reached, (taken, there) -> {
+            ways.forEachWay(() -> reached, (taken, there) -> {
                 UndividedByARelation.Working worked = switch (LinearForm.sum(there)) {
                     case ExactAnswer.Held<LinearForm<Quantity>>(var total) ->
                             totalOfAWay.apply(total);
                     case ExactAnswer.Unheld<LinearForm<Quantity>> _ -> null;
                 };
-                if (worked == null) {
-                    out.add(StopEvidence.OnAnArm.takenWhere(taken,
-                            StopEvidence.ofWhatIsToldOf(A_TOTAL_UNTOLD)));
-                } else if (!worked.operations().isEmpty()) {
-                    out.add(StopEvidence.OnAnArm.takenWhere(taken,
-                            StopEvidence.ofWhatIsToldOf(worked)));
+                StopEvidence stops = StopEvidence.ofWhatIsToldOf(
+                        worked == null ? A_TOTAL_UNTOLD : worked);
+                if (!stops.noRunMayStopAnywhere()) {
+                    out.add(StopEvidence.OnAnArm.takenWhere(taken, stops));
                 }
-                return taken;
             });
             return out;
         }
@@ -3438,6 +3440,8 @@ final class Pullback {
             kept.onTheArms.view().forEach((read, arms) -> arms.view().forEach(each ->
                     readOnAnArm(read, each)));
             kept.onTheWays.view().forEach(onTheWays::put);
+            // Where a total's stop is told goes with what tells it on each way.
+            kept.toldWhereItStops.view().forEach(this::tellsWhereItStops);
         }
     }
 
@@ -3618,14 +3622,23 @@ final class Pullback {
         if (theRule == null || !(read instanceof AffineReading.OfAComparison.Stopped stopped)) {
             return AffineReading.OfAComparison.worksOut(read);
         }
+        return stopped.worksOut(answersOf(theRule));
+    }
+
+    /**
+     * What the analysis of the candidate {@code theRule} answers for, as every reader of what a
+     * run works out under it asks: the one place what the candidate said is made into what a
+     * reading takes as answered, and where it tells a total's stop on each way among it.
+     */
+    private AffineReading.WhatTheAnalysisAnswersFor answersOf(Trial theRule) {
         Predicate<Core> readAgain = theRule.answersFor();
-        return stopped.worksOut(new AffineReading.WhatTheAnalysisAnswersFor(
+        return new AffineReading.WhatTheAnalysisAnswersFor(
                 readAgain == null ? _ -> false : readAgain,
                 held -> theRule.readByTheFormOf(Core.withoutStanding(held)),
                 held -> theRule.dividendBesideTheRows(Core.withoutStanding(held)),
                 this::boundValueOf,
                 held -> theRule.landsInAMonth(Core.withoutStanding(held)),
-                held -> theRule.toldWhereItStops(Core.withoutStanding(held))));
+                held -> theRule.toldWhereItStops(Core.withoutStanding(held)));
     }
 
     /**
@@ -11530,8 +11543,15 @@ final class Pullback {
         Derivation.WaysWrittenWhenAsked written = new Derivation.WaysWrittenWhenAsked(ways.kept(),
                 deciding, read, forms, sum, Optional.ofNullable(reading.count), counted, madeAt,
                 fixed);
+        // What a run taking a way works out is the sum of the forms that way keeps, held to an
+        // Int, which the comparison read once need not be read again for. Which ways there are,
+        // and what each works out, is asked where a reader asks what a run taking them works out
+        // ({@link Trial#onTheWays}): a way whose total is no form of the input's numbers leaves
+        // its stop untold there.
         if (Core.withoutStanding(total.call()).type() == Type.INT) {
-            tellWhereTheTotalStopsOnEachWay(total, written);
+            InputReading ofTheInput = this.read;
+            trial().readOnTheWays(written, total.call(),
+                    form -> whatAnIntTotalWorksOut(form, ofTheInput));
         }
         return written;
     }
@@ -11541,31 +11561,6 @@ final class Pullback {
     private static final UndividedByARelation.Working A_TOTAL_UNTOLD =
             new UndividedByARelation.Working(List.of(), WhatARelationLeavesUndivided.Told.EVERY,
                     true, List.of(), true);
-
-    /**
-     * That where working out the total of whole numbers {@code total} stops is told on each way
-     * {@code written} keeps its elements in: what a run taking a way works out is the sum of the
-     * forms that way keeps, held to an {@code Int}, which the comparison read once need not be
-     * read again for. Told where every way's total is a form of the input's numbers: each way's
-     * sum is over some of the quantities of all the elements, so where every one of those is one
-     * number of the input, so is every way's. Which ways there are, and what each works out, is
-     * asked where a reader asks what a run taking them works out ({@link Trial#onTheWays}).
-     */
-    private void tellWhereTheTotalStopsOnEachWay(Inside.ATotalByKeeping total,
-                                                 Derivation.WaysWrittenWhenAsked written) {
-        Map<Quantity, ExactRatio> every = new LinkedHashMap<>();
-        written.forms().forEach(form -> form.coefs().keySet().forEach(each ->
-                every.put(each, ExactRatio.ONE)));
-        boolean told = WhatTheDeclarationsLeave.ofTheInput(
-                new LinearForm<>(ExactRatio.ZERO, every)) != null
-                && WhereAnOperatorAnswers.ofATotal(Type.INT)
-                        instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld;
-        trial().tellsWhereItStops(total.call(), told);
-        if (told) {
-            InputReading reading = read;
-            trial().readOnTheWays(written, form -> whatAnIntTotalWorksOut(form, reading));
-        }
-    }
 
     /**
      * What the elements of {@code total} come to as forms, in the order they are written, or null
@@ -13602,7 +13597,8 @@ final class Pullback {
                 new Once<>(() -> worksOut(theRule, arithmeticOf(stated, there)));
         Once<UndividedByARelation.Working> evaluated = new Once<>(() -> answered == null
                 ? UndividedByARelation.Working.NOTHING
-                : AffineReading.workedOutByEvaluating(answered.value(), answered.at(), this.read));
+                : AffineReading.workedOutByEvaluating(answered.value(), answered.at(), this.read,
+                        answersOf(theRule)));
         OnThisArm arm = new OnThisArm(worksOut, evaluated,
                 restatingAQuotient.get() ? List.of() : whatDecidedTheArm());
         for (ArmRead each : ArmRead.in(read)) {
@@ -13695,7 +13691,8 @@ final class Pullback {
                 // choice read again elsewhere on this reading is the same choice, taken.
                 Core choice = choiceAt.value();
                 yield new Derivation.AComparisonOfAChoice(madeBy(iff, armsOf(
-                        Optional.of(AffineReading.workingOfWhatDecides(iff, choiceAt.at(), read)),
+                        Optional.of(AffineReading.workingOfWhatDecides(iff, choiceAt.at(), read,
+                                answersOf(trial()))),
                         iff, choiceAt.at(), condition, left,
                         arm -> readOnAnArm(again.apply(on -> on.taking(choice, arm, 1)),
                                 reads.taking(choice, arm, 1), arm))));
@@ -13709,7 +13706,8 @@ final class Pullback {
                 Core choice = chosen.value();
                 yield new Derivation.AComparisonOfAChoice(byItsCases(chosen, at,
                         Optional.of(AffineReading.workingOfWhatDecides(
-                                Core.withoutStanding(chosen.value()), chosen.at(), read)),
+                                Core.withoutStanding(chosen.value()), chosen.at(), read,
+                                answersOf(trial()))),
                         arm -> readOnAnArm(again.apply(on -> on.taking(choice, arm, arms)),
                                 reads.taking(choice, arm, arms), arm)));
             }
@@ -15345,20 +15343,6 @@ final class Pullback {
                 || readOnceForEveryValue(quotient.divisor(), quotient.at(), new HashSet<>())) {
             return null;
         }
-        // What this comparison, over these names, works out: its own reading, and no other's.
-        UndividedByARelation.Working told = null;
-        if (AffineReading.read(stated, reads, read)
-                instanceof AffineReading.OfAComparison.Stopped stopped) {
-            // The quotient may be written at the stop, behind a name, or around it.
-            Core division = divisionBy(quotient.divisor(), stopped.node());
-            division = division != null ? division
-                    : divisionBy(quotient.divisor(), stated.left());
-            division = division != null ? division
-                    : divisionBy(quotient.divisor(), stated.right());
-            if (division != null) {
-                told = stopped.ofTheQuotientAwayFromNought(division);
-            }
-        }
         Derivation answers;
         Derivation signed;
         Derivation states;
@@ -15374,6 +15358,22 @@ final class Pullback {
         }
         if (answers == null || states == null) {
             return null;
+        }
+        // What this comparison, over these names, works out: its own reading, and no other's,
+        // asked once what it was restated as has been read, so that what that reading tells of a
+        // total's stop on each way is what this one answers for.
+        UndividedByARelation.Working told = null;
+        if (AffineReading.read(stated, reads, read)
+                instanceof AffineReading.OfAComparison.Stopped stopped) {
+            // The quotient may be written at the stop, behind a name, or around it.
+            Core division = divisionBy(quotient.divisor(), stopped.node());
+            division = division != null ? division
+                    : divisionBy(quotient.divisor(), stated.left());
+            division = division != null ? division
+                    : divisionBy(quotient.divisor(), stated.right());
+            if (division != null) {
+                told = stopped.ofTheQuotientAwayFromNought(division, answersOf(trial()));
+            }
         }
         trial().says(told);
         return new Derivation.WhereItAnswers(answers, states);

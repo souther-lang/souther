@@ -265,10 +265,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * everything written under the quotient. The dividend and the divisor are worked out
              * on every row of those lines, and the quotient of two numbers answers on every divisor
              * but nought, so they are told with the rest. Not every operation is told where the
-             * quotient is not of that kind.
+             * quotient is not of that kind. {@code answersFor} is what the rule that read the
+             * comparison answers for.
              */
-            UndividedByARelation.Working ofTheQuotientAwayFromNought(Core division) {
-                return beside.ofTheQuotientAwayFromNought(division);
+            UndividedByARelation.Working ofTheQuotientAwayFromNought(
+                    Core division, WhatTheAnalysisAnswersFor answersFor) {
+                return beside.ofTheQuotientAwayFromNought(division, answersFor);
             }
 
             /** The expression the reading stopped at. */
@@ -524,11 +526,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
         /**
          * Whether working out {@code value}, which {@link #tellsWhatItWorksOut} did not tell,
-         * ends no run all the same, beside what this reading told
-         * ({@link WorkedOutToReachIt#endsNoRunWhereItWasPassedOver}): a stop in it is then left
-         * untold nowhere.
+         * leaves no stop untold all the same, beside what this reading told
+         * ({@link WorkedOutToReachIt#leavesNoStopUntoldWhereItWasPassedOver}): every stop in it is
+         * none, or one the analysis tells on each way. Not whether a run ends there.
          */
-        boolean passedOverEndsNoRun(Core value, InputReads at);
+        boolean passedOverLeavesNoStopUntold(Core value, InputReads at);
     }
 
     /**
@@ -593,6 +595,19 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     private static Arithmetic reading(
             InputReading ofTheInput, Set<NumericTerm> named, ElementsMet met, WhatWasTold told,
             StoppedValues stoppedAt, NamesKept namesKept) {
+        return reading(ofTheInput, named, met, told, stoppedAt, namesKept,
+                stoppedAt == null ? _ -> false : stoppedAt::toldWhereItStops);
+    }
+
+    /**
+     * The same, where the analysis that read the comparison tells, on each way it reads them in,
+     * the own stops of the expressions {@code toldOnTheirWays} holds of
+     * ({@link WhatTheAnalysisAnswersFor#toldWhereItStops}): what this reading asks of whether a
+     * stop is left untold, and every reading it tries apart from it, takes those as told.
+     */
+    private static Arithmetic reading(
+            InputReading ofTheInput, Set<NumericTerm> named, ElementsMet met, WhatWasTold told,
+            StoppedValues stoppedAt, NamesKept namesKept, Predicate<Core> toldOnTheirWays) {
         InputDomain inputs = ofTheInput.domain();
         RuleReadingSource ruleSource = ofTheInput.rules();
         ReadMeaning.WhereKept kept = KeptTruths.readIn(ofTheInput);
@@ -604,7 +619,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             /** What a run works out to reach a value, asked once for each value this reading
              *  asks it of. */
-            private final WorkedOutToReachIt reached = WorkedOutToReachIt.of(ofTheInput);
+            private final WorkedOutToReachIt reached = WorkedOutToReachIt.of(ofTheInput)
+                    .besideTheStopsToldOnTheirWays(toldOnTheirWays);
 
             /** The lists written out whose elements this reading has told as a run builds them,
              *  each once. */
@@ -741,7 +757,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 }
                 if (!(DeclaredBounds.whereMakingSucceeds(construct, type, ofTheInput.ruleReading())
                         instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld where)) {
-                    if (!reached.ownWorkingEndsNoRun(new Denotation(construct, at))) {
+                    if (reached.leavesItsOwnStopUntold(new Denotation(construct, at))) {
                         told.passedOverWhatMayEndARun();
                     }
                     return;
@@ -836,9 +852,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
 
             @Override
-            public boolean passedOverEndsNoRun(Core value, InputReads at) {
+            public boolean passedOverLeavesNoStopUntold(Core value, InputReads at) {
                 return reached.besideWhatIsTold(this::toldHere)
-                        .endsNoRunWhereItWasPassedOver(new Denotation(value, at));
+                        .leavesNoStopUntoldWhereItWasPassedOver(new Denotation(value, at));
             }
 
             /**
@@ -1053,7 +1069,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     // row is, and no operation told here says so — the analysis may tell it on
                     // each way it reads the node in. Of the node's own working: what a name in it
                     // was given is told where it was given.
-                    if (!stoppedAt.toldWhereItStops(node) && !reached.ownWorkingEndsNoRun(worked)) {
+                    if (reached.leavesItsOwnStopUntold(worked)) {
                         told.aStopWhereNoRowIs();
                     }
                     return true;
@@ -1160,14 +1176,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             /**
              * That {@code node}, held aside, was passed over where no owner answers for it. What
              * it works out of its own, apart from what it is made of and what a name in it was
-             * given, is a stop told by nothing unless its owner shows it ends none
-             * ({@link WorkedOutToReachIt#ownWorkingEndsNoRun}). What its parts work out is told
-             * beside it for where a run stops, and not as what a row gets past: unless the whole
-             * of it ends no run, a row is not shown to get past every operation.
+             * given, is a stop told by nothing unless its owner shows it ends none, or the
+             * analysis tells it on each way ({@link WorkedOutToReachIt#leavesItsOwnStopUntold}).
+             * What its parts work out is told beside it for where a run stops, and not as what a
+             * row gets past: unless the whole of it ends no run, a row is not shown to get past
+             * every operation.
              */
             private void ownWorkingPassedOver(Core node, InputReads at) {
                 Denotation worked = new Denotation(node, at);
-                if (!reached.ownWorkingEndsNoRun(worked)) {
+                if (reached.leavesItsOwnStopUntold(worked)) {
                     told.passedOverWhatMayEndARun();
                 } else if (!reached.endsNoRunWhereItWasPassedOver(worked)) {
                     told.toldOnlyForWhereARunStops();
@@ -1204,14 +1221,20 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * out whenever it works out what it is a part of and it was not read as a number: its
              * own operation, and an arm or the right of {@code &&}, which some runs take. Each is
              * passed over unread ({@link WhatWasTold#passedOver}). Not a behavior's body a call
-             * runs, whose stops are the body's, told where the body is read.
+             * runs, whose stops are the body's, told where the body is read. An own operation the
+             * analysis tells on each way leaves no stop untold, and is still nothing a row is
+             * shown to get past.
              */
             private void passedOverIn(Core part, InputReads at) {
                 Core here = Core.withoutStanding(part);
+                Denotation worked = new Denotation(part, at);
                 if (!(here instanceof Core.Call call
-                        && call.fn() instanceof Core.Reached.OfDeclaration)
-                        && !reached.ownWorkingEndsNoRun(new Denotation(part, at))) {
-                    told.passedOverWhatMayEndARun();
+                        && call.fn() instanceof Core.Reached.OfDeclaration)) {
+                    if (reached.leavesItsOwnStopUntold(worked)) {
+                        told.passedOverWhatMayEndARun();
+                    } else if (!reached.ownWorkingEndsNoRun(worked)) {
+                        told.toldOnlyForWhereARunStops();
+                    }
                 }
                 List<Core> always = Evaluated.inOrder(here).stream()
                         .filter(step -> step instanceof Evaluated.Step.Always)
@@ -1239,7 +1262,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 apart.productsStop = false;
                 ElementsMet.Mark metBefore = met.mark();
                 Attempt read = Attempt.ofAPart(AffineForms.outcome(e, at,
-                        reading(ofTheInput, new LinkedHashSet<>(), met, apart, null)));
+                        reading(ofTheInput, new LinkedHashSet<>(), met, apart, null, null,
+                                toldOnTheirWays)));
                 met.rewind(metBefore);
                 if (read instanceof Attempt.Form
                         && (!apart.operations.isEmpty() || apart.aStopUntold)) {
@@ -1645,7 +1669,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 ElementsMet.Mark metBefore = met.mark();
                 WhatWasTold toldApart = told.apart();
                 Attempt attempt = unrolling.apply(
-                        reading(ofTheInput, namedApart, met, toldApart));
+                        reading(ofTheInput, namedApart, met, toldApart, null, null,
+                                toldOnTheirWays));
                 if (attempt instanceof Attempt.Form) {
                     named.addAll(namedApart);
                     told.absorb(toldApart);
@@ -3064,10 +3089,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
      * What a run works out to decide which arm of {@code choice} it takes, which every run of an
      * arm has worked out first: what evaluating the choice reaches before any arm. A comparison
      * among it is read as any is, its two sides worked out whichever way it comes out; anything
-     * else that can stop a run tells nothing.
+     * else that can stop a run tells nothing, but where {@code answersFor} tells its stop on each
+     * way ({@link WhatTheAnalysisAnswersFor#toldWhereItStops}).
      */
     static UndividedByARelation.Working workingOfWhatDecides(Core choice, InputReads at,
-                                                             InputReading ofTheInput) {
+                                                             InputReading ofTheInput,
+                                                             WhatTheAnalysisAnswersFor answersFor) {
         UndividedByARelation.Working together = new UndividedByARelation.Working(List.of(),
                 WhatARelationLeavesUndivided.Told.EVERY);
         // An attempt decides by building: what it works out is the values of the fields, and the
@@ -3080,7 +3107,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         for (Evaluated.Step step : steps) {
             UndividedByARelation.Working here = switch (step) {
                 case Evaluated.Step.Always always ->
-                        workingOfEvaluating(always.expression(), at, ofTheInput);
+                        toldEvaluating(always.expression(), at, ofTheInput, answersFor).working();
                 case Evaluated.Step.OnlyWhere only ->
                         WorkedOutToReachIt.of(ofTheInput)
                                 .endsNoRun(new Denotation(only.expression(), at))
@@ -3100,31 +3127,32 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     /**
      * What a run works out evaluating {@code expression}, every operation of whole numbers in the
      * order it works them out, for where a run stops: told by walking the expression as written,
-     * and not by what a comparison made of its value is read as.
+     * and not by what a comparison made of its value is read as. A stop {@code answersFor} tells
+     * on each way is no stop left untold.
      */
     static UndividedByARelation.Working workedOutByEvaluating(Core expression, InputReads at,
-                                                              InputReading ofTheInput) {
+                                                              InputReading ofTheInput,
+                                                              WhatTheAnalysisAnswersFor answersFor) {
         if (WorkedOutToReachIt.of(ofTheInput).endsNoRun(new Denotation(expression, at))) {
             return UndividedByARelation.Working.NOTHING;
         }
-        return toldEvaluating(expression, at, ofTheInput).workedOut().stops().operations();
-    }
-
-    private static UndividedByARelation.Working workingOfEvaluating(Core expression, InputReads at,
-                                                                    InputReading ofTheInput) {
-        return toldEvaluating(expression, at, ofTheInput).working();
+        return toldEvaluating(expression, at, ofTheInput, answersFor).workedOut().stops()
+                .operations();
     }
 
     /** What a reading of its own tells of what a run works out evaluating {@code expression}
      *  ({@link Arithmetic#tellsWhatItWorksOut}): every operation it tells, and short of every one
-     *  where it does not read it. */
+     *  where it does not read it, with a stop {@code answersFor} tells on each way left untold
+     *  nowhere. */
     private static WhatWasTold toldEvaluating(Core expression, InputReads at,
-                                              InputReading ofTheInput) {
+                                              InputReading ofTheInput,
+                                              WhatTheAnalysisAnswersFor answersFor) {
         WhatWasTold told = new WhatWasTold();
-        Arithmetic reading = reading(ofTheInput, new LinkedHashSet<>(), new ElementsMet(), told);
+        Arithmetic reading = reading(ofTheInput, new LinkedHashSet<>(), new ElementsMet(), told,
+                null, null, answersFor.toldWhereItStops());
         if (!reading.tellsWhatItWorksOut(expression, at)) {
             // Not told only where something in it that may end a run is read by nothing.
-            if (reading.passedOverEndsNoRun(expression, at)) {
+            if (reading.passedOverLeavesNoStopUntold(expression, at)) {
                 told.passedOverWhatEndsNoRun();
             } else {
                 told.passedOverWhatMayEndARun();
@@ -3198,7 +3226,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                              landsInAMonth,
                                      Predicate<Core> toldWhereItStops) {
 
-        static final WhatTheAnalysisAnswersFor NOTHING = readingAgain(_ -> false);
+        /** What no rule answers for: a comparison no rule read. */
+        static final WhatTheAnalysisAnswersFor NOTHING = new WhatTheAnalysisAnswersFor(_ -> false,
+                _ -> null, _ -> null, (_, _) -> null, _ -> null, _ -> false);
 
         WhatTheAnalysisAnswersFor {
             Objects.requireNonNull(readAgain);
@@ -3209,9 +3239,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             Objects.requireNonNull(toldWhereItStops);
         }
 
-        static WhatTheAnalysisAnswersFor readingAgain(Predicate<Core> readAgain) {
+        /**
+         * What an analysis that reads the comparison again with each value of what
+         * {@code readAgain} holds of answers for, and nothing else of its own, within this one:
+         * where the rule that read the comparison tells a total's stop on each way is the rule's,
+         * whichever analysis of it asks.
+         */
+        WhatTheAnalysisAnswersFor readingAgainOnly(Predicate<Core> readAgain) {
             return new WhatTheAnalysisAnswersFor(readAgain, _ -> null, _ -> null, (_, _) -> null,
-                    _ -> null, _ -> false);
+                    _ -> null, toldWhereItStops);
         }
     }
 
@@ -3500,13 +3536,15 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
         /** The same for the quotient {@code division}, which the analysis answers for with
          *  everything written under it and under the expression the reading stopped at, which it
-         *  reads the quotient out of. */
-        UndividedByARelation.Working ofTheQuotientAwayFromNought(Core division) {
+         *  reads the quotient out of, within what the rule that read it answers for
+         *  ({@code answersFor}). */
+        UndividedByARelation.Working ofTheQuotientAwayFromNought(
+                Core division, WhatTheAnalysisAnswersFor answersFor) {
             Set<Core> under = Collections.newSetFromMap(new IdentityHashMap<>());
             collectUnder(division, under);
             collectUnder(node, under);
             return beside(new StoppedValues(division, null, true, ofTheInput,
-                    WhatTheAnalysisAnswersFor.readingAgain(
+                    answersFor.readingAgainOnly(
                             node -> under.contains(Core.withoutStanding(node))))).toGetPast();
         }
 
