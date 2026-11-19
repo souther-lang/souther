@@ -26,15 +26,17 @@ class WhatNothingWasToldOfARunIsNotThatNothingStopsItTest {
         assertSame(told, Cutting.whatWasToldOrNot(_ -> told).apply(null));
     }
 
-    /** What decided an arm worked out nothing a row gets past, however it came to say so, and
-     *  the arm's own working is what a row of it gets past. */
+    /** Working out no operation adds nothing to what a run works out, before it or after it: the
+     *  one that told every operation and found none is what leaves the other as it was, whether
+     *  the other is read as the form or is an arm's, which is not on every run. */
     @Test
-    void whatWorkedOutNothingAddsNothingToWhatAnArmWorksOut() {
-        UndividedByARelation.Working arm = UndividedByARelation.Working.AS_THE_FORM.notOnEveryRun();
-        for (UndividedByARelation.Working decided : List.of(
+    void whatWorkedOutNoOperationAddsNothingOnEitherSide() {
+        UndividedByARelation.Working none = UndividedByARelation.Working.NO_STOPS;
+        for (UndividedByARelation.Working working : List.of(
                 UndividedByARelation.Working.AS_THE_FORM,
-                UndividedByARelation.Working.NO_STOPS)) {
-            assertSame(arm, arm.after(decided));
+                UndividedByARelation.Working.AS_THE_FORM.notOnEveryRun())) {
+            assertSame(working, working.after(none));
+            assertSame(working, none.after(working));
         }
     }
 }

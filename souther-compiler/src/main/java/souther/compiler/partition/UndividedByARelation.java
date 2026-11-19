@@ -555,9 +555,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * worked out what decided the arm before it works out the arm.
          */
         Working after(Working earlier) {
-            // What decided the arm worked out nothing a row gets past, whether no reading was
-            // made of it or every operation was told and none can stop a run.
-            if (earlier.equals(AS_THE_FORM) || earlier.equals(NO_STOPS)) {
+            // Every operation told and none can stop a run: it adds no operation, and what it
+            // is put beside keeps what it said, on either side.
+            if (equals(NO_STOPS)) {
+                return earlier;
+            }
+            if (earlier.equals(NO_STOPS)) {
+                return this;
+            }
+            if (earlier.equals(AS_THE_FORM)) {
                 return this;
             }
             if (equals(AS_THE_FORM)) {
@@ -2857,9 +2863,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return false;
     }
 
-    /** Whether {@link #aRunMayStopIn} says no run stops in {@code working} on any region: it
-     *  tells no operation, so whatever regions it is asked over do not need working out. */
-    static boolean noRunMayStopIn(Working working) {
+    /** Whether {@code working} tells no operation, so that {@link #aRunMayStopIn} is false of it
+     *  on any region and the regions it is asked over do not need working out. That is no
+     *  claim that a run stops nowhere ({@link Working#NO_STOPS}). */
+    static boolean tellsNoOperation(Working working) {
         return working.operations().isEmpty();
     }
 

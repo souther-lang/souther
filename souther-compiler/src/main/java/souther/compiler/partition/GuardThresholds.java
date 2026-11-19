@@ -422,7 +422,7 @@ public final class GuardThresholds {
                                                     .orElseGet(() -> arrived.relationsRead()
                                                             .stream().anyMatch(UndividedByARelation
                                                                     ::aRunMayStopOverABoundValue)))
-                                    || each.stopsIn().map(stops -> !stops.noRunMayStopAnywhere()
+                                    || each.stopsIn().map(stops -> !stops.tellsNoOperation()
                                             && stops.aRunMayStopIn(read,
                                             regionsOf(beforeIt))).orElse(false)
                                     || each.worksOutOnEach().map(applications -> applications
@@ -1360,7 +1360,7 @@ public final class GuardThresholds {
             ComparisonReadings.Reading each, Cutting.OnAnApplication one, Reachability toIt,
             Reachability beforeIt, InputReading read, List<ComparisonArrival> arrivals,
             WaysToACase wayToACase, Function<Proposition, ReachingCuts.Stating> aCase) {
-        if (one.stops().noRunMayStopAnywhere()) {
+        if (one.stops().tellsNoOperation()) {
             return false;
         }
         if (one.reached() instanceof Proposition.Always(boolean holds) && holds) {
@@ -1394,7 +1394,7 @@ public final class GuardThresholds {
         for (StopEvidence.OnAnArm arm : arms) {
             Proposition reached = within == null ? arm.reached()
                     : WhereAnApplicationIsMade.past(within, arm.reached());
-            if (!arm.stops().noRunMayStopAnywhere()
+            if (!arm.stops().tellsNoOperation()
                     && ComparisonAssessment.someRowArrives(wayToACase.apply(reached), arrivals)
                     && arm.stops().aRunMayStopIn(read, regionsOf(Reachability.of(
                             new WayToTheBorder(each.wayToACase(aCase.apply(reached))),
