@@ -56,8 +56,13 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
 
             // The calendar's cycle and the stretch of years a proof about it is made over: what has
             // to be looked at for an answer to hold of every year, not how far a search goes.
-            Map.entry("souther.compiler.partition.DatesThatStandInEveryYear.YEARS_OF_A_CYCLE",
+            Map.entry("souther.compiler.partition.PartsOfADateOverACycle.YEARS_OF_A_CYCLE",
                     "how many years the calendar's pattern repeats over"),
+            Map.entry("souther.compiler.partition.PartsOfADateOverACycle.FIRST_YEAR",
+                    "the year the cycle is read from, which any year would be as well"),
+            Map.entry("souther.compiler.partition.PartsOfADateOverACycle.DAYS_OF_A_SHORT_YEAR",
+                    "how many days a year that is not a leap year has, which bounds how many years"
+                            + " a move reaches"),
             Map.entry("souther.compiler.partition.YearsAWayAllows.YEARS_OF_A_CYCLE",
                     "how many years the calendar's pattern repeats over, which is as many years"
                             + " as a look from one year meets every pattern in"),
@@ -69,6 +74,12 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             Map.entry("souther.compiler.partition.WhatStatementsOfDatePartsLeaveAlone"
                             + ".MOST_DATES_A_WAY_IS_ASKED_OF",
                     "how many dates a way may state the parts of for them to be looked through"),
+            // Dates are looked for with at most this many choices of what their parts come to
+            // beside the years; past it, no dates are said to hold them, which claims nothing,
+            // and no search is begun.
+            Map.entry("souther.compiler.partition.DatesThatHoldEveryStatement.MOST_CHOICES",
+                    "how many choices of the parts beside the years a look for dates is begun"
+                            + " over"),
 
             // How many steps of a date written as a move of another are followed to the date whose
             // month it is the first of: the depth of an expression, which no search stops at.
