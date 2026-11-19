@@ -109,7 +109,7 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
             let isBusinessDay (c: Calendar, d: Date): Bool =
                 weekday(c, d) >= 1 && weekday(c, d) <= 5 && Bool.not(Set.contains(d, c.holidays))
             let firstBusinessDay (c: Calendar, from: Date, step: Int): Date =
-                rangeInclusive(0, 10)
+                rangeInclusive(0, 1)
                     |> map(n -> Date.addDays(n * step, from))
                     |> find(d -> isBusinessDay(c, d))
                     |> Option.withDefault(from)
@@ -138,14 +138,9 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
         return compilation;
     }
 
-    /** What each case of each line not worked out came to, at each copy it was read at. */
-    private static List<JsonNode> readings(Compilation compilation) {
-        return readings(AdequacyReport.of(compilation), compilation);
-    }
-
-    private static List<JsonNode> readings(AdequacyReport report, Compilation compilation) {
-        return told(report, compilation).stream()
-                .map(reading -> reading.path("caseExpansion")).toList();
+    /** What each case came to, of each of {@code told}. */
+    private static List<JsonNode> caseExpansions(List<JsonNode> told) {
+        return told.stream().map(reading -> reading.path("caseExpansion")).toList();
     }
 
     /** Each reading of each case of each line not worked out, whole. */
@@ -161,10 +156,17 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
         return out;
     }
 
-    /** That no reading of {@code compilation} names a helper a function outside it calls. */
-    private static void namesNoHelperCalledOnEachElement(Compilation compilation) {
-        told(AdequacyReport.of(compilation), compilation).forEach(reading -> assertFalse(
-                reading.has("helperCalledOnEachElement"), reading::toString));
+    /** That none of {@code told} names a helper a function outside it calls. */
+    private static void namesNoHelperCalledOnEachElement(List<JsonNode> told) {
+        told.forEach(reading -> assertFalse(reading.has("helperCalledOnEachElement"),
+                reading::toString));
+    }
+
+    /** Every reading of a case not worked out of {@code model}, compiled. */
+    private static List<JsonNode> toldOf(String model) {
+        Compilation compilation = made(model);
+        ACompiledModel.compiles(compilation);
+        return told(AdequacyReport.of(compilation), compilation);
     }
 
     /** What {@code model} has written from {@code construct}'s place to the end of its line. */
@@ -182,11 +184,13 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
         return helpers.get(0);
     }
 
+    /** And, the choices multiplying its readings, that is what is said of it: no second
+     *  suggestion of the same helper. */
     @Test
     void theHelperTheSearchAppliesOnEachCandidateIsNamedAtTheComparisonsItWrote() {
-        Compilation compilation = made(CALLED_ON_EACH_CANDIDATE);
-        ACompiledModel.compiles(compilation);
-        for (JsonNode reading : readings(compilation)) {
+        List<JsonNode> told = toldOf(CALLED_ON_EACH_CANDIDATE);
+        namesNoHelperCalledOnEachElement(told);
+        for (JsonNode reading : caseExpansions(told)) {
             JsonNode helper = onlyHelper(reading);
             assertEquals("demo.ok", helper.path("helper").asString());
             Set<String> written = new TreeSet<>();
@@ -212,7 +216,9 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
         Compilation compilation = made(CALLED_INSIDE_HELPERS);
         ACompiledModel.compiles(compilation);
         AdequacyReport report = AdequacyReport.of(compilation);
-        for (JsonNode reading : readings(report, compilation)) {
+        List<JsonNode> told = told(report, compilation);
+        namesNoHelperCalledOnEachElement(told);
+        for (JsonNode reading : caseExpansions(told)) {
             JsonNode helper = onlyHelper(reading);
             assertEquals("demo.ok", helper.path("helper").asString());
             Set<String> copies = new TreeSet<>();
@@ -226,9 +232,9 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
                     + " of pick's if: " + helper);
         }
         String text = report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
-        List<String> told = text.lines().filter(line -> line.contains("case expansion")).toList();
-        assertFalse(told.isEmpty(), text);
-        for (String line : told) {
+        List<String> lines = text.lines().filter(line -> line.contains("case expansion")).toList();
+        assertFalse(lines.isEmpty(), text);
+        for (String line : lines) {
             assertTrue(line.contains("The helper `ok` is read more than once")
                             && line.contains("the call written inside `first`, `pick` has to move"
                             + " into the `let` of the behavior itself"),
@@ -238,40 +244,26 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
 
     @Test
     void comparisonsTheBehaviorWritesItselfNameNoHelper() {
-        Compilation compilation = made(IN_THE_BEHAVIORS_OWN_BODY);
-        ACompiledModel.compiles(compilation);
-        readings(compilation).forEach(reading -> assertEquals(0,
+        List<JsonNode> told = toldOf(IN_THE_BEHAVIORS_OWN_BODY);
+        caseExpansions(told).forEach(reading -> assertEquals(0,
                 reading.path("multipliedHelpers").size(), reading::toString));
-        namesNoHelperCalledOnEachElement(compilation);
+        namesNoHelperCalledOnEachElement(told);
     }
 
     @Test
     void aHelperExpandedOnceIsOneReadingWhateverItMultipliesInside() {
-        Compilation compilation = made(EXPANDED_ONCE);
-        ACompiledModel.compiles(compilation);
-        readings(compilation).forEach(reading -> assertEquals(0,
+        List<JsonNode> told = toldOf(EXPANDED_ONCE);
+        caseExpansions(told).forEach(reading -> assertEquals(0,
                 reading.path("multipliedHelpers").size(), reading::toString));
-        namesNoHelperCalledOnEachElement(compilation);
+        namesNoHelperCalledOnEachElement(told);
     }
 
     @Test
     void readingsChosenAmongAsAlternativesAreAddedAndNameNoHelper() {
-        Compilation compilation = made(READINGS_THAT_ARE_ALTERNATIVES);
-        ACompiledModel.compiles(compilation);
-        readings(compilation).forEach(reading -> assertEquals(0,
+        List<JsonNode> told = toldOf(READINGS_THAT_ARE_ALTERNATIVES);
+        caseExpansions(told).forEach(reading -> assertEquals(0,
                 reading.path("multipliedHelpers").size(), reading::toString));
-        namesNoHelperCalledOnEachElement(compilation);
-    }
-
-    /** Where the choices multiply the helper's readings, that is what is said of it, and not a
-     *  second suggestion of the same helper. */
-    @Test
-    void aHelperTheChoicesMultiplyIsNotNamedAgainForTheFunctionCallingIt() {
-        for (String model : List.of(CALLED_ON_EACH_CANDIDATE, CALLED_INSIDE_HELPERS)) {
-            Compilation compilation = made(model);
-            ACompiledModel.compiles(compilation);
-            namesNoHelperCalledOnEachElement(compilation);
-        }
+        namesNoHelperCalledOnEachElement(told);
     }
 
     /**
@@ -281,11 +273,7 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
      */
     @Test
     void theHelperAFindOutsideItCallsOnEachCandidateIsNamedWithEveryHelperCallingIt() {
-        Compilation compilation = made(SHAPED_AS_BILLING);
-        ACompiledModel.compiles(compilation);
-        AdequacyReport report = AdequacyReport.of(compilation);
-        List<JsonNode> told = told(report, compilation);
-        for (JsonNode reading : told) {
+        for (JsonNode reading : toldOf(SHAPED_AS_BILLING)) {
             assertEquals(0, reading.path("caseExpansion").path("multipliedHelpers").size(),
                     reading::toString);
             assertFalse(reading.has("helperToDeclare"), reading::toString);

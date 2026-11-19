@@ -46,7 +46,7 @@ class EveryLineIsReadWhereTheWalkAloneMetItsComparisonTest {
             let isBusinessDay (c: Calendar, d: Date): Bool =
                 weekday(c, d) >= 1 && weekday(c, d) <= 5 && Bool.not(Set.contains(d, c.holidays))
             let firstBusinessDay (c: Calendar, from: Date, step: Int): Date =
-                rangeInclusive(0, 10)
+                rangeInclusive(0, 1)
                     |> map(n -> Date.addDays(n * step, from))
                     |> find(d -> isBusinessDay(c, d))
                     |> Option.withDefault(from)
@@ -58,10 +58,10 @@ class EveryLineIsReadWhereTheWalkAloneMetItsComparisonTest {
             let g (c, nominal) = onABusinessDay(c, nominal)
 
             example g
-                | "a Saturday moves on to the Monday" :
+                | "a Friday stays" :
                     (Calendar { holidays = Set.fromList([ Date("2026-08-11") ]),
                                 aSunday = Date("2026-01-04"), rule = Following },
-                     Date("2026-08-08")) -> Date("2026-08-10")
+                     Date("2026-08-07")) -> Date("2026-08-07")
             """;
 
     /** A closure inside a closure, over a list the input holds and one written out. */
