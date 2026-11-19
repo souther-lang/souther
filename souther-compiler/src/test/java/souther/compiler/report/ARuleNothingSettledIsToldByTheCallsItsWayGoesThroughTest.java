@@ -318,7 +318,8 @@ class ARuleNothingSettledIsToldByTheCallsItsWayGoesThroughTest {
                         each.armPlaces(), each.conditionPlaces(), each.rulePlaces(),
                         each.partPlaces(), each.ruleReadings(), unsettled, each.reachShownWrong(),
                         each.combinationReadings(), each.unobserved(), each.rowPlaces(),
-                        each.weights(), each.rewritePlaces(), each.wayStops()));
+                        each.weights(), each.rewritePlaces(), each.wayStops(),
+                        each.helpersCalledOnEachElement()));
             }
             modules.add(new AdequacyReport.ModuleReport(module.module(), module.declaredIn(),
                     behaviors, module.declarations(), module.owedByDeclarations(),

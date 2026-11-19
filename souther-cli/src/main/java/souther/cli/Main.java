@@ -30,6 +30,8 @@ import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.HelpersReadOnApplicationsAroundThem;
+import souther.compiler.types.ValueName;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.query.Offering;
 import souther.compiler.report.GeneratedRows;
@@ -622,6 +624,11 @@ public final class Main {
                 err.println(Messages.get(refused.key(), render.locale(), refused.args()));
                 return 2;
             }
+            // Before the lines are measured, which the offering and the report below both do: a
+            // helper whose comparisons are read again on every application of a function around
+            // it is something the author can act on while that runs, and asking which costs where
+            // the comparisons stand and nothing the measurement makes.
+            toldBeforeTheMeasurement(compilation, module, behavior, render.locale());
             // What this run offers, where rows were asked for. Before the report and not after it:
             // a line the rows do not tell from another is answered by whichever offered row tells
             // the two apart, so where the report sends a reader for one is settled by what goes
@@ -682,6 +689,28 @@ public final class Main {
         } catch (CompileException e) {
             reportCompileError(e, contexts, render);
             return 1;
+        }
+    }
+
+    /**
+     * Each helper of the behaviors {@code module} and {@code behavior} select whose comparisons
+     * a function applied outside it reads again on each element, one line for each helper, said
+     * on the error stream so that a document on the output stays one document.
+     */
+    private void toldBeforeTheMeasurement(Compilation compilation, String module, String behavior,
+                                          Locale locale) {
+        for (HelpersReadOnApplicationsAroundThem.Said said
+                : HelpersReadOnApplicationsAroundThem.toldOf(compilation, module, behavior)) {
+            List<String> readBy = new ArrayList<>();
+            said.applications().forEach((reader, times) -> readBy.add(
+                    Messages.get("cli.examples.helper.ahead.read", locale, reader, times)));
+            List<ValueName.Helper> inside = said.calledInside();
+            String calledInside = inside.isEmpty() ? ""
+                    : Messages.get("cli.examples.helper.ahead.inside", locale,
+                            String.join(", ", inside.stream()
+                                    .map(each -> "`" + each.name() + "`").toList()));
+            err.println(Messages.get("cli.examples.helper.ahead", locale, said.helper().name(),
+                    String.join(", ", readBy), calledInside));
         }
     }
 

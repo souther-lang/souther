@@ -51,6 +51,18 @@ sealed interface ClosureApplications {
     /** Inside no closure at all. */
     ClosureApplications OUTSIDE = new Outside(ElementsMetOn.EVERY, MadeOnEvery.NONE_AROUND);
 
+    /** These applications as a reader outside this package is told them: which of the four
+     *  states they are in, and, where they are said one by one, each of them. */
+    default AComparisonRead.AppliedOn told() {
+        return switch (this) {
+            case Outside _ -> new AComparisonRead.AppliedOn.Outside();
+            case Each(var each) -> new AComparisonRead.AppliedOn.OnEach(
+                    each.stream().map(Application::readOn).toList());
+            case NotSaid _ -> new AComparisonRead.AppliedOn.NotSaid();
+            case None _ -> new AComparisonRead.AppliedOn.OnNone();
+        };
+    }
+
     /**
      * Inside no closure handed values written out.
      *

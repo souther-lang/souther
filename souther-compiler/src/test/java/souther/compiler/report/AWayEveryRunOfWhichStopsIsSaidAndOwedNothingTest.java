@@ -156,7 +156,7 @@ class AWayEveryRunOfWhichStopsIsSaidAndOwedNothingTest {
                 b.rowsOwed(), b.claimed(), b.reported(), b.armPlaces(), b.conditionPlaces(),
                 b.rulePlaces(), b.partPlaces(), readings, b.ruleSettlements(),
                 b.reachShownWrong(), b.combinationReadings(), b.unobserved(), b.rowPlaces(),
-                b.weights(), b.rewritePlaces(), stops);
+                b.weights(), b.rewritePlaces(), stops, b.helpersCalledOnEachElement());
     }
 
     private static DecisionReading readUnderTheOtherRules(Compilation bodies) {

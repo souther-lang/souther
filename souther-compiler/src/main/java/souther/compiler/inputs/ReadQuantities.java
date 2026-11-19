@@ -458,6 +458,13 @@ final class ReadQuantities implements Quantities {
         record YearLeaves(NumericTerm.ValueOf date, int divisor, Set<Integer> remainders)
                 implements Assumed {
 
+            /** The remainders held as a set nothing can change, once: the class of days read off
+             *  this ({@code classFixedAt}) is made again each time a region is asked about the
+             *  date, and takes them as they are rather than copying them each time. */
+            public YearLeaves {
+                remainders = Set.copyOf(remainders);
+            }
+
             @Override
             public Set<NumericTerm> terms() {
                 return Set.of(date);

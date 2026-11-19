@@ -94,6 +94,63 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
             """;
 
     /**
+     * Billing's due dates: the comparisons in {@code isBusinessDay}, called inside the
+     * {@code find} of {@code firstBusinessDay}, which each arm of {@code onABusinessDay}'s match
+     * calls and {@code dueDate} calls in turn. The candidates are dates, and several steps reach
+     * one date, so the choices are among dates and not among readings of {@code isBusinessDay}.
+     */
+    private static final String SHAPED_AS_BILLING = """
+            module demo exposing (g, Calendar, Rule)
+            import List ( map, find, rangeInclusive )
+            data Rule = Preceding | Following
+            data Calendar = { holidays: Set<Date>, aSunday: Date, rule: Rule }
+            let weekday (c: Calendar, d: Date): Int =
+                Int.floorMod(Date.daysBetween(c.aSunday, d), 7)
+            let isBusinessDay (c: Calendar, d: Date): Bool =
+                weekday(c, d) >= 1 && weekday(c, d) <= 5 && Bool.not(Set.contains(d, c.holidays))
+            let firstBusinessDay (c: Calendar, from: Date, step: Int): Date =
+                rangeInclusive(0, 1)
+                    |> map(n -> Date.addDays(n * step, from))
+                    |> find(d -> isBusinessDay(c, d))
+                    |> Option.withDefault(from)
+            let onABusinessDay (c: Calendar, nominal: Date): Date =
+                match c.rule with
+                    | Preceding -> firstBusinessDay(c, nominal, 0 - 1)
+                    | Following -> firstBusinessDay(c, nominal, 1)
+            let dueDate (c: Calendar, nominal: Date): Date = onABusinessDay(c, nominal)
+            behavior g : (c: Calendar, nominal: Date) -> Date
+            let g (c, nominal) = dueDate(c, nominal)
+            """;
+
+    /** Billing's due dates with a search of its own on each side: the helper the comparisons are
+     *  written in is called inside two finds, each in a helper of its own. */
+    private static final String CALLED_IN_TWO_FINDS = """
+            module demo exposing (g, Calendar, Rule)
+            import List ( map, find, rangeInclusive )
+            data Rule = Preceding | Following
+            data Calendar = { holidays: Set<Date>, aSunday: Date, rule: Rule }
+            let weekday (c: Calendar, d: Date): Int =
+                Int.floorMod(Date.daysBetween(c.aSunday, d), 7)
+            let isBusinessDay (c: Calendar, d: Date): Bool =
+                weekday(c, d) >= 1 && weekday(c, d) <= 5 && Bool.not(Set.contains(d, c.holidays))
+            let nextBusinessDay (c: Calendar, from: Date): Date =
+                rangeInclusive(0, 1)
+                    |> map(n -> Date.addDays(n, from))
+                    |> find(d -> isBusinessDay(c, d))
+                    |> Option.withDefault(from)
+            let previousBusinessDay (c: Calendar, from: Date): Date =
+                rangeInclusive(0, 1)
+                    |> map(n -> Date.addDays(0 - n, from))
+                    |> find(d -> isBusinessDay(c, d))
+                    |> Option.withDefault(from)
+            behavior g : (c: Calendar, nominal: Date) -> Date
+            let g (c, nominal) =
+                match c.rule with
+                    | Preceding -> previousBusinessDay(c, nominal)
+                    | Following -> nextBusinessDay(c, nominal)
+            """;
+
+    /**
      * How many cases a line is taken apart into here: none. The comparisons of one search leave
      * few ways once their numbers are read, so at the figure declared the line would be taken
      * apart and say nothing of a helper; held to none, every line past the figure as the choices
@@ -109,21 +166,35 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
         return compilation;
     }
 
-    /** What each case of each line not worked out came to, at each copy it was read at. */
-    private static List<JsonNode> readings(Compilation compilation) {
-        return readings(AdequacyReport.of(compilation), compilation);
+    /** What each case came to, of each of {@code told}. */
+    private static List<JsonNode> caseExpansions(List<JsonNode> told) {
+        return told.stream().map(reading -> reading.path("caseExpansion")).toList();
     }
 
-    private static List<JsonNode> readings(AdequacyReport report, Compilation compilation) {
+    /** Each reading of each case of each line not worked out, whole. */
+    private static List<JsonNode> told(AdequacyReport report, Compilation compilation) {
         JsonNode partition = JSON.readTree(report
                         .json(SourceRendering.namedByIdentity(compilation.texts())))
                 .path("modules").get(0).path("behaviors").get(0).path("partition");
         List<JsonNode> out = new ArrayList<>();
         partition.path("caseExpansions").forEach(each -> each.path("readings")
-                .forEach(reading -> out.add(reading.path("caseExpansion"))));
+                .forEach(out::add));
         assertFalse(out.isEmpty(), "the line on what the search found is past the figure: "
                 + partition);
         return out;
+    }
+
+    /** That none of {@code told} names a helper a function outside it calls. */
+    private static void namesNoHelperCalledOnEachElement(List<JsonNode> told) {
+        told.forEach(reading -> assertFalse(reading.has("helperCalledOnEachElement"),
+                reading::toString));
+    }
+
+    /** Every reading of a case not worked out of {@code model}, compiled. */
+    private static List<JsonNode> toldOf(String model) {
+        Compilation compilation = made(model);
+        ACompiledModel.compiles(compilation);
+        return told(AdequacyReport.of(compilation), compilation);
     }
 
     /** What {@code model} has written from {@code construct}'s place to the end of its line. */
@@ -141,11 +212,13 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
         return helpers.get(0);
     }
 
+    /** And, the choices multiplying its readings, that is what is said of it: no second
+     *  suggestion of the same helper. */
     @Test
     void theHelperTheSearchAppliesOnEachCandidateIsNamedAtTheComparisonsItWrote() {
-        Compilation compilation = made(CALLED_ON_EACH_CANDIDATE);
-        ACompiledModel.compiles(compilation);
-        for (JsonNode reading : readings(compilation)) {
+        List<JsonNode> told = toldOf(CALLED_ON_EACH_CANDIDATE);
+        namesNoHelperCalledOnEachElement(told);
+        for (JsonNode reading : caseExpansions(told)) {
             JsonNode helper = onlyHelper(reading);
             assertEquals("demo.ok", helper.path("helper").asString());
             Set<String> written = new TreeSet<>();
@@ -171,7 +244,9 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
         Compilation compilation = made(CALLED_INSIDE_HELPERS);
         ACompiledModel.compiles(compilation);
         AdequacyReport report = AdequacyReport.of(compilation);
-        for (JsonNode reading : readings(report, compilation)) {
+        List<JsonNode> told = told(report, compilation);
+        namesNoHelperCalledOnEachElement(told);
+        for (JsonNode reading : caseExpansions(told)) {
             JsonNode helper = onlyHelper(reading);
             assertEquals("demo.ok", helper.path("helper").asString());
             Set<String> copies = new TreeSet<>();
@@ -185,9 +260,9 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
                     + " of pick's if: " + helper);
         }
         String text = report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
-        List<String> told = text.lines().filter(line -> line.contains("case expansion")).toList();
-        assertFalse(told.isEmpty(), text);
-        for (String line : told) {
+        List<String> lines = text.lines().filter(line -> line.contains("case expansion")).toList();
+        assertFalse(lines.isEmpty(), text);
+        for (String line : lines) {
             assertTrue(line.contains("The helper `ok` is read more than once")
                             && line.contains("the call written inside `first`, `pick` has to move"
                             + " into the `let` of the behavior itself"),
@@ -197,25 +272,78 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
 
     @Test
     void comparisonsTheBehaviorWritesItselfNameNoHelper() {
-        Compilation compilation = made(IN_THE_BEHAVIORS_OWN_BODY);
-        ACompiledModel.compiles(compilation);
-        readings(compilation).forEach(reading -> assertEquals(0,
+        List<JsonNode> told = toldOf(IN_THE_BEHAVIORS_OWN_BODY);
+        caseExpansions(told).forEach(reading -> assertEquals(0,
                 reading.path("multipliedHelpers").size(), reading::toString));
+        namesNoHelperCalledOnEachElement(told);
     }
 
     @Test
     void aHelperExpandedOnceIsOneReadingWhateverItMultipliesInside() {
-        Compilation compilation = made(EXPANDED_ONCE);
-        ACompiledModel.compiles(compilation);
-        readings(compilation).forEach(reading -> assertEquals(0,
+        List<JsonNode> told = toldOf(EXPANDED_ONCE);
+        caseExpansions(told).forEach(reading -> assertEquals(0,
                 reading.path("multipliedHelpers").size(), reading::toString));
+        namesNoHelperCalledOnEachElement(told);
     }
 
     @Test
     void readingsChosenAmongAsAlternativesAreAddedAndNameNoHelper() {
-        Compilation compilation = made(READINGS_THAT_ARE_ALTERNATIVES);
-        ACompiledModel.compiles(compilation);
-        readings(compilation).forEach(reading -> assertEquals(0,
+        List<JsonNode> told = toldOf(READINGS_THAT_ARE_ALTERNATIVES);
+        caseExpansions(told).forEach(reading -> assertEquals(0,
                 reading.path("multipliedHelpers").size(), reading::toString));
+        namesNoHelperCalledOnEachElement(told);
+    }
+
+    /**
+     * Billing's shape: nothing multiplies the readings of {@code isBusinessDay} and no helper holds
+     * every choice, and the helper named is the one the comparisons are written in, with every
+     * helper that calls it.
+     */
+    @Test
+    void theHelperAFindOutsideItCallsOnEachCandidateIsNamedWithEveryHelperCallingIt() {
+        for (JsonNode reading : toldOf(SHAPED_AS_BILLING)) {
+            assertEquals(0, reading.path("caseExpansion").path("multipliedHelpers").size(),
+                    reading::toString);
+            assertFalse(reading.has("helperToDeclare"), reading::toString);
+            JsonNode named = reading.path("helperCalledOnEachElement");
+            assertEquals("demo.isBusinessDay", named.path("helper").asString(),
+                    reading::toString);
+            assertEquals(List.of("demo.firstBusinessDay", "demo.onABusinessDay", "demo.dueDate"),
+                    JSON.convertValue(named.path("calledInside"), List.class),
+                    "every helper on the way out to the behavior: " + named);
+            for (JsonNode call : named.path("calls")) {
+                assertTrue(writtenAt(SHAPED_AS_BILLING, call).startsWith("find("),
+                        "the find around the call: " + call);
+            }
+            assertEquals(List.of(), JSON.convertValue(named.path("leftReadAgainBy"), List.class),
+                    "no other rule suggests a helper here: " + named);
+        }
+    }
+
+    /**
+     * A reading at a copy of the helper is told of the find around that copy, and of no find
+     * around another copy: here every copy is called inside one of two finds, each in a helper
+     * of its own.
+     */
+    @Test
+    void aReadingIsToldOfTheFindsAroundItsOwnCopiesAlone() {
+        List<JsonNode> told = toldOf(CALLED_IN_TWO_FINDS);
+        assertFalse(told.stream().noneMatch(reading -> reading.has("helperCalledOnEachElement")),
+                "some reading tells of the helper: " + told);
+        for (JsonNode reading : told) {
+            if (!reading.has("helperCalledOnEachElement")) {
+                continue;
+            }
+            Set<String> callers = new TreeSet<>();
+            for (JsonNode copy : reading.path("readAt")) {
+                JsonNode through = copy.path("through");
+                callers.add(through.get(through.size() - 1).path("definition").asString());
+            }
+            Set<String> around = new TreeSet<>();
+            for (JsonNode call : reading.path("helperCalledOnEachElement").path("calls")) {
+                around.add(call.path("construct").path("definition").asString());
+            }
+            assertEquals(callers, around, "the finds around this reading's copies: " + reading);
+        }
     }
 }
