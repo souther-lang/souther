@@ -14,7 +14,9 @@ import souther.compiler.check.Prepared;
 import souther.compiler.check.Clause;
 import souther.compiler.check.ClauseName;
 import souther.compiler.diag.PhysicalPos;
+import souther.compiler.partition.AComparisonRead;
 import souther.compiler.partition.ClauseOfAConstruction;
+import souther.compiler.partition.GuardThresholds;
 import souther.compiler.partition.PassedConstruction;
 import souther.compiler.partition.StopPastTheRepresentation;
 import souther.compiler.meaning.Quantity;
@@ -2937,6 +2939,43 @@ public final class Adequacy {
          */
         static Answer<BodyDivided> over(Db db, String name, String behavior,
                                         InputDomain builtAgainst) {
+            ToDivide divided = toDivide(db, name, behavior, builtAgainst);
+            if (divided == null) {
+                return Answer.absent();
+            }
+            Coverages.Partitioned read = Coverages.partitioningOf(divided.spec(), divided.read(),
+                    divided.body(), divided.plan(),
+                    atTheLinesOf(db.ask(new ArrivedAtLines(name)).value(), divided.spec()),
+                    statedOf(db.ask(new Bodies.StatedContracts(name)).value(), divided.spec()),
+                    // One allowance for this measure, made here and handed on. Asked for again
+                    // further in, a position would be allowed its machines once per caller and what
+                    // the two came to would be bought by nobody.
+                    db.ask(new Front.Adequacy()).value().measures()
+                            .allowanceForBehaviorDistinctions(),
+                    divided.witnesses());
+            return Answer.of(new BodyDivided(read.geometry(), read.conditionsMet(),
+                    read.rulesReachedAt()));
+        }
+    }
+
+    /**
+     * What one behavior's body is divided over: the behavior, the reading of its input, the body,
+     * the plan its comparisons are numbered by, and where a reading asks for a row showing it gets
+     * somewhere.
+     *
+     * <p>One assembly for every reader of the body, so that what is divided and what is walked
+     * before it is divided are of one input and one body.
+     */
+    record ToDivide(Hir.SpecBehavior spec, souther.compiler.inputs.InputReading read,
+                    souther.compiler.partition.BodyReading body,
+                    souther.compiler.coverage.CoverageSites.Plan plan,
+                    Coverages.WitnessesAtSites witnesses) {}
+
+    /**
+     * What {@code behavior}'s body is divided over, read against {@code builtAgainst} where there
+     * is one; null where there is nothing to divide.
+     */
+    static ToDivide toDivide(Db db, String name, String behavior, InputDomain builtAgainst) {
             // The assembly. What says whether there is anything to divide is the behavior's own
             // signature: a module one of whose declarations did not come out still has behaviors
             // whose boundary was built, and those are divided like any other.
@@ -2947,11 +2986,11 @@ public final class Adequacy {
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             if (!prepared.present() || !scope.present() || !sigs.present()
                     || !reading.present()) {
-                return Answer.absent();
+                return null;
             }
             Hir.SpecBehavior spec = specOf(prepared.value(), behavior);
             if (spec == null) {
-                return Answer.absent();   // no such behavior here, or one measured at its stages
+                return null;   // no such behavior here, or one measured at its stages
             }
             // The reading the measurement is made against, which is what makes it a measurement of
             // this behavior's input rather than of nothing. A module holding a type nobody could
@@ -2968,7 +3007,7 @@ public final class Adequacy {
                     instanceof BoundaryForMeasurement.Derived(
                             Sig _, InputForMeasurement.Local(Hir.SpecBehavior _,
                                     InputDomain measured)))) {
-                return Answer.absent();
+                return null;
             }
             InputDomain domain = builtAgainst == null ? measured : builtAgainst;
             souther.compiler.query.Bodies.Elaborated checked =
@@ -2976,20 +3015,12 @@ public final class Adequacy {
             souther.compiler.coverage.CoverageSites.Plan plan =
                     checked == null
                             ? souther.compiler.coverage.CoverageSites.Plan.NONE : checked.plan();
-            Coverages.Partitioned read = Coverages.partitioningOf(spec,
-                    readingOf(db, domain, reading.value()),
+            return new ToDivide(spec, readingOf(db, domain, reading.value()),
                     // Which of the three this elaboration holds, settled before anything reads a
                     // body. The other reading of the same body travels with it, which is where a
                     // rule about the strings at a position still stands as the author wrote it.
                     bodyReading(db, name, checked, behavior),
                     plan,
-                    atTheLinesOf(db.ask(new ArrivedAtLines(name)).value(), spec),
-                    statedOf(db.ask(new Bodies.StatedContracts(name)).value(), spec),
-                    // One allowance for this measure, made here and handed on. Asked for again
-                    // further in, a position would be allowed its machines once per caller and what
-                    // the two came to would be bought by nobody.
-                    db.ask(new Front.Adequacy()).value().measures()
-                            .allowanceForBehaviorDistinctions(),
                     new Coverages.WitnessesAtSites() {
                         @Override
                         public CountWitnesses.Sought ofACount(
@@ -3012,9 +3043,6 @@ public final class Adequacy {
                             return ExampleExecutions.sameValue(db);
                         }
                     });
-            return Answer.of(new BodyDivided(read.geometry(), read.conditionsMet(),
-                    read.rulesReachedAt()));
-        }
     }
 
     /**
@@ -5066,6 +5094,33 @@ public final class Adequacy {
         public Answer<List<TiltOfADerivedValue>> compute(Db db) {
             LineReadings readings = db.ask(new Readings(name, behavior)).value();
             return readings == null ? Answer.absent() : Answer.of(readings.tilts());
+        }
+    }
+
+    /**
+     * Every comparison of one behavior's body as the walk that draws its lines meets it, each with
+     * the applications of closures its lines were read on, before any line is asked where it
+     * decides ({@link GuardThresholds#comparisonsRead}).
+     *
+     * <p>Its own key because it is the cheap half of {@link Dividing}: what a body's comparisons
+     * are read on is known by the walk alone, and the asking that follows is most of what dividing
+     * a body costs. Read against the same input, body and plan as that one ({@link ToDivide}), so
+     * the comparisons met here are the ones the lines are drawn from.
+     */
+    public record ComparisonsRead(String name, String behavior)
+            implements Key<List<AComparisonRead>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<List<AComparisonRead>> compute(Db db) {
+            ToDivide divided = toDivide(db, name, behavior, null);
+            return divided == null ? Answer.absent()
+                    : Answer.of(Coverages.comparisonsRead(divided.spec(), divided.read(),
+                            divided.body(), divided.plan(), divided.witnesses()));
         }
     }
 

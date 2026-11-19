@@ -232,6 +232,52 @@ public final class GuardThresholds {
                 arrives, reaches, witnesses));
     }
 
+    /**
+     * Every construct of the body the walk of {@link #of} meets that may state something a line
+     * is drawn from, with every application of the closures it stands in, and nothing read of
+     * what it states ({@link ComparisonReadings#metOf}): no line is drawn, asked where it decides,
+     * or searched. What a reader that has to answer before any of that is paid for reads, over the
+     * same body, input and names the lines are drawn from.
+     */
+    public static List<AComparisonRead> comparisonsRead(String behavior, AnalysisBody states,
+                                                        InputReading read,
+                                                        ElementBindings elements,
+                                                        ComparisonWitnesses.AtComparisons
+                                                                witnesses) {
+        if (states == null) {
+            return List.of();
+        }
+        return OneReading.over(() -> appliedOn(ComparisonReadings.metOf(behavior, states, read,
+                namesOf(read, elements), witnesses)));
+    }
+
+    /** Each of {@code met} that is a construct of the model, with every application of the
+     *  closures around it. */
+    private static List<AComparisonRead> appliedOn(List<ComparisonReadings.AConstructMet> met) {
+        List<AComparisonRead> out = new ArrayList<>();
+        for (ComparisonReadings.AConstructMet each : met) {
+            Optional<ModelOccurrence> copy = ModelOccurrence.statedAt(each.occurrence());
+            if (copy.isPresent()) {
+                out.add(new AComparisonRead(copy.get(), each.applying().eachReadOn()));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** The walk of the body's comparisons, over the names {@code read} reads. */
+    private static ComparisonReadings comparisonsOf(String behavior, AnalysisBody states,
+                                                    InputReading read, ElementBindings elements,
+                                                    ComparisonWitnesses.AtComparisons witnesses) {
+        return ComparisonReadings.of(behavior, states, read, namesOf(read, elements), witnesses);
+    }
+
+    /** The names a walk of the body reads in at its root. */
+    private static InputReads namesOf(InputReading read, ElementBindings elements) {
+        InputDomain inputs = read.domain();
+        return InputReads.ofParametersWhereCallsStand(inputs.parameterReads(), read.declared(),
+                elements, inputs.dependencies());
+    }
+
     private static Guards guardsOf(String behavior, AnalysisBody states, Core emitted,
                                    CoverageSites.Plan plan,
                                    InputReading read,
@@ -239,7 +285,6 @@ public final class GuardThresholds {
                                    PathReachability.Arrivals arrives,
                                    RuleReachNumbering reaches,
                                    ComparisonWitnesses.AtComparisons witnesses) {
-        InputDomain inputs = read.domain();
         List<LineEvidence> found = new ArrayList<>();
         RulesWithNoLine.Gathered withoutALine = new RulesWithNoLine.Gathered();
         ReadingsReadOn.Taking readOn = new ReadingsReadOn.Taking();
@@ -263,9 +308,7 @@ public final class GuardThresholds {
         // is written by the expansion that made the binding, and the two representations of one body
         // are two expansions with two sets of bindings — so `elements` is the reading of this tree
         // and the other one's answer would be about bindings this tree does not have.
-        ComparisonReadings comparisons = ComparisonReadings.of(behavior, states, read,
-                InputReads.ofParametersWhereCallsStand(inputs.parameterReads(), read.declared(),
-                        elements, inputs.dependencies()), witnesses);
+        ComparisonReadings comparisons = comparisonsOf(behavior, states, read, elements, witnesses);
         // And what the tree that runs says about each of them, joined on the construct of the model
         // the two readings agree about.
         ComparisonEmissionIndex index =

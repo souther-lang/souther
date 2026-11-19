@@ -624,10 +624,10 @@ public final class Main {
                 err.println(Messages.get(refused.key(), render.locale(), refused.args()));
                 return 2;
             }
-            // Before anything searches the lines' points for rows, which the offering and the
-            // report below both do: a helper whose copies owe that search most of its points is
-            // something the author can act on while it runs, and asking which costs nothing the
-            // search makes.
+            // Before the lines are measured, which the offering and the report below both do: a
+            // helper whose comparisons are read again on every application of a function around
+            // it is something the author can act on while that runs, and asking which costs where
+            // the comparisons stand and nothing the measurement makes.
             toldBeforeTheSearch(compilation, module, behavior, render.locale());
             // What this run offers, where rows were asked for. Before the report and not after it:
             // a line the rows do not tell from another is answered by whichever offered row tells
@@ -693,9 +693,9 @@ public final class Main {
     }
 
     /**
-     * Each helper of the behaviors {@code module} and {@code behavior} select whose copies owe the
-     * search for rows enough points to be told of first, said on the error stream so that a
-     * document on the output stays one document.
+     * Each helper of the behaviors {@code module} and {@code behavior} select whose comparisons
+     * are read often enough to be told of first, said on the error stream so that a document on
+     * the output stays one document.
      */
     private void toldBeforeTheSearch(Compilation compilation, String module, String behavior,
                                      Locale locale) {
@@ -711,8 +711,7 @@ public final class Main {
                             String.join(", ", inside.stream()
                                     .map(each -> "`" + each.name() + "`").toList()));
             err.println(Messages.get("cli.examples.helper.ahead", locale, said.behavior(),
-                    said.told().named().helper().name(), said.told().readings(),
-                    said.told().points(), calledInside));
+                    said.told().named().helper().name(), said.told().readings(), calledInside));
         }
     }
 

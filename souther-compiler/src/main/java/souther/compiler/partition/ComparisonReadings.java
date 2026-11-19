@@ -53,6 +53,7 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
@@ -476,14 +477,15 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                         InputReads atTheRoot, ArmsNamed.Gathered armsNamed,
                         ForkDependencies.Gathered dependencies,
                         WithinOneApplication.Gathered oneApplication,
-                        ComparisonWitnesses.AtComparisons witnesses, WaysToNodes ways) {
+                        ComparisonWitnesses.AtComparisons witnesses, WaysToNodes ways,
+                        Optional<List<AConstructMet>> metOnly) {
 
         /** The same reading, in the body of a recursive helper read at a call of it: its own
          *  tree, and the copy that call makes of each construct in it. */
         Body inside(Core helperBody, CallContext called, InputReads reads) {
             return new Body(behavior, read, Arrivals.inTheTree(helperBody), templates, outcomes,
                     decided, stated, conditions, called, helperBody, reads, armsNamed,
-                    dependencies, oneApplication, witnesses, ways);
+                    dependencies, oneApplication, witnesses, ways, metOnly);
         }
 
         /** That the walk met the fork at {@code occurrence} where it is now, as this reading's copy
@@ -522,6 +524,52 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      */
     static ComparisonReadings of(String behavior, AnalysisBody analysis, InputReading read,
                                  InputReads reads, ComparisonWitnesses.AtComparisons witnesses) {
+        return read(behavior, analysis, read, reads, witnesses, Optional.empty());
+    }
+
+    /**
+     * A construct of the body that may state something a line is drawn from ({@link #mayState}),
+     * where the walk met it, and the applications of the closures it stands in.
+     *
+     * @param occurrence the construct, in the copy the walk met it in
+     * @param applying   the applications of the closures it stands in, every one of them
+     */
+    record AConstructMet(ConstructOccurrence occurrence, ClosureApplications applying) {
+
+        AConstructMet {
+            Objects.requireNonNull(occurrence, "a construct the walk met");
+            Objects.requireNonNull(applying, "inside some closures, or none");
+        }
+    }
+
+    /**
+     * The same walk of {@code body}, saying where each construct that may state something stands
+     * and on which applications, and reading nothing of what any of them states.
+     *
+     * <p>One walk and not a second one. Every way into a closure, an arm, a recursive helper and a
+     * template is taken by the one walk below, so what this meets is what {@link #of} meets, under
+     * the same applications; only what is done at a construct differs. What is read of each there
+     * — where its lines are drawn and where they decide — is most of what the walk costs, and is
+     * what a reader asking where the comparisons stand does not need.
+     *
+     * <p>So it meets more than {@link #of} reads: a comparison whose statement is carried past it,
+     * or an application that states nothing of its own, is met here and read as nothing there.
+     */
+    static List<AConstructMet> metOf(String behavior, AnalysisBody analysis, InputReading read,
+                           InputReads reads, ComparisonWitnesses.AtComparisons witnesses) {
+        List<AConstructMet> met = new ArrayList<>();
+        read(behavior, analysis, read, reads, witnesses, Optional.of(met));
+        return List.copyOf(met);
+    }
+
+    /**
+     * The walk of {@code body}, reading what each construct states, or, where {@code metOnly} is
+     * held, putting each construct that may state something into it and reading nothing of it.
+     */
+    private static ComparisonReadings read(String behavior, AnalysisBody analysis,
+                                           InputReading read, InputReads reads,
+                                           ComparisonWitnesses.AtComparisons witnesses,
+                                           Optional<List<AConstructMet>> metOnly) {
         Core body = analysis.core();
         List<Reading> readings = new ArrayList<>();
         List<ForkMet> forks = new ArrayList<>();
@@ -553,7 +601,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         walk(body, new Body(behavior, read, answering,
                         templates, outcomes, decided, stated, conditions,
                         CallContext.OF_THE_BODY, body, reads, armsNamed, dependencies,
-                        oneApplication, witnesses, ways),
+                        oneApplication, witnesses, ways, metOnly),
                 reads, ClosureApplications.OUTSIDE,
                 LiveFlow.of(body), List.of(), true, readings, forks, numbering);
         // What each value the body builds states, read once. A value means the same wherever it is
@@ -570,7 +618,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 walk(template, new Body(behavior, read, answering,
                         templates, outcomes, decided, stated, conditions,
                         CallContext.OF_THE_BODY, null, null, armsNamed, dependencies,
-                        oneApplication, witnesses, ways),
+                        oneApplication, witnesses, ways, metOnly),
                         defined, ClosureApplications.OUTSIDE, LiveFlow.of(template),
                         entry.assumed(), entry.live(),
                         readings, forks, numbering);
@@ -1075,8 +1123,20 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         // The way this node is reached on, for whoever asks whether a part of a fork's condition is
         // evaluated at all.
         in.ways().reached(e, assumed);
-        StatedAt stated = statedAt(e, () -> WhatNamesStandFor.in(reads, in.read()), applying,
-                in.stated());
+        // The one place the two readings part: what is done at a construct. Where only where each
+        // stands is asked, it is said and nothing of it is read; everything else in this walk,
+        // every way it takes into what lies below, is the same for both.
+        StatedAt stated;
+        if (in.metOnly().isPresent()) {
+            ConstructOccurrence written = mayState(e);
+            if (written != null) {
+                in.metOnly().get().add(new AConstructMet(in.context().of(written), applying));
+            }
+            stated = null;
+        } else {
+            stated = statedAt(e, () -> WhatNamesStandFor.in(reads, in.read()), applying,
+                    in.stated());
+        }
         if (stated != null) {
             // Which construct of the model it is, off the node. The two readings of a body hold
             // different copies of it and agree about this, so it is what a reader below joins on.
@@ -1758,6 +1818,29 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      */
     private static StatedAt statedAt(Core e, Supplier<WhatNamesStandFor> names,
                                      ClosureApplications applying, StatedHere here) {
+        ConstructOccurrence written = mayState(e);
+        if (written == null) {
+            return null;
+        }
+        Optional<StatedComparison> compared = BooleanMeaning.asAComparison(e);
+        if (compared.isPresent()) {
+            return here.carriesPast(e, compared.get(), names) ? null
+                    : new StatedAt(written, new Stated.AComparison(compared.get()));
+        }
+        Cutting.Read answered = here.ofAnApplication((Core.PreservedCall) e, names, applying);
+        return answered == null ? null
+                : new StatedAt(written, new Stated.AnApplication(e, answered));
+    }
+
+    /**
+     * The construct {@code e} is, where it is one the source wrote that may state something a
+     * line is drawn from: a comparison, or an application of one of the language's operations
+     * answering a truth or whether it holds a value; null where it is not.
+     *
+     * <p>Asked by both readings of a body ({@link #statedAt}, {@link #metOf}), so the constructs
+     * one reads and the other says stand somewhere are told by one answer.
+     */
+    private static ConstructOccurrence mayState(Core e) {
         ConstructOccurrence written = switch (e) {
             case Core.Binary binary -> binary.occurrence();
             case Core.PreservedCall call -> call.occurrence();
@@ -1766,16 +1849,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         if (written == null || !written.isWritten()) {
             return null;
         }
-        Optional<StatedComparison> compared = BooleanMeaning.asAComparison(e);
-        if (compared.isPresent()) {
-            return here.carriesPast(e, compared.get(), names) ? null
-                    : new StatedAt(written, new Stated.AComparison(compared.get()));
+        if (BooleanMeaning.asAComparison(e).isPresent()) {
+            return written;
         }
-        Cutting.Read answered = e instanceof Core.PreservedCall call
+        return e instanceof Core.PreservedCall call
                 && (Type.BOOL.equals(call.type()) || statesWhetherItHoldsAValue(call))
-                ? here.ofAnApplication(call, names, applying) : null;
-        return answered == null ? null
-                : new StatedAt(written, new Stated.AnApplication(e, answered));
+                ? written : null;
     }
 
     /**

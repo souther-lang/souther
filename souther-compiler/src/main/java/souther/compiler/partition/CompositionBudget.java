@@ -679,26 +679,6 @@ public enum CompositionBudget {
     QUESTIONS_A_STATEMENT_IS_ASKED(4096),
 
     /**
-     * How many searches for a row the lines of one behavior are searched with: one for each point
-     * a row is looked for at, and one for each side a row that tells a line from one beside it is
-     * looked for on, across every line the behavior reads.
-     *
-     * <p><b>The searches, and not what one of them does.</b> What one search does is bounded by
-     * the figures of its own walk ({@link #STEPS_A_SEARCH_MAY_TAKE} among them); what none of those
-     * bounds is how many searches there are, which is as many as the lines read and their points.
-     * A helper written inside a function applied to each of eleven candidates, called on each arm
-     * of a choice, is read once for each, and each reading is lines whose points are searched.
-     * Counted for the behavior, in the order its lines are read and their points are given, so
-     * which searches are made is the same whatever else the compilation asked first.
-     *
-     * <p><b>Reaching it stops every search after it, and says so.</b> A point past it is stopped
-     * by this figure ({@code Attempt.Stopped}), never a point nothing could be written at, and a
-     * row past it that would tell a line from one beside it is said to have been stopped the same
-     * way. What a search before it found is kept.
-     */
-    SEARCHES_FOR_ROWS_A_BEHAVIOR_MAKES(512),
-
-    /**
      * How deep a construction plan descends.
      *
      * <p><b>Reaching it stops no search: what it shortens is the plan.</b> The composing runs
@@ -1011,8 +991,6 @@ public enum CompositionBudget {
             case CASES_A_LINE_IS_TAKEN_APART_INTO -> new SearchMessage.CasesALineIsTakenApartInto();
             case CASES_A_LINE_IS_ASKED_IN -> new SearchMessage.CasesALineIsAskedIn();
             case QUESTIONS_A_STATEMENT_IS_ASKED -> new SearchMessage.QuestionsAStatementIsAsked();
-            case SEARCHES_FOR_ROWS_A_BEHAVIOR_MAKES ->
-                    new SearchMessage.SearchesForRowsABehaviorMakes();
             case NUMBERS_OF_A_SET_TRIED -> new SearchMessage.NumbersOfASetTried();
             case COMBINATIONS_OF_TOTALS_TRIED -> new SearchMessage.CombinationsOfTotalsTried();
             case CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL ->
@@ -1096,8 +1074,7 @@ public enum CompositionBudget {
                  WAYS_A_STATEMENT_IS_WRITTEN_OUT_OVER, PARTS_THE_CHOICES_OF_A_COUNT_COME_TO,
                  ALTERNATIVES_A_PATH_TRIES, STEPS_A_STATEMENT_IS_READ_IN,
                  CASES_A_LINE_IS_TAKEN_APART_INTO, CASES_A_LINE_IS_ASKED_IN,
-                 QUESTIONS_A_STATEMENT_IS_ASKED, SEARCHES_FOR_ROWS_A_BEHAVIOR_MAKES,
-                 WAYS_A_WAY_IS_LOOKED_ALONG, WALKS_A_WAY_IS_READ_AGAIN_WITH,
+                 QUESTIONS_A_STATEMENT_IS_ASKED, WAYS_A_WAY_IS_LOOKED_ALONG, WALKS_A_WAY_IS_READ_AGAIN_WITH,
                  PAIRS_OF_BOUNDS_A_WAY_IS_READ_AGAIN_WITH, DEPTH_A_CONSTRUCTION_PLAN_DESCENDS, NUMBERS_OF_A_SET_TRIED,
                  COMBINATIONS_OF_TOTALS_TRIED,
                  CODE_POINTS_A_STRING_IS_SEARCHED_IN_FULL,

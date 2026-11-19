@@ -711,14 +711,12 @@ class AnExpressionIsAskedWhatItIsWithWhatItStandsAsSetAsideTest {
                 "(" + core + "L" + c + "coverage/NormalReturn;Ljava/util/List;)V", 1,
                 "follows what a node evaluates first to where a run stops, and what a Widen"
                         + " evaluates is what it holds (Evaluated)");
-        row(out, c + "partition/ComparisonReadings", "statedAt",
-                "(" + core + "Ljava/util/function/Supplier;L" + c
-                        + "partition/ClosureApplications;L" + c
-                        + "partition/ComparisonReadings$StatedHere;)L" + c
-                        + "partition/ComparisonReadings$StatedAt;", 2,
-                "whether the node the walk stands at is a construct a source wrote that states a"
-                        + " comparison, or an application of one answering a truth: a Widen is"
-                        + " neither, and the construct under it is met one step down");
+        row(out, c + "partition/ComparisonReadings", "mayState",
+                "(" + core + ")L" + c + "types/ConstructOccurrence;", 2,
+                "whether the node the walk stands at is a construct a source wrote that may state"
+                        + " a comparison, or an application of one answering a truth, asked for"
+                        + " both readings of the walk: a Widen is neither, and the construct under"
+                        + " it is met one step down");
         row(out, c + "partition/ComparisonReadings", "walk",
                 "(" + core + "L" + c + "partition/ComparisonReadings$Body;L" + c
                         + "inputs/InputReads;L" + c + "partition/ClosureApplications;L" + c

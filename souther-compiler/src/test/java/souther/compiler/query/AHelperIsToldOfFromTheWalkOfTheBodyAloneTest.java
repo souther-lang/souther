@@ -12,10 +12,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The helper a function applied outside it calls on each element is known from the lines as read,
- * before any row is searched for at their points: asking for it asks nothing the search makes.
+ * The helper a function applied outside it calls on each element is known from the walk of the
+ * body alone: asking for it asks no line where it decides, reads no line against the rows and
+ * searches for no row, which is where what a measurement costs is spent.
  */
-class AHelperIsToldOfBeforeTheSearchForRowsRunsTest {
+class AHelperIsToldOfFromTheWalkOfTheBodyAloneTest {
 
     private static final String MODULE = "demo";
 
@@ -69,10 +70,13 @@ class AHelperIsToldOfBeforeTheSearchForRowsRunsTest {
         return told;
     }
 
-    private static void searchedNothing(Compilation compilation) {
+    /** That nothing asked where a line decides, read the lines against the rows, or searched. */
+    private static void measuredNothing(Compilation compilation) {
         compilation.db().everyAnswer().keySet().forEach(key -> assertFalse(
-                key instanceof Adequacy.BoundarySearch,
-                "nothing searched for rows: " + key));
+                key instanceof Adequacy.Dividing || key instanceof Adequacy.Divided
+                        || key instanceof Adequacy.Readings
+                        || key instanceof Adequacy.BoundarySearch,
+                "nothing past the walk of the body was asked: " + key));
     }
 
     @Test
@@ -87,8 +91,8 @@ class AHelperIsToldOfBeforeTheSearchForRowsRunsTest {
         assertEquals(List.of(new ValueName.Helper(MODULE, "firstBusinessDay"),
                 new ValueName.Helper(MODULE, "onABusinessDay"),
                 new ValueName.Helper(MODULE, "dueDate")), one.calledInside());
-        assertTrue(one.readings() > 0 && one.points() > 0, one::toString);
-        searchedNothing(compilation);
+        assertTrue(one.readings() > 1, one::toString);
+        measuredNothing(compilation);
     }
 
     @Test
@@ -97,6 +101,6 @@ class AHelperIsToldOfBeforeTheSearchForRowsRunsTest {
                 Adequacy.Asked.fullReport());
         ACompiledModel.compiles(compilation);
         assertEquals(List.of(), told(compilation));
-        searchedNothing(compilation);
+        measuredNothing(compilation);
     }
 }

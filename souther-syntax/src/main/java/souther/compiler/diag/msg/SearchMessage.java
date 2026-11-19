@@ -547,8 +547,6 @@ public sealed interface SearchMessage extends Message {
 
     record QuestionsAStatementIsAsked() implements SearchMessage, Prose {}
 
-    record SearchesForRowsABehaviorMakes() implements SearchMessage, Prose {}
-
     record NumbersOfASetTried() implements SearchMessage, Prose {}
 
     record CombinationsOfTotalsTried() implements SearchMessage, Prose {}

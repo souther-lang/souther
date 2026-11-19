@@ -51,6 +51,13 @@ sealed interface ClosureApplications {
     /** Inside no closure at all. */
     ClosureApplications OUTSIDE = new Outside(ElementsMetOn.EVERY, MadeOnEvery.NONE_AROUND);
 
+    /** Each application, as what a line drawn on it is read on; none where they are not said
+     *  one by one. */
+    default List<ApplicationsReadOn> eachReadOn() {
+        return this instanceof Each(var each)
+                ? each.stream().map(Application::readOn).toList() : List.of();
+    }
+
     /**
      * Inside no closure handed values written out.
      *

@@ -411,8 +411,6 @@ public final class PublicationOrders {
                     CompositionBudget.CASES_A_LINE_IS_TAKEN_APART_INTO,
                     CompositionBudget.CASES_A_LINE_IS_ASKED_IN,
                     CompositionBudget.QUESTIONS_A_STATEMENT_IS_ASKED,
-                    // After the reading of every line, as how many of their points are searched.
-                    CompositionBudget.SEARCHES_FOR_ROWS_A_BEHAVIOR_MAKES,
                     CompositionBudget.DEPTH_A_CONSTRUCTION_PLAN_DESCENDS));
 
     /**

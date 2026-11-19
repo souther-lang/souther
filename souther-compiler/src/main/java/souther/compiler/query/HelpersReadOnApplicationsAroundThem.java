@@ -5,6 +5,7 @@ import souther.compiler.check.HelperGraph;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.meaning.AHelperReadOnApplicationsAroundIt;
+import souther.compiler.partition.AComparisonRead;
 import souther.compiler.types.ApplicationsReadOn;
 import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ReachName;
@@ -22,21 +23,24 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * The helpers one behavior's lines are written in whose copies stand in more than one application
- * of a closure a call outside them makes ({@link AHelperReadOnApplicationsAroundIt}), with how many
- * of the lines read and of their points owed a search those copies make.
+ * The helpers one behavior's comparisons are written in whose copies stand in more than one
+ * application of a closure a call outside them makes ({@link AHelperReadOnApplicationsAroundIt}),
+ * with how many times those comparisons are read.
  *
- * <p><b>Asked of the lines as read, and before anything is searched for at them.</b> What it reads
- * is {@link Adequacy.Readings}, which is what the search for rows at the lines' points is handed,
- * and nothing that search makes. So what this says can be told to an author before the search
- * runs, and what it costs does not turn on how long the search takes. Which of those points a
- * search is in the end made at is the search's own answer and is not said here: a point no
- * account keeps is left unsearched there, and this counts what the lines owe.
+ * <p><b>Asked of where the comparisons stand, and before anything is read of them.</b> What it
+ * reads is {@link Adequacy.ComparisonsRead}: which constructs of the body may state something, in
+ * which copies and on which applications, from the one walk of the body that draws the lines,
+ * with nothing read of what they state. Drawing the lines, asking where they decide and searching
+ * their points come after that and are what measuring a body costs, so what this says is known
+ * while the compile is still all that has been paid for.
  *
- * <p>A line not worked out is read as well, under the condition it was said in, and owes its
- * points; so it is among these, and what a report says of a helper at such a line is read off
- * this. Not off the line's cases: a case of one candidate is made of nothing the function
- * applied to the candidates did, and the applications are what the line was read on.
+ * <p>Read again on every application, each comparison is a reading each line is drawn from, and
+ * each line is asked where it decides; how many lines those readings come to is not said here,
+ * since readings drawing one line at one place come to one, and telling which do is the drawing.
+ *
+ * <p>A line asked no further for the number of its cases stands where the walk met it all the
+ * same; so what a report says of a helper at such a line is read off this. Not off the line's
+ * cases: a case of one candidate is made of nothing the function applied to the candidates did.
  *
  * @param name     the module
  * @param behavior the behavior
@@ -45,23 +49,23 @@ public record HelpersReadOnApplicationsAroundThem(String name, String behavior)
         implements Key<List<HelpersReadOnApplicationsAroundThem.Told>> {
 
     /**
-     * How many points the readings of one helper's copies owe a search before an author is told
-     * of the helper ahead of it. Below it the search those copies make is small beside the rest of
-     * a measurement, and a helper called inside a closure is the usual way to write a model.
+     * How many times one helper's comparisons are read before an author is told of the helper
+     * ahead of the measurement. Below it what those readings cost is small beside the rest of a
+     * measurement, and a helper called inside a closure is the usual way to write a model.
      */
-    public static final int POINTS_TOLD_OF_BEFORE_THE_SEARCH = 64;
+    public static final int READINGS_TOLD_OF_BEFORE_THE_MEASUREMENT = 32;
 
     /**
-     * One helper, and what its copies add to the lines read.
+     * One helper, and how often its comparisons are read.
      *
      * @param named        the helper and the calls whose applications stand around its copies
-     * @param readings     how many readings of lines written in it were read on those applications
-     * @param points       how many points those readings owe a search
+     * @param readings     how many times its comparisons are read: each once on each application
+     *                     of the closures it stands in ({@link AComparisonRead#readings})
      * @param calledInside the helpers that call it, and the ones calling those, out to a behavior:
      *                     every call of the helper written inside one has to move into the
      *                     behavior's own body, since a helper cannot call a behavior
      */
-    public record Told(AHelperReadOnApplicationsAroundIt named, int readings, int points,
+    public record Told(AHelperReadOnApplicationsAroundIt named, int readings,
                        List<ValueName.Helper> calledInside) {
 
         public Told {
@@ -69,9 +73,9 @@ public record HelpersReadOnApplicationsAroundThem(String name, String behavior)
             calledInside = List.copyOf(calledInside);
         }
 
-        /** Whether its copies owe a search enough points to be told of before the search. */
+        /** Whether its comparisons are read often enough to be told of before the measurement. */
         public boolean worthTellingBeforeTheSearch() {
-            return points >= POINTS_TOLD_OF_BEFORE_THE_SEARCH;
+            return readings >= READINGS_TOLD_OF_BEFORE_THE_MEASUREMENT;
         }
     }
 
@@ -124,7 +128,7 @@ public record HelpersReadOnApplicationsAroundThem(String name, String behavior)
 
     @Override
     public Answer<List<Told>> compute(Db db) {
-        LineReadings read = db.ask(new Adequacy.Readings(name, behavior)).value();
+        List<AComparisonRead> read = db.ask(new Adequacy.ComparisonsRead(name, behavior)).value();
         Bodies.Expanding.Of expanding =
                 db.ask(new Bodies.Expanding(name, InliningPolicy.FULL)).value();
         if (read == null || expanding == null) {
@@ -133,45 +137,30 @@ public record HelpersReadOnApplicationsAroundThem(String name, String behavior)
         return Answer.of(told(read, expanding.graph()));
     }
 
-    /** What the readings in {@code read} come to for each helper their lines are written in. */
-    static List<Told> told(LineReadings read, HelperGraph graph) {
+    /** What the comparisons in {@code read} come to for each helper they are written in. */
+    static List<Told> told(List<AComparisonRead> read, HelperGraph graph) {
         Map<ValueName.Helper, Gathered> byHelper = new LinkedHashMap<>();
-        for (BorderAssessment each : read.each()) {
-            Optional<ValueName.Helper> writer = writerOf(each.readAt().inOrder());
-            writer.ifPresent(helper -> byHelper.computeIfAbsent(helper, _ -> new Gathered())
-                    .add(each));
+        for (AComparisonRead each : read) {
+            AHelperReadOnApplicationsAroundIt.writtenIn(each.copy()).ifPresent(helper ->
+                    byHelper.computeIfAbsent(helper, _ -> new Gathered()).add(each));
         }
         List<Told> out = new ArrayList<>();
         byHelper.forEach((helper, gathered) -> gathered.named().ifPresent(named ->
-                out.add(new Told(named, gathered.readings, gathered.points,
-                        callersOf(graph, helper)))));
+                out.add(new Told(named, gathered.readings, callersOf(graph, helper)))));
         return List.copyOf(out);
     }
 
-    /** The one helper every copy in {@code copies} is written in, or empty where there is none. */
-    private static Optional<ValueName.Helper> writerOf(List<ModelOccurrence> copies) {
-        Set<Optional<ValueName.Helper>> writers = new LinkedHashSet<>();
-        copies.forEach(copy -> writers.add(AHelperReadOnApplicationsAroundIt.writtenIn(copy)));
-        return writers.size() == 1 ? writers.iterator().next() : Optional.empty();
-    }
-
-    /** The readings of one helper's lines, gathered. */
+    /** The comparisons of one helper, gathered. */
     private static final class Gathered {
 
         private final Set<ModelOccurrence> copies = new LinkedHashSet<>();
         private final List<ApplicationsReadOn> readOn = new ArrayList<>();
         private int readings;
-        private int points;
 
-        void add(BorderAssessment reading) {
-            copies.addAll(reading.readAt().inOrder());
-            readOn.add(reading.readOn());
-            readings++;
-            for (ItemAssessment item : reading.items().values()) {
-                if (item instanceof ItemAssessment.Owed owed && owed.worthSearching()) {
-                    points++;
-                }
-            }
+        void add(AComparisonRead comparison) {
+            copies.add(comparison.copy());
+            readOn.addAll(comparison.applications());
+            readings += comparison.readings();
         }
 
         Optional<AHelperReadOnApplicationsAroundIt> named() {
