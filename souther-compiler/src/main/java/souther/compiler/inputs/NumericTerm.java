@@ -2925,7 +2925,8 @@ public sealed interface NumericTerm
             // the last date, so its year is never the last year, whatever the operation answers of
             // any date.
             case TakenOf taken -> taken.whatTheOperationStates()
-                    .meet(taken.takenAs().reachedFrom(taken.transformation()));
+                    .meet(taken.takenAs().reachedFrom(taken.transformation(),
+                            NumericDomain.Bounds.OPEN));
             // A count of some of a string's code points is never negative, as how many it holds is
             // not. What it is at most is the string's own length, which is another number of the
             // same place and is held where the two are realized together.

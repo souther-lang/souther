@@ -30,6 +30,7 @@ import souther.compiler.inputs.CasesLeft;
 import souther.compiler.inputs.EachWayItComesOut;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
+import souther.compiler.inputs.ABoundThatKeepsEveryRunGoing;
 import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputDomain;
@@ -76,6 +77,7 @@ import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.numeric.WholeNumberSet;
 import souther.compiler.observe.Figure;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.regex.CodeMap;
 import souther.compiler.regex.ConversionAnswers;
@@ -234,12 +236,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *              every run. Two operations neither of which is worked out of the other may come
      *              in either order, and an operation worked out of one through a name is not
      *              among these, which says less of the order and nothing false
+     * @param ofTheRepresentation whether {@code least} and {@code greatest} are where the type
+     *              the number is worked out in stops — an {@code Int}, the calendar — and not where
+     *              the clauses of a type a construction makes leave it, which the model states
      */
     record IntOperation(LinearForm<IntOperand> form, BigInteger least, BigInteger greatest,
-                        List<Integer> after) {
+                        List<Integer> after, boolean ofTheRepresentation) {
 
         IntOperation {
             after = isAscending(after) ? List.copyOf(after) : List.copyOf(new TreeSet<>(after));
+        }
+
+        /** An operation whose ends are where the type it is worked out in stops, which is every
+         *  operation but a construction ({@link Pullback#answersWhereItsTypeStops}). */
+        IntOperation(LinearForm<IntOperand> form, BigInteger least, BigInteger greatest,
+                     List<Integer> after) {
+            this(form, least, greatest, after, true);
         }
 
         /** Whether every index comes after the one before it, which is what the set of them
@@ -260,11 +272,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     && greatest.equals(other.greatest);
         }
 
-        /** An operation over numbers of the input alone. */
+        /** An operation over numbers of the input alone, whose ends are where its type stops. */
         static IntOperation overTheInput(LinearForm<NumericTerm> form, BigInteger least,
                                          BigInteger greatest, List<Integer> after) {
+            return overTheInput(form, least, greatest, after, true);
+        }
+
+        /** An operation over numbers of the input alone. */
+        static IntOperation overTheInput(LinearForm<NumericTerm> form, BigInteger least,
+                                         BigInteger greatest, List<Integer> after,
+                                         boolean ofTheRepresentation) {
             return new IntOperation(form.over(term -> LinearForm.atom(
-                    new IntOperand.OfTheInput(term))), least, greatest, after);
+                    new IntOperand.OfTheInput(term))), least, greatest, after,
+                    ofTheRepresentation);
         }
 
         /** The form over numbers of the input, where it is over nothing else; null otherwise. */
@@ -299,7 +319,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         /** The same operation, worked out after the operations moved {@code by} on. */
         IntOperation shifted(int by) {
             return new IntOperation(form, least, greatest,
-                    after.stream().map(at -> at + by).toList());
+                    after.stream().map(at -> at + by).toList(), ofTheRepresentation);
         }
     }
 
@@ -803,6 +823,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   the relation showed there ({@link GettingThere}): the values a row built
      *                   and run got there at, which are reached, and where the runs of the rows
      *                   it tried stopped; the rest of the values there are shown neither way
+     * @param outcomes   for some sides that are numbers, how the relation may come out and is
+     *                   shown to at each of their values along the way ({@link EachWayItComesOut}),
+     *                   with the places each is made of: what {@link #undivided} and
+     *                   {@link #settled} say of the side, kept so that ways meeting at the
+     *                   relation are read once they have met ({@link #alongBoth})
      */
     record WhatItLeaves(Set<FilingCoordinate> undivided,
                         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
@@ -811,9 +836,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                         Set<FilingCoordinate> mayStopBefore,
                         Map<NumericTerm.FromOnePosition, List<StringsAPartnerCanHold>> partnered,
                         Map<FilingCoordinate, GettingThere> gettingThere,
-                        Map<NumericTerm.FromOnePosition, NumbersAPartnerCanHold> numbersPartnered) {
+                        Map<NumericTerm.FromOnePosition, NumbersAPartnerCanHold> numbersPartnered,
+                        Map<NumericTerm, OfASide> outcomes) {
 
         WhatItLeaves {
+            outcomes = keptInOrder(outcomes);
             numbersPartnered = keptInOrder(numbersPartnered);
             undivided = Set.copyOf(undivided);
             settled = Map.copyOf(settled);
@@ -856,6 +883,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     Map.of());
         }
 
+        /** This, with how the relation comes out at the values of {@code sides}. */
+        WhatItLeaves told(Map<NumericTerm, OfASide> sides) {
+            return new WhatItLeaves(undivided, settled, rowsArrive, stoppedAt, rowsStopped,
+                    mayStopBefore, partnered, gettingThere, numbersPartnered, sides);
+        }
+
+        /** {@link #outcomes} but the sides made of one of {@code parted}, which a partner's
+         *  values part and the outcomes no longer say all of. */
+        private Map<NumericTerm, OfASide> outcomesBut(Set<FilingCoordinate> parted) {
+            Map<NumericTerm, OfASide> out = new LinkedHashMap<>(outcomes);
+            out.values().removeIf(side -> side.places().stream().anyMatch(parted::contains));
+            return out;
+        }
+
         WhatItLeaves(Set<FilingCoordinate> undivided,
                      Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled,
                      boolean rowsArrive, Set<Figure> stoppedAt,
@@ -864,7 +905,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                      Map<NumericTerm.FromOnePosition, List<StringsAPartnerCanHold>> partnered,
                      Map<FilingCoordinate, GettingThere> gettingThere) {
             this(undivided, settled, rowsArrive, stoppedAt, rowsStopped, mayStopBefore, partnered,
-                    gettingThere, Map.of());
+                    gettingThere, Map.of(), Map.of());
         }
 
         /**
@@ -883,7 +924,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Map<FilingCoordinate, GettingThere> shown = new LinkedHashMap<>(gettingThere);
             shown.keySet().removeAll(parted);
             return new WhatItLeaves(stillUndivided, settled, rowsArrive, stoppedAt, rowsStopped,
-                    stops, partnered, shown, numbers);
+                    stops, partnered, shown, numbers, outcomesBut(parted));
         }
 
         WhatItLeaves(Set<FilingCoordinate> undivided,
@@ -913,7 +954,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Set<FilingCoordinate> both = new LinkedHashSet<>(undivided);
             both.addAll(places);
             return new WhatItLeaves(both, settled, rowsArrive, stoppedAt, rowsStopped,
-                    mayStopBefore, partnered, gettingThere, numbersPartnered);
+                    mayStopBefore, partnered, gettingThere, numbersPartnered, outcomes);
         }
 
         /**
@@ -938,7 +979,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Map<FilingCoordinate, GettingThere> shown = new LinkedHashMap<>(gettingThere);
             shown.keySet().removeAll(parted);
             return new WhatItLeaves(stillUndivided, settled, rowsArrive, stopped, rowsStopped,
-                    stops, strings, shown, numbersPartnered);
+                    stops, strings, shown, numbersPartnered, outcomesBut(parted));
         }
 
         /** What a way that no row comes along shows: nothing of any place, and that no row comes
@@ -973,7 +1014,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
             });
             return new WhatItLeaves(undivided, settled, rowsArrive, stoppedAt, rowsStopped, stops,
-                    partnered, reached, numbersPartnered);
+                    partnered, reached, numbersPartnered, outcomes);
         }
 
         /** Whether the position of {@code term} is shown undivided, at every value getting to the
@@ -1000,6 +1041,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             settled.forEach((term, runs) -> {
                 if (runs.equals(other.settled.get(term))) {
                     alike.put(term, runs);
+                }
+            });
+            // A side both ways tell the rows of is read once they have met: the rows of either, so
+            // that a value one way has no row at takes nothing from it, and what is left of the
+            // side is said in place of what the two said apart.
+            Map<NumericTerm, OfASide> met = new LinkedHashMap<>();
+            outcomes.forEach((term, mine) -> {
+                OfASide theirs = other.outcomes.get(term);
+                OfASide joined = theirs == null ? null : mine.alongBoth(theirs);
+                if (joined != null) {
+                    met.put(term, joined);
+                    joined.putDown(term, both, alike);
                 }
             });
             Set<Figure> stopped = new LinkedHashSet<>(stoppedAt);
@@ -1044,7 +1097,82 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 }
             });
             return new WhatItLeaves(both, alike, true, stopped, runs, stops, alikeStrings,
-                    reached, alikeNumbers);
+                    reached, alikeNumbers, met);
+        }
+    }
+
+    /**
+     * How the relation comes out at the values of one side that is the number of one place,
+     * along some ways ({@link EachWayItComesOut}), and the places the side is made of. What is
+     * shown reached is a row, as {@link WhatARelationLeavesUndivided#eachWayItComesOut} and
+     * {@link WhatARelationLeavesUndivided#alongAWayThatDecidesIt} show it, and never what a way
+     * leaves the side ({@link WhatARelationLeavesUndivided.Leaves}).
+     *
+     * @param ofTheTypeAlone lines the ways' readings said the orders' ends alone draw on it
+     * @param ofTheModel     lines they said the model draws on it
+     */
+    record OfASide(List<FilingCoordinate> places, EachWayItComesOut outcomes,
+                   Set<WhatARelationLeavesUndivided.Line> ofTheTypeAlone,
+                   Set<WhatARelationLeavesUndivided.Line> ofTheModel) {
+
+        OfASide {
+            places = List.copyOf(places);
+            ofTheTypeAlone = Set.copyOf(ofTheTypeAlone);
+            ofTheModel = Set.copyOf(ofTheModel);
+        }
+
+        /** The rows {@code outcomes} shows of a side, with the lines {@code leaves}, the way's
+         *  reading of it, says are drawn on it; null where no rows are shown. */
+        static OfASide of(List<FilingCoordinate> places, EachWayItComesOut outcomes,
+                          WhatARelationLeavesUndivided.Leaves leaves) {
+            if (outcomes == null) {
+                return null;
+            }
+            return leaves instanceof WhatARelationLeavesUndivided.Leaves.Settled settled
+                    ? new OfASide(places, outcomes, Set.copyOf(settled.ofTheTypeAlone()),
+                            Set.copyOf(settled.linesOfTheModel()))
+                    : new OfASide(places, outcomes, Set.of(), Set.of());
+        }
+
+        /** The rows of both this and {@code other}'s ways, or null where what they show cannot
+         *  be put together ({@link EachWayItComesOut#eitherOf}). */
+        OfASide alongBoth(OfASide other) {
+            EachWayItComesOut either = EachWayItComesOut.eitherOf(List.of(outcomes,
+                    other.outcomes));
+            if (either == null) {
+                return null;
+            }
+            Set<WhatARelationLeavesUndivided.Line> typeAlone = new LinkedHashSet<>(ofTheTypeAlone);
+            typeAlone.addAll(other.ofTheTypeAlone);
+            Set<WhatARelationLeavesUndivided.Line> model = new LinkedHashSet<>(ofTheModel);
+            model.addAll(other.ofTheModel);
+            return new OfASide(places, either, typeAlone, model);
+        }
+
+        /**
+         * What is left of {@code number}, this side, said in {@code undivided} and
+         * {@code settled} in place of what was said there of it: its places undivided where the
+         * relation divides it by nothing, or where the lines its settling runs draw part no place;
+         * its runs where some settle it. Where the rows show nothing, what was said there stays:
+         * what each way says alike of the side is said of the rows of both.
+         */
+        void putDown(NumericTerm number, Set<FilingCoordinate> undivided,
+                     Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled) {
+            WhatARelationLeavesUndivided.Leaves left = outcomes.leaves(ofTheTypeAlone, ofTheModel);
+            if (left == null) {
+                return;
+            }
+            undivided.removeAll(places);
+            settled.remove(number);
+            switch (left) {
+                case WhatARelationLeavesUndivided.Leaves.Undivided _ -> undivided.addAll(places);
+                case WhatARelationLeavesUndivided.Leaves.Settled runs -> {
+                    settled.put(number, runs);
+                    if (runs.leavesItsPlacesUndivided(number)) {
+                        undivided.addAll(places);
+                    }
+                }
+            }
         }
     }
 
@@ -2293,32 +2421,49 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 || mayStopOnWhatItReads(past, read, way.region(), written, declined, Set.of())) {
             return Optional.of(Map.of());
         }
-        List<Source> sources = declared.sources();
         List<Carrier> carriers = declared.carriers();
-        WayRead entire = wayRead(written, past, null, way.region(), false, read, sources, true);
-        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = termsAlong(read,
-                sources, carriers, entire.along(), entire.declared(), entire.conditions(), null,
-                entire.stating(), true, entire.narrowing(), false);
-        WhatARelationLeavesUndivided.Independence independent =
-                apartOnTheWay(entire.tying(), sources, read, Set.of(), entire.along(),
-                        entire.onTheWay());
-        TheWay theWay = new TheWay(written, past, null, way.region(), false, true);
-        WhatARelationLeavesUndivided.Operations operations = operationsOverTheSides(read,
-                entire.conditions(), true, totalsWrittenByOneElement(terms),
-                numbers -> heldApart(numbers, read, theWay));
+        SidesAlongTheWay along = sidesAlongTheWay(written, past, way.region(), read,
+                declared.sources(), carriers);
         Map<NumericTerm, EachWayItComesOut> out = new LinkedHashMap<>();
         for (int at = 0; at < sides.size(); at++) {
             if (sides.get(at).number() == null) {
                 continue;
             }
-            EachWayItComesOut each = WhatARelationLeavesUndivided.eachWayItComesOut(terms, at,
-                    constant, relation, FilingCoordinate::sharesAPlaceWith, independent,
-                    granularityOf(carriers.get(at)), greatestOf(carriers.get(at)), operations);
+            EachWayItComesOut each = WhatARelationLeavesUndivided.eachWayItComesOut(
+                    along.terms(), at, constant, relation, FilingCoordinate::sharesAPlaceWith,
+                    along.independent(), granularityOf(carriers.get(at)),
+                    greatestOf(carriers.get(at)), along.operations());
             if (each != null) {
                 out.put(sides.get(at).number(), each);
             }
         }
         return Optional.of(out);
+    }
+
+    /**
+     * The sides as a way's own region holds them, every statement of it in, with what ties them
+     * along it and what its rows work out: what a row along the way is shown to be is asked of
+     * these, and not of a region a reading widened by taking a statement away.
+     */
+    private record SidesAlongTheWay(List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms,
+                                    WhatARelationLeavesUndivided.Independence independent,
+                                    WhatARelationLeavesUndivided.Operations operations) {}
+
+    /** {@link SidesAlongTheWay} of the way stating {@code written} over {@code region}. */
+    private SidesAlongTheWay sidesAlongTheWay(List<OnAWay> written, DemandReading.Answered past,
+                                              SearchRegion region, InputReading read,
+                                              List<Source> sources, List<Carrier> carriers) {
+        WayRead entire = wayRead(written, past, null, region, false, read, sources, true);
+        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = termsAlong(read,
+                sources, carriers, entire.along(), entire.declared(), entire.conditions(), null,
+                entire.stating(), true, entire.narrowing(), false);
+        TheWay theWay = new TheWay(written, past, null, region, false, true);
+        return new SidesAlongTheWay(terms,
+                apartOnTheWay(entire.tying(), sources, read, Set.of(), entire.along(),
+                        entire.onTheWay()),
+                operationsOverTheSides(read, entire.conditions(), true,
+                        totalsWrittenByOneElement(terms),
+                        numbers -> heldApart(numbers, read, theWay)));
     }
 
     /** What this leaves its places over what the declarations leave. */
@@ -2618,11 +2763,57 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 rows.add(past);
                 List<EveryRunStops.Within> where = rowsWhere(rows, read, regions);
                 if (where != null) {
-                    out.add(new EveryRunStops(written(it.form()), where));
+                    out.add(new EveryRunStops(written(it.form()), where,
+                            it.ofTheRepresentation() ? keepingEveryRunGoing(where, read) : null));
                 }
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * The bound on the input that keeps every run from the rows {@code where}: where they are the
+     * values of one place an input holds from some value on, or up to some value, that place held
+     * on the other side of it — or null where they are anything else, the place is held by no data
+     * an invariant can be declared on, or its values are no whole numbers or dates.
+     *
+     * <p>The data is the place's own type where it is written under a name ({@code data Today =
+     * Date}), whose invariant names it as its value, and otherwise the record the place is a field
+     * of. A place that is a parameter of no such type is held by nothing an author declares.
+     */
+    private static ABoundThatKeepsEveryRunGoing keepingEveryRunGoing(
+            List<EveryRunStops.Within> where, InputReading read) {
+        if (where.size() != 1
+                || !(where.getFirst().alone() instanceof NumericTerm.ValueOf value)
+                || (where.getFirst().least() == null) == (where.getFirst().greatest() == null)) {
+            return null;
+        }
+        // From the least the run stops at up, so the place is held below it; or up to the
+        // greatest, so it is held above it.
+        boolean atMost = where.getFirst().least() != null;
+        BigInteger bound = atMost ? where.getFirst().least().subtract(BigInteger.ONE)
+                : where.getFirst().greatest().add(BigInteger.ONE);
+        TermOrders orders = read.quantities().ordersOf(value);
+        Carrier carrier = orders == null ? null : orders.answered();
+        ObservedValue at = carrier == null ? null
+                : carrier.valueOf(Count.of(new BigDecimal(bound)));
+        if (!(at instanceof ObservedValue.Integer || at instanceof ObservedValue.Temporal)) {
+            return null;
+        }
+        TermPath place = value.position();
+        Position position = read.domain().at(place);
+        if (position != null && position.view().outermostName() != null) {
+            return new ABoundThatKeepsEveryRunGoing(position.view().outermostName().name(),
+                    "value", atMost, at);
+        }
+        if (place.steps().isEmpty()
+                || !(place.steps().getLast() instanceof TermPath.Step.Field(String field))) {
+            return null;
+        }
+        TermPath record = TermPath.of(place.head(),
+                place.steps().subList(0, place.steps().size() - 1));
+        return read.domain().typeAt(record, read.rules()) instanceof Type.Ref(TypeSymbol data)
+                ? new ABoundThatKeepsEveryRunGoing(data.name(), field, atMost, at) : null;
     }
 
     /**
@@ -2767,7 +2958,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             BigInteger shownGreatest = greatest != null && greatest.equals(typeGreatest) ? null
                     : greatest;
             if (shownLeast != null || shownGreatest != null) {
-                out.add(new EveryRunStops.Within(written(form), shownLeast, shownGreatest));
+                out.add(new EveryRunStops.Within(written(form), shownLeast, shownGreatest,
+                        form.coefs().size() == 1
+                                ? (NumericTerm.FromOnePosition) form.coefs().keySet().iterator()
+                                        .next() : null));
             }
         }
         // And every number of them within its type, which every row is, for the regions: a
@@ -3600,6 +3794,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
     }
 
+    /** Whether a statement of {@code written} keeps every element off the relation's line, or
+     *  apart from the two strings it is between, so that the relation comes out one way. */
+    private boolean keepsEveryElementApart(List<OnAWay> written, TakenConstraint.Affine asStated) {
+        return written.stream().anyMatch(each -> asStated != null
+                ? keepsEveryElementOffTheLineOf(each, asStated)
+                : keepsEveryElementApartFromTheTwoStrings(each));
+    }
+
     /** Along this way: every place left undivided, the counts the statements read as well. */
     private Lines.OneWayWherever comesOutOneWay(Set<FilingCoordinate> out,
                                                 Map<NumericTerm,
@@ -3728,8 +3930,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             throw new IllegalArgumentException("what a relation divides is read along a way some"
                     + " row comes along");
         }
-        Set<FilingCoordinate> countsRead = new LinkedHashSet<>();
         WhatStatementsOfOneFormDecide.Verdict decided = way.decided();
+        Set<FilingCoordinate> countsRead = new LinkedHashSet<>();
         // A statement a row beside this relation's line meets leaves the sides as they stand to
         // one another there, whatever the others hold. Each term is read without it, and no
         // other reading is: they speak of the whole of what the way leaves, and a row beside the
@@ -3771,10 +3973,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Set<FilingCoordinate> out = new LinkedHashSet<>(amongThemselves);
         Map<NumericTerm, WhatARelationLeavesUndivided.Leaves.Settled> settled =
                 new LinkedHashMap<>();
-        if (decided.relationIsDecided() || written.stream().anyMatch(each ->
-                asStated != null ? keepsEveryElementOffTheLineOf(each, asStated)
-                        : keepsEveryElementApartFromTheTwoStrings(each))) {
-            return comesOutOneWay(out, settled, countsRead);
+        if (decided.relationIsDecided() || keepsEveryElementApart(written, asStated)) {
+            Lines.OneWayWherever oneWay = comesOutOneWay(out, settled, countsRead);
+            return decided.relationIsDecided() ? new Lines.OneWayWherever(oneWay.shown()
+                    .told(rowsAlong(way, null, run, read, sources, carriers)), countsRead)
+                    : oneWay;
         }
         // A way that relates a term to other numbers leaves it the run the region answers, and
         // the pair is asked whether the way ties them as well as whether the declarations do.
@@ -3917,7 +4120,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 putDown(at, leaves.get(at), out, settled);
             }
         }
-        WhatItLeaves shown = new WhatItLeaves(out, settled, true, stopped, runsStopped);
+        WhatItLeaves shown = new WhatItLeaves(out, settled, true, stopped, runsStopped)
+                .told(rowsAlong(way, leaves, run, read, sources, carriers));
         // An equality with a weighed number is true at the values the weighing reaches, which are
         // no run: the places not shown undivided are parted by them.
         if (!offItsLine && heldWhole && sides.size() == 2 && standApart(0, 1, independent)) {
@@ -3932,6 +4136,78 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             accountedFor = partnering.accountedFor();
         }
         return new Lines.Divides(shown, accountedFor, countsRead);
+    }
+
+    /**
+     * The rows along {@code way} of each side that is the number of one place and nothing more,
+     * how the relation comes out at them ({@link OfASide}): along a way whose own statements
+     * decide the relation, the values the side is shown to take come out that way
+     * ({@link WhatARelationLeavesUndivided#alongAWayThatDecidesIt}); along any other, as rows are
+     * shown each way ({@link WhatARelationLeavesUndivided#eachWayItComesOut}). Not of a
+     * remainder's form, which is left as all its numbers together leave it.
+     *
+     * <p>A row is a row of the run, whichever reading of the way asks: the sides are read over
+     * the region of the rows that get past every end on the way, every statement of it in
+     * ({@code run}), and not over a region a reading widened, by a statement taken away for a row
+     * at the line or by the ends of the model's way. And only where every row there gets to the
+     * relation: nothing the way declined bears on it, and no run may stop on what it reads.
+     * Nothing where that is not so.
+     *
+     * @param leaves what the way's reading leaves each side, whose lines are kept beside the
+     *               rows; null where the way comes out one way wherever
+     */
+    private Map<NumericTerm, OfASide> rowsAlong(StatedWay way,
+                                                List<WhatARelationLeavesUndivided.Leaves> leaves,
+                                                RunToIt run, InputReading read,
+                                                List<Source> sources, List<Carrier> carriers) {
+        Boolean comesOut = way.decided().comesOut();
+        List<Integer> asked = new ArrayList<>();
+        for (int at = 0; at < sides.size(); at++) {
+            // A side that is the number of one place, and nothing more: what is left of it is
+            // what is left of that place. Not of a place the way states a part of a date of: such
+            // a statement is left to the calendar and not held by the region, so what the region
+            // shows the place takes is not what a row along the way takes.
+            if (sides.get(at).number() instanceof NumericTerm.FromOnePosition number
+                    && sides.get(at).madeOf().equals(List.of(FilingCoordinate.of(number)))
+                    && (remainder == null || at != 0)
+                    && (comesOut != null || WhatARelationLeavesUndivided.showsRowsEachWayOf(
+                            granularityOf(carriers.get(at)), constant, relation))
+                    && !statesAPartOfTheDateAt(run.written(), number.position())) {
+                asked.add(at);
+            }
+        }
+        if (asked.isEmpty() || kind != Kind.AFFINE || constant == null || !way.heldWhole()
+                || mayStopOnWhatItReads(run.past(), read, run.along(), run.written(),
+                        run.declined(), Set.of())) {
+            return Map.of();
+        }
+        SidesAlongTheWay along = sidesAlongTheWay(run.written(), run.past(), run.along(), read,
+                sources, carriers);
+        Map<NumericTerm, OfASide> out = new LinkedHashMap<>();
+        for (int at : asked) {
+            EachWayItComesOut rows = comesOut != null
+                    ? WhatARelationLeavesUndivided.alongAWayThatDecidesIt(along.terms(), at,
+                            constant, comesOut, granularityOf(carriers.get(at)),
+                            greatestOf(carriers.get(at)), along.operations())
+                    : WhatARelationLeavesUndivided.eachWayItComesOut(along.terms(), at, constant,
+                            relation, FilingCoordinate::sharesAPlaceWith, along.independent(),
+                            granularityOf(carriers.get(at)), greatestOf(carriers.get(at)),
+                            along.operations());
+            OfASide side = OfASide.of(sides.get(at).madeOf(), rows,
+                    leaves == null ? null : leaves.get(at));
+            if (side != null) {
+                out.put(sides.get(at).number(), side);
+            }
+        }
+        return out;
+    }
+
+    /** Whether a statement of {@code written} names a part of the date at {@code position}. */
+    private static boolean statesAPartOfTheDateAt(List<OnAWay> written, TermPath position) {
+        return written.stream().anyMatch(each -> each.affine() != null
+                && each.affine().form().coefs().keySet().stream().anyMatch(term ->
+                        term instanceof NumericTerm.TakenOf taken
+                                && taken.position().equals(position)));
     }
 
     /**
@@ -7074,9 +7350,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * <p>The way is asked whole ({@link WhatStatementsOfDatePartsLeaveAlone}): all its statements
      * of months and days together leave the years alone, or none of them does, and likewise those
      * of years. A statement is of one kind only where every term of it is a month or a day, or
-     * every term is a year, of a date the declarations leave every date and no rule names, so that
-     * no rule ties its parts to a number of another place. A statement of anything else is left
-     * unmarked, and a part it touches is then tied by it as before.
+     * every term is a year, of a date the declarations leave every date, or every date between
+     * its ends, and no rule names, so that no rule ties its parts to a number of another place
+     * ({@link #daysOfTheDate}). A statement of anything else is left unmarked, and a part it
+     * touches is then tied by it as before.
      *
      * <p>Where the months and days are left, the dates are in the years the statements of years
      * were shown to hold at, and the combinations of months and days a date gives are those of
@@ -7094,10 +7371,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         boolean yearsAreLeft = !ofMonthsAndDays.isEmpty()
                 && WhatStatementsOfDatePartsLeaveAlone.leavesTheYears(ofMonthsAndDays,
-                        yearShiftsOfTheSides());
+                        yearShiftsOfTheSides(), daysOfTheDates(ofMonthsAndDays, read));
         WhatStatementsOfDatePartsLeaveAlone.YearsChosen years = ofYears.isEmpty() ? null
                 : WhatStatementsOfDatePartsLeaveAlone.leavesTheMonthsAndDays(ofYears,
-                        monthsAndDaysTheSidesTake());
+                        monthsAndDaysTheSidesTake(), daysOfTheDates(ofYears, read));
         List<OnAWay> out = new ArrayList<>();
         for (OnAWay each : conditions) {
             out.add(yearsAreLeft && statesOnlyParts(each, false, read)
@@ -8553,7 +8830,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /** Whether {@code statement} is a form of years only, or of months and days only, of dates
-     *  nothing in the declarations restricts or names. */
+     *  the declarations restrict by their ends at most and name in no rule
+     *  ({@link #daysOfTheDate}). */
     private static boolean statesOnlyParts(OnAWay statement, boolean years, InputReading read) {
         TakenConstraint.Affine affine = statement.affine();
         if (affine == null || affine.form().coefs().isEmpty()) {
@@ -8562,15 +8840,49 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (NumericTerm each : affine.form().coefs().keySet()) {
             if (!(each instanceof NumericTerm.TakenOf taken)
                     || !(taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part))
-                    || (part == TakenAs.DatePart.YEAR) != years) {
-                return false;
-            }
-            Source source = sourceOf(taken, read);
-            if (source == null || !source.takes().every() || source.named()) {
+                    || (part == TakenAs.DatePart.YEAR) != years
+                    || daysOfTheDate(taken, read) == null) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * The dates the declarations leave the date {@code taken} is a part of, as the days a move by
+     * nothing is defined at: every date where they leave it every value, the dates between its
+     * ends where they hold it by its ends and nothing else — or null where they do neither, or a
+     * rule names it beside another place.
+     */
+    private static DateTranslation daysOfTheDate(NumericTerm.TakenOf taken, InputReading read) {
+        return daysOf(sourceOf(taken, read));
+    }
+
+    /** {@link #daysOfTheDate}, of what the declarations leave the date. */
+    private static DateTranslation daysOf(Source source) {
+        if (source == null || source.named()) {
+            return null;
+        }
+        if (source.takes().every()) {
+            return DateTranslation.none();
+        }
+        return source.onlyItsEnds() && source.takes() instanceof Takes.Some(var _, var _,
+                NumericDomain.Bounds ends) && ends != null
+                ? DateTranslation.none().definedOnlyWithin(ends) : null;
+    }
+
+    /** The dates each date {@code statements} take parts of may be ({@link #daysOfTheDate}), by
+     *  the date. */
+    private static Map<TermPath, DateTranslation> daysOfTheDates(
+            List<TakenConstraint.Affine> statements, InputReading read) {
+        Map<TermPath, DateTranslation> out = new LinkedHashMap<>();
+        for (TakenConstraint.Affine each : statements) {
+            for (NumericTerm term : each.form().coefs().keySet()) {
+                NumericTerm.TakenOf taken = (NumericTerm.TakenOf) term;
+                out.putIfAbsent(taken.position(), daysOfTheDate(taken, read));
+            }
+        }
+        return out;
     }
 
     /** The moves of each date whose year a side is, which a month and day must keep it in the
@@ -8591,9 +8903,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * The sides that are the month or the day of one date, as the combinations that date gives.
      *
-     * <p>A date is asked only where the declarations leave it every date and the way says nothing
-     * of any part taken of it, so the combinations are the calendar's whole and not those a rule
-     * lets through. A date only one side is taken of has no combination to give.
+     * <p>A date is asked only where the declarations leave it every date, or every date between
+     * its ends, and the way says nothing of any part taken of it, so the combinations are the
+     * calendar's and not those a rule lets through. A date only one side is taken of has no
+     * combination to give.
      *
      * <p>A date the way fixes the year of gives the combinations of that year, which are all it
      * can be at; a support is made only where they give every number each side can be, so that no
@@ -8612,7 +8925,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (sides.get(i).number() instanceof NumericTerm.TakenOf taken
                     && taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part)
                     && part != TakenAs.DatePart.YEAR
-                    && sources.get(i) != null && sources.get(i).takes().every()
+                    && daysOf(sources.get(i)) != null
                     && wayOf(taken, stating.get(i)) == Way.UNTOUCHED) {
                 ofOneDate.computeIfAbsent(taken.position(), _ -> new ArrayList<>()).add(i);
             }
@@ -8623,16 +8936,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (members.size() < 2) {
                 continue;
             }
+            DateTranslation days = daysOf(sources.get(members.getFirst()));
             List<DatesThatStandInEveryYear.Part> parts = new ArrayList<>();
             for (int i : members) {
                 NumericTerm.TakenOf taken = (NumericTerm.TakenOf) sides.get(i).number();
-                parts.add(new DatesThatStandInEveryYear.Part(
-                        ((TakenAs.PartOfDate) taken.takenAs()).part(),
-                        taken.transformation().translation()));
+                DateTranslation moved = taken.transformation().translation().definedOnlyWhere(days);
+                if (moved != null) {
+                    parts.add(new DatesThatStandInEveryYear.Part(
+                            ((TakenAs.PartOfDate) taken.takenAs()).part(), moved));
+                }
             }
             Integer year = years == null ? null : years.yearOf().get(date.getKey());
-            List<List<ExactRatio>> together = year == null
-                    ? MonthsAndDaysOfOneDate.ofAnyYear(parts)
+            List<List<ExactRatio>> together = parts.size() < members.size() ? null
+                    : year == null ? MonthsAndDaysOfOneDate.ofAnyYear(parts)
                     : MonthsAndDaysOfOneDate.inYear(parts, year,
                             years.shiftsOf().get(date.getKey()));
             if (together != null && !together.isEmpty()
@@ -11437,7 +11753,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * <p>A value no rule restricts, untouched on the way, takes every value of its type. Where a
      * way narrows it ({@link Way#NARROWED}), where the rules are ends on it and nothing else, or
      * where it is a number taken of a value no rule restricts, what it takes is the run the region
-     * shows it fills ({@link SearchRegion#wholeRunOf}).
+     * shows it fills ({@link SearchRegion#wholeRunOf}). So is a number taken of a value the rules
+     * hold by its ends and nothing else, where every number of that run is one the value's own
+     * run answers ({@link #takenOfAValueItsRunAnswers}).
      *
      * @param source what the declarations leave the value {@code term} is, or is taken of
      */
@@ -11448,9 +11766,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             case NumericTerm.ValueOf value -> every
                     ? way == Way.UNTOUCHED ? NumericDomain.Bounds.OPEN : region.wholeRunOf(value)
                     : source.onlyItsEnds() ? region.wholeRunOf(value) : null;
-            case NumericTerm.TakenOf taken -> every && DefaultBoundOperationFacts.get()
-                    .everyAnswerItCanGiveHasASourceValue(taken.operation())
-                    ? region.wholeRunOf(taken) : null;
+            case NumericTerm.TakenOf taken -> every
+                    ? DefaultBoundOperationFacts.get()
+                            .everyAnswerItCanGiveHasASourceValue(taken.operation())
+                            ? region.wholeRunOf(taken) : null
+                    : source.onlyItsEnds() ? takenOfAValueItsRunAnswers(taken, region) : null;
             // Every step of the answer's order has a value of the position's order in it, so the
             // steps the value falls in fill the answer's run wherever the value takes every value
             // its type holds.
@@ -11460,6 +11780,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             case NumericTerm.CodePointClassCount _, NumericTerm.CodePointValueSum _,
                  NumericTerm.CodePointAt _ -> null;
         };
+    }
+
+    /**
+     * The run the region shows {@code taken} fills, where every number of it is one the operation
+     * answers of some value of the run the region shows the value it is taken of fills
+     * ({@link TakenAs#answeredWholeFrom}) — or null.
+     *
+     * <p>What a number taken of a value that takes every value is shown to fill, asked of a value
+     * held between its ends. The region holds the number apart from the value, so a number it
+     * fills is one a row's value gives only where the value's run gives it: what a value of every
+     * value is shown of by the operation's own account
+     * ({@code everyAnswerItCanGiveHasASourceValue}) is shown here of the run.
+     */
+    private static NumericDomain.Bounds takenOfAValueItsRunAnswers(NumericTerm.TakenOf taken,
+                                                                    SearchRegion region) {
+        NumericDomain.Bounds run = region.wholeRunOf(taken);
+        NumericDomain.Bounds values = region.wholeRunOf(new NumericTerm.ValueOf(taken.position()));
+        NumericDomain.Bounds answered = (run == null || values == null) ? null
+                : taken.takenAs().answeredWholeFrom(taken.transformation(), values);
+        return (answered != null && run.liesWithin(answered)) ? run : null;
     }
 
     /**

@@ -1,6 +1,7 @@
 package souther.compiler.report;
 
 import souther.compiler.check.PathReachability;
+import souther.compiler.observe.ObservedValue;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
 import souther.compiler.publish.ReachProofWord;
@@ -104,6 +105,7 @@ import souther.compiler.diag.msg.MessageOrder;
 import souther.compiler.diag.msg.ReportMessage;
 
 import java.math.BigInteger;
+import souther.compiler.inputs.ABoundThatKeepsEveryRunGoing;
 import souther.compiler.inputs.AuthoredOrder;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.ElementKey;
@@ -4504,6 +4506,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         constructionsAsk(it.asks(), page, rendering, declaredIn),
                         inCopies(it.readAt(), behavior.conditionPlaces().copies(),
                                 page, declaredIn)));
+                // And, where a stop is where the representation of a number stops, the invariant
+                // that keeps every run from it, under the line that says where it is.
+                for (EveryRunStops stop : it.everyRunStops()) {
+                    if (stop.keeping() != null) {
+                        out.append("          · ").append(page.say(
+                                new ReportMessage.ABoundOnTheInputKeepsEveryRunGoing(
+                                        stop.keeping().data(), invariantWritten(stop.keeping()))))
+                                .append(NEW_LINE);
+                    }
+                }
             }
         }
         // And, for a rule a line of which was not worked out because its cases were too many, what
@@ -7228,6 +7240,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
         String said = askedSaid(part, page);
         return part instanceof WhatAConstructionAsks.Is ? said
                 : page.say(new ReportMessage.Grouped(said));
+    }
+
+    /**
+     * The clause {@code bound} is, as an author writes it in the data's invariant: the place, the
+     * side, and the value as a literal of its type — a whole number, or a date as it is written.
+     */
+    static String invariantWritten(ABoundThatKeepsEveryRunGoing bound) {
+        String value = switch (bound.bound()) {
+            case ObservedValue.Integer whole -> String.valueOf(whole.value());
+            case ObservedValue.Temporal temporal -> temporal.written();
+            default -> throw new IllegalStateException("a bound kept on an input is a whole number"
+                    + " or a date: " + bound.bound());
+        };
+        return "invariant " + bound.named() + (bound.atMost() ? " <= " : " >= ") + value;
     }
 
     /** Where every run getting to a rule stops, as the human report says it after the rule. */
@@ -11378,6 +11404,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                     if (within.greatest() != null) {
                         bound.put("greatest", within.greatest());
                     }
+                }
+                if (each.keeping() != null) {
+                    ObjectNode keeping = one.putObject("keeping");
+                    keeping.put("data", each.keeping().data());
+                    keeping.put("invariant", invariantWritten(each.keeping()));
                 }
             }
         }

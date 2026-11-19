@@ -33,9 +33,18 @@ final class WhatStatementsOfOneFormDecide {
     private WhatStatementsOfOneFormDecide() {
     }
 
-    /** What the statements of one form leave: no row at all, or a relation of it decided. */
-    record Verdict(boolean noRowArrives, boolean relationIsDecided) {
-        static final Verdict NOTHING = new Verdict(false, false);
+    /**
+     * What the statements of one form leave: no row at all, or a relation of it decided.
+     *
+     * @param comesOut how the relation comes out at every point they leave, or null where they do
+     *                 not decide it
+     */
+    record Verdict(boolean noRowArrives, Boolean comesOut) {
+        static final Verdict NOTHING = new Verdict(false, null);
+
+        boolean relationIsDecided() {
+            return comesOut != null;
+        }
     }
 
     /**
@@ -51,7 +60,7 @@ final class WhatStatementsOfOneFormDecide {
                 left.add(each);
             }
         }
-        boolean decided = false;
+        Boolean comesOut = null;
         while (!left.isEmpty()) {
             TakenConstraint.Affine first = left.removeFirst();
             Map<NumericTerm, ExactRatio> form = first.form().coefs();
@@ -72,14 +81,14 @@ final class WhatStatementsOfOneFormDecide {
                 continue;
             }
             if (empty) {
-                return new Verdict(true, false);
+                return new Verdict(true, null);
             }
-            if (askedBound != null && !askedAt.isEmpty()
+            if (comesOut == null && askedBound != null && !askedAt.isEmpty()
                     && askedAt.stream().distinct().count() == 1) {
-                decided = true;
+                comesOut = askedAt.getFirst();
             }
         }
-        return new Verdict(false, decided);
+        return new Verdict(false, comesOut);
     }
 
     /**

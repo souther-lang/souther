@@ -1,5 +1,6 @@
 package souther.compiler.numeric;
 
+import java.math.BigInteger;
 import java.time.LocalDate;
 
 /**
@@ -81,6 +82,61 @@ public record DateTranslation(long offsetDays, long first, long last) {
         } catch (ArithmeticException _) {
             return null;
         }
+    }
+
+    /**
+     * This, defined only at the origin days {@code days} holds besides — or null where that leaves
+     * none, or an end of {@code days} is no number of days.
+     *
+     * <p>A date held between two ends is a date at those days alone, and moving it is defined at
+     * fewer dates than moving every date is: what the move answers is read off the dates it is
+     * defined at, so the dates a position may hold are kept where the move is.
+     */
+    public DateTranslation definedOnlyWithin(NumericDomain.Bounds days) {
+        BigInteger from = days.min() == null ? BigInteger.valueOf(first) : dayAt(days.min(), true);
+        BigInteger to = days.max() == null ? BigInteger.valueOf(last) : dayAt(days.max(), false);
+        if (from == null || to == null) {
+            return null;
+        }
+        from = from.max(BigInteger.valueOf(first));
+        to = to.min(BigInteger.valueOf(last));
+        return from.compareTo(to) > 0 ? null
+                : new DateTranslation(offsetDays, from.longValueExact(), to.longValueExact());
+    }
+
+    /** This, defined only at the origin days {@code days} is defined at besides, or null where
+     *  that leaves none. What {@code days} moves by is not read. */
+    public DateTranslation definedOnlyWhere(DateTranslation days) {
+        long from = Math.max(first, days.first);
+        long to = Math.min(last, days.last);
+        return from > to ? null : new DateTranslation(offsetDays, from, to);
+    }
+
+    /**
+     * The first and the last year every day of which is an origin this is defined at, or null where
+     * no year is.
+     */
+    public int[] wholeYears() {
+        LocalDate from = LocalDate.ofEpochDay(first);
+        LocalDate to = LocalDate.ofEpochDay(last);
+        int least = from.getDayOfYear() == 1 ? from.getYear() : from.getYear() + 1;
+        int most = to.getDayOfYear() == to.lengthOfYear() ? to.getYear() : to.getYear() - 1;
+        return least > most ? null : new int[] {least, most};
+    }
+
+    /** The day nearest {@code end} on the run's side of it, or null where it is no number: the
+     *  run's first day where {@code least}, and its last otherwise. */
+    private static BigInteger dayAt(Endpoint end, boolean least) {
+        if (!(end.at() instanceof Count count)) {
+            return null;
+        }
+        ExactRatio at = count.exactly();
+        if (least) {
+            return end.inclusive() ? at.ceiling().orNull()
+                    : at.floor().map(day -> day.add(BigInteger.ONE)).orNull();
+        }
+        return end.inclusive() ? at.floor().orNull()
+                : at.ceiling().map(day -> day.subtract(BigInteger.ONE)).orNull();
     }
 
     /** Whether the chain is defined at the date {@code day} counts to. */

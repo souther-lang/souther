@@ -9741,9 +9741,7 @@ final class Pullback {
      * <p>Of those, the ones that answer where the number they come to is one their type holds are
      * added to {@code atTheEnds} as well: where a run stops at one is where the representation
      * stops, which is no line the model draws, and a reader of the relation tells it apart from
-     * the rest. Not a construction: the number it wraps is one its type holds already, so where
-     * it answers is where the clauses of the type it makes leave the number, which the model
-     * states.
+     * the rest. Not a construction ({@link #answersWhereItsTypeStops}).
      */
     private List<Derivation> whereEachOperatorAnswers(Operators operators,
                                                       List<ConstructionAsk> asked,
@@ -9801,7 +9799,7 @@ final class Pullback {
                 out.add(answers);
                 if (over instanceof Answers.AsAnOperator(var _,
                         WhereAnOperatorAnswers.WhereItsExactValueIsHeld _)
-                        && !(Core.withoutStanding(each.operation()) instanceof Core.Construct)) {
+                        && answersWhereItsTypeStops(each.operation())) {
                     atTheEnds.add(answers);
                 }
                 askedOf(asked, each.operation(), askedBy(form, held), form.coefs().keySet());
@@ -9811,6 +9809,15 @@ final class Pullback {
             }
         }
         return out;
+    }
+
+    /**
+     * Whether where {@code operation} answers is where the type it works its number out in stops:
+     * every operation but a construction, whose number is one its type holds already and which
+     * answers where the clauses of the type it makes leave the number, which the model states.
+     */
+    static boolean answersWhereItsTypeStops(Core operation) {
+        return !(Core.withoutStanding(operation) instanceof Core.Construct);
     }
 
     /**

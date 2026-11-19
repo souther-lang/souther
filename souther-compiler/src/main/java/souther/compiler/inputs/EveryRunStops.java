@@ -26,8 +26,14 @@ import java.util.List;
  * @param operation the operation, written as the numbers it is over weighed and a constant
  * @param where     the rows, as forms each of which lies between two ends: every row meeting all
  *                  of them stops in the operation
+ * @param keeping   the bound on the input that keeps every run from stopping there, where the
+ *                  operation stops where the representation of its number does and the rows are
+ *                  the values of one place on one side ({@link ABoundThatKeepsEveryRunGoing}); null
+ *                  where it stops where the clauses of a type a construction makes leave the
+ *                  number, which the model states, or the rows are any others
  */
-public record EveryRunStops(String operation, List<Within> where) {
+public record EveryRunStops(String operation, List<Within> where,
+                            ABoundThatKeepsEveryRunGoing keeping) {
 
     public EveryRunStops {
         if (operation == null || where == null || where.isEmpty()) {
@@ -42,8 +48,11 @@ public record EveryRunStops(String operation, List<Within> where) {
      * @param form     the numbers weighed and a constant, as an author would write them
      * @param least    the least value the form takes there, or null where nothing bounds it below
      * @param greatest the greatest, or null where nothing bounds it above
+     * @param alone    the one number the form is, where it is one, and null where it is a form of
+     *                 several
      */
-    public record Within(String form, BigInteger least, BigInteger greatest) {
+    public record Within(String form, BigInteger least, BigInteger greatest,
+                         NumericTerm.FromOnePosition alone) {
 
         public Within {
             if (form == null || (least == null && greatest == null)

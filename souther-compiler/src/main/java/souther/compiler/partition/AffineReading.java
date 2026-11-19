@@ -987,7 +987,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                   LinearForm<NumericTerm> form, List<Integer> after) {
                 UndividedByARelation.IntOperation operation =
                         UndividedByARelation.IntOperation.overTheInput(form, held.least(),
-                                held.greatest(), after);
+                                held.greatest(), after,
+                                Pullback.answersWhereItsTypeStops(node));
                 if (!FormRange.liesWithin(form, ofTheInput, Map.of(), held.least(),
                         held.greatest())) {
                     if (!told.told(operation)) {

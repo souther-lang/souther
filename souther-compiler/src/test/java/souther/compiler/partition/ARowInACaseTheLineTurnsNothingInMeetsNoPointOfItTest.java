@@ -34,32 +34,38 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * A row meets a line of a statement of several only in a case the line turns the statement in,
  * however many cases there are and whether they were said one by one or as one.
  *
- * <p>{@code x} is compared with nought where an even number of the statement's parts hold, and one
- * of the parts is {@code x + y > 0} over a {@code y} declared at nought or above. Where that part
- * fails, the declarations leave {@code x} at nought or below, so the line on {@code x} has rows on
- * one side of it only and turns nothing — though the statement, read without the declarations,
- * turns there as anywhere. Nought is still a point of the line there, and a row in such a case at
- * nought tells nothing about the line.
+ * <p>{@code x} is compared with nought in each of several cases, each a truth of its own taken with
+ * {@code x + y > 0} or with its failing, over a {@code y} declared at nought or above. Where that
+ * part fails, the declarations leave {@code x} at nought or below, so the line on {@code x} has
+ * rows on one side of it only and turns nothing — though the statement, read without the
+ * declarations, turns there as anywhere. Nought is still a point of the line there, and a row in
+ * such a case at nought tells nothing about the line.
  *
  * <p>Past a figure the cases are said as one condition, and that condition holds the cases the line
  * turns nothing in as well as the ones it turns in. The line is read in the cases that divide rows
  * and no other, so a row in the condition is not by that alone a row at the line.
  *
  * <p>Which cases the line is drawn in is asked of the guards, for each way the cases come past the
- * cases said one by one: said as one and taken apart again into as many as are said one by one
- * (five truths beside the part), and said as one with more than that dividing rows, kept as one
- * (six). That a row is at the line's point only in a case the line is drawn in is asked of the
- * report once, with the cases said one by one and as few as there can be — one truth beside the
- * part, two cases: what reads a row against a point is the same however the cases it was drawn in
- * came, and how many cases there are against the figure is asked without a compilation in
+ * cases said one by one, with one case that fails the part beside those that hold it: said as one
+ * and taken apart again into as many as are said one by one (as many holding it as the figure),
+ * and said as one with more than that dividing rows, kept as one (one more). That a row is at the
+ * line's point only in a case the line is drawn in is asked of the report once, with as few cases
+ * as there can be — one holding the part and one failing it: what reads a row against a point is
+ * the same however the cases it was drawn in came, and how many cases there are against the figure
+ * is asked without a compilation in
  * {@code meaning.WhereALineDecidesIsAskedOfEachCaseItWasSaidForTest}.
  */
 class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    /** The guards of {@code e} for each number of truths, which every test here only reads. */
+    /** The guards of {@code e} for each number of cases holding the part, which every test here
+     *  only reads. */
     private static final Map<Integer, GuardThresholds.Guards> GUARDS = new ConcurrentHashMap<>();
+
+    /** As many cases holding the part as are said one by one, and one more. */
+    private static final List<Integer> AT_AND_PAST_THE_FIGURE =
+            List.of(WhereEachLineDecides.MOST_CASES, WhereEachLineDecides.MOST_CASES + 1);
 
     /**
      * A row where {@code x + y > 0} fails, at nought on {@code x}, meets no point of the line on
@@ -67,7 +73,7 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
      */
     @Test
     void aRowInACaseTheLineTurnsNothingInIsNotAtItsPoint() {
-        assertFalse(atNought(statement(1), "0, MB(0)", 1, 0),
+        assertFalse(atNought(statement(1), "0, MB(0), false, true"),
                 "x + y > 0 fails and the line turns nothing there");
     }
 
@@ -77,24 +83,22 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
      */
     @Test
     void aRowInACaseTheLineTurnsInIsAtItsPoint() {
-        assertTrue(atNought(statement(1), "0, MB(1)", 1, 1),
+        assertTrue(atNought(statement(1), "0, MB(1), true, false"),
                 "x + y > 0 holds and the line turns there");
     }
 
     /**
      * The line on {@code x} is drawn in the cases that hold {@code x + y > 0} and in no case that
      * holds it failing: one by one where those are as few as are said one by one, and as one where
-     * they are more. Of the assignments to the truths, half put the part on its holding side — so
-     * five truths are as many cases as are said one by one, and six are past it.
+     * they are more. With the one case failing it, the cases are past the figure either way.
      */
     @Test
     void theLineIsDrawnOnlyInTheCasesItTurnsIn() {
-        for (int truths = 5; truths <= 6; truths++) {
-            int of = truths;
-            int dividing = 1 << (truths - 1);
-            List<Proposition> cases = casesTheLineIsDrawnIn(truths);
-            assertEquals(dividing <= WhereEachLineDecides.MOST_CASES ? dividing : 1, cases.size(),
-                    () -> "the cases the line is drawn in, of " + of + " truths: " + cases);
+        for (int holding : AT_AND_PAST_THE_FIGURE) {
+            int of = holding;
+            List<Proposition> cases = casesTheLineIsDrawnIn(holding);
+            assertEquals(holding <= WhereEachLineDecides.MOST_CASES ? holding : 1, cases.size(),
+                    () -> "the cases the line is drawn in, of " + of + " holding: " + cases);
             for (Proposition each : cases) {
                 List<Boolean> comparisons = each.partsHeld().stream()
                         .flatMap(part -> part instanceof Proposition.Compared compared
@@ -102,7 +106,7 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
                         .toList();
                 assertEquals(List.of(true), comparisons,
                         () -> "a case the line is drawn in holds x + y > 0, of " + of
-                                + " truths: " + each);
+                                + " holding: " + each);
             }
         }
     }
@@ -115,9 +119,9 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
      */
     @Test
     void theWayToEachCaseALineIsDrawnInIsFiledUnderThatCase() {
-        for (int truths = 5; truths <= 6; truths++) {
-            int of = truths;
-            GuardThresholds.Guards guards = guards(truths);
+        for (int holding : AT_AND_PAST_THE_FIGURE) {
+            int of = holding;
+            GuardThresholds.Guards guards = guards(holding);
             List<LineOrigin.ComparisonOrigin> inACase = drawnInACase(guards);
             assertFalse(inACase.isEmpty(), () -> "some line is drawn in a case, of " + of);
             for (LineOrigin.ComparisonOrigin origin : inACase) {
@@ -135,44 +139,25 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
 
     /**
      * A line every case of which divides rows is asked to the end and read in all of them, and
-     * nothing of it is left not worked out: {@code x} compared with nought where an even number of
-     * truths hold, each case one the line turns in. As few truths as make more cases than are said
-     * one by one: an even number of {@code n} truths holds in half their assignments, so the
-     * fewest truths are the {@code n} whose half first exceeds the figure, and one case past the
-     * figure is enough. No two assignments with the same parity of truths differ in one truth, so
-     * none of the cases joins another.
+     * nothing of it is left not worked out: {@code x} compared with nought where any of the
+     * truths holds, each truth a case the line turns in, and one case past the figure. No two
+     * truths are one, so none of the cases joins another.
      */
     @Test
     void aLineEveryCaseOfWhichDividesRowsIsWorkedOutInAll() {
-        List<String> ways = new ArrayList<>();
-        int truths = Integer.numberOfTrailingZeros(
-                Integer.highestOneBit(WhereEachLineDecides.MOST_CASES)) + 2;
-        for (int each = 0; each < 1 << truths && ways.size() <= WhereEachLineDecides.MOST_CASES;
-                each++) {
-            if (Integer.bitCount(each) % 2 != 0) {
-                continue;
-            }
-            List<String> parts = new ArrayList<>();
-            for (int i = 0; i < truths; i++) {
-                parts.add((each >> i & 1) == 1 ? "t" + i : "Bool.not(t" + i + ")");
-            }
-            ways.add("(" + String.join(" && ", parts) + ")");
-        }
-        assertEquals(WhereEachLineDecides.MOST_CASES + 1, ways.size(),
-                "one case past the figure");
         List<String> names = new ArrayList<>();
         List<String> typed = new ArrayList<>();
-        for (int i = 0; i < truths; i++) {
+        for (int i = 0; i <= WhereEachLineDecides.MOST_CASES; i++) {
             names.add("t" + i);
             typed.add("t" + i + ": Bool");
         }
         JsonNode report = JSON.readTree(measured("""
                 module probe
                 behavior e : (x: Int, TYPED) -> Int
-                let e (x, NAMES) = if (if EVEN then x else 0) > 0 then 1 else 0
+                let e (x, NAMES) = if (if ANY then x else 0) > 0 then 1 else 0
                 """.replace("TYPED", String.join(", ", typed))
                 .replace("NAMES", String.join(", ", names))
-                .replace("EVEN", anyOf(ways)))
+                .replace("ANY", anyOf(names)))
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         List<JsonNode> onX = new ArrayList<>();
         borders(report, "e/x", onX);
@@ -191,8 +176,8 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
     }
 
     /** The case each line drawn in a case of the statement is drawn in. */
-    private static List<Proposition> casesTheLineIsDrawnIn(int truths) {
-        return drawnInACase(guards(truths)).stream()
+    private static List<Proposition> casesTheLineIsDrawnIn(int holding) {
+        return drawnInACase(guards(holding)).stream()
                 .map(origin -> origin.part().orElseThrow().decides())
                 .toList();
     }
@@ -206,8 +191,8 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
                 .toList();
     }
 
-    private static GuardThresholds.Guards guards(int truths) {
-        return GUARDS.computeIfAbsent(truths, of -> guardsOf(statement(of)));
+    private static GuardThresholds.Guards guards(int holding) {
+        return GUARDS.computeIfAbsent(holding, of -> guardsOf(statement(of)));
     }
 
     /** What the guards of {@code e} come to in {@code source}. */
@@ -223,20 +208,13 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
                 checked.behaviorBodies().get("e"), checked.plan(), inputs.get("e"), rules);
     }
 
-    /**
-     * Whether the row {@code (written, t1 .. t[holding] true, the rest false)} meets the point of
-     * the line on {@code x} at nought.
-     */
-    private static boolean atNought(String statement, String written, int truths, int holding) {
-        List<String> row = new ArrayList<>();
-        for (int i = 1; i <= truths; i++) {
-            row.add(i <= holding ? "true" : "false");
-        }
+    /** Whether the row {@code (row)} meets the point of the line on {@code x} at nought. */
+    private static boolean atNought(String statement, String row) {
         JsonNode report = JSON.readTree(measured(statement + """
 
                 example e
-                    | (WRITTEN, ROW) -> 0
-                """.replace("WRITTEN", written).replace("ROW", String.join(", ", row)))
+                    | (ROW) -> 0
+                """.replace("ROW", row))
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         // The comparison inside the statement draws a line of its own on x, at one: y is held at
         // nought or above, so x from one on holds it whatever y is. The line asked about is the
@@ -265,25 +243,18 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
     }
 
     /**
-     * {@code x} compared with nought where an even number of {@code x + y > 0} and {@code truths}
-     * truths hold, and nought compared with nought where they do not.
+     * {@code x} compared with nought in {@code holding} cases that hold {@code x + y > 0} and one
+     * that fails it, and nought compared with nought outside them. Each case is a truth of its own
+     * taken with the part, {@code t1 .. t[holding]} holding it and the one after failing it, so any
+     * two cases differ in two parts and none joins another.
      */
-    private static String statement(int truths) {
+    private static String statement(int holding) {
         List<String> ways = new ArrayList<>();
-        for (int each = 0; each < 1 << (truths + 1); each++) {
-            if (Integer.bitCount(each) % 2 != 0) {
-                continue;
-            }
-            List<String> parts = new ArrayList<>();
-            parts.add((each & 1) == 1 ? "x + y.value > 0" : "Bool.not(x + y.value > 0)");
-            for (int i = 1; i <= truths; i++) {
-                parts.add((each >> i & 1) == 1 ? "t" + i : "Bool.not(t" + i + ")");
-            }
-            ways.add("(" + String.join(" && ", parts) + ")");
-        }
         List<String> names = new ArrayList<>();
         List<String> typed = new ArrayList<>();
-        for (int i = 1; i <= truths; i++) {
+        for (int i = 1; i <= holding + 1; i++) {
+            ways.add("(" + (i <= holding ? "x + y.value > 0" : "Bool.not(x + y.value > 0)")
+                    + " && t" + i + ")");
             names.add("t" + i);
             typed.add("t" + i + ": Bool");
         }
@@ -292,10 +263,10 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
                 data MB = Int
                     invariant value >= 0
                 behavior e : (x: Int, y: MB, TYPED) -> Int
-                let e (x, y, NAMES) = if (if EVEN then x else 0) > 0 then 1 else 0
+                let e (x, y, NAMES) = if (if ANY then x else 0) > 0 then 1 else 0
                 """.replace("TYPED", String.join(", ", typed))
                 .replace("NAMES", String.join(", ", names))
-                .replace("EVEN", anyOf(ways));
+                .replace("ANY", anyOf(ways));
     }
 
     /** Any one of {@code ways}, joined two halves at a time so that the source is only as deep
