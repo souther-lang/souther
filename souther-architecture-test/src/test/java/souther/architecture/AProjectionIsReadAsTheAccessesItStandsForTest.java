@@ -703,6 +703,12 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(L" + CORE + "$FieldAccess;Ljava/util/Map;)Z", Reading.ONE_ACCESS, ONE);
         row(out, c + "inputs/ElementValue$Reader", "recordOperationsOf", "(" + core + ")V",
                 Reading.STRUCTURE, EVALUATION);
+        row(out, c + "partition/WorkedOutToReachIt", "numbersNotYetAsked", "(L" + c
+                        + "inputs/Denotation;Ljava/util/Map;)L" + c + "partition/FormRange;",
+                Reading.NAMES, READS_THE_NAMES);
+        row(out, c + "partition/WorkedOutToReachIt", "valuesItMayBe", "(L" + c
+                        + "inputs/Denotation;)Ljava/util/List;",
+                Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/Pullback", "underItsAccesses", "(L" + c + "inputs/Denotation;)L"
                 + c + "inputs/Denotation;", Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/Pullback", "aWayIntoAfresh", "(L" + c + "inputs/Denotation;L" + c

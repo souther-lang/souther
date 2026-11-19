@@ -4926,8 +4926,9 @@ public final class InputReads {
         if (!(Core.withoutStanding(e) instanceof Core.Read read)) {
             return List.of();
         }
-        if (read.binding() != null
-                && names.attemptThatBuilt(read.binding()) instanceof Core.IfConstructed attempt) {
+        Core.IfConstructed attempt = read.binding() == null ? null
+                : names.attemptThatBuilt(read.binding());
+        if (attempt != null) {
             return attempt.construct().values().stream()
                     .map(field -> new Denotation(field.value(), this)).toList();
         }

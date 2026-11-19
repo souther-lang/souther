@@ -646,6 +646,9 @@ final class WorkedOutToReachIt {
             }
             case Core.LetIn let -> valuesItMayBe(new Denotation(let.body(),
                     value.at().and(let.binder(), let.value())));
+            // A run of names read off one value, read one name at a time.
+            case Core.FieldProjection projection ->
+                    valuesItMayBe(new Denotation(projection.lastAccess(), value.at()));
             case Core.FieldAccess access -> {
                 List<Denotation> holding = valuesItMayBe(new Denotation(access.target(),
                         value.at()));
@@ -810,6 +813,11 @@ final class WorkedOutToReachIt {
                 yield inside == null ? null
                         : numbersOf(new Denotation(body.get().body(), inside), asked);
             }
+            // A run of names read off one value: a place where the whole run is one, and
+            // otherwise read one name at a time.
+            case Core.FieldProjection projection -> value.at().pathOf(written, newtypes)
+                    instanceof ValuesAt.At(var at) ? rangeOfAPlace(at)
+                    : numbersOf(new Denotation(projection.lastAccess(), value.at()), asked);
             case Core.FieldAccess access -> {
                 if (value.at().pathOf(written, newtypes) instanceof ValuesAt.At(var at)) {
                     yield rangeOfAPlace(at);
