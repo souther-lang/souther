@@ -3,16 +3,18 @@ package souther.compiler.partition;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
+import souther.compiler.semantics.TakenAs;
 
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 /**
  * The years a way that states the years of dates puts them in, one year for each date, so that
@@ -47,7 +49,7 @@ final class YearsAWayAllows {
     /** {@code constant} and the weighed {@code years} held against nought as {@code relation}. */
     record Statement(List<Year> years, ExactRatio constant, Rel relation) {}
 
-    private static final int YEARS_OF_A_CYCLE = 400;
+    private static final int YEARS_OF_A_CYCLE = PartsOfADateOverACycle.YEARS_OF_A_CYCLE;
 
     /** The first and the last year the calendar has. A move defined at fewer dates is asked of a
      *  year when it is chosen, not by leaving the ends out here. */
@@ -60,7 +62,7 @@ final class YearsAWayAllows {
 
     /** The dates a way may state the years of for them to be chosen together: the years of one
      *  are looked for among those of the other, so the choices multiply. */
-    private static final int MOST_DATES = 2;
+    static final int MOST_DATES = 2;
 
     private YearsAWayAllows() {
     }
@@ -83,15 +85,6 @@ final class YearsAWayAllows {
         int dates = partsOfEachDate.size();
         if (dates == 0 || dates > MOST_DATES || !staysInsideTheType(statements)) {
             return null;
-        }
-        long[][] weights = new long[statements.size()][dates];
-        long[] constants = new long[statements.size()];
-        for (int i = 0; i < constants.length; i++) {
-            constants[i] = asLong(statements.get(i).constant());
-            for (Year year : statements.get(i).years()) {
-                // Cannot pass the type: every weight was counted alone against the farthest year.
-                weights[i][year.date()] += asLong(year.weight());
-            }
         }
         List<List<DateTranslation>> shifts = new ArrayList<>();
         List<int[]> wholeYears = new ArrayList<>();
@@ -117,9 +110,63 @@ final class YearsAWayAllows {
                 return null;   // no year gives this date every number, whatever the statements
             }
         }
-        long[] chosen = new long[dates];
-        return search(statements, weights, constants, partsOfEachDate, shifts, giving,
-                wholeYears, chosen, 0) ? toInts(chosen) : null;
+        return years(statements, (date, year) ->
+                giving[date].get(Math.floorMod(year, YEARS_OF_A_CYCLE))
+                        && MonthsAndDaysOfOneDate.coversEveryValueInYear(
+                                partsOfEachDate.get(date), (int) year, shifts.get(date)),
+                wholeYears, YearsAWayAllows::toInts);
+    }
+
+    /**
+     * What {@code made} makes of the first years it makes anything of, among those, one for each
+     * date, at which every statement holds, each year one of a cycle of four hundred
+     * {@code ofTheCycle} sets for its date and inside the years {@code allowed} gives it — or null
+     * where it makes nothing of any. What the year of a moved date is beside the date's own year
+     * is the caller's to have put in the constants: every {@link Year#moved} here is read as moving
+     * nothing.
+     *
+     * <p>The years of the cycle are where some day gives what the caller asks of the date, which a
+     * year only some days of which the date may be need not have among them: so whether the years
+     * are taken is what {@code made} makes of them, and the search goes on past those it makes
+     * nothing of.
+     *
+     * @param ofTheCycle for each date, the years of a cycle, by the year modulo four hundred
+     * @param allowed    for each date, its first and last year
+     * @param made       what the caller makes of the years, or null where it makes nothing
+     */
+    static <T> T holding(List<Statement> statements, List<BitSet> ofTheCycle,
+                         List<int[]> allowed, Function<long[], T> made) {
+        int dates = ofTheCycle.size();
+        if (dates == 0 || dates > MOST_DATES || allowed.size() != dates
+                || !staysInsideTheType(statements)) {
+            return null;
+        }
+        return years(statements, (date, year) ->
+                ofTheCycle.get(date).get(Math.floorMod(year, YEARS_OF_A_CYCLE)), allowed, made);
+    }
+
+    /** Whether a year is one a date may be put in, before the statements are asked of it. */
+    @FunctionalInterface
+    private interface Taken {
+        boolean at(int date, long year);
+    }
+
+    /** What {@code made} makes of the first years it makes anything of, among those the
+     *  statements, which stay inside the type, hold at, each one {@code taken} allows — or null
+     *  where none is found. */
+    private static <T> T years(List<Statement> statements, Taken taken, List<int[]> allowed,
+                               Function<long[], T> made) {
+        int dates = allowed.size();
+        long[][] weights = new long[statements.size()][dates];
+        long[] constants = new long[statements.size()];
+        for (int i = 0; i < constants.length; i++) {
+            constants[i] = asLong(statements.get(i).constant());
+            for (Year year : statements.get(i).years()) {
+                // Cannot pass the type: every weight was counted alone against the farthest year.
+                weights[i][year.date()] += asLong(year.weight());
+            }
+        }
+        return search(statements, weights, constants, taken, allowed, made, new long[dates], 0);
     }
 
     private static int[] toInts(long[] years) {
@@ -131,36 +178,34 @@ final class YearsAWayAllows {
     }
 
     /**
-     * Whether the dates from {@code date} on can be put in years that, with those already chosen,
-     * hold every statement.
+     * What {@code made} makes of the first years, the dates from {@code date} on put in them, that
+     * hold every statement with those already chosen and that it makes anything of — or null.
      */
-    private static boolean search(List<Statement> statements, long[][] weights, long[] constants,
-                                  List<List<DatesThatStandInEveryYear.Part>> parts,
-                                  List<List<DateTranslation>> shifts, BitSet[] giving,
-                                  List<int[]> allowed, long[] chosen, int date) {
+    private static <T> T search(List<Statement> statements, long[][] weights, long[] constants,
+                                Taken taken, List<int[]> allowed, Function<long[], T> made,
+                                long[] chosen, int date) {
         if (date == chosen.length) {
             for (int i = 0; i < constants.length; i++) {
                 if (!statements.get(i).relation().holds(Long.signum(valueAt(weights[i],
                         constants[i], chosen)))) {
-                    return false;
+                    return null;
                 }
             }
-            return true;
+            return made.apply(chosen);
         }
         for (long year : yearsToLookAt(statements, weights, constants, chosen, date,
                 allowed.get(date))) {
-            if (!giving[date].get(Math.floorMod(year, YEARS_OF_A_CYCLE))
-                    || !MonthsAndDaysOfOneDate.coversEveryValueInYear(parts.get(date),
-                            (int) year, shifts.get(date))) {
+            if (!taken.at(date, year)) {
                 continue;
             }
             chosen[date] = year;
-            if (search(statements, weights, constants, parts, shifts, giving, allowed, chosen,
-                    date + 1)) {
-                return true;
+            T found = search(statements, weights, constants, taken, allowed, made, chosen,
+                    date + 1);
+            if (found != null) {
+                return found;
             }
         }
-        return false;
+        return null;
     }
 
     private static long valueAt(long[] weights, long constant, long[] years) {
@@ -336,45 +381,60 @@ final class YearsAWayAllows {
     }
 
     /**
-     * Which of the four hundred years of a cycle give every number each part can be. The years
-     * before and after repeat them, so this is asked of the calendar once for what was asked, and
-     * a year taken is looked at itself.
+     * Which of the four hundred years of a cycle give every number each part can be, at the days
+     * every shift keeps in the year ({@link MonthsAndDaysOfOneDate#coversEveryValueInYear}). The
+     * years before and after repeat them, so this is read off the cycle
+     * ({@link PartsOfADateOverACycle}), and a year taken is looked at itself.
      *
      * <p>The calendar's pattern and nothing else: each move is asked by what it moves by, and the
-     * dates it is defined at are asked of the year taken. A part is read over a cycle
-     * ({@link DatesThatStandInEveryYear.Part#overACycle}); a shift of the year is read as it is:
-     * it moves the year, and one that leaves no date in its year leaves none in any.
+     * dates it is defined at are asked of the year taken. A shift is read as the year of the date
+     * it moves, which keeps the date in its year where it is nought.
      */
-    private static BitSet classesGivingEveryValue(List<DatesThatStandInEveryYear.Part> parts,
-                                                  List<DateTranslation> shifts) {
-        List<DatesThatStandInEveryYear.Part> byTheMove = parts.stream()
-                .map(DatesThatStandInEveryYear.Part::overACycle).toList();
-        List<DateTranslation> shiftsByTheMove =
-                shifts.stream().map(YearsAWayAllows::byWhatItMoves).toList();
-        return CLASSES.computeIfAbsent(new Asked(byTheMove, shiftsByTheMove), asked -> {
-            BitSet out = new BitSet(YEARS_OF_A_CYCLE);
-            for (int at = 0; at < YEARS_OF_A_CYCLE; at++) {
-                if (MonthsAndDaysOfOneDate.coversEveryValueInYear(asked.parts(),
-                        (int) USUAL_YEAR + at, asked.yearShifts())) {
-                    out.set(Math.floorMod((int) USUAL_YEAR + at, YEARS_OF_A_CYCLE));
+    static BitSet classesGivingEveryValue(List<DatesThatStandInEveryYear.Part> parts,
+                                          List<DateTranslation> shifts) {
+        List<PartsOfADateOverACycle.Moved> asked = new ArrayList<>();
+        for (DatesThatStandInEveryYear.Part part : parts) {
+            asked.add(new PartsOfADateOverACycle.Moved(part.which(), part.moved().offsetDays()));
+        }
+        for (DateTranslation shift : shifts) {
+            asked.add(new PartsOfADateOverACycle.Moved(TakenAs.DatePart.YEAR,
+                    shift.offsetDays()));
+        }
+        // What the parts give, by the years that give it: the lists of one day are in the same
+        // years as many others, and a year is asked once for each set of years.
+        Map<BitSet, long[]> seenIn = new LinkedHashMap<>();
+        for (PartsOfADateOverACycle.Given each : PartsOfADateOverACycle.of(asked)) {
+            if (each.values().subList(parts.size(), asked.size()).stream()
+                    .anyMatch(years -> years != 0)) {
+                continue;
+            }
+            long[] seen = seenIn.computeIfAbsent(each.years(), _ -> new long[parts.size()]);
+            for (int i = 0; i < seen.length; i++) {
+                seen[i] |= 1L << each.values().get(i);
+            }
+        }
+        BitSet out = new BitSet(YEARS_OF_A_CYCLE);
+        for (int year = 0; year < YEARS_OF_A_CYCLE; year++) {
+            long[] seen = new long[parts.size()];
+            boolean kept = false;
+            for (Map.Entry<BitSet, long[]> each : seenIn.entrySet()) {
+                if (each.getKey().get(year)) {
+                    kept = true;
+                    for (int i = 0; i < seen.length; i++) {
+                        seen[i] |= each.getValue()[i];
+                    }
                 }
             }
-            return out;
-        });
+            boolean every = kept;
+            for (int i = 0; i < seen.length; i++) {
+                every &= seen[i] == parts.get(i).everyNumber();
+            }
+            if (every) {
+                out.set(year);
+            }
+        }
+        return out;
     }
-
-    /** One shift by what {@code move} moves by, at every date that shift is defined at. */
-    private static DateTranslation byWhatItMoves(DateTranslation move) {
-        return DateTranslation.none().thenAddDays(move.offsetDays());
-    }
-
-    /** What was asked of the calendar, which is all there is to the answer. */
-    private record Asked(List<DatesThatStandInEveryYear.Part> parts,
-                         List<DateTranslation> yearShifts) {}
-
-    /** Answers by what was asked: the same few moves come back across the relations of a
-     *  program, and each answer is four hundred years of the calendar. Four hundred bits each. */
-    private static final Map<Asked, BitSet> CLASSES = new ConcurrentHashMap<>();
 
     private static List<DateTranslation> shiftsOf(List<Statement> statements, int date) {
         List<DateTranslation> out = new ArrayList<>();

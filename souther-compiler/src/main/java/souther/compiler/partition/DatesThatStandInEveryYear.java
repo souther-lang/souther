@@ -1,19 +1,16 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.DatePartsLeft;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.semantics.TakenAs;
 
 import java.time.LocalDate;
-import java.time.Month;
-import java.time.YearMonth;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.BitSet;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.LongStream;
 
 /**
@@ -41,8 +38,6 @@ import java.util.stream.LongStream;
  */
 final class DatesThatStandInEveryYear {
 
-    private static final int YEARS_OF_A_CYCLE = 400;
-
     /**
      * The month or the day of a date, taken after the date was moved. The year is not one: it
      * runs as far as the calendar does and goes with no month or day in particular, so it is
@@ -62,18 +57,6 @@ final class DatesThatStandInEveryYear {
             return which.of(date);
         }
 
-        /**
-         * This part with its move less the whole cycles it moves by, at every date: a whole cycle
-         * takes a month and a day to the same month and day, so it comes to what this does at
-         * every date this is defined at, and is defined at every date of a cycle near the
-         * calendar's middle however far this moves. What a part comes to over a cycle is a fact
-         * of the calendar and of what the move moves by, and this is that fact's question.
-         */
-        Part overACycle() {
-            return new Part(which, DateTranslation.none().thenAddDays(
-                    Math.floorMod(moved.offsetDays(), DatePartsLeft.DAYS_OF_A_CYCLE)));
-        }
-
         /** How many numbers this part can be, which are one to that many. */
         int howManyThereAre() {
             return switch (which) {
@@ -81,6 +64,16 @@ final class DatesThatStandInEveryYear {
                 case DAY -> 31;
                 case YEAR -> throw new IllegalStateException("not a part of this kind");
             };
+        }
+
+        /** Every number this part can be, as the bits of those numbers. */
+        long everyNumber() {
+            return (1L << (howManyThereAre() + 1)) - 2;
+        }
+
+        /** This part as the cycle of the calendar reads it ({@link PartsOfADateOverACycle}). */
+        PartsOfADateOverACycle.Moved overTheCycle() {
+            return new PartsOfADateOverACycle.Moved(which, moved.offsetDays());
         }
     }
 
@@ -154,75 +147,40 @@ final class DatesThatStandInEveryYear {
      *
      * <p>Asked of the years strictly between {@code first} and {@code last}, every date of which
      * every move is defined at, and of no other: a move is read only at dates it is defined at.
-     * The calendar comes round every four hundred years, so no more than one cycle of them is
-     * read, and a whole cycle answers the same wherever it starts.
+     * The calendar comes round every four hundred years, so those years are read as the years of
+     * the cycle they are ({@link PartsOfADateOverACycle}), all of them where they are a cycle or
+     * more.
      */
-    private static List<Origin> alikeInTheYearsBetween(List<Part> parts,
-                                                       List<DateTranslation> yearShifts,
-                                                       int first, int last) {
-        List<Long> partMoves = parts.stream().map(part -> part.moved().offsetDays()).toList();
-        List<TakenAs.DatePart> which = parts.stream().map(Part::which).toList();
-        List<Long> yearMoves = yearShifts.stream().map(DateTranslation::offsetDays).distinct()
-                .sorted().toList();
-        int from = first + 1;
-        int years = Math.min(last - 1, first + YEARS_OF_A_CYCLE) - first;
-        int startingIn = years == YEARS_OF_A_CYCLE ? 0 : Math.floorMod(from, YEARS_OF_A_CYCLE);
-        return KNOWN.computeIfAbsent(new Asked(which, partMoves, yearMoves, startingIn, years),
-                _ -> worked(which, partMoves, yearMoves, from, years));
-    }
-
-    /**
-     * What the pattern is asked of, which is all there is to the answer: which parts, what each
-     * move moves by, and which years of the cycle, as where they start in it and how many there
-     * are — a whole cycle starting nowhere in particular.
-     */
-    private record Asked(List<TakenAs.DatePart> which, List<Long> partMoves,
-                         List<Long> yearMoves, int startingIn, int years) {}
-
-    /** Answers by what was asked. A pure function of its key, so an answer is never stale; a
-     *  way's statements come back to the same few moves again and again across the relations of
-     *  a program, and each answer walks up to four hundred years of the calendar. */
-    private static final Map<Asked, List<Origin>> KNOWN = new ConcurrentHashMap<>();
-
-    private static List<Origin> worked(List<TakenAs.DatePart> which, List<Long> partMoves,
-                                       List<Long> yearMoves, int from, int years) {
+    static List<Origin> alikeInTheYearsBetween(List<Part> parts, List<DateTranslation> yearShifts,
+                                               int first, int last) {
+        int cycle = PartsOfADateOverACycle.YEARS_OF_A_CYCLE;
+        BitSet between = new BitSet(cycle);
+        for (int year = first + 1; year < Math.min(last, first + 1 + cycle); year++) {
+            between.set(Math.floorMod(year, cycle));
+        }
+        // The month and the day of the date itself, then the parts, then the year of the date
+        // after each shift: one list for each day.
+        List<PartsOfADateOverACycle.Moved> asked = new ArrayList<>();
+        asked.add(new PartsOfADateOverACycle.Moved(TakenAs.DatePart.MONTH, 0));
+        asked.add(new PartsOfADateOverACycle.Moved(TakenAs.DatePart.DAY, 0));
+        parts.forEach(part -> asked.add(part.overTheCycle()));
+        yearShifts.forEach(shift -> asked.add(
+                new PartsOfADateOverACycle.Moved(TakenAs.DatePart.YEAR, shift.offsetDays())));
+        // A month and day is one day of each year, so one list of it given in every year between
+        // is the only one given there: the parts are alike in all of them.
         List<Origin> out = new ArrayList<>();
-        for (int month = 1; month <= 12; month++) {
-            for (int day = 1; day <= Month.of(month).maxLength(); day++) {
-                int[] taken = alikeEveryYear(month, day, which, partMoves, yearMoves, from, years);
-                if (taken != null) {
-                    out.add(new Origin(month, day, ratiosOf(taken)));
-                }
+        for (PartsOfADateOverACycle.Given each : PartsOfADateOverACycle.of(asked)) {
+            BitSet missing = (BitSet) between.clone();
+            missing.andNot(each.years());
+            List<Integer> values = each.values();
+            if (missing.isEmpty() && values.subList(2 + parts.size(), values.size()).stream()
+                    .allMatch(years -> years == 0)) {
+                out.add(new Origin(values.get(0), values.get(1), ratiosOf(values
+                        .subList(2, 2 + parts.size()).stream().mapToInt(Integer::intValue)
+                        .toArray())));
             }
         }
-        return out;
-    }
-
-    private static int[] alikeEveryYear(int month, int day, List<TakenAs.DatePart> which,
-                                        List<Long> partMoves, List<Long> yearMoves, int from,
-                                        int years) {
-        int[] out = null;
-        for (int year = from; year < from + years; year++) {
-            if (day > YearMonth.of(year, month).lengthOfMonth()) {
-                return null;
-            }
-            long origin = LocalDate.of(year, month, day).toEpochDay();
-            DaysOfAYear days = DaysOfAYear.of(year);
-            for (long move : yearMoves) {
-                if (!days.holds(origin + move)) {
-                    return null;
-                }
-            }
-            int[] here = new int[which.size()];
-            for (int i = 0; i < here.length; i++) {
-                here[i] = which.get(i).of(LocalDate.ofEpochDay(origin + partMoves.get(i)));
-            }
-            if (out == null) {
-                out = here;
-            } else if (!Arrays.equals(out, here)) {
-                return null;
-            }
-        }
+        out.sort(Comparator.comparingInt(Origin::month).thenComparingInt(Origin::day));
         return out;
     }
 
