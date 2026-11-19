@@ -862,8 +862,7 @@ public final class WhatARelationLeavesUndivided {
                                                           Granularity granularity,
                                                           BigInteger greatest,
                                                           Operations operations) {
-        if (granularity != Granularity.DENSE || constant == null || relation == Rel.EQ
-                || relation == Rel.NE
+        if (!showsRowsEachWayOf(granularity, constant, relation)
                 || !RowsComputed.upTo(greatest).withOperations(operations).nothingStopsARow()) {
             return null;
         }
@@ -900,6 +899,14 @@ public final class WhatARelationLeavesUndivided {
             }
         }
         return new EachWayItComesOut(Granularity.DENSE, out);
+    }
+
+    /** Whether {@link #eachWayItComesOut} works anything out of a term spaced so, of a relation
+     *  of order against {@code constant}: a dense term only. Asked before the terms are read. */
+    public static boolean showsRowsEachWayOf(Granularity granularity, ExactRatio constant,
+                                             Rel relation) {
+        return granularity == Granularity.DENSE && constant != null && relation != Rel.EQ
+                && relation != Rel.NE;
     }
 
     /**

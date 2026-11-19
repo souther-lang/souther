@@ -1,5 +1,6 @@
 package souther.compiler.observe;
 
+import souther.compiler.cst.CstLexer;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
@@ -66,7 +67,14 @@ public sealed interface ObservedValue {
 
     /** A {@code Date} or {@code DateTime}, kept as the ISO text it was written as. Separate from
      * {@link Text} so a rule over dates is never compared against a rule over strings. */
-    record Temporal(String iso) implements ObservedValue {}
+    record Temporal(String iso) implements ObservedValue {
+
+        /** As source writes it: the construction of its type over its text, so it is never read
+         *  as the text that spells it. */
+        public String written() {
+            return primitive().shown() + "(" + CstLexer.literalOf(iso) + ")";
+        }
+    }
 
     /** A unit data — a case that carries nothing. Its identity is its name. */
     record Unit(TypeSymbol type) implements ObservedValue {}

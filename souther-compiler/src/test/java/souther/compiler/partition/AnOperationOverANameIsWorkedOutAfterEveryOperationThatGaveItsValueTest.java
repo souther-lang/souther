@@ -28,7 +28,7 @@ class AnOperationOverANameIsWorkedOutAfterEveryOperationThatGaveItsValueTest {
 
     private static UndividedByARelation.IntOperation operation() {
         return new UndividedByARelation.IntOperation(LinearForm.constant(ExactRatio.ZERO),
-                BigInteger.ZERO, BigInteger.ONE, List.of(), true);
+                BigInteger.ZERO, BigInteger.ONE, List.of());
     }
 
     @Test

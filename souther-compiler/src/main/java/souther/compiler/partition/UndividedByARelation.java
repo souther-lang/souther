@@ -247,6 +247,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             after = isAscending(after) ? List.copyOf(after) : List.copyOf(new TreeSet<>(after));
         }
 
+        /** An operation whose ends are where the type it is worked out in stops, which is every
+         *  operation but a construction ({@link Pullback#answersWhereItsTypeStops}). */
+        IntOperation(LinearForm<IntOperand> form, BigInteger least, BigInteger greatest,
+                     List<Integer> after) {
+            this(form, least, greatest, after, true);
+        }
+
         /** Whether every index comes after the one before it, which is what the set of them
          *  held in order is: a set already so is held as it is. */
         private static boolean isAscending(List<Integer> indices) {
@@ -263,6 +270,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         boolean sameOperationAs(IntOperation other) {
             return form.equals(other.form) && least.equals(other.least)
                     && greatest.equals(other.greatest);
+        }
+
+        /** An operation over numbers of the input alone, whose ends are where its type stops. */
+        static IntOperation overTheInput(LinearForm<NumericTerm> form, BigInteger least,
+                                         BigInteger greatest, List<Integer> after) {
+            return overTheInput(form, least, greatest, after, true);
         }
 
         /** An operation over numbers of the input alone. */
@@ -1036,15 +1049,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             });
             // A side both ways tell the rows of is read once they have met: the rows of either, so
             // that a value one way has no row at takes nothing from it, and what is left of the
-            // side is said in place of what the two said apart. Told only of rows a run gets to
-            // the relation with, so not of a place a run along either may stop before.
+            // side is said in place of what the two said apart.
             Map<NumericTerm, OfASide> met = new LinkedHashMap<>();
             outcomes.forEach((term, mine) -> {
                 OfASide theirs = other.outcomes.get(term);
-                OfASide joined = theirs == null
-                        || !Collections.disjoint(mine.places(), mayStopBefore)
-                        || !Collections.disjoint(mine.places(), other.mayStopBefore)
-                        ? null : mine.alongBoth(theirs);
+                OfASide joined = theirs == null ? null : mine.alongBoth(theirs);
                 if (joined != null) {
                     met.put(term, joined);
                     joined.putDown(term, both, alike);
@@ -2600,10 +2609,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return reached(linesAlong(read, sources, carriers, rows.stated(), remainders,
                     witnesses, run, reaches), run, read, witnesses);
         }
-        // A row of the model's way may stop at an end on the way before it gets to the relation,
-        // so it is no row of the relation's: nothing of the rows is told from it.
         WhatItLeaves shown = reached(linesAlong(read, sources, carriers, ofTheModel, remainders,
-                witnesses, run, reaches), run, read, witnesses).told(Map.of());
+                witnesses, run, reaches), run, read, witnesses);
         Set<FilingCoordinate> mayStop = new LinkedHashSet<>();
         List<FilingCoordinate> asPairs = new ArrayList<>();
         for (FilingCoordinate at : shown.undivided()) {
@@ -3973,7 +3980,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (decided.relationIsDecided() || keepsEveryElementApart(written, asStated)) {
             Lines.OneWayWherever oneWay = comesOutOneWay(out, settled, countsRead);
             return decided.relationIsDecided() ? new Lines.OneWayWherever(oneWay.shown()
-                    .told(rowsAlong(way, null, read, sources, carriers)), countsRead) : oneWay;
+                    .told(rowsAlong(way, null, run, read, sources, carriers)), countsRead)
+                    : oneWay;
         }
         // A way that relates a term to other numbers leaves it the run the region answers, and
         // the pair is asked whether the way ties them as well as whether the declarations do.
@@ -4117,7 +4125,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         WhatItLeaves shown = new WhatItLeaves(out, settled, true, stopped, runsStopped)
-                .told(rowsAlong(way, leaves, read, sources, carriers));
+                .told(rowsAlong(way, leaves, run, read, sources, carriers));
         // An equality with a weighed number is true at the values the weighing reaches, which are
         // no run: the places not shown undivided are parted by them.
         if (!offItsLine && heldWhole && sides.size() == 2 && standApart(0, 1, independent)) {
@@ -4142,41 +4150,42 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * shown each way ({@link WhatARelationLeavesUndivided#eachWayItComesOut}). Not of a
      * remainder's form, which is left as all its numbers together leave it.
      *
-     * <p>A row is asked of the sides as the way's own region holds them, every statement of it
-     * in: a reading that took a statement away for a row at the line reads a wider region than
-     * the way's. And only where a run along the way gets to the relation at every row the region
-     * holds: nothing the way declined bears on it, and no run may stop on what it reads. Nothing
-     * where that is not so.
+     * <p>A row is a row of the run, whichever reading of the way asks: the sides are read over
+     * the region of the rows that get past every end on the way, every statement of it in
+     * ({@code run}), and not over a region a reading widened, by a statement taken away for a row
+     * at the line or by the ends of the model's way. And only where every row there gets to the
+     * relation: nothing the way declined bears on it, and no run may stop on what it reads.
+     * Nothing where that is not so.
      *
      * @param leaves what the way's reading leaves each side, whose lines are kept beside the
      *               rows; null where the way comes out one way wherever
      */
     private Map<NumericTerm, OfASide> rowsAlong(StatedWay way,
                                                 List<WhatARelationLeavesUndivided.Leaves> leaves,
-                                                InputReading read, List<Source> sources,
-                                                List<Carrier> carriers) {
+                                                RunToIt run, InputReading read,
+                                                List<Source> sources, List<Carrier> carriers) {
         Boolean comesOut = way.decided().comesOut();
         List<Integer> asked = new ArrayList<>();
         for (int at = 0; at < sides.size(); at++) {
             // A side that is the number of one place, and nothing more: what is left of it is
-            // what is left of that place. Along a way that leaves the relation open, a row each
-            // way is shown only of a dense side. Not of a place the way states a part of a date
-            // of: such a statement is left to the calendar and not held by the region, so what
-            // the region shows the place takes is not what a row along the way takes.
+            // what is left of that place. Not of a place the way states a part of a date of: such
+            // a statement is left to the calendar and not held by the region, so what the region
+            // shows the place takes is not what a row along the way takes.
             if (sides.get(at).number() instanceof NumericTerm.FromOnePosition number
                     && sides.get(at).madeOf().equals(List.of(FilingCoordinate.of(number)))
                     && (remainder == null || at != 0)
-                    && (comesOut != null || granularityOf(carriers.get(at)) == Granularity.DENSE)
-                    && !statesAPartOfTheDateAt(way.written(), number.position())) {
+                    && (comesOut != null || WhatARelationLeavesUndivided.showsRowsEachWayOf(
+                            granularityOf(carriers.get(at)), constant, relation))
+                    && !statesAPartOfTheDateAt(run.written(), number.position())) {
                 asked.add(at);
             }
         }
         if (asked.isEmpty() || kind != Kind.AFFINE || constant == null || !way.heldWhole()
-                || mayStopOnWhatItReads(way.past(), read, way.region(), way.written(),
-                        way.declined(), Set.of())) {
+                || mayStopOnWhatItReads(run.past(), read, run.along(), run.written(),
+                        run.declined(), Set.of())) {
             return Map.of();
         }
-        SidesAlongTheWay along = sidesAlongTheWay(way.written(), way.past(), way.region(), read,
+        SidesAlongTheWay along = sidesAlongTheWay(run.written(), run.past(), run.along(), read,
                 sources, carriers);
         Map<NumericTerm, OfASide> out = new LinkedHashMap<>();
         for (int at : asked) {

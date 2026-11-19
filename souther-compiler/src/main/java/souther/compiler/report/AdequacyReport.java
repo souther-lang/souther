@@ -1,7 +1,6 @@
 package souther.compiler.report;
 
 import souther.compiler.check.PathReachability;
-import souther.compiler.cst.CstLexer;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.coverage.ControlClaim;
 import souther.compiler.coverage.ControlPlace;
@@ -7250,8 +7249,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     static String invariantWritten(ABoundThatKeepsEveryRunGoing bound) {
         String value = switch (bound.bound()) {
             case ObservedValue.Integer whole -> String.valueOf(whole.value());
-            case ObservedValue.Temporal temporal -> temporal.primitive().shown() + "("
-                    + CstLexer.literalOf(temporal.iso()) + ")";
+            case ObservedValue.Temporal temporal -> temporal.written();
             default -> throw new IllegalStateException("a bound kept on an input is a whole number"
                     + " or a date: " + bound.bound());
         };
