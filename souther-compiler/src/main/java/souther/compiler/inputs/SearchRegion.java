@@ -365,6 +365,17 @@ public interface SearchRegion {
     }
 
     /**
+     * Where {@code term} runs in a row of this region: with every number a condition taken in
+     * names still to be chosen ({@link #projectionOf(NumericTerm, Collection)}), so that a number
+     * the region ties it to bounds it by where that number can be. Read off the rules a run
+     * shown whole is read of ({@link #wholeRunOf}), and where the values lie, not that a row takes
+     * them. A region that took nothing in has nothing to add, which is what the default is.
+     */
+    default NumericDomain.FormProjection projectionOfARow(NumericTerm term) {
+        return projectionOf(term);
+    }
+
+    /**
      * Whether what this region was narrowed to relates some of {@code these} to some of
      * {@code those}: a chain of what it holds names one of each, so that holding one of them
      * narrower may hold the other narrower too. Numbers no chain relates are free of one another

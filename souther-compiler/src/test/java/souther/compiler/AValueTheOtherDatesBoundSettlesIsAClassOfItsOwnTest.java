@@ -6,6 +6,7 @@ import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.OfferingRequest;
+import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
@@ -51,6 +52,21 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
     private static String report(Compilation compilation) {
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
+    /**
+     * {@code source} compiled with no rows measured: what its rules divide each position into,
+     * and what they leave unread, are derived all the same, and no row is searched for.
+     */
+    private static Compilation divided(String source) {
+        return ACompiledModel.compiles(ACompiledModel.measured(source,
+                Adequacy.Asked.reportOnly(Adequacy.Level.OFF)));
+    }
+
+    /** The positions the reading of {@code ceiling} left something unread about. */
+    private static List<String> unread(Compilation compilation) {
+        return compilation.db().ask(new Adequacy.Coverage("d")).value().get("ceiling").notRead()
+                .stream().map(PartitionEvidence.NotRead::at).toList();
     }
 
     /** The classes of each axis of {@code ceiling}, by the axis. */
@@ -262,6 +278,115 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
 
         assertTrue(report.contains("measurement: complete"), report);
         assertFalse(report.contains("not worked out"), report);
+    }
+
+    /**
+     * The same over dates. Along the way the first reading decided true, the year of {@code on}
+     * is shown only from 1960, where a birthday from 1900 is sixty: the region holds the year of
+     * the birthday where the birthday lies, so the years before have no row along it.
+     */
+    @Test
+    void aComparisonOfYearsReadAgainIsReadOverTheYearsTheBoundLeaves() {
+        Compilation compilation = compiled("""
+                module d
+
+                data P = { birthday: Date, disabled: Bool }
+                    invariant birthday >= Date("1900-01-01")
+
+                let old (p: P, on: Date): Int =
+                    if Date.year(on) - Date.year(p.birthday) >= 60 || p.disabled
+                    then 1800 else 1300
+
+                behavior ceiling : (p: P, on: Date, r: Int) -> Int
+                let ceiling (p, on, r) =
+                    if r >= old(p, on) then old(p, on) else 3
+                """);
+        String report = report(compilation);
+
+        assertTrue(report.contains("measurement: complete"), report);
+        assertEquals(List.of(), unread(compilation));
+        assertEquals(List.of("Date.year(on): -999999999 <= x <= 1959",
+                "Date.year(on): 1959 < x <= 999999999"),
+                classes(compilation).get("Date.year(on)"), report);
+    }
+
+    /**
+     * An age worked out through the months, read again. The statements of months on each way
+     * hold at some month in every year the dates may be in, so the years are read through the
+     * statements of years alone.
+     */
+    @Test
+    void anAgeThroughTheMonthsAndDaysReadAgainIsRead() {
+        List<String> unread = unread(divided("""
+                module d
+
+                data P = { birthday: Date }
+                    invariant birthday >= Date("1900-01-01")
+
+                let old (p: P, on: Date): Int =
+                    if Date.year(on) - Date.year(p.birthday)
+                            - (if Date.month(on) < Date.month(p.birthday) then 1 else 0) >= 60
+                    then 1800 else 1300
+
+                behavior ceiling : (p: P, on: Date, r: Int) -> Int
+                let ceiling (p, on, r) =
+                    if r >= old(p, on) then old(p, on) else 3
+                """));
+
+        assertTrue(unread.stream().noneMatch(at -> at.startsWith("Date.year")), unread.toString());
+    }
+
+    /**
+     * A comparison of months read again along ways that state a year of the same date. The
+     * statement of the year holds in years every month is in, so the months are read through
+     * the statements of months alone.
+     */
+    @Test
+    void aComparisonOfMonthsReadAgainUnderAYearIsRead() {
+        List<String> unread = unread(divided("""
+                module d
+
+                let old (on: Date, b: Date): Int =
+                    if Date.month(on) - Date.month(b) >= 3 then 1800 else 1300
+
+                behavior ceiling : (on: Date, b: Date, r: Int) -> Int
+                let ceiling (on, b, r) =
+                    if Date.year(on) >= 2000 then
+                        (if r >= old(on, b) then old(on, b) else 3)
+                    else 4
+                """));
+
+        assertTrue(unread.stream().noneMatch(at -> at.startsWith("Date.month")),
+                unread.toString());
+    }
+
+    /**
+     * A way whose statements no date meets shows no row. The comparison is read again only along
+     * ways through the thirtieth of February, which the region holds as a month and a day it
+     * leaves and no date is. Along the way that decided it true, the region leaves a birthday's
+     * year up to sixty before the calendar's last, and those years are no row's: no class of the
+     * birthday's years is made of them.
+     */
+    @Test
+    void aYearAWaysMonthsAndDaysKeepFromEveryDateIsNoRowAlongIt() {
+        Compilation compilation = divided("""
+                module d
+
+                data P = { birthday: Date }
+                    invariant birthday >= Date("1900-01-01")
+
+                let old (p: P, on: Date): Int =
+                    if Date.year(on) - Date.year(p.birthday) >= 60 then 1800 else 1300
+
+                behavior ceiling : (p: P, on: Date, r: Int) -> Int
+                let ceiling (p, on, r) =
+                    if Date.month(on) * 100 + Date.day(on) == 230 then
+                        (if r >= old(p, on) then old(p, on) else 3)
+                    else 4
+                """);
+
+        assertFalse(classes(compilation).containsKey("Date.year(p.birthday)"),
+                classes(compilation).toString());
     }
 
     /** The same comparison over whole numbers, which is how the section reads it. */

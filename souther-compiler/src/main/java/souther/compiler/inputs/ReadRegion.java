@@ -98,6 +98,11 @@ record ReadRegion(ReadQuantities within) implements SearchRegion {
     }
 
     @Override
+    public NumericDomain.FormProjection projectionOfARow(NumericTerm term) {
+        return within.projectionOfARow(term);
+    }
+
+    @Override
     public boolean relates(Collection<NumericTerm> these, Collection<NumericTerm> those) {
         return within.relates(these, those);
     }
