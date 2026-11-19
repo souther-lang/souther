@@ -498,6 +498,15 @@ class EveryPublishedReasonIsWrittenBySomeCompilationTest {
                         |> List.find(d -> Set.contains(d, hs))
                         |> Option.withDefault(0)
                 """));
+        // The comparison is read, and the sum over what a walk keeps stops where the walk's value
+        // is the greatest Int, which no position of the input says.
+        out.put(UndividedPosition.Reason.EVALUATION_STOPS_NOT_FULLY_READ, of("""
+                module m
+
+                behavior f : (ds: List<Int>) -> Int
+                let f (ds) =
+                    if List.fold((w, l) -> if l > w then l else w, 0, ds) + 1 <= 10 then 1 else 2
+                """));
         // Read to the end, and the positions cancel: the rule is about the position and the
         // quantity it cuts is nothing.
         out.put(UndividedPosition.Reason.RULE_CUTS_NOTHING, of("""

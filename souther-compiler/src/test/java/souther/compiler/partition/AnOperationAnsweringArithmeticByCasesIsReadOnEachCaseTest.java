@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A rule over what an operation answers, where the library defines it in cases of arithmetic over
@@ -14,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * <p>{@code Int.abs(n)} answers {@code 0 - n} where {@code n} is below nought and {@code n} from
  * there, which is what its body was proved to answer. So {@code Int.abs(n) > 5} holds where
- * {@code n} is below minus five or past five: two lines on {@code n}, and nothing unread. Where the
+ * {@code n} is below minus five or past five: lines on {@code n} that leave nothing unread. Where the
  * cases part, at nought, is the library's and no rule of the model: the rule comes out the same on
  * both sides of it.
  *
@@ -29,8 +30,21 @@ class AnOperationAnsweringArithmeticByCasesIsReadOnEachCaseTest {
         read.put("the call as a side", reading("Int", "n: Int", "Int.abs(n) > 5"));
         read.put("the call inside a sum", reading("Int", "n: Int", "Int.abs(n) + 1 > 6"));
 
-        String lines = "[n: x < -5, n: -5 <= x <= 5, n: 5 < x] unread []";
-        assertEquals(Map.of("the call as a side", lines, "the call inside a sum", lines), read);
+        String lines = "[n: x < -5, n: -5 <= x <= 5, n: 5 < x]";
+        assertEquals(Map.of("the call as a side", lines, "the call inside a sum", lines),
+                linesOf(read));
+        assertEquals(lines + " unread []", read.get("the call as a side"));
+        assertTrue(read.get("the call inside a sum").contains("EVALUATION_STOPS_NOT_FULLY_READ"),
+                read.get("the call inside a sum"));
+    }
+
+    /** What is drawn of each reading, and not what it leaves unread: a sum that adds to what the
+     *  call answers works out an operation of its own, which stops a run at the end of an
+     *  {@code Int}, and the report says that beside the lines. */
+    private static Map<String, String> linesOf(Map<String, String> read) {
+        Map<String, String> lines = new LinkedHashMap<>();
+        read.forEach((what, drawn) -> lines.put(what, drawn.substring(0, drawn.indexOf(" unread"))));
+        return lines;
     }
 
     @Test

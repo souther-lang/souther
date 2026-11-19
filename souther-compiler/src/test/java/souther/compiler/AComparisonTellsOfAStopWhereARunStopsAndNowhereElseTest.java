@@ -35,6 +35,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * there and is not told is a stop dropped. What is told though none of these numbers stops is
  * in {@link #TOLD_THOUGH_NONE_STOPS}, a stop that cannot be ruled out yet.
  *
+ * <p>A stop that is not told as one is not always left unsaid: where a run stops and no note says
+ * so, the report may say the comparison is not read to the end. Where it says neither, the form
+ * is in {@link #SAID_NOWHERE}, one form each with why, and a form that is not there and is said
+ * nowhere is a stop dropped without a word.
+ *
  * <p>This holds the report and the program to one another on these numbers, and not on every
  * input: a stop only some other number reaches is not found by it.
  */
@@ -58,6 +63,10 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
     /** What is told though no run of the numbers tried stops: a stop that cannot be ruled out,
      *  each with why it cannot. */
     private static final Map<String, String> TOLD_THOUGH_NONE_STOPS = new LinkedHashMap<>();
+
+    /** What a run stops in and the report says nothing of, neither a note nor that the comparison
+     *  is not read to the end, each with why. */
+    private static final Map<String, String> SAID_NOWHERE = new LinkedHashMap<>();
 
     static {
         // an operation of the comparison, and the same without it
@@ -173,6 +182,38 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 + "arm is taken, which an operation told over the elements cannot say");
         FORMS.put("lengthOfAnArmStep",
                 "List.length(List.map(x -> if x > 5 then x + 1 else 0, ds)) >= 2");
+        // an operation over what a reading cannot tell the stop of, and where it is told
+        String walk = "List.fold((w, l) -> if l > w then l else w, 0, ds)";
+        NOT_TOLD.put("walkPlusOne", "the operation is over what a walk came to, which no "
+                + "operation told is over: said as not read");
+        FORMS.put("walkPlusOne", walk + " + 1 <= 10");
+        NOT_TOLD.put("walkAgainstAnOption", "the same, over what an option holds: said as not "
+                + "read");
+        FORMS.put("walkAgainstAnOption", walk + " <= Option.withDefault(0, List.max(ds)) + 1");
+        NOT_TOLD.put("armOfAWalkPlusOne", "the same, in an arm");
+        FORMS.put("armOfAWalkPlusOne", "(if q > 3 then " + walk + " + 1 else 0) >= 2");
+        NOT_TOLD.put("remainderOfAWalkPlusOne", "the same, in what a remainder divides");
+        FORMS.put("remainderOfAWalkPlusOne", "Int.floorMod(" + walk + " + 1, 7) >= 3");
+        NOT_TOLD.put("armOfAWalkPlusOneInAClosure", "the same, in an arm of what a closure "
+                + "works out on each element");
+        FORMS.put("armOfAWalkPlusOneInAClosure",
+                "List.all(x -> (if x > 3 then " + walk + " + 1 else 0) >= 2, ds)");
+        FORMS.put("remainderOfAWalk", "Int.floorMod(" + walk + ", 7) + 1 >= 3");
+        SAID_NOWHERE.put("absOfANumber", "the reading tells every operation it knows of and "
+                + "tells none for the call, so nothing says an operation is left out");
+        SAID_NOWHERE.put("absInALetBodyUnchanged", "the same, in the body of a let");
+        SAID_NOWHERE.put("foldOfAProduct", "the step of the walk, a product over the running "
+                + "value, is left untold and no operation held aside is over it, so nothing "
+                + "records that something that may stop a run is left out");
+        SAID_NOWHERE.put("lengthOfAStepOfAFilter", "the same, for a step over what a filter "
+                + "keeps");
+        SAID_NOWHERE.put("lengthOfAnArmStep", "the same, for a step that takes an arm");
+        SAID_NOWHERE.put("armOfAWalkPlusOne", "what an arm works out is read apart from the "
+                + "comparison, and that reading is not asked what it leaves untold");
+        SAID_NOWHERE.put("armOfAWalkPlusOneInAClosure", "the same as an arm: what an arm works "
+                + "out is read by evaluating it, which records no stop it leaves untold");
+        SAID_NOWHERE.put("remainderOfAWalkPlusOne", "the operation is inside what a remainder "
+                + "divides, which is left to the analysis that owns the remainder");
     }
 
     @Test
@@ -188,20 +229,24 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                     .append(" (i) = Out { value = if ").append(condition)
                     .append(" then 1 else 2 }\n");
         }
-        Map<String, Integer> told = notes(model.toString());
+        Map<String, int[]> said = notes(model.toString());
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(model.toString()),
                 AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest.class.getClassLoader());
         TreeSet<String> stopsAndNothingTold = new TreeSet<>();
         TreeSet<String> toldAndNoRunStops = new TreeSet<>();
+        TreeSet<String> stopsAndNothingSaid = new TreeSet<>();
         for (int at = 0; at < names.size(); at++) {
             Object behavior = Emitted.behavior(loader, "demo", "b" + at)
                     .getConstructor().newInstance();
             boolean stops = someRunStops(loader, behavior);
-            int notes = told.getOrDefault("b" + at, 0);
-            if (stops && notes == 0) {
+            int[] counts = said.getOrDefault("b" + at, new int[2]);
+            if (stops && counts[MAY_STOP] == 0) {
                 stopsAndNothingTold.add(names.get(at));
+                if (counts[NOT_READ] == 0) {
+                    stopsAndNothingSaid.add(names.get(at));
+                }
             }
-            if (!stops && notes > 0) {
+            if (!stops && counts[MAY_STOP] > 0) {
                 toldAndNoRunStops.add(names.get(at));
             }
         }
@@ -210,7 +255,13 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                         + "compiler cannot yet rule out");
         assertEquals(new TreeSet<>(NOT_TOLD.keySet()), stopsAndNothingTold,
                 "a run stops and no note says so, beside the forms the compiler cannot yet tell");
+        assertEquals(new TreeSet<>(SAID_NOWHERE.keySet()), stopsAndNothingSaid,
+                "a run stops and the report says nothing of it, not even that it is not read to "
+                        + "the end, beside the forms whose stop no reading knows to ask of");
     }
+
+    private static final int MAY_STOP = 0;
+    private static final int NOT_READ = 1;
 
     private static boolean someRunStops(ClassLoader loader, Object behavior) throws Exception {
         for (List<Long> list : LISTS) {
@@ -226,12 +277,13 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         return false;
     }
 
-    /** How many {@code may stop a run} notes each behavior's report holds. */
-    private static Map<String, Integer> notes(String model) {
+    /** How many {@code may stop a run} notes ({@link #MAY_STOP}) and how many places said not read
+     *  ({@link #NOT_READ}) each behavior's report holds. */
+    private static Map<String, int[]> notes(String model) {
         Compilation compilation = ACompiledModel.measured(model,
                 new Adequacy.Asked(Adequacy.Level.OFF, false));
         Pattern header = Pattern.compile("^(\\w+)\\s+implemented\\b.*");
-        Map<String, Integer> out = new LinkedHashMap<>();
+        Map<String, int[]> out = new LinkedHashMap<>();
         String current = null;
         for (String line : AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
@@ -239,8 +291,11 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
             Matcher started = header.matcher(line);
             if (started.matches()) {
                 current = started.group(1);
+                out.put(current, new int[2]);
             } else if (current != null && line.contains("may stop a run")) {
-                out.merge(current, 1, Integer::sum);
+                out.get(current)[MAY_STOP]++;
+            } else if (current != null && line.startsWith("· not read:")) {
+                out.get(current)[NOT_READ]++;
             }
         }
         return out;

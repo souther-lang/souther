@@ -48,11 +48,18 @@ class TheValueAFindAnswersIsTheFirstElementItsClosureHoldsOfTest {
             }
             """;
 
-    /** A comparison of the value found is read: nothing of it is left unread. */
+    /**
+     * A comparison of the value found is read: no reading of it stops. What the closure works out
+     * of each element, {@code a + n}, is an operation that stops a run where {@code a} is past the
+     * end of an {@code Int} by less than {@code n}, and the report says that is not told.
+     */
     @Test
     void aComparisonOfTheValueFoundIsRead() {
-        assertEquals(List.of(), notRead("3", "e >= 5"));
-        assertEquals(List.of(), notRead("3", "Int.floorMod(e, 7) >= 1"));
+        for (String comparison : List.of("e >= 5", "Int.floorMod(e, 7) >= 1")) {
+            assertEquals(List.of(), notRead("3", comparison).stream()
+                    .filter(left -> !left.endsWith(" evaluation_stops_not_fully_read"))
+                    .toList(), comparison);
+        }
     }
 
     /**

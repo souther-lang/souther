@@ -321,6 +321,7 @@ public sealed interface BlockReason {
                 case RelationRowsNotShownComputed _ -> 30;
                 case RelationNotShownWhereItsRowsStopped _ -> 31;
                 case RuleAboutARemainderNoPositionHolds _ -> 33;
+                case EvaluationStopsNotFullyRead _ -> 34;
             };
         }
 
@@ -408,7 +409,8 @@ public sealed interface BlockReason {
                      EndLeftOpenByAChoice _,
                      ValueRuleLeftOpenByAChoice _, LineAtANumberNoRatioHolds _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
-                     RelationNotShownToReachEveryValue _, OrderedExtentEndIsNoValue _ -> 0;
+                     RelationNotShownToReachEveryValue _, OrderedExtentEndIsNoValue _,
+                     EvaluationStopsNotFullyRead _ -> 0;
             };
         }
 
@@ -450,6 +452,9 @@ public sealed interface BlockReason {
                 // And a relation shown over some of the values here: what the position admits is
                 // what the rules leave, and what is open is which class some of them are in.
                 case RelationShownOverARegion _ -> false;
+                // And an evaluation whose stops are not all told: the values are what the rules
+                // leave and the line is where it was read.
+                case EvaluationStopsNotFullyRead _ -> false;
                 // And the same operator read the other way does widen it, which is the whole
                 // difference between the two: what the alternatives admit was not read here, so
                 // the position holds whatever a value taking the unread branch may hold.
@@ -520,6 +525,7 @@ public sealed interface BlockReason {
                      LineSideNotWorkedOut _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
                      RelationNotShownToReachEveryValue _, RelationShownOverARegion _,
+                     EvaluationStopsNotFullyRead _,
                      RelationRowsNotShownComputed _ -> RunSensitivity.UNAFFECTED;
             };
         }
@@ -559,7 +565,8 @@ public sealed interface BlockReason {
                      LineSideNotWorkedOut _,
                      CasePairingNotDetermined _, SeveralLinesInOneRule _,
                      RelationNotShownToReachEveryValue _,
-                     RelationShownOverARegion _, RelationRowsNotShownComputed _ -> List.of();
+                     RelationShownOverARegion _, EvaluationStopsNotFullyRead _,
+                     RelationRowsNotShownComputed _ -> List.of();
             };
         }
     }
@@ -1021,6 +1028,19 @@ public sealed interface BlockReason {
      * one no line can be drawn on, keeps what it says.
      */
     record RuleAboutARemainderNoPositionHolds() implements RuleReadingStopped {}
+
+    /**
+     * What the comparison states was read, and what a run works out to evaluate it was not read
+     * to the end: an operation it works out may end a run, and nothing here says where, or that
+     * none does.
+     *
+     * <p>A statement about the evaluation and not about the line. The values at a position are
+     * what the rules leave and the line the comparison draws is where it was read; what is not
+     * shown is which rows a run gets to it past, since a row at a value where an operation stops
+     * is no row of the line. Neither a stop nor a proof there is none: said where a run reaching
+     * the comparison works out an operation whose stops are not all told.
+     */
+    record EvaluationStopsNotFullyRead() implements RuleReadingStopped {}
 
     /**
      * A rule naming which values the position may hold is written in a form no reader here takes
