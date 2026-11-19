@@ -1,6 +1,5 @@
 package souther.compiler.partition;
 
-import souther.compiler.check.DatePartsLeft;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
@@ -15,7 +14,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Dates at which statements of their parts all hold, found and then checked against the
@@ -41,11 +39,6 @@ final class DatesThatHoldEveryStatement {
     /** How many choices of what the parts come to beside the years are looked through, over all
      *  the dates together. */
     static final int MOST_CHOICES = 4_096;
-
-    private static final int YEARS_OF_A_CYCLE = 400;
-
-    /** The first day of a cycle near the calendar's middle, which the cycle is read from. */
-    private static final long FIRST_DAY_OF_THE_CYCLE = LocalDate.of(2000, 1, 1).toEpochDay();
 
     /** A part of the date numbered {@code date}, taken after it is moved. */
     record Part(int date, TakenAs.DatePart which, DateTranslation moved) {}
@@ -120,9 +113,11 @@ final class DatesThatHoldEveryStatement {
      * weighed year, or null where a sum is past what a whole number holds.
      */
     private static Map<List<Long>, Kind> kindsOf(List<Statement> statements, List<Part> parts) {
-        Map<List<Integer>, BitSet> ofTheCycle = besideTheYear(parts);
+        List<PartsOfADateOverACycle.Moved> asked = parts.stream().map(part ->
+                new PartsOfADateOverACycle.Moved(part.which(), part.moved().offsetDays()))
+                .toList();
         Map<List<Long>, Kind> out = new LinkedHashMap<>();
-        for (Map.Entry<List<Integer>, BitSet> each : ofTheCycle.entrySet()) {
+        for (PartsOfADateOverACycle.Given each : PartsOfADateOverACycle.of(asked)) {
             List<Long> sums = new ArrayList<>(statements.size());
             for (Statement statement : statements) {
                 long sum = 0;
@@ -133,78 +128,20 @@ final class DatesThatHoldEveryStatement {
                     }
                     try {
                         sum = Math.addExact(sum, Math.multiplyExact(weight,
-                                (long) each.getKey().get(at)));
+                                (long) each.values().get(at)));
                     } catch (ArithmeticException _) {
                         return null;
                     }
                 }
                 sums.add(sum);
             }
-            Kind kind = out.computeIfAbsent(List.copyOf(sums),
-                    _ -> new Kind(new BitSet(YEARS_OF_A_CYCLE), new LinkedHashSet<>()));
-            kind.years().or(each.getValue());
-            kind.beside().add(each.getKey());
+            Kind kind = out.computeIfAbsent(List.copyOf(sums), _ -> new Kind(
+                    new BitSet(PartsOfADateOverACycle.YEARS_OF_A_CYCLE), new LinkedHashSet<>()));
+            kind.years().or(each.years());
+            kind.beside().add(each.values());
         }
         return out;
     }
-
-    /**
-     * What each part comes to beside the year of the date it is taken of, over the days of a
-     * cycle, with the years of the cycle each comes to that in. A year is the years the move puts
-     * the date past its own; a month or a day is itself. A move is read as what it moves by less
-     * the whole cycles in it, which take the date to the same month and day, the year moved by
-     * four hundred for each.
-     */
-    private static Map<List<Integer>, BitSet> besideTheYear(List<Part> parts) {
-        List<Moved> asked = new ArrayList<>();
-        for (Part part : parts) {
-            asked.add(Moved.of(part));
-        }
-        return BESIDE.computeIfAbsent(asked, key -> {
-            Map<List<Integer>, BitSet> out = new LinkedHashMap<>();
-            long last = FIRST_DAY_OF_THE_CYCLE + DatePartsLeft.DAYS_OF_A_CYCLE;
-            for (long day = FIRST_DAY_OF_THE_CYCLE; day < last; day++) {
-                int year = LocalDate.ofEpochDay(day).getYear();
-                List<Integer> beside = besideTheYear(key, day, year);
-                out.computeIfAbsent(beside, _ -> new BitSet(YEARS_OF_A_CYCLE))
-                        .set(Math.floorMod(year, YEARS_OF_A_CYCLE));
-            }
-            return out;
-        });
-    }
-
-    /** What {@code asked} come to beside {@code year} at the origin {@code day} of the cycle the
-     *  table is read from. */
-    private static List<Integer> besideTheYear(List<Moved> asked, long day, int year) {
-        List<Integer> out = new ArrayList<>(asked.size());
-        for (Moved each : asked) {
-            LocalDate moved = LocalDate.ofEpochDay(day + each.withinACycle());
-            out.add(each.which() == TakenAs.DatePart.YEAR
-                    ? moved.getYear() - year + YEARS_OF_A_CYCLE * each.cycles()
-                    : each.which().of(moved));
-        }
-        return out;
-    }
-
-    /**
-     * A part and its move as whole cycles and what is left within one: all the table asks of it.
-     * The whole cycles are few enough to count in an {@code int}, since a move is a number of days
-     * between two dates of the calendar.
-     */
-    private record Moved(TakenAs.DatePart which, int cycles, long withinACycle) {
-
-        static Moved of(Part part) {
-            long offset = part.moved().offsetDays();
-            return new Moved(part.which(),
-                    Math.toIntExact(Math.floorDiv(offset, DatePartsLeft.DAYS_OF_A_CYCLE)),
-                    Math.floorMod(offset, DatePartsLeft.DAYS_OF_A_CYCLE));
-        }
-    }
-
-    /** Answers by what was asked: the same few parts come back across the ways of a program,
-     *  and each answer is read off a cycle of days. */
-    private static final Map<List<Moved>, Map<List<Integer>, BitSet>> BESIDE =
-            new ConcurrentHashMap<>();
 
     /**
      * Dates for the kinds still to be chosen after {@code chosen}, taken in turn: at each choice

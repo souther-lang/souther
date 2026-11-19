@@ -4258,11 +4258,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : part == TakenAs.DatePart.YEAR ? OnAWay.PartsLeftAlone.YEARS
                 : OnAWay.PartsLeftAlone.MONTHS_AND_DAYS;
         Set<TermPath> leftToTheCalendar = new LinkedHashSet<>();
+        List<Collection<NumericTerm>> tying = new ArrayList<>();
         List<OnAWay> asked = new ArrayList<>();
         for (OnAWay each : conditions) {
             if (notAsked != OnAWay.PartsLeftAlone.NONE && each.leavesAlone() == notAsked) {
                 each.affine().form().coefs().keySet().forEach(term ->
                         leftToTheCalendar.add(((NumericTerm.TakenOf) term).position()));
+                tying.add(each.affine().form().coefs().keySet());
             } else {
                 asked.add(each);
             }
@@ -4289,11 +4291,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         Set<TermPath> named = new LinkedHashSet<>(namedBy.keySet());
         named.addAll(leftToTheCalendar);
-        List<Collection<NumericTerm>> tying = new ArrayList<>(weighed);
-        conditions.stream().filter(each -> !asked.contains(each))
-                .forEach(each -> tying.add(each.affine().form().coefs().keySet()));
-        PlacesTiedTogether tied = PlacesTiedTogether.of(named, tying);
-        Set<TermPath> heldApart = placesOfDatesHeldApartFromTheSide(side, namedBy, tied,
+        tying.addAll(weighed);
+        Set<TermPath> heldApart = placesOfDatesHeldApartFromTheSide(side, namedBy, named, tying,
                 conditions, past, read);
         if (heldApart == null) {
             return false;
@@ -4416,17 +4415,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * date, or every date between its ends, and name in no rule ({@link #daysOfTheDate}).
      * Anything else of them is a statement the calendar is not asked of, and no dates are said to
      * hold it.
+     *
+     * @param named  every place named, {@code namedBy}'s and those of the statements left to the
+     *               calendar
+     * @param tying  the terms of each statement and narrowing, as they tie places
      */
     private static Set<TermPath> placesOfDatesHeldApartFromTheSide(
-            NumericTerm side, Map<TermPath, Set<NumericTerm>> namedBy, PlacesTiedTogether tied,
-            List<OnAWay> conditions, DemandReading.Answered past, InputReading read) {
+            NumericTerm side, Map<TermPath, Set<NumericTerm>> namedBy, Set<TermPath> named,
+            List<Collection<NumericTerm>> tying, List<OnAWay> conditions,
+            DemandReading.Answered past, InputReading read) {
         if (!(side instanceof NumericTerm.FromOnePosition ofTheSide)) {
             return Set.of();
         }
         Set<TermPath> out = new LinkedHashSet<>();
+        PlacesTiedTogether tied = null;
         for (Map.Entry<TermPath, Set<NumericTerm>> each : namedBy.entrySet()) {
             if (each.getValue().size() < 2 || out.contains(each.getKey())) {
                 continue;
+            }
+            if (tied == null) {
+                tied = PlacesTiedTogether.of(named, tying);
             }
             if (tied.together(each.getKey(), ofTheSide.position())) {
                 return null;

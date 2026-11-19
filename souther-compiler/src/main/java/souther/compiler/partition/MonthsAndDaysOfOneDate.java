@@ -1,7 +1,6 @@
 package souther.compiler.partition;
 
 import souther.compiler.check.DatePartsLeft;
-import souther.compiler.check.HeldClass;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactRatio;
 
@@ -10,9 +9,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.LongStream;
 
 /**
@@ -43,12 +40,10 @@ final class MonthsAndDaysOfOneDate {
      * at, in the order of {@code parts}, or null where there is no such day.
      *
      * <p>A cycle of days holds every combination there is, so where the days are a cycle or more
-     * what one cycle gives is read, each part over it
-     * ({@link DatesThatStandInEveryYear.Part#overACycle}): a fact of the calendar and of what the
-     * moves move by, kept for every compilation. A date
-     * held to fewer days gives what those give, and may miss the twenty-ninth of February or what
-     * a move makes of the last days of a year: that turns on the dates a model holds the date to,
-     * and is worked out where it is asked.
+     * what the cycle gives is read ({@link PartsOfADateOverACycle}): a fact of the calendar and of
+     * what the moves move by. A date held to fewer days gives what those give, and may miss the
+     * twenty-ninth of February or what a move makes of the last days of a year: that turns on the
+     * dates a model holds the date to, and is worked out where it is asked.
      */
     static List<List<ExactRatio>> ofAnyYear(List<DatesThatStandInEveryYear.Part> parts) {
         DateTranslation every = DateTranslation.none();
@@ -61,18 +56,13 @@ final class MonthsAndDaysOfOneDate {
         if (every.last() - every.first() + 1 < DatePartsLeft.DAYS_OF_A_CYCLE) {
             return workedOverTheDays(parts, every.first(), every.last());
         }
-        List<DatesThatStandInEveryYear.Part> overACycle = parts.stream()
-                .map(DatesThatStandInEveryYear.Part::overACycle).toList();
-        return EVERY_YEAR.computeIfAbsent(overACycle, asked -> workedOverTheDays(asked,
-                HeldClass.A_CYCLE_STARTS,
-                HeldClass.A_CYCLE_STARTS + DatePartsLeft.DAYS_OF_A_CYCLE - 1));
+        List<List<ExactRatio>> out = new ArrayList<>();
+        for (PartsOfADateOverACycle.Given each : PartsOfADateOverACycle.of(parts.stream()
+                .map(DatesThatStandInEveryYear.Part::overTheCycle).toList())) {
+            out.add(ratiosOf(each.values().stream().mapToInt(Integer::intValue).toArray()));
+        }
+        return List.copyOf(out);
     }
-
-    /** Answers by what was asked, which is all there is to them: the calendar and what the moves
-     *  move by over a cycle. A program asks the same few moves again and again, and each answer
-     *  walks a cycle of the calendar. */
-    private static final Map<List<DatesThatStandInEveryYear.Part>, List<List<ExactRatio>>>
-            EVERY_YEAR = new ConcurrentHashMap<>();
 
     /** Every combination of {@code parts} at the days from {@code from} to {@code to}, at every
      *  one of which every move of them is defined. */
@@ -174,8 +164,7 @@ final class MonthsAndDaysOfOneDate {
             }
         }
         for (int i = 0; i < seen.length; i++) {
-            long every = (1L << (parts.get(i).howManyThereAre() + 1)) - 2;
-            if (seen[i] != every) {
+            if (seen[i] != parts.get(i).everyNumber()) {
                 return false;
             }
         }
