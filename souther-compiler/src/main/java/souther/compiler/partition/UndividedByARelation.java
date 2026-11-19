@@ -2433,10 +2433,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         SidesAlongTheWay along = sidesAlongTheWay(written, past, way.region(), read,
                 declared.sources(), carriers);
         Map<NumericTerm, EachWayItComesOut> out = new LinkedHashMap<>();
+        DatesHeldApartAlongAWay apart = datesHeldApartAlong(along.conditions(), past, read);
         for (int at = 0; at < sides.size(); at++) {
             if (sides.get(at).number() == null
                     || !whatTheRegionShowsOfItIsARow(sides.get(at).number(), along.conditions(),
-                            past, declined, read)) {
+                            past, declined, apart, read)) {
                 continue;
             }
             EachWayItComesOut each = WhatARelationLeavesUndivided.eachWayItComesOut(
@@ -4195,10 +4196,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         SidesAlongTheWay along = sidesAlongTheWay(run.written(), run.past(), run.along(), read,
                 sources, carriers);
         Map<NumericTerm, OfASide> out = new LinkedHashMap<>();
+        DatesHeldApartAlongAWay apart = datesHeldApartAlong(along.conditions(), run.past(), read);
         for (int at : asked) {
             if (!(sides.get(at).number() instanceof NumericTerm.FromOnePosition number)
                     || !whatTheRegionShowsOfItIsARow(number, along.conditions(), run.past(),
-                            run.declined(), read)) {
+                            run.declined(), apart, read)) {
                 continue;
             }
             EachWayItComesOut rows = comesOut != null
@@ -4232,6 +4234,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * or in two, may be put by the region where no value is: at the thirtieth of February. A place
      * named by one number is put only where some value of it gives that number.
      *
+     * <p>A date named by two numbers that nothing the way states or narrows ties to the side is
+     * asked of the calendar instead ({@link DatesHeldApartAlongAWay}, which {@code apart} is of
+     * the way): where some dates hold everything said of it and what it is tied to, the region
+     * shows the side as it would without them, and every row the side is shown at has such dates
+     * beside it. Where none are found, the way may have no row, and nothing is shown. A place is
+     * named by every number read off it, so a product of two places' numbers names both.
+     *
      * <p>Statements the calendar was shown to leave a part to are not asked of that part
      * ({@link OnAWay.PartsLeftAlone}). Of a year: some month and day holds the statements of
      * months and days in every year each date may be in, with every year the other dates may be
@@ -4249,6 +4258,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                  List<OnAWay> conditions,
                                                  DemandReading.Answered past,
                                                  Optional<Set<String>> declined,
+                                                 DatesHeldApartAlongAWay apart,
                                                  InputReading read) {
         OnAWay.PartsLeftAlone notAsked = !(side instanceof NumericTerm.TakenOf taken)
                 || !(taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part))
@@ -4259,8 +4269,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<OnAWay> asked = new ArrayList<>();
         for (OnAWay each : conditions) {
             if (notAsked != OnAWay.PartsLeftAlone.NONE && each.leavesAlone() == notAsked) {
-                each.affine().form().coefs().keySet().forEach(term ->
-                        leftToTheCalendar.add(((NumericTerm.TakenOf) term).position()));
+                leftToTheCalendar.addAll(DatesHeldApartAlongAWay.placesReadOff(
+                        each.affine().form().coefs().keySet()));
             } else {
                 asked.add(each);
             }
@@ -4278,29 +4288,41 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         past.narrowing().forEach(each -> weighed.add(each.terms()));
+        // A place is named by every number read off it, a number of it alone or not: a product
+        // of two places' numbers names each.
         for (Collection<NumericTerm> terms : weighed) {
             for (NumericTerm term : terms) {
-                if (term instanceof NumericTerm.FromOnePosition one) {
-                    namedBy.computeIfAbsent(one.position(), _ -> new LinkedHashSet<>()).add(one);
+                for (TermPath place : term.placesReadOff()) {
+                    namedBy.computeIfAbsent(place, _ -> new LinkedHashSet<>()).add(term);
                 }
             }
         }
         Set<TermPath> named = new LinkedHashSet<>(namedBy.keySet());
         named.addAll(leftToTheCalendar);
+        Set<TermPath> heldApart = new LinkedHashSet<>();
+        for (Map.Entry<TermPath, Set<NumericTerm>> each : namedBy.entrySet()) {
+            if (each.getValue().size() > 1 && !heldApart.contains(each.getKey())) {
+                Optional<Set<TermPath>> held = apart.heldApartFrom(side, each.getKey());
+                if (held.isEmpty()) {
+                    return false;
+                }
+                heldApart.addAll(held.get());
+            }
+        }
         for (TermPath place : named) {
-            Set<NumericTerm> numbers = namedBy.getOrDefault(place, Set.of());
-            if (numbers.size() > 1) {
-                return false;
-            }
-            NumericTerm number = numbers.isEmpty() ? null : numbers.iterator().next();
-            if (number instanceof NumericTerm.TakenOf taken
-                    && taken.takenAs() instanceof TakenAs.PartOfDate
-                    && !everyValueItLiesAtIsOfADate(taken, sourceOf(taken, read))) {
-                return false;
-            }
-            if (leftToTheCalendar.contains(place) && number != null
-                    && !theCalendarLeavesIt(number, notAsked)) {
-                return false;
+            if (!heldApart.contains(place)) {
+                // Named by one number at most: a place named by more is held apart or refused.
+                NumericTerm number = namedBy.getOrDefault(place, Set.of()).stream().findFirst()
+                        .orElse(null);
+                if (number instanceof NumericTerm.TakenOf taken
+                        && taken.takenAs() instanceof TakenAs.PartOfDate
+                        && !everyValueItLiesAtIsOfADate(taken, sourceOf(taken, read))) {
+                    return false;
+                }
+                if (leftToTheCalendar.contains(place) && number != null
+                        && !theCalendarLeavesIt(number, notAsked)) {
+                    return false;
+                }
             }
             if (theRunTiesTheValueAt(place, past) || declined.isEmpty()
                     || declined.get().contains(place.head())) {
@@ -4316,6 +4338,22 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return true;
+    }
+
+    /** What the way stating {@code conditions}, the run having narrowed it as {@code past} says,
+     *  ties together and which of its dates the calendar holds apart, with the places of every
+     *  side among those it is asked of. */
+    private DatesHeldApartAlongAWay datesHeldApartAlong(List<OnAWay> conditions,
+                                                        DemandReading.Answered past,
+                                                        InputReading read) {
+        List<TermPath> ofTheSides = new ArrayList<>();
+        for (Side side : sides) {
+            if (side.number() != null) {
+                ofTheSides.addAll(side.number().placesReadOff());
+            }
+        }
+        return DatesHeldApartAlongAWay.of(conditions, past.narrowing(), ofTheSides,
+                taken -> daysOfTheDate(taken, read));
     }
 
     /**
