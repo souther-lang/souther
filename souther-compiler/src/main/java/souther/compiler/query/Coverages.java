@@ -82,6 +82,9 @@ import souther.compiler.partition.CompositionRepertoire;
 import souther.compiler.partition.ValuesTried;
 import souther.compiler.partition.EnsuresThresholds;
 import souther.compiler.partition.GuardThresholds;
+import souther.compiler.partition.AComparisonRead;
+import souther.compiler.partition.BodyReading;
+import souther.compiler.inputs.InputReading;
 import souther.compiler.partition.BoundaryLine;
 import souther.compiler.partition.PartitionClass;
 import souther.compiler.partition.Partitions;
@@ -205,6 +208,23 @@ final class Coverages {
                         }
                     };
         };
+    }
+
+    /**
+     * Every comparison of {@code behavior}'s body as the walk {@link #partitioningOf} begins with
+     * meets it, read against the same input, body, plan and rows, and nothing asked past the walk
+     * ({@link GuardThresholds#comparisonsRead}); none where there is no body to read.
+     */
+    static List<AComparisonRead> comparisonsRead(Hir.SpecBehavior behavior, InputReading read,
+                                                 BodyReading reading, CoverageSites.Plan plan,
+                                                 WitnessesAtSites witnesses) {
+        if (!(reading instanceof BodyReading.Read it)) {
+            return List.of();
+        }
+        return GuardThresholds.comparisonsRead(behavior.name(), it.analysis(), read,
+                it.analysis() == null ? ElementBindings.NONE
+                        : ElementBindings.of(it.analysis(), read.rules().newtypes()),
+                atTheComparisonsOf(it.emitted(), plan, witnesses));
     }
 
     /**
