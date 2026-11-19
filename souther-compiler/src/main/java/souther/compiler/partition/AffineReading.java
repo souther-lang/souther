@@ -69,6 +69,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.TreeSet;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -1194,7 +1195,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              *  as a number whose operations are told, or as where every run aborts. */
             private boolean toldWhereItStops(Denotation value) {
                 return told.tellingOnce(value, each -> worksOutAsANumber(each.value(), each.at(),
-                        new IdentityHashMap<>()));
+                        new IdentityHashMap<>()), ofTheInput.derived(
+                        WhatWasTold.ReadAsNoNumber.class, _ -> new WhatWasTold.ReadAsNoNumber()));
             }
 
             /**
@@ -2597,19 +2599,26 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          *  among them without going through each group. */
         private final Set<UndividedByARelation.IntOperation> keptOnce = new HashSet<>();
 
-        /** What is being told for where a run stops by a reading of it as a number, each node with
-         *  what its names were read in, shared with every reading tried apart from this one: a
-         *  value met again while it is told is not told again ({@link #tellingOnce}). */
-        private final Map<Core, List<InputReads>> beingTold;
+        /** What reading values as numbers to tell their stops has met, shared with every reading
+         *  tried apart from this one ({@link #tellingOnce}). */
+        private final Telling telling;
 
         WhatWasTold() {
-            this(new int[2], new IdentityHashMap<>());
+            this(new int[2], new Telling(new ArrayList<>(), new int[] {Integer.MAX_VALUE}));
         }
 
-        private WhatWasTold(int[] elementsRead, Map<Core, List<InputReads>> beingTold) {
+        private WhatWasTold(int[] elementsRead, Telling telling) {
             this.elementsRead = elementsRead;
-            this.beingTold = beingTold;
+            this.telling = telling;
         }
+
+        /**
+         * What reading values as numbers to tell their stops has met in one reading and those
+         * tried apart from it: the values being told now, outermost first ({@code being}), and
+         * the shallowest of them a value was refused for being told already since the value now
+         * innermost began ({@code shallowestRefused}, past the end where none was).
+         */
+        private record Telling(List<ReadAsNoNumber.OneWorking> being, int[] shallowestRefused) {}
 
         /**
          * Whether an operation at {@code node} is told here, among the groups kept for where a
@@ -2632,18 +2641,74 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * {@code tell} asked of {@code value}, unless it is already being told: a reading of a
          * value as a number may pass over that value itself, and its owner then asks for it to be
          * told again. Then it is not, and what it works out is left as nothing here tells it.
+         *
+         * <p>A value that read as no number is not read again by any reading of the input
+         * ({@code readAsNone}): telling it adds nothing, so taking that answer from another
+         * reading leaves nothing of that reading's in this one, and a value it would have told
+         * is then said untold, never passed over in silence. Not where it read as none because a
+         * value told outside it, begun before it, was refused inside it: that answer is one of
+         * the moment. A refusal of the value itself, or of one begun inside it, is its own.
          */
-        boolean tellingOnce(Denotation value, Predicate<Denotation> tell) {
-            Core node = Core.withoutStanding(value.value());
-            List<InputReads> readIn = beingTold.computeIfAbsent(node, _ -> new ArrayList<>());
-            if (readIn.contains(value.at())) {
+        boolean tellingOnce(Denotation value, Predicate<Denotation> tell,
+                            ReadAsNoNumber readAsNone) {
+            ReadAsNoNumber.OneWorking one = new ReadAsNoNumber.OneWorking(
+                    Core.withoutStanding(value.value()), value.at());
+            if (readAsNone.holds(one)) {
                 return false;
             }
-            readIn.add(value.at());
+            List<ReadAsNoNumber.OneWorking> being = telling.being();
+            int[] shallowest = telling.shallowestRefused();
+            int already = being.indexOf(one);
+            if (already >= 0) {
+                shallowest[0] = Math.min(shallowest[0], already);
+                return false;
+            }
+            int depth = being.size();
+            int outside = shallowest[0];
+            shallowest[0] = Integer.MAX_VALUE;
+            being.add(one);
+            boolean told;
             try {
-                return tell.test(value);
+                told = tell.test(value);
             } finally {
-                readIn.remove(readIn.size() - 1);
+                being.removeLast();
+            }
+            if (!told && shallowest[0] >= depth) {
+                readAsNone.add(one);
+            }
+            shallowest[0] = Math.min(outside, shallowest[0]);
+            return told;
+        }
+
+        /** The values of one input that read as no number when read to tell their stops
+         *  ({@link #tellingOnce}), each a node with what its names were read in; asked by
+         *  readings on several threads. */
+        static final class ReadAsNoNumber {
+
+            private final Set<OneWorking> values = ConcurrentHashMap.newKeySet();
+
+            /** One working out of a node, told apart by which node and by what its names were
+             *  read in. */
+            record OneWorking(Core node, InputReads at) {
+
+                @Override
+                public boolean equals(Object other) {
+                    return other instanceof OneWorking that && node == that.node
+                            && at.equals(that.at);
+                }
+
+                @Override
+                public int hashCode() {
+                    return 31 * System.identityHashCode(node) + at.hashCode();
+                }
+            }
+
+            boolean holds(OneWorking one) {
+                return values.contains(one);
+            }
+
+            void add(OneWorking one) {
+                values.add(one);
             }
         }
 
@@ -2663,7 +2728,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /** Nothing told yet, for a part of the comparison read apart: what it reads element by
          *  element is counted with what this reading has. */
         WhatWasTold apart() {
-            WhatWasTold apart = new WhatWasTold(elementsRead, beingTold);
+            WhatWasTold apart = new WhatWasTold(elementsRead, telling);
             apart.productsStop = productsStop;
             return apart;
         }
