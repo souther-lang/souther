@@ -6,6 +6,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.runtime.ConstraintViolation;
+import souther.test.Nightly;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -43,7 +44,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  *
  * <p>This holds the report and the program to one another on these numbers, and not on every
  * input: a stop only some other number reaches is not found by it.
+ *
+ * <p>Compiling and running every form costs more than a change is worth waiting on, so it is asked
+ * at night; the unit tests of each reading ask the forms one at a time.
  */
+@Nightly
 class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
 
     private static final long MAX = Long.MAX_VALUE;
