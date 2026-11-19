@@ -2976,73 +2976,73 @@ public final class Adequacy {
      * is one; null where there is nothing to divide.
      */
     static ToDivide toDivide(Db db, String name, String behavior, InputDomain builtAgainst) {
-            // The assembly. What says whether there is anything to divide is the behavior's own
-            // signature: a module one of whose declarations did not come out still has behaviors
-            // whose boundary was built, and those are divided like any other.
-            Answer<CheckSurface> prepared =
-                    db.ask(new Shapes.CheckSurface(name));
-            Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
-            Answer<RuleReadingSource> reading = Shapes.ruleReading(db, name);
-            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
-            if (!prepared.present() || !scope.present() || !sigs.present()
-                    || !reading.present()) {
-                return null;
-            }
-            Hir.SpecBehavior spec = specOf(prepared.value(), behavior);
-            if (spec == null) {
-                return null;   // no such behavior here, or one measured at its stages
-            }
-            // The reading the measurement is made against, which is what makes it a measurement of
-            // this behavior's input rather than of nothing. A module holding a type nobody could
-            // name has none, and a measurement made without one divides an input with no positions:
-            // what comes back is a partitioning that divides nothing, which is what a behavior
-            // whose rules part nothing comes back with. Absent here, so the two are not one answer.
-            //
-            // Read off the one classification, so that what a missing signature and a missing
-            // reading come to is not worked out again here. Both come back absent, which is this
-            // query's answer surface and not one reason: what has no partitioning has none however
-            // it came to have none, and which prerequisite went missing is said by the measures
-            // that report it.
-            if (!(BoundaryForMeasurement.of(sigs.value(), db.ask(new Inputs(name)).value(), spec)
-                    instanceof BoundaryForMeasurement.Derived(
-                            Sig _, InputForMeasurement.Local(Hir.SpecBehavior _,
-                                    InputDomain measured)))) {
-                return null;
-            }
-            InputDomain domain = builtAgainst == null ? measured : builtAgainst;
-            souther.compiler.query.Bodies.Elaborated checked =
-                    db.ask(new Bodies.Observable(name)).value();
-            souther.compiler.coverage.CoverageSites.Plan plan =
-                    checked == null
-                            ? souther.compiler.coverage.CoverageSites.Plan.NONE : checked.plan();
-            return new ToDivide(spec, readingOf(db, domain, reading.value()),
-                    // Which of the three this elaboration holds, settled before anything reads a
-                    // body. The other reading of the same body travels with it, which is where a
-                    // rule about the strings at a position still stands as the author wrote it.
-                    bodyReading(db, name, checked, behavior),
-                    plan,
-                    new Coverages.WitnessesAtSites() {
-                        @Override
-                        public CountWitnesses.Sought ofACount(
-                                Quantity.CountedOverAContainer count,
-                                Set<ConditionOutcomeSite> reaching) {
-                            return db.ask(new WitnessOfACount(name, behavior, count, reaching))
-                                    .value();
-                        }
+        // The assembly. What says whether there is anything to divide is the behavior's own
+        // signature: a module one of whose declarations did not come out still has behaviors
+        // whose boundary was built, and those are divided like any other.
+        Answer<CheckSurface> prepared =
+                db.ask(new Shapes.CheckSurface(name));
+        Answer<DerivedSymbols> scope = Names.derivedSymbols(db, name);
+        Answer<RuleReadingSource> reading = Shapes.ruleReading(db, name);
+        Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
+        if (!prepared.present() || !scope.present() || !sigs.present()
+                || !reading.present()) {
+            return null;
+        }
+        Hir.SpecBehavior spec = specOf(prepared.value(), behavior);
+        if (spec == null) {
+            return null;   // no such behavior here, or one measured at its stages
+        }
+        // The reading the measurement is made against, which is what makes it a measurement of
+        // this behavior's input rather than of nothing. A module holding a type nobody could
+        // name has none, and a measurement made without one divides an input with no positions:
+        // what comes back is a partitioning that divides nothing, which is what a behavior
+        // whose rules part nothing comes back with. Absent here, so the two are not one answer.
+        //
+        // Read off the one classification, so that what a missing signature and a missing
+        // reading come to is not worked out again here. Both come back absent, which is this
+        // query's answer surface and not one reason: what has no partitioning has none however
+        // it came to have none, and which prerequisite went missing is said by the measures
+        // that report it.
+        if (!(BoundaryForMeasurement.of(sigs.value(), db.ask(new Inputs(name)).value(), spec)
+                instanceof BoundaryForMeasurement.Derived(
+                        Sig _, InputForMeasurement.Local(Hir.SpecBehavior _,
+                                InputDomain measured)))) {
+            return null;
+        }
+        InputDomain domain = builtAgainst == null ? measured : builtAgainst;
+        souther.compiler.query.Bodies.Elaborated checked =
+                db.ask(new Bodies.Observable(name)).value();
+        souther.compiler.coverage.CoverageSites.Plan plan =
+                checked == null
+                        ? souther.compiler.coverage.CoverageSites.Plan.NONE : checked.plan();
+        return new ToDivide(spec, readingOf(db, domain, reading.value()),
+                // Which of the three this elaboration holds, settled before anything reads a
+                // body. The other reading of the same body travels with it, which is where a
+                // rule about the strings at a position still stands as the author wrote it.
+                bodyReading(db, name, checked, behavior),
+                plan,
+                new Coverages.WitnessesAtSites() {
+                    @Override
+                    public CountWitnesses.Sought ofACount(
+                            Quantity.CountedOverAContainer count,
+                            Set<ConditionOutcomeSite> reaching) {
+                        return db.ask(new WitnessOfACount(name, behavior, count, reaching))
+                                .value();
+                    }
 
-                        @Override
-                        public ReachWitnesses.Sought reaching(
-                                Set<ConditionOutcomeSite> reaching,
-                                List<TakenConstraint> conditions) {
-                            return db.ask(new WitnessOfAReach(name, behavior, reaching,
-                                    conditions)).value();
-                        }
+                    @Override
+                    public ReachWitnesses.Sought reaching(
+                            Set<ConditionOutcomeSite> reaching,
+                            List<TakenConstraint> conditions) {
+                        return db.ask(new WitnessOfAReach(name, behavior, reaching,
+                                conditions)).value();
+                    }
 
-                        @Override
-                        public BehaviorInputs.SameValue sameValue() {
-                            return ExampleExecutions.sameValue(db);
-                        }
-                    });
+                    @Override
+                    public BehaviorInputs.SameValue sameValue() {
+                        return ExampleExecutions.sameValue(db);
+                    }
+                });
     }
 
     /**

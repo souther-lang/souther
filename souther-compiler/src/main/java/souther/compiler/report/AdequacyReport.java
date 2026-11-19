@@ -678,13 +678,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *                  name what only such rows cover. The module's and not this behavior's: a row
      *                  of another behavior can be what covers an arm of this one, and a report
      *                  narrowed to this one still names it
-     * @param helpersCalledOnEachElement the helpers this behavior's lines are written in that a
-     *                  function applied outside them calls on more than one element, each with
-     *                  the calls and the helpers calling it
-     *                  ({@link HelpersReadOnApplicationsAroundThem}): what a line not worked out
-     *                  that is written in one of them names. Asked of every line read, and not of
-     *                  the cases of the one stopped, since a case of one candidate is made of
-     *                  nothing the function did
+     * @param helpersCalledOnEachElement the helpers this behavior's comparisons are written in
+     *                  that a function applied outside them calls on more than one element, each
+     *                  with the calls and the helpers calling it
+     *                  ({@link HelpersReadOnApplicationsAroundThem}): what a reading of a line
+     *                  written in one of them names, beside what the other rules suggest there.
+     *                  Asked of where the body's comparisons stand, and not of the cases of a
+     *                  line, since a case of one candidate is made of nothing the function did
      */
     public record BehaviorReport(String name, BehaviorImplementation implementation,
                                  BehaviorEvidence evidence,
@@ -1073,19 +1073,56 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     }
 
     /**
-     * What {@code helpers} says of the helper the comparison read at {@code readAt} is written in,
-     * or empty where it says nothing of it, or where the case's choices multiply its readings,
-     * which is said of it already.
+     * The helper a comparison is written in that a function applied outside it calls on each
+     * element, as a reading of the comparison tells of it beside what the other rules suggest at
+     * that reading.
+     *
+     * @param told            the helper, its calls, and the helpers its call moves out of
+     * @param leftReadAgainBy the helpers the other rules suggest at the reading that, declared as
+     *                        a behavior, leave the comparison read again on each of those
+     *                        applications ({@link AHelperReadOnApplicationsAroundIt#leftReadAgainBy})
      */
-    private static Optional<HelpersReadOnApplicationsAroundThem.Told> calledOnEachElement(
+    private record OnEachElement(HelpersReadOnApplicationsAroundThem.Told told,
+                                 List<ValueName.Helper> leftReadAgainBy) {
+
+        OnEachElement {
+            Objects.requireNonNull(told, "some helper");
+            leftReadAgainBy = List.copyOf(leftReadAgainBy);
+        }
+    }
+
+    /**
+     * What a reading of the comparison read at {@code readAt} tells of the helper it is written in
+     * that a function applied outside it calls on each element, beside {@code suggested}, the
+     * helpers the other rules suggest at the same reading; empty where {@code helpers} says
+     * nothing of the helper, or where it is among {@code suggested}, which says it already.
+     *
+     * <p>The one place a reading's suggestions are put beside each other, so that every place a
+     * reading is told of says the same of them.
+     */
+    private static Optional<OnEachElement> calledOnEachElement(
             Map<ValueName.Helper, HelpersReadOnApplicationsAroundThem.Told> helpers,
-            CaseExpansion.CameTo answer, List<ModelOccurrence> readAt) {
+            List<ModelOccurrence> readAt, List<ValueName.Helper> suggested) {
         Set<Optional<ValueName.Helper>> writers = new LinkedHashSet<>();
         readAt.forEach(copy -> writers.add(AHelperReadOnApplicationsAroundIt.writtenIn(copy)));
         return writers.size() != 1 ? Optional.empty()
                 : writers.iterator().next()
-                        .filter(helper -> !answer.multiplies(helper))
-                        .map(helpers::get);
+                        .filter(helper -> !suggested.contains(helper))
+                        .map(helpers::get)
+                        .map(told -> new OnEachElement(told,
+                                told.named().leftReadAgainBy(suggested, readAt)));
+    }
+
+    /** The helpers the rules of a case not worked out suggest at one reading of it: those its
+     *  choices multiply the readings of, and the one holding every choice. */
+    private static List<ValueName.Helper> suggestedAt(CaseExpansion.CameTo answer,
+                                                      List<ModelOccurrence> readAt) {
+        List<ValueName.Helper> out = new ArrayList<>();
+        if (answer.attributed() instanceof CaseExpansion.Attributed made) {
+            made.multiplied().forEach(each -> out.add(each.helper()));
+        }
+        answer.helperHoldingEveryChoice(readAt).ifPresent(declared -> out.add(declared.helper()));
+        return out;
     }
 
     private static ModuleReport moduleReport(Compilation compilation, String name,
@@ -4486,7 +4523,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                             .map(declared -> helperToDeclareSaid(declared, page))
                                             .orElse("")
                                     + calledOnEachElement(behavior.helpersCalledOnEachElement(),
-                                            reading.answer(), reading.readAt().inOrder())
+                                            reading.readAt().inOrder(),
+                                            suggestedAt(reading.answer(),
+                                                    reading.readAt().inOrder()))
                                             .map(told -> helperOnEachElementSaid(told,
                                                     construct -> writtenInSaid(construct, parts,
                                                             page, declaredIn), page))
@@ -4505,7 +4544,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                                     writtenInSaid(construct, parts, page, declaredIn),
                                     copy -> calledAt(callsAt(behavior.conditionPlaces().copies(),
                                             copy).calls(), page, declaredIn), page))
-                            .toList());
+                            .toList())
+                            + calledOnEachElement(behavior.helpersCalledOnEachElement(),
+                                    reading.readAt().inOrder(), reading.answer().stream()
+                                            .map(CaseExpansion.MultipliedHelper::helper).toList())
+                                    .map(told -> helperOnEachElementSaid(told,
+                                            construct -> writtenInSaid(construct, parts, page,
+                                                    declaredIn), page))
+                                    .orElse("");
                     out.append("      ").append(page.say(new ReportMessage.CostlyReading(
                             cited(each.cited(), page, declaredIn, places), each.line(),
                             each.cutAt(), armsSaid(each.which().line().written(), page),
@@ -9686,7 +9732,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             DocumentArray costly = DocumentPart.COSTLY_READINGS.putArray(out);
             for (CasesAtARule<List<CaseExpansion.MultipliedHelper>> each
                     : partition.costlyReadings()) {
-                costlyReadingRow(costly.addObject(), each, places, parts, sources);
+                costlyReadingRow(costly.addObject(), each, places, parts, sources,
+                        helpersCalledOnEachElement);
             }
         }
         // And where a run stops only past what the representation holds, once each, where there
@@ -9727,19 +9774,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         ArrayNode inside = helper.putArray("calledInside");
                         declared.calledInside().forEach(caller -> inside.add(caller.toString()));
                     });
-            calledOnEachElement(helpersCalledOnEachElement, reading.answer(),
-                    reading.readAt().inOrder()).ifPresent(told -> {
-                        ObjectNode helper = one.putObject("helperCalledOnEachElement");
-                        helper.put("helper", told.named().helper().toString());
-                        ArrayNode calls = helper.putArray("calls");
-                        for (ModelOccurrence call : told.named().calls()) {
-                            ObjectNode at = calls.addObject();
-                            copyId(at.putObject("construct"), call);
-                            writtenAt(at, call, parts, sources);
-                        }
-                        ArrayNode inside = helper.putArray("calledInside");
-                        told.calledInside().forEach(caller -> inside.add(caller.toString()));
-                    });
+            calledOnEachElement(helpersCalledOnEachElement, reading.readAt().inOrder(),
+                    suggestedAt(reading.answer(), reading.readAt().inOrder()))
+                    .ifPresent(onEach -> helperCalledOnEachElement(one, onEach, parts, sources));
         });
     }
 
@@ -9748,14 +9785,39 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static void costlyReadingRow(DocumentItem row,
                                          CasesAtARule<List<CaseExpansion.MultipliedHelper>> each,
                                          PublishedRuleHandle.WhereARuleIs places,
-                                         WhereAPartIs parts, DocumentSources sources) {
+                                         WhereAPartIs parts, DocumentSources sources,
+                                         Map<ValueName.Helper,
+                                                 HelpersReadOnApplicationsAroundThem.Told>
+                                                 helpersCalledOnEachElement) {
         ObjectNode said = caseRowOf(row, RuleHandleSurface.COSTLY_READING_RULE, each, places,
                 sources);
         readingsOfACase(said, each, (one, reading) -> {
             ArrayNode out = one.putArray("helpers");
             reading.answer().forEach(helper ->
                     multipliedHelper(out.addObject(), helper, parts, sources));
+            calledOnEachElement(helpersCalledOnEachElement, reading.readAt().inOrder(),
+                    reading.answer().stream().map(CaseExpansion.MultipliedHelper::helper)
+                            .toList())
+                    .ifPresent(onEach -> helperCalledOnEachElement(one, onEach, parts, sources));
         });
+    }
+
+    /** The helper a comparison is written in that a function applied outside it calls on each
+     *  element, as a reading of the comparison says it. */
+    private static void helperCalledOnEachElement(ObjectNode one, OnEachElement said,
+                                                  WhereAPartIs parts, DocumentSources sources) {
+        ObjectNode helper = one.putObject("helperCalledOnEachElement");
+        helper.put("helper", said.told().named().helper().toString());
+        ArrayNode calls = helper.putArray("calls");
+        for (ModelOccurrence call : said.told().named().calls()) {
+            ObjectNode at = calls.addObject();
+            copyId(at.putObject("construct"), call);
+            writtenAt(at, call, parts, sources);
+        }
+        ArrayNode inside = helper.putArray("calledInside");
+        said.told().calledInside().forEach(caller -> inside.add(caller.toString()));
+        ArrayNode left = helper.putArray("leftReadAgainBy");
+        said.leftReadAgainBy().forEach(other -> left.add(other.toString()));
     }
 
     /** What every row about a case of a line says first: the rule, the line, where on it, and
@@ -10094,20 +10156,26 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
 
     /**
      * A helper a comparison is written in that a call outside it applies to each element, as a
-     * suggestion an author can take: where the calls are, and the helpers that call it, which a
-     * call of it has to move out of.
+     * suggestion an author can take: where the calls are, the helpers that call it, which a call
+     * of it has to move out of, and the helpers the other rules suggest at the same reading that
+     * leave the comparison read again on each application.
      */
-    private static String helperOnEachElementSaid(HelpersReadOnApplicationsAroundThem.Told told,
+    private static String helperOnEachElementSaid(OnEachElement said,
                                                   Function<ModelOccurrence, Message> writtenIn,
                                                   Page page) {
+        HelpersReadOnApplicationsAroundThem.Told told = said.told();
         Set<Message> at = new LinkedHashSet<>();
         told.named().calls().forEach(call -> at.add(writtenIn.apply(call)));
-        return page.say(new ReportMessage.TheHelperIsCalledOnEachElement(
+        String out = page.say(new ReportMessage.TheHelperIsCalledOnEachElement(
                 told.named().helper().name(), Joined.reasons(List.copyOf(at)),
                 told.calledInside().isEmpty() ? new ReportMessage.Nothing()
                         : new ReportMessage.TheCallIsWrittenInsideHelpers(listed(page,
                                 told.calledInside().stream()
                                         .map(each -> "`" + each.name() + "`").toList()))));
+        return said.leftReadAgainBy().isEmpty() ? out
+                : out + page.say(new ReportMessage.DeclaringThemLeavesItReadAgain(listed(page,
+                        said.leftReadAgainBy().stream()
+                                .map(each -> "`" + each.name() + "`").toList())));
     }
 
     /** One thing that made some of a case's parts, as an author would find it. */

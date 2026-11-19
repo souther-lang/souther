@@ -101,6 +101,49 @@ class AHelperIsToldOfFromTheWalkOfTheBodyAloneTest {
                 Adequacy.Asked.fullReport());
         ACompiledModel.compiles(compilation);
         assertEquals(List.of(), told(compilation));
+        assertEquals(List.of(), HelpersReadOnApplicationsAroundThem.toldOf(compilation, null,
+                null));
         measuredNothing(compilation);
     }
+
+    /** What an author is told before the measurement: the helper once, with each behavior that
+     *  reads it and how often, however few times that is. */
+    @Test
+    void theHelperIsToldOfOnceWithEveryBehaviorReadingIt() {
+        Compilation compilation = ACompiledModel.measured(TWO_BEHAVIORS,
+                Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        List<HelpersReadOnApplicationsAroundThem.Said> said =
+                HelpersReadOnApplicationsAroundThem.toldOf(compilation, null, null);
+        assertEquals(1, said.size(), said::toString);
+        assertEquals(new ValueName.Helper(MODULE, "isBusinessDay"), said.getFirst().helper());
+        assertEquals(List.of("g", "h"), List.copyOf(said.getFirst().readings().keySet()));
+        measuredNothing(compilation);
+    }
+
+    /** A behavior the author did not select is asked nothing, where its comparisons stand
+     *  included. */
+    @Test
+    void aBehaviorNotSelectedIsAskedNothing() {
+        Compilation compilation = ACompiledModel.measured(TWO_BEHAVIORS,
+                Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        List<HelpersReadOnApplicationsAroundThem.Said> said =
+                HelpersReadOnApplicationsAroundThem.toldOf(compilation, MODULE, "h");
+        assertEquals(1, said.size(), said::toString);
+        assertEquals(List.of("h"), List.copyOf(said.getFirst().readings().keySet()));
+        compilation.db().everyAnswer().keySet().forEach(key -> assertFalse(
+                (key instanceof Adequacy.ComparisonsRead read && !read.behavior().equals("h"))
+                        || (key instanceof HelpersReadOnApplicationsAroundThem told
+                        && !told.behavior().equals("h")),
+                "asked of a behavior not selected: " + key));
+    }
+
+    /** Billing's due dates, read by two behaviors. */
+    private static final String TWO_BEHAVIORS = SHAPED_AS_BILLING.replace("exposing (g,",
+            "exposing (g, h,") + """
+
+            behavior h : (c: Calendar, nominal: Date) -> Date
+            let h (c, nominal) = onABusinessDay(c, nominal)
+            """;
 }

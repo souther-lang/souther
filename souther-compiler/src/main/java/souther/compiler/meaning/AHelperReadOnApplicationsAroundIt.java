@@ -114,6 +114,29 @@ public record AHelperReadOnApplicationsAroundIt(ValueName.Helper helper,
                         List.copyOf(around)));
     }
 
+    /**
+     * Of {@code suggested}, the helpers that, declared as a behavior, leave the comparison read at
+     * {@code copies} in the behavior, and so read again on each application of {@link #calls}:
+     * those some copy does not stand in a copy of. Each once, in the order given.
+     *
+     * <p>What tells this suggestion from another made at the same comparison, and a fact about
+     * where the copies stand rather than a guess at what either would cost. A helper the copies
+     * stand in takes the comparison into its own body, and the applications around its calls hand
+     * it a value each; one they do not stand in is expanded somewhere else, and whatever it takes
+     * away, these applications still read the comparison.
+     */
+    public List<ValueName.Helper> leftReadAgainBy(Collection<ValueName.Helper> suggested,
+                                                  Collection<ModelOccurrence> copies) {
+        Set<ValueName.Helper> out = new LinkedHashSet<>();
+        for (ValueName.Helper each : suggested) {
+            if (!each.equals(helper) && copies.stream()
+                    .anyMatch(copy -> !CaseExpansion.writtenInside(copy).contains(each))) {
+                out.add(each);
+            }
+        }
+        return List.copyOf(out);
+    }
+
     /** The innermost copy of {@code helper}'s body {@code lineage} stands in. */
     private static ExpansionLineage.Expansion copyOf(ExpansionLineage lineage,
                                                     ValueName.Helper helper) {

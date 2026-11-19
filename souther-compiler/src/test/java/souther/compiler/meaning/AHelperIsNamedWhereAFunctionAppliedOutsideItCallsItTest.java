@@ -95,6 +95,23 @@ class AHelperIsNamedWhereAFunctionAppliedOutsideItCallsItTest {
                 List.of(new AHelperReadOnApplicationsAroundIt.Applied(findIn(first), 1))));
     }
 
+    /**
+     * Of the helpers another rule suggests at the same comparison, one its copies do not stand
+     * in — as billing's {@code endOfMonth} is to {@code isBusinessDay}'s comparisons — leaves it
+     * read again on each application; one they stand in takes it into its own body.
+     */
+    @Test
+    void aHelperTheCopiesDoNotStandInLeavesTheComparisonReadAgain() {
+        ExpansionLineage.Expansion first = firstIn(2);
+        AHelperReadOnApplicationsAroundIt named = AHelperReadOnApplicationsAroundIt.of(
+                List.of(comparisonIn(first)),
+                List.of(new AHelperReadOnApplicationsAroundIt.Applied(findIn(first), 11)))
+                .orElseThrow();
+        ValueName.Helper elsewhere = new ValueName.Helper("m", "elsewhere");
+        assertEquals(List.of(elsewhere), named.leftReadAgainBy(
+                List.of(elsewhere, ON, FIRST, IS), List.of(comparisonIn(first))));
+    }
+
     @Test
     void aComparisonTheBehaviorWritesItselfNamesNothing() {
         ModelOccurrence inTheBody = new ModelOccurrence(construct(9, SourceConstruct.BINARY),

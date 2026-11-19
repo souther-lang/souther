@@ -13,6 +13,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -49,13 +50,6 @@ public record HelpersReadOnApplicationsAroundThem(String name, String behavior)
         implements Key<List<HelpersReadOnApplicationsAroundThem.Told>> {
 
     /**
-     * How many times one helper's comparisons are read before an author is told of the helper
-     * ahead of the measurement. Below it what those readings cost is small beside the rest of a
-     * measurement, and a helper called inside a closure is the usual way to write a model.
-     */
-    public static final int READINGS_TOLD_OF_BEFORE_THE_MEASUREMENT = 32;
-
-    /**
      * One helper, and how often its comparisons are read.
      *
      * @param named        the helper and the calls whose applications stand around its copies
@@ -72,51 +66,78 @@ public record HelpersReadOnApplicationsAroundThem(String name, String behavior)
             Objects.requireNonNull(named, "some helper");
             calledInside = List.copyOf(calledInside);
         }
-
-        /** Whether its comparisons are read often enough to be told of before the measurement. */
-        public boolean worthTellingBeforeTheSearch() {
-            return readings >= READINGS_TOLD_OF_BEFORE_THE_MEASUREMENT;
-        }
     }
 
     /**
-     * One helper of one behavior worth telling of before the search.
+     * One helper of one module, with how many times each behavior that reads its comparisons on
+     * applications around it reads them.
      *
-     * @param module   the module
-     * @param behavior the behavior whose lines are written in it
-     * @param told     the helper, and what its copies add to the lines read
+     * <p>One per helper and not one per behavior: what an author does about it is declare the
+     * helper, once, and every behavior reading it is told of together.
+     *
+     * @param module       the module
+     * @param helper       the helper
+     * @param readings     for each behavior that reads its comparisons so, how many times, in the
+     *                     order the behaviors are declared
+     * @param calledInside the helpers that call it, and the ones calling those, out to a behavior
      */
-    public record Said(String module, String behavior, Told told) {
+    public record Said(String module, ValueName.Helper helper, Map<String, Integer> readings,
+                       List<ValueName.Helper> calledInside) {
 
         public Said {
             Objects.requireNonNull(module, "some module");
-            Objects.requireNonNull(behavior, "some behavior");
-            Objects.requireNonNull(told, "some helper");
+            Objects.requireNonNull(helper, "some helper");
+            readings = Collections.unmodifiableMap(new LinkedHashMap<>(readings));
+            calledInside = List.copyOf(calledInside);
+            if (readings.isEmpty()) {
+                throw new IllegalArgumentException("a helper is told of where some behavior"
+                        + " reads it");
+            }
         }
     }
 
     /**
-     * Every helper of every behavior of {@code compilation} whose copies owe a search enough
-     * points to be told of before it ({@link Told#worthTellingBeforeTheSearch}), behavior by
-     * behavior in the order they are declared. Asks nothing a search makes.
+     * Every helper of the behaviors {@code module} and {@code behavior} select whose comparisons
+     * are read on applications of a function outside it ({@link AHelperReadOnApplicationsAroundIt}),
+     * by module and helper, in the order the modules and behaviors are declared; a null selects
+     * every one. Asks where the selected behaviors' comparisons stand and nothing about any other
+     * behavior, and nothing the measurement makes.
+     *
+     * <p>Every such helper, however few times it is read. How much a reading costs is the
+     * measurement's to find out, and what this says is where the readings come from: a figure
+     * below which a helper went untold would be a reckoning of cost that nothing here makes.
      */
-    public static List<Said> worthTellingBeforeTheSearch(Compilation compilation) {
+    public static List<Said> toldOf(Compilation compilation, String module, String behavior) {
         List<Said> out = new ArrayList<>();
-        for (String module : compilation.modules()) {
-            CheckSurface surface =
-                    compilation.db().ask(new Shapes.CheckSurface(module)).value();
+        for (String name : compilation.modules()) {
+            if (module != null && !module.equals(name)) {
+                continue;
+            }
+            CheckSurface surface = compilation.db().ask(new Shapes.CheckSurface(name)).value();
             if (surface == null) {
                 continue;
             }
-            for (Hir.BehaviorDef behavior : surface.behaviors()) {
+            Map<ValueName.Helper, Map<String, Integer>> readings = new LinkedHashMap<>();
+            Map<ValueName.Helper, List<ValueName.Helper>> callers = new LinkedHashMap<>();
+            for (Hir.BehaviorDef declared : surface.behaviors()) {
+                if (behavior != null && !behavior.equals(declared.name())) {
+                    continue;
+                }
                 List<Told> told = compilation.db()
-                        .ask(new HelpersReadOnApplicationsAroundThem(module, behavior.name()))
+                        .ask(new HelpersReadOnApplicationsAroundThem(name, declared.name()))
                         .value();
-                if (told != null) {
-                    told.stream().filter(Told::worthTellingBeforeTheSearch)
-                            .forEach(each -> out.add(new Said(module, behavior.name(), each)));
+                if (told == null) {
+                    continue;
+                }
+                for (Told each : told) {
+                    ValueName.Helper helper = each.named().helper();
+                    readings.computeIfAbsent(helper, _ -> new LinkedHashMap<>())
+                            .put(declared.name(), each.readings());
+                    callers.putIfAbsent(helper, each.calledInside());
                 }
             }
+            readings.forEach((helper, byBehavior) ->
+                    out.add(new Said(name, helper, byBehavior, callers.get(helper))));
         }
         return List.copyOf(out);
     }

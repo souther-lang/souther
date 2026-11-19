@@ -299,15 +299,8 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
                 assertTrue(writtenAt(SHAPED_AS_BILLING, call).startsWith("find("),
                         "the find around the call: " + call);
             }
-        }
-        String text = report.humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
-        List<String> lines = text.lines().filter(line -> line.contains("case expansion")).toList();
-        assertFalse(lines.isEmpty(), text);
-        for (String line : lines) {
-            assertTrue(line.contains("This comparison is written in `isBusinessDay`")
-                            && line.contains("the call written inside `firstBusinessDay`,"
-                            + " `onABusinessDay`, `dueDate` has to move"),
-                    "the helper, and the helpers its call moves out of: " + line);
+            assertEquals(List.of(), JSON.convertValue(named.path("leftReadAgainBy"), List.class),
+                    "no other rule suggests a helper here: " + named);
         }
     }
 }

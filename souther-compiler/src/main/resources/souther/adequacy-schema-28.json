@@ -9229,6 +9229,9 @@
                       "items": {
                         "$ref": "#/$defs/caseExpansion/properties/multipliedHelpers/items"
                       }
+                    },
+                    "helperCalledOnEachElement": {
+                      "$ref": "#/$defs/helperCalledOnEachElement"
                     }
                   }
                 }
@@ -9353,54 +9356,65 @@
                       }
                     },
                     "helperCalledOnEachElement": {
-                      "type": "object",
-                      "description": "The helper the comparison is written in, where a call outside every copy of it applies a function that calls it to more than one element, and those applications made parts of the case: declared as a behavior, it reads the comparison once over its own inputs, and the applications hand it a value each. Absent where the comparison is written in the behavior's own body, where no such call made parts, where what made the parts was not said, and where the helper is one of `caseExpansion`'s `multiplied`.",
-                      "required": [
-                        "helper",
-                        "calls",
-                        "calledInside"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "helper": {
-                          "type": "string",
-                          "description": "The helper, as its module and name."
-                        },
-                        "calls": {
-                          "type": "array",
-                          "minItems": 1,
-                          "description": "Each call that applies the function, in the copy of the body it stands in, in the order they are met.",
-                          "items": {
-                            "type": "object",
-                            "required": [
-                              "construct"
-                            ],
-                            "additionalProperties": false,
-                            "properties": {
-                              "construct": {
-                                "$ref": "#/$defs/constructOccurrence"
-                              },
-                              "at": {
-                                "$ref": "#/$defs/at",
-                                "description": "Where the author wrote the call."
-                              }
-                            }
-                          }
-                        },
-                        "calledInside": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          },
-                          "description": "Every helper of the module that calls the helper, and every helper that calls one of those, nearest first, as module and name: on every way to it, and not only the ways this line was read through. A helper cannot call a behavior, so each of those calls moves into a behavior's own `let`, or the helper holding it is declared as a behavior as well. Empty where only behaviors call it."
-                        }
-                      }
+                      "$ref": "#/$defs/helperCalledOnEachElement"
                     }
                   }
                 }
               }
             }
           }
+        }
+      }
+    },
+    "helperCalledOnEachElement": {
+      "type": "object",
+      "description": "The helper the comparison is written in, where its copies stand in more than one application of a function that a call outside every copy of it applies: declared as a behavior, it reads the comparison once over its own inputs, and the applications hand it a value each. Found from where the comparison's copies stand and the applications of the closures around them, as the walk of the body meets them before any line is drawn; whether what made the parts of a case was said, and what the case was made of, are not read. Absent where the comparison is written in the behavior's own body, where no call outside its copies applies a function around them more than once, and where the helper is one the other suggestions at this reading already name.",
+      "required": [
+        "helper",
+        "calls",
+        "calledInside",
+        "leftReadAgainBy"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "helper": {
+          "type": "string",
+          "description": "The helper, as its module and name."
+        },
+        "calls": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Each call outside the helper's copies that applies a function around them more than once, in the copy of the body it stands in, in the order they are met.",
+          "items": {
+            "type": "object",
+            "required": [
+              "construct"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "construct": {
+                "$ref": "#/$defs/constructOccurrence"
+              },
+              "at": {
+                "$ref": "#/$defs/at",
+                "description": "Where the author wrote the call."
+              }
+            }
+          }
+        },
+        "calledInside": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Every helper of the module that calls the helper, and every helper that calls one of those, nearest first, as module and name: on every way to it, and not only the ways this line was read through. A helper cannot call a behavior, so each of those calls moves into a behavior's own `let`, or the helper holding it is declared as a behavior as well. Empty where only behaviors call it."
+        },
+        "leftReadAgainBy": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The helpers the other suggestions at this reading name (`multipliedHelpers`, `helperToDeclare`, or a costly reading's `helpers`) that, declared as a behavior, leave the comparison in this behavior, read again on each application of `calls`: those some copy of the comparison does not stand in. A fact about where the copies stand, and no reckoning of what either suggestion would cost. Empty where every one of them takes the comparison in, or there is none."
         }
       }
     },

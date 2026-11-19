@@ -100,13 +100,6 @@ public record CaseExpansion(Which which, String line, String cutAt, CameTo cameT
             return attributed instanceof Attributed made
                     ? theHelperHoldingEveryChoice(made, readAt) : Optional.empty();
         }
-
-        /** Whether the choices multiply the readings of {@code helper}, which is said of it
-         *  already ({@link MultipliedHelper}). */
-        public boolean multiplies(ValueName.Helper helper) {
-            return attributed instanceof Attributed made && made.multiplied().stream()
-                    .anyMatch(each -> each.helper().equals(helper));
-        }
     }
 
     /**

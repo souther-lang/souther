@@ -1335,6 +1335,8 @@ public sealed interface ReportMessage extends Message {
     record TheHelperIsCalledOnEachElement(String helper, Message at, Message inside)
             implements ReportMessage, Prose {}
 
+    record DeclaringThemLeavesItReadAgain(String helpers) implements ReportMessage, Prose {}
+
     record TheIf() implements ReportMessage, Prose {}
 
     record TheMatch() implements ReportMessage, Prose {}
