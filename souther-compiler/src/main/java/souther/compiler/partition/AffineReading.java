@@ -126,7 +126,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * comparison is read again with the stopped value held aside ({@link Stopped#apart}).
          * Where neither working that value out nor anything beside it can stop a row the lines
          * are answered for their rows by the form's sizes
-         * ({@link UndividedByARelation.Working#NOTHING}); where something can, the operations
+         * ({@link UndividedByARelation.Working#AS_THE_FORM}); where something can, the operations
          * told are kept and the rest is not told. That analysis reads the number the value comes
          * to, which says nothing of whether working it out gets there.
          */
