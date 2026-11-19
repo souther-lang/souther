@@ -413,22 +413,30 @@ class AWalkAddingDecimalsCompletesStepByStepTest {
     }
 
     /**
-     * A step that works out what it was not handed, or works the answer so far out by anything
-     * but adding to it, tells nothing: {@code k + 1} stops where {@code k} is the greatest
-     * {@code Int}, which no step of the walk says, and a product of the answer so far is at a
-     * scale that grows with every step.
+     * A step that works out what it was not handed tells nothing: {@code k + 1} stops where
+     * {@code k} is the greatest {@code Int}, which no step of the walk says.
      */
     @Test
     void aStepThatWorksOutWhatItWasNotHandedTellsNothing() {
-        for (String step : List.of("""
+        String step = """
                 {
                         let unused = k + 1
                         Decimal.add(acc, n.gross.value)
-                    }""",
-                "Decimal.add(Decimal.multiply(acc, 1.0m), n.gross.value)")) {
-            String walked = report(INPUTS + ", k: Int", credited(step, "0.0m"));
-            assertEquals(Set.of(), related(walked), () -> step + walked);
-        }
+                    }""";
+        String walked = report(INPUTS + ", k: Int", credited(step, "0.0m"));
+        assertEquals(Set.of(), related(walked), walked);
+    }
+
+    /**
+     * A product of the answer so far is at a scale that grows with every step, so the walk tells
+     * no step at the scale it is at. It ends a run only past what the representation holds, which
+     * is no row's run, and the number is the total all the same: the comparison relates it.
+     */
+    @Test
+    void aProductOfTheAnswerSoFarEndsNoRowsRun() {
+        String walked = report(INPUTS, credited(
+                "Decimal.add(Decimal.multiply(acc, 1.0m), n.gross.value)", "0.0m"));
+        assertEquals(THE_FOUR_TERMS, related(walked), walked);
     }
 
     /** What is worked out of the walk's answer is told after it, and a row gets past both. */

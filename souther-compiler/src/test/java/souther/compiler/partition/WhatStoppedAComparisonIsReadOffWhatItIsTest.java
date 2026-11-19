@@ -491,12 +491,15 @@ class WhatStoppedAComparisonIsReadOffWhatItIsTest {
         return measured;
     }
 
-    /** What a report is told stopped the reading at {@code position}. */
+    /** What a report is told stopped the reading at {@code position}. Not that a run evaluating
+     *  the comparison may stop where nothing says: that is said of the run, and the reading went
+     *  on. */
     private static List<UndividedPosition.Reason> whyAt(PartitionEvidence measured,
                                                         String position) {
         return measured.notRead().stream()
                 .filter(each -> each.at().equals(position))
                 .map(PartitionEvidence.NotRead::reason)
+                .filter(reason -> reason != UndividedPosition.Reason.EVALUATION_STOPS_NOT_FULLY_READ)
                 .toList();
     }
 }

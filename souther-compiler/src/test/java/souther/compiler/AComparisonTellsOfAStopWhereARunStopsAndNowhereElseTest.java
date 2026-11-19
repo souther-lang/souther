@@ -6,6 +6,7 @@ import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 import souther.runtime.ConstraintViolation;
+import souther.test.Nightly;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -35,14 +36,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * there and is not told is a stop dropped. What is told though none of these numbers stops is
  * in {@link #TOLD_THOUGH_NONE_STOPS}, a stop that cannot be ruled out yet.
  *
- * <p>A stop that is not told as one is not always left unsaid: where a run stops and no note says
- * so, the report may say the comparison is not read to the end. Where it says neither, the form
- * is in {@link #SAID_NOWHERE}, one form each with why, and a form that is not there and is said
- * nowhere is a stop dropped without a word.
+ * <p>A stop that is not told as one is not left unsaid: where a run stops and no note says so,
+ * the report says the comparison is not read to the end. A form where it says neither is a stop
+ * dropped without a word. And where no run stops, it does not say that a run evaluating the
+ * comparison may stop where nothing says: what each element, each step and each operand comes to
+ * shows that none does.
  *
  * <p>This holds the report and the program to one another on these numbers, and not on every
  * input: a stop only some other number reaches is not found by it.
+ *
+ * <p>Compiling and running every form costs more than a change is worth waiting on, so it is asked
+ * at night; the unit tests of each reading ask the forms one at a time.
  */
+@Nightly
 class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
 
     private static final long MAX = Long.MAX_VALUE;
@@ -64,9 +70,9 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
      *  each with why it cannot. */
     private static final Map<String, String> TOLD_THOUGH_NONE_STOPS = new LinkedHashMap<>();
 
-    /** What a run stops in and the report says nothing of, neither a note nor that the comparison
-     *  is not read to the end, each with why. */
-    private static final Map<String, String> SAID_NOWHERE = new LinkedHashMap<>();
+    /** What is said to work out what may stop a run where nothing tells, though no run of the
+     *  numbers tried stops: a stop that cannot be ruled out, nor told, each with why. */
+    private static final Map<String, String> UNTOLD_THOUGH_NONE_STOPS = new LinkedHashMap<>();
 
     static {
         // an operation of the comparison, and the same without it
@@ -149,6 +155,14 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 + "element does not rule the stop out");
         TOLD_THOUGH_NONE_STOPS.put("lengthOfAStepOfNoElements", "the same, for what a step works "
                 + "out at the elements of a list the way leaves none of");
+        TOLD_THOUGH_NONE_STOPS.put("tuplePartBesideAPartMadeWhereItHolds", "a construction is "
+                + "told over the number it is handed, and the condition of the arm it is made in "
+                + "narrows no range of that number, so Yen(q - 5) made only where q > 5 is told "
+                + "as one that may be refused");
+        UNTOLD_THOUGH_NONE_STOPS.put("tuplePartBesideAPartMadeWhereItHolds", "the same, for the "
+                + "part read: what the arm is made of is not shown to end no run, and what an arm "
+                + "works out is told by no reading of the part, which every run would take as "
+                + "its own");
         NOT_TOLD.put("absOfANumber", "a call's own stop, here the least Int having no absolute "
                 + "value, is told by no reading as an operation of the call: only what it is "
                 + "made of is");
@@ -178,6 +192,44 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 + "that keeps them");
         FORMS.put("lengthOfAStepOfAFilter",
                 "List.length(List.map(x -> x + 1, List.filter(y -> y > 0, ds))) >= 2");
+        // one closure applied to the elements of the list and to q: what is told of the one
+        // application is no word of the other
+        FORMS.put("oneClosureOnTheElementsAndOnQ", "{ let f = x -> x + 1 \n "
+                + "List.sum(List.map(f, ds)) + List.length(List.map(f, [q])) } >= 3");
+        NOT_TOLD.put("oneClosureOnTheElementsAndOnQ", "a closure bound to a name is read as no "
+                + "step: the comparison is about a value made from the input and is not worked "
+                + "out, so no application of it is told");
+        FORMS.put("oneClosureBoundOnQAndSummedOnTheElements", "{ let f = x -> x + 1 \n "
+                + "let unused = List.map(f, [q]) \n List.sum(List.map(f, ds)) } >= 3");
+        NOT_TOLD.put("oneClosureBoundOnQAndSummedOnTheElements", "the same, where the one "
+                + "application is bound and never read");
+        // a step that answers afresh on one arm of a choice written inside a sum, and takes from
+        // the answer so far on the other: the answer so far starts again from that arm's value
+        FORMS.put("aStepAnsweringAfreshInsideASum", "List.fold((w, x) -> (if x > 1 then "
+                + "(0 - 9223372036854775758) else w - 75) + 0, 9223372036854775807, ds) >= 10");
+        NOT_TOLD.put("aStepAnsweringAfreshInsideASum", "a step whose answer so far is taken from "
+                + "on one arm is told by no reading step by step, so its stop is said as one "
+                + "nothing tells; that no run of it is shown held where one stops is "
+                + "WhatAnElementsPartWorksOutIsAskedOperationByOperationTest's");
+        // the elements of a list a choice makes, each made only on its arm's runs: one that
+        // stops is said though what the other arm makes is not shown to keep within its type
+        FORMS.put("elementsOfAChosenListThatAgree",
+                "List.all(x -> x >= 3, if q > 0 then [q + 1] else [(q + 2) - 1])");
+        FORMS.put("elementsOfAChosenListThatKeepWithin",
+                "List.all(x -> x >= 3, if q > 0 then [q - 1] else [q + 1])");
+        // an arm held aside beside another, whose operation its condition keeps within its type
+        FORMS.put("anArmHeldAsideWhereItsConditionHolds",
+                "(if q > 7 then 1 else 2) + (if q > 5 then q - 1 else 3) >= q");
+        UNTOLD_THOUGH_NONE_STOPS.put("anArmHeldAsideWhereItsConditionHolds", "the condition of "
+                + "the arm narrows no range of q, so q - 1 is not shown to end no run, and what an "
+                + "arm works out is told by no reading of the part");
+        // the same step, where the filter keeps no element the step stops at
+        FORMS.put("lengthOfAStepOfAFilterKeepingNoEnd",
+                "List.length(List.map(x -> x + 1, List.filter(y -> y < 0, ds))) >= 2");
+        UNTOLD_THOUGH_NONE_STOPS.put("lengthOfAStepOfAFilterKeepingNoEnd", "a closure's body is "
+                + "worked out only of what it is handed, and what the filter keeps narrows no "
+                + "range of that, so x + 1 is not shown to end no run; told over every element "
+                + "it would be a stop of elements the step never sees");
         NOT_TOLD.put("lengthOfAnArmStep", "what an arm works out is worked out only where the "
                 + "arm is taken, which an operation told over the elements cannot say");
         FORMS.put("lengthOfAnArmStep",
@@ -199,33 +251,72 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         FORMS.put("armOfAWalkPlusOneInAClosure",
                 "List.all(x -> (if x > 3 then " + walk + " + 1 else 0) >= 2, ds)");
         FORMS.put("remainderOfAWalk", "Int.floorMod(" + walk + ", 7) + 1 >= 3");
-        SAID_NOWHERE.put("absOfANumber", "the reading tells every operation it knows of and "
-                + "tells none for the call, so nothing says an operation is left out");
-        SAID_NOWHERE.put("absInALetBodyUnchanged", "the same, in the body of a let");
-        SAID_NOWHERE.put("foldOfAProduct", "the step of the walk, a product over the running "
-                + "value, is left untold and no operation held aside is over it, so nothing "
-                + "records that something that may stop a run is left out");
-        SAID_NOWHERE.put("lengthOfAStepOfAFilter", "the same, for a step over what a filter "
-                + "keeps");
-        SAID_NOWHERE.put("lengthOfAnArmStep", "the same, for a step that takes an arm");
-        SAID_NOWHERE.put("armOfAWalkPlusOne", "what an arm works out is read apart from the "
-                + "comparison, and that reading is not asked what it leaves untold");
-        SAID_NOWHERE.put("armOfAWalkPlusOneInAClosure", "the same as an arm: what an arm works "
-                + "out is read by evaluating it, which records no stop it leaves untold");
-        SAID_NOWHERE.put("remainderOfAWalkPlusOne", "the operation is inside what a remainder "
-                + "divides, which is left to the analysis that owns the remainder");
+        // what each element, each step and each operand comes to, from where it stands
+        FORMS.put("countOfAChoiceStep", "List.fold((w, l) -> if l > 0 then w + 1 else w, 0, ds)"
+                + " >= 3");
+        FORMS.put("sumOfAChoiceStep", "List.fold((w, l) -> if l > 0 then w + l else w, 0, ds)"
+                + " >= 3");
+        FORMS.put("armKeptWithinTheType", "(if q == " + MAX + " then 0 else q) + 1 >= 3");
+        FORMS.put("armPastTheType", "(if q == 0 then 0 else q) + 1 >= 3");
+        FORMS.put("takenFromARemainderInAnArm",
+                "(if q > 0 then 11 - Int.floorMod(" + walk + ", 11) else 0) >= 3");
+        FORMS.put("takenFromAProductInAnArm",
+                "(if q > 0 then 11 - List.length(ds) * q else 0) >= 3");
+        FORMS.put("totalOfAWrittenStep", "List.sum(List.map(x -> 100, ds)) >= 3");
+        FORMS.put("totalOfAnEmptyRange", "List.sum(List.rangeInclusive(3, 1)) >= q");
+        FORMS.put("totalOfThePositions", "List.sum(List.mapIndexed((i, x) -> i, ds)) >= 3");
+        FORMS.put("totalOfThePositionsTimesTheElements",
+                "List.sum(List.mapIndexed((i, x) -> (i + 1) * x, ds)) >= 3");
+        // a total of a list written out, each element chosen alike however it is written
+        FORMS.put("totalOfWrittenChoices",
+                "List.sum([if q > 0 then q else 0, if q > 0 then q else 0]) >= 10");
+        FORMS.put("totalOfChoicesAStepMakes",
+                "List.sum(List.map(x -> if x > 0 then x else 0, [q, q])) >= 10");
+        NOT_TOLD.put("totalOfWhatAFilterKeeps", "the comparison over the total is read once for "
+                + "every way the filter keeps the elements, with the total standing as one "
+                + "number, and the ways are written out only where a reader of the statement "
+                + "asks: no way's total is told as the operation it is, and the total is said as "
+                + "not read");
+        FORMS.put("totalOfWhatAFilterKeeps", "List.sum(List.filter(x -> x > 0, [q, q])) >= 10");
+        // a step over what a step made, and a walk that starts again from a number written down
+        FORMS.put("totalOfAStepOverAStep",
+                "List.sum(List.map(p -> 2 * p, List.map(x -> x, ds))) >= 10");
+        FORMS.put("foldStartingAgain",
+                "List.fold((n, x) -> if x == 0 then n + 1 else 0, 0, ds) >= 3");
+        // a walk adding a choice of the element, one arm of which works out an operation, and the
+        // same total added up exactly
+        FORMS.put("foldAddingAChoice",
+                "List.fold((acc, x) -> acc + (if x > 0 then x else 0 - x), 0, ds) >= 3");
+        FORMS.put("totalOfTheSameChoice",
+                "List.sum(List.map(x -> if x > 0 then x else 0 - x, ds)) >= 3");
+        // a part of what a walk carries in a tuple, counted and summed
+        FORMS.put("countCarriedInATuple", "{ let (s, _) = List.fold((acc, x) -> { "
+                + "let (s, c) = acc \n if x > 0 then (s + 1, c) else acc }, (0, 0), ds) \n s }"
+                + " >= 3");
+        FORMS.put("sumCarriedInATuple", "{ let (s, _) = List.fold((acc, x) -> { "
+                + "let (s, c) = acc \n (s + x, c) }, (0, 0), ds) \n s } >= 3");
+        // a field taken off a construction whose other part is refused at some q
+        FORMS.put("fieldBesideARefusedPart",
+                "Pay { base = Yen(5), other = Yen(0 - q) }.base.value >= q");
+        // a part of a tuple beside a construction made only where its invariant holds
+        FORMS.put("tuplePartBesideAPartMadeWhereItHolds", "{ let (a, r) = if q <= 5 "
+                + "then (q, Yen(0)) else (5, Yen(q - 5)) \n a } >= 3");
     }
 
     @Test
     void aComparisonIsToldOfAStopWhereARunStopsAndNowhereElse() throws Exception {
         List<String> names = new ArrayList<>(FORMS.keySet());
         StringBuilder model = new StringBuilder("module demo\n\n"
-                + "data In = { ds: List<Int>, q: Int }\ndata Out = Int\n");
+                + "data In = { ds: List<Int>, q: Int }\ndata Out = Int\n"
+                + "data Yen = Int invariant value >= 0\ndata Pay = { base: Yen, other: Yen }\n");
         for (int at = 0; at < names.size(); at++) {
             String condition = FORMS.get(names.get(at)).replaceAll("\\bds\\b", "i.ds")
                     .replaceAll("\\bq\\b", "i.q");
             model.append("\nbehavior b").append(at)
-                    .append(" : (i: In) -> Out constructs Out\nlet b").append(at)
+                    .append(" : (i: In) -> Out constructs Out")
+                    .append(condition.contains("Yen(") ? ", Yen" : "")
+                    .append(condition.contains("Pay {") ? ", Pay" : "")
+                    .append("\nlet b").append(at)
                     .append(" (i) = Out { value = if ").append(condition)
                     .append(" then 1 else 2 }\n");
         }
@@ -235,11 +326,15 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         TreeSet<String> stopsAndNothingTold = new TreeSet<>();
         TreeSet<String> toldAndNoRunStops = new TreeSet<>();
         TreeSet<String> stopsAndNothingSaid = new TreeSet<>();
+        TreeSet<String> untoldAndNoRunStops = new TreeSet<>();
         for (int at = 0; at < names.size(); at++) {
             Object behavior = Emitted.behavior(loader, "demo", "b" + at)
                     .getConstructor().newInstance();
             boolean stops = someRunStops(loader, behavior);
-            int[] counts = said.getOrDefault("b" + at, new int[2]);
+            int[] counts = said.getOrDefault("b" + at, new int[3]);
+            if (!stops && counts[UNTOLD] > 0) {
+                untoldAndNoRunStops.add(names.get(at));
+            }
             if (stops && counts[MAY_STOP] == 0) {
                 stopsAndNothingTold.add(names.get(at));
                 if (counts[NOT_READ] == 0) {
@@ -255,13 +350,17 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                         + "compiler cannot yet rule out");
         assertEquals(new TreeSet<>(NOT_TOLD.keySet()), stopsAndNothingTold,
                 "a run stops and no note says so, beside the forms the compiler cannot yet tell");
-        assertEquals(new TreeSet<>(SAID_NOWHERE.keySet()), stopsAndNothingSaid,
+        assertEquals(new TreeSet<>(), stopsAndNothingSaid,
                 "a run stops and the report says nothing of it, not even that it is not read to "
                         + "the end, beside the forms whose stop no reading knows to ask of");
+        assertEquals(new TreeSet<>(UNTOLD_THOUGH_NONE_STOPS.keySet()), untoldAndNoRunStops,
+                "the report says a run may stop where nothing says, and no run stops, beside the "
+                        + "stops the compiler cannot yet rule out nor tell");
     }
 
     private static final int MAY_STOP = 0;
     private static final int NOT_READ = 1;
+    private static final int UNTOLD = 2;
 
     private static boolean someRunStops(ClassLoader loader, Object behavior) throws Exception {
         for (List<Long> list : LISTS) {
@@ -291,11 +390,14 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
             Matcher started = header.matcher(line);
             if (started.matches()) {
                 current = started.group(1);
-                out.put(current, new int[2]);
+                out.put(current, new int[3]);
             } else if (current != null && line.contains("may stop a run")) {
                 out.get(current)[MAY_STOP]++;
             } else if (current != null && line.startsWith("· not read:")) {
                 out.get(current)[NOT_READ]++;
+                if (line.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD)) {
+                    out.get(current)[UNTOLD]++;
+                }
             }
         }
         return out;

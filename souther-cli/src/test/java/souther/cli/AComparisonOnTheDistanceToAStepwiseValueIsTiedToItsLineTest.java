@@ -4,6 +4,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import souther.cli.CliProcess.Ran;
+import souther.compiler.UnreadBesideItsStops;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,6 +12,7 @@ import java.util.function.IntPredicate;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -81,7 +83,10 @@ class AComparisonOnTheDistanceToAStepwiseValueIsTiedToItsLineTest {
                 + comparison + "\n\n" + rows(holds));
         Ran ran = CliInProcess.run("examples", file.toString());
         assertEquals(0, ran.code(), ran.err());
-        assertTrue(ran.out().contains("measurement: complete"), ran.out());
+        // The grade less a current of any whole number may pass an Int, and so may its absolute
+        // value, where nothing in the comparison tells: that is said of the run, and every reading
+        // is read through all the same.
+        assertFalse(UnreadBesideItsStops.in(ran.out()), ran.out());
         assertTrue(ran.out().contains("obligations 42/42"), ran.out());
     }
 }

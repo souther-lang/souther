@@ -17,8 +17,10 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
@@ -135,6 +137,73 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
                 Map.of(), NAMED_D));
     }
 
+    /**
+     * A step that may answer afresh holds the walk from nought as well as from the seed. From 50,
+     * over two steps that take thirty away or answer minus thirty, a run comes to minus sixty —
+     * minus thirty, then thirty less — which is past minus fifty though every number from the seed
+     * down by two steps is not; and with minus ninety the least, every operation is within.
+     */
+    @Test
+    void aStepAnsweringAfreshIsHeldFromNoughtAsWellAsFromTheSeed() {
+        AddedOfEachElement.Part thirty = new AddedOfEachElement.Written(BigDecimal.valueOf(30));
+        AddedOfEachElement step = new AddedOfEachElement(new AddedOfEachElement.Chosen(List.of(
+                new AddedOfEachElement.Taken(worked(BinOp.SUB, SO_FAR, thirty), null),
+                new AddedOfEachElement.Taken(
+                        new AddedOfEachElement.Written(BigDecimal.valueOf(-30)), null))));
+
+        assertFalse(step.heldOverEveryStep(BigInteger.valueOf(50), _ -> null, 2,
+                BigInteger.valueOf(-50), BigInteger.valueOf(100)));
+        assertTrue(step.heldOverEveryStep(BigInteger.valueOf(50), _ -> null, 2,
+                BigInteger.valueOf(-90), BigInteger.valueOf(100)));
+    }
+
+    /**
+     * A choice answering afresh is one wherever sums and differences lead down to it, and a step
+     * holding one there is held from nought as well as from the seed. Each step below starts again
+     * on one arm, and a run taking it and then taking from the answer so far passes a least end
+     * every number from the seed alone keeps within; widened past where that run goes, the same
+     * step is held.
+     */
+    @Test
+    void aStepAnsweringAfreshBelowItsTopIsHeldFromNoughtAsWell() {
+        // Inside a sum: from 9, minus two, then minus five.
+        assertHeldOnlyPastTheRunFromNought(worked(BinOp.ADD,
+                choice(worked(BinOp.SUB, SO_FAR, written(3)), written(-2)), written(0)),
+                9, -4, -12);
+        // Inside a difference: from 3, nought, then minus one, then minus two.
+        assertHeldOnlyPastTheRunFromNought(worked(BinOp.SUB,
+                choice(worked(BinOp.ADD, SO_FAR, written(1)), written(2)), written(2)),
+                3, -1, -4);
+        // Inside an arm of another choice: from 9, one, then minus two, then minus five.
+        assertHeldOnlyPastTheRunFromNought(choice(
+                worked(BinOp.SUB, choice(SO_FAR, written(4)), written(3)),
+                worked(BinOp.ADD, SO_FAR, written(0))), 9, -4, -12);
+    }
+
+    /** {@code step} from {@code seed} over three steps, up to twelve, is not held down to
+     *  {@code passed}, which a run starting again goes past, and is held down to
+     *  {@code least}, which none does. */
+    private static void assertHeldOnlyPastTheRunFromNought(AddedOfEachElement.Part step,
+                                                           long seed, long passed, long least) {
+        AddedOfEachElement read = new AddedOfEachElement(step);
+        BigInteger from = BigInteger.valueOf(seed);
+        BigInteger greatest = BigInteger.valueOf(12);
+        assertFalse(read.heldOverEveryStep(from, _ -> null, 3, BigInteger.valueOf(passed),
+                greatest), step::toString);
+        assertTrue(read.heldOverEveryStep(from, _ -> null, 3, BigInteger.valueOf(least),
+                greatest), step::toString);
+    }
+
+    private static AddedOfEachElement.Part choice(AddedOfEachElement.Part first,
+                                                  AddedOfEachElement.Part second) {
+        return new AddedOfEachElement.Chosen(List.of(new AddedOfEachElement.Taken(first, null),
+                new AddedOfEachElement.Taken(second, null)));
+    }
+
+    private static AddedOfEachElement.Part written(long value) {
+        return new AddedOfEachElement.Written(BigDecimal.valueOf(value));
+    }
+
     private static AddedOfEachElement.Through through(AddedOfEachElement.Part part, long seed,
                                                       long[] p, long[] q) {
         return new AddedOfEachElement(part).overWholeNumbers(BigInteger.valueOf(seed),
@@ -232,7 +301,7 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
             case AddedOfEachElement.Written(BigDecimal value) -> value.longValueExact();
             case AddedOfEachElement.Named(BindingId name) -> named.get(name);
             case AddedOfEachElement.SoFar _ -> seed;
-            case AddedOfEachElement.ReadWithTheTotal _ ->
+            case AddedOfEachElement.ReadWithTheTotal _, AddedOfEachElement.Chosen _ ->
                     throw new IllegalStateException("not among the trees asked");
             case AddedOfEachElement.Worked(BinOp op, var left, var right) -> {
                 long value = apply(op, workedOut(left, seed, values, named, stops),

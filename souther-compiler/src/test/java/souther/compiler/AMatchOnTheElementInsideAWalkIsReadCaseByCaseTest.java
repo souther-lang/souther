@@ -467,11 +467,13 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
 
     /**
      * Whether something is left unread for more than that the gross is related to a total not
-     * shown to reach every value of it, which is all a total read to the end leaves the gross.
+     * shown to reach every value of it, which is all a total read to the end leaves the gross,
+     * and that a run may stop where nothing says ({@link UnreadBesideItsStops}).
      */
     private static boolean unreadBeyondReach(String report) {
         return report.lines().anyMatch(line -> line.contains("not read")
-                && !line.contains("not shown to reach every value here"));
+                && !line.contains("not shown to reach every value here")
+                && !line.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD));
     }
 
     private static String report(Compilation compilation) {

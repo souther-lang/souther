@@ -1,20 +1,27 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.Comparison;
+import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.SeededWalk;
 import souther.compiler.core.Core;
+import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.RunSource;
 import souther.compiler.inputs.WrittenOperation;
 import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BinOp;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -22,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * What a walk's step, or a closure whose answers a total adds up, works out of each element it is
@@ -40,9 +48,9 @@ import java.util.function.Function;
  * <p>Every value a name is given is worked out before what follows, whether anything reads it or
  * not, and is held here in the order the names are given ({@code bound}); a read of the name is a
  * read of that value and works out nothing again. A step or closure that works out anything but
- * these — a call of any other operation, a name it was not given here, a choice — is not read,
- * and neither is a step whose answer so far is multiplied, taken away from something, or given to
- * a name.
+ * these — a call of any other operation, a name it was not given here, a choice where a reader
+ * did not say what decides it ends no run — is not read, and neither is a step whose answer so far
+ * is multiplied, taken away from something, or given to a name.
  *
  * <p>The tree is read only beside a total that adds up a number of each element
  * ({@link #addsUpEachElement}), which is the number the tree comes to.
@@ -65,7 +73,8 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
                         + each);
             }
         }
-        if (readsTheAnswerSoFar(answer) && (!(answer instanceof Worked) || !addsTo(answer))) {
+        if (readsTheAnswerSoFar(answer)
+                && (!(answer instanceof Worked || answer instanceof Chosen) || !addsTo(answer))) {
             throw new IllegalArgumentException("a step reads the answer so far once, added along"
                     + " sums and differences from the top to something of the element: "
                     + answer);
@@ -118,6 +127,31 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
         }
     }
 
+    /** A choice between arms, whichever a run takes: read only where what decides it ends no
+     *  run. In a step each arm adds to the answer so far, is it, or reads it nowhere. */
+    record Chosen(List<Taken> arms) implements Part {
+
+        Chosen {
+            arms = List.copyOf(arms);
+        }
+    }
+
+    /** One arm of a choice, and what deciding it states of a path of the element; null where it
+     *  states nothing a path's numbers are held to. */
+    record Taken(Part answers, Narrowed where) {
+
+        Taken {
+            Objects.requireNonNull(answers, "what the arm answers");
+        }
+    }
+
+    /**
+     * That an arm is taken only where the whole numbers of a path of the element ({@code path})
+     * stand in {@code rel} to {@code number}; {@code samePlace} says whether another path reads
+     * the same place of the element.
+     */
+    record Narrowed(Core path, Predicate<Core> samePlace, Rel rel, ExactRatio number) {}
+
     /** A name the step gives a value, and the value, worked out where it is given. */
     record Bound(BindingId name, Part value) {
 
@@ -139,6 +173,18 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
                 ? read : null;
     }
 
+    /**
+     * The same, a choice read arm by arm where what decides it ends no run
+     * ({@code decidesWithoutAStop}), each arm adding to the answer so far or being it and taken
+     * where its condition holds of a place of the element ({@code newtypes} tell which), for
+     * asking where every number the walk works out lies ({@link #heldOverEveryStep}).
+     */
+    static AddedOfEachElement ofTheStep(SeededWalk walk, Predicate<Core> decidesWithoutAStop,
+                                        DeclarationNewtypes newtypes) {
+        return new Reader(walk.element().binding(), walk.accumulator().binding(), null,
+                decidesWithoutAStop, newtypes).read(walk.step().body());
+    }
+
     /** What {@code closure} works out of the one element it is handed, as a part a total adds up;
      *  null where it works out anything else. */
     static AddedOfEachElement ofAClosure(Core.Block closure) {
@@ -147,6 +193,19 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
             return null;
         }
         return new Reader(closure.params().getFirst().binding(), null).read(closure.body());
+    }
+
+    /**
+     * What a closure applied to each element works out of it ({@code answer}), the position it is
+     * handed read as a path, and a choice read arm by arm where what decides it ends no run
+     * ({@code decidesWithoutAStop}), each arm taken where its condition holds of a place of the
+     * element ({@code newtypes} tell which). Null where it works out anything else.
+     */
+    static AddedOfEachElement ofAnAnswer(ElementAnswer answer,
+                                         Predicate<Core> decidesWithoutAStop,
+                                         DeclarationNewtypes newtypes) {
+        return new Reader(answer.parameter(), null, answer.position(), decidesWithoutAStop,
+                newtypes).read(answer.body());
     }
 
     /**
@@ -239,6 +298,83 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
     }
 
     /**
+     * Whether every operation of whole numbers worked out for an element, the answer's own among
+     * them, lies within {@code least} and {@code greatest}, each path of the element coming to
+     * what {@code rangeOf} answers: then working the closure out ends no run on any element. Of a
+     * closure, which reads no answer so far.
+     */
+    boolean holdsEveryOperation(Function<Core, FormRange> rangeOf, BigInteger least,
+                                BigInteger greatest) {
+        return checkedAlone(rangeOf, least, greatest) != null;
+    }
+
+    /**
+     * The numbers the answer for an element comes to, where every operation worked out for it is
+     * held as {@link #holdsEveryOperation} asks; null where one is not, or where what the answer
+     * comes to is not known.
+     */
+    FormRange answerHeldWithin(Function<Core, FormRange> rangeOf, BigInteger least,
+                               BigInteger greatest) {
+        Checked whole = checkedAlone(rangeOf, least, greatest);
+        return whole == null ? null : whole.range();
+    }
+
+    /**
+     * Whether every number a walk's step works out, from {@code seed} over at most {@code most}
+     * elements, lies within {@code least} and {@code greatest}, each path of the element coming to
+     * what {@code rangeOf} answers. Each step moves the answer so far by what it adds, which lies
+     * within a range of its own; after any number of steps up to {@code most} the answer so far
+     * lies within the seed and that many times the range either way, and each operation of a step
+     * is asked with the answer so far anywhere there.
+     *
+     * <p>A step that may answer afresh ({@link #answersAfresh}) answers, read with the answer so
+     * far nought, a value within the same range, and what follows it adds to that value: the
+     * answer so far is then a sum of as many such values as steps were taken, and lies within
+     * nought or the seed and that many times the range.
+     */
+    boolean heldOverEveryStep(BigInteger seed, Function<Core, FormRange> rangeOf, long most,
+                              BigInteger least, BigInteger greatest) {
+        FormRange none = new FormRange(ExactRatio.ZERO, ExactRatio.ZERO);
+        Checked moved = checkedAlone(none, rangeOf, least, greatest, true);
+        if (moved == null || moved.range() == null) {
+            return false;
+        }
+        FormRange steps = new FormRange(ExactRatio.ZERO, ExactRatio.of(most));
+        FormRange reached = FormRange.combined(BinOp.MUL, moved.range().hull(none), steps);
+        FormRange from = new FormRange(ExactRatio.of(seed), ExactRatio.of(seed));
+        FormRange soFar = reached == null ? null : FormRange.combined(BinOp.ADD, reached,
+                answersAfresh(answer) ? from.hull(none) : from);
+        return soFar != null && soFar.liesWithin(least, greatest)
+                && checkedAlone(soFar, rangeOf, least, greatest, false) != null;
+    }
+
+    /** What the answer comes to, each operation asked on its own and none taken to come to a
+     *  total; null where one may stop a run. */
+    private Checked checkedAlone(Function<Core, FormRange> rangeOf, BigInteger least,
+                                 BigInteger greatest) {
+        Checked whole = checkedAlone(new FormRange(ExactRatio.ZERO, ExactRatio.ZERO), rangeOf,
+                least, greatest, false);
+        return (whole == null || whole.readsTheAnswerSoFar()) ? null : whole;
+    }
+
+    /** The same with the answer so far anywhere in {@code soFar}, and, where {@code onlyItsRange},
+     *  what the answer comes to whether or not an operation on the way may stop a run. */
+    private Checked checkedAlone(FormRange soFar, Function<Core, FormRange> rangeOf,
+                                 BigInteger least, BigInteger greatest, boolean onlyItsRange) {
+        Checker checker = new Checker(BigInteger.ZERO, soFar, rangeOf, least, greatest,
+                new HashMap<>());
+        for (Bound each : bound) {
+            Checked value = checker.checked(each.value(), false);
+            if (value.notShown() && !onlyItsRange) {
+                return null;
+            }
+            checker.named().put(each.name(), value);
+        }
+        Checked whole = checker.checked(answer, false);
+        return (whole.notShown() && !onlyItsRange) ? null : whole;
+    }
+
+    /**
      * Whether a walk's step moves the answer so far one way only, by what gets through on every
      * row: the answer so far with a part of the element added or taken away, each operation of
      * the part within the ends on every row, and the part never past nought on one side. Every
@@ -283,9 +419,32 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
                            boolean notShown) {}
 
     /** The asking of {@link #overWholeNumbers}, of each part in turn, with what each name given
-     *  so far was found to come to. */
-    private record Checker(BigInteger seed, Function<Core, FormRange> rangeOf, BigInteger least,
-                           BigInteger greatest, Map<BindingId, Checked> named) {
+     *  so far was found to come to; the answer so far is the seed, or every number of
+     *  {@code soFar} where that is given. */
+    private record Checker(BigInteger seed, FormRange soFar, Function<Core, FormRange> rangeOf,
+                           BigInteger least, BigInteger greatest, Map<BindingId, Checked> named) {
+
+        Checker(BigInteger seed, Function<Core, FormRange> rangeOf, BigInteger least,
+                BigInteger greatest, Map<BindingId, Checked> named) {
+            this(seed, new FormRange(ExactRatio.of(seed), ExactRatio.of(seed)), rangeOf, least,
+                    greatest, named);
+        }
+
+        /** The same asking inside an arm taken only where {@code where} holds: the path it is
+         *  about comes to the numbers there; null where it comes to none and no run takes the
+         *  arm. */
+        Checker taken(Narrowed where) {
+            FormRange whole = rangeOf.apply(where.path());
+            if (whole != null && whole.heldTo(where.rel(), where.number()) == null) {
+                return null;
+            }
+            Function<Core, FormRange> narrowed = path -> {
+                FormRange range = rangeOf.apply(path);
+                return range != null && where.samePlace().test(path)
+                        ? range.heldTo(where.rel(), where.number()) : range;
+            };
+            return new Checker(seed, soFar, narrowed, least, greatest, named);
+        }
 
         /** {@code part} checked, where {@code theTotal} says it comes to the total on a row of
          *  one element: the whole of what is worked out, or a part the answer so far is added to
@@ -301,8 +460,27 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
                     yield new Checked(value.range(), value.readsTheAnswerSoFar(), false, false);
                 }
                 case ReadWithTheTotal _ -> new Checked(null, false, false, false);
-                case SoFar _ -> new Checked(new FormRange(ExactRatio.of(seed), ExactRatio.of(seed)),
-                        true, false, false);
+                case Chosen(List<Taken> arms) -> {
+                    FormRange hull = null;
+                    boolean known = true;
+                    boolean soFar = false;
+                    boolean onOneElement = false;
+                    boolean notShown = false;
+                    for (Taken arm : arms) {
+                        Checker in = arm.where() == null ? this : taken(arm.where());
+                        if (in == null) {
+                            continue;
+                        }
+                        Checked one = in.checked(arm.answers(), theTotal);
+                        known &= one.range() != null;
+                        hull = !known ? null : hull == null ? one.range() : hull.hull(one.range());
+                        soFar |= one.readsTheAnswerSoFar();
+                        onOneElement |= one.onOneElement();
+                        notShown |= one.notShown();
+                    }
+                    yield new Checked(hull, soFar, onOneElement, notShown);
+                }
+                case SoFar _ -> new Checked(soFar, true, false, false);
                 case Worked(BinOp op, Part left, Part right) -> {
                     boolean addedToNought = theTotal && op == BinOp.ADD
                             && BigInteger.ZERO.equals(seed);
@@ -319,21 +497,54 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
         }
     }
 
+    /**
+     * Whether some run of {@code part} works it out without reading the answer so far: one that
+     * takes an arm reading it nowhere, wherever in the step that choice is written — at the top,
+     * inside a sum or a difference, or inside an arm of another choice. A step such a run takes
+     * answers afresh, whatever the answer so far was.
+     *
+     * <p>Asked of the whole tree and not of the kind of node at its top: a reader takes a choice
+     * wherever sums and differences lead down to it ({@link #addsTo}), and a run that takes an arm
+     * reading nothing of the answer so far drops it there. A name's value reads none of it
+     * ({@link Bound}), so a read of a name is one that does not.
+     */
+    private static boolean answersAfresh(Part part) {
+        return !readsTheAnswerSoFarOnEveryRun(part);
+    }
+
+    /** Whether every run of {@code part}, whichever arm each choice takes, reads the answer so
+     *  far. */
+    private static boolean readsTheAnswerSoFarOnEveryRun(Part part) {
+        return switch (part) {
+            case SoFar _ -> true;
+            case Path _, Written _, Named _, ReadWithTheTotal _ -> false;
+            case Worked worked -> readsTheAnswerSoFarOnEveryRun(worked.left())
+                    || readsTheAnswerSoFarOnEveryRun(worked.right());
+            case Chosen chosen -> chosen.arms().stream()
+                    .allMatch(arm -> readsTheAnswerSoFarOnEveryRun(arm.answers()));
+        };
+    }
+
     private static boolean readsTheAnswerSoFar(Part part) {
         return switch (part) {
             case SoFar _ -> true;
             case Path _, Written _, Named _, ReadWithTheTotal _ -> false;
             case Worked worked ->
                     readsTheAnswerSoFar(worked.left()) || readsTheAnswerSoFar(worked.right());
+            case Chosen chosen -> chosen.arms().stream()
+                    .anyMatch(arm -> readsTheAnswerSoFar(arm.answers()));
         };
     }
 
     /** Whether {@code part} reads the answer so far once, added along a run of sums and
-     *  differences from the top, and taken away from nothing. */
+     *  differences from the top, and taken away from nothing. An arm of a choice may instead read
+     *  it nowhere, and answer afresh ({@link #answersAfresh}). */
     private static boolean addsTo(Part part) {
         return switch (part) {
             case SoFar _ -> true;
             case Path _, Written _, Named _, ReadWithTheTotal _ -> false;
+            case Chosen chosen -> chosen.arms().stream().allMatch(arm -> addsTo(arm.answers())
+                    || !readsTheAnswerSoFar(arm.answers()));
             case Worked(BinOp op, Part left, Part right) -> switch (op) {
                 case ADD -> addsTo(left) ? !readsTheAnswerSoFar(right)
                         : addsTo(right) && !readsTheAnswerSoFar(left);
@@ -351,13 +562,29 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
 
         private final BindingId element;
         private final BindingId carried;
+        /** The position the closure is handed, read as a path; null where it is handed none. */
+        private final BindingId position;
+        /** Whether what decides a choice ends no run, where a choice is read; none where it is
+         *  not. */
+        private final Predicate<Core> decidesWithoutAStop;
+        /** What tells which place of the element a path reads, for what deciding an arm states
+         *  of it; null where nothing is asked of that. */
+        private final DeclarationNewtypes newtypes;
         private final List<Bound> bound = new ArrayList<>();
         /** What each name given so far stands for, where it is a path of the element. */
         private final Map<BindingId, Core> paths = new LinkedHashMap<>();
 
         Reader(BindingId element, BindingId carried) {
+            this(element, carried, null, _ -> false, null);
+        }
+
+        Reader(BindingId element, BindingId carried, BindingId position,
+               Predicate<Core> decidesWithoutAStop, DeclarationNewtypes newtypes) {
             this.element = element;
             this.carried = carried;
+            this.position = position;
+            this.decidesWithoutAStop = decidesWithoutAStop;
+            this.newtypes = newtypes;
         }
 
         /** {@code body} as what it works out, or null where any of it is anything else, or it
@@ -365,7 +592,8 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
         AddedOfEachElement read(Core body) {
             Part answer = partOf(body);
             if (answer == null || (readsTheAnswerSoFar(answer)
-                    && (!(answer instanceof Worked) || !addsTo(answer)))) {
+                    && (!(answer instanceof Worked || answer instanceof Chosen)
+                            || !addsTo(answer)))) {
                 return null;
             }
             return new AddedOfEachElement(bound, paths, answer);
@@ -390,6 +618,16 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
             if (bare instanceof Core.LetIn let) {
                 return given(let) ? partOf(let.body()) : null;
             }
+            if (bare instanceof Core.If fork && decidesWithoutAStop.test(fork.cond())) {
+                Narrowed holding = narrowedBy(fork.cond());
+                return chosen(List.of(fork.then(), fork.els()), Arrays.asList(holding,
+                        holding == null ? null : new Narrowed(holding.path(),
+                                holding.samePlace(), holding.rel().denied(), holding.number())));
+            }
+            if (bare instanceof Core.Match match && decidesWithoutAStop.test(match.scrutinee())) {
+                List<Core> arms = match.cases().stream().map(Core.Case::body).toList();
+                return chosen(arms, Collections.nCopies(arms.size(), null));
+            }
             if (bare instanceof Core.Read read && read.binding() != null) {
                 if (read.binding().equals(carried)) {
                     return new SoFar();
@@ -410,6 +648,54 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
                 return new Written(written);
             }
             return isAPathInside(bare) ? new Path(e) : null;
+        }
+
+        /** A choice between {@code arms}, each read as a part and taken where {@code where} says
+         *  ({@link Taken}); null where one is not read. A name an arm binds is no part, so an arm
+         *  reading one is not read. */
+        private Part chosen(List<Core> arms, List<Narrowed> where) {
+            List<Taken> taken = new ArrayList<>();
+            for (int at = 0; at < arms.size(); at++) {
+                Part part = partOf(arms.get(at));
+                if (part == null) {
+                    return null;
+                }
+                taken.add(new Taken(part, where.get(at)));
+            }
+            return new Chosen(taken);
+        }
+
+        /** What {@code condition} states of a whole-number path of the element against a number
+         *  written out, as it holds; null where it states nothing of one, or nothing says which
+         *  place of the element a path reads. */
+        private Narrowed narrowedBy(Core condition) {
+            if (newtypes == null || !(Core.withoutStanding(condition) instanceof Core.Binary binary)
+                    || !(Comparison.of(binary).orElse(null) instanceof Comparison read)) {
+                return null;
+            }
+            Rel rel = read.claim().statedRelation();
+            BigDecimal right = writtenOut(read.right());
+            if (right != null && aWholeNumberPath(read.left())) {
+                return narrowed(read.left(), rel, right);
+            }
+            BigDecimal left = writtenOut(read.left());
+            if (left != null && aWholeNumberPath(read.right())) {
+                return narrowed(read.right(), rel.turned(), left);
+            }
+            return null;
+        }
+
+        /** That {@code path} stands in {@code rel} to {@code number}, a path being the same place
+         *  where {@link ElementProjection#read} reads both the same. */
+        private Narrowed narrowed(Core path, Rel rel, BigDecimal number) {
+            ElementProjection place = ElementProjection.read(path, element, paths, newtypes);
+            return place == null ? null : new Narrowed(path, other -> place.equals(
+                    ElementProjection.read(other, element, paths, newtypes)), rel,
+                    ExactRatio.of(number));
+        }
+
+        private boolean aWholeNumberPath(Core e) {
+            return Core.withoutStanding(e).type() == Type.INT && isAPathInside(e);
         }
 
         /**
@@ -455,7 +741,8 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
             while (true) {
                 switch (here) {
                     case Core.Read read -> {
-                        if (element.equals(read.binding())) {
+                        if (element.equals(read.binding())
+                                || (position != null && position.equals(read.binding()))) {
                             return true;
                         }
                         Core path = read.binding() == null ? null : paths.get(read.binding());

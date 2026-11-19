@@ -15,6 +15,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BinOp;
@@ -412,6 +413,52 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
         ExactRatio from = least.compareTo(other.least) >= 0 ? least : other.least;
         ExactRatio to = greatest.compareTo(other.greatest) <= 0 ? greatest : other.greatest;
         return from.compareTo(to) > 0 ? null : new FormRange(from, to);
+    }
+
+    /**
+     * The whole numbers of this that stand in {@code rel} to {@code number}, as the range from the
+     * least to the greatest of them, or null where none does. A range is of rationals and the
+     * numbers asked of are whole, so both ends of this and {@code number} are taken to the whole
+     * numbers they bound: below {@code 1.5} is up to {@code 1}, and a range from {@code 0.5} to
+     * {@code 2.5} holds {@code 1} and {@code 2}. A number not equal to an end of those leaves them
+     * as they are, since a range has no hole; and where a bound is past what can be held, this is
+     * left as it is, which holds every number the relation keeps.
+     */
+    FormRange heldTo(Rel rel, ExactRatio number) {
+        ExactRatio from = whole(least.ceiling());
+        ExactRatio to = whole(greatest.floor());
+        ExactRatio floor = whole(number.floor());
+        ExactRatio ceiling = whole(number.ceiling());
+        if (from == null || to == null || floor == null || ceiling == null) {
+            return this;
+        }
+        if (from.compareTo(to) > 0) {
+            return null;
+        }
+        FormRange whole = new FormRange(from, to);
+        ExactRatio below = ceiling.minus(ExactRatio.ONE).orNull();
+        ExactRatio above = floor.plus(ExactRatio.ONE).orNull();
+        if (below == null || above == null) {
+            return this;
+        }
+        return switch (rel) {
+            case EQ -> number.isWhole() ? whole.meet(new FormRange(number, number)) : null;
+            case NE -> !number.isWhole() ? whole
+                    : (number.equals(from) && number.equals(to)) ? null
+                    : number.equals(from) ? new FormRange(above, to)
+                    : number.equals(to) ? new FormRange(from, below)
+                    : whole;
+            case LT -> whole.meet(new FormRange(from, below));
+            case LE -> whole.meet(new FormRange(from, floor));
+            case GT -> whole.meet(new FormRange(above, to));
+            case GE -> whole.meet(new FormRange(ceiling, to));
+        };
+    }
+
+    /** {@code end} as a number, or null where it is past what can be held. */
+    private static ExactRatio whole(ExactAnswer<BigInteger> end) {
+        return end instanceof ExactAnswer.Held<BigInteger>(BigInteger held)
+                ? ExactRatio.of(held) : null;
     }
 
     /** The smallest range holding this and {@code other}. */

@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.UnreadBesideItsStops;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -16,6 +17,7 @@ import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A lookup of the average in a table, after an {@code if} whose condition looks the same average
@@ -141,9 +143,13 @@ class ChoicesThatPartitionOneValueAreCountedByTheWaysThatHoldTogetherTest {
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines().toList();
     }
 
-    /** The lines of {@code report} saying something is not read. */
+    /** The lines of {@code report} saying something is not read, beside a run that may stop where
+     *  nothing says ({@link UnreadBesideItsStops}): the grade less the current one is a difference
+     *  of numbers not shown to stay within an {@code Int}, what a fold over the table comes to
+     *  not being read as numbers. */
     private static List<String> unreadIn(List<String> report) {
-        return report.stream().filter(line -> line.contains("not read:")).toList();
+        return report.stream().filter(line -> line.contains("not read:")
+                && !line.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD)).toList();
     }
 
     /** The values of the average the lookup's borders are at, as {@code report} says them. */
@@ -162,7 +168,11 @@ class ChoicesThatPartitionOneValueAreCountedByTheWaysThatHoldTogetherTest {
         List<String> withNothingBefore =
                 bordersIn(report(model(Body.NOT_TESTED, Grade.UNBOUNDED, 2)));
 
-        assertEquals(List.of(), unreadIn(report));
+        // A grade of any whole number less the one the table gives may pass an Int, so the
+        // comparison of the two in the blockers is not shown past for every value: that is all
+        // left unread, and the lookup is not.
+        assertTrue(unreadIn(report).stream().allMatch(line -> line.endsWith("in blockers@28:32")),
+                report::toString);
         assertFalse(withNothingBefore.isEmpty(), "the lookup has borders to compare");
         assertEquals(withNothingBefore, bordersIn(report));
     }
