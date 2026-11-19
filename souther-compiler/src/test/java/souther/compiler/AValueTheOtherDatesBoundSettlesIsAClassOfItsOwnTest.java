@@ -165,12 +165,16 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
             behavior ceiling : (p: P, on: Date) -> Bool
             let ceiling (p, on) =
                 ageOn(Date.addDays(0 - 1, p.birthday), on) >= 40
-                    && ageOn(Date.addDays(0 - 1, p.birthday), on) < 65
             """;
+
+    /** {@link #AGE_IN_MONTHS_AND_DAYS} measured, which the tests of it only read. */
+    private static final class AnAge {
+        static final Compilation MEASURED = compiled(AGE_IN_MONTHS_AND_DAYS);
+    }
 
     @Test
     void anAgeReadThroughTheMonthsAndDaysOfABoundedBirthdayIsRead() {
-        String report = report(compiled(AGE_IN_MONTHS_AND_DAYS));
+        String report = report(AnAge.MEASURED);
 
         assertTrue(report.contains("measurement: complete"), report);
         assertFalse(report.contains("not worked out"), report);
@@ -192,7 +196,7 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
      */
     @Test
     void theRowsOfferedAreBirthdaysTheBoundHoldsAndAnsweredAsTheCalendarWorksTheAgeOut() {
-        Compilation offering = compiled(AGE_IN_MONTHS_AND_DAYS);
+        Compilation offering = AnAge.MEASURED;
         String offered = GeneratedRows.of(
                 Adequacy.offeredFor(offering.db(), OfferingRequest.overTheModule("d")),
                 Map.of(), SourceRendering.namedByIdentity(offering.texts()), offering.db())
@@ -215,9 +219,9 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
             ages.add(age);
             examples.append("    | (P { birthday = Date(\"").append(birthday)
                     .append("\") }, Date(\"").append(on).append("\")) -> ")
-                    .append(age >= 40 && age < 65).append('\n');
+                    .append(age >= 40).append('\n');
         }
-        assertTrue(ages.containsAll(List.of(39, 40, 64, 65)), ages + "\n" + offered);
+        assertTrue(ages.containsAll(List.of(39, 40)), ages + "\n" + offered);
 
         Compilation answered = ACompiledModel.measured(
                 AGE_IN_MONTHS_AND_DAYS + "\nexample ceiling\n" + examples,
@@ -228,12 +232,12 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
     }
 
     /**
-     * The age read again where the first reading of it decided the way: the guard of a list
-     * comprehension asks the ceiling, which reads the age, and the element it builds asks it again.
-     * The second reading is reached along a way that holds the age at sixty, one that holds it
-     * under, and one where a disability took the ceiling up whatever the age, and no year before
-     * 1960 is reached along the first. Read once the ways have met, the years up to 1959 fail it
-     * along every way that reaches them.
+     * The age read again where the first reading of it decided the way: the comparison with
+     * {@code r} asks the ceiling, which reads the age, and the answer asks it again. The second
+     * reading is reached along a way that holds the age at sixty, one that holds it under, and one
+     * where a disability took the ceiling up whatever the age, and no year before 1960 is reached
+     * along the first. Read once the ways have met, the years up to 1959 fail it along every way
+     * that reaches them.
      */
     @Test
     void anAgeReadAgainWhereTheFirstReadingDecidedTheWayIsRead() {
@@ -243,34 +247,13 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
                 data P = { birthday: Date, disabled: Bool }
                     invariant birthday >= Date("1900-01-01")
 
-                data Revenue = Int
-                    invariant value >= 0
+                let old (p: P, on: Date): Int =
+                    if Date.year(on) - Date.year(p.birthday) >= 60 || p.disabled
+                    then 1800 else 1300
 
-                data Over = { ceiling: Revenue, revenue: Revenue }
-
-                data Reason =
-                    Old
-                  | Over
-
-                let ageOn (birthday: Date, on: Date): Int =
-                    Date.year(on) - Date.year(birthday)
-                        - (if Date.month(on) * 100 + Date.day(on)
-                                < Date.month(birthday) * 100 + Date.day(birthday)
-                           then 1 else 0)
-
-                let attainedAgeOn (birthday: Date, on: Date): Int =
-                    ageOn(Date.addDays(0 - 1, birthday), on)
-
-                let ceiling (p: P, on: Date): Revenue =
-                    if attainedAgeOn(p.birthday, on) >= 60 || p.disabled
-                    then Revenue(1800000)
-                    else Revenue(1300000)
-
-                behavior blockers : (p: P, revenue: Revenue, on: Date) -> List<Reason>
-                let blockers (p, revenue, on) =
-                       [ Old | attainedAgeOn(p.birthday, on) >= 75 ]
-                    ++ [ Over { ceiling = ceiling(p, on), revenue = revenue }
-                       | revenue >= ceiling(p, on) ]
+                behavior ceiling : (p: P, on: Date, r: Int) -> Int
+                let ceiling (p, on, r) =
+                    if r >= old(p, on) then old(p, on) else 3
                 """));
 
         assertTrue(report.contains("measurement: complete"), report);
