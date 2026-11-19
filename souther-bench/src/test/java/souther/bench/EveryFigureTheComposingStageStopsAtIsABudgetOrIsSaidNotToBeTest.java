@@ -69,6 +69,16 @@ class EveryFigureTheComposingStageStopsAtIsABudgetOrIsSaidNotToBeTest {
             Map.entry("souther.compiler.partition.WhatStatementsOfDatePartsLeaveAlone"
                             + ".MOST_DATES_A_WAY_IS_ASKED_OF",
                     "how many dates a way may state the parts of for them to be looked through"),
+            // Dates are looked for only for statements of at most this many dates, with at most
+            // this many choices of what their parts come to beside the years; past either, no
+            // dates are said to hold them, which claims nothing, and no search is begun.
+            Map.entry("souther.compiler.partition.DatesThatHoldEveryStatement.MOST_DATES",
+                    "how many dates a way may state the parts of for dates to be looked for"),
+            Map.entry("souther.compiler.partition.DatesThatHoldEveryStatement.MOST_CHOICES",
+                    "how many choices of the parts beside the years a look for dates is begun"
+                            + " over"),
+            Map.entry("souther.compiler.partition.DatesThatHoldEveryStatement.YEARS_OF_A_CYCLE",
+                    "how many years the calendar's pattern repeats over"),
 
             // How many steps of a date written as a move of another are followed to the date whose
             // month it is the first of: the depth of an expression, which no search stops at.

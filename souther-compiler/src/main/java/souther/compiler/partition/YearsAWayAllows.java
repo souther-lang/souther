@@ -84,15 +84,6 @@ final class YearsAWayAllows {
         if (dates == 0 || dates > MOST_DATES || !staysInsideTheType(statements)) {
             return null;
         }
-        long[][] weights = new long[statements.size()][dates];
-        long[] constants = new long[statements.size()];
-        for (int i = 0; i < constants.length; i++) {
-            constants[i] = asLong(statements.get(i).constant());
-            for (Year year : statements.get(i).years()) {
-                // Cannot pass the type: every weight was counted alone against the farthest year.
-                weights[i][year.date()] += asLong(year.weight());
-            }
-        }
         List<List<DateTranslation>> shifts = new ArrayList<>();
         List<int[]> wholeYears = new ArrayList<>();
         for (int date = 0; date < dates; date++) {
@@ -117,9 +108,56 @@ final class YearsAWayAllows {
                 return null;   // no year gives this date every number, whatever the statements
             }
         }
+        long[] chosen = years(statements, (date, year) ->
+                giving[date].get(Math.floorMod(year, YEARS_OF_A_CYCLE))
+                        && MonthsAndDaysOfOneDate.coversEveryValueInYear(
+                                partsOfEachDate.get(date), (int) year, shifts.get(date)),
+                wholeYears);
+        return chosen == null ? null : toInts(chosen);
+    }
+
+    /**
+     * A year for each date at which every statement holds, each year one of a cycle of four
+     * hundred {@code ofTheCycle} sets for its date and inside the years {@code allowed} gives it,
+     * or null where none is found. What the year of a moved date is beside the date's own year is
+     * the caller's to have put in the constants: every {@link Year#moved} here is read as moving
+     * nothing.
+     *
+     * @param ofTheCycle for each date, the years of a cycle, by the year modulo four hundred
+     * @param allowed    for each date, its first and last year
+     */
+    static long[] holding(List<Statement> statements, List<BitSet> ofTheCycle,
+                          List<int[]> allowed) {
+        int dates = ofTheCycle.size();
+        if (dates == 0 || dates > MOST_DATES || allowed.size() != dates
+                || !staysInsideTheType(statements)) {
+            return null;
+        }
+        return years(statements, (date, year) ->
+                ofTheCycle.get(date).get(Math.floorMod(year, YEARS_OF_A_CYCLE)), allowed);
+    }
+
+    /** Whether a year is one a date may be put in, before the statements are asked of it. */
+    @FunctionalInterface
+    private interface Taken {
+        boolean at(int date, long year);
+    }
+
+    /** The years the statements, which stay inside the type, hold at, each one {@code taken}
+     *  allows, or null where none is found. */
+    private static long[] years(List<Statement> statements, Taken taken, List<int[]> allowed) {
+        int dates = allowed.size();
+        long[][] weights = new long[statements.size()][dates];
+        long[] constants = new long[statements.size()];
+        for (int i = 0; i < constants.length; i++) {
+            constants[i] = asLong(statements.get(i).constant());
+            for (Year year : statements.get(i).years()) {
+                // Cannot pass the type: every weight was counted alone against the farthest year.
+                weights[i][year.date()] += asLong(year.weight());
+            }
+        }
         long[] chosen = new long[dates];
-        return search(statements, weights, constants, partsOfEachDate, shifts, giving,
-                wholeYears, chosen, 0) ? toInts(chosen) : null;
+        return search(statements, weights, constants, taken, allowed, chosen, 0) ? chosen : null;
     }
 
     private static int[] toInts(long[] years) {
@@ -135,9 +173,7 @@ final class YearsAWayAllows {
      * hold every statement.
      */
     private static boolean search(List<Statement> statements, long[][] weights, long[] constants,
-                                  List<List<DatesThatStandInEveryYear.Part>> parts,
-                                  List<List<DateTranslation>> shifts, BitSet[] giving,
-                                  List<int[]> allowed, long[] chosen, int date) {
+                                  Taken taken, List<int[]> allowed, long[] chosen, int date) {
         if (date == chosen.length) {
             for (int i = 0; i < constants.length; i++) {
                 if (!statements.get(i).relation().holds(Long.signum(valueAt(weights[i],
@@ -149,14 +185,11 @@ final class YearsAWayAllows {
         }
         for (long year : yearsToLookAt(statements, weights, constants, chosen, date,
                 allowed.get(date))) {
-            if (!giving[date].get(Math.floorMod(year, YEARS_OF_A_CYCLE))
-                    || !MonthsAndDaysOfOneDate.coversEveryValueInYear(parts.get(date),
-                            (int) year, shifts.get(date))) {
+            if (!taken.at(date, year)) {
                 continue;
             }
             chosen[date] = year;
-            if (search(statements, weights, constants, parts, shifts, giving, allowed, chosen,
-                    date + 1)) {
+            if (search(statements, weights, constants, taken, allowed, chosen, date + 1)) {
                 return true;
             }
         }

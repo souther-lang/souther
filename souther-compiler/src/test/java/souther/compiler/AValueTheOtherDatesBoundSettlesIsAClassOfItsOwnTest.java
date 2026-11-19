@@ -389,6 +389,55 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
                 classes(compilation).toString());
     }
 
+    /** The comparison of ages read again along a way that also states {@code ofAnotherDate} of a
+     *  date {@code d} nothing ties to the person or the day. */
+    private static String readAgainBeside(String ofAnotherDate) {
+        return """
+                module d
+
+                data P = { birthday: Date, disabled: Bool }
+                    invariant birthday >= Date("1900-01-01")
+
+                let old (p: P, on: Date): Int =
+                    if Date.year(on) - Date.year(p.birthday) >= 60 || p.disabled
+                    then 1800 else 1300
+
+                behavior ceiling : (p: P, on: Date, d: Date, r: Int) -> Int
+                let ceiling (p, on, d, r) =
+                    if %s then
+                        (if r >= old(p, on) then old(p, on) else 3)
+                    else 4
+                """.formatted(ofAnotherDate);
+    }
+
+    /**
+     * A statement weighing the year and the month of another date, which February 2000 holds,
+     * leaves the ages read again as they are read without it: some date holds it, and nothing
+     * it says is of the person or the day.
+     */
+    @Test
+    void aStatementOfTwoPartsOfAnotherDateThatSomeDateHoldsLeavesTheAgesRead() {
+        List<String> unread = unread(divided(
+                readAgainBeside("Date.year(d) * 100 + Date.month(d) == 200002")));
+
+        assertTrue(unread.stream().noneMatch(at -> at.startsWith("Date.year(on)")
+                || at.startsWith("Date.year(p.birthday)")), unread.toString());
+    }
+
+    /**
+     * Statements of another date that no date holds, the thirtieth of February: no row comes
+     * along the way, so the ages are not read off what the region leaves there. Read there,
+     * they would be read of rows there are none of.
+     */
+    @Test
+    void statementsOfAnotherDateThatNoDateHoldsLeaveTheAgesUnread() {
+        List<String> unread = unread(divided(
+                readAgainBeside("Date.month(d) == 2 && Date.day(d) == 30")));
+
+        assertTrue(unread.containsAll(List.of("Date.year(on)", "Date.year(p.birthday)")),
+                unread.toString());
+    }
+
     /** The same comparison over whole numbers, which is how the section reads it. */
     @Test
     void aBoundOnOneNumberSettlesTheOtherWhereItIsAWholeNumber() {
