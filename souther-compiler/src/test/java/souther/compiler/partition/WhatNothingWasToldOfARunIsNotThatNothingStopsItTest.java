@@ -20,7 +20,7 @@ class WhatNothingWasToldOfARunIsNotThatNothingStopsItTest {
 
     @Test
     void whatWasToldIsWhatTheRowsGetPast() {
-        UndividedByARelation.Working told = UndividedByARelation.Working.NOTHING;
+        UndividedByARelation.Working told = UndividedByARelation.Working.AS_THE_FORM;
         assertSame(told, Cutting.whatWasToldOrNot(_ -> told).apply(null));
     }
 }

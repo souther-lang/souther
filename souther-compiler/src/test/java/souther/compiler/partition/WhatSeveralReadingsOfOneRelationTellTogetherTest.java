@@ -15,7 +15,7 @@ class WhatSeveralReadingsOfOneRelationTellTogetherTest {
 
     @Test
     void readingsThatAgreeTellWhatTheyAgreeOn() {
-        UndividedByARelation.Working same = UndividedByARelation.Working.NOTHING;
+        UndividedByARelation.Working same = UndividedByARelation.Working.AS_THE_FORM;
         assertEquals(same, UndividedByARelation.Working.together(List.of(same, same)));
     }
 
@@ -23,7 +23,6 @@ class WhatSeveralReadingsOfOneRelationTellTogetherTest {
     void readingsThatDifferTellNothingThatHoldsOfEveryRow() {
         assertEquals(UndividedByARelation.Working.UNREAD,
                 UndividedByARelation.Working.together(List.of(
-                        UndividedByARelation.Working.NOTHING,
+                        UndividedByARelation.Working.AS_THE_FORM,
                         UndividedByARelation.Working.UNREAD)));
-    }
-}
+    }}

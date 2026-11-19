@@ -11732,7 +11732,7 @@ final class Pullback {
             return false;
         }
         OnThisArm arm = new OnThisArm(() -> AffineReading.WorkedOut.ofWhatIsToldOf(worked),
-                () -> UndividedByARelation.Working.NOTHING, whatDecidedTheArm());
+                () -> UndividedByARelation.Working.AS_THE_FORM, whatDecidedTheArm());
         for (ArmRead each : arms) {
             trial().readOnAnArm(each, arm);
         }
@@ -11751,7 +11751,7 @@ final class Pullback {
             return null;
         }
         if (FormRange.liesWithin(ofTheInput, read, Map.of(), held.least(), held.greatest())) {
-            return UndividedByARelation.Working.NOTHING;
+            return UndividedByARelation.Working.NO_STOPS;
         }
         return new UndividedByARelation.Working(List.of(UndividedByARelation.IntOperation
                 .overTheInput(ofTheInput, held.least(), held.greatest(), List.of())),
@@ -13500,7 +13500,7 @@ final class Pullback {
         Once<AffineReading.WorkedOut> worksOut =
                 new Once<>(() -> worksOut(theRule, arithmeticOf(stated, there)));
         Once<UndividedByARelation.Working> evaluated = new Once<>(() -> answered == null
-                ? UndividedByARelation.Working.NOTHING
+                ? UndividedByARelation.Working.AS_THE_FORM
                 : AffineReading.workedOutByEvaluating(answered.value(), answered.at(), this.read));
         OnThisArm arm = new OnThisArm(worksOut, evaluated,
                 restatingAQuotient.get() ? List.of() : whatDecidedTheArm());

@@ -3105,7 +3105,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
     static UndividedByARelation.Working workedOutByEvaluating(Core expression, InputReads at,
                                                               InputReading ofTheInput) {
         if (WorkedOutToReachIt.of(ofTheInput).endsNoRun(new Denotation(expression, at))) {
-            return UndividedByARelation.Working.NOTHING;
+            return UndividedByARelation.Working.NO_STOPS;
         }
         return toldEvaluating(expression, at, ofTheInput).workedOut().stops().operations();
     }
@@ -3493,8 +3493,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         WorkedOut worksOut(WhatTheAnalysisAnswersFor answersFor) {
             WorkedOut beside = beside(new StoppedValues(node, nodeAt, false, ofTheInput,
                     answersFor));
+            // Beside the stop there is no operation, and the stop itself is no operation this
+            // tells: its sizes are what answer for it, so no run is shown to stop nowhere.
             return beside.toGetPast().operations().isEmpty() && beside.toGetPast().exact()
-                    ? new WorkedOut(UndividedByARelation.Working.NOTHING, beside.stops())
+                    ? new WorkedOut(UndividedByARelation.Working.AS_THE_FORM, beside.stops())
                     : beside;
         }
 

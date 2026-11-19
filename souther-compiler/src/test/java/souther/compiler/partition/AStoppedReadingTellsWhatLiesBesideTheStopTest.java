@@ -97,7 +97,7 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
 
     @Test
     void nothingBesideTheProductLeavesTheSizesOfTheFormToAnswer() {
-        assertEquals(UndividedByARelation.Working.NOTHING, workingOfTheStop("m * m >= 100"));
+        assertEquals(UndividedByARelation.Working.AS_THE_FORM, workingOfTheStop("m * m >= 100"));
     }
 
     /**
@@ -153,7 +153,7 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
     void aSecondStopIsNotTheFirstOnesToAnswerFor() {
         UndividedByARelation.Working working = workingOfTheStop("m * m + n / m >= 100");
         assertNotEquals(WhatARelationLeavesUndivided.Told.EVERY, working.told());
-        assertNotEquals(UndividedByARelation.Working.NOTHING, working);
+        assertNotEquals(UndividedByARelation.Working.AS_THE_FORM, working);
     }
 
     /**
@@ -177,8 +177,10 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
     void anOperationThatIsNoSumOfTheAddendsIsNotTheOwnersToAnswerFor() {
         assertUnread(workingOfTheStop("((m * m) + 1) - 1 >= 100"));
         assertUnread(workingOfTheStop("m * m + 5 >= 100"));
-        assertEquals(UndividedByARelation.Working.NOTHING, workingOfTheStop("m * m + n >= 100"));
-        assertEquals(UndividedByARelation.Working.NOTHING, workingOfTheStop("m * m * 2 >= 100"));
+        assertEquals(UndividedByARelation.Working.AS_THE_FORM,
+                workingOfTheStop("m * m + n >= 100"));
+        assertEquals(UndividedByARelation.Working.AS_THE_FORM,
+                workingOfTheStop("m * m * 2 >= 100"));
     }
 
     /**
@@ -188,7 +190,7 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
      */
     @Test
     void twoChoicesAreHeldAsideEachWithItsOwnNumbers() {
-        assertEquals(UndividedByARelation.Working.NOTHING, workingOfTheStop(OVER_CHOICES,
+        assertEquals(UndividedByARelation.Working.AS_THE_FORM, workingOfTheStop(OVER_CHOICES,
                 "(if p then 0 else 1) + (if q then 1 else 0) >= k"));
         assertUnread(workingOfTheStop(OVER_CHOICES,
                 "(if p then 0 else 1) + (if q then 9223372036854775807 else 0) >= k"));

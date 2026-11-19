@@ -27,7 +27,7 @@ class AnAbsorbedCandidateKeepsEveryComparisonItsArmsWereReadAsTest {
         Derivation alike = new Derivation.ACutThatCutsNothing(true, Set.of());
         Pullback.OnThisArm arm = new Pullback.OnThisArm(() ->
                 AffineReading.WorkedOut.ofWhatIsToldOf(UndividedByARelation.Working.UNREAD),
-                () -> UndividedByARelation.Working.NOTHING, List.of());
+                () -> UndividedByARelation.Working.AS_THE_FORM, List.of());
         Pullback.Trial kept = new Pullback.Trial();
         kept.readOnAnArm(new Pullback.ArmRead.OfARelation(relation), arm);
         kept.readOnAnArm(new Pullback.ArmRead.OfACutThatCutsNothing(cut), arm);

@@ -473,8 +473,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          *  its part, a difference, a remainder or quotient, and the lines drawn from them), whose
          *  form is the program's own expression and not a sum the walk composed. A relation read
          *  by the affine walk carries what that walk told instead. */
-        static final Working NOTHING =
+        static final Working AS_THE_FORM =
                 new Working(List.of(), WhatARelationLeavesUndivided.Told.NOTHING_SAID);
+
+        /** Every operation that can stop a run was told, and none can: a row gets past nothing,
+         *  and the sizes of the form say nothing of it. Not the same as {@link #AS_THE_FORM},
+         *  where no reading was made and the sizes of the form are what stops a row. */
+        static final Working NO_STOPS =
+                new Working(List.of(), WhatARelationLeavesUndivided.Told.EVERY);
 
         /** A comparison was read and nothing it told is known to belong to this relation: no row
          *  is shown computed. */
@@ -549,10 +555,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * worked out what decided the arm before it works out the arm.
          */
         Working after(Working earlier) {
-            if (earlier.equals(NOTHING)) {
+            if (earlier.equals(AS_THE_FORM)) {
                 return this;
             }
-            if (equals(NOTHING)) {
+            if (equals(AS_THE_FORM)) {
                 return earlier;
             }
             List<IntOperation> both = new ArrayList<>(earlier.operations);
@@ -598,7 +604,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                          List<FilingCoordinate> amongThemselves, Kind kind,
                          RemainderSide remainder) {
-        this(sides, constant, relation, amongThemselves, kind, remainder, Working.NOTHING, null);
+        this(sides, constant, relation, amongThemselves, kind, remainder, Working.AS_THE_FORM, null);
     }
 
     /** The same relation, read from a comparison that works out {@code working}. */
