@@ -90,6 +90,15 @@ class AReaderOfHowAnArmWasDecidedNamesEveryWayThereIsTest {
                     + " same question Conditions#settledBy answers as constraints over the check's"
                     + " terms, asked of the one reading of what a condition means over the input"));
 
+    static {
+        READERS.put("souther.compiler.partition.AffineReading$1#whereItIsTaken", "the numbers an"
+                + " arm's whole-number answer comes to where the arm is taken: a condition"
+                + " comparing that answer with a number written out holds it to that side of the"
+                + " number, and every other way of deciding states nothing of it. Read of the"
+                + " arithmetic of the comparison, which no reader of what a condition means over"
+                + " the input is handed");
+    }
+
     @Test
     void everyReaderOfHowAnArmWasDecidedNamesEveryWayThereIs() throws IOException {
         Set<String> ways = waysOfDeciding();

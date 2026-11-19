@@ -2324,13 +2324,34 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * what the condition deciding the arm states of that form, as the arm takes it: where the
              * condition compares the answer with a number written out, only the numbers it holds
              * at. Null where it holds at none, and the arm is taken by no run. An answer the
-             * condition says nothing of keeps its range.
+             * condition says nothing of keeps its range, and so does an arm decided any other
+             * way: a case of a value, an attempt built or departed from, and a case of a library
+             * operation state nothing of a number the arm answers.
              */
             private static FormRange whereItIsTaken(
                     FormRange range, LinearForm<NumericTerm> form, Choice.Decides decides,
                     InputReads at, AffineForms.Reading<NumericTerm, InputReads> apart) {
-                if (!(decides instanceof Choice.Decides.ACondition(Core.If fork, boolean holding))
-                        || !(Core.withoutStanding(fork.cond()) instanceof Core.Binary condition)
+                Core.If fork;
+                boolean holding;
+                switch (decides) {
+                    case Choice.Decides.ACondition condition -> {
+                        fork = condition.fork();
+                        holding = condition.holding();
+                    }
+                    case Choice.Decides.ACase _ -> {
+                        return range;
+                    }
+                    case Choice.Decides.ItWasBuilt _ -> {
+                        return range;
+                    }
+                    case Choice.Decides.ItDeparted _ -> {
+                        return range;
+                    }
+                    case Choice.Decides.ByArgumentRelations _ -> {
+                        return range;
+                    }
+                }
+                if (!(Core.withoutStanding(fork.cond()) instanceof Core.Binary condition)
                         || !(Comparison.of(condition).orElse(null) instanceof Comparison read)) {
                     return range;
                 }
