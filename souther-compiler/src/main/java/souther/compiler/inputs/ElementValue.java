@@ -14,6 +14,7 @@ import souther.compiler.check.Comparison;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.check.ValueStanding;
+import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.check.WholeRounding;
 import souther.compiler.check.DeclarationAccess;
 import souther.compiler.check.ElementAnswer;
@@ -37,6 +38,7 @@ import souther.compiler.types.ValueName;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -1555,8 +1557,9 @@ public sealed interface ElementValue {
      * the order it works them out, as a form of the numbers at the places of the elements, and
      * the product of two of them: what each comes to where it is worked out, and not what the
      * answer comes to once the arithmetic has simplified it — {@code (x + 2) - 1} comes to
-     * {@code x + 1}, and a run stops at the {@code x + 2}. Not what a choice in the answer holds,
-     * which some runs do not work out, nor an operation that is no such form.
+     * {@code x + 1}, and a run stops at the {@code x + 2}. Null where one of them is not read so:
+     * one a choice in the answer holds, which some runs do not work out, or one that is no such
+     * form.
      */
     static List<LinearForm<NumericTerm>> operationsOf(ElementAnswer answer,
                                                       Map<BindingId, Core> held,
@@ -1647,6 +1650,9 @@ public sealed interface ElementValue {
         private List<LinearForm<Atom>> operations;
         /** How many choices deep the walk is: what a choice holds is worked out on some runs. */
         private int insideChoices;
+        /** Whether an operation the answer works out was left out of {@link #operations}, being
+         *  in an arm or read as no form, so that they are not every one. */
+        private boolean leftSome;
 
         private Reader(BindingId element, BindingId position,
                        Map<BindingId, ElementProjection> standing, Map<BindingId, Core> held,
@@ -1661,8 +1667,8 @@ public sealed interface ElementValue {
             this.invariantAt = invariantAt;
         }
 
-        /** What {@link ElementValue#operationsOf} says: each operation the answer composes, kept
-         *  where it is a form of places of the element alone. */
+        /** What {@link ElementValue#operationsOf} says: each operation the answer composes, as a
+         *  form of places of the element alone, or null where one is not. */
         private static List<LinearForm<NumericTerm>> operationsOf(
                 ElementAnswer answer, Map<BindingId, Core> held, RuleReadingSource source,
                 ElementsAt elements) {
@@ -1686,11 +1692,12 @@ public sealed interface ElementValue {
                         break;
                     }
                 }
-                if (ofPlaces) {
-                    out.add(new LinearForm<>(form.constant(), terms));
+                if (!ofPlaces) {
+                    return null;
                 }
+                out.add(new LinearForm<>(form.constant(), terms));
             }
-            return out;
+            return reader.leftSome ? null : out;
         }
 
         /**
@@ -1705,14 +1712,25 @@ public sealed interface ElementValue {
                 return;
             }
             Core here = Core.withoutStanding(e);
+            Set<Core> recorded = Collections.newSetFromMap(new IdentityHashMap<>());
             for (Evaluated.Step step : Evaluated.inOrder(here)) {
                 if (step instanceof Evaluated.Step.Always(Core part)) {
+                    recorded.add(part);
                     recordOperationsOf(part);
                 }
             }
             if (here instanceof Core.LetIn let) {
+                recorded.add(let.body());
                 recordOperationsOf(let.body());
             }
+            // What runs only on some runs, an arm or the right of `&&`, is not recorded: where it
+            // may end a run, the operations kept are not every one. A function made here runs
+            // nothing. Nor is what the node itself works out, which read as no number of the
+            // element: a product of a choice and a number beside the element is one.
+            Core.forEachChild(here, child -> leftSome |= !recorded.contains(child)
+                    && !Evaluated.makesAFunction(child)
+                    && !WhatARunMayEndFor.endsNoneBeneath(child));
+            leftSome |= !WhatARunMayEndFor.itselfApartFromTheClosuresWrittenAtIt(here).endsNone();
         }
 
         /**
@@ -2369,8 +2387,18 @@ public sealed interface ElementValue {
                 @Override
                 public void composed(Core operation, LinearForm<Atom> form,
                                      List<LinearForm<Atom>> operands) {
-                    if (keeping() && Type.INT.equals(Core.withoutStanding(operation).type())) {
+                    if (Type.INT.equals(Core.withoutStanding(operation).type())) {
+                        keep(form);
+                    }
+                }
+
+                /** {@code form}, an operation the answer works out, kept where operations are;
+                 *  one in an arm is left out, and that one was is told. */
+                private void keep(LinearForm<Atom> form) {
+                    if (keeping()) {
                         operations.add(form);
+                    } else if (operations != null) {
+                        leftSome = true;
                     }
                 }
 
@@ -2385,25 +2413,27 @@ public sealed interface ElementValue {
                 @Override
                 public void answeredByTheLibrary(Core call, LinearForm<Atom> form,
                                                  WhereAnOperatorAnswers where) {
-                    if (keeping() && where instanceof
-                            WhereAnOperatorAnswers.WhereItsExactValueIsHeld
+                    if (where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld
                             && Type.INT.equals(Core.withoutStanding(call).type())) {
-                        operations.add(form);
+                        keep(form);
                     }
                 }
 
                 /** A value bound and not read by the body is worked out first all the same. */
                 @Override
                 public void bound(Core.LetIn binding, Map<BindingId, Core> at) {
-                    if (keeping()) {
+                    if (operations != null) {
                         recordOperationsOf(binding.value());
                     }
                 }
 
                 /** An operation the walk could not read has no form to keep: what it works out is
-                 *  told by nobody here, which is a limit of the record and not a finding. */
+                 *  told by nobody here, so the operations kept are not every one. */
                 @Override
                 public void unobserved(Core node) {
+                    if (operations != null) {
+                        leftSome = true;
+                    }
                 }
 
                 /** A call that folds to a number is the same on every run that has one, and
@@ -2431,7 +2461,7 @@ public sealed interface ElementValue {
                  *  of the comparison that stands over the number and not of an element's answer. */
                 @Override
                 public void constructed(Core.Construct construct, TypeView type,
-                                        LinearForm<Atom> value) {
+                                        LinearForm<Atom> value, Map<BindingId, Core> at) {
                 }
 
                 /** The position times a form of the places of the element, which is a form of the

@@ -92,6 +92,7 @@ import souther.compiler.inputs.ValuesAt;
 import souther.compiler.inputs.ValuesHeld;
 import souther.compiler.inputs.Watched;
 import souther.compiler.inputs.WhatAConstructionAsks;
+import souther.compiler.inputs.WhatARelationLeavesUndivided;
 import souther.compiler.inputs.WrittenOutElements;
 import souther.compiler.meaning.Conclusion;
 import souther.compiler.meaning.DecisionAtom;
@@ -3231,6 +3232,11 @@ final class Pullback {
          *  arithmetic stopped at among them, which tells what working them out may stop a run at;
          *  null where it reads none so. */
         private final Tallied.Value<Predicate<Core>> answersFor = said.value(null);
+        /** The totals the rule reads once for each way of keeping their elements and tells, on
+         *  each way, where working them out stops
+         *  ({@link AffineReading.WhatTheAnalysisAnswersFor#toldWhereItStops}). */
+        private final Tallied.Table<Core, Boolean> toldWhereItStops =
+                said.table(IdentityHashMap::new);
         /** The expressions the rule read as the form of one operand of theirs, each with that
          *  operand ({@link AffineReading.WhatTheAnalysisAnswersFor#readByTheFormOf}). */
         private final Tallied.Table<Core, Core> readByTheFormOf =
@@ -3260,6 +3266,21 @@ final class Pullback {
 
         void readByTheFormOf(Core call, Core dividend) {
             readByTheFormOf.put(call, dividend);
+        }
+
+        /** That the rule read {@code total} in one more way, and {@code told} whether it told
+         *  where working it out stops there. One way it did not tell it in is every way's. */
+        void tellsWhereItStops(Core total, boolean told) {
+            Core bare = Core.withoutStanding(total);
+            if (!told || toldWhereItStops.get(bare) == null) {
+                toldWhereItStops.put(bare, told);
+            }
+        }
+
+        /** Whether the rule tells where working out {@code held} stops, on every way it read it
+         *  in ({@link #tellsWhereItStops}). */
+        boolean toldWhereItStops(Core held) {
+            return Boolean.TRUE.equals(toldWhereItStops.get(held));
         }
 
         Core readByTheFormOf(Core held) {
@@ -3540,7 +3561,8 @@ final class Pullback {
                 held -> theRule.readByTheFormOf(Core.withoutStanding(held)),
                 held -> theRule.dividendBesideTheRows(Core.withoutStanding(held)),
                 this::boundValueOf,
-                held -> theRule.landsInAMonth(Core.withoutStanding(held))));
+                held -> theRule.landsInAMonth(Core.withoutStanding(held)),
+                held -> theRule.toldWhereItStops(Core.withoutStanding(held))));
     }
 
     /**
@@ -11664,19 +11686,76 @@ final class Pullback {
         return readWithTheAggregate(total, sum, metBefore, again);
     }
 
-    /** {@code again} read with what {@code total} adds up to, or counts, in this way of keeping
-     *  {@code form}. */
+    /**
+     * {@code again} read with what {@code total} adds up to, or counts, in this way of keeping
+     * {@code form}.
+     *
+     * <p>A total of whole numbers stops a run where it passes an {@code Int}: in this way, where
+     * the sum {@code form} of the elements it keeps does. That is told as what a run taking this
+     * way works out, as a choice's arm is ({@link #readOnAnArm}), and the rule then tells where
+     * working the total out stops — only where every way it reads the total in tells it.
+     */
     private Derivation readWithTheAggregate(Inside.ATotalByKeeping total,
                                             LinearForm<Quantity> form, ElementsMet.Mark metBefore,
                                             Function<UnaryOperator<InputReads>, Derivation> again) {
         AnAggregateInACase inThisWay = new AnAggregateInACase(total.call(), total.at(), form);
         try (Restore _ = aggregatesInACase.pushing(inThisWay)) {
-            return again.apply(on -> on);
+            Derivation read = again.apply(on -> on);
+            if (!total.counted() && Core.withoutStanding(total.call()).type() == Type.INT) {
+                trial().tellsWhereItStops(total.call(), toldOnTheArms(read, form));
+            }
+            return read;
         } finally {
             // The ways are independent readings of one comparison: what one met of the container's
             // elements is no part of what the next meets.
             elementsMet.get().rewind(metBefore);
         }
+    }
+
+    /**
+     * Whether where a total of whole numbers that comes to {@code form} stops is told on the way
+     * {@code read} reads it in: nowhere, where every number it may come to is an {@code Int}; and
+     * otherwise as what a run taking the way works out, recorded on each arm the reading has
+     * ({@link #readOnAnArm}). Not told where there is no reading, no arm to record it on, or no
+     * form of the input's numbers to tell: what says it was told is what was recorded.
+     */
+    private boolean toldOnTheArms(Derivation read, LinearForm<Quantity> form) {
+        UndividedByARelation.Working worked = whatAnIntTotalWorksOut(form);
+        if (worked == null) {
+            return false;
+        }
+        if (worked.operations().isEmpty()) {
+            return true;
+        }
+        List<ArmRead> arms = read == null ? List.of() : ArmRead.in(read);
+        if (arms.isEmpty()) {
+            return false;
+        }
+        OnThisArm arm = new OnThisArm(() -> AffineReading.WorkedOut.ofWhatIsToldOf(worked),
+                () -> UndividedByARelation.Working.NOTHING, whatDecidedTheArm());
+        for (ArmRead each : arms) {
+            trial().readOnAnArm(each, arm);
+        }
+        return true;
+    }
+
+    /**
+     * What a run works out making a total of whole numbers that comes to {@code form}: the one
+     * operation it is, held to an {@code Int}, or nothing where every number it may come to is
+     * one. Null where {@code form} is no form of the input's numbers.
+     */
+    private UndividedByARelation.Working whatAnIntTotalWorksOut(LinearForm<Quantity> form) {
+        LinearForm<NumericTerm> ofTheInput = WhatTheDeclarationsLeave.ofTheInput(form);
+        if (ofTheInput == null || !(WhereAnOperatorAnswers.ofATotal(Type.INT)
+                instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held)) {
+            return null;
+        }
+        if (FormRange.liesWithin(ofTheInput, read, Map.of(), held.least(), held.greatest())) {
+            return UndividedByARelation.Working.NOTHING;
+        }
+        return new UndividedByARelation.Working(List.of(UndividedByARelation.IntOperation
+                .overTheInput(ofTheInput, held.least(), held.greatest(), List.of())),
+                WhatARelationLeavesUndivided.Told.EVERY);
     }
 
     /**
@@ -12482,7 +12561,7 @@ final class Pullback {
 
             @Override
             public void constructed(Core.Construct construct, TypeView type,
-                                    LinearForm<Quantity> value) {
+                                    LinearForm<Quantity> value, InputReads at) {
                 if (asked != null && Core.withoutStanding(construct) == asked) {
                     composedAs.accept(value);
                 }

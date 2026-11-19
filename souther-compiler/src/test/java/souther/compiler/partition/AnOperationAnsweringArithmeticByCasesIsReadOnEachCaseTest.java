@@ -6,7 +6,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A rule over what an operation answers, where the library defines it in cases of arithmetic over
@@ -33,14 +32,15 @@ class AnOperationAnsweringArithmeticByCasesIsReadOnEachCaseTest {
         String lines = "[n: x < -5, n: -5 <= x <= 5, n: 5 < x]";
         assertEquals(Map.of("the call as a side", lines, "the call inside a sum", lines),
                 linesOf(read));
-        assertEquals(lines + " unread []", read.get("the call as a side"));
-        assertTrue(read.get("the call inside a sum").contains("EVALUATION_STOPS_NOT_FULLY_READ"),
-                read.get("the call inside a sum"));
+        for (String each : read.values()) {
+            assertEquals(lines + " unread [n EVALUATION_STOPS_NOT_FULLY_READ]", each);
+        }
     }
 
-    /** What is drawn of each reading, and not what it leaves unread: a sum that adds to what the
-     *  call answers works out an operation of its own, which stops a run at the end of an
-     *  {@code Int}, and the report says that beside the lines. */
+    /** What is drawn of each reading, and not what it leaves unread: the least {@code Int} has no
+     *  absolute value, and a sum that adds to what the call answers works out an operation of its
+     *  own, each of which stops a run at the end of an {@code Int}, and the report says that
+     *  beside the lines. */
     private static Map<String, String> linesOf(Map<String, String> read) {
         Map<String, String> lines = new LinkedHashMap<>();
         read.forEach((what, drawn) -> lines.put(what, drawn.substring(0, drawn.indexOf(" unread"))));

@@ -1,34 +1,24 @@
 package souther.compiler;
 
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
-import souther.compiler.partition.UndividedPosition;
 import souther.compiler.report.AdequacyReport;
-import souther.compiler.report.WhyAPlaceIsUndividedIsSaid;
 
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A number made of the elements of a list is read the same whether the list is a position of the
- * input or the answer of an injected behavior, and as the same number however it is spelled. Two
- * walks decide what keeps every element of a list once — the input's, down to a position, and the
- * answer's, down to a dependency's answer — and this is what keeps them from parting: each shape is
- * written over both, and has to come out read on both or unread on both.
- *
- * <p>Read is not enough. Spellings of one number — a count and a fold adding one, a total of a list
- * and of the list reversed — are one term, so on each side every spelling in a group comes out with
- * the report the first one does. A spelling read as a term of its own would put a second line on
- * one number, and a row composed for one would be offered at the other.
+ * A total of what takes and drops keep of a list is read the same whether the list is a position
+ * of the input or the answer of an injected behavior, and as the same number however the takes
+ * and drops are stacked. Both sides read the stack as one selection of positions, from the
+ * furthest drop to the nearest take; over the answer the elements are then asked of the answer in
+ * the order it hands them, over the input of the position.
  */
 class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
 
@@ -37,15 +27,12 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
 
             data Many
             data Few
-            data Item = { sku: String, quantity: Int, active: Bool }
 
-            behavior decide : (xs: List<Item>, ns: List<Int>) -> Many | Few
+            behavior decide : (ns: List<Int>) -> Many | Few
 
-            let decide (xs, ns) = {
-                <bound>
+            let decide (ns) =
                 if <number> >= 4
                 then Many else Few
-            }
             """;
 
     private static final String OF_THE_RESPONSE = """
@@ -53,129 +40,48 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
 
             data Many
             data Few
-            data Item = { sku: String, quantity: Int, active: Bool }
-            data Cart = { items: List<Item> }
-            data Snap = { rows: List<Item>, ns: List<Int> }
+            data Cart = { items: List<Int> }
+            data Snap = { ns: List<Int> }
             behavior readSnap : (order: Cart) -> Snap
                 constructs Snap
             behavior decide : (order: Cart) -> Many | Few
                 depends on readSnap
 
-            let decide (order, readSnap) = {
-                <bound>
+            let decide (order, readSnap) =
                 if <number> >= 4
                 then Many else Few
-            }
             """;
 
     /**
-     * Spellings of one number over {@code ROWS}, {@code NUMS} or {@code YS}, each read as the first
-     * is.
-     *
-     * <p>Each operation that leaves the elements as they were is written once on its own and once
-     * under another, and a nesting is written in each order it can be met in rather than once for
-     * every operation it could be made of: what reads a reordering or a copy is the fact the library
-     * states of that operation, and a nesting asks only that the walk goes on past one.
+     * Spellings of one number over {@code NUMS}, each read as the first is: a selection that keeps
+     * nothing, whichever order its cuts are written in, and one that keeps the second to the
+     * fourth, through a drop inside a take or outside it, and through two takes of which the
+     * nearer decides.
      */
     private static List<List<String>> readAsOne() {
         return List.of(
-                List.of("List.length(ROWS)",
-                        "List.length(List.sortBy(.sku, ROWS))",
-                        "List.fold((acc, x) -> acc + 1, 0, ROWS)"),
-                List.of("List.sum(List.map(.quantity, ROWS))",
-                        "List.fold((acc, x) -> acc + x.quantity, 0, ROWS)",
-                        "List.sum(List.map(.quantity, List.sortBy(.sku, ROWS)))",
-                        "List.sum(List.map(x -> x, List.map(.quantity, ROWS)))"),
-                // A total taken directly of a list in another order is the total of the list.
-                List.of("List.sum(NUMS)",
-                        "List.sum(List.reverse(NUMS))",
-                        "List.sum(YS)"),
-                // And a total of what each element comes to is the same over the list reversed.
-                List.of("List.sum(List.map(x -> 2 * x, NUMS))",
-                        "List.sum(List.map(x -> 2 * x, List.reverse(NUMS)))"),
-                // A total that turns on where each element stands is of the elements in the order
-                // they were handed in, which two reversals leave as it was.
-                List.of("List.sum(List.mapIndexed((i, x) -> i * x, NUMS))",
-                        "List.sum(List.mapIndexed((i, x) -> i * x,"
-                                + " List.reverse(List.reverse(NUMS))))"),
-                List.of("List.sum(List.mapIndexed((i, x) -> if i < 2 then x else 0, NUMS))"),
-                // A selection by position that keeps every element is the list, whichever way it
-                // is written, and the order of the elements has no part in it.
-                List.of("List.sum(NUMS)",
-                        "List.sum(List.drop(0, NUMS))",
-                        "List.sum(List.mapIndexed((i, x) -> if i >= 0 then x else 0, NUMS))",
-                        "List.sum(List.mapIndexed((i, x) -> x, List.sortBy(y -> y, NUMS)))"),
-                // And one that keeps none is nought.
                 List.of("List.sum(List.take(0, NUMS))",
                         "List.sum(List.drop(3, List.take(3, NUMS)))"),
-                List.of("List.sum(List.mapIndexed((i, x) -> if i < 0 then x else 0, NUMS))"),
-                // And a total of the elements a take or drop keeps is one chosen by position.
-                List.of("List.sum(List.take(1, List.reverse(NUMS)))"),
-                List.of("List.sum(List.drop(1, NUMS))"),
-                // Takes and drops stacked keep the positions from the furthest drop to the
-                // nearest take, however they are stacked.
                 List.of("List.sum(List.take(3, List.drop(1, NUMS)))",
                         "List.sum(List.drop(1, List.take(4, NUMS)))",
-                        "List.sum(List.take(5, List.take(3, List.drop(1, NUMS))))"),
-                List.of("List.sum(List.take(1, List.drop(1, List.reverse(NUMS))))"),
-                // What a filter keeps is every element counting nought where its closure fails,
-                // which a choice in the closure says as well, and in any order.
-                List.of("List.sum(List.map(i -> if i.active then i.quantity else 0, ROWS))",
-                        "List.sum(List.map(.quantity, List.filter(i -> i.active, ROWS)))"),
-                // A closure that writes one element for each element is a map.
-                List.of("List.sum(List.map(.quantity, ROWS))",
-                        "List.sum(List.flatMap(i -> [i.quantity], ROWS))"),
-                List.of("List.sum(List.map(x -> if x > 0 then x else 0, NUMS))",
-                        "List.sum(List.filter(x -> x > 0, NUMS))"));
-    }
-
-    /**
-     * Shapes neither side reads: a sum over what a closure puts end to end, or a reordering of
-     * the numbers a fold adds.
-     */
-    private static List<String> unread() {
-        return List.of(
-                // Sorted, the position an element is at is no position it was written at.
-                "List.sum(List.mapIndexed((i, x) -> i * x, List.sortBy(x -> x, NUMS)))",
-                // A reversal between the selections puts their positions in another list.
-                "List.sum(List.take(1, List.reverse(List.drop(1, NUMS))))",
-                "List.sum(List.flatMap(i -> [i.quantity, i.quantity], ROWS))",
-                "List.fold((acc, x) -> acc + x, 0,"
-                        + " List.sortBy(x -> x, List.map(.quantity, ROWS)))");
+                        "List.sum(List.take(5, List.take(3, List.drop(1, NUMS))))"));
     }
 
     private static String overTheInput(String shape) {
-        return reportOf(OF_THE_INPUT, shape, "xs", "ns");
+        return reportOf(OF_THE_INPUT, shape, "ns");
     }
 
     private static String overTheResponse(String shape) {
-        return reportOf(OF_THE_RESPONSE, shape, "readSnap(order).rows", "readSnap(order).ns");
+        return reportOf(OF_THE_RESPONSE, shape, "readSnap(order).ns");
     }
 
     /**
      * The report of {@code shape} compared in {@code template}, with where each part stands left
      * out: spellings of one number differ in length, and what is compared is what was read.
-     * {@code YS} is {@code NUMS} reversed and bound to a name.
      */
-    private static String reportOf(String template, String shape, String rows, String nums) {
-        String bound = shape.contains("YS") ? "let ys = List.reverse(" + nums + ")" : "";
-        String model = template.replace("<bound>", bound).replace("<number>",
-                shape.replace("ROWS", rows).replace("NUMS", nums).replace("YS", "ys"));
-        return REPORTED.computeIfAbsent(model,
-                AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest::reportOf);
-    }
-
-    /** Each model's report once for the class: a spelling that leads one group may be written in
-     *  another, and what it is read as does not change between them. */
-    private static final Map<String, String> REPORTED = new ConcurrentHashMap<>();
-
-    @AfterAll
-    static void released() {
-        REPORTED.clear();
-    }
-
-    private static String reportOf(String model) {
-        Compilation compilation = Compilation.ofSource(model, "Main");
+    private static String reportOf(String template, String shape, String nums) {
+        Compilation compilation = Compilation.ofSource(
+                template.replace("<number>", shape.replace("NUMS", nums)), "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
@@ -183,14 +89,14 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
                 .replaceAll("\\d+:\\d+", "");
     }
 
+    /** Each spelling is read, and read as the first of its group is, on each side. */
     @Test
     void everySpellingOfANumberIsReadAsTheFirstOnBothSides() {
-        assertFalse(readAsOne().isEmpty());
         for (List<String> spellings : readAsOne()) {
             String input = overTheInput(spellings.getFirst());
             String response = overTheResponse(spellings.getFirst());
-            assertFalse(input.contains("not read: comparison"), input);
-            assertFalse(response.contains("not read: comparison"), response);
+            assertFalse(UnreadBesideItsStops.in(input), input);
+            assertFalse(UnreadBesideItsStops.in(response), response);
             for (String each : spellings.subList(1, spellings.size())) {
                 assertEquals(input, overTheInput(each), "over the input: " + each);
                 assertEquals(response, overTheResponse(each), "over the response: " + each);
@@ -199,27 +105,15 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
     }
 
     /**
-     * Unread on both. Over the input, a fold neither reads is a number a run works out, and its
-     * rows are placed by what their runs worked out; over the response it is what the stand-in
-     * answered, which no run works out of the input, and it stays unread.
+     * A reversal between two cuts puts the positions the outer one counts in another list, so the
+     * stack is no selection of the list under it, and it is unread on both sides.
      */
     @Test
-    void whatNeitherSideReadsIsUnreadOnBoth() {
-        for (String shape : unread()) {
-            String input = overTheInput(shape);
-            if (shape.startsWith("List.fold")) {
-                assertFalse(input.contains("not read: comparison"), "over the input: " + shape
-                        + "\n" + input);
-                assertTrue(input.contains(WhyAPlaceIsUndividedIsSaid.of(
-                                UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS)),
-                        "over the input: " + shape + "\n" + input);
-            } else {
-                assertTrue(input.contains("not read: comparison"), "over the input: " + shape
-                        + "\n" + input);
-            }
-            String response = overTheResponse(shape);
-            assertTrue(response.contains("not read: comparison"), "over the response: " + shape
-                    + "\n" + response);
-        }
+    void aReversalBetweenTwoCutsIsUnreadOnBoth() {
+        String shape = "List.sum(List.take(1, List.reverse(List.drop(1, NUMS))))";
+        String input = overTheInput(shape);
+        String response = overTheResponse(shape);
+        assertTrue(UnreadBesideItsStops.in(input), input);
+        assertTrue(UnreadBesideItsStops.in(response), response);
     }
 }

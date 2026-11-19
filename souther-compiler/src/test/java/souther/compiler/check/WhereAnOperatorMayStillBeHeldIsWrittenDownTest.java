@@ -576,6 +576,15 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.AddedOfEachElement.addsTo",
                     "asks whether the answer so far is added along sums and differences from"
                             + " the top, and taken from nothing"),
+            new Held("souther.compiler.partition.AddedOfEachElement.heldOverEveryStep",
+                    "works out where the answer so far lies after the most steps there are: what a"
+                            + " step moves it by, times how many steps, added to the seed"),
+            new Held("souther.compiler.partition.WorkedOutToReachIt.aTotalWithinAnInt",
+                    "works out where a total lies: what each element comes to times the most"
+                            + " elements there are"),
+            new Held("souther.compiler.partition.WorkedOutToReachIt.whatItComesTo",
+                    "hands the operator a run works out to the arithmetic of the numbers its"
+                            + " operands come to, for whether it passes its type"),
             new Held("souther.compiler.partition.AddedOfEachElement.Checker.checked",
                     "works out what each operation of an element's part comes to from what its"
                             + " operands do, and asks whether a sum with the answer so far from"

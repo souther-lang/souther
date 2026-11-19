@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.UnreadBesideItsStops;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -48,6 +49,12 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
         return "· not read: comparison@" + at + " — what it states was read, and it relates the"
                 + " value here to another value not shown to reach every value here, so which values"
                 + " here settle it on their own is not worked out, about `" + position + "`";
+    }
+
+    private static String untold(String at, String position) {
+        return "· not read: comparison@" + at + " — what it states was read, but a run evaluating"
+                + " it works out an operation that may end the run where nothing here says, so the"
+                + " rows a run gets past it with are not shown, about `" + position + "`";
     }
 
     private static String overARegion(String at, String position) {
@@ -159,9 +166,12 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
                 """));
     }
 
+    /** A piece wrapped in a newtype is the same piece. Making it checks the invariant, which a
+     *  piece shorter than three refuses, and nothing in the comparison tells of that stop. */
     @Test
     void aPieceWrappedInANewtypeIsTheSamePiece() {
-        assertEquals(Set.of(notShown("6:36", "d"), notShown("6:36", "email")), Set.copyOf(said("""
+        assertEquals(Set.of(notShown("6:36", "d"), notShown("6:36", "email"),
+                untold("6:36", "d"), untold("6:36", "email")), Set.copyOf(said("""
                 module w1
                 data Domain = String
                     invariant String.length(value) >= 3
@@ -169,5 +179,15 @@ class AValueHeldAgainstAPieceOfASplitRelatesTheTwoTest {
                     constructs Domain
                 let m (email, d) = List.any(p -> p == d, List.map(x -> Domain(x), String.split("@", email)))
                 """)));
+        // With no invariant, making it stops no run, and no stop is left untold.
+        List<String> free = said("""
+                module w1
+                data Domain = String
+                behavior m : (email: String, d: Domain) -> Bool
+                    constructs Domain
+                let m (email, d) = List.any(p -> p == d, List.map(x -> Domain(x), String.split("@", email)))
+                """);
+        assertTrue(free.stream().noneMatch(line -> line.contains(
+                UnreadBesideItsStops.STOPS_NOT_ALL_TOLD)), free::toString);
     }
 }
