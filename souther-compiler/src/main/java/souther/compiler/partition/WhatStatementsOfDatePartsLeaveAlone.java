@@ -23,8 +23,9 @@ import java.util.Set;
  * date that is the same in every year, or at one year of each date in which every month and day
  * is still one.
  *
- * <p>The statements are of dates the caller has shown nothing restricts, and every term of them is
- * a month, a day or a year of one of those dates.
+ * <p>The statements are of dates the caller has shown nothing restricts but ends on the date,
+ * which are told as the days each may be, and every term of them is a month, a day or a year of
+ * one of those dates.
  */
 final class WhatStatementsOfDatePartsLeaveAlone {
 
@@ -40,14 +41,17 @@ final class WhatStatementsOfDatePartsLeaveAlone {
 
     /**
      * Whether the years of the dates are left to the calendar by {@code statements} of their
-     * months and days: some month and day of each date holds all of them at once, and is the same
-     * in every year.
+     * months and days: in each kind of year each date has, some month and day of it holds all of
+     * them at once together with one of each kind of year the other has, so that every year of
+     * the one goes with every year of the other ({@link DatesThatStandInEveryYear#byTheYearsOf}).
      *
      * @param yearShifts the moves of each date whose years are asked, which a month and day must
      *                   keep the date in the year of
+     * @param days       the dates each date may be, as the days a move by nothing is defined at
      */
     static boolean leavesTheYears(List<TakenConstraint.Affine> statements,
-                                  Map<TermPath, List<DateTranslation>> yearShifts) {
+                                  Map<TermPath, List<DateTranslation>> yearShifts,
+                                  Map<TermPath, DateTranslation> days) {
         Map<TermPath, Set<NumericTerm.TakenOf>> partsOfEachDate = new LinkedHashMap<>();
         for (TakenConstraint.Affine each : statements) {
             for (NumericTerm term : each.form().coefs().keySet()) {
@@ -61,24 +65,62 @@ final class WhatStatementsOfDatePartsLeaveAlone {
             return false;
         }
         List<List<NumericTerm.TakenOf>> terms = new ArrayList<>();
-        List<List<DatesThatStandInEveryYear.Origin>> standing = new ArrayList<>();
+        List<List<List<DatesThatStandInEveryYear.Origin>>> kinds = new ArrayList<>();
         for (Map.Entry<TermPath, Set<NumericTerm.TakenOf>> date : partsOfEachDate.entrySet()) {
             List<NumericTerm.TakenOf> parts = List.copyOf(date.getValue());
+            DateTranslation held = days.get(date.getKey());
             List<DatesThatStandInEveryYear.Part> asked = new ArrayList<>();
             for (NumericTerm.TakenOf part : parts) {
+                DateTranslation moved = within(part.transformation().translation(), held);
+                if (moved == null) {
+                    return false;
+                }
                 asked.add(new DatesThatStandInEveryYear.Part(
-                        ((TakenAs.PartOfDate) part.takenAs()).part(),
-                        part.transformation().translation()));
+                        ((TakenAs.PartOfDate) part.takenAs()).part(), moved));
             }
-            List<DatesThatStandInEveryYear.Origin> alike = DatesThatStandInEveryYear.of(asked,
-                    yearShifts.getOrDefault(date.getKey(), List.of()));
-            if (alike.isEmpty()) {
+            List<DateTranslation> shifts = new ArrayList<>();
+            for (DateTranslation each : yearShifts.getOrDefault(date.getKey(), List.of())) {
+                DateTranslation moved = within(each, held);
+                if (moved == null) {
+                    return false;
+                }
+                shifts.add(moved);
+            }
+            List<List<DatesThatStandInEveryYear.Origin>> ofTheYears =
+                    DatesThatStandInEveryYear.byTheYearsOf(asked, shifts);
+            if (ofTheYears == null) {
                 return false;
             }
             terms.add(parts);
-            standing.add(alike);
+            kinds.add(ofTheYears);
         }
-        return someChoiceHoldsAll(statements, terms, standing);
+        return everyKindHoldsAll(statements, terms, kinds, new ArrayList<>());
+    }
+
+    /** {@code move}, defined only at the dates {@code days} says the date may be, or null where
+     *  nothing says or that leaves none. */
+    private static DateTranslation within(DateTranslation move, DateTranslation days) {
+        return days == null ? null : move.definedOnlyWhere(days);
+    }
+
+    /** Whether some choice holds every statement at each kind of year of each date, taken with
+     *  each kind of the dates after it: {@code chosen} holds the kinds taken of those before. */
+    private static boolean everyKindHoldsAll(
+            List<TakenConstraint.Affine> statements, List<List<NumericTerm.TakenOf>> terms,
+            List<List<List<DatesThatStandInEveryYear.Origin>>> kinds,
+            List<List<DatesThatStandInEveryYear.Origin>> chosen) {
+        if (chosen.size() == kinds.size()) {
+            return someChoiceHoldsAll(statements, terms, chosen);
+        }
+        for (List<DatesThatStandInEveryYear.Origin> kind : kinds.get(chosen.size())) {
+            chosen.add(kind);
+            boolean holds = everyKindHoldsAll(statements, terms, kinds, chosen);
+            chosen.removeLast();
+            if (!holds) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -86,13 +128,18 @@ final class WhatStatementsOfDatePartsLeaveAlone {
      * days of the dates are left to the calendar: the years hold all the statements together,
      * and in each every month and day the sides take of the date still is one.
      *
+     * <p>Each move is told the dates its date may be first, so a year is chosen only where every
+     * month and day asked is one of them ({@link YearsAWayAllows#choose}).
+     *
      * @param partsAsked the months and days the sides take of each date
+     * @param days       the dates each date may be, as the days a move by nothing is defined at
      * @return the years, with the moves the statements take the dates' years after, or null where
      *         there are none
      */
     static YearsChosen leavesTheMonthsAndDays(
             List<TakenConstraint.Affine> statements,
-            Map<TermPath, List<DatesThatStandInEveryYear.Part>> partsAsked) {
+            Map<TermPath, List<DatesThatStandInEveryYear.Part>> partsAsked,
+            Map<TermPath, DateTranslation> days) {
         Map<TermPath, Integer> dates = new LinkedHashMap<>();
         Map<TermPath, List<DateTranslation>> shifts = new LinkedHashMap<>();
         List<YearsAWayAllows.Statement> asked = new ArrayList<>();
@@ -101,7 +148,11 @@ final class WhatStatementsOfDatePartsLeaveAlone {
             for (Map.Entry<NumericTerm, ExactRatio> term : each.form().coefs().entrySet()) {
                 NumericTerm.TakenOf taken = (NumericTerm.TakenOf) term.getKey();
                 int date = dates.computeIfAbsent(taken.position(), _ -> dates.size());
-                DateTranslation moved = taken.transformation().translation();
+                DateTranslation moved = within(taken.transformation().translation(),
+                        days.get(taken.position()));
+                if (moved == null) {
+                    return null;
+                }
                 years.add(new YearsAWayAllows.Year(date, term.getValue(), moved));
                 shifts.computeIfAbsent(taken.position(), _ -> new ArrayList<>()).add(moved);
             }
@@ -112,7 +163,15 @@ final class WhatStatementsOfDatePartsLeaveAlone {
         }
         List<List<DatesThatStandInEveryYear.Part>> parts = new ArrayList<>();
         for (TermPath date : dates.keySet()) {
-            parts.add(partsAsked.getOrDefault(date, List.of()));
+            List<DatesThatStandInEveryYear.Part> ofIt = new ArrayList<>();
+            for (DatesThatStandInEveryYear.Part part : partsAsked.getOrDefault(date, List.of())) {
+                DateTranslation moved = within(part.moved(), days.get(date));
+                if (moved == null) {
+                    return null;
+                }
+                ofIt.add(new DatesThatStandInEveryYear.Part(part.which(), moved));
+            }
+            parts.add(ofIt);
         }
         int[] chosen = YearsAWayAllows.choose(asked, parts);
         if (chosen == null) {

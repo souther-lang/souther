@@ -529,6 +529,14 @@ public sealed interface ReportMessage extends Message {
     record MayStopARun(String rule, Message every, Message asks, String calls)
             implements ReportMessage, Prose {}
 
+    /**
+     * The invariant an author may declare on {@code data}, the data holding an input, that keeps
+     * every run from the stop said above it, where that stop is where the representation of a
+     * number stops: the furthest out a bound can be, which the domain may put further in.
+     */
+    record ABoundOnTheInputKeepsEveryRunGoing(String data, String invariant)
+            implements ReportMessage, Prose {}
+
     /** What one construction on the way to a rule asks of a run that works it out. */
     record ConstructionAsks(String construction, String at, String asked)
             implements ReportMessage, Prose {}

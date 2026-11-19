@@ -31,7 +31,8 @@ class ARunGetsPastTheOperationsAtTheWitnessOfARemainderTest {
 
     private static UndividedByARelation.IntOperation over(
             LinearForm<NumericTerm> form) {
-        return UndividedByARelation.IntOperation.overTheInput(form, LEAST, GREATEST, List.of());
+        return UndividedByARelation.IntOperation.overTheInput(form, LEAST, GREATEST, List.of(),
+                true);
     }
 
     private static LinearForm<NumericTerm> weighing(NumericTerm number, long weight,

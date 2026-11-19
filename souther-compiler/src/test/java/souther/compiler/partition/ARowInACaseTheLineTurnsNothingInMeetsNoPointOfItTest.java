@@ -239,8 +239,11 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
                 """.replace("WRITTEN", written).replace("ROW", String.join(", ", row)))
                 .json(SourceRendering.namedByIdentity(SourceLayouts.NONE)));
         // The comparison inside the statement draws a line of its own on x, at one: y is held at
-        // nought or above, so x from one on holds it whatever y is. The line asked about is the
-        // statement's, drawn where the part of it that is x turns.
+        // nought or above, so x from one on holds it whatever y is. It is written once in each way
+        // of the statement, and each writing a row gets to draws that line: the one after the
+        // first is got to where the first held and where it failed, and comes out as the first
+        // did on each side of one. The line asked about is the statement's, drawn where the part
+        // of it that is x turns.
         List<JsonNode> onX = new ArrayList<>();
         borders(report, "e/x", onX);
         List<String> besideIt = new ArrayList<>();
@@ -251,8 +254,8 @@ class ARowInACaseTheLineTurnsNothingInMeetsNoPointOfItTest {
             }
             return !kind.equals("part_of_comparison");
         });
-        assertEquals(List.of("comparison"), besideIt,
-                () -> "beside it, the comparison's own line at one: " + besideIt);
+        assertEquals(List.of("comparison", "comparison"), besideIt,
+                () -> "beside it, each writing of the comparison's own line at one: " + besideIt);
         assertEquals(1, onX.size(), () -> "one line on x, read in every case it turns in: " + onX);
         List<JsonNode> atTheLine = new ArrayList<>();
         onX.getFirst().path("items").forEach(item -> {

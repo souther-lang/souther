@@ -1,12 +1,18 @@
 package souther.compiler.inputs;
 
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactCut;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
+import souther.compiler.numeric.NumericDomain;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.TreeSet;
 
 /**
@@ -173,6 +179,171 @@ public record EachWayItComesOut(Granularity spacing, List<Stretch> stretches) {
             out.add(here);
         }
         return new EachWayItComesOut(spacing, out);
+    }
+
+    /**
+     * What one way's reading of the term ({@code leaves}) shows of each way the statement comes
+     * out, the term lying in {@code lies} along the way: both reached at every value where it is
+     * left either way, the way a run settles it to not shown and the other never reached at every
+     * value of the run, and no value of the term past where it may lie. Null where the reading is
+     * neither, says of some values that no row there is shown computed, or an end is no number.
+     *
+     * <p>That a run settles the statement says how a row there would come out, and not that there
+     * is one, so the way it comes out there is not shown reached.
+     */
+    public static EachWayItComesOut of(WhatARelationLeavesUndivided.Leaves leaves,
+                                       NumericDomain.Bounds lies, Granularity spacing) {
+        return switch (leaves) {
+            case null -> null;
+            case WhatARelationLeavesUndivided.Leaves.Undivided _ -> {
+                if (lies == null) {
+                    yield null;
+                }
+                ExactCut from = cutOf(lies.min());
+                ExactCut to = cutOf(lies.max());
+                yield (lies.min() != null && from == null) || (lies.max() != null && to == null)
+                        ? null : new EachWayItComesOut(spacing,
+                                List.of(new Stretch(from, to, Shown.REACHED, Shown.REACHED)));
+            }
+            case WhatARelationLeavesUndivided.Leaves.Settled settled -> {
+                if (!settled.noRowShownComputed().isEmpty()) {
+                    yield null;
+                }
+                // From the least the term holds, each run settling it and the values before it
+                // left either way, and after the last run the values up to the greatest.
+                List<Stretch> out = new ArrayList<>();
+                ExactCut next = settled.least();
+                boolean toTheEnd = true;
+                for (WhatARelationLeavesUndivided.SettledRun run : settled.runs()) {
+                    ExactCut start = run.from() == null ? next : run.from();
+                    if (run.from() != null && !eitherWay(out, spacing, next, endBefore(start))) {
+                        yield null;
+                    }
+                    out.add(new Stretch(start, run.to(),
+                            run.holds() ? Shown.NOT_SHOWN : Shown.NEVER,
+                            run.holds() ? Shown.NEVER : Shown.NOT_SHOWN));
+                    if (run.to() == null) {
+                        toTheEnd = false;
+                        break;
+                    }
+                    next = startAfter(run.to());
+                }
+                if (toTheEnd && !eitherWay(out, spacing, next, settled.greatest())) {
+                    yield null;
+                }
+                yield new EachWayItComesOut(spacing, out);
+            }
+        };
+    }
+
+    /** {@code out} with the values from {@code from} to {@code to} reached both ways where some
+     *  value lies between them; false where whether one does is not worked out. */
+    private static boolean eitherWay(List<Stretch> out, Granularity spacing, ExactCut from,
+                                     ExactCut to) {
+        Lattice.Occupancy occupancy = Lattice.occupancy(spacing, from, to);
+        if (occupancy == Lattice.Occupancy.HOLDS) {
+            out.add(new Stretch(from, to, Shown.REACHED, Shown.REACHED));
+        }
+        return occupancy != Lattice.Occupancy.UNKNOWN;
+    }
+
+    /** {@code end} as the end of a run of the term, or null where it is no number. */
+    private static ExactCut cutOf(Endpoint end) {
+        return end != null && end.at() instanceof Count count
+                ? new ExactCut(count.exactly(), end.inclusive()) : null;
+    }
+
+    /**
+     * The rows of these at which the statement comes out {@code holds}: a way whose own
+     * statements decide it keeps those and no other, so the other way is never reached, and a
+     * value it was never reached the first way at holds no row of it.
+     */
+    public EachWayItComesOut comingOut(boolean holds) {
+        List<Stretch> out = new ArrayList<>();
+        for (Stretch each : stretches) {
+            out.add(new Stretch(each.from(), each.to(), holds ? each.holding() : Shown.NEVER,
+                    holds ? Shown.NEVER : each.failing()));
+        }
+        return new EachWayItComesOut(spacing, out);
+    }
+
+    /**
+     * What this leaves the term as a relation's reading says it ({@link
+     * WhatARelationLeavesUndivided.Leaves}): divided by nothing where both ways are reached at
+     * every value some row may hold, or where the statement comes out one way at all of them;
+     * the runs at which one way is never reached settling it the other, every other value
+     * reached both ways — or null where some value may come out either way and is not shown
+     * reached both, or a value no row holds lies between values some row may hold.
+     *
+     * @param ofTheTypeAlone lines the readings this was made of said the orders' ends alone draw
+     * @param ofTheModel     lines they said the model draws
+     */
+    public WhatARelationLeavesUndivided.Leaves leaves(
+            Set<WhatARelationLeavesUndivided.Line> ofTheTypeAlone,
+            Set<WhatARelationLeavesUndivided.Line> ofTheModel) {
+        List<Stretch> held = new ArrayList<>(stretches);
+        while (!held.isEmpty() && noRow(held.getFirst())) {
+            held.removeFirst();
+        }
+        while (!held.isEmpty() && noRow(held.getLast())) {
+            held.removeLast();
+        }
+        if (held.isEmpty()) {
+            return null;
+        }
+        boolean whole = spacing == Granularity.DISCRETE;
+        List<WhatARelationLeavesUndivided.SettledRun> runs = new ArrayList<>();
+        boolean bothSomewhere = false;
+        for (Stretch each : held) {
+            if (noRow(each)) {
+                return null;
+            }
+            boolean mayHold = each.holding() != Shown.NEVER;
+            boolean mayFail = each.failing() != Shown.NEVER;
+            if (mayHold && mayFail) {
+                if (each.holding() != Shown.REACHED || each.failing() != Shown.REACHED) {
+                    return null;
+                }
+                bothSomewhere = true;
+            } else {
+                runs.add(new WhatARelationLeavesUndivided.SettledRun(lower(each.from(), whole),
+                        upper(each.to(), whole), mayHold));
+            }
+        }
+        if (runs.isEmpty() || (!bothSomewhere && runs.size() == 1)) {
+            return new WhatARelationLeavesUndivided.Leaves.Undivided();
+        }
+        WhatARelationLeavesUndivided.Leaves.Settled settled =
+                new WhatARelationLeavesUndivided.Leaves.Settled(runs,
+                        lower(held.getFirst().from(), whole), upper(held.getLast().to(), whole),
+                        whole, List.of(), List.of());
+        return new WhatARelationLeavesUndivided.Leaves.Settled(runs, settled.least(),
+                settled.greatest(), whole, settled.lines().stream()
+                        .filter(line -> ofTheTypeAlone.contains(line)
+                                && !ofTheModel.contains(line)).toList(), List.of());
+    }
+
+    private static boolean noRow(Stretch stretch) {
+        return stretch.holding() == Shown.NEVER && stretch.failing() == Shown.NEVER;
+    }
+
+    /** {@code start} as the least value a run of whole numbers holds where it is one, so that
+     *  the lines drawn of it name the number they are at. */
+    private static ExactCut lower(ExactCut start, boolean whole) {
+        if (start == null || !whole || start.inclusive()) {
+            return start;
+        }
+        BigInteger least = start.at().floor().map(each -> each.add(BigInteger.ONE)).orNull();
+        return least == null ? start : ExactCut.inclusive(ExactRatio.of(least));
+    }
+
+    /** {@code end} as the greatest value a run of whole numbers holds, as {@link #lower}. */
+    private static ExactCut upper(ExactCut end, boolean whole) {
+        if (end == null || !whole || end.inclusive()) {
+            return end;
+        }
+        BigInteger most = end.at().ceiling().map(each -> each.subtract(BigInteger.ONE)).orNull();
+        return most == null ? end : ExactCut.inclusive(ExactRatio.of(most));
     }
 
     /** The stretch holding every value from {@code from} up to the next place one starts or

@@ -10,6 +10,7 @@ import souther.compiler.numeric.Rel;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -315,9 +316,9 @@ class WhatStatementsOfOneFormDecideTest {
                             all.get(third));
                     for (Written asked : asks) {
                         assertEquals(everyValueBetween(stated, asked),
-                                WhatStatementsOfOneFormDecide.of(
+                                told(WhatStatementsOfOneFormDecide.of(
                                         stated.stream().map(Written::affine).toList(),
-                                        asked.affine()),
+                                        asked.affine())),
                                 stated + " asking " + asked);
                     }
                 }
@@ -337,8 +338,9 @@ class WhatStatementsOfOneFormDecideTest {
         }
     }
 
-    private static WhatStatementsOfOneFormDecide.Verdict everyValueBetween(
-            List<Written> stated, Written asked) {
+    /** Whether no row arrives, and how the relation asked comes out where it is decided: null
+     *  where it is not. */
+    private static List<Object> everyValueBetween(List<Written> stated, Written asked) {
         boolean any = false;
         Set<Boolean> askedAt = new HashSet<>();
         for (int quarters = -40; quarters <= 40; quarters++) {
@@ -351,7 +353,12 @@ class WhatStatementsOfOneFormDecideTest {
                 askedAt.add(asked.holdsAt(quarters));
             }
         }
-        return new WhatStatementsOfOneFormDecide.Verdict(!any, any && askedAt.size() == 1);
+        return Arrays.asList(!any, any && askedAt.size() == 1 ? askedAt.iterator().next() : null);
+    }
+
+    /** What {@link #everyValueBetween} says, of a verdict. */
+    private static List<Object> told(WhatStatementsOfOneFormDecide.Verdict verdict) {
+        return Arrays.asList(verdict.noRowArrives(), verdict.comesOut());
     }
 
     @Test

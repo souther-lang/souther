@@ -48,7 +48,8 @@ class WhatACandidateHasSaidMovesWithEveryWayOfSayingItTest {
     private static List<Consumer<Pullback.Trial>> waysOfSaying() {
         Relation relation = new Relation.Affine(LinearForm.constant(ExactRatio.ZERO), Rel.GE);
         UndividedByARelation.IntOperation operation = new UndividedByARelation.IntOperation(
-                LinearForm.constant(ExactRatio.ZERO), BigInteger.ZERO, BigInteger.ONE, List.of());
+                LinearForm.constant(ExactRatio.ZERO), BigInteger.ZERO, BigInteger.ONE, List.of(),
+                true);
         return List.of(
                 trial -> trial.says(UndividedByARelation.Working.UNREAD),
                 trial -> trial.answersFor(_ -> true),

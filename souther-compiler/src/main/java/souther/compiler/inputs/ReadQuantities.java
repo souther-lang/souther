@@ -3714,13 +3714,35 @@ final class ReadQuantities implements Quantities {
         }
         Position at = byPath.get(term.position());
         PositionBounds bounds = at == null ? null : at.boundsFor(term);
+        // A number taken of the value lies where the operation takes it to of the values the
+        // value lies at: the year of a date from 1900 on is from 1900 on, whether or not a rule
+        // names the year.
+        NumericDomain.Bounds ofTheValues = term instanceof NumericTerm.TakenOf taken
+                ? takenOfWhereTheValueLies(taken) : null;
         if (bounds != null) {
-            return bounds.admissible();
+            return meeting(bounds.admissible(), ofTheValues);
+        }
+        if (ofTheValues != null) {
+            return ofTheValues;
         }
         Language.Ends sums = whereAFormatLeaves(term);
         return sums == null ? null : new NumericDomain.Bounds(
                 Endpoint.inclusive(Count.of(sums.least())),
                 sums.most() == null ? null : Endpoint.inclusive(Count.of(sums.most())));
+    }
+
+    /**
+     * Where {@code taken} lies over the values its position was read to hold
+     * ({@link TakenAs#reachedFrom}), or null where those say nothing of it: the position holds
+     * every value, or what is taken of it is no number of where the value lies.
+     */
+    private NumericDomain.Bounds takenOfWhereTheValueLies(NumericTerm.TakenOf taken) {
+        NumericDomain.Bounds values = ownOf(new NumericTerm.ValueOf(taken.position()));
+        if (values == null || values.saysNothing()) {
+            return null;
+        }
+        NumericDomain.Bounds lies = taken.takenAs().reachedFrom(taken.transformation(), values);
+        return lies.saysNothing() ? null : lies;
     }
 
     /**

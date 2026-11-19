@@ -676,7 +676,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 if (WhereAnOperatorAnswers.ofAnOperator(BinOp.MUL, Type.INT)
                         instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held) {
                     told.add(mul, UndividedByARelation.IntOperation.overTheInput(atom,
-                            held.least(), held.greatest(), told.workedOutOf(mul)));
+                            held.least(), held.greatest(), told.workedOutOf(mul), true));
                 } else {
                     told.exact = false;
                 }
@@ -940,9 +940,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              */
             private void tellHeld(Core node, WhereAnOperatorAnswers.WhereItsExactValueIsHeld held,
                                   LinearForm<NumericTerm> form, List<Integer> after) {
+                // Where a construction answers is where the clauses of the type it makes leave
+                // the number, which the model states; any other operation answers where the type
+                // it works the number out in stops.
                 UndividedByARelation.IntOperation operation =
                         UndividedByARelation.IntOperation.overTheInput(form, held.least(),
-                                held.greatest(), after);
+                                held.greatest(), after,
+                                !(Core.withoutStanding(node) instanceof Core.Construct));
                 if (!FormRange.liesWithin(form, ofTheInput, Map.of(), held.least(),
                         held.greatest())) {
                     if (!told.told(operation)) {
@@ -1971,7 +1975,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         : InputNumber.operationsAtEachElement(walk, at, ruleSource)) {
                     if (!heldWithinItsEnds(form, held)) {
                         keepForWhereARunStops(walk, UndividedByARelation.IntOperation
-                                .overTheInput(form, held.least(), held.greatest(), List.of()));
+                                .overTheInput(form, held.least(), held.greatest(), List.of(),
+                                        true));
                     }
                 }
             }
@@ -2292,7 +2297,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             return new UndividedByARelation.IntOperation(form.over(atom -> LinearForm.atom(
                     atom.equals(over.atom) ? bound
                             : new UndividedByARelation.IntOperand.OfTheInput(atom))),
-                    least, greatest, after);
+                    least, greatest, after, true);
         }
 
         /**

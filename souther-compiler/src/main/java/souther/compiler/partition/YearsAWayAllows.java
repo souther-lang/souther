@@ -72,6 +72,8 @@ final class YearsAWayAllows {
      *
      * <p>A date's days in a year are those at which no move a statement takes its year after
      * puts the date in another year. The statements are then about that year, whatever the day.
+     * A date is put only in a year every day of which each of its moves is defined at, so that the
+     * days of the year are dates it may be.
      *
      * @param partsOfEachDate the months and days taken of each date, which must each appear in the
      *                        year chosen for it
@@ -92,8 +94,21 @@ final class YearsAWayAllows {
             }
         }
         List<List<DateTranslation>> shifts = new ArrayList<>();
+        List<int[]> wholeYears = new ArrayList<>();
         for (int date = 0; date < dates; date++) {
             shifts.add(shiftsOf(statements, date));
+            DateTranslation every = DateTranslation.none();
+            for (DateTranslation each : shifts.get(date)) {
+                every = every == null ? null : every.definedOnlyWhere(each);
+            }
+            for (DatesThatStandInEveryYear.Part part : partsOfEachDate.get(date)) {
+                every = every == null ? null : every.definedOnlyWhere(part.moved());
+            }
+            int[] whole = every == null ? null : every.wholeYears();
+            if (whole == null) {
+                return null;
+            }
+            wholeYears.add(whole);
         }
         BitSet[] giving = new BitSet[dates];
         for (int date = 0; date < dates; date++) {
@@ -103,8 +118,8 @@ final class YearsAWayAllows {
             }
         }
         long[] chosen = new long[dates];
-        return search(statements, weights, constants, partsOfEachDate, shifts, giving, chosen, 0)
-                ? toInts(chosen) : null;
+        return search(statements, weights, constants, partsOfEachDate, shifts, giving,
+                wholeYears, chosen, 0) ? toInts(chosen) : null;
     }
 
     private static int[] toInts(long[] years) {
@@ -122,7 +137,7 @@ final class YearsAWayAllows {
     private static boolean search(List<Statement> statements, long[][] weights, long[] constants,
                                   List<List<DatesThatStandInEveryYear.Part>> parts,
                                   List<List<DateTranslation>> shifts, BitSet[] giving,
-                                  long[] chosen, int date) {
+                                  List<int[]> allowed, long[] chosen, int date) {
         if (date == chosen.length) {
             for (int i = 0; i < constants.length; i++) {
                 if (!statements.get(i).relation().holds(Long.signum(valueAt(weights[i],
@@ -132,14 +147,16 @@ final class YearsAWayAllows {
             }
             return true;
         }
-        for (long year : yearsToLookAt(statements, weights, constants, chosen, date)) {
+        for (long year : yearsToLookAt(statements, weights, constants, chosen, date,
+                allowed.get(date))) {
             if (!giving[date].get(Math.floorMod(year, YEARS_OF_A_CYCLE))
                     || !MonthsAndDaysOfOneDate.coversEveryValueInYear(parts.get(date),
                             (int) year, shifts.get(date))) {
                 continue;
             }
             chosen[date] = year;
-            if (search(statements, weights, constants, parts, shifts, giving, chosen, date + 1)) {
+            if (search(statements, weights, constants, parts, shifts, giving, allowed, chosen,
+                    date + 1)) {
                 return true;
             }
         }
@@ -166,9 +183,12 @@ final class YearsAWayAllows {
      * statement written as sums that are not below nought.
      */
     private static List<Long> yearsToLookAt(List<Statement> statements, long[][] weights,
-                                            long[] constants, long[] chosen, int date) {
+                                            long[] constants, long[] chosen, int date,
+                                            int[] allowed) {
         int later = date + 1 < chosen.length ? date + 1 : -1;
         Bounds bounds = new Bounds();
+        bounds.low = bounds.low.max(BigInteger.valueOf(allowed[0]));
+        bounds.high = bounds.high.min(BigInteger.valueOf(allowed[1]));
         List<BigInteger[]> lowersOfLater = new ArrayList<>();
         List<BigInteger[]> uppersOfLater = new ArrayList<>();
         Lattice lattice = Lattice.EVERY_YEAR;
@@ -319,20 +339,32 @@ final class YearsAWayAllows {
      * Which of the four hundred years of a cycle give every number each part can be. The years
      * before and after repeat them, so this is asked of the calendar once for what was asked, and
      * a year taken is looked at itself.
+     *
+     * <p>The calendar's pattern and nothing else: each move is asked by what it moves by, and the
+     * dates it is defined at are asked of the year taken.
      */
     private static BitSet classesGivingEveryValue(List<DatesThatStandInEveryYear.Part> parts,
                                                   List<DateTranslation> shifts) {
-        return CLASSES.computeIfAbsent(new Asked(List.copyOf(parts), List.copyOf(shifts)),
-                asked -> {
-                    BitSet out = new BitSet(YEARS_OF_A_CYCLE);
-                    for (int at = 0; at < YEARS_OF_A_CYCLE; at++) {
-                        if (MonthsAndDaysOfOneDate.coversEveryValueInYear(asked.parts(),
-                                (int) USUAL_YEAR + at, asked.yearShifts())) {
-                            out.set(Math.floorMod((int) USUAL_YEAR + at, YEARS_OF_A_CYCLE));
-                        }
-                    }
-                    return out;
-                });
+        List<DatesThatStandInEveryYear.Part> byTheMove = parts.stream().map(part ->
+                new DatesThatStandInEveryYear.Part(part.which(), byWhatItMoves(part.moved())))
+                .toList();
+        List<DateTranslation> shiftsByTheMove =
+                shifts.stream().map(YearsAWayAllows::byWhatItMoves).toList();
+        return CLASSES.computeIfAbsent(new Asked(byTheMove, shiftsByTheMove), asked -> {
+            BitSet out = new BitSet(YEARS_OF_A_CYCLE);
+            for (int at = 0; at < YEARS_OF_A_CYCLE; at++) {
+                if (MonthsAndDaysOfOneDate.coversEveryValueInYear(asked.parts(),
+                        (int) USUAL_YEAR + at, asked.yearShifts())) {
+                    out.set(Math.floorMod((int) USUAL_YEAR + at, YEARS_OF_A_CYCLE));
+                }
+            }
+            return out;
+        });
+    }
+
+    /** One shift by what {@code move} moves by, at every date that shift is defined at. */
+    private static DateTranslation byWhatItMoves(DateTranslation move) {
+        return DateTranslation.none().thenAddDays(move.offsetDays());
     }
 
     /** What was asked of the calendar, which is all there is to the answer. */

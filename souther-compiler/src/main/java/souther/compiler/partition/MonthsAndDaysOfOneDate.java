@@ -28,8 +28,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * must still know is that every number the parts can be appears in them
  * ({@link #coversEveryValue}).
  *
- * <p>Only for a date no rule restricts. A rule on a part of it, or on the days it may be, leaves
- * the combinations that rule lets through, which this does not read; the caller does not ask.
+ * <p>Only for a date no rule restricts but ends on the days it may be. A rule on a part of it
+ * leaves the combinations that rule lets through, which this does not read; the caller does not
+ * ask.
  */
 final class MonthsAndDaysOfOneDate {
 
@@ -37,12 +38,16 @@ final class MonthsAndDaysOfOneDate {
     }
 
     /**
-     * Every combination of {@code parts} of one date in any year, in the order of {@code parts},
-     * or null where a move is not defined at every day of the cycle.
+     * Every combination of {@code parts} of one date at some day every move of them is defined
+     * at, in the order of {@code parts}, or null where there is no such day.
+     *
+     * <p>A cycle of days holds every combination there is, so where the days are a cycle or more
+     * one cycle of them is read; a date held to fewer days gives what those give, and may miss the
+     * twenty-ninth of February or what a move makes of the last days of a year.
      */
     static List<List<ExactRatio>> ofAnyYear(List<DatesThatStandInEveryYear.Part> parts) {
         return EVERY_YEAR.computeIfAbsent(List.copyOf(parts),
-                asked -> new Combinations(workedOverTheCycle(asked))).combinations();
+                asked -> new Combinations(workedOverTheDays(asked))).combinations();
     }
 
     /** The combinations, which are none where a move is not defined. */
@@ -54,18 +59,24 @@ final class MonthsAndDaysOfOneDate {
     private static final Map<List<DatesThatStandInEveryYear.Part>, Combinations> EVERY_YEAR =
             new ConcurrentHashMap<>();
 
-    private static List<List<ExactRatio>> workedOverTheCycle(
+    private static List<List<ExactRatio>> workedOverTheDays(
             List<DatesThatStandInEveryYear.Part> parts) {
+        DateTranslation every = DateTranslation.none();
+        for (DatesThatStandInEveryYear.Part part : parts) {
+            every = every == null ? null : every.definedOnlyWhere(part.moved());
+        }
+        if (every == null) {
+            return null;
+        }
+        long cycleEnds = HeldClass.A_CYCLE_STARTS + DatePartsLeft.DAYS_OF_A_CYCLE - 1;
+        long from = every.definedAt(HeldClass.A_CYCLE_STARTS) && every.definedAt(cycleEnds)
+                ? HeldClass.A_CYCLE_STARTS : every.first();
+        long to = Math.min(every.last(), from + DatePartsLeft.DAYS_OF_A_CYCLE - 1);
         // The numbers are compared as numbers, and only the combinations that differ are made into
         // ratios: a cycle has far more days than it has distinct combinations.
         Set<Combination> seen = new LinkedHashSet<>();
-        for (long day = HeldClass.A_CYCLE_STARTS;
-                day < HeldClass.A_CYCLE_STARTS + DatePartsLeft.DAYS_OF_A_CYCLE; day++) {
-            int[] numbers = numbersAt(parts, day);
-            if (numbers == null) {
-                return null;
-            }
-            seen.add(new Combination(numbers));
+        for (long day = from; day <= to; day++) {
+            seen.add(new Combination(numbersAt(parts, day)));
         }
         List<List<ExactRatio>> out = new ArrayList<>(seen.size());
         for (Combination each : seen) {
