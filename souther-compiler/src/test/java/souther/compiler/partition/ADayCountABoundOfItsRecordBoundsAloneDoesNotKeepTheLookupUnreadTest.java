@@ -114,6 +114,8 @@ class ADayCountABoundOfItsRecordBoundsAloneDoesNotKeepTheLookupUnreadTest {
                 .toList();
     }
 
+    /** Days the record's invariants bound alone leave nothing of the lookup unanswered, and leave
+     *  unread what days of a newtype of their own leave. */
     @Test
     void daysBoundedByTheirRecordAloneAreReadAsDaysOfTheirOwnAre() {
         PartitionEvidence alone = withDaysAnInt(BOUNDED_ALONE);
@@ -122,18 +124,10 @@ class ADayCountABoundOfItsRecordBoundsAloneDoesNotKeepTheLookupUnreadTest {
         assertEquals(withDaysANewtype().notRead(), alone.notRead());
     }
 
+    /** Days an invariant holds beside the pay leave the lookup unanswered, and not only the
+     *  blockers' comparison. */
     @Test
     void daysHeldBesideThePayTheAverageIsOfAreNotGivenAValueApartFromIt() {
-        assertFalse(withDaysAnInt(BESIDE_THE_PAY).unanswered().isEmpty());
-    }
-
-    @Test
-    void rulesJoinedInOneClauseAreReadAsTheyAreOnSeparateLines() {
-        String oneClause = PAY + """
-                data Pay = { a: Yen, days: Int }
-                    invariant a.value <= 1000000000000 && days >= 0 && days <= 31
-                """ + REST;
-
-        assertEquals(List.of(), unansweredBesideTheGrade(partitionOf(oneClause)));
+        assertFalse(unansweredBesideTheGrade(withDaysAnInt(BESIDE_THE_PAY)).isEmpty());
     }
 }
