@@ -1,11 +1,8 @@
 package souther.compiler.inputs;
 
-import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactCut;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
-import souther.compiler.numeric.NumericDomain;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -177,92 +174,6 @@ public record EachWayItComesOut(Granularity spacing, List<Stretch> stretches) {
                 here = new Stretch(out.removeLast().from(), to, here.holding(), here.failing());
             }
             out.add(here);
-        }
-        return new EachWayItComesOut(spacing, out);
-    }
-
-    /**
-     * What one way's reading of the term ({@code leaves}) shows of each way the statement comes
-     * out, the term lying in {@code lies} along the way: both reached at every value where it is
-     * left either way, the way a run settles it to not shown and the other never reached at every
-     * value of the run, and no value of the term past where it may lie. Null where the reading is
-     * neither, says of some values that no row there is shown computed, or an end is no number.
-     *
-     * <p>That a run settles the statement says how a row there would come out, and not that there
-     * is one, so the way it comes out there is not shown reached.
-     */
-    public static EachWayItComesOut of(WhatARelationLeavesUndivided.Leaves leaves,
-                                       NumericDomain.Bounds lies, Granularity spacing) {
-        return switch (leaves) {
-            case null -> null;
-            case WhatARelationLeavesUndivided.Leaves.Undivided _ -> {
-                if (lies == null) {
-                    yield null;
-                }
-                ExactCut from = cutOf(lies.min());
-                ExactCut to = cutOf(lies.max());
-                yield (lies.min() != null && from == null) || (lies.max() != null && to == null)
-                        ? null : new EachWayItComesOut(spacing,
-                                List.of(new Stretch(from, to, Shown.REACHED, Shown.REACHED)));
-            }
-            case WhatARelationLeavesUndivided.Leaves.Settled settled -> {
-                if (!settled.noRowShownComputed().isEmpty()) {
-                    yield null;
-                }
-                // From the least the term holds, each run settling it and the values before it
-                // left either way, and after the last run the values up to the greatest.
-                List<Stretch> out = new ArrayList<>();
-                ExactCut next = settled.least();
-                boolean toTheEnd = true;
-                for (WhatARelationLeavesUndivided.SettledRun run : settled.runs()) {
-                    ExactCut start = run.from() == null ? next : run.from();
-                    if (run.from() != null && !eitherWay(out, spacing, next, endBefore(start))) {
-                        yield null;
-                    }
-                    out.add(new Stretch(start, run.to(),
-                            run.holds() ? Shown.NOT_SHOWN : Shown.NEVER,
-                            run.holds() ? Shown.NEVER : Shown.NOT_SHOWN));
-                    if (run.to() == null) {
-                        toTheEnd = false;
-                        break;
-                    }
-                    next = startAfter(run.to());
-                }
-                if (toTheEnd && !eitherWay(out, spacing, next, settled.greatest())) {
-                    yield null;
-                }
-                yield new EachWayItComesOut(spacing, out);
-            }
-        };
-    }
-
-    /** {@code out} with the values from {@code from} to {@code to} reached both ways where some
-     *  value lies between them; false where whether one does is not worked out. */
-    private static boolean eitherWay(List<Stretch> out, Granularity spacing, ExactCut from,
-                                     ExactCut to) {
-        Lattice.Occupancy occupancy = Lattice.occupancy(spacing, from, to);
-        if (occupancy == Lattice.Occupancy.HOLDS) {
-            out.add(new Stretch(from, to, Shown.REACHED, Shown.REACHED));
-        }
-        return occupancy != Lattice.Occupancy.UNKNOWN;
-    }
-
-    /** {@code end} as the end of a run of the term, or null where it is no number. */
-    private static ExactCut cutOf(Endpoint end) {
-        return end != null && end.at() instanceof Count count
-                ? new ExactCut(count.exactly(), end.inclusive()) : null;
-    }
-
-    /**
-     * The rows of these at which the statement comes out {@code holds}: a way whose own
-     * statements decide it keeps those and no other, so the other way is never reached, and a
-     * value it was never reached the first way at holds no row of it.
-     */
-    public EachWayItComesOut comingOut(boolean holds) {
-        List<Stretch> out = new ArrayList<>();
-        for (Stretch each : stretches) {
-            out.add(new Stretch(each.from(), each.to(), holds ? each.holding() : Shown.NEVER,
-                    holds ? Shown.NEVER : each.failing()));
         }
         return new EachWayItComesOut(spacing, out);
     }

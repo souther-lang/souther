@@ -38,15 +38,9 @@ final class WhatStatementsOfOneFormDecide {
      *
      * @param comesOut how the relation comes out at every point they leave, or null where they do
      *                 not decide it
-     * @param deciding the statements that decide it, none where they do not
      */
-    record Verdict(boolean noRowArrives, Boolean comesOut,
-                   List<TakenConstraint.Affine> deciding) {
-        static final Verdict NOTHING = new Verdict(false, null, List.of());
-
-        Verdict {
-            deciding = List.copyOf(deciding);
-        }
+    record Verdict(boolean noRowArrives, Boolean comesOut) {
+        static final Verdict NOTHING = new Verdict(false, null);
 
         boolean relationIsDecided() {
             return comesOut != null;
@@ -67,7 +61,6 @@ final class WhatStatementsOfOneFormDecide {
             }
         }
         Boolean comesOut = null;
-        List<TakenConstraint.Affine> deciding = List.of();
         while (!left.isEmpty()) {
             TakenConstraint.Affine first = left.removeFirst();
             Map<NumericTerm, ExactRatio> form = first.form().coefs();
@@ -88,15 +81,14 @@ final class WhatStatementsOfOneFormDecide {
                 continue;
             }
             if (empty) {
-                return new Verdict(true, null, List.of());
+                return new Verdict(true, null);
             }
             if (comesOut == null && askedBound != null && !askedAt.isEmpty()
                     && askedAt.stream().distinct().count() == 1) {
                 comesOut = askedAt.getFirst();
-                deciding = bounds.stream().map(Bound::statement).toList();
             }
         }
-        return new Verdict(false, comesOut, deciding);
+        return new Verdict(false, comesOut);
     }
 
     /**

@@ -903,6 +903,69 @@ public final class WhatARelationLeavesUndivided {
     }
 
     /**
+     * How the relation comes out at the values of the term at {@code at} along a way every row of
+     * which has it come out {@code comesOut}, each way on its own ({@link EachWayItComesOut}) — or
+     * null where an end of the term's run is no number, or whether a part of it holds a value is
+     * not worked out.
+     *
+     * <p>The other way is never reached at any value: no row of the way comes out so. This way is
+     * reached at the values the term is shown to take ({@link Term#realizes}), and only where
+     * every row the terms' runs hold is computed ({@link RowsComputed#computesEveryRowWithin}):
+     * that every row comes out one way says how a row there would come out, and not that there is
+     * one. At the rest it is not shown.
+     *
+     * @param terms the terms as the way's own region holds them, the statements that decide the
+     *              relation among what it holds
+     */
+    public static <P> EachWayItComesOut alongAWayThatDecidesIt(List<Term<P>> terms, int at,
+                                                              ExactRatio constant,
+                                                              boolean comesOut,
+                                                              Granularity spacing,
+                                                              BigInteger greatest,
+                                                              Operations operations) {
+        Term<P> it = terms.get(at);
+        Interval held = Interval.of(it.holds());
+        if (held == null) {
+            return null;
+        }
+        Interval taken = it.realizes() == null || !RowsComputed.upTo(greatest)
+                .withOperations(operations).computesEveryRowWithin(terms, constant)
+                ? null : Interval.of(it.realizes());
+        List<EachWayItComesOut.Stretch> out = new ArrayList<>();
+        if (taken == null) {
+            return oneWay(out, spacing, held.lower(), held.upper(), comesOut,
+                    EachWayItComesOut.Shown.NOT_SHOWN) ? new EachWayItComesOut(spacing, out) : null;
+        }
+        // Below the values taken, the values taken, and above them, each where the run holds any.
+        boolean worked = (taken.lower() == null || oneWay(out, spacing, held.lower(),
+                ExactCut.tighterUpper(held.upper(), new ExactCut(taken.lower().at(),
+                        !taken.lower().inclusive())), comesOut, EachWayItComesOut.Shown.NOT_SHOWN))
+                && oneWay(out, spacing, ExactCut.tighterLower(held.lower(), taken.lower()),
+                        ExactCut.tighterUpper(held.upper(), taken.upper()), comesOut,
+                        EachWayItComesOut.Shown.REACHED)
+                && (taken.upper() == null || oneWay(out, spacing,
+                        ExactCut.tighterLower(held.lower(), new ExactCut(taken.upper().at(),
+                                !taken.upper().inclusive())), held.upper(), comesOut,
+                        EachWayItComesOut.Shown.NOT_SHOWN));
+        return worked ? new EachWayItComesOut(spacing, out) : null;
+    }
+
+    /** {@code out} with the values from {@code from} to {@code to} coming out {@code comesOut}
+     *  as {@code shown} says and never the other way, where some value lies between them; false
+     *  where whether one does is not worked out. */
+    private static boolean oneWay(List<EachWayItComesOut.Stretch> out, Granularity spacing,
+                                  ExactCut from, ExactCut to, boolean comesOut,
+                                  EachWayItComesOut.Shown shown) {
+        return switch (Lattice.occupancy(spacing, from, to)) {
+            case UNKNOWN -> false;
+            case EMPTY -> true;
+            case HOLDS -> out.add(new EachWayItComesOut.Stretch(from, to,
+                    comesOut ? shown : EachWayItComesOut.Shown.NEVER,
+                    comesOut ? EachWayItComesOut.Shown.NEVER : shown));
+        };
+    }
+
+    /**
      * {@code run} said into {@code out}: at the values of it the term is shown to take
      * ({@code taken}), a way reached where {@code holding} or {@code failing} shows a row of it
      * over them; at the rest, where no row is shown, reached nowhere. A way {@code holdsNever} or

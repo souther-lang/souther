@@ -353,7 +353,8 @@ class WhatStatementsOfOneFormDecideTest {
                 askedAt.add(asked.holdsAt(quarters));
             }
         }
-        return Arrays.asList(!any, any && askedAt.size() == 1 ? askedAt.iterator().next() : null);
+        return Arrays.asList(!any,
+                (any && askedAt.size() == 1) ? askedAt.iterator().next() : null);
     }
 
     /** What {@link #everyValueBetween} says, of a verdict. */

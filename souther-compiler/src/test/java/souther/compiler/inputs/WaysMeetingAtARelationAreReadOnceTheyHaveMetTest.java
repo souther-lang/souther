@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.numeric.Count;
 import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactCut;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Granularity;
 import souther.compiler.numeric.NumericDomain;
 
@@ -17,39 +19,41 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 /**
  * What ways that meet at a relation leave a whole-number term, read once they have met: at each
  * value, a way the relation comes out is reached where some way reaches it and never where none
- * can ({@link EachWayItComesOut#eitherOf}). A way whose own statements decide the relation keeps
- * the rows it comes out that way at ({@link EachWayItComesOut#comingOut}), so a value it never
- * reaches takes nothing from it, and what the ways leave is read once they have met
+ * can ({@link EachWayItComesOut#eitherOf}), and what the ways leave is read once they have met
  * ({@link EachWayItComesOut#leaves}).
+ *
+ * <p>Along a way whose own statements decide the relation, a value is reached the way it comes
+ * out only where the term is shown to take it and the rows there are computed
+ * ({@link WhatARelationLeavesUndivided#alongAWayThatDecidesIt}): that every row comes out one way
+ * says how a row would come out, and not that there is one.
  */
 class WaysMeetingAtARelationAreReadOnceTheyHaveMetTest {
 
-    private static NumericDomain.Bounds from(long least) {
-        return new NumericDomain.Bounds(Endpoint.inclusive(Count.of(least)), null);
+    private static NumericDomain.Bounds run(Long least, Long greatest) {
+        return new NumericDomain.Bounds(
+                least == null ? null : Endpoint.inclusive(Count.of(least)),
+                greatest == null ? null : Endpoint.inclusive(Count.of(greatest)));
     }
 
-    private static final NumericDomain.Bounds EVERY = NumericDomain.Bounds.OPEN;
-
-    private static EachWayItComesOut of(WhatARelationLeavesUndivided.Leaves leaves,
-                                        NumericDomain.Bounds lies) {
-        return EachWayItComesOut.of(leaves, lies, Granularity.DISCRETE);
+    /**
+     * A way along which every row has the relation come out {@code holds}, the term lying in
+     * {@code holds} and shown to take {@code realizes}, the relation being the term against
+     * nought and the type stopping at {@code greatest}.
+     */
+    private static EachWayItComesOut decided(NumericDomain.Bounds lies,
+                                             NumericDomain.Bounds realizes, boolean holds,
+                                             BigInteger greatest) {
+        WhatARelationLeavesUndivided.Term<String> it = new WhatARelationLeavesUndivided.Term<>(
+                List.of("x"), ExactRatio.ONE, lies, realizes, null, true, Granularity.DISCRETE,
+                null);
+        return WhatARelationLeavesUndivided.alongAWayThatDecidesIt(List.of(it), 0,
+                ExactRatio.ZERO, holds, Granularity.DISCRETE, greatest,
+                WhatARelationLeavesUndivided.Operations.NONE);
     }
 
-    /** Left either way at every value it lies at. */
-    private static EachWayItComesOut either(NumericDomain.Bounds lies) {
-        return of(new WhatARelationLeavesUndivided.Leaves.Undivided(), lies);
-    }
-
-    private static WhatARelationLeavesUndivided.Leaves settled(Long from, Long to, boolean holds) {
-        return WhatARelationLeavesUndivided.Leaves.Settled.ofWhole(
-                List.of(WhatARelationLeavesUndivided.SettledRun.whole(
-                        from == null ? null : BigInteger.valueOf(from),
-                        to == null ? null : BigInteger.valueOf(to), holds)), null, null);
-    }
-
-    /** A way the relation comes out {@code holds} along, at every value from {@code least}. */
-    private static EachWayItComesOut decided(long least, boolean holds) {
-        return either(from(least)).comingOut(holds);
+    /** The same, every value the term lies at shown taken, and no size stopping a row. */
+    private static EachWayItComesOut decided(NumericDomain.Bounds lies, boolean holds) {
+        return decided(lies, lies, holds, null);
     }
 
     private static EachWayItComesOut met(EachWayItComesOut... ways) {
@@ -60,69 +64,88 @@ class WaysMeetingAtARelationAreReadOnceTheyHaveMetTest {
         return ways.leaves(Set.of(), Set.of());
     }
 
+    private static WhatARelationLeavesUndivided.Leaves settled(Long from, Long to, boolean holds,
+                                                               Long least, Long greatest) {
+        return WhatARelationLeavesUndivided.Leaves.Settled.ofWhole(
+                List.of(WhatARelationLeavesUndivided.SettledRun.whole(
+                        from == null ? null : BigInteger.valueOf(from),
+                        to == null ? null : BigInteger.valueOf(to), holds)),
+                least == null ? null : BigInteger.valueOf(least),
+                greatest == null ? null : BigInteger.valueOf(greatest));
+    }
+
     private static final WhatARelationLeavesUndivided.Leaves UNDIVIDED =
             new WhatARelationLeavesUndivided.Leaves.Undivided();
 
+    /** The other way is never reached, and this one only at the values the term is shown to
+     *  take. */
     @Test
-    void aWayThatComesOutOneWayWhereverIsDividedByNothing() {
-        assertEquals(UNDIVIDED, left(decided(0, true)));
+    void aWayThatDecidesTheRelationReachesItsWayOnlyWhereTheTermIsShownTaken() {
+        EachWayItComesOut way = decided(run(0L, null), run(5L, 9L), true, null);
+
+        List<EachWayItComesOut.Shown> reached = List.of(EachWayItComesOut.Shown.REACHED,
+                EachWayItComesOut.Shown.NEVER);
+        List<EachWayItComesOut.Shown> notShown = List.of(EachWayItComesOut.Shown.NOT_SHOWN,
+                EachWayItComesOut.Shown.NEVER);
+        assertEquals(List.of(notShown, notShown, reached, reached, notShown, notShown),
+                List.of(shownAt(way, 0), shownAt(way, 4), shownAt(way, 5), shownAt(way, 9),
+                        shownAt(way, 10), shownAt(way, 1000)));
+        assertNull(shownAt(way, -1), "no row is at a value the term does not lie at");
     }
 
+    /** A term held to a run and shown to take none of it has no row shown there: two ways
+     *  deciding the relation two ways do not show a value either way. */
     @Test
-    void twoWaysThatComeOutTheSameWayComeOutThatWay() {
-        assertEquals(UNDIVIDED, left(met(decided(0, true), decided(0, true))));
+    void aTermHeldToARunButShownToTakeNoneOfItShowsNoRow() {
+        EachWayItComesOut holding = decided(run(0L, 9L), null, true, null);
+        EachWayItComesOut failing = decided(run(0L, 9L), false);
+
+        assertNull(left(met(holding, failing)));
+    }
+
+    /** A row whose sum may pass where the type stops is no row shown, wherever the term is
+     *  shown to take a value. */
+    @Test
+    void aValueWhoseRowsMayStopIsNotShownReached() {
+        EachWayItComesOut holding = decided(run(0L, 1000L), run(0L, 1000L), true,
+                BigInteger.valueOf(100));
+        EachWayItComesOut failing = decided(run(0L, 1000L), false);
+
+        assertNull(left(met(holding, failing)));
+        assertEquals(UNDIVIDED, left(met(decided(run(0L, 1000L), run(0L, 1000L), true,
+                BigInteger.valueOf(1000)), failing)));
     }
 
     @Test
     void twoWaysThatComeOutTwoWaysAtTheSameValuesLeaveThemEitherWay() {
-        assertEquals(UNDIVIDED, left(met(decided(0, true), decided(0, false))));
+        assertEquals(UNDIVIDED, left(met(decided(run(0L, null), true),
+                decided(run(0L, null), false))));
     }
 
     @Test
-    void aValueLeftEitherWayByOneWayStaysSoBesideAWayThatComesOutOneWay() {
-        assertEquals(UNDIVIDED, left(met(either(EVERY), decided(0, true))));
-    }
-
-    /** That every row at a value comes out one way says how a row there would come out, and not
-     *  that there is one: two ways settling it two ways at a value do not show it either way. */
-    @Test
-    void aValueThatMayComeOutEitherWayAndIsNotShownToIsShownNothingOf() {
-        assertNull(left(met(of(settled(null, 9L, false), EVERY),
-                of(settled(null, 9L, true), EVERY))));
+    void aWayThatComesOutOneWayWhereverIsDividedByNothing() {
+        assertEquals(UNDIVIDED, left(decided(run(0L, null), true)));
     }
 
     /**
-     * The age of the issue: a birthday from 1900 on fails sixty at every year up to 1959 and leaves
-     * it either way from 1960, along a way that decides nothing; along a way that holds it, read
-     * without what decides it, no year before 1960 is one it holds at. Met, the years up to 1959 are
-     * a class of their own.
+     * The age of the issue: a birthday from 1900 on is sixty only from 1960, so the way that
+     * holds it has no row before 1960, and the way that fails it has one at every year. Met, the
+     * years up to 1959 are a class of their own.
      */
     @Test
-    void theYearsAWayThatHoldsTheAgeNeverReachesAreSettledByTheOtherWay() {
-        EachWayItComesOut open = of(settled(null, 1959L, false), EVERY);
-        EachWayItComesOut holding = of(settled(null, 1959L, false), EVERY).comingOut(true);
+    void theYearsAWayThatHoldsTheAgeHasNoRowAtAreSettledByTheOtherWay() {
+        EachWayItComesOut holding = decided(run(1960L, null), true);
+        EachWayItComesOut failing = decided(run(1900L, null), false);
 
-        assertEquals(settled(null, 1959L, false), left(met(open, holding)));
-    }
-
-    /** Ways that each come out one way, on values the other never reaches, part the term where
-     *  they meet. */
-    @Test
-    void waysComingOutTwoWaysOnValuesApartPartTheTerm() {
-        EachWayItComesOut holdingFromOne = decided(1, true);
-        EachWayItComesOut failingUpToNought = of(settled(1L, null, true), EVERY).comingOut(false);
-
-        assertEquals(2, ((WhatARelationLeavesUndivided.Leaves.Settled) left(
-                met(holdingFromOne, failingUpToNought))).runs().size());
+        assertEquals(settled(1900L, 1959L, false, 1900L, null), left(met(holding, failing)));
     }
 
     /** Meeting is a union: in either order, in either grouping, and of a way with itself. */
     @Test
     void meetingIsAUnion() {
-        List<EachWayItComesOut> ways = List.of(decided(0, true), decided(5, false),
-                of(settled(null, 3L, false), EVERY), of(settled(null, 7L, true), EVERY),
-                either(from(2)), either(EVERY),
-                of(settled(null, 1959L, false), EVERY).comingOut(true));
+        List<EachWayItComesOut> ways = List.of(decided(run(0L, null), true),
+                decided(run(5L, null), false), decided(run(0L, 3L), false),
+                decided(run(0L, 9L), run(2L, 7L), true, null), decided(run(1960L, null), true));
         for (EachWayItComesOut a : ways) {
             assertEquals(left(a), left(met(a, a)), a.toString());
             for (EachWayItComesOut b : ways) {
@@ -133,5 +156,27 @@ class WaysMeetingAtARelationAreReadOnceTheyHaveMetTest {
                 }
             }
         }
+    }
+
+    /** What {@code way} shows of holding and of failing at {@code value}, or null where no
+     *  stretch holds it. */
+    private static List<EachWayItComesOut.Shown> shownAt(EachWayItComesOut way, long value) {
+        ExactRatio at = ExactRatio.of(value);
+        for (EachWayItComesOut.Stretch each : way.stretches()) {
+            if (above(at, each.from()) && below(at, each.to())) {
+                return List.of(each.holding(), each.failing());
+            }
+        }
+        return null;
+    }
+
+    private static boolean above(ExactRatio at, ExactCut from) {
+        return from == null || at.compareTo(from.at()) > 0
+                || (from.inclusive() && at.compareTo(from.at()) == 0);
+    }
+
+    private static boolean below(ExactRatio at, ExactCut to) {
+        return to == null || at.compareTo(to.at()) < 0
+                || (to.inclusive() && at.compareTo(to.at()) == 0);
     }
 }

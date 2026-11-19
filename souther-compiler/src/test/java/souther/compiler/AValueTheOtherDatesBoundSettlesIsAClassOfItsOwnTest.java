@@ -232,37 +232,12 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
     }
 
     /**
-     * The age read again where the first reading of it decided the way: the comparison with
-     * {@code r} asks the ceiling, which reads the age, and the answer asks it again. The second
-     * reading is reached along a way that holds the age at sixty, one that holds it under, and one
-     * where a disability took the ceiling up whatever the age, and no year before 1960 is reached
-     * along the first. Read once the ways have met, the years up to 1959 fail it along every way
-     * that reaches them.
-     */
-    @Test
-    void anAgeReadAgainWhereTheFirstReadingDecidedTheWayIsRead() {
-        String report = report(compiled("""
-                module d
-
-                data P = { birthday: Date, disabled: Bool }
-                    invariant birthday >= Date("1900-01-01")
-
-                let old (p: P, on: Date): Int =
-                    if Date.year(on) - Date.year(p.birthday) >= 60 || p.disabled
-                    then 1800 else 1300
-
-                behavior ceiling : (p: P, on: Date, r: Int) -> Int
-                let ceiling (p, on, r) =
-                    if r >= old(p, on) then old(p, on) else 3
-                """));
-
-        assertTrue(report.contains("measurement: complete"), report);
-        assertFalse(report.contains("not worked out"), report);
-    }
-
-    /**
-     * The same over whole numbers no difference of which passes where an {@code Int} stops: the
-     * years of {@code on} up to 1959 are a class, read in the second call as in the first.
+     * A comparison read again where the first reading of it decided the way: the comparison with
+     * {@code r} asks {@code old}, which compares the age, and the answer asks it again. The second
+     * reading is reached along a way that holds the age at sixty and ways that hold it under, and
+     * no {@code on} before 1960 has a row along the first. Read once the ways have met, the values
+     * up to 1959 fail it along every way that has a row at them: whole numbers no difference of
+     * which passes where an {@code Int} stops, so that every row the runs hold is computed.
      */
     @Test
     void aComparisonReadAgainWhereTheFirstReadingDecidedTheWayIsReadOverWholeNumbers() {
