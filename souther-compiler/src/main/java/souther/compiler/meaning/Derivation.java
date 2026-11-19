@@ -48,6 +48,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.function.BiFunction;
 import java.util.function.ToIntFunction;
 
 /**
@@ -827,6 +828,45 @@ public sealed interface Derivation {
                             count, kept.countThere(forms.size(), counted, decided), fixed);
                 }
             }, kept.undecided()));
+        }
+
+        /**
+         * What {@code at} makes of each way: where the way is taken — {@code reached}, and what
+         * decides each truth it is split on holding or not as the way has it — and the forms of
+         * the elements it keeps, whose sum its total is.
+         *
+         * <p>A run taking a way works out that way's total and no other's, so what is said of a
+         * way is said where it is taken. What each truth states is concluded once for every way
+         * it decides.
+         */
+        public <R> List<R> eachWay(Proposition reached,
+                                   BiFunction<Proposition, List<LinearForm<Quantity>>, R> at) {
+            Map<Integer, Proposition> stated = new HashMap<>();
+            return kept.made(new KeptWays.Making<List<R>>() {
+                @Override
+                public List<R> split(int truth, List<R> where, List<R> otherwise) {
+                    List<R> both = new ArrayList<>(where);
+                    both.addAll(otherwise);
+                    return both;
+                }
+
+                @Override
+                public List<R> leaf(Boolean[] decided) {
+                    List<Proposition> taken = new ArrayList<>();
+                    taken.add(reached);
+                    for (int truth = 0; truth < decided.length; truth++) {
+                        Derivation condition = conditions.get(truth);
+                        if (decided[truth] == null || condition == null) {
+                            continue;
+                        }
+                        Proposition holds = stated.computeIfAbsent(truth,
+                                _ -> condition.concludes(Optional.empty()));
+                        taken.add(decided[truth] ? holds : holds.denied());
+                    }
+                    return List.of(at.apply(Proposition.all(taken),
+                            kept.thereOf(forms, decided)));
+                }
+            }, kept.undecided());
         }
 
         /**

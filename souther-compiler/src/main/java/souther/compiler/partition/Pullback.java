@@ -1137,6 +1137,13 @@ final class Pullback {
                 out.add(new StopEvidence.OnAnArm(each.reached(), arm.evaluatedStops()));
             }
         }
+        // A total read once for every way of keeping its elements is worked out way by way: each
+        // way's at where a run takes it, whatever the comparison over it comes to there.
+        for (Meaning.StepOnAnArm each : stated.meaning().stepsDownTheArms(
+                theRule::tellsOnTheWays)) {
+            out.addAll(theRule.onTheWays((Derivation.WaysWrittenWhenAsked) each.step(),
+                    each.reached()));
+        }
         return List.copyOf(out);
     }
 
@@ -3263,6 +3270,11 @@ final class Pullback {
          *  one was read as with the choice standing as that arm ({@link Pullback#readOnAnArm}). */
         private final Tallied.Table<ArmRead, Tallied.Sequence<OnThisArm>> onTheArms =
                 said.table(LinkedHashMap::new);
+        /** The comparisons over a total read once for every way of keeping its elements
+         *  ({@link Derivation.WaysWrittenWhenAsked}), each by its very step, with what a run taking
+         *  a way works out making the total that way comes to ({@link Pullback#keptOnceFor}). */
+        private final Tallied.Table<Derivation, Function<LinearForm<Quantity>,
+                UndividedByARelation.Working>> onTheWays = said.table(IdentityHashMap::new);
 
         void readByTheFormOf(Core call, Core dividend) {
             readByTheFormOf.put(call, dividend);
@@ -3347,6 +3359,49 @@ final class Pullback {
             return !onTheArms(new ArmRead.OfTheAnswerOfAnArm(step)).isEmpty();
         }
 
+        /** That a run taking a way of {@code ways} works out what {@code totalOfAWay} says of
+         *  the total that way comes to. */
+        void readOnTheWays(Derivation.WaysWrittenWhenAsked ways,
+                           Function<LinearForm<Quantity>, UndividedByARelation.Working>
+                                   totalOfAWay) {
+            onTheWays.put(ways, totalOfAWay);
+        }
+
+        /** Whether {@code step} is a comparison over a total this candidate tells, on each way of
+         *  keeping its elements, what working the total out stops at
+         *  ({@link #readOnTheWays}). */
+        boolean tellsOnTheWays(Derivation step) {
+            return onTheWays.get(step) != null;
+        }
+
+        /**
+         * What a run taking each way of {@code ways}, read where {@code reached} holds, works out
+         * making the total the way comes to, at where the way is taken. A way whose total is within
+         * the type works out nothing that stops a run, and is not said; one whose sum cannot be
+         * held leaves its stop untold.
+         */
+        List<StopEvidence.OnAnArm> onTheWays(Derivation.WaysWrittenWhenAsked ways,
+                                             Proposition reached) {
+            Function<LinearForm<Quantity>, UndividedByARelation.Working> totalOfAWay =
+                    onTheWays.get(ways);
+            List<StopEvidence.OnAnArm> out = new ArrayList<>();
+            ways.eachWay(reached, (taken, there) -> {
+                UndividedByARelation.Working worked = switch (LinearForm.sum(there)) {
+                    case ExactAnswer.Held<LinearForm<Quantity>>(var total) ->
+                            totalOfAWay.apply(total);
+                    case ExactAnswer.Unheld<LinearForm<Quantity>> _ -> null;
+                };
+                if (worked == null) {
+                    out.add(new StopEvidence.OnAnArm(taken, StopEvidence.ofWhatIsToldOf(
+                            UndividedByARelation.Working.UNREAD)));
+                } else if (!worked.operations().isEmpty()) {
+                    out.add(new StopEvidence.OnAnArm(taken, StopEvidence.ofWhatIsToldOf(worked)));
+                }
+                return taken;
+            });
+            return out;
+        }
+
         void tell(Relation relation, UndividedByARelation.Working told) {
             UndividedByARelation.Working already = relations.get(relation);
             relations.put(relation, already == null ? told
@@ -3375,6 +3430,7 @@ final class Pullback {
             kept.relations.view().forEach(this::tell);
             kept.onTheArms.view().forEach((read, arms) -> arms.view().forEach(each ->
                     readOnAnArm(read, each)));
+            kept.onTheWays.view().forEach(onTheWays::put);
         }
     }
 
@@ -11464,8 +11520,35 @@ final class Pullback {
             }
         }
         int counted = reading.counted == null ? 0 : reading.counted.size();
-        return new Derivation.WaysWrittenWhenAsked(ways.kept(), deciding, read, forms, sum,
-                Optional.ofNullable(reading.count), counted, madeAt, fixed);
+        Derivation.WaysWrittenWhenAsked written = new Derivation.WaysWrittenWhenAsked(ways.kept(),
+                deciding, read, forms, sum, Optional.ofNullable(reading.count), counted, madeAt,
+                fixed);
+        if (Core.withoutStanding(total.call()).type() == Type.INT) {
+            tellWhereTheTotalStopsOnEachWay(total, written);
+        }
+        return written;
+    }
+
+    /**
+     * That where working out the total of whole numbers {@code total} stops is told on each way
+     * {@code written} keeps its elements in: what a run taking a way works out is the sum of the
+     * forms that way keeps, held to an {@code Int}, which the comparison read once need not be
+     * read again for. Told where every way is written out and every way's total is a form of the
+     * input's numbers: each way's sum is over some of the quantities of all the elements, so where
+     * every one of those is one number of the input, so is every way's.
+     */
+    private void tellWhereTheTotalStopsOnEachWay(Inside.ATotalByKeeping total,
+                                                 Derivation.WaysWrittenWhenAsked written) {
+        Map<Quantity, ExactRatio> every = new LinkedHashMap<>();
+        written.forms().forEach(form -> form.coefs().keySet().forEach(each ->
+                every.put(each, ExactRatio.ONE)));
+        boolean told = Conclusion.everyWayIsWrittenOut(written.kept())
+                && whatAnIntTotalWorksOut(new LinearForm<>(ExactRatio.ZERO, every), read) != null;
+        trial().tellsWhereItStops(total.call(), told);
+        if (told) {
+            InputReading reading = read;
+            trial().readOnTheWays(written, form -> whatAnIntTotalWorksOut(form, reading));
+        }
     }
 
     /**
@@ -11720,7 +11803,7 @@ final class Pullback {
      * form of the input's numbers to tell: what says it was told is what was recorded.
      */
     private boolean toldOnTheArms(Derivation read, LinearForm<Quantity> form) {
-        UndividedByARelation.Working worked = whatAnIntTotalWorksOut(form);
+        UndividedByARelation.Working worked = whatAnIntTotalWorksOut(form, this.read);
         if (worked == null) {
             return false;
         }
@@ -11742,9 +11825,11 @@ final class Pullback {
     /**
      * What a run works out making a total of whole numbers that comes to {@code form}: the one
      * operation it is, held to an {@code Int}, or nothing where every number it may come to is
-     * one. Null where {@code form} is no form of the input's numbers.
+     * one. Null where {@code form} is no form of the input's numbers. {@code read} is the
+     * reading the input's numbers range over.
      */
-    private UndividedByARelation.Working whatAnIntTotalWorksOut(LinearForm<Quantity> form) {
+    private static UndividedByARelation.Working whatAnIntTotalWorksOut(LinearForm<Quantity> form,
+                                                                       InputReading read) {
         LinearForm<NumericTerm> ofTheInput = WhatTheDeclarationsLeave.ofTheInput(form);
         if (ofTheInput == null || !(WhereAnOperatorAnswers.ofATotal(Type.INT)
                 instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held)) {
