@@ -428,7 +428,7 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
                     ? meet(new FormRange(above, greatest))
                     : number.equals(greatest) && !number.equals(least)
                     ? meet(new FormRange(least, below))
-                    : holds(number) && least.equals(greatest) ? null : this;
+                    : (holds(number) && least.equals(greatest)) ? null : this;
             case LT -> meet(new FormRange(least, below));
             case LE -> meet(new FormRange(least, number));
             case GT -> meet(new FormRange(above, greatest));

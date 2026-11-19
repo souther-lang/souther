@@ -411,7 +411,7 @@ final class WorkedOutToReachIt {
         return path -> {
             if (position != null && Core.withoutStanding(path) instanceof Core.Read at
                     && position.equals(at.binding())) {
-                return most == null || most < 1 ? null
+                return (most == null || most < 1) ? null
                         : new FormRange(ExactRatio.ZERO, ExactRatio.of(most - 1));
             }
             ElementProjection place = ElementProjection.read(path, element, aliases, newtypes);
@@ -835,7 +835,7 @@ final class WorkedOutToReachIt {
             case Core.If fork -> {
                 FormRange then = numbersOf(new Denotation(fork.then(), value.at()), asked);
                 FormRange otherwise = numbersOf(new Denotation(fork.els(), value.at()), asked);
-                yield then == null || otherwise == null ? null : then.hull(otherwise);
+                yield (then == null || otherwise == null) ? null : then.hull(otherwise);
             }
             default -> null;
         };

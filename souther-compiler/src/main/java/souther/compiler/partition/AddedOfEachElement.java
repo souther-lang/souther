@@ -354,7 +354,7 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
                                  BigInteger greatest) {
         Checked whole = checkedAlone(new FormRange(ExactRatio.ZERO, ExactRatio.ZERO), rangeOf,
                 least, greatest, false);
-        return whole == null || whole.readsTheAnswerSoFar() ? null : whole;
+        return (whole == null || whole.readsTheAnswerSoFar()) ? null : whole;
     }
 
     /** The same with the answer so far anywhere in {@code soFar}, and, where {@code onlyItsRange},
@@ -371,7 +371,7 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
             checker.named().put(each.name(), value);
         }
         Checked whole = checker.checked(answer, false);
-        return whole.notShown() && !onlyItsRange ? null : whole;
+        return (whole.notShown() && !onlyItsRange) ? null : whole;
     }
 
     /**

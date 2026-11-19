@@ -223,8 +223,8 @@ public final class InputNumber {
         // No form of a place says what the closure works out of an element, which is nothing
         // to tell where it works out nothing that may end a run, or where it answers a test of
         // the element: a comparison it makes is read as a comparison, on each element.
-        return closure.body().type() == Type.BOOL
-                || WhatARunMayEndFor.endsNoneBeneath(closure.body()) ? List.of() : null;
+        return (closure.body().type() == Type.BOOL
+                || WhatARunMayEndFor.endsNoneBeneath(closure.body())) ? List.of() : null;
     }
 
     /**

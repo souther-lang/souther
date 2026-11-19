@@ -2231,7 +2231,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              */
             private static NumericTerm addedAsItIs(LinearForm<NumericTerm> added) {
                 NumericTerm total = theTotalItIs(added);
-                return total != null && AddedOfEachElement.addsUpEachElement(total) ? total : null;
+                return (total != null && AddedOfEachElement.addsUpEachElement(total)) ? total
+                        : null;
             }
 
             /** The total {@code added} is alone, at the weight one ({@link FormRange#aTotal}), or
