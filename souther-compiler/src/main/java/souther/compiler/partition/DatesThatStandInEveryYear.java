@@ -25,9 +25,10 @@ import java.util.stream.LongStream;
  * one of the first kind can be put in any year the date has without a part of it changing, so the
  * year is a number nothing said of the month and the day ties.
  *
- * <p>That holds of the years every date of which the date may be. The parts and the years come
- * round with the calendar's cycle of four hundred years, so what is the same in all of those is the
- * same in every year between. The years at either end are another kind: the dates a date may be
+ * <p>That holds of the years every date of which the date may be, and is read off those years and
+ * no others, as a move is read only at a date it is defined at. The parts and the years come
+ * round with the calendar's cycle of four hundred years, so what is the same in a cycle of them is
+ * the same in every year between. The years at either end are another kind: the dates a date may be
  * start and stop somewhere, at the calendar's ends or at its own, and so does each move, and a
  * year there holds some of its dates. From the first of January 1900, a date moved a day back is
  * in 1899 on one date only. What a date stands at there is read off the dates of that year it may
@@ -40,7 +41,6 @@ import java.util.stream.LongStream;
  */
 final class DatesThatStandInEveryYear {
 
-    private static final int FIRST_YEAR = 2000;
     private static final int YEARS_OF_A_CYCLE = 400;
 
     /**
@@ -88,8 +88,8 @@ final class DatesThatStandInEveryYear {
      * <p>The year is the year of the date after the first of {@code yearShifts}, and every other
      * of them is asked to put the date in that year too; where none is given, it is the year of
      * the date itself. Between the first year and the last, the months and days are those at
-     * which every part is the same number in all the years of the cycle and no move puts the date
-     * in another year than it is in. At the first and the last year they are the dates of that
+     * which every part is the same number in all those years and no move puts the date in
+     * another year than it is in. At the first and the last year they are the dates of that
      * year at which every move is defined and puts the date in the year.
      *
      * @param parts      the month and day parts taken of the date, each with the move it was
@@ -137,7 +137,7 @@ final class DatesThatStandInEveryYear {
         }
         List<List<Origin>> out = new ArrayList<>();
         if (last - first >= 2) {
-            List<Origin> alike = alikeOverTheCycle(parts, yearShifts);
+            List<Origin> alike = alikeInTheYearsBetween(parts, yearShifts, first, last);
             if (alike.isEmpty()) {
                 return null;
             }
@@ -154,39 +154,48 @@ final class DatesThatStandInEveryYear {
     }
 
     /**
-     * Every month and day at which each of {@code parts} is the same number in all the years of
-     * the cycle and no move of {@code yearShifts} puts the date in another year.
+     * Every month and day at which each of {@code parts} is the same number in all the years
+     * between {@code first} and {@code last} and no move of {@code yearShifts} puts the date in
+     * another year.
      *
-     * <p>A question about the calendar's pattern and not about where the moves are defined: it is
-     * asked of the years between the first and the last, every date of which every move is
-     * defined at, so only what each move moves by is read.
+     * <p>Asked of the years strictly between {@code first} and {@code last}, every date of which
+     * every move is defined at, and of no other: a move is read only at dates it is defined at.
+     * The calendar comes round every four hundred years, so no more than one cycle of them is
+     * read, and a whole cycle answers the same wherever it starts.
      */
-    private static List<Origin> alikeOverTheCycle(List<Part> parts,
-                                                  List<DateTranslation> yearShifts) {
+    private static List<Origin> alikeInTheYearsBetween(List<Part> parts,
+                                                       List<DateTranslation> yearShifts,
+                                                       int first, int last) {
         List<Long> partMoves = parts.stream().map(part -> part.moved().offsetDays()).toList();
         List<TakenAs.DatePart> which = parts.stream().map(Part::which).toList();
         List<Long> yearMoves = yearShifts.stream().map(DateTranslation::offsetDays).distinct()
                 .sorted().toList();
-        return KNOWN.computeIfAbsent(new Asked(which, partMoves, yearMoves),
-                asked -> worked(asked.which(), asked.partMoves(), asked.yearMoves()));
+        int from = first + 1;
+        int years = Math.min(last - 1, first + YEARS_OF_A_CYCLE) - first;
+        int startingIn = years == YEARS_OF_A_CYCLE ? 0 : Math.floorMod(from, YEARS_OF_A_CYCLE);
+        return KNOWN.computeIfAbsent(new Asked(which, partMoves, yearMoves, startingIn, years),
+                _ -> worked(which, partMoves, yearMoves, from, years));
     }
 
-    /** What the pattern is asked of, which is all there is to the answer: which parts, and what
-     *  each move moves by. */
+    /**
+     * What the pattern is asked of, which is all there is to the answer: which parts, what each
+     * move moves by, and which years of the cycle, as where they start in it and how many there
+     * are — a whole cycle starting nowhere in particular.
+     */
     private record Asked(List<TakenAs.DatePart> which, List<Long> partMoves,
-                         List<Long> yearMoves) {}
+                         List<Long> yearMoves, int startingIn, int years) {}
 
     /** Answers by what was asked. A pure function of its key, so an answer is never stale; a
      *  way's statements come back to the same few moves again and again across the relations of
-     *  a program, and each answer walks four hundred years of the calendar. */
+     *  a program, and each answer walks up to four hundred years of the calendar. */
     private static final Map<Asked, List<Origin>> KNOWN = new ConcurrentHashMap<>();
 
     private static List<Origin> worked(List<TakenAs.DatePart> which, List<Long> partMoves,
-                                       List<Long> yearMoves) {
+                                       List<Long> yearMoves, int from, int years) {
         List<Origin> out = new ArrayList<>();
         for (int month = 1; month <= 12; month++) {
             for (int day = 1; day <= Month.of(month).maxLength(); day++) {
-                int[] taken = alikeEveryYear(month, day, which, partMoves, yearMoves);
+                int[] taken = alikeEveryYear(month, day, which, partMoves, yearMoves, from, years);
                 if (taken != null) {
                     out.add(new Origin(month, day, ratiosOf(taken)));
                 }
@@ -196,9 +205,10 @@ final class DatesThatStandInEveryYear {
     }
 
     private static int[] alikeEveryYear(int month, int day, List<TakenAs.DatePart> which,
-                                        List<Long> partMoves, List<Long> yearMoves) {
+                                        List<Long> partMoves, List<Long> yearMoves, int from,
+                                        int years) {
         int[] out = null;
-        for (int year = FIRST_YEAR; year < FIRST_YEAR + YEARS_OF_A_CYCLE; year++) {
+        for (int year = from; year < from + years; year++) {
             if (day > YearMonth.of(year, month).lengthOfMonth()) {
                 return null;
             }

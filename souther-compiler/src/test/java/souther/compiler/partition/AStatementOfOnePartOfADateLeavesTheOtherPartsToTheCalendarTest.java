@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.check.DatePartsLeft;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
@@ -196,6 +197,44 @@ class AStatementOfOnePartOfADateLeavesTheOtherPartsToTheCalendarTest {
                 List.of(statement(1989, Rel.GE, year(0, -1, from1990))), held));
         assertEquals(1990, YearsAWayAllows.choose(
                 List.of(statement(1990, Rel.GE, year(0, -1, from1990))), held)[0]);
+    }
+
+    /** A move that takes the first of January 2000 five hundred days past the calendar's end,
+     *  defined at the dates up to about then. */
+    private static final DateTranslation FAR = DateTranslation.none().thenAddDays(
+            LocalDate.MAX.toEpochDay() - LocalDate.of(2000, 1, 1).toEpochDay() + 500);
+
+    /**
+     * A move is read at the dates it is defined at, however far it moves: the months a date
+     * moved that far stands at in the years between are the months it stands at moved by as much
+     * less the whole cycles, which take a month and a day to the same month and day.
+     */
+    @Test
+    void aMoveFarAcrossTheCalendarIsReadAtTheDatesItIsDefinedAt() {
+        var far = new DatesThatStandInEveryYear.Part(TakenAs.DatePart.MONTH, FAR);
+        var near = new DatesThatStandInEveryYear.Part(TakenAs.DatePart.MONTH,
+                DateTranslation.none().thenAddDays(
+                        Math.floorMod(FAR.offsetDays(), DatePartsLeft.DAYS_OF_A_CYCLE)));
+
+        List<List<DatesThatStandInEveryYear.Origin>> kinds =
+                DatesThatStandInEveryYear.byTheYearsOf(List.of(far), List.of());
+        assertNotNull(kinds);
+        assertEquals(DatesThatStandInEveryYear.byTheYearsOf(List.of(near), List.of()).getFirst(),
+                kinds.getFirst());
+    }
+
+    /** And a year is chosen at the dates such a move is defined at: the months and days it gives
+     *  there are every month and every day. */
+    @Test
+    void aYearIsChosenAtTheDatesAFarMoveIsDefinedAt() {
+        var dates = new DateTranslation(0, FAR.first(), FAR.last());
+        var held = List.of(List.of(new DatesThatStandInEveryYear.Part(TakenAs.DatePart.MONTH, FAR),
+                new DatesThatStandInEveryYear.Part(TakenAs.DatePart.DAY, FAR)));
+
+        int[] chosen = YearsAWayAllows.choose(
+                List.of(statement(-1000, Rel.GE, year(0, 1, dates))), held);
+        assertNotNull(chosen);
+        assertTrue(chosen[0] >= 1000 && chosen[0] <= 1998, String.valueOf(chosen[0]));
     }
 
     /** The days a month has in every year alike: the thirty-first of January is one, the

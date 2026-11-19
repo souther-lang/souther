@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.DatePartsLeft;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.Rel;
@@ -341,12 +342,18 @@ final class YearsAWayAllows {
      * a year taken is looked at itself.
      *
      * <p>The calendar's pattern and nothing else: each move is asked by what it moves by, and the
-     * dates it is defined at are asked of the year taken.
+     * dates it is defined at are asked of the year taken. A part's move is read less the whole
+     * cycles it moves by, which take a month and a day to the same month and day, so that it is
+     * defined at every date of the cycle read here however far it moves. A shift of the year is
+     * read as it is: it moves the year, and one that leaves no date in its year leaves none in
+     * any.
      */
     private static BitSet classesGivingEveryValue(List<DatesThatStandInEveryYear.Part> parts,
                                                   List<DateTranslation> shifts) {
         List<DatesThatStandInEveryYear.Part> byTheMove = parts.stream().map(part ->
-                new DatesThatStandInEveryYear.Part(part.which(), byWhatItMoves(part.moved())))
+                new DatesThatStandInEveryYear.Part(part.which(),
+                        DateTranslation.none().thenAddDays(Math.floorMod(
+                                part.moved().offsetDays(), DatePartsLeft.DAYS_OF_A_CYCLE))))
                 .toList();
         List<DateTranslation> shiftsByTheMove =
                 shifts.stream().map(YearsAWayAllows::byWhatItMoves).toList();
