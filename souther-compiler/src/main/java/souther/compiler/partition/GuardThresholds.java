@@ -1218,9 +1218,12 @@ public final class GuardThresholds {
         }
         // Where what a run works out to evaluate it is not all told, which says nothing of a stop
         // and nothing against the line it draws: the line stands where it was read and the rows a
-        // run gets to it past are what is open, so the border waits on it. A comparison read as
-        // no relation was not read, and says what stopped it.
-        if (stopsNotFullyRead && whatItStatesWasRead(read)) {
+        // run gets to it past are what is open, so the border waits on it. Asked of a comparison
+        // read as a relation only: one that cut nothing, or answered nowhere, has the stops of its
+        // evaluation recorded less exactly, where a walk's parts carried in a tuple and an
+        // operation over how many a list holds are left untold that nothing leaves untold in
+        // the spelling that reads them as a total.
+        if (stopsNotFullyRead && read.readAsARelation()) {
             for (FilingCoordinate place : read.filedAt()) {
                 withoutALine.boundaryUndetermined(
                         new RuleCitation.Written(new RuleRef.Comparison(behavior, wrote), anchor),
@@ -1367,18 +1370,6 @@ public final class GuardThresholds {
         }
         return each.statedAsACondition().isEmpty() || ComparisonAssessment.someRowArrives(
                 wayToACase.apply(worked.madeWhere()), arrivals);
-    }
-
-    /**
-     * Whether what the comparison states was read: as a relation, or as several lines held
-     * together, which says nothing of the meaning going unread. A comparison whose arithmetic met
-     * a shape no term stands for was not, and what a run works out to evaluate it is told by that
-     * arithmetic, so there is nothing of it to say is partly told.
-     */
-    private static boolean whatItStatesWasRead(ComparisonAssessment read) {
-        List<ComparisonAssessment.LeftAt> left = read.whatEachPlaceIsLeftWith();
-        return !read.relationsRead().isEmpty() || (!left.isEmpty() && left.stream()
-                .allMatch(each -> each.why() instanceof BlockReason.SeveralLinesInOneRule));
     }
 
     /**

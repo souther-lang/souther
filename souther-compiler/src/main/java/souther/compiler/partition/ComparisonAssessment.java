@@ -2629,6 +2629,30 @@ sealed interface ComparisonAssessment {
     }
 
     /**
+     * Whether the comparison was read as a relation of the input's numbers, or as several lines
+     * held together, which says nothing of the meaning going unread. Not where it was read to
+     * the end and cut nothing, or answered nowhere, or had no line to draw: those are read, and
+     * as no relation. Not where it is about what a dependency answers or states no relation, or
+     * where the reading stopped at a shape no term stands for.
+     *
+     * <p>No {@code default}, for the reason {@link #whatEachPlaceIsLeftWith} has none.
+     */
+    default boolean readAsARelation() {
+        return switch (this) {
+            case AcrossPositions _, AtAPosition _ -> true;
+            case AgainstAnotherValue against -> !against.relations().isEmpty();
+            case Several several -> several.parts().stream()
+                    .anyMatch(part -> part.line().readAsARelation());
+            case Unread unread -> unread.why().values().stream()
+                    .allMatch(why -> why instanceof BlockReason.SeveralLinesInOneRule);
+            case AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _, NoInput _,
+                 CutsNothing _, AnswersNowhere _, OutsideTheDomain _, NothingArrivesAtItsLine _,
+                 TurnsNothing _, NothingArrivesAtItsRelation _, NothingArrivesAtItsStop _,
+                 RelationTurnsNothing _, NoFeasibleInput _ -> false;
+        };
+    }
+
+    /**
      * What a reader telling an author why a line was not worked out is told of its cases, where
      * they were more ways of choosing one than are taken apart ({@link CaseExpansion}): beside
      * what each place is left with, and never in it. None for a comparison of one line, whose
