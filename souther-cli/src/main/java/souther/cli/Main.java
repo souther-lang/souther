@@ -702,7 +702,7 @@ public final class Main {
         for (HelpersReadOnApplicationsAroundThem.Said said
                 : HelpersReadOnApplicationsAroundThem.toldOf(compilation, module, behavior)) {
             List<String> readBy = new ArrayList<>();
-            said.readings().forEach((reader, times) -> readBy.add(
+            said.applications().forEach((reader, times) -> readBy.add(
                     Messages.get("cli.examples.helper.ahead.read", locale, reader, times)));
             List<ValueName.Helper> inside = said.calledInside();
             String calledInside = inside.isEmpty() ? ""

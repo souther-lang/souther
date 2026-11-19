@@ -258,7 +258,7 @@ public final class GuardThresholds {
         for (ComparisonReadings.AConstructMet each : met) {
             Optional<ModelOccurrence> copy = ModelOccurrence.statedAt(each.occurrence());
             if (copy.isPresent()) {
-                out.add(new AComparisonRead(copy.get(), each.applying().eachReadOn()));
+                out.add(new AComparisonRead(copy.get(), each.applying().told()));
             }
         }
         return List.copyOf(out);

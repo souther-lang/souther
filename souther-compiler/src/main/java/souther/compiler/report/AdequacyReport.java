@@ -1082,11 +1082,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      *                        a behavior, leave the comparison read again on each of those
      *                        applications ({@link AHelperReadOnApplicationsAroundIt#leftReadAgainBy})
      */
-    private record OnEachElement(HelpersReadOnApplicationsAroundThem.Told told,
+    private record OnEachElement(AHelperReadOnApplicationsAroundIt named,
+                                 List<ValueName.Helper> calledInside,
                                  List<ValueName.Helper> leftReadAgainBy) {
 
         OnEachElement {
-            Objects.requireNonNull(told, "some helper");
+            Objects.requireNonNull(named, "some helper");
+            calledInside = List.copyOf(calledInside);
             leftReadAgainBy = List.copyOf(leftReadAgainBy);
         }
     }
@@ -1105,12 +1107,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             List<ModelOccurrence> readAt, List<ValueName.Helper> suggested) {
         Set<Optional<ValueName.Helper>> writers = new LinkedHashSet<>();
         readAt.forEach(copy -> writers.add(AHelperReadOnApplicationsAroundIt.writtenIn(copy)));
-        return writers.size() != 1 ? Optional.empty()
-                : writers.iterator().next()
-                        .filter(helper -> !suggested.contains(helper))
-                        .map(helpers::get)
-                        .map(told -> new OnEachElement(told,
-                                told.named().leftReadAgainBy(suggested, readAt)));
+        if (writers.size() != 1) {
+            return Optional.empty();
+        }
+        Optional<HelpersReadOnApplicationsAroundThem.Told> told = writers.iterator().next()
+                .filter(helper -> !suggested.contains(helper))
+                .map(helpers::get);
+        // Of the copies this reading was read at alone: a call around another copy of the helper
+        // is nothing this reading was read on.
+        return told.flatMap(each -> each.named().restrictedTo(readAt)
+                .map(here -> new OnEachElement(here, each.calledInside(),
+                        here.leftReadAgainBy(suggested))));
     }
 
     /** The helpers the rules of a case not worked out suggest at one reading of it: those its
@@ -9809,15 +9816,15 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static void helperCalledOnEachElement(ObjectNode one, OnEachElement said,
                                                   WhereAPartIs parts, DocumentSources sources) {
         ObjectNode helper = one.putObject("helperCalledOnEachElement");
-        helper.put("helper", said.told().named().helper().toString());
+        helper.put("helper", said.named().helper().toString());
         ArrayNode calls = helper.putArray("calls");
-        for (ModelOccurrence call : said.told().named().calls()) {
+        for (ModelOccurrence call : said.named().calls()) {
             ObjectNode at = calls.addObject();
             copyId(at.putObject("construct"), call);
             writtenAt(at, call, parts, sources);
         }
         ArrayNode inside = helper.putArray("calledInside");
-        said.told().calledInside().forEach(caller -> inside.add(caller.toString()));
+        said.calledInside().forEach(caller -> inside.add(caller.toString()));
         ArrayNode left = helper.putArray("leftReadAgainBy");
         said.leftReadAgainBy().forEach(other -> left.add(other.toString()));
     }
@@ -10165,14 +10172,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static String helperOnEachElementSaid(OnEachElement said,
                                                   Function<ModelOccurrence, Message> writtenIn,
                                                   Page page) {
-        HelpersReadOnApplicationsAroundThem.Told told = said.told();
         Set<Message> at = new LinkedHashSet<>();
-        told.named().calls().forEach(call -> at.add(writtenIn.apply(call)));
+        said.named().calls().forEach(call -> at.add(writtenIn.apply(call)));
         String out = page.say(new ReportMessage.TheHelperIsCalledOnEachElement(
-                told.named().helper().name(), Joined.reasons(List.copyOf(at)),
-                told.calledInside().isEmpty() ? new ReportMessage.Nothing()
+                said.named().helper().name(), Joined.reasons(List.copyOf(at)),
+                said.calledInside().isEmpty() ? new ReportMessage.Nothing()
                         : new ReportMessage.TheCallIsWrittenInsideHelpers(listed(page,
-                                told.calledInside().stream()
+                                said.calledInside().stream()
                                         .map(each -> "`" + each.name() + "`").toList()))));
         return said.leftReadAgainBy().isEmpty() ? out
                 : out + page.say(new ReportMessage.DeclaringThemLeavesItReadAgain(listed(page,

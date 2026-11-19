@@ -122,6 +122,34 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
             let g (c, nominal) = dueDate(c, nominal)
             """;
 
+    /** Billing's due dates with a search of its own on each side: the helper the comparisons are
+     *  written in is called inside two finds, each in a helper of its own. */
+    private static final String CALLED_IN_TWO_FINDS = """
+            module demo exposing (g, Calendar, Rule)
+            import List ( map, find, rangeInclusive )
+            data Rule = Preceding | Following
+            data Calendar = { holidays: Set<Date>, aSunday: Date, rule: Rule }
+            let weekday (c: Calendar, d: Date): Int =
+                Int.floorMod(Date.daysBetween(c.aSunday, d), 7)
+            let isBusinessDay (c: Calendar, d: Date): Bool =
+                weekday(c, d) >= 1 && weekday(c, d) <= 5 && Bool.not(Set.contains(d, c.holidays))
+            let nextBusinessDay (c: Calendar, from: Date): Date =
+                rangeInclusive(0, 1)
+                    |> map(n -> Date.addDays(n, from))
+                    |> find(d -> isBusinessDay(c, d))
+                    |> Option.withDefault(from)
+            let previousBusinessDay (c: Calendar, from: Date): Date =
+                rangeInclusive(0, 1)
+                    |> map(n -> Date.addDays(0 - n, from))
+                    |> find(d -> isBusinessDay(c, d))
+                    |> Option.withDefault(from)
+            behavior g : (c: Calendar, nominal: Date) -> Date
+            let g (c, nominal) =
+                match c.rule with
+                    | Preceding -> previousBusinessDay(c, nominal)
+                    | Following -> nextBusinessDay(c, nominal)
+            """;
+
     /**
      * How many cases a line is taken apart into here: none. The comparisons of one search leave
      * few ways once their numbers are read, so at the figure declared the line would be taken
@@ -289,6 +317,33 @@ class AHelperWhoseReadingsACaseChoosesAmongOnePastAnotherIsNamedTest {
             }
             assertEquals(List.of(), JSON.convertValue(named.path("leftReadAgainBy"), List.class),
                     "no other rule suggests a helper here: " + named);
+        }
+    }
+
+    /**
+     * A reading at a copy of the helper is told of the find around that copy, and of no find
+     * around another copy: here every copy is called inside one of two finds, each in a helper
+     * of its own.
+     */
+    @Test
+    void aReadingIsToldOfTheFindsAroundItsOwnCopiesAlone() {
+        List<JsonNode> told = toldOf(CALLED_IN_TWO_FINDS);
+        assertFalse(told.stream().noneMatch(reading -> reading.has("helperCalledOnEachElement")),
+                "some reading tells of the helper: " + told);
+        for (JsonNode reading : told) {
+            if (!reading.has("helperCalledOnEachElement")) {
+                continue;
+            }
+            Set<String> callers = new TreeSet<>();
+            for (JsonNode copy : reading.path("readAt")) {
+                JsonNode through = copy.path("through");
+                callers.add(through.get(through.size() - 1).path("definition").asString());
+            }
+            Set<String> around = new TreeSet<>();
+            for (JsonNode call : reading.path("helperCalledOnEachElement").path("calls")) {
+                around.add(call.path("construct").path("definition").asString());
+            }
+            assertEquals(callers, around, "the finds around this reading's copies: " + reading);
         }
     }
 }

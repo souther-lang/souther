@@ -26,7 +26,7 @@ import java.util.Set;
 /**
  * The helpers one behavior's comparisons are written in whose copies stand in more than one
  * application of a closure a call outside them makes ({@link AHelperReadOnApplicationsAroundIt}),
- * with how many times those comparisons are read.
+ * with how many applications those copies stand on.
  *
  * <p><b>Asked of where the comparisons stand, and before anything is read of them.</b> What it
  * reads is {@link Adequacy.ComparisonsRead}: which constructs of the body may state something, in
@@ -35,12 +35,15 @@ import java.util.Set;
  * their points come after that and are what measuring a body costs, so what this says is known
  * while the compile is still all that has been paid for.
  *
- * <p>Read again on every application, each comparison is a reading each line is drawn from, and
- * each line is asked where it decides; how many lines those readings come to is not said here,
- * since readings drawing one line at one place come to one, and telling which do is the drawing.
+ * <p>So what it says is where the constructs stand, and no more. A construct met here may state
+ * nothing a line is drawn from — a comparison whose statement is carried past it, an application
+ * stating nothing of its own — and how many lines the applications it stands on come to is not
+ * said either, since readings drawing one line at one place come to one, and telling which do is
+ * the drawing.
  *
  * <p>A line asked no further for the number of its cases stands where the walk met it all the
- * same; so what a report says of a helper at such a line is read off this. Not off the line's
+ * same; so what a report says of a helper at such a line is read off this, of the copies the line
+ * was read at alone ({@link AHelperReadOnApplicationsAroundIt#restrictedTo}). Not off the line's
  * cases: a case of one candidate is made of nothing the function applied to the candidates did.
  *
  * @param name     the module
@@ -50,16 +53,18 @@ public record HelpersReadOnApplicationsAroundThem(String name, String behavior)
         implements Key<List<HelpersReadOnApplicationsAroundThem.Told>> {
 
     /**
-     * One helper, and how often its comparisons are read.
+     * One helper, the copies of its comparisons with the calls around each, and how many
+     * applications those copies stand on.
      *
-     * @param named        the helper and the calls whose applications stand around its copies
-     * @param readings     how many times its comparisons are read: each once on each application
-     *                     of the closures it stands in ({@link AComparisonRead#readings})
+     * @param named        the helper, and each copy of its comparisons with a call outside it
+     *                     that applies a closure around it more than once
+     * @param applications how many applications those copies stand on together, each copy's as
+     *                     the walk said them one by one
      * @param calledInside the helpers that call it, and the ones calling those, out to a behavior:
      *                     every call of the helper written inside one has to move into the
      *                     behavior's own body, since a helper cannot call a behavior
      */
-    public record Told(AHelperReadOnApplicationsAroundIt named, int readings,
+    public record Told(AHelperReadOnApplicationsAroundIt named, int applications,
                        List<ValueName.Helper> calledInside) {
 
         public Told {
@@ -69,43 +74,43 @@ public record HelpersReadOnApplicationsAroundThem(String name, String behavior)
     }
 
     /**
-     * One helper of one module, with how many times each behavior that reads its comparisons on
-     * applications around it reads them.
+     * One helper of one module, with how many applications of functions outside it its
+     * comparisons stand on, in each behavior where they do.
      *
      * <p>One per helper and not one per behavior: what an author does about it is declare the
-     * helper, once, and every behavior reading it is told of together.
+     * helper, once, and every behavior it stands so in is told of together.
      *
      * @param module       the module
      * @param helper       the helper
-     * @param readings     for each behavior that reads its comparisons so, how many times, in the
-     *                     order the behaviors are declared
+     * @param applications for each behavior its comparisons stand so in, on how many applications,
+     *                     in the order the behaviors are declared
      * @param calledInside the helpers that call it, and the ones calling those, out to a behavior
      */
-    public record Said(String module, ValueName.Helper helper, Map<String, Integer> readings,
+    public record Said(String module, ValueName.Helper helper, Map<String, Integer> applications,
                        List<ValueName.Helper> calledInside) {
 
         public Said {
             Objects.requireNonNull(module, "some module");
             Objects.requireNonNull(helper, "some helper");
-            readings = Collections.unmodifiableMap(new LinkedHashMap<>(readings));
+            applications = Collections.unmodifiableMap(new LinkedHashMap<>(applications));
             calledInside = List.copyOf(calledInside);
-            if (readings.isEmpty()) {
-                throw new IllegalArgumentException("a helper is told of where some behavior"
-                        + " reads it");
+            if (applications.isEmpty()) {
+                throw new IllegalArgumentException("a helper is told of where it stands in some"
+                        + " behavior");
             }
         }
     }
 
     /**
      * Every helper of the behaviors {@code module} and {@code behavior} select whose comparisons
-     * are read on applications of a function outside it ({@link AHelperReadOnApplicationsAroundIt}),
+     * stand on applications of a function outside it ({@link AHelperReadOnApplicationsAroundIt}),
      * by module and helper, in the order the modules and behaviors are declared; a null selects
      * every one. Asks where the selected behaviors' comparisons stand and nothing about any other
      * behavior, and nothing the measurement makes.
      *
-     * <p>Every such helper, however few times it is read. How much a reading costs is the
-     * measurement's to find out, and what this says is where the readings come from: a figure
-     * below which a helper went untold would be a reckoning of cost that nothing here makes.
+     * <p>Every such helper, on however few applications. How much they cost is the measurement's
+     * to find out, and what this says is where the comparisons stand: a figure below which a
+     * helper went untold would be a reckoning of cost that nothing here makes.
      */
     public static List<Said> toldOf(Compilation compilation, String module, String behavior) {
         List<Said> out = new ArrayList<>();
@@ -117,7 +122,7 @@ public record HelpersReadOnApplicationsAroundThem(String name, String behavior)
             if (surface == null) {
                 continue;
             }
-            Map<ValueName.Helper, Map<String, Integer>> readings = new LinkedHashMap<>();
+            Map<ValueName.Helper, Map<String, Integer>> applications = new LinkedHashMap<>();
             Map<ValueName.Helper, List<ValueName.Helper>> callers = new LinkedHashMap<>();
             for (Hir.BehaviorDef declared : surface.behaviors()) {
                 if (behavior != null && !behavior.equals(declared.name())) {
@@ -131,12 +136,12 @@ public record HelpersReadOnApplicationsAroundThem(String name, String behavior)
                 }
                 for (Told each : told) {
                     ValueName.Helper helper = each.named().helper();
-                    readings.computeIfAbsent(helper, _ -> new LinkedHashMap<>())
-                            .put(declared.name(), each.readings());
+                    applications.computeIfAbsent(helper, _ -> new LinkedHashMap<>())
+                            .put(declared.name(), each.applications());
                     callers.putIfAbsent(helper, each.calledInside());
                 }
             }
-            readings.forEach((helper, byBehavior) ->
+            applications.forEach((helper, byBehavior) ->
                     out.add(new Said(name, helper, byBehavior, callers.get(helper))));
         }
         return List.copyOf(out);
@@ -167,30 +172,42 @@ public record HelpersReadOnApplicationsAroundThem(String name, String behavior)
         }
         List<Told> out = new ArrayList<>();
         byHelper.forEach((helper, gathered) -> gathered.named().ifPresent(named ->
-                out.add(new Told(named, gathered.readings, callersOf(graph, helper)))));
+                out.add(new Told(named, gathered.applicationsOf(named),
+                        callersOf(graph, helper)))));
         return List.copyOf(out);
     }
 
     /** The comparisons of one helper, gathered. */
     private static final class Gathered {
 
-        private final Set<ModelOccurrence> copies = new LinkedHashSet<>();
-        private final List<ApplicationsReadOn> readOn = new ArrayList<>();
-        private int readings;
+        /** Each copy with a call around it, and how many of its applications the copy stands
+         *  on, as the walk said them one by one. */
+        private final List<AHelperReadOnApplicationsAroundIt.ReadAgain> read = new ArrayList<>();
+        /** How many applications each copy stands on, by copy. */
+        private final Map<ModelOccurrence, Integer> applications = new LinkedHashMap<>();
 
+        /** {@code comparison}, where the walk said each application it stands on; one whose
+         *  applications are not said, or that stands on none, has no call around it to tell. */
         void add(AComparisonRead comparison) {
-            copies.add(comparison.copy());
-            readOn.addAll(comparison.applications());
-            readings += comparison.readings();
+            if (!(comparison.on() instanceof AComparisonRead.AppliedOn.OnEach(var each))) {
+                return;
+            }
+            applications.merge(comparison.copy(), each.size(), Integer::sum);
+            for (ApplicationsReadOn.OfACall call : ApplicationsReadOn.byCall(each)) {
+                read.add(new AHelperReadOnApplicationsAroundIt.ReadAgain(comparison.copy(),
+                        call.construct(), call.applications()));
+            }
         }
 
         Optional<AHelperReadOnApplicationsAroundIt> named() {
-            List<AHelperReadOnApplicationsAroundIt.Applied> applied = new ArrayList<>();
-            for (ApplicationsReadOn.OfACall call : ApplicationsReadOn.byCall(readOn)) {
-                applied.add(new AHelperReadOnApplicationsAroundIt.Applied(call.construct(),
-                        call.applications()));
-            }
-            return AHelperReadOnApplicationsAroundIt.of(copies, applied);
+            return AHelperReadOnApplicationsAroundIt.of(read);
+        }
+
+        /** How many applications the copies {@code named} tells of stand on, together. */
+        int applicationsOf(AHelperReadOnApplicationsAroundIt named) {
+            Set<ModelOccurrence> copies = new LinkedHashSet<>();
+            named.around().forEach(each -> copies.add(each.copy()));
+            return copies.stream().mapToInt(applications::get).sum();
         }
     }
 

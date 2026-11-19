@@ -3,6 +3,8 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.meaning.AHelperReadOnApplicationsAroundIt;
+import souther.compiler.partition.AComparisonRead;
 import souther.compiler.types.ValueName;
 
 import java.util.List;
@@ -91,7 +93,7 @@ class AHelperIsToldOfFromTheWalkOfTheBodyAloneTest {
         assertEquals(List.of(new ValueName.Helper(MODULE, "firstBusinessDay"),
                 new ValueName.Helper(MODULE, "onABusinessDay"),
                 new ValueName.Helper(MODULE, "dueDate")), one.calledInside());
-        assertTrue(one.readings() > 1, one::toString);
+        assertTrue(one.applications() > 1, one::toString);
         measuredNothing(compilation);
     }
 
@@ -117,7 +119,7 @@ class AHelperIsToldOfFromTheWalkOfTheBodyAloneTest {
                 HelpersReadOnApplicationsAroundThem.toldOf(compilation, null, null);
         assertEquals(1, said.size(), said::toString);
         assertEquals(new ValueName.Helper(MODULE, "isBusinessDay"), said.getFirst().helper());
-        assertEquals(List.of("g", "h"), List.copyOf(said.getFirst().readings().keySet()));
+        assertEquals(List.of("g", "h"), List.copyOf(said.getFirst().applications().keySet()));
         measuredNothing(compilation);
     }
 
@@ -131,12 +133,67 @@ class AHelperIsToldOfFromTheWalkOfTheBodyAloneTest {
         List<HelpersReadOnApplicationsAroundThem.Said> said =
                 HelpersReadOnApplicationsAroundThem.toldOf(compilation, MODULE, "h");
         assertEquals(1, said.size(), said::toString);
-        assertEquals(List.of("h"), List.copyOf(said.getFirst().readings().keySet()));
+        assertEquals(List.of("h"), List.copyOf(said.getFirst().applications().keySet()));
         compilation.db().everyAnswer().keySet().forEach(key -> assertFalse(
                 (key instanceof Adequacy.ComparisonsRead read && !read.behavior().equals("h"))
                         || (key instanceof HelpersReadOnApplicationsAroundThem told
                         && !told.behavior().equals("h")),
                 "asked of a behavior not selected: " + key));
+    }
+
+    /** Where {@code ok}'s comparison stands in the body of {@code model}, as the walk met it:
+     *  each copy of it, with what the walk said of the applications around it. */
+    private static List<AComparisonRead> okMetIn(String model) {
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        List<AComparisonRead> met = compilation.db()
+                .ask(new Adequacy.ComparisonsRead(MODULE, "g")).value();
+        assertTrue(met != null, "where g's comparisons stand");
+        return met.stream().filter(each -> AHelperReadOnApplicationsAroundIt.writtenIn(each.copy())
+                .map(helper -> helper.name().equals("ok")).orElse(false)).toList();
+    }
+
+    /** A comparison nothing reads on the way to the answer is no line the measurement draws, and
+     *  the walk alone does not meet it either: both are told so by the one policy. */
+    @Test
+    void aComparisonNothingReadsIsNotMet() {
+        assertEquals(List.of(), okMetIn("""
+                module demo exposing (g)
+                import List ( any )
+                let ok (x: Int, t: Int): Bool = x > t
+                behavior g : (x: Int) -> Bool
+                let g (x) = {
+                    let unread = any(t -> ok(x, t), [1, 2, 3])
+                    x > 0
+                }
+
+                example g
+                    | "one row" : (5) -> true
+                """));
+    }
+
+    /** A comparison inside a closure no run applies stands on no application: none is counted,
+     *  and the helper is told of nowhere. */
+    @Test
+    void aComparisonInAClosureAppliedToNothingStandsOnNone() {
+        String model = """
+                module demo exposing (g)
+                import List ( any, rangeInclusive )
+                let ok (x: Int, t: Int): Bool = x > t
+                behavior g : (x: Int) -> Bool
+                let g (x) = any(t -> ok(x, t), rangeInclusive(1, 0)) || x > 0
+
+                example g
+                    | "one row" : (5) -> true
+                """;
+        List<AComparisonRead> met = okMetIn(model);
+        assertFalse(met.isEmpty(), "ok's comparison stands in g");
+        met.forEach(each -> assertTrue(each.on() instanceof AComparisonRead.AppliedOn.OnNone,
+                each::toString));
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        assertEquals(List.of(), HelpersReadOnApplicationsAroundThem.toldOf(compilation, null,
+                null));
     }
 
     /** Billing's due dates, read by two behaviors. */

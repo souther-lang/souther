@@ -1160,11 +1160,13 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         in.ways().reached(e, assumed);
         // The one place the two readings part: what is done at a construct. Where only where each
         // stands is asked, it is said and nothing of it is read; everything else in this walk,
-        // every way it takes into what lies below, is the same for both.
+        // every way it takes into what lies below, is the same for both. A construct the policy
+        // refuses where nothing it computes is read on the way to the answer is no line either
+        // reading draws, and the policy says so to both ({@link BoundaryPolicy#refuses}).
         StatedAt stated;
         if (in.metOnly().isPresent()) {
             ConstructOccurrence written = mayState(e);
-            if (written != null) {
+            if (written != null && BoundaryPolicy.refuses(live).isEmpty()) {
                 in.metOnly().get().add(new AConstructMet(in.context().of(written), applying));
             }
             stated = null;

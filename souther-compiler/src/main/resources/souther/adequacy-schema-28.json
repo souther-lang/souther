@@ -9369,7 +9369,7 @@
     },
     "helperCalledOnEachElement": {
       "type": "object",
-      "description": "The helper the comparison is written in, where its copies stand in more than one application of a function that a call outside every copy of it applies: declared as a behavior, it reads the comparison once over its own inputs, and the applications hand it a value each. Found from where the comparison's copies stand and the applications of the closures around them, as the walk of the body meets them before any line is drawn; whether what made the parts of a case was said, and what the case was made of, are not read. Absent where the comparison is written in the behavior's own body, where no call outside its copies applies a function around them more than once, and where the helper is one the other suggestions at this reading already name.",
+      "description": "The helper the comparison is written in, where a copy this reading was read at stands in more than one application of a function that a call outside that copy applies: declared as a behavior, it reads the comparison once over its own inputs, and the applications hand it a value each. Found from where each copy stands and which call applies a closure around that copy, as the walk of the body meets them before any line is drawn; whether what made the parts of a case was said, and what the case was made of, are not read. Of the copies this reading was read at alone: a call around another copy of the helper is not listed here. Absent where the comparison is written in the behavior's own body, where no call outside these copies applies a function around them more than once, and where the helper is one the other suggestions at this reading already name.",
       "required": [
         "helper",
         "calls",
@@ -9385,7 +9385,7 @@
         "calls": {
           "type": "array",
           "minItems": 1,
-          "description": "Each call outside the helper's copies that applies a function around them more than once, in the copy of the body it stands in, in the order they are met.",
+          "description": "Each call that applies a function more than once around one of the copies this reading was read at, from outside that copy, in the copy of the body it stands in, in the order they are met.",
           "items": {
             "type": "object",
             "required": [
@@ -9415,7 +9415,7 @@
           "items": {
             "type": "string"
           },
-          "description": "The helpers the other suggestions at this reading name (`multipliedHelpers`, `helperToDeclare`, or a costly reading's `helpers`) that, declared as a behavior, leave the comparison in this behavior, read again on each application of `calls`: those some copy of the comparison does not stand in. A fact about where the copies stand, and no reckoning of what either suggestion would cost. Empty where every one of them takes the comparison in, or there is none."
+          "description": "The helpers the other suggestions at this reading name (`multipliedHelpers`, `helperToDeclare`, or a costly reading's `helpers`) that, declared as a behavior, leave a copy of the comparison read again on each application of a call around it: those it does not stand in, and those its call stands in as well, which take the call into their own body with it. A helper takes a copy out of the applications around it only where the copy stands in a copy of the helper and the call does not. A fact about where the copies and the calls stand, and no reckoning of what either suggestion would cost. Empty where every one of them takes every copy out, or there is none."
         }
       }
     },

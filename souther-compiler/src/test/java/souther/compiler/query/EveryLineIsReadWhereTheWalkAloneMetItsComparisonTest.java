@@ -115,8 +115,10 @@ class EveryLineIsReadWhereTheWalkAloneMetItsComparisonTest {
         for (AComparisonRead each : met) {
             Set<AnApplicationOfAClosure> on =
                     applied.computeIfAbsent(each.copy(), _ -> new HashSet<>());
-            for (ApplicationsReadOn one : each.applications()) {
-                on.addAll(one.each());
+            if (each.on() instanceof AComparisonRead.AppliedOn.OnEach(var applications)) {
+                for (ApplicationsReadOn one : applications) {
+                    on.addAll(one.each());
+                }
             }
         }
         assertFalse(read.each().isEmpty(), "g reads some line");

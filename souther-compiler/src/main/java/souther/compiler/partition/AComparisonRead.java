@@ -13,22 +13,49 @@ import java.util.Objects;
  *
  * <p>Where it stands and nothing read of it. What it states, which lines it draws and where they
  * decide are read after this and cost more than the walk; a reader that asks which comparisons a
- * body reads on which applications, before any of that is paid for, reads this.
+ * body has on which applications, before any of that is paid for, reads this. A construct here
+ * may state nothing the measurement draws a line from: what it states is not read.
  *
- * @param copy         the copy of the model the construct stands in
- * @param applications every application of the closures it stands in, as what a line drawn on it
- *                     is read on; none for one inside no closure, or inside one whose applications
- *                     are not said one by one
+ * @param copy the copy of the model the construct stands in
+ * @param on   the applications of the closures it stands in, as the walk said them
  */
-public record AComparisonRead(ModelOccurrence copy, List<ApplicationsReadOn> applications) {
+public record AComparisonRead(ModelOccurrence copy, AppliedOn on) {
 
     public AComparisonRead {
         Objects.requireNonNull(copy, "a construct stands in some copy of the model");
-        applications = List.copyOf(applications);
+        Objects.requireNonNull(on, "inside some closures or none, said or not");
     }
 
-    /** How many times it is read: once on each application, or once where it stands in none. */
-    public int readings() {
-        return Math.max(1, applications.size());
+    /**
+     * The applications of the closures a construct stands in, as the walk said them: four states
+     * and not a count, since none of them is another's number.
+     */
+    public sealed interface AppliedOn {
+
+        /** Inside no closure: met once wherever the body is run. */
+        record Outside() implements AppliedOn {}
+
+        /**
+         * Inside closures whose applications are said one by one.
+         *
+         * @param each every application, as what a line drawn on it is read on, in the order a
+         *             run makes them
+         */
+        record OnEach(List<ApplicationsReadOn> each) implements AppliedOn {
+
+            public OnEach {
+                each = List.copyOf(each);
+                if (each.isEmpty()) {
+                    throw new IllegalArgumentException("a closure applied is applied some times");
+                }
+            }
+        }
+
+        /** Inside a closure whose applications are not said: how many there are is not known,
+         *  and no number of them is said. */
+        record NotSaid() implements AppliedOn {}
+
+        /** Inside a closure no run applies: nothing here is met on any run. */
+        record OnNone() implements AppliedOn {}
     }
 }
