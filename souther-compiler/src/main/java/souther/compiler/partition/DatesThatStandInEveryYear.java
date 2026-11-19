@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.check.DatePartsLeft;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.semantics.TakenAs;
@@ -12,7 +13,6 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.LongStream;
 
@@ -62,6 +62,18 @@ final class DatesThatStandInEveryYear {
             return which.of(date);
         }
 
+        /**
+         * This part with its move less the whole cycles it moves by, at every date: a whole cycle
+         * takes a month and a day to the same month and day, so it comes to what this does at
+         * every date this is defined at, and is defined at every date of a cycle near the
+         * calendar's middle however far this moves. What a part comes to over a cycle is a fact
+         * of the calendar and of what the move moves by, and this is that fact's question.
+         */
+        Part overACycle() {
+            return new Part(which, DateTranslation.none().thenAddDays(
+                    Math.floorMod(moved.offsetDays(), DatePartsLeft.DAYS_OF_A_CYCLE)));
+        }
+
         /** How many numbers this part can be, which are one to that many. */
         int howManyThereAre() {
             return switch (which) {
@@ -97,24 +109,6 @@ final class DatesThatStandInEveryYear {
      * @param yearShifts the moves of the date whose years are asked, defined the same way
      */
     static List<List<Origin>> byTheYearsOf(List<Part> parts, List<DateTranslation> yearShifts) {
-        return KINDS.computeIfAbsent(new KindsAsked(List.copyOf(parts), List.copyOf(yearShifts)),
-                asked -> Optional.ofNullable(kindsOfYear(asked.parts(), asked.yearShifts())))
-                .orElse(null);
-    }
-
-    /** What the kinds of year are asked of: the parts and the year shifts, each with the dates it
-     *  is defined at, which is all there is to the answer. */
-    private record KindsAsked(List<Part> parts, List<DateTranslation> yearShifts) {}
-
-    /** Answers by what was asked. A pure function of its key; the same dates and moves are asked
-     *  again by every way of every relation over them, and each answer counts the days of the
-     *  years at the ends. */
-    private static final Map<KindsAsked, Optional<List<List<Origin>>>> KINDS =
-            new ConcurrentHashMap<>();
-
-    /** {@link #byTheYearsOf}, worked out. */
-    private static List<List<Origin>> kindsOfYear(List<Part> parts,
-                                                  List<DateTranslation> yearShifts) {
         DateTranslation year = yearShifts.isEmpty() ? DateTranslation.none()
                 : yearShifts.getFirst();
         for (DateTranslation each : yearShifts) {
@@ -213,8 +207,9 @@ final class DatesThatStandInEveryYear {
                 return null;
             }
             long origin = LocalDate.of(year, month, day).toEpochDay();
+            DaysOfAYear days = DaysOfAYear.of(year);
             for (long move : yearMoves) {
-                if (LocalDate.ofEpochDay(origin + move).getYear() != year) {
+                if (!days.holds(origin + move)) {
                     return null;
                 }
             }
@@ -238,15 +233,14 @@ final class DatesThatStandInEveryYear {
      */
     private static List<Origin> heldIn(int year, List<Part> parts,
                                        List<DateTranslation> yearShifts, DateTranslation within) {
-        long from = Math.max(within.first(),
-                LocalDate.of(year, 1, 1).toEpochDay() - within.offsetDays());
-        long to = Math.min(within.last(),
-                LocalDate.of(year, 12, 31).toEpochDay() - within.offsetDays());
+        DaysOfAYear days = DaysOfAYear.of(year);
+        long from = Math.max(within.first(), days.first() - within.offsetDays());
+        long to = Math.min(within.last(), days.last() - within.offsetDays());
         // Keyed by what the parts come to, the first origin to come to it kept.
         Map<List<Integer>, Origin> out = new LinkedHashMap<>();
         LongStream.rangeClosed(from, to).forEach(origin -> {
             for (DateTranslation each : yearShifts) {
-                if (LocalDate.ofEpochDay(origin + each.offsetDays()).getYear() != year) {
+                if (!days.holds(origin + each.offsetDays())) {
                     return;
                 }
             }
@@ -261,6 +255,23 @@ final class DatesThatStandInEveryYear {
             });
         });
         return List.copyOf(out.values());
+    }
+
+    /**
+     * The days a year runs over, counted from the epoch. Whether a move puts a date in the year is
+     * asked of these: a day a move takes a date to is a count, and one past the calendar's ends is
+     * in no year of it, where made into a date it would be none.
+     */
+    record DaysOfAYear(long first, long last) {
+
+        static DaysOfAYear of(int year) {
+            return new DaysOfAYear(LocalDate.of(year, 1, 1).toEpochDay(),
+                    LocalDate.of(year, 12, 31).toEpochDay());
+        }
+
+        boolean holds(long day) {
+            return day >= first && day <= last;
+        }
     }
 
     private static List<ExactRatio> ratiosOf(int[] numbers) {

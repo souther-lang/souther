@@ -43,25 +43,14 @@ final class MonthsAndDaysOfOneDate {
      * at, in the order of {@code parts}, or null where there is no such day.
      *
      * <p>A cycle of days holds every combination there is, so where the days are a cycle or more
-     * one cycle of them is read; a date held to fewer days gives what those give, and may miss the
-     * twenty-ninth of February or what a move makes of the last days of a year.
+     * what one cycle gives is read, each part over it
+     * ({@link DatesThatStandInEveryYear.Part#overACycle}): a fact of the calendar and of what the
+     * moves move by, kept for every compilation. A date
+     * held to fewer days gives what those give, and may miss the twenty-ninth of February or what
+     * a move makes of the last days of a year: that turns on the dates a model holds the date to,
+     * and is worked out where it is asked.
      */
     static List<List<ExactRatio>> ofAnyYear(List<DatesThatStandInEveryYear.Part> parts) {
-        return EVERY_YEAR.computeIfAbsent(List.copyOf(parts),
-                asked -> new Combinations(workedOverTheDays(asked))).combinations();
-    }
-
-    /** The combinations, which are none where a move is not defined. */
-    private record Combinations(List<List<ExactRatio>> combinations) {}
-
-    /** Answers by what was asked, which is all there is to them: the calendar and the moves. A
-     *  program asks the same few moves again and again, and each answer walks a cycle of the
-     *  calendar. */
-    private static final Map<List<DatesThatStandInEveryYear.Part>, Combinations> EVERY_YEAR =
-            new ConcurrentHashMap<>();
-
-    private static List<List<ExactRatio>> workedOverTheDays(
-            List<DatesThatStandInEveryYear.Part> parts) {
         DateTranslation every = DateTranslation.none();
         for (DatesThatStandInEveryYear.Part part : parts) {
             every = every == null ? null : every.definedOnlyWhere(part.moved());
@@ -69,10 +58,26 @@ final class MonthsAndDaysOfOneDate {
         if (every == null) {
             return null;
         }
-        long cycleEnds = HeldClass.A_CYCLE_STARTS + DatePartsLeft.DAYS_OF_A_CYCLE - 1;
-        long from = every.definedAt(HeldClass.A_CYCLE_STARTS) && every.definedAt(cycleEnds)
-                ? HeldClass.A_CYCLE_STARTS : every.first();
-        long to = Math.min(every.last(), from + DatePartsLeft.DAYS_OF_A_CYCLE - 1);
+        if (every.last() - every.first() + 1 < DatePartsLeft.DAYS_OF_A_CYCLE) {
+            return workedOverTheDays(parts, every.first(), every.last());
+        }
+        List<DatesThatStandInEveryYear.Part> overACycle = parts.stream()
+                .map(DatesThatStandInEveryYear.Part::overACycle).toList();
+        return EVERY_YEAR.computeIfAbsent(overACycle, asked -> workedOverTheDays(asked,
+                HeldClass.A_CYCLE_STARTS,
+                HeldClass.A_CYCLE_STARTS + DatePartsLeft.DAYS_OF_A_CYCLE - 1));
+    }
+
+    /** Answers by what was asked, which is all there is to them: the calendar and what the moves
+     *  move by over a cycle. A program asks the same few moves again and again, and each answer
+     *  walks a cycle of the calendar. */
+    private static final Map<List<DatesThatStandInEveryYear.Part>, List<List<ExactRatio>>>
+            EVERY_YEAR = new ConcurrentHashMap<>();
+
+    /** Every combination of {@code parts} at the days from {@code from} to {@code to}, at every
+     *  one of which every move of them is defined. */
+    private static List<List<ExactRatio>> workedOverTheDays(
+            List<DatesThatStandInEveryYear.Part> parts, long from, long to) {
         // The numbers are compared as numbers, and only the combinations that differ are made into
         // ratios: a cycle has far more days than it has distinct combinations.
         Set<Combination> seen = new LinkedHashSet<>();
@@ -120,10 +125,11 @@ final class MonthsAndDaysOfOneDate {
     static List<List<ExactRatio>> inYear(List<DatesThatStandInEveryYear.Part> parts, int year,
                                          List<DateTranslation> yearShifts) {
         Set<List<ExactRatio>> out = new LinkedHashSet<>();
-        long first = LocalDate.of(year, 1, 1).toEpochDay();
-        long last = LocalDate.of(year, 12, 31).toEpochDay();
+        DatesThatStandInEveryYear.DaysOfAYear days = DatesThatStandInEveryYear.DaysOfAYear.of(year);
+        long first = days.first();
+        long last = days.last();
         for (long day = first; day <= last; day++) {
-            if (staysInTheYear(yearShifts, day, year)) {
+            if (staysInTheYear(yearShifts, day, days)) {
                 List<ExactRatio> combination = combinationAt(parts, day);
                 if (combination != null) {
                     out.add(combination);
@@ -146,10 +152,11 @@ final class MonthsAndDaysOfOneDate {
                                           List<DateTranslation> yearShifts) {
         long[] seen = new long[parts.size()];
         boolean kept = false;
-        long first = LocalDate.of(year, 1, 1).toEpochDay();
-        long last = LocalDate.of(year, 12, 31).toEpochDay();
+        DatesThatStandInEveryYear.DaysOfAYear days = DatesThatStandInEveryYear.DaysOfAYear.of(year);
+        long first = days.first();
+        long last = days.last();
         for (long day = first; day <= last; day++) {
-            if (!staysInTheYear(yearShifts, day, year)) {
+            if (!staysInTheYear(yearShifts, day, days)) {
                 continue;
             }
             boolean defined = true;
@@ -189,10 +196,10 @@ final class MonthsAndDaysOfOneDate {
         return true;
     }
 
-    private static boolean staysInTheYear(List<DateTranslation> yearShifts, long day, int year) {
+    private static boolean staysInTheYear(List<DateTranslation> yearShifts, long day,
+                                          DatesThatStandInEveryYear.DaysOfAYear year) {
         for (DateTranslation each : yearShifts) {
-            if (!each.definedAt(day)
-                    || LocalDate.ofEpochDay(day + each.offsetDays()).getYear() != year) {
+            if (!each.definedAt(day) || !year.holds(day + each.offsetDays())) {
                 return false;
             }
         }
