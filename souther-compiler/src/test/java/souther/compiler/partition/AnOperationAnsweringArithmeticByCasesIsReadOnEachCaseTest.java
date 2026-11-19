@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A rule over what an operation answers, where the library defines it in cases of arithmetic over
@@ -33,6 +34,8 @@ class AnOperationAnsweringArithmeticByCasesIsReadOnEachCaseTest {
         assertEquals(Map.of("the call as a side", lines, "the call inside a sum", lines),
                 linesOf(read));
         assertEquals(lines + " unread []", read.get("the call as a side"));
+        assertTrue(read.get("the call inside a sum").contains("EVALUATION_STOPS_NOT_FULLY_READ"),
+                read.get("the call inside a sum"));
     }
 
     /** What is drawn of each reading, and not what it leaves unread: a sum that adds to what the

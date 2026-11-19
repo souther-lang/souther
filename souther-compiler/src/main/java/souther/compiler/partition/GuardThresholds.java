@@ -408,23 +408,8 @@ public final class GuardThresholds {
                             // takes.
                             boolean stopsNotFullyRead = aRowArrives
                                     && !(arrived instanceof ComparisonAssessment.AnswersNowhere)
-                                    && (each.stopsIn().map(GuardThresholds::stopsNotAllTold)
-                                            .orElse(false)
-                                    || each.worksOutOnEach().map(applications -> applications
-                                            .stream().anyMatch(one -> stopsNotAllTold(one.stops())
-                                                    && ((one.reached() instanceof Proposition
-                                                            .Always(boolean holds) && holds)
-                                                            ? ComparisonAssessment.someRowArrives(
-                                                                    toIt, arrivals)
-                                                            : (each.statedAsACondition().isEmpty()
-                                                            || ComparisonAssessment.someRowArrives(
-                                                                    wayToACase.apply(one.reached()),
-                                                                    arrivals))))).orElse(false)
-                                    || (each.statedAsACondition().isPresent()
-                                    && each.onTheArms().stream().anyMatch(arm ->
-                                            stopsNotAllTold(arm.stops())
-                                                    && ComparisonAssessment.someRowArrives(
-                                                    wayToACase.apply(arm.reached()), arrivals))));
+                                    && somethingWorkedOutIsNotAllTold(each, toIt, arrivals,
+                                            wayToACase);
                             reached(cuts, stated, each, readingsOf(arrived), aCase, aPart);
                             lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
                                     whereMet(each, helper -> runsOnce.computeIfAbsent(helper,
@@ -1344,6 +1329,44 @@ public final class GuardThresholds {
             }
         }
         return false;
+    }
+
+    /**
+     * Whether what a run getting to the comparison works out, anywhere {@code each} says it does,
+     * has stops that are not all told ({@link #stopsNotAllTold}), where some row arrives at the
+     * place it is worked out: the comparison, an application of the closure it stands in, an
+     * arm of a choice it is read through, or an arm an application takes. An arm is asked only
+     * where the comparison is stated as a condition, as {@link #aRunTakingAnArmMayStop} asks.
+     */
+    private static boolean somethingWorkedOutIsNotAllTold(
+            ComparisonReadings.Reading each, Reachability toIt, List<ComparisonArrival> arrivals,
+            WaysToACase wayToACase) {
+        for (ComparisonReadings.Reading.WorkedOutAt worked : each.whatARunWorksOut()) {
+            if (stopsNotAllTold(worked.stops())
+                    && aRowArrivesWhereItIsWorkedOut(each, worked, toIt, arrivals, wayToACase)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean aRowArrivesWhereItIsWorkedOut(
+            ComparisonReadings.Reading each, ComparisonReadings.Reading.WorkedOutAt worked,
+            Reachability toIt, List<ComparisonArrival> arrivals, WaysToACase wayToACase) {
+        if (worked.takenWhere() != null) {
+            Proposition reached = worked.madeWhere() == null ? worked.takenWhere()
+                    : WhereAnApplicationIsMade.past(worked.madeWhere(), worked.takenWhere());
+            return each.statedAsACondition().isPresent()
+                    && ComparisonAssessment.someRowArrives(wayToACase.apply(reached), arrivals);
+        }
+        if (worked.madeWhere() == null) {
+            return true;
+        }
+        if (worked.madeWhere() instanceof Proposition.Always(boolean holds) && holds) {
+            return ComparisonAssessment.someRowArrives(toIt, arrivals);
+        }
+        return each.statedAsACondition().isEmpty() || ComparisonAssessment.someRowArrives(
+                wayToACase.apply(worked.madeWhere()), arrivals);
     }
 
     /**

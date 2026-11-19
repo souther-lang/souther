@@ -194,6 +194,10 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         FORMS.put("armOfAWalkPlusOne", "(if q > 3 then " + walk + " + 1 else 0) >= 2");
         NOT_TOLD.put("remainderOfAWalkPlusOne", "the same, in what a remainder divides");
         FORMS.put("remainderOfAWalkPlusOne", "Int.floorMod(" + walk + " + 1, 7) >= 3");
+        NOT_TOLD.put("armOfAWalkPlusOneInAClosure", "the same, in an arm of what a closure "
+                + "works out on each element");
+        FORMS.put("armOfAWalkPlusOneInAClosure",
+                "List.all(x -> (if x > 3 then " + walk + " + 1 else 0) >= 2, ds)");
         FORMS.put("remainderOfAWalk", "Int.floorMod(" + walk + ", 7) + 1 >= 3");
         SAID_NOWHERE.put("absOfANumber", "the reading tells every operation it knows of and "
                 + "tells none for the call, so nothing says an operation is left out");
@@ -206,6 +210,8 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         SAID_NOWHERE.put("lengthOfAnArmStep", "the same, for a step that takes an arm");
         SAID_NOWHERE.put("armOfAWalkPlusOne", "what an arm works out is read apart from the "
                 + "comparison, and that reading is not asked what it leaves untold");
+        SAID_NOWHERE.put("armOfAWalkPlusOneInAClosure", "the same as an arm: what an arm works "
+                + "out is read by evaluating it, which records no stop it leaves untold");
         SAID_NOWHERE.put("remainderOfAWalkPlusOne", "the operation is inside what a remainder "
                 + "divides, which is left to the analysis that owns the remainder");
     }
