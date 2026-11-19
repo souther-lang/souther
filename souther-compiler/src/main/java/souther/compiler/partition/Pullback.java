@@ -13482,15 +13482,18 @@ final class Pullback {
      * arm concluded, or the one it is read under. Worked out only when asked.
      */
     private Derivation readOnAnArm(Derivation read, InputReads there) {
-        return readOnAnArm(read, there, null);
+        return readOnAnArm(read, there, null, null, null);
     }
 
     /**
-     * The same, where the arm is the answer {@code answered} of a choice: what a run taking it
-     * works out evaluating that answer is worked out before the comparison it is made of, and a
-     * reading that stops at the choice (as an argument of an operation) does not tell it.
+     * The same, where the arm is the answer {@code answered} of a choice, {@code fork} read at
+     * {@code forkAt}: what a run taking it works out evaluating that answer is worked out before
+     * the comparison it is made of, and a reading that stops at the choice (as an argument of an
+     * operation) does not tell it. It is asked of the runs that enter the arm
+     * ({@link #onTheArmItAnswers}).
      */
-    private Derivation readOnAnArm(Derivation read, InputReads there, Denotation answered) {
+    private Derivation readOnAnArm(Derivation read, InputReads there, Denotation answered,
+                                   Core fork, InputReads forkAt) {
         if (read == null || there == null || armsOfAComparison.isEmpty()) {
             return read;
         }
@@ -13501,7 +13504,8 @@ final class Pullback {
                 new Once<>(() -> worksOut(theRule, arithmeticOf(stated, there)));
         Once<UndividedByARelation.Working> evaluated = new Once<>(() -> answered == null
                 ? UndividedByARelation.Working.NOTHING
-                : AffineReading.workedOutByEvaluating(answered.value(), answered.at(), this.read));
+                : AffineReading.workedOutByEvaluating(answered.value(), answered.at(), this.read,
+                        onTheArmItAnswers(answered, fork, forkAt)));
         OnThisArm arm = new OnThisArm(worksOut, evaluated,
                 restatingAQuotient.get() ? List.of() : whatDecidedTheArm());
         for (ArmRead each : ArmRead.in(read)) {
@@ -13511,6 +13515,30 @@ final class Pullback {
             trial().readOnAnArm(new ArmRead.OfTheAnswerOfAnArm(read), arm);
         }
         return read;
+    }
+
+    /**
+     * What a run works out, asked of the runs entering the arm of {@code fork}, read at
+     * {@code forkAt}, that answers {@code answered}: the arm whose answer is written as that node,
+     * and none where no arm is, or more than one is, which says nothing of which was entered.
+     */
+    private WorkedOutToReachIt onTheArmItAnswers(Denotation answered, Core fork,
+                                                 InputReads forkAt) {
+        WorkedOutToReachIt reached = WorkedOutToReachIt.of(read);
+        Choice choice = fork == null ? null : Choice.of(Core.withoutStanding(fork));
+        if (choice == null) {
+            return reached;
+        }
+        int part = -1;
+        for (int each = 0; each < choice.arms().size(); each++) {
+            if (choice.arms().get(each).answers() == answered.value()) {
+                if (part >= 0) {
+                    return reached;
+                }
+                part = each;
+            }
+        }
+        return part < 0 ? reached : reached.onTheArm(fork, part, forkAt);
     }
 
     /** A value the arithmetic of a number stopped at, that a reading can go into. */
@@ -13597,7 +13625,7 @@ final class Pullback {
                         Optional.of(AffineReading.workingOfWhatDecides(iff, choiceAt.at(), read)),
                         iff, choiceAt.at(), condition, left,
                         arm -> readOnAnArm(again.apply(on -> on.taking(choice, arm, 1)),
-                                reads.taking(choice, arm, 1), arm))));
+                                reads.taking(choice, arm, 1), arm, iff, choiceAt.at()))));
             }
             case Inside.AChoice(Denotation chosen) -> {
                 int arms = Choice.of(Core.withoutStanding(chosen.value())).arms().size();
@@ -13606,11 +13634,15 @@ final class Pullback {
                     yield partOf(at, new Derivation.Stopped(past, fixed));
                 }
                 Core choice = chosen.value();
+                // The node whose arms the cases are read off, where they are read.
+                Denotation fork = chosenAt(chosen);
                 yield new Derivation.AComparisonOfAChoice(byItsCases(chosen, at,
                         Optional.of(AffineReading.workingOfWhatDecides(
                                 Core.withoutStanding(chosen.value()), chosen.at(), read)),
                         arm -> readOnAnArm(again.apply(on -> on.taking(choice, arm, arms)),
-                                reads.taking(choice, arm, arms), arm)));
+                                reads.taking(choice, arm, arms), arm,
+                                fork == null ? null : fork.value(),
+                                fork == null ? null : fork.at())));
             }
             case Inside.ACall(Core call, ValueName.Behavior behavior, Denotation body) ->
                     new Derivation.ABehaviorsBody(behavior,

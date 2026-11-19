@@ -3,11 +3,16 @@ package souther.compiler.partition;
 import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.GetsPast;
 import souther.compiler.check.AnOperationApplied;
+import souther.compiler.check.BehaviorAnswers;
+import souther.compiler.check.BoundOperationFacts;
+import souther.compiler.check.CallArguments;
 import souther.compiler.check.CalledBody;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ClausesInOrder;
+import souther.compiler.check.Comparison;
 import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.DeclaredBounds;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.FoldedValue;
@@ -26,13 +31,16 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.ReadMeaning;
 import souther.compiler.inputs.RepresentationBounds;
+import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.ValuesAt;
 import souther.compiler.inputs.ValuesHeld;
 import souther.compiler.inputs.WrittenOutElements;
+import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Rel;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.ResultRange;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
@@ -81,6 +89,9 @@ final class WorkedOutToReachIt {
     /** Expressions whose working out another reading told, whole: one that may end a run here
      *  gets past it all the same. */
     private final Predicate<Denotation> toldElsewhere;
+    /** The arms every run working out what this is asked of has entered, past which it is
+     *  asked. */
+    private final ArmsTaken onTheWay;
 
     /**
      * One question asked of what a run works out, for as long as it is asked: what each
@@ -101,9 +112,11 @@ final class WorkedOutToReachIt {
 
         /** What each expression was answered, wherever it was read: the node written, and where it
          *  was read told apart by what each name in it stands for, which is what the answer turns
-         *  on once the numbers are asked. */
-        private final Map<Core, List<Answered>> answered = new IdentityHashMap<>();
-        private final FoldedValue.Kept folds = new FoldedValue.Kept();
+         *  on once the numbers are asked, and by the arms the runs it is asked of entered. Kept
+         *  with the questions this one asks past an arm, which differ from it in those arms
+         *  alone. */
+        private final Map<Core, List<Answered>> answered;
+        private final FoldedValue.Kept folds;
         private final boolean byTheNumbers;
         /** The bodies of the closures shown to end no run where the call being asked applies them
          *  ({@link #closuresHeldOverTheirElements}): of that call and no other, so they are held
@@ -114,20 +127,32 @@ final class WorkedOutToReachIt {
          *  works out whenever it works out what the question was asked of: none past an arm, nor
          *  in the body of a closure, which works out only what it is handed. */
         private final Predicate<Denotation> tellsWhereItStops;
+        /** The arms every run working out what this question is asked of has entered. */
+        private final ArmsTaken arms;
 
-        Question() {
-            this(false);
+        Question(ArmsTaken arms) {
+            this(false, arms);
         }
 
-        Question(boolean byTheNumbers) {
-            this(byTheNumbers, Set.of(), null);
+        Question(boolean byTheNumbers, ArmsTaken arms) {
+            this(byTheNumbers, Set.of(), null, arms);
         }
 
         private Question(boolean byTheNumbers, Set<Core> heldWhereApplied,
-                         Predicate<Denotation> tellsWhereItStops) {
+                         Predicate<Denotation> tellsWhereItStops, ArmsTaken arms) {
+            this(byTheNumbers, heldWhereApplied, tellsWhereItStops, arms, new IdentityHashMap<>(),
+                    new FoldedValue.Kept());
+        }
+
+        private Question(boolean byTheNumbers, Set<Core> heldWhereApplied,
+                         Predicate<Denotation> tellsWhereItStops, ArmsTaken arms,
+                         Map<Core, List<Answered>> answered, FoldedValue.Kept folds) {
             this.byTheNumbers = byTheNumbers;
             this.heldWhereApplied = heldWhereApplied;
             this.tellsWhereItStops = tellsWhereItStops;
+            this.arms = arms;
+            this.answered = answered;
+            this.folds = folds;
         }
 
         /** A question of the parts of a call that applies the closures {@code held} is shown of,
@@ -136,7 +161,7 @@ final class WorkedOutToReachIt {
             Set<Core> both = Collections.newSetFromMap(new IdentityHashMap<>());
             both.addAll(heldWhereApplied);
             both.addAll(held);
-            return new Question(byTheNumbers, both, tellsWhereItStops);
+            return new Question(byTheNumbers, both, tellsWhereItStops, arms);
         }
 
         /** The same question of what only some runs work out, an arm or the body of a closure:
@@ -144,7 +169,24 @@ final class WorkedOutToReachIt {
          *  of values, that never work it out. */
         Question notOnEveryRun() {
             return tellsWhereItStops == null ? this
-                    : new Question(byTheNumbers, heldWhereApplied, null);
+                    : new Question(byTheNumbers, heldWhereApplied, null, arms);
+        }
+
+        /** The same question of arm {@code part} of {@code fork}, read where it is ({@code at}):
+         *  of what only the runs entering it work out, which have entered every arm this one
+         *  had. */
+        Question enteringArm(Core fork, int part, InputReads at) {
+            Question past = notOnEveryRun();
+            return new Question(byTheNumbers, heldWhereApplied, null,
+                    arms.entering(fork, part, at), past.answered, past.folds);
+        }
+
+        /** The same question of what a name was given where it was bound, which a run works out
+         *  before any arm the name is read in: none of those is entered there. */
+        Question whereItWasBound() {
+            return arms.isEmpty() ? this
+                    : new Question(byTheNumbers, heldWhereApplied, tellsWhereItStops,
+                            ArmsTaken.NONE, answered, folds);
         }
 
         /** Whether the asker tells the stops of {@code value}. */
@@ -154,7 +196,7 @@ final class WorkedOutToReachIt {
 
         Boolean answerOf(Core written, InputReads at) {
             for (Answered each : answered.getOrDefault(written, List.of())) {
-                if (each.at().equals(at)) {
+                if (each.at().equals(at) && each.arms().equals(arms)) {
                     return each.endsNone();
                 }
             }
@@ -163,25 +205,131 @@ final class WorkedOutToReachIt {
 
         void answer(Core written, InputReads at, boolean endsNone) {
             List<Answered> where = answered.computeIfAbsent(written, _ -> new ArrayList<>());
-            where.removeIf(each -> each.at().equals(at));
-            where.add(new Answered(at, endsNone));
+            where.removeIf(each -> each.at().equals(at) && each.arms().equals(arms));
+            where.add(new Answered(at, arms, endsNone));
         }
     }
 
-    /** What {@link #endsNoRun} answered of an expression read where it is ({@code at}). */
-    private record Answered(InputReads at, boolean endsNone) {}
+    /** What {@link #endsNoRun} answered of an expression read where it is ({@code at}), on the
+     *  runs that entered {@code arms}. */
+    private record Answered(InputReads at, ArmsTaken arms, boolean endsNone) {}
 
-    private WorkedOutToReachIt(InputReading read, Predicate<Denotation> beyond,
-                               boolean closuresApart) {
-        this(read, beyond, closuresApart, _ -> false);
+    /** One arm a run entered: arm {@code part} of {@code fork}, as {@link Choice} numbers them,
+     *  read where it is ({@code at}). The fork is the node written, told apart from another
+     *  written alike. */
+    private record ArmTaken(Core fork, int part, InputReads at) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof ArmTaken that && fork == that.fork && part == that.part
+                    && at.equals(that.at);
+        }
+
+        @Override
+        public int hashCode() {
+            return (System.identityHashCode(fork) * 31 + part) * 31 + at.hashCode();
+        }
+    }
+
+    /**
+     * The arms every run working out an expression has entered on the way to it, outermost first,
+     * and the region of the input they leave.
+     *
+     * <p>What a run entering an arm states ({@link WhatConditionsState#arm}) holds on every run
+     * that works out what the arm is made of, so the numbers such a run holds lie where the region
+     * narrowed by it leaves them. What a region cannot carry of it narrows nothing, which leaves
+     * the region holding every run that enters the arm.
+     *
+     * <p>Told apart by the arms, so that what one way shows is never the answer on another. The
+     * region is made only where a reader asks for it.
+     */
+    private static final class ArmsTaken {
+
+        static final ArmsTaken NONE = new ArmsTaken(List.of());
+
+        private final List<ArmTaken> arms;
+        private SearchRegion region;
+
+        private ArmsTaken(List<ArmTaken> arms) {
+            this.arms = arms;
+        }
+
+        boolean isEmpty() {
+            return arms.isEmpty();
+        }
+
+        /** These, and arm {@code part} of {@code fork} read at {@code at} past them. */
+        ArmsTaken entering(Core fork, int part, InputReads at) {
+            List<ArmTaken> past = new ArrayList<>(arms);
+            past.add(new ArmTaken(fork, part, at));
+            return new ArmsTaken(List.copyOf(past));
+        }
+
+        /** The region of the input every run that entered these leaves, under {@code read}. */
+        SearchRegion region(InputReading read) {
+            if (region == null) {
+                WhatConditionsState conditions = WhatConditionsState.of(read);
+                SearchRegion narrowed = read.quantities().region();
+                for (ArmTaken each : arms) {
+                    Proposition stated = conditions.arm(each.fork(), each.part(), each.at())
+                            .proposition();
+                    for (TakenConstraint taken : DemandReading.regionAnswered(stated, read)
+                            .narrowing()) {
+                        narrowed = taken.narrowing(narrowed);
+                    }
+                }
+                region = narrowed;
+            }
+            return region;
+        }
+
+        /** Whether the region these leave is shown to hold no row, under {@code read}: no run
+         *  enters every one of them, and nothing past them is worked out on any run. */
+        boolean leaveNoRun(InputReading read) {
+            return !arms.isEmpty() && region(read).emptiness().isPresent();
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof ArmsTaken that && arms.equals(that.arms);
+        }
+
+        @Override
+        public int hashCode() {
+            return arms.hashCode();
+        }
     }
 
     private WorkedOutToReachIt(InputReading read, Predicate<Denotation> beyond,
-                               boolean closuresApart, Predicate<Denotation> toldElsewhere) {
+                               boolean closuresApart) {
+        this(read, beyond, closuresApart, _ -> false, ArmsTaken.NONE, new IdentityHashMap<>());
+    }
+
+    private WorkedOutToReachIt(InputReading read, Predicate<Denotation> beyond,
+                               boolean closuresApart, Predicate<Denotation> toldElsewhere,
+                               ArmsTaken onTheWay, Map<Core, List<NumbersAt>> numbersAsked) {
         this.read = Objects.requireNonNull(read);
         this.beyond = Objects.requireNonNull(beyond);
         this.closuresApart = closuresApart;
         this.toldElsewhere = toldElsewhere;
+        this.onTheWay = onTheWay;
+        this.numbersAsked = numbersAsked;
+    }
+
+    /**
+     * The same, of what only the runs entering arm {@code part} of {@code fork}, read where it is
+     * ({@code at}), work out: what entering it states narrows the numbers they hold
+     * ({@link ArmsTaken}).
+     */
+    WorkedOutToReachIt onTheArm(Core fork, int part, InputReads at) {
+        return new WorkedOutToReachIt(read, beyond, closuresApart, toldElsewhere,
+                onTheWay.entering(Core.withoutStanding(fork), part, at), numbersAsked);
+    }
+
+    /** The same, of {@code part} of {@code written} read at {@code at}: on its arm where it is
+     *  one ({@link #onTheArm}), and as this where it is not. */
+    WorkedOutToReachIt onThe(Core written, Part part, InputReads at) {
+        return part.arm() < 0 ? this : onTheArm(written, part.arm(), at);
     }
 
     /**
@@ -199,7 +347,8 @@ final class WorkedOutToReachIt {
         Predicate<Denotation> before = beyond;
         return new WorkedOutToReachIt(read,
                 value -> before.test(value) || Core.withoutStanding(value.value()) == answered,
-                closuresApart, value -> told.contains(Core.withoutStanding(value.value())));
+                closuresApart, value -> told.contains(Core.withoutStanding(value.value())),
+                onTheWay, numbersAsked);
     }
 
     /**
@@ -209,7 +358,7 @@ final class WorkedOutToReachIt {
     WorkedOutToReachIt besideWhatIsTold(Predicate<Denotation> told) {
         Predicate<Denotation> before = toldElsewhere;
         return new WorkedOutToReachIt(read, beyond, closuresApart,
-                value -> before.test(value) || told.test(value));
+                value -> before.test(value) || told.test(value), onTheWay, numbersAsked);
     }
 
     /**
@@ -230,14 +379,19 @@ final class WorkedOutToReachIt {
     /**
      * Whether {@code value} itself, apart from what it is made of and what a name in it was given,
      * ends no run: what {@link WhatARunMayEndFor} says of the node, but for a construction, which
-     * it leaves unknown because the invariant that may refuse it is the declaration's
-     * ({@link #aConstructionEndsNoRun}), and which an attempt makes without ending a run
-     * ({@link InputReads#builtByAnAttempt}).
+     * it leaves unknown because the invariant that may refuse it is the declaration's. A
+     * construction ends none where an attempt makes it ({@link InputReads#builtByAnAttempt}),
+     * where the discharge check proved every clause of it under what holds where it is made
+     * ({@link BehaviorAnswers#shownToHold}), and where its clauses fold to true over what it is
+     * handed ({@link #aConstructionEndsNoRun}).
      */
     private boolean itselfEndsNoRun(Denotation value) {
         Core written = Core.withoutStanding(value.value());
         if (written instanceof Core.Construct made) {
-            return value.at().builtByAnAttempt(made) || aConstructionEndsNoRun(made, value.at());
+            return value.at().builtByAnAttempt(made)
+                    || read.rules().declarations().answers()
+                            .shownToHold(read.rules().symbols().module(), made)
+                    || aConstructionEndsNoRun(made, value.at());
         }
         if (stopsOnlyOnAnOperandThatIsNotNought(value)) {
             return true;
@@ -341,7 +495,7 @@ final class WorkedOutToReachIt {
                 || (standsFor.contains(Core.withoutStanding(value.value()))
                         && endsOnlyWhereItsOwnAnswerHasNoPlace(
                                 Core.withoutStanding(value.value()))),
-                closuresApart, toldElsewhere);
+                closuresApart, toldElsewhere, onTheWay, numbersAsked);
     }
 
     private boolean endsOnlyWhereItsOwnAnswerHasNoPlace(Core written) {
@@ -355,13 +509,13 @@ final class WorkedOutToReachIt {
 
     /** Whether working out {@code value}, and what each name read in it was given, ends no run. */
     boolean endsNoRun(Denotation value) {
-        return endsNoRun(value, new Question());
+        return endsNoRun(value, new Question(onTheWay));
     }
 
     /** Whether working out {@code closure} where {@code call} applies it ends no run: asked with
      *  what the call hands it ({@link #closuresHeldOverTheirElements}). */
     boolean endsNoRunWhereApplied(Denotation call, Core.Block closure) {
-        Question question = new Question(true);
+        Question question = new Question(true, onTheWay);
         return endsNoRun(new Denotation(closure, call.at()),
                 question.applying(closuresHeldOverTheirElements(call, question)));
     }
@@ -388,6 +542,10 @@ final class WorkedOutToReachIt {
     }
 
     private boolean worksOutOfItselfWithoutEndingARun(Denotation value, Question question) {
+        // Past arms no run enters together, nothing is worked out on any run.
+        if (question.arms.leaveNoRun(read)) {
+            return true;
+        }
         Core written = Core.withoutStanding(value.value());
         if (closuresApart && written instanceof Core.Block closure) {
             return endsNoRun(new Denotation(closure.body(), value.at()),
@@ -406,7 +564,7 @@ final class WorkedOutToReachIt {
         // A reference to a value is run as the value is defined, which no part of this node says.
         if (written instanceof Core.MaterialisedValue) {
             Denotation defined = value.at().taken(written);
-            return defined != null && endsNoRun(defined, question);
+            return defined != null && endsNoRun(defined, question.whereItWasBound());
         }
         if (question.byTheNumbers) {
             Set<Core> held = closuresHeldOverTheirElements(value, question);
@@ -478,6 +636,7 @@ final class WorkedOutToReachIt {
         NumericTerm aCodePoint = InputNumber.aCodePointListedBy(container, read.domain(), where,
                 read.rules());
         ValuesHeld held = where.everyElementAt(element, newtypes);
+        Function<ElementProjection, FormRange> kept = keptByATest(where, element, container);
         return path -> {
             if (position != null && Core.withoutStanding(path) instanceof Core.Read at
                     && position.equals(at.binding())) {
@@ -489,11 +648,11 @@ final class WorkedOutToReachIt {
                 return null;
             }
             return switch (held) {
-                case ValuesHeld.At(TermPath at) -> rangeOfAPlace(place.from(at));
+                case ValuesHeld.At(TermPath at) -> rangeOfAPlace(place.from(at), ArmsTaken.NONE);
                 case ValuesHeld.MayStandAt(List<TermPath> among) -> {
                     FormRange hull = null;
                     for (TermPath each : among) {
-                        FormRange one = rangeOfAPlace(place.from(each));
+                        FormRange one = rangeOfAPlace(place.from(each), ArmsTaken.NONE);
                         if (one == null) {
                             yield null;
                         }
@@ -502,16 +661,92 @@ final class WorkedOutToReachIt {
                     yield hull;
                 }
                 case ValuesHeld.NotAPosition _ -> place.steps().isEmpty() && aCodePoint != null
-                        ? FormRange.endsOf(aCodePoint, read) : null;
+                        ? FormRange.endsOf(aCodePoint, read)
+                        : kept == null ? null : kept.apply(place);
             };
         };
     }
 
-    /** The numbers {@code place} holds, or null where it is under nothing this reading holds. */
-    private FormRange rangeOfAPlace(TermPath place) {
+    /**
+     * What a path of the element handed on {@code element} comes to where {@code container} keeps
+     * the elements of another container a test holds of
+     * ({@link BoundOperationFacts#keepsWhereItHolds}), as the library says it does:
+     * an element kept is one of that container's, standing where its elements stand
+     * ({@link InputReads#elementAt}), and one the test held of ({@link #heldByTheTest}). Null where
+     * the container keeps by no test, the test is no closure of one value, or its elements stand at
+     * no place.
+     */
+    private Function<ElementProjection, FormRange> keptByATest(InputReads where, BindingId element,
+                                                               Core container) {
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        if (!(Core.withoutStanding(container) instanceof Core.PreservedCall call)) {
+            return null;
+        }
+        BoundOperationFacts.Kept keeps =
+                DefaultBoundOperationFacts.get().keepsWhereItHolds(call.operation());
+        if (keeps == null
+                || !(Core.withoutStanding(CallArguments.of(keeps.closure(), call))
+                        instanceof Core.Block test)
+                || test.params().size() != 1
+                || !(where.elementAt(element, newtypes) instanceof ValuesAt.At(TermPath at))) {
+            return null;
+        }
+        BindingId tested = test.params().getFirst().binding();
+        return place -> heldByTheTest(rangeOfAPlace(place.from(at), ArmsTaken.NONE), place,
+                test.body(), tested, where);
+    }
+
+    /**
+     * {@code range}, the numbers the path {@code place} of a value comes to, held to what
+     * {@code test} holding of that value, handed on {@code tested}, says of the path: each
+     * comparison of the path with a number written down, and both sides of {@code &&}. As it is
+     * where the test says nothing such of it; null where no number of it meets the test.
+     */
+    private FormRange heldByTheTest(FormRange range, ElementProjection place, Core test,
+                                    BindingId tested, InputReads at) {
+        if (range == null || !(Core.withoutStanding(test) instanceof Core.Binary binary)) {
+            return range;
+        }
+        if (binary.op() == BinOp.AND) {
+            return heldByTheTest(heldByTheTest(range, place, binary.left(), tested, at), place,
+                    binary.right(), tested, at);
+        }
+        if (!(Comparison.of(binary).orElse(null) instanceof Comparison compared)) {
+            return range;
+        }
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        Rel rel = compared.claim().statedRelation();
+        if (place.equals(ElementProjection.read(compared.left(), tested, Map.of(), newtypes))
+                && at.folded(compared.right(), read.rules().symbols(), newtypes).orElse(null)
+                        instanceof Long number) {
+            return range.heldTo(rel, ExactRatio.of(number));
+        }
+        if (place.equals(ElementProjection.read(compared.right(), tested, Map.of(), newtypes))
+                && at.folded(compared.left(), read.rules().symbols(), newtypes).orElse(null)
+                        instanceof Long number) {
+            return range.heldTo(rel.turned(), ExactRatio.of(number));
+        }
+        return range;
+    }
+
+    /** The numbers {@code place} holds on the runs that entered {@code arms}, held to where the
+     *  region they leave runs it, or null where it is under nothing this reading holds. */
+    private FormRange rangeOfAPlace(TermPath place, ArmsTaken arms) {
         NumericTerm at = new NumericTerm.ValueOf(place);
-        return read.quantities().answersFor(at)
-                ? FormRange.held(LinearForm.atom(at), read, Map.of()) : null;
+        if (!read.quantities().answersFor(at)) {
+            return null;
+        }
+        FormRange held = FormRange.held(LinearForm.atom(at), read, Map.of());
+        if (held == null || arms.isEmpty()) {
+            return held;
+        }
+        // Where the arms leave no row, no run gets here and nothing is known of it.
+        NumericDomain.FormProjection runs = arms.region(read).projectionOf(LinearForm.atom(at));
+        if (runs instanceof NumericDomain.FormProjection.NothingIsLeft) {
+            return null;
+        }
+        return runs instanceof NumericDomain.FormProjection.Within within
+                ? held.heldTo(within.bounds()) : held;
     }
 
     /**
@@ -567,7 +802,7 @@ final class WorkedOutToReachIt {
             return false;
         }
         Denotation listed = new Denotation(call.args().get(list), value.at());
-        Worth each = whatEachElementIsWorth(listed, new Question());
+        Worth each = whatEachElementIsWorth(listed, new Question(onTheWay));
         if (each != null) {
             FormRange one = each.added().answerHeldWithin(each.rangeOf(), AN_INT.least(),
                     AN_INT.greatest());
@@ -609,20 +844,27 @@ final class WorkedOutToReachIt {
      * their own: asked {@link Question#byTheNumbers}.
      */
     boolean ownWorkingEndsNoRun(Denotation value) {
-        return ownWorkingEndsNoRun(value, new Question(true));
+        return ownWorkingEndsNoRun(value, new Question(true, onTheWay));
     }
 
+    /**
+     * The same, asked of {@code question}. Past an arm an operation is asked by its numbers on the
+     * runs entering the arm, however the question was asked: nothing the asker reads of the
+     * comparison is a stop of those runs alone ({@link Question#enteringArm}), so an operation
+     * there is sent to no reader that would tell where it stops.
+     */
     private boolean ownWorkingEndsNoRun(Denotation value, Question question) {
         return itselfEndsNoRun(value) || beyond.test(value)
                 || anOperatorWithAValue(value, question)
-                || (question.byTheNumbers && (aTotalWithinAnInt(value)
-                        || anOperatorWithinAnInt(value)));
+                || (question.byTheNumbers && aTotalWithinAnInt(value))
+                || ((question.byTheNumbers || !question.arms.isEmpty())
+                        && anOperatorWithinAnInt(value, question.arms));
     }
 
     /** Whether working out {@code value}, which a reading passed over, ends no run, asked
      *  {@link Question#byTheNumbers}. */
     boolean endsNoRunWhereItWasPassedOver(Denotation value) {
-        return endsNoRun(value, new Question(true));
+        return endsNoRun(value, new Question(true, onTheWay));
     }
 
     /**
@@ -635,28 +877,30 @@ final class WorkedOutToReachIt {
      */
     boolean endsNoRunUntoldWhereItWasPassedOver(Denotation value,
                                                Predicate<Denotation> tells) {
-        return endsNoRun(value, new Question(true, Set.of(), tells));
+        return endsNoRun(value, new Question(true, Set.of(), tells, onTheWay));
     }
 
     /**
      * Whether {@code value} is a sum, a difference, a product or a negation of whole numbers whose
-     * operands come to numbers ({@link #numbersOf}) it takes to no number past an {@code Int}.
+     * operands come to numbers ({@link #numbersOf}), on the runs that entered {@code arms}, it
+     * takes to no number past an {@code Int}.
      */
-    private boolean anOperatorWithinAnInt(Denotation value) {
+    private boolean anOperatorWithinAnInt(Denotation value, ArmsTaken arms) {
         FormRange range = Core.withoutStanding(value.value()).type() == Type.INT
-                ? whatItComesTo(value, numbersAsked) : null;
+                ? whatItComesTo(value, arms) : null;
         return range != null && range.liesWithin(AN_INT.least(), AN_INT.greatest());
     }
 
     /**
-     * The numbers {@code value} works out from the numbers its operands come to, before its type
-     * holds them: a sum, a difference, a product or a negation, or what a call of the library
-     * answers in each case it is defined in ({@link Choice#casesOf}) where all it ends a run for
-     * is that answer having no place. Null where it is none of these or that is not known.
+     * The numbers {@code value} works out, on the runs that entered {@code arms}, from the numbers
+     * its operands come to, before its type holds them: a sum, a difference, a product or a
+     * negation, or what a call of the library answers in each case it is defined in
+     * ({@link Choice#casesOf}) where all it ends a run for is that answer having no place. Null
+     * where it is none of these or that is not known.
      */
-    private FormRange whatItComesTo(Denotation value, Map<Core, List<NumbersAt>> asked) {
+    private FormRange whatItComesTo(Denotation value, ArmsTaken arms) {
         Function<Core, FormRange> operand = each -> numbersOf(new Denotation(each, value.at()),
-                asked);
+                arms);
         return switch (Core.withoutStanding(value.value())) {
             case Core.Binary binary when binary.op() == BinOp.ADD || binary.op() == BinOp.SUB
                     || binary.op() == BinOp.MUL -> FormRange.combined(binary.op(),
@@ -818,39 +1062,41 @@ final class WorkedOutToReachIt {
      * out, what the place of the input it reads holds, what every value a name was given comes to,
      * what the library declares a call answers for the numbers it is handed
      * ({@link ResultRange}), what an operation makes of its operands' numbers, and either arm of a
-     * choice. Each expression is asked once ({@code asked}), where it is written, as an
-     * expression {@link #endsNoRun} meets is.
+     * choice, each on the runs that enter it. Each expression is asked once
+     * ({@link #numbersAsked}), where it is written, as an expression {@link #endsNoRun} meets is.
+     * On the runs that entered the arms this is asked past ({@link #onTheArm}).
      */
     FormRange numbersOf(Denotation value) {
-        return numbersOf(value, numbersAsked);
+        return numbersOf(value, onTheWay);
     }
 
-    /** What {@link #numbersOf} answered of an expression read where it is ({@code at}): the
-     *  numbers, or none where they are not known or are still being asked. */
-    private record NumbersAt(InputReads at, Optional<FormRange> numbers) {}
+    /** What {@link #numbersOf} answered of an expression read where it is ({@code at}) on the runs
+     *  that entered {@code arms}: the numbers, or none where they are not known or are still being
+     *  asked. */
+    private record NumbersAt(InputReads at, ArmsTaken arms, Optional<FormRange> numbers) {}
 
     /** What {@link #numbersOf} answered of each expression, wherever it was read, for as long as
      *  this is asked: a chain of names is followed once however many expressions read it. The
      *  expression is the node written, and where it was read is told apart by what each name in
-     *  it stands for. */
-    private final Map<Core, List<NumbersAt>> numbersAsked = new IdentityHashMap<>();
+     *  it stands for and by the arms the runs it is asked of entered. */
+    private final Map<Core, List<NumbersAt>> numbersAsked;
 
-    private FormRange numbersOf(Denotation value, Map<Core, List<NumbersAt>> asked) {
+    private FormRange numbersOf(Denotation value, ArmsTaken arms) {
         Core written = Core.withoutStanding(value.value());
-        List<NumbersAt> where = asked.computeIfAbsent(written, _ -> new ArrayList<>());
+        List<NumbersAt> where = numbersAsked.computeIfAbsent(written, _ -> new ArrayList<>());
         for (NumbersAt each : where) {
-            if (each.at().equals(value.at())) {
+            if (each.at().equals(value.at()) && each.arms().equals(arms)) {
                 return each.numbers().orElse(null);
             }
         }
         int index = where.size();
-        where.add(new NumbersAt(value.at(), Optional.empty()));
-        FormRange numbers = numbersNotYetAsked(value, asked);
-        where.set(index, new NumbersAt(value.at(), Optional.ofNullable(numbers)));
+        where.add(new NumbersAt(value.at(), arms, Optional.empty()));
+        FormRange numbers = numbersNotYetAsked(value, arms);
+        where.set(index, new NumbersAt(value.at(), arms, Optional.ofNullable(numbers)));
         return numbers;
     }
 
-    private FormRange numbersNotYetAsked(Denotation value, Map<Core, List<NumbersAt>> asked) {
+    private FormRange numbersNotYetAsked(Denotation value, ArmsTaken arms) {
         Core written = Core.withoutStanding(value.value());
         Symbols symbols = read.rules().symbols();
         DeclarationNewtypes newtypes = read.rules().newtypes();
@@ -862,11 +1108,11 @@ final class WorkedOutToReachIt {
                 List<Denotation> given = boundTo(value);
                 if (given.isEmpty()) {
                     yield value.at().pathOf(written, newtypes) instanceof ValuesAt.At(var at)
-                            ? rangeOfAPlace(at) : null;
+                            ? rangeOfAPlace(at, arms) : null;
                 }
                 FormRange hull = null;
                 for (Denotation each : given) {
-                    FormRange one = numbersOf(each, asked);
+                    FormRange one = numbersOf(each, arms);
                     if (one == null) {
                         yield null;
                     }
@@ -884,7 +1130,7 @@ final class WorkedOutToReachIt {
                                 ? Optional.of(BigDecimal.valueOf(number)) : Optional.empty());
                 yield runs.min() != null && runs.max() != null
                         ? FormRange.ofTheWholeNumbersIn(runs)
-                        : written.type() == Type.INT ? heldToAnInt(whatItComesTo(value, asked))
+                        : written.type() == Type.INT ? heldToAnInt(whatItComesTo(value, arms))
                         : null;
             }
             // A behavior called comes to what its body does, read with what the call hands it.
@@ -896,26 +1142,36 @@ final class WorkedOutToReachIt {
                 InputReads inside = body.isEmpty() ? null : value.at().calling(behavior,
                         body.get(), applied.args(), newtypes);
                 yield inside == null ? null
-                        : numbersOf(new Denotation(body.get().body(), inside), asked);
+                        : numbersOf(new Denotation(body.get().body(), inside), arms);
             }
             // A run of names read off one value: a place where the whole run is one, and
             // otherwise read one name at a time.
             case Core.FieldProjection projection -> value.at().pathOf(written, newtypes)
-                    instanceof ValuesAt.At(var at) ? rangeOfAPlace(at)
-                    : numbersOf(new Denotation(projection.lastAccess(), value.at()), asked);
+                    instanceof ValuesAt.At(var at) ? rangeOfAPlace(at, arms)
+                    : numbersOf(new Denotation(projection.lastAccess(), value.at()), arms);
             case Core.FieldAccess access -> {
                 if (value.at().pathOf(written, newtypes) instanceof ValuesAt.At(var at)) {
-                    yield rangeOfAPlace(at);
+                    yield rangeOfAPlace(at, arms);
                 }
-                List<Denotation> made = valuesItMayBe(new Denotation(access.target(), value.at()));
-                if (made == null) {
-                    yield null;
-                }
+                FormRange made = numbersOfWhatWasMade(access, value.at(), arms);
+                FormRange left = numbersTheRulesLeave(access);
+                yield made == null ? left : left == null ? made : made.meet(left);
+            }
+            case Core.Binary _, Core.Neg _ -> written.type() == Type.INT
+                    ? heldToAnInt(whatItComesTo(value, arms)) : null;
+            // Either arm a run enters: one no run enters adds nothing.
+            case Core.If fork -> {
                 FormRange hull = null;
-                for (Denotation each : made) {
-                    Core field = fieldOf(each, access.field());
-                    FormRange one = field == null ? null
-                            : numbersOf(new Denotation(field, each.at()), asked);
+                for (Part arm : partsOf(fork)) {
+                    if (arm.arm() < 0) {
+                        continue;
+                    }
+                    ArmsTaken entered = arms.entering(fork, arm.arm(), value.at());
+                    if (entered.leaveNoRun(read)) {
+                        continue;
+                    }
+                    FormRange one = numbersOf(new Denotation(arm.expression(), value.at()),
+                            entered);
                     if (one == null) {
                         yield null;
                     }
@@ -923,15 +1179,45 @@ final class WorkedOutToReachIt {
                 }
                 yield hull;
             }
-            case Core.Binary _, Core.Neg _ -> written.type() == Type.INT
-                    ? heldToAnInt(whatItComesTo(value, asked)) : null;
-            case Core.If fork -> {
-                FormRange then = numbersOf(new Denotation(fork.then(), value.at()), asked);
-                FormRange otherwise = numbersOf(new Denotation(fork.els(), value.at()), asked);
-                yield (then == null || otherwise == null) ? null : then.hull(otherwise);
-            }
             default -> null;
         };
+    }
+
+    /** The numbers the field {@code access} reads comes to off each construction its value may be
+     *  ({@link #valuesItMayBe}), or null where that is not known. */
+    private FormRange numbersOfWhatWasMade(Core.FieldAccess access, InputReads at,
+                                           ArmsTaken arms) {
+        List<Denotation> made = valuesItMayBe(new Denotation(access.target(), at));
+        if (made == null) {
+            return null;
+        }
+        FormRange hull = null;
+        for (Denotation each : made) {
+            Core field = fieldOf(each, access.field());
+            FormRange one = field == null ? null
+                    : numbersOf(new Denotation(field, each.at()), arms);
+            if (one == null) {
+                return null;
+            }
+            hull = hull == null ? one : hull.hull(one);
+        }
+        return hull;
+    }
+
+    /** The numbers the rules of the type {@code access} reads a field of leave that field
+     *  ({@link DeclaredBounds#ofTheValueReadOff}): a value of the type exists only where they
+     *  held, whatever made it. An end they leave open is the end of an {@code Int}, where the
+     *  field is one; null where it is anything else and they leave it open. */
+    private FormRange numbersTheRulesLeave(Core.FieldAccess access) {
+        DeclaredBounds.Range left = DeclaredBounds.ofTheValueReadOff(access, read.rules(),
+                read.rules().newtypes(), read.ruleReading());
+        if (left == null) {
+            return null;
+        }
+        return access.type() == Type.INT
+                ? new FormRange(ExactRatio.of(AN_INT.least()), ExactRatio.of(AN_INT.greatest()))
+                        .heldTo(new NumericDomain.Bounds(left.min(), left.max()))
+                : FormRange.ofWhatTheRulesLeave(left);
     }
 
     /**
@@ -960,7 +1246,7 @@ final class WorkedOutToReachIt {
      * ({@link NumbersOnTheWayToATotal}).
      */
     boolean endsOnlyWhereItsAnswerHasNoPlace(Denotation value) {
-        return endsOnlyWhereItsAnswerHasNoPlace(value, new Question());
+        return endsOnlyWhereItsAnswerHasNoPlace(value, new Question(onTheWay));
     }
 
     private boolean endsOnlyWhereItsAnswerHasNoPlace(Denotation value, Question question) {
@@ -974,16 +1260,21 @@ final class WorkedOutToReachIt {
                 && partsAndNamesEndNoRun(value, question);
     }
 
+    /** Whether what {@code value} is made of, each part on the runs that work it out, and what
+     *  each name in it was given, where it was given, end no run. */
     private boolean partsAndNamesEndNoRun(Denotation value, Question question) {
         Core written = Core.withoutStanding(value.value());
-        for (Core part : whatIsRunWith(written)) {
-            if (!endsNoRun(new Denotation(part, value.at()),
-                    Evaluated.runsWhenever(written, part) ? question : question.notOnEveryRun())) {
+        for (Part part : partsOf(written)) {
+            Question asked = part.arm() >= 0
+                    ? question.enteringArm(written, part.arm(), value.at())
+                    : Evaluated.runsWhenever(written, part.expression()) ? question
+                    : question.notOnEveryRun();
+            if (!endsNoRun(new Denotation(part.expression(), value.at()), asked)) {
                 return false;
             }
         }
         for (Denotation bound : boundTo(value)) {
-            if (!endsNoRun(bound, question)) {
+            if (!endsNoRun(bound, question.whereItWasBound())) {
                 return false;
             }
         }
@@ -1006,23 +1297,32 @@ final class WorkedOutToReachIt {
      * invariant is the branch the {@code if} takes and ends nothing.
      */
     static List<Core> whatIsRunWith(Core written) {
-        List<Core> parts = new ArrayList<>();
-        if (Core.withoutStanding(written) instanceof Core.IfConstructed tested) {
-            tested.construct().values().forEach(field -> parts.add(field.value()));
-            parts.add(tested.then());
-            tested.els().forEach(arm -> parts.add(arm.body()));
-            return parts;
-        }
-        for (Evaluated.Step step : Evaluated.inOrder(written)) {
-            parts.add(step.expression());
-        }
-        switch (Core.withoutStanding(written)) {
-            case Core.If fork -> {
-                parts.add(fork.then());
-                parts.add(fork.els());
+        return partsOf(written).stream().map(Part::expression).toList();
+    }
+
+    /**
+     * A part of what a run works out to reach a value, and which arm of the value it is, as
+     * {@link Choice} numbers them; {@code arm} is below nought where it is no arm.
+     */
+    record Part(Core expression, int arm) {}
+
+    /** The parts {@link #whatIsRunWith} lists, each arm with its number. */
+    static List<Part> partsOf(Core written) {
+        List<Part> parts = new ArrayList<>();
+        Core fork = Core.withoutStanding(written);
+        if (fork instanceof Core.IfConstructed tested) {
+            tested.construct().values().forEach(field -> parts.add(new Part(field.value(), -1)));
+        } else {
+            for (Evaluated.Step step : Evaluated.inOrder(written)) {
+                parts.add(new Part(step.expression(), -1));
             }
-            case Core.Match match -> match.cases().forEach(arm -> parts.add(arm.body()));
-            default -> { }
+        }
+        if (fork instanceof Core.If || fork instanceof Core.Match
+                || fork instanceof Core.IfConstructed) {
+            List<Choice.Arm> arms = Choice.of(fork).arms();
+            for (int arm = 0; arm < arms.size(); arm++) {
+                parts.add(new Part(arms.get(arm).answers(), arm));
+            }
         }
         return parts;
     }

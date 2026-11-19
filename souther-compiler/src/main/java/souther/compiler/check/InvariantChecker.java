@@ -127,13 +127,14 @@ public final class InvariantChecker {
      * it would pass just as well on one that did not.
      */
     record Findings(List<CompileException> errors, List<InvariantFinding> warnings, Status status,
-                    DeparturesNoRunTakes departures) {
+                    DeparturesNoRunTakes departures, ConstructionsShownToHold shownToHold) {
 
         /** What an analysis that was never run has to say, which is nothing and says so. A caller
          *  without the representation this reads takes this rather than running the analysis over
          *  an empty one — the same findings, and the opposite claim about the module. */
         static Findings notRun() {
-            return new Findings(List.of(), List.of(), Status.ABANDONED, DeparturesNoRunTakes.NONE);
+            return new Findings(List.of(), List.of(), Status.ABANDONED, DeparturesNoRunTakes.NONE,
+                    ConstructionsShownToHold.NONE);
         }
     }
 
@@ -305,6 +306,8 @@ public final class InvariantChecker {
     private final Map<ConstructOccurrence, List<Boolean>> departures = new LinkedHashMap<>();
     /** What each construction read came out as, by the node itself. */
     private final Map<Core, Verdict> verdicts = new IdentityHashMap<>();
+    /** Each copy of a construction read, as whether every reading of it proved every clause. */
+    private final Map<ConstructionsShownToHold.Copy, Boolean> proved = new LinkedHashMap<>();
 
     /** What each value the body builds comes to. */
     private final ValueTemplates templates;
@@ -4751,11 +4754,17 @@ public final class InvariantChecker {
                             Scope params, ValueTemplates templates) {
         InvariantChecker c = new InvariantChecker(reading, contracts, templates);
         if (body == null) {
-            return new Findings(c.errors, c.warnings, Status.ABANDONED, DeparturesNoRunTakes.NONE);
+            return Findings.notRun();
         }
         c.entering(body, c.parametersEntered(params, body.pos()));
+        Set<ConstructionsShownToHold.Copy> shown = new LinkedHashSet<>();
+        c.proved.forEach((copy, holds) -> {
+            if (holds) {
+                shown.add(copy);
+            }
+        });
         return new Findings(c.errors, c.warnings, Status.COMPLETE,
-                new DeparturesNoRunTakes(c.departures));
+                new DeparturesNoRunTakes(c.departures), new ConstructionsShownToHold(shown));
     }
 
     /**
@@ -5625,6 +5634,10 @@ public final class InvariantChecker {
                         Judgment judgment) {
         Verdict verdict = judgment.verdict();
         verdicts.put(at, verdict);
+        if (at instanceof Core.Construct made) {
+            proved.merge(ConstructionsShownToHold.Copy.of(made), verdict == Verdict.PROVED,
+                    Boolean::logicalAnd);
+        }
         List<Said> watching = WATCHING;
         if (watching != null && capturing == null) {
             watching.add(new Said(type.key().name(), pos, judgment));

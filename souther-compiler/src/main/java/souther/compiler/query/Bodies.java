@@ -86,6 +86,7 @@ import souther.compiler.meta.ModuleReadback;
 import souther.compiler.claims.ClaimDiagnostics;
 import souther.compiler.claims.Claims;
 import souther.compiler.claims.UnreachableClaims;
+import souther.compiler.check.ConstructionsShownToHold;
 import souther.compiler.check.DeparturesNoRunTakes;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.EmittedDefinition;
@@ -4230,6 +4231,30 @@ public final class Bodies {
             }
             return !there.owned().contains(reference.name())
                     || there.runnable().contains(reference.name());
+        }
+    }
+
+    /**
+     * The constructions of one module's bodies the discharge check proved every clause of, as the
+     * analysis of each body found them ({@link AnalysisBody#shownToHold}): every copy of each,
+     * wherever it was spliced. Nothing where the module's bodies were not checked.
+     */
+    public record ShownToHold(String name) implements Key<ConstructionsShownToHold> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<ConstructionsShownToHold> compute(Db db) {
+            Answer<Elaborated> checked = db.ask(new Checked(name));
+            if (!checked.present()) {
+                return Answer.absent();
+            }
+            Set<ConstructionsShownToHold.Copy> copies = new LinkedHashSet<>();
+            for (AnalysisBody each : checked.value().analysisBodies().values()) {
+                copies.addAll(each.shownToHold().copies());
+            }            return Answer.of(new ConstructionsShownToHold(copies));
         }
     }
 
