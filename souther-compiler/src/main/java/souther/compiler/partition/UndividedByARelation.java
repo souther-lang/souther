@@ -11792,7 +11792,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                                     SearchRegion region) {
         NumericDomain.Bounds run = region.wholeRunOf(taken);
         NumericDomain.Bounds values = region.wholeRunOf(new NumericTerm.ValueOf(taken.position()));
-        NumericDomain.Bounds answered = run == null || values == null ? null
+        NumericDomain.Bounds answered = (run == null || values == null) ? null
                 : taken.takenAs().answeredWholeFrom(taken.transformation(), values);
         return (answered != null && run.liesWithin(answered)) ? run : null;
     }

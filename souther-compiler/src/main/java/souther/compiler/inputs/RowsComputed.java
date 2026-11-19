@@ -143,7 +143,7 @@ record RowsComputed(BigInteger greatest, Operations operations, Map<Object, Exac
 
     /** The number {@code end} is at, or null where there is no end or it is no number. */
     private static ExactRatio numberAt(Endpoint end) {
-        return end != null && end.at() instanceof Count count ? count.exactly() : null;
+        return (end != null && end.at() instanceof Count count) ? count.exactly() : null;
     }
 
 
