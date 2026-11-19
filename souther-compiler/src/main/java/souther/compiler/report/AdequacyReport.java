@@ -1077,7 +1077,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
      * element, as a reading of the comparison tells of it beside what the other rules suggest at
      * that reading.
      *
-     * @param told            the helper, its calls, and the helpers its call moves out of
+     * @param named           the helper, with each copy the reading was read at and the call around
+     *                        it
+     * @param calledInside    the helpers that call the helper, out to a behavior, which a call of
+     *                        it moves out of
      * @param leftReadAgainBy the helpers the other rules suggest at the reading that, declared as
      *                        a behavior, leave the comparison read again on each of those
      *                        applications ({@link AHelperReadOnApplicationsAroundIt#leftReadAgainBy})
