@@ -2429,10 +2429,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         SidesAlongTheWay along = sidesAlongTheWay(written, past, way.region(), read,
                 declared.sources(), carriers);
         Map<NumericTerm, EachWayItComesOut> out = new LinkedHashMap<>();
+        DatesHeldApartAlongAWay apart = datesHeldApartAlong(along.conditions(), past, read);
         for (int at = 0; at < sides.size(); at++) {
             if (sides.get(at).number() == null
                     || !whatTheRegionShowsOfItIsARow(sides.get(at).number(), along.conditions(),
-                            past, declined, read)) {
+                            past, declined, apart, read)) {
                 continue;
             }
             EachWayItComesOut each = WhatARelationLeavesUndivided.eachWayItComesOut(
@@ -4191,10 +4192,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         SidesAlongTheWay along = sidesAlongTheWay(run.written(), run.past(), run.along(), read,
                 sources, carriers);
         Map<NumericTerm, OfASide> out = new LinkedHashMap<>();
+        DatesHeldApartAlongAWay apart = datesHeldApartAlong(along.conditions(), run.past(), read);
         for (int at : asked) {
             if (!(sides.get(at).number() instanceof NumericTerm.FromOnePosition number)
                     || !whatTheRegionShowsOfItIsARow(number, along.conditions(), run.past(),
-                            run.declined(), read)) {
+                            run.declined(), apart, read)) {
                 continue;
             }
             EachWayItComesOut rows = comesOut != null
@@ -4229,10 +4231,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * named by one number is put only where some value of it gives that number.
      *
      * <p>A date named by two numbers that nothing the way states or narrows ties to the side is
-     * asked of the calendar instead ({@link #placesOfDatesHeldApartFromTheSide}): where some dates
-     * hold everything said of it and what it is tied to, the region shows the side as it would
-     * without them, and every row the side is shown at has such dates beside it. Where none are
-     * found, the way may have no row, and nothing is shown.
+     * asked of the calendar instead ({@link DatesHeldApartAlongAWay}, which {@code apart} is of
+     * the way): where some dates hold everything said of it and what it is tied to, the region
+     * shows the side as it would without them, and every row the side is shown at has such dates
+     * beside it. Where none are found, the way may have no row, and nothing is shown. A place is
+     * named by every number read off it, so a product of two places' numbers names both.
      *
      * <p>Statements the calendar was shown to leave a part to are not asked of that part
      * ({@link OnAWay.PartsLeftAlone}). Of a year: some month and day holds the statements of
@@ -4251,6 +4254,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                                  List<OnAWay> conditions,
                                                  DemandReading.Answered past,
                                                  Optional<Set<String>> declined,
+                                                 DatesHeldApartAlongAWay apart,
                                                  InputReading read) {
         OnAWay.PartsLeftAlone notAsked = !(side instanceof NumericTerm.TakenOf taken)
                 || !(taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part))
@@ -4258,13 +4262,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 : part == TakenAs.DatePart.YEAR ? OnAWay.PartsLeftAlone.YEARS
                 : OnAWay.PartsLeftAlone.MONTHS_AND_DAYS;
         Set<TermPath> leftToTheCalendar = new LinkedHashSet<>();
-        List<Collection<NumericTerm>> tying = new ArrayList<>();
         List<OnAWay> asked = new ArrayList<>();
         for (OnAWay each : conditions) {
             if (notAsked != OnAWay.PartsLeftAlone.NONE && each.leavesAlone() == notAsked) {
-                each.affine().form().coefs().keySet().forEach(term ->
-                        leftToTheCalendar.add(((NumericTerm.TakenOf) term).position()));
-                tying.add(each.affine().form().coefs().keySet());
+                leftToTheCalendar.addAll(DatesHeldApartAlongAWay.placesReadOff(
+                        each.affine().form().coefs().keySet()));
             } else {
                 asked.add(each);
             }
@@ -4282,20 +4284,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         past.narrowing().forEach(each -> weighed.add(each.terms()));
+        // A place is named by every number read off it, a number of it alone or not: a product
+        // of two places' numbers names each.
         for (Collection<NumericTerm> terms : weighed) {
             for (NumericTerm term : terms) {
-                if (term instanceof NumericTerm.FromOnePosition one) {
-                    namedBy.computeIfAbsent(one.position(), _ -> new LinkedHashSet<>()).add(one);
+                for (TermPath place : term.placesReadOff()) {
+                    namedBy.computeIfAbsent(place, _ -> new LinkedHashSet<>()).add(term);
                 }
             }
         }
         Set<TermPath> named = new LinkedHashSet<>(namedBy.keySet());
         named.addAll(leftToTheCalendar);
-        tying.addAll(weighed);
-        Set<TermPath> heldApart = placesOfDatesHeldApartFromTheSide(side, namedBy, named, tying,
-                conditions, past, read);
-        if (heldApart == null) {
-            return false;
+        Set<TermPath> heldApart = new LinkedHashSet<>();
+        for (Map.Entry<TermPath, Set<NumericTerm>> each : namedBy.entrySet()) {
+            if (each.getValue().size() > 1 && !heldApart.contains(each.getKey())) {
+                Optional<Set<TermPath>> held = apart.heldApartFrom(side, each.getKey());
+                if (held.isEmpty()) {
+                    return false;
+                }
+                heldApart.addAll(held.get());
+            }
         }
         for (TermPath place : named) {
             if (!heldApart.contains(place)) {
@@ -4330,200 +4338,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return true;
     }
 
-    /**
-     * The places named in a way that something it states or narrows ties together: two places
-     * are tied where one statement or narrowing names both, where one is at or under the other,
-     * or through a place tied to each.
-     */
-    private static final class PlacesTiedTogether {
-
-        private final Map<TermPath, TermPath> above = new LinkedHashMap<>();
-
-        static PlacesTiedTogether of(Set<TermPath> named, List<Collection<NumericTerm>> tying) {
-            PlacesTiedTogether out = new PlacesTiedTogether();
-            named.forEach(place -> out.above.put(place, place));
-            for (Collection<NumericTerm> terms : tying) {
-                TermPath first = null;
-                for (NumericTerm term : terms) {
-                    if (term instanceof NumericTerm.FromOnePosition one) {
-                        out.above.putIfAbsent(one.position(), one.position());
-                        if (first == null) {
-                            first = one.position();
-                        } else {
-                            out.tie(first, one.position());
-                        }
-                    }
-                }
-            }
-            List<TermPath> places = List.copyOf(out.above.keySet());
-            for (TermPath one : places) {
-                for (TermPath other : places) {
-                    if (!one.equals(other) && (one.bearsOn(other) || other.bearsOn(one))) {
-                        out.tie(one, other);
-                    }
-                }
-            }
-            return out;
-        }
-
-        private TermPath top(TermPath place) {
-            TermPath at = place;
-            while (!above.get(at).equals(at)) {
-                at = above.get(at);
-            }
-            return at;
-        }
-
-        private void tie(TermPath one, TermPath other) {
-            TermPath a = top(one);
-            TermPath b = top(other);
-            if (!a.equals(b)) {
-                above.put(a, b);
+    /** What the way stating {@code conditions}, the run having narrowed it as {@code past} says,
+     *  ties together and which of its dates the calendar holds apart, with the places of every
+     *  side among those it is asked of. */
+    private DatesHeldApartAlongAWay datesHeldApartAlong(List<OnAWay> conditions,
+                                                        DemandReading.Answered past,
+                                                        InputReading read) {
+        List<TermPath> ofTheSides = new ArrayList<>();
+        for (Side side : sides) {
+            if (side.number() != null) {
+                ofTheSides.addAll(side.number().placesReadOff());
             }
         }
-
-        /** Whether {@code one} and {@code other} are tied; a place named nowhere is tied to
-         *  nothing but itself. */
-        boolean together(TermPath one, TermPath other) {
-            if (!above.containsKey(one) || !above.containsKey(other)) {
-                return one.equals(other);
-            }
-            return top(one).equals(top(other));
-        }
-
-        /** The places tied to {@code place}, itself among them. */
-        Set<TermPath> with(TermPath place) {
-            Set<TermPath> out = new LinkedHashSet<>();
-            for (TermPath each : above.keySet()) {
-                if (together(each, place)) {
-                    out.add(each);
-                }
-            }
-            return out;
-        }
-    }
-
-    /**
-     * The places of the dates a way names by two parts or more and ties nothing to {@code side},
-     * where some dates hold everything the way states and the run narrows of them: what the
-     * region shows of the side then has a row along the way, whatever those dates are. Empty
-     * where no such date is named, and null where one is and no dates are found to hold the
-     * statements of it — then the way may have no row at all.
-     *
-     * <p>Each set of places tied together is asked whole, and only where every statement and
-     * narrowing naming one of them is a form of parts of dates the declarations leave every
-     * date, or every date between its ends, and name in no rule ({@link #daysOfTheDate}).
-     * Anything else of them is a statement the calendar is not asked of, and no dates are said to
-     * hold it.
-     *
-     * @param named  every place named, {@code namedBy}'s and those of the statements left to the
-     *               calendar
-     * @param tying  the terms of each statement and narrowing, as they tie places
-     */
-    private static Set<TermPath> placesOfDatesHeldApartFromTheSide(
-            NumericTerm side, Map<TermPath, Set<NumericTerm>> namedBy, Set<TermPath> named,
-            List<Collection<NumericTerm>> tying, List<OnAWay> conditions,
-            DemandReading.Answered past, InputReading read) {
-        if (!(side instanceof NumericTerm.FromOnePosition ofTheSide)) {
-            return Set.of();
-        }
-        Set<TermPath> out = new LinkedHashSet<>();
-        PlacesTiedTogether tied = null;
-        for (Map.Entry<TermPath, Set<NumericTerm>> each : namedBy.entrySet()) {
-            if (each.getValue().size() < 2 || out.contains(each.getKey())) {
-                continue;
-            }
-            if (tied == null) {
-                tied = PlacesTiedTogether.of(named, tying);
-            }
-            if (tied.together(each.getKey(), ofTheSide.position())) {
-                return null;
-            }
-            Set<TermPath> places = tied.with(each.getKey());
-            List<TakenConstraint.Affine> stated = new ArrayList<>();
-            for (OnAWay statement : conditions) {
-                TakenConstraint.Affine affine = statement.affine();
-                List<TermPath> at = affine == null ? List.copyOf(statement.positions())
-                        : positionsOf(affine.form().coefs().keySet());
-                if (!touchesAny(places, at)) {
-                    continue;
-                }
-                if (affine == null) {
-                    return null;
-                }
-                stated.add(affine);
-            }
-            for (TakenConstraint narrowing : past.narrowing()) {
-                if (!touchesAny(places, positionsOf(narrowing.terms()))) {
-                    continue;
-                }
-                if (!(narrowing instanceof TakenConstraint.Affine affine)) {
-                    return null;
-                }
-                stated.add(affine);
-            }
-            if (!someDatesHold(stated, read)) {
-                return null;
-            }
-            out.addAll(places);
-        }
-        return out;
-    }
-
-    /** The places {@code terms} are each of one of, in order. */
-    private static List<TermPath> positionsOf(Collection<NumericTerm> terms) {
-        List<TermPath> out = new ArrayList<>();
-        for (NumericTerm term : terms) {
-            if (term instanceof NumericTerm.FromOnePosition one) {
-                out.add(one.position());
-            }
-        }
-        return out;
-    }
-
-    /**
-     * Whether some dates hold every one of {@code statements} ({@link DatesThatHoldEveryStatement}):
-     * false where a term of one is anything but a part of a date the declarations leave every
-     * date, or every date between its ends, and name in no rule, or a weight or a constant is not
-     * a whole number.
-     */
-    private static boolean someDatesHold(List<TakenConstraint.Affine> statements,
-                                         InputReading read) {
-        Map<TermPath, Integer> dates = new LinkedHashMap<>();
-        List<DateTranslation> days = new ArrayList<>();
-        List<DatesThatHoldEveryStatement.Statement> asked = new ArrayList<>();
-        for (TakenConstraint.Affine each : statements) {
-            Map<DatesThatHoldEveryStatement.Part, Long> parts = new LinkedHashMap<>();
-            for (Map.Entry<NumericTerm, ExactRatio> term : each.form().coefs().entrySet()) {
-                if (!(term.getKey() instanceof NumericTerm.TakenOf taken)
-                        || !(taken.takenAs() instanceof TakenAs.PartOfDate(
-                                TakenAs.DatePart part))) {
-                    return false;
-                }
-                Integer date = dates.get(taken.position());
-                if (date == null) {
-                    DateTranslation ofIt = daysOfTheDate(taken, read);
-                    if (ofIt == null) {
-                        return false;
-                    }
-                    date = dates.size();
-                    dates.put(taken.position(), date);
-                    days.add(ofIt);
-                }
-                Long weight = YearsAWayAllows.asLongOrNull(term.getValue());
-                if (weight == null) {
-                    return false;
-                }
-                parts.merge(new DatesThatHoldEveryStatement.Part(date, part,
-                        taken.transformation().translation()), weight, Math::addExact);
-            }
-            Long constant = YearsAWayAllows.asLongOrNull(each.form().constant());
-            if (constant == null) {
-                return false;
-            }
-            asked.add(new DatesThatHoldEveryStatement.Statement(parts, constant, each.rel()));
-        }
-        return DatesThatHoldEveryStatement.some(asked, days) != null;
+        return DatesHeldApartAlongAWay.of(conditions, past.narrowing(), ofTheSides,
+                taken -> daysOfTheDate(taken, read));
     }
 
     /**

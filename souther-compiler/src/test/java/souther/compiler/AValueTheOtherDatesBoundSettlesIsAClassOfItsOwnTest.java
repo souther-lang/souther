@@ -438,6 +438,40 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
                 unread.toString());
     }
 
+    /**
+     * The other date tied to the day by a product of their years, both dates of this century so
+     * that the product is an {@code Int} at every row and no run stops at it. The product is
+     * 2001 times 2050 only where the years are those two, neither a leap year, so no date is the
+     * twenty-ninth of February there: {@code d} is not apart from the day, and the ages are not
+     * read off what the region leaves along the way.
+     */
+    @Test
+    void aDateTiedToTheDayThroughAProductOfTheirYearsIsNotHeldApartFromIt() {
+        List<String> unread = unread(divided("""
+                module d
+
+                data Century = Date
+                    invariant value >= Date("2000-01-01") && value <= Date("2099-12-31")
+
+                data P = { birthday: Date, disabled: Bool }
+                    invariant birthday >= Date("1900-01-01")
+
+                let old (p: P, on: Date): Int =
+                    if Date.year(on) - Date.year(p.birthday) >= 60 || p.disabled
+                    then 1800 else 1300
+
+                behavior ceiling : (p: P, on: Century, d: Century, r: Int) -> Int
+                let ceiling (p, on, d, r) =
+                    if Date.year(d.value) * Date.year(on.value) == 4102050
+                            && Date.month(d.value) == 2 && Date.day(d.value) == 29 then
+                        (if r >= old(p, on.value) then old(p, on.value) else 3)
+                    else 4
+                """));
+
+        assertTrue(unread.containsAll(List.of("Date.year(on)", "Date.year(p.birthday)")),
+                unread.toString());
+    }
+
     /** The same comparison over whole numbers, which is how the section reads it. */
     @Test
     void aBoundOnOneNumberSettlesTheOtherWhereItIsAWholeNumber() {

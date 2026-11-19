@@ -132,6 +132,20 @@ class DatesAreFoundOnlyWhereTheCalendarHasThemTest {
         assertNull(found(List.of(from2000), february1900));
     }
 
+    /** A date the declarations hold to February 2000 is in a year it holds only some days of,
+     *  and the date is found among those days. */
+    @Test
+    void aDateIsFoundInAYearItMayBeOnlySomeDaysOf() {
+        DateTranslation february2000 = EVERY_DATE.definedOnlyWhere(new DateTranslation(0,
+                LocalDate.of(2000, 2, 1).toEpochDay(), LocalDate.of(2000, 2, 29).toEpochDay()));
+
+        LocalDate[] dates = found(List.of(february2000),
+                statement(-200_002, Rel.EQ, 100, year(0), 1, month(0)));
+
+        assertNotNull(dates);
+        assertEquals(2, dates[0].getMonthValue());
+    }
+
     /** The year of a date moved a day back is the year before on the first of January: the
      *  move is read where the part is taken, and the date found is the one it moves from. */
     @Test

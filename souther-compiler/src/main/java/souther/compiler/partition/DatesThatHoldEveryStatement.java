@@ -83,11 +83,14 @@ final class DatesThatHoldEveryStatement {
         List<Map<List<Long>, Kind>> kinds = new ArrayList<>();
         long choices = 1;
         for (int date = 0; date < dates; date++) {
-            int[] years = wherever.get(date) == null ? null : wherever.get(date).wholeYears();
-            if (years == null) {
+            DateTranslation every = wherever.get(date);
+            if (every == null) {
                 return null;
             }
-            allowed.add(years);
+            // Every year a day of it is in, those it holds only some days of among them: a day
+            // is taken only where every move is defined at it, as aDayOf asks.
+            allowed.add(new int[] {LocalDate.ofEpochDay(every.first()).getYear(),
+                    LocalDate.ofEpochDay(every.last()).getYear()});
             Map<List<Long>, Kind> ofIt = kindsOf(statements, partsOf.get(date));
             if (ofIt == null || ofIt.isEmpty()) {
                 return null;
