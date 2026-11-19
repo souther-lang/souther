@@ -198,6 +198,18 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 + "let unused = List.map(f, [q]) \n List.sum(List.map(f, ds)) } >= 3");
         NOT_TOLD.put("oneClosureBoundOnQAndSummedOnTheElements", "the same, where the one "
                 + "application is bound and never read");
+        // the elements of a list a choice makes, each made only on its arm's runs: one that
+        // stops is said though what the other arm makes is not shown to keep within its type
+        FORMS.put("elementsOfAChosenListThatAgree",
+                "List.all(x -> x >= 3, if q > 0 then [q + 1] else [(q + 2) - 1])");
+        FORMS.put("elementsOfAChosenListThatKeepWithin",
+                "List.all(x -> x >= 3, if q > 0 then [q - 1] else [q + 1])");
+        // an arm held aside beside another, whose operation its condition keeps within its type
+        FORMS.put("anArmHeldAsideWhereItsConditionHolds",
+                "(if q > 7 then 1 else 2) + (if q > 5 then q - 1 else 3) >= q");
+        UNTOLD_THOUGH_NONE_STOPS.put("anArmHeldAsideWhereItsConditionHolds", "the condition of "
+                + "the arm narrows no range of q, so q - 1 is not shown to end no run, and what an "
+                + "arm works out is told by no reading of the part");
         // the same step, where the filter keeps no element the step stops at
         FORMS.put("lengthOfAStepOfAFilterKeepingNoEnd",
                 "List.length(List.map(x -> x + 1, List.filter(y -> y < 0, ds))) >= 2");

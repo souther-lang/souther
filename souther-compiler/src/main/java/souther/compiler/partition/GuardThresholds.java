@@ -425,6 +425,10 @@ public final class GuardThresholds {
                                     || each.stopsIn().map(stops -> !stops.noRunMayStopAnywhere()
                                             && stops.aRunMayStopIn(read,
                                             regionsOf(beforeIt))).orElse(false)
+                                    || each.worksOutOnEach().map(applications -> applications
+                                            .stream().anyMatch(one -> aRunMakingItMayStop(each,
+                                                    one, toIt, beforeIt, read, arrivals,
+                                                    wayToACase, aCase))).orElse(false)
                                     || aRunTakingAnArmMayStop(each, each.onTheArms(), null, read,
                                             arrivals, wayToACase, aCase)
                                     || each.worksOutOnEach().map(applications -> applications
@@ -1341,6 +1345,33 @@ public final class GuardThresholds {
             }
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * Whether a run making {@code one}, an application of the closure the comparison stands in,
+     * may stop in what it works out ({@link StopEvidence#aRunMayStopIn}), over the rows it is made
+     * on: those of the way to the comparison where it is made on every run, and the way with the
+     * rows it is made on put on it otherwise. An application whose rows cannot be put on the way
+     * is asked nothing, since what the rows of the whole way would say is said of runs that do not
+     * make it. Beside {@link #everyRunStops}, which says where every run stops and says nothing
+     * where another application may be worked out first.
+     */
+    private static boolean aRunMakingItMayStop(
+            ComparisonReadings.Reading each, Cutting.OnAnApplication one, Reachability toIt,
+            Reachability beforeIt, InputReading read, List<ComparisonArrival> arrivals,
+            WaysToACase wayToACase, Function<Proposition, ReachingCuts.Stating> aCase) {
+        if (one.stops().noRunMayStopAnywhere()) {
+            return false;
+        }
+        if (one.reached() instanceof Proposition.Always(boolean holds) && holds) {
+            return ComparisonAssessment.someRowArrives(toIt, arrivals)
+                    && one.stops().aRunMayStopIn(read, regionsOf(beforeIt));
+        }
+        return each.statedAsACondition().isPresent()
+                && ComparisonAssessment.someRowArrives(wayToACase.apply(one.reached()), arrivals)
+                && one.stops().aRunMayStopIn(read, regionsOf(Reachability.of(
+                        new WayToTheBorder(each.wayToACase(aCase.apply(one.reached()))),
+                        read.quantities().region())));
     }
 
     /**
