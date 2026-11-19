@@ -146,6 +146,16 @@ class DatesAreFoundOnlyWhereTheCalendarHasThemTest {
         assertEquals(2, dates[0].getMonthValue());
     }
 
+    /** A date the declarations hold to the last day of 2000 and the first months of 2001 has a
+     *  March in the later year only, and is found there though the earlier comes first. */
+    @Test
+    void aDateIsFoundInWhicheverOfItsYearsHasIt() {
+        DateTranslation acrossTheNewYear = EVERY_DATE.definedOnlyWhere(new DateTranslation(0,
+                LocalDate.of(2000, 12, 31).toEpochDay(), LocalDate.of(2001, 5, 1).toEpochDay()));
+
+        assertNotNull(found(List.of(acrossTheNewYear), statement(-3, Rel.EQ, 1, month(0))));
+    }
+
     /** The year of a date moved a day back is the year before on the first of January: the
      *  move is read where the part is taken, and the date found is the one it moves from. */
     @Test

@@ -9,10 +9,12 @@ import java.math.BigInteger;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -28,8 +30,9 @@ import java.util.Set;
  * <p>A date's parts are written as its year and, for each part, what that part comes to beside
  * the year. The second comes round with the calendar's cycle of four hundred years, so it is read
  * once over a cycle for each kind of year, and each statement is then a statement of the years of
- * the dates alone, which {@link YearsAWayAllows#holding} chooses. The dates are made of the years
- * chosen and checked part by part against every statement as written.
+ * the dates alone, which {@link YearsAWayAllows#holding} chooses. Years are taken only where the
+ * dates are made of them and checked part by part against every statement as written: a year the
+ * date may be only some days of need not have a day giving what the cycle has in that year.
  */
 final class DatesThatHoldEveryStatement {
 
@@ -194,19 +197,23 @@ final class DatesThatHoldEveryStatement {
                     statement.relation()));
         }
         List<BitSet> ofTheCycle = chosen.stream().map(kind -> kind.getValue().years()).toList();
-        long[] years = YearsAWayAllows.holding(ofTheYears, ofTheCycle, allowed);
-        if (years == null) {
-            return null;
-        }
-        LocalDate[] dates = new LocalDate[chosen.size()];
-        for (int date = 0; date < dates.length; date++) {
-            dates[date] = aDayOf(partsOf.get(date), chosen.get(date).getValue(), years[date],
-                    wherever.get(date));
-            if (dates[date] == null) {
-                return null;
+        // A year the date may be only some days of may have none giving the kind, so the years
+        // are taken only where the dates are made in them and hold every statement as written.
+        List<Map<Long, Optional<LocalDate>>> dayIn = new ArrayList<>();
+        chosen.forEach(_ -> dayIn.add(new HashMap<>()));
+        return YearsAWayAllows.holding(ofTheYears, ofTheCycle, allowed, years -> {
+            LocalDate[] dates = new LocalDate[years.length];
+            for (int date = 0; date < dates.length; date++) {
+                int of = date;
+                dates[date] = dayIn.get(date).computeIfAbsent(years[date], year ->
+                        Optional.ofNullable(aDayOf(partsOf.get(of), chosen.get(of).getValue(),
+                                year, wherever.get(of)))).orElse(null);
+                if (dates[date] == null) {
+                    return null;
+                }
             }
-        }
-        return everyStatementHoldsAt(statements, dates) ? dates : null;
+            return everyStatementHoldsAt(statements, dates) ? dates : null;
+        });
     }
 
     /** A day of {@code year} every move is defined at whose parts come to one of {@code kind}'s

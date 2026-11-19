@@ -14,6 +14,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * The years a way that states the years of dates puts them in, one year for each date, so that
@@ -109,33 +110,39 @@ final class YearsAWayAllows {
                 return null;   // no year gives this date every number, whatever the statements
             }
         }
-        long[] chosen = years(statements, (date, year) ->
+        return years(statements, (date, year) ->
                 giving[date].get(Math.floorMod(year, YEARS_OF_A_CYCLE))
                         && MonthsAndDaysOfOneDate.coversEveryValueInYear(
                                 partsOfEachDate.get(date), (int) year, shifts.get(date)),
-                wholeYears);
-        return chosen == null ? null : toInts(chosen);
+                wholeYears, YearsAWayAllows::toInts);
     }
 
     /**
-     * A year for each date at which every statement holds, each year one of a cycle of four
-     * hundred {@code ofTheCycle} sets for its date and inside the years {@code allowed} gives it,
-     * or null where none is found. What the year of a moved date is beside the date's own year is
-     * the caller's to have put in the constants: every {@link Year#moved} here is read as moving
+     * What {@code made} makes of the first years it makes anything of, among those, one for each
+     * date, at which every statement holds, each year one of a cycle of four hundred
+     * {@code ofTheCycle} sets for its date and inside the years {@code allowed} gives it — or null
+     * where it makes nothing of any. What the year of a moved date is beside the date's own year
+     * is the caller's to have put in the constants: every {@link Year#moved} here is read as moving
      * nothing.
+     *
+     * <p>The years of the cycle are where some day gives what the caller asks of the date, which a
+     * year only some days of which the date may be need not have among them: so whether the years
+     * are taken is what {@code made} makes of them, and the search goes on past those it makes
+     * nothing of.
      *
      * @param ofTheCycle for each date, the years of a cycle, by the year modulo four hundred
      * @param allowed    for each date, its first and last year
+     * @param made       what the caller makes of the years, or null where it makes nothing
      */
-    static long[] holding(List<Statement> statements, List<BitSet> ofTheCycle,
-                          List<int[]> allowed) {
+    static <T> T holding(List<Statement> statements, List<BitSet> ofTheCycle,
+                         List<int[]> allowed, Function<long[], T> made) {
         int dates = ofTheCycle.size();
         if (dates == 0 || dates > MOST_DATES || allowed.size() != dates
                 || !staysInsideTheType(statements)) {
             return null;
         }
         return years(statements, (date, year) ->
-                ofTheCycle.get(date).get(Math.floorMod(year, YEARS_OF_A_CYCLE)), allowed);
+                ofTheCycle.get(date).get(Math.floorMod(year, YEARS_OF_A_CYCLE)), allowed, made);
     }
 
     /** Whether a year is one a date may be put in, before the statements are asked of it. */
@@ -144,9 +151,11 @@ final class YearsAWayAllows {
         boolean at(int date, long year);
     }
 
-    /** The years the statements, which stay inside the type, hold at, each one {@code taken}
-     *  allows, or null where none is found. */
-    private static long[] years(List<Statement> statements, Taken taken, List<int[]> allowed) {
+    /** What {@code made} makes of the first years it makes anything of, among those the
+     *  statements, which stay inside the type, hold at, each one {@code taken} allows — or null
+     *  where none is found. */
+    private static <T> T years(List<Statement> statements, Taken taken, List<int[]> allowed,
+                               Function<long[], T> made) {
         int dates = allowed.size();
         long[][] weights = new long[statements.size()][dates];
         long[] constants = new long[statements.size()];
@@ -157,8 +166,7 @@ final class YearsAWayAllows {
                 weights[i][year.date()] += asLong(year.weight());
             }
         }
-        long[] chosen = new long[dates];
-        return search(statements, weights, constants, taken, allowed, chosen, 0) ? chosen : null;
+        return search(statements, weights, constants, taken, allowed, made, new long[dates], 0);
     }
 
     private static int[] toInts(long[] years) {
@@ -170,19 +178,20 @@ final class YearsAWayAllows {
     }
 
     /**
-     * Whether the dates from {@code date} on can be put in years that, with those already chosen,
-     * hold every statement.
+     * What {@code made} makes of the first years, the dates from {@code date} on put in them, that
+     * hold every statement with those already chosen and that it makes anything of — or null.
      */
-    private static boolean search(List<Statement> statements, long[][] weights, long[] constants,
-                                  Taken taken, List<int[]> allowed, long[] chosen, int date) {
+    private static <T> T search(List<Statement> statements, long[][] weights, long[] constants,
+                                Taken taken, List<int[]> allowed, Function<long[], T> made,
+                                long[] chosen, int date) {
         if (date == chosen.length) {
             for (int i = 0; i < constants.length; i++) {
                 if (!statements.get(i).relation().holds(Long.signum(valueAt(weights[i],
                         constants[i], chosen)))) {
-                    return false;
+                    return null;
                 }
             }
-            return true;
+            return made.apply(chosen);
         }
         for (long year : yearsToLookAt(statements, weights, constants, chosen, date,
                 allowed.get(date))) {
@@ -190,11 +199,13 @@ final class YearsAWayAllows {
                 continue;
             }
             chosen[date] = year;
-            if (search(statements, weights, constants, taken, allowed, chosen, date + 1)) {
-                return true;
+            T found = search(statements, weights, constants, taken, allowed, made, chosen,
+                    date + 1);
+            if (found != null) {
+                return found;
             }
         }
-        return false;
+        return null;
     }
 
     private static long valueAt(long[] weights, long constant, long[] years) {
