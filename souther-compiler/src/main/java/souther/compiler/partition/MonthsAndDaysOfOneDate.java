@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.LongStream;
 
 /**
  * The months and days that go together, for numbers taken of one date that nothing restricts.
@@ -75,9 +76,8 @@ final class MonthsAndDaysOfOneDate {
         // The numbers are compared as numbers, and only the combinations that differ are made into
         // ratios: a cycle has far more days than it has distinct combinations.
         Set<Combination> seen = new LinkedHashSet<>();
-        for (long day = from; day <= to; day++) {
-            seen.add(new Combination(numbersAt(parts, day)));
-        }
+        LongStream.rangeClosed(from, to)
+                .forEach(day -> seen.add(new Combination(numbersAt(parts, day))));
         List<List<ExactRatio>> out = new ArrayList<>(seen.size());
         for (Combination each : seen) {
             out.add(ratiosOf(each.numbers()));

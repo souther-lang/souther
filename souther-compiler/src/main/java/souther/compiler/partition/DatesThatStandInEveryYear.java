@@ -12,6 +12,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.LongStream;
 
 /**
  * The months and days a date stands at in each kind of year it has.
@@ -213,13 +214,11 @@ final class DatesThatStandInEveryYear {
                 LocalDate.of(year, 12, 31).toEpochDay() - within.offsetDays());
         List<Origin> out = new ArrayList<>();
         List<List<ExactRatio>> seen = new ArrayList<>();
-        for (long origin = from; origin <= to; origin++) {
-            boolean inTheYear = true;
+        LongStream.rangeClosed(from, to).forEach(origin -> {
             for (DateTranslation each : yearShifts) {
-                inTheYear &= LocalDate.ofEpochDay(origin + each.offsetDays()).getYear() == year;
-            }
-            if (!inTheYear) {
-                continue;
+                if (LocalDate.ofEpochDay(origin + each.offsetDays()).getYear() != year) {
+                    return;
+                }
             }
             int[] here = new int[parts.size()];
             for (int i = 0; i < here.length; i++) {
@@ -232,7 +231,7 @@ final class DatesThatStandInEveryYear {
                 LocalDate at = LocalDate.ofEpochDay(origin);
                 out.add(new Origin(at.getMonthValue(), at.getDayOfMonth(), taken));
             }
-        }
+        });
         return out;
     }
 
