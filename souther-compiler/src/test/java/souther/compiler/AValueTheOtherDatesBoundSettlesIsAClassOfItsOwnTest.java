@@ -287,7 +287,7 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
      */
     @Test
     void aComparisonOfYearsReadAgainIsReadOverTheYearsTheBoundLeaves() {
-        Compilation compilation = divided("""
+        Compilation compilation = compiled("""
                 module d
 
                 data P = { birthday: Date, disabled: Bool }
@@ -301,11 +301,13 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
                 let ceiling (p, on, r) =
                     if r >= old(p, on) then old(p, on) else 3
                 """);
+        String report = report(compilation);
 
+        assertTrue(report.contains("measurement: complete"), report);
         assertEquals(List.of(), unread(compilation));
         assertEquals(List.of("Date.year(on): -999999999 <= x <= 1959",
                 "Date.year(on): 1959 < x <= 999999999"),
-                classes(compilation).get("Date.year(on)"));
+                classes(compilation).get("Date.year(on)"), report);
     }
 
     /**
