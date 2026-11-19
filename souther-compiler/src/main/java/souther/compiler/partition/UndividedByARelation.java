@@ -555,7 +555,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * worked out what decided the arm before it works out the arm.
          */
         Working after(Working earlier) {
-            if (earlier.equals(AS_THE_FORM)) {
+            // What decided the arm worked out nothing a row gets past, whether no reading was
+            // made of it or every operation was told and none can stop a run.
+            if (earlier.equals(AS_THE_FORM) || earlier.equals(NO_STOPS)) {
                 return this;
             }
             if (equals(AS_THE_FORM)) {
