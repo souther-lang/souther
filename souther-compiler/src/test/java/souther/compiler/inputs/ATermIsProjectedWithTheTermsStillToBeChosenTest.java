@@ -187,15 +187,20 @@ class ATermIsProjectedWithTheTermsStillToBeChosenTest {
         return reading(behavior).quantities(rules()).region();
     }
 
+    /** {@link #MODEL} compiled once, which every test here only reads. */
+    private static final class Compiled {
+        static final Compilation MODEL = ACompiledModel.compiles(Compilation.ofSources(
+                List.of(ATermIsProjectedWithTheTermsStillToBeChosenTest.MODEL),
+                souther.compiler.meta.ModulePath.EMPTY));
+    }
+
     private static RuleReadingSource rules() {
-        Compilation compilation = ACompiledModel.compiles(
-                Compilation.ofSources(List.of(MODEL), souther.compiler.meta.ModulePath.EMPTY));
+        Compilation compilation = Compiled.MODEL;
         return RuleReadings.of(compilation, compilation.modules().get(0));
     }
 
     private static InputDomain reading(String behavior) {
-        Compilation compilation = ACompiledModel.compiles(
-                Compilation.ofSources(List.of(MODEL), souther.compiler.meta.ModulePath.EMPTY));
+        Compilation compilation = Compiled.MODEL;
         String module = compilation.modules().get(0);
         Map<String, DeclaredSig> sigs =
                 compilation.db().ask(new Bodies.DeclaredSignatures(module)).value();
