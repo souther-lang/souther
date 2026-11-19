@@ -633,6 +633,22 @@ final class BindingEnvironment {
                 ? attempt : null;
     }
 
+    /**
+     * Whether {@code construct} is what an attempt bound on the way here built, read where the
+     * name the attempt writes stands for it ({@link #attemptThatBuilt}): the attempt makes it,
+     * and a value it refuses takes the other arm rather than ending the run.
+     */
+    boolean builtByAnAttempt(Core.Construct construct) {
+        for (Map.Entry<BindingId, Core> each : bound().entrySet()) {
+            if (Core.withoutStanding(each.getValue()) instanceof Core.IfConstructed attempt
+                    && attempt.construct() == construct
+                    && attemptThatBuilt(each.getKey()) == attempt) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Everything bound on the way here as one table, made when it is asked for. */
     private Map<BindingId, Core> bound() {
         Map<BindingId, Core> made = boundAsATable;

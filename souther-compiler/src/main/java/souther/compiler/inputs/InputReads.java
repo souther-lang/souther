@@ -4906,6 +4906,12 @@ public final class InputReads {
         return standing(new Denotation(e, this), symbols, newtypes, new HashSet<>());
     }
 
+    /** Whether {@code construct} is what an attempt bound on the way here built, so that making
+     *  it ends no run: a value the attempt refuses takes its other arm. */
+    public boolean builtByAnAttempt(Core.Construct construct) {
+        return names.builtByAnAttempt(construct);
+    }
+
     /**
      * What the name {@code e} was bound to here, followed no further: the one value it stands for;
      * none where {@code e} is not a name, or is one standing for something of its own.

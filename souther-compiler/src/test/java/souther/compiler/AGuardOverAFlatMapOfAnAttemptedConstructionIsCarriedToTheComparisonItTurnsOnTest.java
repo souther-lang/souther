@@ -57,14 +57,24 @@ class AGuardOverAFlatMapOfAnAttemptedConstructionIsCarriedToTheComparisonItTurns
         theGuardIsCarriedToTheEquality(inner, reported(inner));
     }
 
-    /** Where the piece is made into a newtype, which holds only some strings, the equality divides
-     *  the string the pieces are of as well. */
+    /**
+     * Where the piece is made into a newtype by an attempt, the guard is carried as well, and no run
+     * stops at the attempt: one it refuses takes the other arm.
+     *
+     * <p>The newtype holds only some strings, so the equality divides the string the pieces are of
+     * as well. That is not read yet: the relation reads the attempt's value through to the piece and
+     * keeps nothing of what the attempt asked of it, so it reads the equality as it does where the
+     * piece is not made into one. Where it does, this fails, and says so.
+     */
     @Test
     void theGuardIsCarriedToTheEqualityWhereThePieceIsMadeIntoANewtypeAndItDividesTheString() {
         String inner = "p -> if D(p) as n then [ n.value ] else []";
         String report = reported(inner);
 
         theGuardIsCarriedToTheEquality(inner, report);
-        assertTrue(report.contains("email is divided by comparison"), report);
+        assertFalse(report.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD), report);
+        assertFalse(report.contains("email is divided by comparison"), () -> "what the attempt "
+                + "asks of the piece now divides the string: the claim this test was written for "
+                + "holds, so assert it\n" + report);
     }
 }

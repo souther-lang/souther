@@ -109,18 +109,25 @@ final class WorkedOutToReachIt {
          *  ({@link #closuresHeldOverTheirElements}): of that call and no other, so they are held
          *  only by a question asked of its parts, and what that question answers is not kept. */
         private final Set<Core> heldWhereApplied;
+        /** What the asker tells the stops of, where this question finds an expression that may
+         *  end a run: a stop it tells is no stop this question is about. Asked only of what a run
+         *  works out whenever it works out what the question was asked of: none past an arm, nor
+         *  in the body of a closure, which works out only what it is handed. */
+        private final Predicate<Denotation> tellsWhereItStops;
 
         Question() {
             this(false);
         }
 
         Question(boolean byTheNumbers) {
-            this(byTheNumbers, Set.of());
+            this(byTheNumbers, Set.of(), null);
         }
 
-        private Question(boolean byTheNumbers, Set<Core> heldWhereApplied) {
+        private Question(boolean byTheNumbers, Set<Core> heldWhereApplied,
+                         Predicate<Denotation> tellsWhereItStops) {
             this.byTheNumbers = byTheNumbers;
             this.heldWhereApplied = heldWhereApplied;
+            this.tellsWhereItStops = tellsWhereItStops;
         }
 
         /** A question of the parts of a call that applies the closures {@code held} is shown of,
@@ -129,7 +136,20 @@ final class WorkedOutToReachIt {
             Set<Core> both = Collections.newSetFromMap(new IdentityHashMap<>());
             both.addAll(heldWhereApplied);
             both.addAll(held);
-            return new Question(byTheNumbers, both);
+            return new Question(byTheNumbers, both, tellsWhereItStops);
+        }
+
+        /** The same question of what only some runs work out, an arm or the body of a closure:
+         *  nothing past it is told by the asker, since a stop told there would be one on runs, or
+         *  of values, that never work it out. */
+        Question notOnEveryRun() {
+            return tellsWhereItStops == null ? this
+                    : new Question(byTheNumbers, heldWhereApplied, null);
+        }
+
+        /** Whether the asker tells the stops of {@code value}. */
+        boolean tells(Denotation value) {
+            return tellsWhereItStops != null && tellsWhereItStops.test(value);
         }
 
         Boolean answerOf(Core written, InputReads at) {
@@ -211,12 +231,13 @@ final class WorkedOutToReachIt {
      * Whether {@code value} itself, apart from what it is made of and what a name in it was given,
      * ends no run: what {@link WhatARunMayEndFor} says of the node, but for a construction, which
      * it leaves unknown because the invariant that may refuse it is the declaration's
-     * ({@link #aConstructionEndsNoRun}).
+     * ({@link #aConstructionEndsNoRun}), and which an attempt makes without ending a run
+     * ({@link InputReads#builtByAnAttempt}).
      */
     private boolean itselfEndsNoRun(Denotation value) {
         Core written = Core.withoutStanding(value.value());
         if (written instanceof Core.Construct made) {
-            return aConstructionEndsNoRun(made, value.at());
+            return value.at().builtByAnAttempt(made) || aConstructionEndsNoRun(made, value.at());
         }
         if (stopsOnlyOnAnOperandThatIsNotNought(value)) {
             return true;
@@ -362,13 +383,15 @@ final class WorkedOutToReachIt {
     /** Asked of what {@code value} is made of first, so that what another reading tells is only
      *  ever the least of it that may end a run: telling a value names what it reads. */
     private boolean worksOutWithoutEndingARun(Denotation value, Question question) {
-        return worksOutOfItselfWithoutEndingARun(value, question) || toldElsewhere.test(value);
+        return worksOutOfItselfWithoutEndingARun(value, question) || toldElsewhere.test(value)
+                || question.tells(value);
     }
 
     private boolean worksOutOfItselfWithoutEndingARun(Denotation value, Question question) {
         Core written = Core.withoutStanding(value.value());
         if (closuresApart && written instanceof Core.Block closure) {
-            return endsNoRun(new Denotation(closure.body(), value.at()), question);
+            return endsNoRun(new Denotation(closure.body(), value.at()),
+                    question.notOnEveryRun());
         }
         if (written instanceof Core.LetIn let) {
             return endsNoRun(new Denotation(let.value(), value.at()), question)
@@ -600,6 +623,19 @@ final class WorkedOutToReachIt {
      *  {@link Question#byTheNumbers}. */
     boolean endsNoRunWhereItWasPassedOver(Denotation value) {
         return endsNoRun(value, new Question(true));
+    }
+
+    /**
+     * The same, where the asker tells the stops of what it can ({@code tells}): whether every
+     * stop a run may come to working {@code value} out is either none or told. Asked of what may
+     * end a run least first, so what is told is only ever the least of it; and only of what every
+     * run working {@code value} out works out, so nothing an arm or a closure's body holds is told
+     * as a stop of runs, or of values, that never work it out
+     * ({@link Question#notOnEveryRun}).
+     */
+    boolean endsNoRunUntoldWhereItWasPassedOver(Denotation value,
+                                               Predicate<Denotation> tells) {
+        return endsNoRun(value, new Question(true, Set.of(), tells));
     }
 
     /**
@@ -939,8 +975,10 @@ final class WorkedOutToReachIt {
     }
 
     private boolean partsAndNamesEndNoRun(Denotation value, Question question) {
-        for (Core part : whatIsRunWith(Core.withoutStanding(value.value()))) {
-            if (!endsNoRun(new Denotation(part, value.at()), question)) {
+        Core written = Core.withoutStanding(value.value());
+        for (Core part : whatIsRunWith(written)) {
+            if (!endsNoRun(new Denotation(part, value.at()),
+                    Evaluated.runsWhenever(written, part) ? question : question.notOnEveryRun())) {
                 return false;
             }
         }

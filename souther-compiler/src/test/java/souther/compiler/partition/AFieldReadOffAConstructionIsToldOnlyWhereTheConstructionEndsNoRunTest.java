@@ -48,12 +48,18 @@ class AFieldReadOffAConstructionIsToldOnlyWhereTheConstructionEndsNoRunTest {
         assertTrue(working.exact(), working.toString());
     }
 
+    /** A construction its invariant may refuse: {@code y} is any whole number. One whose parts
+     *  the invariant always holds of is made on every run, and ends none. */
     @Test
     void aConstructionOfATypeWithAnInvariantIsNotToldEveryOperation() {
         UndividedByARelation.Working working = told(
                 RECORD + "\ndata Q = { x: Int, y: Int }\n    invariant y >= 0", "constructs Q",
-                "{\n    let p = Q { x = n, y = 1 }\n    if p.x >= k then Yes else No\n}");
+                "{\n    let p = Q { x = n, y = n }\n    if p.x >= k then Yes else No\n}");
         assertFalse(working.exact(), working.toString());
+        UndividedByARelation.Working kept = told(
+                RECORD + "\ndata Q = { x: Int, y: Int }\n    invariant y >= 0", "constructs Q",
+                "{\n    let p = Q { x = n, y = 1 }\n    if p.x >= k then Yes else No\n}");
+        assertTrue(kept.exact(), kept.toString());
     }
 
     @Test

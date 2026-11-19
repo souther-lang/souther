@@ -267,8 +267,9 @@ public final class AffineForms {
          * construction is, when the clauses leave a run of numbers and nothing else; one that does
          * not know takes it as a node read without telling of every operation it works out.
          */
-        default void constructed(Core.Construct construct, TypeView type, LinearForm<A> value) {
-            unobserved(construct);
+        default void constructed(Core.Construct construct, TypeView type, LinearForm<A> value,
+                                 E at) {
+            unobserved(construct, at);
         }
 
         /**
@@ -569,8 +570,9 @@ public final class AffineForms {
         }
 
         @Override
-        public void constructed(Core.Construct construct, TypeView type, LinearForm<A> value) {
-            of.constructed(construct, type, value);
+        public void constructed(Core.Construct construct, TypeView type, LinearForm<A> value,
+                                E at) {
+            of.constructed(construct, type, value, at);
         }
 
         @Override
@@ -1212,7 +1214,7 @@ public final class AffineForms {
 
         /** A newtype's construction, whose clauses a run is held to ({@link Reading#constructed}). */
         @Override
-        void constructed(Core.Construct construct, TypeView type, LinearForm<A> value);
+        void constructed(Core.Construct construct, TypeView type, LinearForm<A> value, E at);
     }
 
     /** {@code of} with no plurality in it, which is what the members of one are read with. */
@@ -1779,7 +1781,7 @@ public final class AffineForms {
         if (wrapped == null) {
             reading.unobserved(nd, at);
         } else {
-            reading.constructed(nd, made, wrapped);
+            reading.constructed(nd, made, wrapped, at);
         }
         return wrapped;
     }
