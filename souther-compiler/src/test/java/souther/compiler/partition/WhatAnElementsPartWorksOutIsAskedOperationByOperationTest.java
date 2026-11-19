@@ -13,8 +13,10 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -155,6 +157,128 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
                 BigInteger.valueOf(-50), BigInteger.valueOf(100)));
         assertTrue(step.heldOverEveryStep(BigInteger.valueOf(50), _ -> null, 2,
                 BigInteger.valueOf(-90), BigInteger.valueOf(100)));
+    }
+
+    /**
+     * A step held over every step is one no run of it stops, wherever in it a choice answers
+     * afresh: at the top, inside a sum or a difference, or inside an arm of another choice. Every
+     * step below is asked over a lattice of seeds, counts of steps and ends, and wherever it is
+     * said to be held, each run — every arm of every choice taken at every step — is worked out
+     * and every operation it works out lies within the ends.
+     */
+    @Test
+    void aStepHeldOverEveryStepStopsNoRunWhereverItAnswersAfresh() {
+        AddedOfEachElement.Part afresh = choice(worked(BinOp.SUB, SO_FAR, written(3)),
+                written(-2));
+        List<AddedOfEachElement.Part> steps = List.of(
+                afresh,
+                worked(BinOp.ADD, afresh, written(0)),
+                worked(BinOp.ADD, written(1), choice(worked(BinOp.ADD, SO_FAR, written(2)),
+                        written(-3))),
+                worked(BinOp.SUB, choice(worked(BinOp.ADD, SO_FAR, written(1)), written(2)),
+                        written(2)),
+                worked(BinOp.ADD, choice(worked(BinOp.ADD, choice(SO_FAR, written(-1)),
+                        written(1)), written(-2)), written(0)));
+        int held = 0;
+        for (AddedOfEachElement.Part step : steps) {
+            AddedOfEachElement read = new AddedOfEachElement(step);
+            for (long seed = -4; seed <= 4; seed++) {
+                for (long most = 1; most <= 3; most++) {
+                    for (long least = -9; least <= -1; least++) {
+                        for (long greatest = 1; greatest <= 9; greatest++) {
+                            if (read.heldOverEveryStep(BigInteger.valueOf(seed), _ -> null, most,
+                                    BigInteger.valueOf(least), BigInteger.valueOf(greatest))) {
+                                held++;
+                                assertTrue(everyRunIsWithin(step, seed, most, least, greatest),
+                                        step + " from " + seed + " over " + most + " steps within "
+                                                + least + ".." + greatest);
+                            }
+                            // Said of a row of any number of elements, so of every count here.
+                            if (read.overWholeNumbers(BigInteger.valueOf(seed), _ -> null,
+                                    BigInteger.valueOf(least), BigInteger.valueOf(greatest))
+                                    == AddedOfEachElement.Through.EVERY_ROW) {
+                                held++;
+                                assertTrue(everyRunIsWithin(step, seed, most, least, greatest),
+                                        step + " said to get through on every row, from " + seed
+                                                + " over " + most + " steps within " + least
+                                                + ".." + greatest);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue(held > 0, "some step is held somewhere, so the lattice asks something");
+    }
+
+    /** Whether every run of {@code step} from {@code seed} over at most {@code most} steps works
+     *  every operation out within {@code least} and {@code greatest}. */
+    private static boolean everyRunIsWithin(AddedOfEachElement.Part step, long seed, long most,
+                                            long least, long greatest) {
+        Set<Long> soFar = Set.of(seed);
+        for (long taken = 0; taken < most; taken++) {
+            Set<Long> next = new HashSet<>();
+            for (long each : soFar) {
+                Set<Long> answers = answersOf(step, each, least, greatest);
+                if (answers == null) {
+                    return false;
+                }
+                next.addAll(answers);
+            }
+            soFar = next;
+        }
+        return true;
+    }
+
+    /** What {@code part} answers with the answer so far at {@code soFar}, whichever arm each
+     *  choice takes; null where some operation on some way lies past the ends. */
+    private static Set<Long> answersOf(AddedOfEachElement.Part part, long soFar, long least,
+                                       long greatest) {
+        return switch (part) {
+            case AddedOfEachElement.SoFar _ -> Set.of(soFar);
+            case AddedOfEachElement.Written(BigDecimal value) -> Set.of(value.longValueExact());
+            case AddedOfEachElement.Chosen(List<AddedOfEachElement.Taken> arms) -> {
+                Set<Long> out = new HashSet<>();
+                for (AddedOfEachElement.Taken arm : arms) {
+                    Set<Long> one = answersOf(arm.answers(), soFar, least, greatest);
+                    if (one == null) {
+                        yield null;
+                    }
+                    out.addAll(one);
+                }
+                yield out;
+            }
+            case AddedOfEachElement.Worked(BinOp op, AddedOfEachElement.Part left,
+                                           AddedOfEachElement.Part right) -> {
+                Set<Long> l = answersOf(left, soFar, least, greatest);
+                Set<Long> r = answersOf(right, soFar, least, greatest);
+                if (l == null || r == null) {
+                    yield null;
+                }
+                Set<Long> out = new HashSet<>();
+                for (long a : l) {
+                    for (long b : r) {
+                        long worked = op == BinOp.ADD ? a + b : op == BinOp.SUB ? a - b : a * b;
+                        if (worked < least || worked > greatest) {
+                            yield null;
+                        }
+                        out.add(worked);
+                    }
+                }
+                yield out;
+            }
+            default -> throw new IllegalArgumentException("no such part in these steps: " + part);
+        };
+    }
+
+    private static AddedOfEachElement.Part choice(AddedOfEachElement.Part first,
+                                                  AddedOfEachElement.Part second) {
+        return new AddedOfEachElement.Chosen(List.of(new AddedOfEachElement.Taken(first, null),
+                new AddedOfEachElement.Taken(second, null)));
+    }
+
+    private static AddedOfEachElement.Part written(long value) {
+        return new AddedOfEachElement.Written(BigDecimal.valueOf(value));
     }
 
     private static AddedOfEachElement.Through through(AddedOfEachElement.Part part, long seed,

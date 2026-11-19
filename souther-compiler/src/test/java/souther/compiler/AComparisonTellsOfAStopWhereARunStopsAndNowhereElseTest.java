@@ -198,6 +198,14 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 + "let unused = List.map(f, [q]) \n List.sum(List.map(f, ds)) } >= 3");
         NOT_TOLD.put("oneClosureBoundOnQAndSummedOnTheElements", "the same, where the one "
                 + "application is bound and never read");
+        // a step that answers afresh on one arm of a choice written inside a sum, and takes from
+        // the answer so far on the other: the answer so far starts again from that arm's value
+        FORMS.put("aStepAnsweringAfreshInsideASum", "List.fold((w, x) -> (if x > 1 then "
+                + "(0 - 9223372036854775758) else w - 75) + 0, 9223372036854775807, ds) >= 10");
+        NOT_TOLD.put("aStepAnsweringAfreshInsideASum", "a step whose answer so far is taken from "
+                + "on one arm is told by no reading step by step, so its stop is said as one "
+                + "nothing tells; that no run of it is shown held where one stops is "
+                + "WhatAnElementsPartWorksOutIsAskedOperationByOperationTest's");
         // the elements of a list a choice makes, each made only on its arm's runs: one that
         // stops is said though what the other arm makes is not shown to keep within its type
         FORMS.put("elementsOfAChosenListThatAgree",

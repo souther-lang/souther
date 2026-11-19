@@ -497,11 +497,32 @@ record AddedOfEachElement(List<Bound> bound, Map<BindingId, Core> aliases, Part 
         }
     }
 
-    /** Whether some arm of {@code part}, a choice, reads the answer so far nowhere: a step taking
-     *  it answers afresh, whatever the answer so far was. */
+    /**
+     * Whether some run of {@code part} works it out without reading the answer so far: one that
+     * takes an arm reading it nowhere, wherever in the step that choice is written — at the top,
+     * inside a sum or a difference, or inside an arm of another choice. A step such a run takes
+     * answers afresh, whatever the answer so far was.
+     *
+     * <p>Asked of the whole tree and not of the kind of node at its top: a reader takes a choice
+     * wherever sums and differences lead down to it ({@link #addsTo}), and a run that takes an arm
+     * reading nothing of the answer so far drops it there. A name's value reads none of it
+     * ({@link Bound}), so a read of a name is one that does not.
+     */
     private static boolean answersAfresh(Part part) {
-        return part instanceof Chosen chosen && chosen.arms().stream()
-                .anyMatch(arm -> !readsTheAnswerSoFar(arm.answers()));
+        return !readsTheAnswerSoFarOnEveryRun(part);
+    }
+
+    /** Whether every run of {@code part}, whichever arm each choice takes, reads the answer so
+     *  far. */
+    private static boolean readsTheAnswerSoFarOnEveryRun(Part part) {
+        return switch (part) {
+            case SoFar _ -> true;
+            case Path _, Written _, Named _, ReadWithTheTotal _ -> false;
+            case Worked worked -> readsTheAnswerSoFarOnEveryRun(worked.left())
+                    || readsTheAnswerSoFarOnEveryRun(worked.right());
+            case Chosen chosen -> chosen.arms().stream()
+                    .allMatch(arm -> readsTheAnswerSoFarOnEveryRun(arm.answers()));
+        };
     }
 
     private static boolean readsTheAnswerSoFar(Part part) {
