@@ -310,26 +310,26 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
      * A mean over a list the body wrote out is read as the sum of it is: the way where the list
      * holds nothing divides by nought and is no row, and what is left unsaid is the relation's — a
      * value it is not shown to reach — which is a fact of its own and not about the quotient. The
-     * sum leaves nothing unsaid: its halves weigh one each and stand at the bar's own value. A
-     * mean's weigh a half, so a bar past half the greatest {@code Int} is one neither half reaches
-     * alone, and the bar is what is left unsaid.
+     * sum leaves nothing of the relation unsaid: its halves weigh one each and stand at the bar's
+     * own value. A mean's weigh a half, so a bar past half the greatest {@code Int} is one neither
+     * half reaches alone, and the bar is what is left unsaid.
      */
     @Test
     void aMeanOverAFilteredListIsUnreadOnlyWhereItsRelationIs() {
         String mean = human(LIST.formatted("List.sum(xs) / List.length(xs)"));
         String sum = human(LIST.formatted("List.sum(xs)"));
         assertFalse(mean.contains("quotient by nought"), mean);
-        assertEquals(Set.of(), notRead(sum), sum);
-        assertFalse(notRead(mean).isEmpty(), mean);
-        assertTrue(notRead(mean).stream()
-                .allMatch(line -> line.contains("not shown to reach every value here")
-                        && line.endsWith("about `k`")), mean);
+        assertEquals(Set.of(), unreachedValues(sum), sum);
+        assertTrue(unreachedValues(mean).stream().anyMatch(line -> line.endsWith("about `k`")),
+                mean);
         assertTrue(mean.contains("border      borders"), mean);
     }
 
-    private static Set<String> notRead(String report) {
+    /** The lines of {@code report} saying a relation is not shown to reach a value. */
+    private static Set<String> unreachedValues(String report) {
         return report.lines()
-                .filter(line -> line.contains("not read:"))
+                .filter(line -> line.contains("not read:")
+                        && line.contains("not shown to reach every value here"))
                 .map(line -> line.replaceAll("@\\d+:\\d+", ""))
                 .collect(Collectors.toSet());
     }

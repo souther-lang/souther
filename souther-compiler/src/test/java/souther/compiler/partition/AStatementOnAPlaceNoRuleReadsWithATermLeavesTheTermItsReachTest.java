@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.UnreadBesideItsStops;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -52,14 +53,17 @@ class AStatementOnAPlaceNoRuleReadsWithATermLeavesTheTermItsReachTest {
 
     private static final String KEPT = "List.filter(r -> r.days >= 17, [a, b, c])";
 
-    /** The places the report says nothing is read of. */
+    /** The places the report says nothing is read of, beside a stop nothing tells
+     *  ({@link UnreadBesideItsStops}): an amount has no greatest value, and a total of three may
+     *  pass its type. */
     private static List<String> unread(String data, String body) {
         Compilation compilation = Compilation.ofSource(PREAMBLE.formatted(data, body), "Main");
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
-                .filter(line -> line.contains("not read:"))
+                .filter(line -> line.contains("not read:")
+                        && !line.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD))
                 .map(line -> line.replaceAll(".*about `([^`]*)`.*", "$1"))
                 .toList();
     }
@@ -89,11 +93,15 @@ class AStatementOnAPlaceNoRuleReadsWithATermLeavesTheTermItsReachTest {
     /** The shape of a grade looked up for the average of the months kept. */
     @Test
     void anAverageOverTheMonthsKeptHeldAgainstATableIsRead() {
-        assertEquals(List.of(), unread(PAY + GRADES, "let p = " + KEPT + """
+        List<String> unread = unread(PAY + GRADES, "let p = " + KEPT + """
 
                 guard List.length(p) >= 1 else No
                 guard gradeRowFor(Rational.toInt(DOWN, List.sum(List.map(r -> r.amount, p))
-                                                       / List.length(p))).grade >= 2 else No"""));
+                                                       / List.length(p))).grade >= 2 else No""");
+        // An amount has no greatest value, so the total of three under the quotient may pass its
+        // type, and an amount is not shown to reach every value; which months are kept is read.
+        assertTrue(unread.stream().allMatch(place -> place.endsWith(".amount")),
+                unread.toString());
     }
 
     /** Each term takes its own amount only where its own days allow. */

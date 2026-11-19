@@ -90,6 +90,12 @@ class ALookupOfTwoAveragesIsReadAtEveryLengthOfItsTableTest {
 
     /** Everything the report leaves unread, with why and at which figure. */
     private static List<String> unread(String source) {
+        return unread(source, false);
+    }
+
+    /** The same, of what is left unread at a figure of this compiler's work alone, or of
+     *  everything. */
+    private static List<String> unread(String source, boolean atAFigure) {
         Compilation compilation = Compilation.ofSource(source, "Main").allowing(
                 Allowances.DECLARED.with(CompositionBudget.TOTAL_READINGS_OF_ONE_CONDITION, 32));
         compilation.measure(Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS));
@@ -97,15 +103,17 @@ class ALookupOfTwoAveragesIsReadAtEveryLengthOfItsTableTest {
         List<String> out = new ArrayList<>();
         for (AdequacyReport.BehaviorReport each :
                 AdequacyReport.of(compilation).modules().get(0).behaviors()) {
-            each.partition().notRead().forEach(one -> out.add(
-                    one.at() + " " + one.reason() + " " + one.figures()));
+            each.partition().notRead().stream()
+                    .filter(one -> !atAFigure || !one.figures().isEmpty())
+                    .forEach(one -> out.add(one.at() + " " + one.reason() + " " + one.figures()));
         }
         return out.stream().sorted().toList();
     }
 
     /**
      * A length at which the comparison of a row with an average runs out of the readings of one
-     * condition leaves no month unread.
+     * condition leaves no month unread at that figure. A month's pay may be past what a total of
+     * two holds, which is said of the total whatever the length.
      *
      * <p>A reading that stopped hands the fork over the comparison no parts, so which months are
      * unread does not turn on where it stopped, and so not on the length. One length at which it
@@ -113,7 +121,7 @@ class ALookupOfTwoAveragesIsReadAtEveryLengthOfItsTableTest {
      */
     @Test
     void noLengthOfTheTableLeavesAMonthUnreadThatAnotherLengthDoesNot() {
-        assertEquals(List.of(), unread(source(2)),
+        assertEquals(List.of(), unread(source(2), true),
                 "what is left unread at a length the reading runs out at");
     }
 

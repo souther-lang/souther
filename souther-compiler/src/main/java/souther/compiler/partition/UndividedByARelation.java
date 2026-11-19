@@ -425,15 +425,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                 untold as well, and then {@code told} is some. A row of one element holds
      *                 no running total but the total, so these rows are computed where the total
      *                 is written by one element alone ({@link #operationsOverTheSides})
-     * @param unplaced the nodes working out an operation that may stop a run and that no number
-     *                 of the input, no bound value and no analysis that drew the lines answers
-     *                 for: it is among no operation told, and where a run stops in it is not said.
-     *                 Told only of what a run works out ({@link StopEvidence}), and carried
-     *                 wherever the working is, so that a reading that stands in for another does
-     *                 not leave it behind
+     * @param aStopUntold whether a run may stop in something worked out that is no operation
+     *                    told, where {@code told} says every one is: a stop where an answer has no
+     *                    place, which no row of a line is at. Told only of what a run works out
+     *                    ({@link StopEvidence}), and carried wherever the working is, so that a
+     *                    reading that stands in for another does not leave it behind
      */
     record Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
-                   boolean onEveryRun, List<NumericTerm> partials, List<Core> unplaced) {
+                   boolean onEveryRun, List<NumericTerm> partials, boolean aStopUntold) {
 
         Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told) {
             this(operations, told, true);
@@ -446,7 +445,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         Working(List<IntOperation> operations, WhatARelationLeavesUndivided.Told told,
                 boolean onEveryRun, List<NumericTerm> partials) {
-            this(operations, told, onEveryRun, partials, List.of());
+            this(operations, told, onEveryRun, partials, false);
         }
 
         /** No reading of the comparison was made, and the program is taken to add the form up.
@@ -476,21 +475,20 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             Working first = readings.getFirst();
             // What no reading answers for is left unanswered by the readings together, whichever
             // of them a run is read as.
-            List<Core> unplaced = readings.stream().flatMap(each -> each.unplaced.stream())
-                    .toList();
+            boolean untold = readings.stream().anyMatch(Working::aStopUntold);
             if (!readings.stream().allMatch(each -> each.tellsWhat(first))) {
-                return UNREAD.leavingUnplaced(unplaced);
+                return UNREAD.leavingAStopUntold(untold);
             }
             // Whether every run reaches the relation is no part of what is told of it: readings
             // that tell alike tell that, and the relation is on every run only if each is.
             return (readings.stream().allMatch(Working::onEveryRun) ? first
-                    : first.notOnEveryRun()).leavingUnplaced(unplaced);
+                    : first.notOnEveryRun()).leavingAStopUntold(untold);
         }
 
-        /** The same, with {@code nodes} as what no reading answers for. */
-        private Working leavingUnplaced(List<Core> nodes) {
-            return nodes.isEmpty() && unplaced.isEmpty() ? this
-                    : new Working(operations, told, onEveryRun, partials, nodes);
+        /** The same, with {@code untold} as whether a stop is left that no reading tells. */
+        private Working leavingAStopUntold(boolean untold) {
+            return untold == aStopUntold ? this
+                    : new Working(operations, told, onEveryRun, partials, untold);
         }
 
         /** Whether this tells the operations {@code other} does, each once or more, and as much
@@ -513,7 +511,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Working {
             operations = List.copyOf(operations);
             partials = List.copyOf(partials);
-            unplaced = List.copyOf(unplaced);
             Objects.requireNonNull(told, "what the reading told, or that there was none");
             if (!partials.isEmpty() && told != WhatARelationLeavesUndivided.Told.SOME) {
                 throw new IllegalArgumentException(
@@ -538,8 +535,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (equals(NOTHING)) {
                 return earlier;
             }
-            List<Core> bothUnplaced = new ArrayList<>(earlier.unplaced);
-            bothUnplaced.addAll(unplaced);
             List<IntOperation> both = new ArrayList<>(earlier.operations);
             for (IntOperation each : operations) {
                 // What an operation is worked out of is told by where it stands among them.
@@ -554,12 +549,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return new Working(both, earlier.exact() && exact()
                     ? WhatARelationLeavesUndivided.Told.EVERY
                     : WhatARelationLeavesUndivided.Told.SOME,
-                    earlier.onEveryRun && onEveryRun, bothPartials, bothUnplaced);
+                    earlier.onEveryRun && onEveryRun, bothPartials,
+                    earlier.aStopUntold || aStopUntold);
         }
 
         /** The same operations, for a relation not every run that gets to the comparison reaches. */
         Working notOnEveryRun() {
-            return new Working(operations, told, false, partials, unplaced);
+            return new Working(operations, told, false, partials, aStopUntold);
         }
 
         /** Whether every operation that can stop a run is told. */

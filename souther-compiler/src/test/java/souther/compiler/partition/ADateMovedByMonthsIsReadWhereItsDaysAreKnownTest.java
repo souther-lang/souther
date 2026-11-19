@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.UnreadBesideItsStops;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.BorderAssessment;
@@ -51,13 +52,19 @@ class ADateMovedByMonthsIsReadWhereItsDaysAreKnownTest {
             "Date.addMonths(1, monthStart(Date.addMonths(1, monthStart(x))))",
             "endOfMonth(Date.addMonths(1, monthStart(x)))");
 
-    /** The first of a month, moved by months, is read to the end whichever way it is reached. */
+    /**
+     * The first of a month, moved by months, is read to the end whichever way it is reached. A
+     * move by months near either end of the calendar stops a run, and no operation of whole
+     * numbers is that move, so where it stops is said of the run and not of how it is read
+     * ({@link UnreadBesideItsStops}).
+     */
     @Test
     void theWeekdayOfAMonthStartMovedByMonthsIsRead() {
         for (String moved : SHAPES) {
             String report = human(WEEKDAY.formatted(moved));
-            assertFalse(report.contains("· not read:"), moved + "\n" + report);
-            assertTrue(report.contains("measurement: complete"), moved + "\n" + report);
+            assertFalse(UnreadBesideItsStops.in(report), moved + "\n" + report);
+            assertTrue(report.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD),
+                    moved + "\n" + report);
         }
     }
 

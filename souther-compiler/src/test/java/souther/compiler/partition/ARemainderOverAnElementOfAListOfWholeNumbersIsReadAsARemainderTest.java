@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.UnreadBesideItsStops;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -156,7 +157,7 @@ class ARemainderOverAnElementOfAListOfWholeNumbersIsReadAsARemainderTest {
         Compilation compilation = compiled("a: Int, days: Int", "Bool",
                 "List.any(n -> Int.floorMod(a + n, 7) >= 1, List.rangeInclusive(0, days))");
         assertEquals(Set.of(), linesOn(compilation));
-        assertTrue(report(compilation).contains("· not read: comparison@"),
+        assertTrue(UnreadBesideItsStops.in(report(compilation)),
                 () -> report(compilation));
     }
 
@@ -171,7 +172,8 @@ class ARemainderOverAnElementOfAListOfWholeNumbersIsReadAsARemainderTest {
                 CHOSEN_BY_A_MEMBERSHIP + " |> List.filter(d -> Set.contains(d, hs))");
         assertFalse(report(compilation).contains(NO_POSITION_HOLDS_IT), () -> report(compilation));
         List<String> notRead = report(compilation).lines()
-                .filter(line -> line.contains("· not read:")).toList();
+                .filter(line -> line.contains("· not read:")
+                        && !line.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD)).toList();
         assertFalse(notRead.isEmpty(), () -> report(compilation));
         notRead.forEach(line -> assertTrue(
                 line.contains("relates the value here to another value"),
@@ -227,7 +229,7 @@ class ARemainderOverAnElementOfAListOfWholeNumbersIsReadAsARemainderTest {
             expected.add(remainderOf("a", element, 4) + " = 3");
         }
         assertEquals(expected, gatedLinesOn(compilation));
-        assertFalse(report(compilation).contains("· not read:"), () -> report(compilation));
+        assertFalse(UnreadBesideItsStops.in(report(compilation)), () -> report(compilation));
         measured(compilation).stream().filter(line -> gatedShiftOf(line.left()) != null)
                 .forEach(ARemainderOverAnElementOfAListOfWholeNumbersIsReadAsARemainderTest
                         ::assertGatedRowsDecideOnAnElementTheListHolds);
@@ -241,7 +243,7 @@ class ARemainderOverAnElementOfAListOfWholeNumbersIsReadAsARemainderTest {
                 "List.rangeInclusive(0, days) |> List.filter(n -> (if b > 0 && n > 3 then"
                         + " Int.floorMod(a + n, 6) else Int.floorMod(a + n, 4) + 2) >= 5)");
         assertEquals(Set.of(), gatedLinesOn(compilation));
-        assertTrue(report(compilation).contains("· not read: comparison@"),
+        assertTrue(UnreadBesideItsStops.in(report(compilation)),
                 () -> report(compilation));
     }
 
@@ -279,7 +281,7 @@ class ARemainderOverAnElementOfAListOfWholeNumbersIsReadAsARemainderTest {
                         + " |> Option.withDefault(a + n), 7) == 6)");
         Set<String> lines = linesOn(compilation);
         assertFalse(lines.isEmpty(), () -> report(compilation));
-        assertFalse(report(compilation).contains("· not read:"), () -> report(compilation));
+        assertFalse(UnreadBesideItsStops.in(report(compilation)), () -> report(compilation));
         List<BorderAssessment> owed = measured(compilation).stream()
                 .filter(line -> shiftOf(line.left()) != null).toList();
         assertFalse(owed.isEmpty(), () -> report(compilation));
@@ -315,7 +317,8 @@ class ARemainderOverAnElementOfAListOfWholeNumbersIsReadAsARemainderTest {
                         + " |> Option.withDefault(a + n), 7) == 6)");
         // What the set's numbers are related to is the element itself, which values of the set
         // settle that is not worked out, and it is said so; nothing else is left unread.
-        report(compilation).lines().filter(line -> line.contains("· not read:")).forEach(line ->
+        report(compilation).lines().filter(line -> line.contains("· not read:")
+                && !line.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD)).forEach(line ->
                 assertTrue(line.contains("relates the value here to another value"),
                         () -> line + "\n" + report(compilation)));
         List<BorderAssessment> owed = measured(compilation).stream()

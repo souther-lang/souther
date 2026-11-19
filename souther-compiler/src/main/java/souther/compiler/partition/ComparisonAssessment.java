@@ -2577,6 +2577,7 @@ sealed interface ComparisonAssessment {
     default List<FilingCoordinate> filedAt() {
         return switch (this) {
             case AcrossPositions over -> over.cutting().over();
+            case AtAPosition at -> at.cutting().over();
             case OutsideTheDomain outside -> outside.cutting().over();
             case NothingArrivesAtItsLine unarrived -> unarrived.cutting().over();
             case TurnsNothing turns -> turns.cutting().over();
@@ -2596,8 +2597,8 @@ sealed interface ComparisonAssessment {
                     .flatMap(part -> part.line().filedAt().stream())
                     .distinct()
                     .toList();
-            case AtAPosition _, AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _,
-                 NoInput _ -> List.of();
+            case AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _, NoInput _ ->
+                    List.of();
         };
     }
 
@@ -2629,26 +2630,26 @@ sealed interface ComparisonAssessment {
     }
 
     /**
-     * Whether the comparison was read as a relation of the input's numbers, or as several lines
-     * held together, which says nothing of the meaning going unread. Not where it was read to
-     * the end and cut nothing, or answered nowhere, or had no line to draw: those are read, and
-     * as no relation. Not where it is about what a dependency answers or states no relation, or
-     * where the reading stopped at a shape no term stands for.
+     * Whether what the comparison states was read to the end, whatever the line came to: a
+     * relation of the input's numbers, several lines held together, a line no row is at or that
+     * turns nothing, or nothing cut at all. Not where the reading stopped at a shape no term
+     * stands for, is about what a dependency answers, states no relation, or reads an input
+     * that has no value: those say what of it is not read, or have no run to say it of.
      *
      * <p>No {@code default}, for the reason {@link #whatEachPlaceIsLeftWith} has none.
      */
-    default boolean readAsARelation() {
+    default boolean readToTheEnd() {
         return switch (this) {
-            case AcrossPositions _, AtAPosition _ -> true;
+            case AcrossPositions _, AtAPosition _, CutsNothing _, OutsideTheDomain _,
+                 NothingArrivesAtItsLine _, TurnsNothing _, NothingArrivesAtItsRelation _,
+                 NothingArrivesAtItsStop _, RelationTurnsNothing _ -> true;
             case AgainstAnotherValue against -> !against.relations().isEmpty();
             case Several several -> several.parts().stream()
-                    .anyMatch(part -> part.line().readAsARelation());
+                    .anyMatch(part -> part.line().readToTheEnd());
             case Unread unread -> unread.why().values().stream()
                     .allMatch(why -> why instanceof BlockReason.SeveralLinesInOneRule);
             case AnswerDependent _, OnADependencysAnswer _, StatesNoRelation _, NoInput _,
-                 CutsNothing _, AnswersNowhere _, OutsideTheDomain _, NothingArrivesAtItsLine _,
-                 TurnsNothing _, NothingArrivesAtItsRelation _, NothingArrivesAtItsStop _,
-                 RelationTurnsNothing _, NoFeasibleInput _ -> false;
+                 AnswersNowhere _, NoFeasibleInput _ -> false;
         };
     }
 

@@ -464,8 +464,13 @@ class AFoldOverAConstantTableIsTheStepFunctionItIsTest {
         return compilation.db().ask(new Adequacy.Coverage("demo")).value().get(behavior);
     }
 
+    /** What the reading left unread. Not that a run may stop where nothing says, which is said of
+     *  the run: the grade less a pay of any whole number may pass an {@code Int} under the
+     *  absolute value, where no operation of the comparison tells it. */
     private static List<String> notRead(PartitionEvidence measured) {
         return measured.notRead().stream()
+                .filter(each -> each.reason()
+                        != UndividedPosition.Reason.EVALUATION_STOPS_NOT_FULLY_READ)
                 .map(each -> each.at() + ": " + each.reason())
                 .distinct()
                 .sorted()

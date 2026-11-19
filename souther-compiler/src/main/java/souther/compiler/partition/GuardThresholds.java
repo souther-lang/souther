@@ -1216,14 +1216,11 @@ public final class GuardThresholds {
                     new RuleCitation.Written(new RuleRef.Comparison(behavior, wrote), anchor),
                     ModelOccurrences.of(stated), stops, asks);
         }
-        // Where what a run works out to evaluate it is not all told, which says nothing of a stop
-        // and nothing against the line it draws: the line stands where it was read and the rows a
-        // run gets to it past are what is open, so the border waits on it. Asked of a comparison
-        // read as a relation only: one that cut nothing, or answered nowhere, has the stops of its
-        // evaluation recorded less exactly, where a walk's parts carried in a tuple and an
-        // operation over how many a list holds are left untold that nothing leaves untold in
-        // the spelling that reads them as a total.
-        if (stopsNotFullyRead && read.readAsARelation()) {
+        // Where what a run works out to evaluate it leaves a stop untold, whatever else is said
+        // of a stop: one told is not the one left untold. It says nothing against the line: the
+        // line stands where it was read and the rows a run gets to it past are what is open, so
+        // the border waits on it.
+        if (stopsNotFullyRead && read.readToTheEnd()) {
             for (FilingCoordinate place : read.filedAt()) {
                 withoutALine.boundaryUndetermined(
                         new RuleCitation.Written(new RuleRef.Comparison(behavior, wrote), anchor),
@@ -1336,16 +1333,16 @@ public final class GuardThresholds {
 
     /**
      * Whether what a run getting to the comparison works out, anywhere {@code each} says it does,
-     * has stops that are not all told ({@link #stopsNotAllTold}), where some row arrives at the
-     * place it is worked out: the comparison, an application of the closure it stands in, an
-     * arm of a choice it is read through, or an arm an application takes. An arm is asked only
-     * where the comparison is stated as a condition, as {@link #aRunTakingAnArmMayStop} asks.
+     * leaves a stop untold ({@link UndividedByARelation.Working#aStopUntold}), where some row
+     * may arrive at the place it is worked out: the comparison, an application of the closure it
+     * stands in, an arm of a choice it is read through, or an arm an application takes. Where the
+     * comparison is stated as no condition, nothing says which rows take an arm, and one may.
      */
     private static boolean somethingWorkedOutIsNotAllTold(
             ComparisonReadings.Reading each, Reachability toIt, List<ComparisonArrival> arrivals,
             WaysToACase wayToACase) {
         for (ComparisonReadings.Reading.WorkedOutAt worked : each.whatARunWorksOut()) {
-            if (stopsNotAllTold(worked.stops())
+            if (worked.stops().operations().aStopUntold()
                     && aRowArrivesWhereItIsWorkedOut(each, worked, toIt, arrivals, wayToACase)) {
                 return true;
             }
@@ -1359,8 +1356,8 @@ public final class GuardThresholds {
         if (worked.takenWhere() != null) {
             Proposition reached = worked.madeWhere() == null ? worked.takenWhere()
                     : WhereAnApplicationIsMade.past(worked.madeWhere(), worked.takenWhere());
-            return each.statedAsACondition().isPresent()
-                    && ComparisonAssessment.someRowArrives(wayToACase.apply(reached), arrivals);
+            return each.statedAsACondition().isEmpty()
+                    || ComparisonAssessment.someRowArrives(wayToACase.apply(reached), arrivals);
         }
         if (worked.madeWhere() == null) {
             return true;
@@ -1370,15 +1367,6 @@ public final class GuardThresholds {
         }
         return each.statedAsACondition().isEmpty() || ComparisonAssessment.someRowArrives(
                 wayToACase.apply(worked.madeWhere()), arrivals);
-    }
-
-    /**
-     * Whether some operation a run works out in {@code stops} may end it and is placed nowhere in
-     * the input ({@link StopEvidence#someStopIsUnplaced}), so that where a run stops is not all
-     * told.
-     */
-    private static boolean stopsNotAllTold(StopEvidence stops) {
-        return stops.someStopIsUnplaced();
     }
 
     /** The region {@code way} leaves, or none where nothing reaches along it. */

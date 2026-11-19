@@ -2930,7 +2930,7 @@ public final class InputReads {
                     insideArmOn(scrutinee, arm, symbols, newtypes);
             // The invariant held, so the name the attempt writes stands for what was built.
             case Choice.Decides.ItWasBuilt(Core.IfConstructed attempt) ->
-                    and(attempt.binder(), attempt.construct());
+                    and(attempt.binder(), attempt);
             // A departure is taken where nothing was built, so it has nothing to enter.
             case Choice.Decides.ItDeparted _ -> this;
             // An operation defined by cases answers a value the call was already given. It
@@ -4917,10 +4917,19 @@ public final class InputReads {
      * <p>Beside {@link #standing}, which follows the name on to where it ends. What was run to
      * work the bound value out is run whatever the name goes on to stand as, and a reader asking
      * what a use of the name runs is asking about this value and not about where it ends.
+     *
+     * <p>A name an {@code if ... as} gave what it built is read only where the building
+     * succeeded, and what was run to give it its value is what the building worked out: the
+     * values of its fields, and not a construction that could still be refused.
      */
     public List<Denotation> boundTo(Core e, Symbols symbols, DeclarationNewtypes newtypes) {
         if (!(Core.withoutStanding(e) instanceof Core.Read read)) {
             return List.of();
+        }
+        if (read.binding() != null
+                && names.attemptThatBuilt(read.binding()) instanceof Core.IfConstructed attempt) {
+            return attempt.construct().values().stream()
+                    .map(field -> new Denotation(field.value(), this)).toList();
         }
         return switch (ValueStanding.named(read, this,
                 new Followed(symbols, newtypes, new HashSet<>()))) {

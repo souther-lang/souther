@@ -2,26 +2,56 @@ package souther.compiler.partition;
 
 import souther.compiler.abort.AbortKind;
 import souther.compiler.abort.GetsPast;
+import souther.compiler.check.AnOperationApplied;
+import souther.compiler.check.CalledBody;
+import souther.compiler.check.Choice;
 import souther.compiler.check.ClausesInOrder;
 import souther.compiler.check.DeclarationMeaning;
+import souther.compiler.check.DeclarationNewtypes;
+import souther.compiler.check.DefaultBoundOperationFacts;
+import souther.compiler.check.ElementAnswer;
 import souther.compiler.check.FoldedValue;
 import souther.compiler.check.PublishedDeclarationResult;
+import souther.compiler.check.SeededWalk;
+import souther.compiler.check.Symbols;
+import souther.compiler.check.WalkElements;
 import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
 import souther.compiler.core.Evaluated;
 import souther.compiler.inputs.Denotation;
+import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.InputReads;
+import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.ReadMeaning;
+import souther.compiler.inputs.RepresentationBounds;
+import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.ValuesAt;
+import souther.compiler.inputs.ValuesHeld;
+import souther.compiler.inputs.WrittenOutElements;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.NumericDomain;
 import souther.compiler.semantics.ResultBound;
+import souther.compiler.semantics.ResultRange;
+import souther.compiler.semantics.WhereAnOperatorAnswers;
+import souther.compiler.types.BinOp;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -60,11 +90,26 @@ final class WorkedOutToReachIt {
      * the one value its binding gave it, so an expression reached from every read of a name is
      * answered once. A chain of names each read more than once is otherwise walked, and folded,
      * once for every way down to it.
+     *
+     * <p>Asked {@code byTheNumbers} of what a reading passed over, it also answers from the
+     * numbers what is worked out comes to: an operation, a total or a closure applied to each
+     * element that lies within an {@code Int}. Other readers are not asked so: each of them reads
+     * the operations of what may end a run where this sends it, and a value that ends no run by
+     * its numbers alone would send it elsewhere.
      */
     private static final class Question {
 
         private final Map<Core, Boolean> answered = new IdentityHashMap<>();
         private final FoldedValue.Kept folds = new FoldedValue.Kept();
+        private final boolean byTheNumbers;
+
+        Question() {
+            this(false);
+        }
+
+        Question(boolean byTheNumbers) {
+            this.byTheNumbers = byTheNumbers;
+        }
     }
 
     private WorkedOutToReachIt(InputReading read, Predicate<Denotation> beyond,
@@ -253,6 +298,14 @@ final class WorkedOutToReachIt {
         return endsNoRun(value, new Question());
     }
 
+    /** Whether working out {@code closure} where {@code call} applies it ends no run: asked with
+     *  what the call hands it ({@link #closureHeldOverItsElements}). */
+    boolean endsNoRunWhereApplied(Denotation call, Core.Block closure) {
+        Question question = new Question(true);
+        closureHeldOverItsElements(call, question);
+        return endsNoRun(new Denotation(closure, call.at()), question);
+    }
+
     private boolean endsNoRun(Denotation value, Question question) {
         Core written = Core.withoutStanding(value.value());
         Boolean known = question.answered.get(written);
@@ -290,9 +343,502 @@ final class WorkedOutToReachIt {
             Denotation defined = value.at().taken(written);
             return defined != null && endsNoRun(defined, question);
         }
-        return (itselfEndsNoRun(value) || beyond.test(value)
-                || anOperatorWithAValue(value, question))
-                && partsAndNamesEndNoRun(value, question);
+        if (question.byTheNumbers) {
+            closureHeldOverItsElements(value, question);
+        }
+        return ownWorkingEndsNoRun(value, question) && partsAndNamesEndNoRun(value, question);
+    }
+
+    /** The ends of an {@code Int}, which a total of whole numbers and each operation of them
+     *  answers within. */
+    private static final WhereAnOperatorAnswers.WhereItsExactValueIsHeld AN_INT =
+            (WhereAnOperatorAnswers.WhereItsExactValueIsHeld) WhereAnOperatorAnswers.ofATotal(
+                    Type.INT);
+
+    /**
+     * What a closure {@code walk} applies works out of each element it is handed
+     * ({@link AddedOfEachElement#ofAnAnswer}), with what each path of the element comes to and how
+     * many elements there are at most; null where {@code walk} applies none, or it is not read so.
+     *
+     * @param rangeOf what a path of the element comes to: the numbers its place holds, the code
+     *                points of a string from nought to the last there is, the position from
+     *                nought to one below the most elements; null where none of these
+     * @param most    the elements of the list written out at the call, or the most a list holds;
+     *                null where neither is known
+     */
+    private record Worth(AddedOfEachElement added, Function<Core, FormRange> rangeOf, Core body,
+                         Long most) {}
+
+    private Worth whatEachElementIsWorth(Denotation walk, Question question) {
+        Symbols symbols = read.rules().symbols();
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        Denotation met = walk.at().denotes(walk.value(), symbols, newtypes);
+        InputReads where = met == null ? null : met.at();
+        BindingId element = where == null ? null
+                : WalkElements.elementBindingOf(met.value(), where, symbols, newtypes);
+        ElementAnswer answer = element == null ? null : where.answerAt(element);
+        Core container = answer == null ? null : where.containerOfTheElementHandedTo(element);
+        AddedOfEachElement added = container == null ? null : AddedOfEachElement.ofAnAnswer(
+                answer, decides -> endsNoRun(new Denotation(decides, where), question), newtypes);
+        if (added == null) {
+            return null;
+        }
+        Long most = mostElementsOf(container);
+        return new Worth(added, rangesOfTheElements(where, element, answer.position(), container,
+                added.aliases(), most), answer.body(), most);
+    }
+
+    /** How many elements {@code container} holds at most: those of a list written out there, or
+     *  the most a list holds; null where neither is known. */
+    private static Long mostElementsOf(Core container) {
+        return Core.withoutStanding(container) instanceof Core.ListLit list
+                ? Long.valueOf(list.elements().size()) : RepresentationBounds.mostElements();
+    }
+
+    /**
+     * What a path of the element handed on {@code element} comes to, read in {@code where}: the
+     * numbers its place holds, wherever the elements of {@code container} stand; the code point
+     * of a string, from nought to the last there is; or, where it is the position handed on
+     * {@code position}, from nought to one below {@code most}. Null where it is none of these.
+     */
+    private Function<Core, FormRange> rangesOfTheElements(
+            InputReads where, BindingId element, BindingId position, Core container,
+            Map<BindingId, Core> aliases, Long most) {
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        NumericTerm aCodePoint = InputNumber.aCodePointListedBy(container, read.domain(), where,
+                read.rules());
+        ValuesHeld held = where.everyElementAt(element, newtypes);
+        return path -> {
+            if (position != null && Core.withoutStanding(path) instanceof Core.Read at
+                    && position.equals(at.binding())) {
+                return most == null || most < 1 ? null
+                        : new FormRange(ExactRatio.ZERO, ExactRatio.of(most - 1));
+            }
+            ElementProjection place = ElementProjection.read(path, element, aliases, newtypes);
+            if (place == null) {
+                return null;
+            }
+            return switch (held) {
+                case ValuesHeld.At(TermPath at) -> rangeOfAPlace(place.from(at));
+                case ValuesHeld.MayStandAt(List<TermPath> among) -> {
+                    FormRange hull = null;
+                    for (TermPath each : among) {
+                        FormRange one = rangeOfAPlace(place.from(each));
+                        if (one == null) {
+                            yield null;
+                        }
+                        hull = hull == null ? one : hull.hull(one);
+                    }
+                    yield hull;
+                }
+                case ValuesHeld.NotAPosition _ -> place.steps().isEmpty() && aCodePoint != null
+                        ? FormRange.endsOf(aCodePoint, read) : null;
+            };
+        };
+    }
+
+    /** The numbers {@code place} holds, or null where it is under nothing this reading holds. */
+    private FormRange rangeOfAPlace(TermPath place) {
+        NumericTerm at = new NumericTerm.ValueOf(place);
+        return read.quantities().answersFor(at)
+                ? FormRange.held(LinearForm.atom(at), read, Map.of()) : null;
+    }
+
+    /**
+     * Takes the closure {@code value} applies to each element as ending no run where every
+     * operation it works out of an element lies within an {@code Int}, from what the element comes
+     * to ({@link #whatEachElementIsWorth}); and a walk's step, where every number the walk works
+     * out from its seed over the most elements there are does
+     * ({@link AddedOfEachElement#heldOverEveryStep}). Asked where the call is, which knows the
+     * elements, and not where the closure's body is met, which knows nothing of them.
+     */
+    private void closureHeldOverItsElements(Denotation value, Question question) {
+        if (!closuresApart || !(Core.withoutStanding(value.value()) instanceof Core.PreservedCall)) {
+            return;
+        }
+        Worth each = whatEachElementIsWorth(value, question);
+        if (each != null && each.added().holdsEveryOperation(each.rangeOf(), AN_INT.least(),
+                AN_INT.greatest())) {
+            question.answered.put(Core.withoutStanding(each.body()), true);
+            return;
+        }
+        Symbols symbols = read.rules().symbols();
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        Denotation met = value.at().denotes(value.value(), symbols, newtypes);
+        SeededWalk walk = met == null ? null : SeededWalk.of(met.value(), closure ->
+                Core.withoutStanding(closure) instanceof Core.Block block ? block : null);
+        InputReads where = met == null ? null : met.at();
+        AddedOfEachElement step = walk == null ? null : AddedOfEachElement.ofTheStep(walk,
+                decides -> endsNoRun(new Denotation(decides, where), question), newtypes);
+        Long most = step == null ? null : mostElementsOf(walk.container());
+        if (most != null && where.folded(walk.seed(), symbols, newtypes).orElse(null)
+                instanceof Long seed
+                && step.heldOverEveryStep(BigInteger.valueOf(seed), rangesOfTheElements(where,
+                        walk.element().binding(), null, walk.container(), step.aliases(), most),
+                        most, AN_INT.least(), AN_INT.greatest())) {
+            question.answered.put(Core.withoutStanding(walk.step().body()), true);
+        }
+    }
+
+    /**
+     * Whether {@code value} is a total of whole numbers, held to an {@code Int} and ending a run
+     * only past it ({@link GetsPast.WhereTheTotalFits}), that no list can take past it: each
+     * element comes to numbers whose sum over the most elements there are lies within it — what a
+     * closure works out of each ({@link #whatEachElementIsWorth}), or the numbers a list written
+     * out holds, every one of them there.
+     */
+    boolean aTotalWithinAnInt(Denotation value) {
+        if (!(Core.withoutStanding(value.value()) instanceof Core.PreservedCall call)
+                || !(WhatARunMayEndFor.completionApartFromTheClosuresWrittenAtIt(call)
+                        instanceof GetsPast.WhereTheTotalFits(int list))
+                || list >= call.args().size()) {
+            return false;
+        }
+        Denotation listed = new Denotation(call.args().get(list), value.at());
+        Worth each = whatEachElementIsWorth(listed, new Question());
+        if (each != null) {
+            FormRange one = each.added().answerHeldWithin(each.rangeOf(), AN_INT.least(),
+                    AN_INT.greatest());
+            if (one == null || each.most() == null) {
+                return false;
+            }
+            ExactRatio most = ExactRatio.of(each.most());
+            FormRange total = FormRange.combined(BinOp.MUL, one,
+                    new FormRange(ExactRatio.ZERO, most));
+            return total != null && total.hull(new FormRange(ExactRatio.ZERO, ExactRatio.ZERO))
+                    .liesWithin(AN_INT.least(), AN_INT.greatest());
+        }
+        return aListWrittenOutWithinAnInt(listed);
+    }
+
+    /** Whether {@code listed} is a list written out, every element there and a number the fold
+     *  works out, whose sum lies within an {@code Int}. */
+    private boolean aListWrittenOutWithinAnInt(Denotation listed) {
+        if (!(WrittenOutElements.of(listed, read.rules().symbols(), read.rules().newtypes())
+                instanceof WrittenOutElements.Walked.Each written)) {
+            return false;
+        }
+        BigInteger sum = BigInteger.ZERO;
+        for (ReadMeaning.Occurrence each : written.asWritten()) {
+            Denotation element = each.value();
+            if (!each.keptWhere().isEmpty()
+                    || !(element.at().folded(element.value(), read.rules().symbols(),
+                            read.rules().newtypes()).orElse(null) instanceof Long number)) {
+                return false;
+            }
+            sum = sum.add(BigInteger.valueOf(number));
+        }
+        return sum.compareTo(AN_INT.least()) >= 0 && sum.compareTo(AN_INT.greatest()) <= 0;
+    }
+
+    /**
+     * Whether working out {@code value}, which a reading passed over, ends no run of its own,
+     * apart from what it is made of and what a name in it was given, which are asked as values of
+     * their own: asked {@link Question#byTheNumbers}.
+     */
+    boolean ownWorkingEndsNoRun(Denotation value) {
+        return ownWorkingEndsNoRun(value, new Question(true));
+    }
+
+    private boolean ownWorkingEndsNoRun(Denotation value, Question question) {
+        return itselfEndsNoRun(value) || beyond.test(value)
+                || anOperatorWithAValue(value, question)
+                || (question.byTheNumbers && (aTotalWithinAnInt(value)
+                        || anOperatorWithinAnInt(value)));
+    }
+
+    /** Whether working out {@code value}, which a reading passed over, ends no run, asked
+     *  {@link Question#byTheNumbers}. */
+    boolean endsNoRunWhereItWasPassedOver(Denotation value) {
+        return endsNoRun(value, new Question(true));
+    }
+
+    /**
+     * Whether {@code value} is a sum, a difference, a product or a negation of whole numbers whose
+     * operands come to numbers ({@link #numbersOf}) it takes to no number past an {@code Int}.
+     */
+    private boolean anOperatorWithinAnInt(Denotation value) {
+        FormRange range = Core.withoutStanding(value.value()).type() == Type.INT
+                ? whatItComesTo(value, numbersAsked) : null;
+        return range != null && range.liesWithin(AN_INT.least(), AN_INT.greatest());
+    }
+
+    /**
+     * The numbers {@code value} works out from the numbers its operands come to, before its type
+     * holds them: a sum, a difference, a product or a negation, or what a call of the library
+     * answers in each case it is defined in ({@link Choice#casesOf}) where all it ends a run for
+     * is that answer having no place. Null where it is none of these or that is not known.
+     */
+    private FormRange whatItComesTo(Denotation value, Map<Core, List<NumbersAt>> asked) {
+        Function<Core, FormRange> operand = each -> numbersOf(new Denotation(each, value.at()),
+                asked);
+        return switch (Core.withoutStanding(value.value())) {
+            case Core.Binary binary when binary.op() == BinOp.ADD || binary.op() == BinOp.SUB
+                    || binary.op() == BinOp.MUL -> FormRange.combined(binary.op(),
+                    operand.apply(binary.left()), operand.apply(binary.right()));
+            case Core.Neg negated -> FormRange.combined(BinOp.SUB,
+                    new FormRange(ExactRatio.ZERO, ExactRatio.ZERO),
+                    operand.apply(negated.operand()));
+            case Core.PreservedCall call when endsOnlyWhereItsOwnAnswerHasNoPlace(call) -> {
+                FormRange hull = null;
+                List<Choice.ADefinitionCase> cases = Choice.casesOf(call);
+                for (Choice.ADefinitionCase each : cases) {
+                    FormRange one = FormRange.of(each.answers(), operand);
+                    if (one == null) {
+                        yield null;
+                    }
+                    hull = hull == null ? one : hull.hull(one);
+                }
+                yield hull;
+            }
+            default -> null;
+        };
+    }
+
+    /**
+     * The constructions {@code value} may be, each where it is written, or null where that is not
+     * known: a construction itself, what every value a name was given may be, what a behavior's
+     * body may be, either arm of a choice, and what a walk from a seed may end with whose step
+     * answers the element or what it was carried and nothing else — the seed or an element of the
+     * list written out it walks.
+     */
+    private List<Denotation> valuesItMayBe(Denotation value) {
+        Core written = Core.withoutStanding(value.value());
+        Symbols symbols = read.rules().symbols();
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        return switch (written) {
+            case Core.Construct _ -> List.of(value);
+            case Core.Read _ -> {
+                List<Denotation> given = boundTo(value);
+                yield given.isEmpty() ? null : allOf(given.stream().map(this::valuesItMayBe)
+                        .toList());
+            }
+            case Core.If fork -> allOf(List.of(
+                    valuesItMayBe(new Denotation(fork.then(), value.at())),
+                    valuesItMayBe(new Denotation(fork.els(), value.at()))));
+            case Core.Call _ when AnOperationApplied.of(written) instanceof AnOperationApplied
+                    applied && applied.operation() instanceof ValueName.Behavior behavior
+                    && !value.at().standsIn(behavior) -> {
+                Optional<CalledBody> body =
+                        read.rules().declarations().answers().bodyOf(behavior);
+                InputReads inside = body.isEmpty() ? null : value.at().calling(behavior,
+                        body.get(), applied.args(), newtypes);
+                yield inside == null ? null
+                        : valuesItMayBe(new Denotation(body.get().body(), inside));
+            }
+            case Core.PreservedCall _ -> {
+                Denotation met = value.at().denotes(written, symbols, newtypes);
+                SeededWalk walk = met == null ? null : SeededWalk.of(met.value(), closure ->
+                        Core.withoutStanding(closure) instanceof Core.Block block ? block : null);
+                List<Denotation> elements = walk == null
+                        || !answersTheElementOrWhatItCarried(walk.step().body(),
+                                walk.element().binding(), walk.accumulator().binding()) ? null
+                        : elementsWrittenOut(new Denotation(walk.container(), met.at()));
+                if (elements == null) {
+                    yield null;
+                }
+                List<List<Denotation>> parts = new ArrayList<>();
+                parts.add(valuesItMayBe(new Denotation(walk.seed(), met.at())));
+                for (Denotation one : elements) {
+                    parts.add(valuesItMayBe(one));
+                }
+                yield allOf(parts);
+            }
+            case Core.LetIn let -> valuesItMayBe(new Denotation(let.body(),
+                    value.at().and(let.binder(), let.value())));
+            case Core.FieldAccess access -> {
+                List<Denotation> holding = valuesItMayBe(new Denotation(access.target(),
+                        value.at()));
+                if (holding == null) {
+                    yield null;
+                }
+                List<List<Denotation>> parts = new ArrayList<>();
+                for (Denotation each : holding) {
+                    Core field = fieldOf(each, access.field());
+                    parts.add(field == null ? null
+                            : valuesItMayBe(new Denotation(field, each.at())));
+                }
+                yield allOf(parts);
+            }
+            default -> null;
+        };
+    }
+
+    /** The value {@code made}, a construction, gives {@code field}, or null where it gives it
+     *  none. */
+    private static Core fieldOf(Denotation made, String field) {
+        return ((Core.Construct) Core.withoutStanding(made.value())).values().stream()
+                .filter(one -> one.field().equals(field))
+                .map(Core.FieldValue::value).findFirst().orElse(null);
+    }
+
+    /** Every element of {@code list} where it is a list written out, each as written — through a
+     *  value it refers to, run as the value is defined, or the one value a name was given — or
+     *  null where it is none. */
+    private List<Denotation> elementsWrittenOut(Denotation list) {
+        Core written = Core.withoutStanding(list.value());
+        if (written instanceof Core.MaterialisedValue) {
+            Denotation defined = list.at().taken(written);
+            return defined == null ? null : elementsWrittenOut(defined);
+        }
+        if (written instanceof Core.Read && boundTo(list) instanceof List<Denotation> given
+                && given.size() == 1) {
+            return elementsWrittenOut(given.getFirst());
+        }
+        if (written instanceof Core.ListLit literal) {
+            return literal.elements().stream().map(each -> new Denotation(each, list.at()))
+                    .toList();
+        }
+        return WrittenOutElements.of(list, read.rules().symbols(), read.rules().newtypes())
+                instanceof WrittenOutElements.Walked.Each each
+                ? each.asWritten().stream().map(ReadMeaning.Occurrence::value).toList() : null;
+    }
+
+    /** Whether {@code body} answers the element handed on {@code element} or what was carried
+     *  on {@code carried}, whichever arm of a choice it takes, and nothing else. */
+    private static boolean answersTheElementOrWhatItCarried(Core body, BindingId element,
+                                                           BindingId carried) {
+        return switch (Core.withoutStanding(body)) {
+            case Core.Read name -> element.equals(name.binding()) || carried.equals(name.binding());
+            case Core.If fork -> answersTheElementOrWhatItCarried(fork.then(), element, carried)
+                    && answersTheElementOrWhatItCarried(fork.els(), element, carried);
+            default -> false;
+        };
+    }
+
+    /** Every one of {@code parts} together, or null where one is not known. */
+    private static List<Denotation> allOf(List<List<Denotation>> parts) {
+        List<Denotation> out = new ArrayList<>();
+        for (List<Denotation> each : parts) {
+            if (each == null) {
+                return null;
+            }
+            out.addAll(each);
+        }
+        return out;
+    }
+
+    /** The numbers of {@code range} an {@code Int} holds: those a run that got the value holds,
+     *  past which it stopped. Null where it is not known or holds none. */
+    private static FormRange heldToAnInt(FormRange range) {
+        return range == null ? null : range.meet(new FormRange(ExactRatio.of(AN_INT.least()),
+                ExactRatio.of(AN_INT.greatest())));
+    }
+
+    /**
+     * The numbers {@code value} comes to, or null where that is not known: a number the fold works
+     * out, what the place of the input it reads holds, what every value a name was given comes to,
+     * what the library declares a call answers for the numbers it is handed
+     * ({@link ResultRange}), what an operation makes of its operands' numbers, and either arm of a
+     * choice. Each expression is asked once ({@code asked}), where it is written, as an
+     * expression {@link #endsNoRun} meets is.
+     */
+    FormRange numbersOf(Denotation value) {
+        return numbersOf(value, numbersAsked);
+    }
+
+    /** What {@link #numbersOf} answered of an expression read where it is ({@code at}): the
+     *  numbers, or none where they are not known or are still being asked. */
+    private record NumbersAt(InputReads at, Optional<FormRange> numbers) {}
+
+    /** What {@link #numbersOf} answered of each expression, wherever it was read, for as long as
+     *  this is asked: a chain of names is followed once however many expressions read it. The
+     *  expression is the node written, and where it was read is told apart by what each name in
+     *  it stands for. */
+    private final Map<Core, List<NumbersAt>> numbersAsked = new IdentityHashMap<>();
+
+    private FormRange numbersOf(Denotation value, Map<Core, List<NumbersAt>> asked) {
+        Core written = Core.withoutStanding(value.value());
+        List<NumbersAt> where = asked.computeIfAbsent(written, _ -> new ArrayList<>());
+        for (NumbersAt each : where) {
+            if (each.at().equals(value.at())) {
+                return each.numbers().orElse(null);
+            }
+        }
+        int index = where.size();
+        where.add(new NumbersAt(value.at(), Optional.empty()));
+        FormRange numbers = numbersNotYetAsked(value, asked);
+        where.set(index, new NumbersAt(value.at(), Optional.ofNullable(numbers)));
+        return numbers;
+    }
+
+    private FormRange numbersNotYetAsked(Denotation value, Map<Core, List<NumbersAt>> asked) {
+        Core written = Core.withoutStanding(value.value());
+        Symbols symbols = read.rules().symbols();
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        if (value.at().folded(written, symbols, newtypes).orElse(null) instanceof Long number) {
+            return new FormRange(ExactRatio.of(number), ExactRatio.of(number));
+        }
+        return switch (written) {
+            case Core.Read _ -> {
+                List<Denotation> given = boundTo(value);
+                if (given.isEmpty()) {
+                    yield value.at().pathOf(written, newtypes) instanceof ValuesAt.At(var at)
+                            ? rangeOfAPlace(at) : null;
+                }
+                FormRange hull = null;
+                for (Denotation each : given) {
+                    FormRange one = numbersOf(each, asked);
+                    if (one == null) {
+                        yield null;
+                    }
+                    hull = hull == null ? one : hull.hull(one);
+                }
+                yield hull;
+            }
+            case Core.PreservedCall call when AnOperationApplied.of(call) instanceof AnOperationApplied
+                    applied -> {
+                NumericDomain.Bounds runs = ResultRange.of(
+                        DefaultBoundOperationFacts.get().everyBoundOnTheResult(applied.operation()),
+                        argument -> applied.argument(argument) instanceof Core handed
+                                && value.at().folded(handed, symbols, newtypes).orElse(null)
+                                        instanceof Long number
+                                ? Optional.of(BigDecimal.valueOf(number)) : Optional.empty());
+                yield runs.min() != null && runs.max() != null
+                        ? FormRange.ofTheWholeNumbersIn(runs)
+                        : written.type() == Type.INT ? heldToAnInt(whatItComesTo(value, asked))
+                        : null;
+            }
+            // A behavior called comes to what its body does, read with what the call hands it.
+            case Core.Call _ when AnOperationApplied.of(written) instanceof AnOperationApplied
+                    applied && applied.operation() instanceof ValueName.Behavior behavior
+                    && !value.at().standsIn(behavior) -> {
+                Optional<CalledBody> body =
+                        read.rules().declarations().answers().bodyOf(behavior);
+                InputReads inside = body.isEmpty() ? null : value.at().calling(behavior,
+                        body.get(), applied.args(), newtypes);
+                yield inside == null ? null
+                        : numbersOf(new Denotation(body.get().body(), inside), asked);
+            }
+            case Core.FieldAccess access -> {
+                if (value.at().pathOf(written, newtypes) instanceof ValuesAt.At(var at)) {
+                    yield rangeOfAPlace(at);
+                }
+                List<Denotation> made = valuesItMayBe(new Denotation(access.target(), value.at()));
+                if (made == null) {
+                    yield null;
+                }
+                FormRange hull = null;
+                for (Denotation each : made) {
+                    Core field = fieldOf(each, access.field());
+                    FormRange one = field == null ? null
+                            : numbersOf(new Denotation(field, each.at()), asked);
+                    if (one == null) {
+                        yield null;
+                    }
+                    hull = hull == null ? one : hull.hull(one);
+                }
+                yield hull;
+            }
+            case Core.Binary _, Core.Neg _ -> written.type() == Type.INT
+                    ? heldToAnInt(whatItComesTo(value, asked)) : null;
+            case Core.If fork -> {
+                FormRange then = numbersOf(new Denotation(fork.then(), value.at()), asked);
+                FormRange otherwise = numbersOf(new Denotation(fork.els(), value.at()), asked);
+                yield then == null || otherwise == null ? null : then.hull(otherwise);
+            }
+            default -> null;
+        };
     }
 
     /**

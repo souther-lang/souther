@@ -15,6 +15,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.WalkElements;
+import souther.compiler.check.WhatARunMayEndFor;
 import souther.compiler.core.Core;
 import souther.compiler.numeric.DateTranslation;
 import souther.compiler.numeric.ExactAnswer;
@@ -180,9 +181,11 @@ public final class InputNumber {
      * What a run works out of each element to make {@code walk}, a call of an operation applying
      * a closure to the elements of a container that stands at a place: each whole-number
      * operation the closure writes, in the order it works them out
-     * ({@link ElementValue#operationsOf}). None where {@code walk} is no such call, or its
-     * elements stand at no place, as the elements a filter keeps stand at none: a run is then
-     * over some of the values at a place, not the values there.
+     * ({@link ElementValue#operationsOf}). None where {@code walk} is no such call. Null where
+     * they are not every one: one is not read as a form of the places of the element, or the
+     * elements stand at no place, as the elements a filter keeps stand at none, and a run is then
+     * over some of the values at a place, not the values there — unless the closure works out
+     * nothing that may end a run, and then there are none.
      */
     public static List<LinearForm<NumericTerm>> operationsAtEachElement(Core walk,
                                                                         InputReads reads,
@@ -195,12 +198,47 @@ public final class InputNumber {
         BindingId element = WalkElements.elementBindingOf(met.value(), where, source.symbols(),
                 source.newtypes());
         ElementAnswer closure = element == null ? null : where.answerAt(element);
-        if (closure == null || !(where.everyElementAt(element, source.newtypes())
-                instanceof ValuesHeld.At(TermPath stands))) {
+        if (closure == null) {
             return List.of();
         }
-        return ElementValue.operationsOf(closure, where.heldByTheBody(), source,
-                new ElementValue.ElementsAt(stands, where.declared()));
+        if (where.everyElementAt(element, source.newtypes())
+                instanceof ValuesHeld.At(TermPath stands)) {
+            return ElementValue.operationsOf(closure, where.heldByTheBody(), source,
+                    new ElementValue.ElementsAt(stands, where.declared()));
+        }
+        // An element a walk made, one way and of every element of a container of the input, is
+        // read through the names the walks hand it by, down to the element of the input it was
+        // made of, which is what the closure is read over: the name it is handed is one of them.
+        Core container = WalkElements.containerOf(met.value(), where, source.symbols(),
+                source.newtypes());
+        InputReads.WalkedElement walked = container == null ? null
+                : where.walkedElementOf(container, element, null, source.symbols(),
+                        source.newtypes());
+        if (walked != null && walked.subject() == null && walked.keptBy().isEmpty()) {
+            return ElementValue.operationsOf(
+                    new ElementAnswer(walked.element(), closure.body(), null),
+                    walked.arms().getFirst().held(), source,
+                    new ElementValue.ElementsAt(walked.elements(), where.declared()));
+        }
+        // No form of a place says what the closure works out of an element, which is nothing
+        // to tell where it works out nothing that may end a run, or where it answers a test of
+        // the element: a comparison it makes is read as a comparison, on each element.
+        return closure.body().type() == Type.BOOL
+                || WhatARunMayEndFor.endsNoneBeneath(closure.body()) ? List.of() : null;
+    }
+
+    /**
+     * The step of {@code walk} where it is a walk from a seed whose step answers a whole number,
+     * handed what it answered last and not an element's answer, which no form of a place of an
+     * element says ({@link #operationsAtEachElement}); none where it is no such walk.
+     */
+    public static List<Core.Block> stepsAnsweringNoElement(Core walk, InputReads reads,
+                                                          RuleReadingSource source) {
+        Denotation met = reads.denotes(walk, source.symbols(), source.newtypes());
+        SeededWalk seeded = met == null ? null : SeededWalk.of(met.value(), closure ->
+                Core.withoutStanding(closure) instanceof Core.Block block ? block : null);
+        return seeded != null && seeded.step().body().type() == Type.INT
+                ? List.of(seeded.step()) : List.of();
     }
 
     /**
@@ -357,6 +395,23 @@ public final class InputNumber {
         TermPath at = stringWhoseCodePointsAre(measured.of(), reads, source);
         return at == null ? null
                 : NumericTerm.CodePointValueSum.of(at, inputs.typeAt(at, source), source.inners());
+    }
+
+    /**
+     * A code point of the string whose code points {@code listed} lists — the first, which stands
+     * for every one of them as far as the numbers a code point comes to — or null where it lists
+     * those of no string standing at one, nor some of them ({@link #codePointsWalked}). For
+     * asking what a code point comes to, and never which one a run reads.
+     */
+    public static NumericTerm aCodePointListedBy(Core listed, InputDomain inputs,
+                                                 InputReads reads, RuleReadingSource source) {
+        TermPath at = stringWhoseCodePointsAre(listed, reads, source);
+        if (at == null) {
+            CodePointsWalked some = codePointsWalked(listed, inputs, reads, source);
+            at = some == null ? null : some.at();
+        }
+        return at == null ? null
+                : NumericTerm.CodePointAt.of(at, 0, inputs.typeAt(at, source), source.inners());
     }
 
     /** The location of the string whose code points {@code listed} lists, or null where it lists

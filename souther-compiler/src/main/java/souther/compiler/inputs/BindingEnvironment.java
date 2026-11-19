@@ -606,12 +606,31 @@ final class BindingEnvironment {
 
     /** What {@code binding} is bound to on the way here, the nearest binding winning. */
     private Core boundTo(BindingId binding) {
+        Core.IfConstructed attempt = attemptThatBuilt(binding);
+        return attempt != null ? attempt.construct() : heldFor(binding);
+    }
+
+    /** What is held for {@code binding}: its value, or the attempt that built it. */
+    private Core heldFor(BindingId binding) {
         for (Layer layer = newest; layer != null; layer = layer.older()) {
             if (layer.binding().equals(binding)) {
                 return layer.value();
             }
         }
         return table.get(binding);
+    }
+
+    /**
+     * The attempt that built what {@code binding} names, where it names what an
+     * {@code if ... as} built and stands only where the building succeeded, or null. What a
+     * run works out to give it its value is what the attempt worked out, and the attempt ends
+     * no run of its own: a value it refused takes the other arm. Only the name the attempt
+     * writes: a name given the whole {@code if ... as} is given whichever arm it answers.
+     */
+    Core.IfConstructed attemptThatBuilt(BindingId binding) {
+        return Core.withoutStanding(heldFor(binding)) instanceof Core.IfConstructed attempt
+                && attempt.binder() != null && binding.equals(attempt.binder().binding())
+                ? attempt : null;
     }
 
     /** Everything bound on the way here as one table, made when it is asked for. */

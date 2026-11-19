@@ -151,7 +151,7 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         String chosen = report(model("if a.debit then a.q else 0 - a.q", 3));
         assertTrue(chosen.contains(
                 "List.sum({if debit then 1·q + 0 else -1·q + 0 | xs[*]})"), chosen);
-        assertFalse(chosen.contains("not read"), chosen);
+        assertFalse(UnreadBesideItsStops.in(chosen), chosen);
     }
 
     /** Arithmetic over a choice by a flag is the choice of the arithmetic, in each branch. */
@@ -160,7 +160,7 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         String weighed = report(model("(if a.debit then a.q else 0 - a.q) * 2 + a.p", 3));
         assertTrue(weighed.contains("List.sum({if debit then 1·p + 2·q + 0 else 1·p + -2·q + 0"
                 + " | xs[*]})"), weighed);
-        assertFalse(weighed.contains("not read"), weighed);
+        assertFalse(UnreadBesideItsStops.in(weighed), weighed);
     }
 
     /**
@@ -395,7 +395,7 @@ class ASumOverWhatAWalkComputedIsReadLikeASumOverWhatItReadTest {
         assertTrue(report.contains("List.sum({if first then if debit then 1·q + 0 else -1·q + 0"
                 + " else if second then if debit then 1·q + 0 else -1·q + 0 else 0 | xs[*]})"),
                 report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(UnreadBesideItsStops.in(report), report);
     }
 
     /** A weight below nought is solved for the way any other is: the fields come to minus the rest. */

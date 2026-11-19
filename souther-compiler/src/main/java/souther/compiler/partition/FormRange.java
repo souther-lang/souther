@@ -15,6 +15,7 @@ import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
+import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.ValueTransformation;
 import souther.compiler.semantics.TakenAs;
 import souther.compiler.types.BinOp;
@@ -412,6 +413,27 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
         ExactRatio from = least.compareTo(other.least) >= 0 ? least : other.least;
         ExactRatio to = greatest.compareTo(other.greatest) <= 0 ? greatest : other.greatest;
         return from.compareTo(to) > 0 ? null : new FormRange(from, to);
+    }
+
+    /**
+     * The whole numbers of this that stand in {@code rel} to {@code number}, or null where none
+     * does. A number this is not ended at by the relation leaves it as it is: a range has no hole.
+     */
+    FormRange heldTo(Rel rel, ExactRatio number) {
+        ExactRatio below = number.minus(ExactRatio.ONE).orNull();
+        ExactRatio above = number.plus(ExactRatio.ONE).orNull();
+        return switch (rel) {
+            case EQ -> holds(number) ? new FormRange(number, number) : null;
+            case NE -> number.equals(least) && !number.equals(greatest)
+                    ? meet(new FormRange(above, greatest))
+                    : number.equals(greatest) && !number.equals(least)
+                    ? meet(new FormRange(least, below))
+                    : holds(number) && least.equals(greatest) ? null : this;
+            case LT -> meet(new FormRange(least, below));
+            case LE -> meet(new FormRange(least, number));
+            case GT -> meet(new FormRange(above, greatest));
+            case GE -> meet(new FormRange(number, greatest));
+        };
     }
 
     /** The smallest range holding this and {@code other}. */

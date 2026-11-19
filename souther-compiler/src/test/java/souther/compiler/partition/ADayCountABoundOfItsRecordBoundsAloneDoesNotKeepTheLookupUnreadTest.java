@@ -3,10 +3,12 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.check.RuleRef;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.types.WrittenOwner;
 
 import java.util.List;
 
@@ -98,11 +100,25 @@ class ADayCountABoundOfItsRecordBoundsAloneDoesNotKeepTheLookupUnreadTest {
         return partitionOf(PAY + DAYS_OF_THEIR_OWN + PAY_RECORD.formatted("Days") + REST);
     }
 
+    /**
+     * What {@code measured} leaves unanswered apart from the blockers' comparison. A grade of any
+     * whole number less the one the table gives may pass an {@code Int}, so that comparison is not
+     * shown past for every value whatever the days are; what turns on the days is the lookup.
+     */
+    private static List<PartitionEvidence.Unanswered> unansweredBesideTheGrade(
+            PartitionEvidence measured) {
+        return measured.unanswered().stream()
+                .filter(each -> !(each.rule() instanceof RuleRef.Written written
+                        && written.origin().owner() instanceof WrittenOwner.Body body
+                        && body.definition().equals("blockers")))
+                .toList();
+    }
+
     @Test
     void daysBoundedByTheirRecordAloneAreReadAsDaysOfTheirOwnAre() {
         PartitionEvidence alone = withDaysAnInt(BOUNDED_ALONE);
 
-        assertEquals(List.of(), alone.unanswered());
+        assertEquals(List.of(), unansweredBesideTheGrade(alone));
         assertEquals(withDaysANewtype().notRead(), alone.notRead());
     }
 
@@ -118,6 +134,6 @@ class ADayCountABoundOfItsRecordBoundsAloneDoesNotKeepTheLookupUnreadTest {
                     invariant a.value <= 1000000000000 && days >= 0 && days <= 31
                 """ + REST;
 
-        assertEquals(List.of(), partitionOf(oneClause).unanswered());
+        assertEquals(List.of(), unansweredBesideTheGrade(partitionOf(oneClause)));
     }
 }

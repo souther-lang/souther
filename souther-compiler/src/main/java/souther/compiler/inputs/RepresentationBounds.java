@@ -43,6 +43,8 @@ public final class RepresentationBounds {
 
     private static final ValueName.Stdlib LENGTH = ValueName.Stdlib.operation("String", "length");
 
+    private static final ValueName.Stdlib HOW_MANY = ValueName.Stdlib.operation("List", "length");
+
     /** The run up to each end declared. Asked of every term of every form, and there are only as
      *  many as there are ends declared, so each is built once. */
     private static final Map<Long, NumericDomain.Bounds> UP_TO = new ConcurrentHashMap<>();
@@ -83,6 +85,12 @@ public final class RepresentationBounds {
      *  the same string, so they stop where its length does. */
     private static Long longestString() {
         return whereItsOperationStops(LENGTH);
+    }
+
+    /** The most elements a list holds, as {@code List.length} declares where it stops, or null
+     *  where it declares none. */
+    public static Long mostElements() {
+        return whereItsOperationStops(HOW_MANY);
     }
 
     /** {@code number} times {@code by}, or null where {@code number} is. */

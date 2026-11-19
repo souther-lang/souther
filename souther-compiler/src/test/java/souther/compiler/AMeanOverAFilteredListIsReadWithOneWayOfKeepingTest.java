@@ -160,16 +160,22 @@ class AMeanOverAFilteredListIsReadWithOneWayOfKeepingTest {
     /**
      * With the pay of each month the comparison is a line over several of the inputs. In each way
      * of keeping, the count is the number of months that way keeps, and the line relates the pay of
-     * one month to the pay of another — which two months are enough to have. A pay at the greatest
-     * {@code Int} leaves no row that computes below the line, so that value settles the line by the
-     * arithmetic alone, and every other pay is left either way by the other month's: the line is
-     * read to the end, as it is for the same comparison written out without a filter.
+     * one month to the pay of another — which two months are enough to have. Two pays near the
+     * greatest {@code Int} take their total past it, and a run stops there, which the report says;
+     * a pay is then not shown to reach every value, and nothing else is left unread. The reading
+     * does not stop at the quotient.
      */
     @Test
     void aMeanOverTheirPayIsReadAsTheLineOverSeveralValuesAndNotStoppedAtTheQuotient() {
         String report = report(guarded("List.length(" + PAYABLE + ") >= 1",
                 meanOfEach("r.pay") + " >= 300"));
-        assertReadToTheEnd(report);
+        assertFalse(report.contains(NO_QUOTIENT_READ), report);
+        assertTrue(report.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD), report);
+        assertTrue(report.lines()
+                .filter(line -> line.contains("not read")
+                        && !line.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD))
+                .allMatch(line -> line.contains("not shown to reach every value here")
+                        && line.endsWith(".pay`")), report);
     }
 
     /**

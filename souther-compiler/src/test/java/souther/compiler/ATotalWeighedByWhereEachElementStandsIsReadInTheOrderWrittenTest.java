@@ -66,7 +66,7 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
     void aWeightChosenByThePositionIsReadAsALineOnTheTotal() {
         String human = report(model(BRANCH, "xs"));
         assertTrue(human.contains("no line: comparison") && human.contains(TERM), human);
-        assertFalse(human.contains("not read:"), human);
+        assertFalse(UnreadBesideItsStops.in(human), human);
     }
 
     /** The weight written as a factor is the same number, and the same term. */
@@ -114,7 +114,7 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
     void aWalkOverTheElementsFromTheFarEndIsReadByThePositionCountedThere() {
         String reversed = report(model(BRANCH, "List.reverse(xs)"));
         assertTrue(reversed.contains("from the far end"), reversed);
-        assertFalse(reversed.contains("not read:"), reversed);
+        assertFalse(UnreadBesideItsStops.in(reversed), reversed);
         String alike = report(model("(i, c) -> 3 * c", "List.reverse(xs)"));
         assertTrue(alike.contains("List.sum({3·the element itself + 0 | xs[*]})"), alike);
     }
@@ -155,9 +155,9 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
     @Test
     void aWalkOverTheElementsInAnOrderNothingDeclaresIsNotReadByPosition() {
         String sorted = report(model(BRANCH, "List.sort(xs)"));
-        assertTrue(sorted.contains("not read: comparison"), sorted);
+        assertTrue(UnreadBesideItsStops.in(sorted), sorted);
         String reversedSorted = report(model(BRANCH, "List.reverse(List.sort(xs))"));
-        assertTrue(reversedSorted.contains("not read: comparison"), reversedSorted);
+        assertTrue(UnreadBesideItsStops.in(reversedSorted), reversedSorted);
     }
 
     /** Turning the order round twice is the order written: the same term as the list itself, and
@@ -168,7 +168,7 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
         String twice = report(model(BRANCH, "List.reverse(List.reverse(xs))"));
         assertTrue(twice.contains(TERM), twice);
         assertFalse(twice.contains("from the far end"), twice);
-        assertFalse(twice.contains("not read:"), twice);
+        assertFalse(UnreadBesideItsStops.in(twice), twice);
         assertFalse(near.contains("from the far end"), near);
         String thrice = report(model(BRANCH,
                 "List.reverse(List.reverse(List.reverse(xs)))"));
@@ -228,7 +228,7 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
                     }
                     """.formatted(BRANCH, walked));
             // Read as no weighing: the total a call works out places a row by what its run did.
-            assertFalse(human.contains("not read: comparison"), walked + "\n" + human);
+            assertFalse(UnreadBesideItsStops.in(human), walked + "\n" + human);
             assertTrue(human.contains(WhyAPlaceIsUndividedIsSaid.of(
                             UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS)),
                     walked + "\n" + human);
@@ -261,7 +261,7 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
                 """.formatted(BRANCH));
         assertTrue(human.contains(TERM), human);
         assertTrue(human.contains(TERM.replace("xs[*]", "xs[*] from the far end")), human);
-        assertFalse(human.contains("not read:"), human);
+        assertFalse(UnreadBesideItsStops.in(human), human);
         assertTrue(human.contains("obligations 8/8"), human);
         assertFalse(human.contains("undecided whether a row is at"), human);
         assertFalse(human.contains("does not hold"), human);
@@ -293,7 +293,7 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
                     | "past"  : ([0, 0, 0, 0, 0, 0, 3]) -> Yes { n = 0 }
                     | "short" : ([1, 0, 0, 0, 0, 0, 0]) -> No { n = 0 }
                 """);
-        assertFalse(human.contains("not read:"), human);
+        assertFalse(UnreadBesideItsStops.in(human), human);
         assertTrue(human.contains("obligations 4/4"), human);
         assertFalse(human.contains("undecided whether a row is at"), human);
         assertFalse(human.contains("does not hold"), human);
@@ -313,7 +313,7 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
                 }
                 """.formatted(BRANCH));
         assertTrue(human.contains("from the far end"), human);
-        assertFalse(human.contains("not read:"), human);
+        assertFalse(UnreadBesideItsStops.in(human), human);
     }
 
     /** A whole number that is not the position is no position. */
@@ -321,9 +321,9 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
     void anotherNumberIsNoChoiceByThePosition() {
         String another = report(model(
                 "(i, c) -> if Int.floorMod(n, 2) == 0 then c else 3 * c", "xs"));
-        assertTrue(another.contains("not read: comparison"), another);
+        assertTrue(UnreadBesideItsStops.in(another), another);
         String notTheElement = report(model("(i, c) -> n * c", "xs"));
-        assertTrue(notTheElement.contains("not read: comparison"), notTheElement);
+        assertTrue(UnreadBesideItsStops.in(notTheElement), notTheElement);
     }
 
     /**
@@ -336,7 +336,7 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
                 "(i, c) -> i * c + 2 * c", "(i, c) -> i * c")) {
             String human = report(model(closure, "xs"));
             assertTrue(human.contains("the position"), closure + "\n" + human);
-            assertFalse(human.contains("not read:"), closure + "\n" + human);
+            assertFalse(UnreadBesideItsStops.in(human), closure + "\n" + human);
         }
     }
 
@@ -363,7 +363,7 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
                 """;
         String human = report(guarded);
         assertTrue(human.contains("obligations 4/4"), human);
-        assertFalse(human.contains("not read:"), human);
+        assertFalse(UnreadBesideItsStops.in(human), human);
     }
 
     /**
@@ -389,7 +389,7 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
                     | "short" : ([4, 0]) -> Bad
                 """);
         assertTrue(human.contains("obligations 4/4"), human);
-        assertFalse(human.contains("not read:"), human);
+        assertFalse(UnreadBesideItsStops.in(human), human);
     }
 
     /** The position by itself, beside an element, and chosen between by a test of it are each read. */
@@ -400,7 +400,7 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
                 "(i, c) -> if i <= 5 then (i + 2) * c else (i - 4) * c")) {
             String human = report(model(closure, "xs"));
             assertTrue(human.contains("the position"), closure + "\n" + human);
-            assertFalse(human.contains("not read:"), closure + "\n" + human);
+            assertFalse(UnreadBesideItsStops.in(human), closure + "\n" + human);
         }
     }
 
@@ -420,7 +420,7 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
                     | "one"  : ([7]) -> 0
                     | "less" : ([6]) -> Bad
                 """);
-        assertFalse(human.contains("not read:"), human);
+        assertFalse(UnreadBesideItsStops.in(human), human);
         assertFalse(human.contains("gave no answer"), human);
     }
 
@@ -469,7 +469,7 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
                 "(i, c) -> c * (i + (if i <= 5 then 2 else -4))",
                 "(i, c) -> if i <= 5 then (i + 2) * c else (i - 4) * c")) {
             String human = report(model(closure, "xs"));
-            assertFalse(human.contains("not read:"), closure + "\n" + human);
+            assertFalse(UnreadBesideItsStops.in(human), closure + "\n" + human);
             assertEquals(inside, totalOf(human), closure);
         }
     }
@@ -499,7 +499,7 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
                 let verify (xs) =
                     if Int.floorMod(List.sum(List.mapIndexed((i, c) -> (i + 2) * c, xs)), 11) <= 1 then Yes { n = 0 } else No { n = 0 }
                 """);
-        assertFalse(human.contains("not read:"), human);
+        assertFalse(UnreadBesideItsStops.in(human), human);
         assertTrue(human.contains("the position"), human);
     }
 
@@ -516,14 +516,14 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
                     0
                 }
                 """);
-        assertTrue(human.contains("not read: comparison"), human);
+        assertTrue(UnreadBesideItsStops.in(human), human);
     }
 
     /** A weight that is the position squared is no form of the elements. */
     @Test
     void thePositionTimesItselfIsStillNotRead() {
         String human = report(model("(i, c) -> i * i * c", "xs"));
-        assertTrue(human.contains("not read: comparison"), human);
+        assertTrue(UnreadBesideItsStops.in(human), human);
     }
 
     /**
@@ -708,7 +708,6 @@ class ATotalWeighedByWhereEachElementStandsIsReadInTheOrderWrittenTest {
     private static String report(String model) {
         return report(List.of(), model);
     }
-
     /** The report of a model the compiler is meant to refuse with {@code refused}. */
     private static String report(List<String> refused, String model) {
         Compilation compilation = SHARED.refusedWith(refused, model, () -> measure(model));

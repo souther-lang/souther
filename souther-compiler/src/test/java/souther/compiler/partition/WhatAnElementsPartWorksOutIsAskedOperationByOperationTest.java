@@ -17,8 +17,10 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
@@ -135,6 +137,26 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
                 Map.of(), NAMED_D));
     }
 
+    /**
+     * A step that may answer afresh holds the walk from nought as well as from the seed. From 50,
+     * over two steps that take thirty away or answer minus thirty, a run comes to minus sixty —
+     * minus thirty, then thirty less — which is past minus fifty though every number from the seed
+     * down by two steps is not; and with minus ninety the least, every operation is within.
+     */
+    @Test
+    void aStepAnsweringAfreshIsHeldFromNoughtAsWellAsFromTheSeed() {
+        AddedOfEachElement.Part thirty = new AddedOfEachElement.Written(BigDecimal.valueOf(30));
+        AddedOfEachElement step = new AddedOfEachElement(new AddedOfEachElement.Chosen(List.of(
+                new AddedOfEachElement.Taken(worked(BinOp.SUB, SO_FAR, thirty), null),
+                new AddedOfEachElement.Taken(
+                        new AddedOfEachElement.Written(BigDecimal.valueOf(-30)), null))));
+
+        assertFalse(step.heldOverEveryStep(BigInteger.valueOf(50), _ -> null, 2,
+                BigInteger.valueOf(-50), BigInteger.valueOf(100)));
+        assertTrue(step.heldOverEveryStep(BigInteger.valueOf(50), _ -> null, 2,
+                BigInteger.valueOf(-90), BigInteger.valueOf(100)));
+    }
+
     private static AddedOfEachElement.Through through(AddedOfEachElement.Part part, long seed,
                                                       long[] p, long[] q) {
         return new AddedOfEachElement(part).overWholeNumbers(BigInteger.valueOf(seed),
@@ -232,7 +254,7 @@ class WhatAnElementsPartWorksOutIsAskedOperationByOperationTest {
             case AddedOfEachElement.Written(BigDecimal value) -> value.longValueExact();
             case AddedOfEachElement.Named(BindingId name) -> named.get(name);
             case AddedOfEachElement.SoFar _ -> seed;
-            case AddedOfEachElement.ReadWithTheTotal _ ->
+            case AddedOfEachElement.ReadWithTheTotal _, AddedOfEachElement.Chosen _ ->
                     throw new IllegalStateException("not among the trees asked");
             case AddedOfEachElement.Worked(BinOp op, var left, var right) -> {
                 long value = apply(op, workedOut(left, seed, values, named, stops),

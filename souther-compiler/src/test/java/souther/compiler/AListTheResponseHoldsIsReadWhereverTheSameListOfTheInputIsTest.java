@@ -189,8 +189,8 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
         for (List<String> spellings : readAsOne()) {
             String input = overTheInput(spellings.getFirst());
             String response = overTheResponse(spellings.getFirst());
-            assertFalse(input.contains("not read: comparison"), input);
-            assertFalse(response.contains("not read: comparison"), response);
+            assertFalse(UnreadBesideItsStops.in(input), input);
+            assertFalse(UnreadBesideItsStops.in(response), response);
             for (String each : spellings.subList(1, spellings.size())) {
                 assertEquals(input, overTheInput(each), "over the input: " + each);
                 assertEquals(response, overTheResponse(each), "over the response: " + each);
@@ -208,17 +208,17 @@ class AListTheResponseHoldsIsReadWhereverTheSameListOfTheInputIsTest {
         for (String shape : unread()) {
             String input = overTheInput(shape);
             if (shape.startsWith("List.fold")) {
-                assertFalse(input.contains("not read: comparison"), "over the input: " + shape
+                assertFalse(UnreadBesideItsStops.in(input), "over the input: " + shape
                         + "\n" + input);
                 assertTrue(input.contains(WhyAPlaceIsUndividedIsSaid.of(
                                 UndividedPosition.Reason.RULE_MEASURED_ON_ITS_RUNS)),
                         "over the input: " + shape + "\n" + input);
             } else {
-                assertTrue(input.contains("not read: comparison"), "over the input: " + shape
+                assertTrue(UnreadBesideItsStops.in(input), "over the input: " + shape
                         + "\n" + input);
             }
             String response = overTheResponse(shape);
-            assertTrue(response.contains("not read: comparison"), "over the response: " + shape
+            assertTrue(UnreadBesideItsStops.in(response), "over the response: " + shape
                     + "\n" + response);
         }
     }

@@ -779,6 +779,19 @@ public final class AffineForms {
                     : Optional.empty();
         }
 
+        /**
+         * Whether this stop comes to one where a run aborts ({@link NoNumberOnARun}), through
+         * however many calls the library states the form of it was reached under: every run that
+         * works the expression out stops there, and none gets past it.
+         */
+        default boolean abortsEveryRun() {
+            Halt<A, E> at = this;
+            while (at instanceof AnArgumentStopped<A, E>(var argument)) {
+                at = argument.why();
+            }
+            return at instanceof NoNumberOnARun<A, E>;
+        }
+
         /** No rule here for the expression, and the caller named it nothing. */
         record NoRule<A, E>() implements Halt<A, E> {}
 
