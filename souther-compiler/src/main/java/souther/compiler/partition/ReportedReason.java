@@ -281,6 +281,8 @@ public final class ReportedReason {
             };
             case BlockReason.RuleAboutARemainderNoPositionHolds _ ->
                     UndividedPosition.Reason.RULE_ABOUT_A_REMAINDER_NO_POSITION_HOLDS;
+            case BlockReason.EvaluationStopsNotFullyRead _ ->
+                    UndividedPosition.Reason.EVALUATION_STOPS_NOT_FULLY_READ;
             case BlockReason.RuleAboutAnElementOfSeveralContainers _ ->
                     UndividedPosition.Reason.RULE_ABOUT_AN_ELEMENT_OF_SEVERAL_CONTAINERS;
             case BlockReason.TypeUnresolved _ -> UndividedPosition.Reason.TYPE_UNRESOLVED;

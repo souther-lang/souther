@@ -443,6 +443,7 @@
         "rule_relating_elements",
         "rule_relating_two_elements_of_one_container",
         "rule_about_a_remainder_no_position_holds",
+        "evaluation_stops_not_fully_read",
         "rule_about_a_derived_value",
         "rule_about_an_element_of_several_containers",
         "unread_alternative_of_a_choice",

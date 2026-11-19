@@ -445,11 +445,20 @@ public final class GuardThresholds {
                                                             new WayToTheBorder(each.wayToACase(
                                                                     aCase.apply(decides))),
                                                             read.quantities().region())));
+                            // And whether a run that gets to it works out an operation whose stops
+                            // are not all told: asked of what is worked out where a row arrives,
+                            // as the stops above are, and not of an application or an arm no row
+                            // takes.
+                            boolean stopsNotFullyRead = aRowArrives
+                                    && !(arrived instanceof ComparisonAssessment.AnswersNowhere)
+                                    && somethingWorkedOutIsNotAllTold(each, toIt, arrivals,
+                                            wayToACase);
                             reached(cuts, stated, each, readingsOf(arrived), aCase, aPart);
                             lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
                                     whereMet(each, helper -> runsOnce.computeIfAbsent(helper,
                                             called -> plan.runsOnce(called, emitted))),
-                                    reaches, arrived, each.readOn(), aRunStops, stops,
+                                    reaches, arrived, each.readOn(), aRunStops,
+                                    stopsNotFullyRead, stops,
                                     aRowArrives ? asksOfARunReaching(each.asks(), before, read,
                                             arrived) : List.of(), found,
                                     between, throughADerivedValue, partnered, withoutALine,
@@ -1226,6 +1235,7 @@ public final class GuardThresholds {
                                RuleReachNumbering reaches,
                                ComparisonAssessment read, LinesReadOn linesReadOn,
                                boolean aRunStops,
+                               boolean stopsNotFullyRead,
                                List<EveryRunStops> stops,
                                List<WhatAConstructionAsks> asks,
                                List<LineEvidence> out,
@@ -1248,6 +1258,21 @@ public final class GuardThresholds {
             withoutALine.mayStopARun(
                     new RuleCitation.Written(new RuleRef.Comparison(behavior, wrote), anchor),
                     ModelOccurrences.of(stated), stops, asks);
+        }
+        // Where what a run works out to evaluate it is not all told, which says nothing of a stop
+        // and nothing against the line it draws: the line stands where it was read and the rows a
+        // run gets to it past are what is open, so the border waits on it. Asked of a comparison
+        // read as a relation only: one that cut nothing, or answered nowhere, has the stops of its
+        // evaluation recorded less exactly, where a walk's parts carried in a tuple and an
+        // operation over how many a list holds are left untold that nothing leaves untold in
+        // the spelling that reads them as a total.
+        if (stopsNotFullyRead && read.readAsARelation()) {
+            for (FilingCoordinate place : read.filedAt()) {
+                withoutALine.boundaryUndetermined(
+                        new RuleCitation.Written(new RuleRef.Comparison(behavior, wrote), anchor),
+                        ModelOccurrences.of(stated), place,
+                        new BlockReason.EvaluationStopsNotFullyRead());
+            }
         }
         // The geometry itself is not this reader's own — {@link ComparisonGeometry} reads it the
         // same way a clause does. Only where a line's origin comes from is: a guard's is where
@@ -1350,6 +1375,53 @@ public final class GuardThresholds {
             }
         }
         return false;
+    }
+
+    /**
+     * Whether what a run getting to the comparison works out, anywhere {@code each} says it does,
+     * has stops that are not all told ({@link #stopsNotAllTold}), where some row arrives at the
+     * place it is worked out: the comparison, an application of the closure it stands in, an
+     * arm of a choice it is read through, or an arm an application takes. An arm is asked only
+     * where the comparison is stated as a condition, as {@link #aRunTakingAnArmMayStop} asks.
+     */
+    private static boolean somethingWorkedOutIsNotAllTold(
+            ComparisonReadings.Reading each, Reachability toIt, List<ComparisonArrival> arrivals,
+            WaysToACase wayToACase) {
+        for (ComparisonReadings.Reading.WorkedOutAt worked : each.whatARunWorksOut()) {
+            if (stopsNotAllTold(worked.stops())
+                    && aRowArrivesWhereItIsWorkedOut(each, worked, toIt, arrivals, wayToACase)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean aRowArrivesWhereItIsWorkedOut(
+            ComparisonReadings.Reading each, ComparisonReadings.Reading.WorkedOutAt worked,
+            Reachability toIt, List<ComparisonArrival> arrivals, WaysToACase wayToACase) {
+        if (worked.takenWhere() != null) {
+            Proposition reached = worked.madeWhere() == null ? worked.takenWhere()
+                    : WhereAnApplicationIsMade.past(worked.madeWhere(), worked.takenWhere());
+            return each.statedAsACondition().isPresent()
+                    && ComparisonAssessment.someRowArrives(wayToACase.apply(reached), arrivals);
+        }
+        if (worked.madeWhere() == null) {
+            return true;
+        }
+        if (worked.madeWhere() instanceof Proposition.Always(boolean holds) && holds) {
+            return ComparisonAssessment.someRowArrives(toIt, arrivals);
+        }
+        return each.statedAsACondition().isEmpty() || ComparisonAssessment.someRowArrives(
+                wayToACase.apply(worked.madeWhere()), arrivals);
+    }
+
+    /**
+     * Whether some operation a run works out in {@code stops} may end it and is placed nowhere in
+     * the input ({@link StopEvidence#someStopIsUnplaced}), so that where a run stops is not all
+     * told.
+     */
+    private static boolean stopsNotAllTold(StopEvidence stops) {
+        return stops.someStopIsUnplaced();
     }
 
     /** The region {@code way} leaves, or none where nothing reaches along it. */

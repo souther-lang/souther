@@ -358,6 +358,41 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             asks = List.copyOf(asks);
         }
 
+        /**
+         * What a run works out, and where ({@link #whatARunWorksOut}).
+         *
+         * @param stops      what the run works out
+         * @param madeWhere  where the application of the closure the comparison stands in is
+         *                   made, or null where the comparison is not read on each application
+         * @param takenWhere where the arm of a choice is taken, or null where it is worked out
+         *                   whichever arm is taken
+         */
+        record WorkedOutAt(StopEvidence stops, Proposition madeWhere, Proposition takenWhere) {
+
+            WorkedOutAt {
+                Objects.requireNonNull(stops, "a run works something out");
+            }
+        }
+
+        /**
+         * Every stop evidence a run getting to the comparison works out, each with where it is
+         * worked out: wherever the comparison is reached, on an application of the closure it
+         * stands in, on an arm of a choice it is read through, or on an arm an application takes.
+         * Asked of one place, so that whoever asks what a run works out of the evidence says it of
+         * all of it.
+         */
+        List<WorkedOutAt> whatARunWorksOut() {
+            List<WorkedOutAt> out = new ArrayList<>();
+            stopsIn.ifPresent(stops -> out.add(new WorkedOutAt(stops, null, null)));
+            worksOutOnEach.ifPresent(applications -> applications.forEach(one -> {
+                out.add(new WorkedOutAt(one.stops(), one.reached(), null));
+                one.arms().forEach(arm -> out.add(new WorkedOutAt(arm.stops(),
+                        one.reached(), arm.reached())));
+            }));
+            onTheArms.forEach(arm -> out.add(new WorkedOutAt(arm.stops(), null, arm.reached())));
+            return out;
+        }
+
         /** Which elements of the input a run makes the comparison on, as every application says. */
         ElementsMetOn metOn() {
             return applying.elementsMetOn();

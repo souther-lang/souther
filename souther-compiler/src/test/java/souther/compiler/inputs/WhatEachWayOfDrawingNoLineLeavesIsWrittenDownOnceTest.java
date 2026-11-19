@@ -112,6 +112,10 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
         // meets it again.
         table.put("RuleAboutARemainderNoPositionHolds",
                 "RULE_ABOUT_A_REMAINDER_NO_POSITION_HOLDS/UNAFFECTED");
+        // The comparison was read and what a run works out to evaluate it was not, which no figure
+        // decides, so a run allowed more meets it again.
+        table.put("EvaluationStopsNotFullyRead",
+                "EVALUATION_STOPS_NOT_FULLY_READ/UNAFFECTED");
         table.put("UnreadValueRule", "UNSUPPORTED_SYNTAX/UNAFFECTED");
         // Arithmetic no form says, which the arithmetic named where it met it. Nothing was made of
         // a position and nothing was compared against a figure, so a run allowed more meets it
@@ -588,6 +592,7 @@ class WhatEachWayOfDrawingNoLineLeavesIsWrittenDownOnceTest {
                 new BlockReason.RuleAboutADerivedValue(),
                 new BlockReason.RuleAboutAnElementOfSeveralContainers(),
                 new BlockReason.RuleAboutARemainderNoPositionHolds(),
+                new BlockReason.EvaluationStopsNotFullyRead(),
                 new BlockReason.UnreadValueRule(),
                 new BlockReason.NonAffineArithmetic(
                         NonAffineOperation.PRODUCT_OF_NON_CONSTANT_VALUES),
