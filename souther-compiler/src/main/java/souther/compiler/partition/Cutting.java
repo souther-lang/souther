@@ -713,13 +713,13 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
         }
     }
 
-    /** What making a value a walk hands an application works out, and where the walk is
-     *  entered, which every run entering it works out. */
-    record MadeByAWalk(StopEvidence stops, Proposition walkEntered) {
+    /** What making a value a walk hands an application works out, and where it is made: where
+     *  the container holds it, which every run there works out. */
+    record MadeByAWalk(StopEvidence stops, Proposition madeWhere) {
 
         MadeByAWalk {
             Objects.requireNonNull(stops, "making a value works something out");
-            Objects.requireNonNull(walkEntered, "where a walk is entered");
+            Objects.requireNonNull(madeWhere, "and it is made somewhere");
         }
     }
 
@@ -746,7 +746,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
             List<MadeByAWalk> handed = new ArrayList<>();
             for (ClosureApplications.Handed each : one.handed()) {
                 handed.add(new MadeByAWalk(onTheInput.evaluating().apply(each.value()),
-                        each.walkEntered()));
+                        each.madeWhere()));
             }
             out.add(new OnAnApplication(one.reached(), workingOf(onTheInput),
                     onTheInput.stops().get(), onTheInput.onTheArms().get(), handed));

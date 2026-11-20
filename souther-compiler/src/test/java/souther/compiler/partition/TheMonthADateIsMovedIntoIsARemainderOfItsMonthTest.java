@@ -177,13 +177,15 @@ class TheMonthADateIsMovedIntoIsARemainderOfItsMonthTest {
         return out;
     }
 
-    /** The rows every run stops at, as {@code operation where form least..greatest}. */
+    /** The rows every run stops at, as {@code operation where form least..greatest}, read from
+     *  the finding of the rule whichever of a stop shown or one not resolved it is. */
     private static List<String> everyRunStops(String before, String comparison) {
         JsonNode findings = JsonMapper.builder().build().readTree(json(before, comparison))
                 .get("modules").get(0).get("behaviors").get(0).get("findings");
         List<String> out = new ArrayList<>();
         for (JsonNode each : findings) {
-            if (each.get("kind").asString().equals("rule_may_stop_a_run")
+            String kind = each.get("kind").asString();
+            if ((kind.equals("rule_may_stop_a_run") || kind.equals("rule_stop_not_shown"))
                     && each.has("everyRunStops")) {
                 for (JsonNode stop : each.get("everyRunStops")) {
                     List<String> where = new ArrayList<>();

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.NotRead;
 import souther.compiler.check.NumericMeasures;
 import souther.compiler.report.InEnglish;
 import souther.compiler.check.RuleReadings;
@@ -1070,7 +1071,7 @@ class ARelationLeavesAPlaceUndividedOnlyWhereTheOtherSideIsShownToReachItTest {
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("adequacy: satisfied"), report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
     }
 
     /**

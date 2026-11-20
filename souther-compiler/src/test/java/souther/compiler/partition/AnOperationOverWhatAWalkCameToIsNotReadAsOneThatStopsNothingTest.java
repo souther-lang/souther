@@ -33,6 +33,8 @@ class AnOperationOverWhatAWalkCameToIsNotReadAsOneThatStopsNothingTest {
 
     private static final String MAY_STOP = "may stop a run";
 
+    private static final String STOP_NOT_RESOLVED = "stop not resolved:";
+
     /** What the walk comes to is the seed or an element, any {@code Int}, so nothing keeps one
      *  more within the type, and nothing shows a run that takes it past. */
     @Test
@@ -105,12 +107,14 @@ class AnOperationOverWhatAWalkCameToIsNotReadAsOneThatStopsNothingTest {
 
     private static final String ANOTHER_WALK = "List.fold((w, l) -> if l > w then l else w, 1, ds)";
 
-    /** A stop that is told is not the one left untold beside it: the sum over the input is told
-     *  as one a run may stop in, and the sum over what the walk came to is said all the same. */
+    /** A stop that is told is not the one left untold beside it: the rule is said to be one a
+     *  run may stop in, and the sum over what the walk came to is said all the same. A run works
+     *  out that sum in the same comparison as the sum over the input, so no existence of a run
+     *  stopping is shown, and the stop is said as not resolved. */
     @Test
     void aStopToldBesideOneLeftUntoldIsSaidAsBoth() {
         String report = reportOf(THE_WALK + " + 1 <= q + 1");
-        assertTrue(report.contains(MAY_STOP), report);
+        assertTrue(report.contains(STOP_NOT_RESOLVED), report);
         assertTrue(report.contains(NOT_ALL_TOLD), report);
     }
 

@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.NotRead;
 import souther.compiler.check.RuleReadings;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
@@ -659,7 +660,7 @@ class AListADependencyAnsweredIsReadAsAListWhereverItStandsTest {
 
         String report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
-        assertTrue(report.lines().anyMatch(line -> line.contains("not read")
+        assertTrue(report.lines().anyMatch(line -> NotRead.isOne(line)
                         && line.contains(CompositionBudget.READINGS_OF_ONE_CONDITION.name())
                         && line.contains("about `on`")),
                 () -> "the comparison is said to be one the figure stopped: " + report);

@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.NotRead;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.check.RuleReadingSource;
@@ -186,7 +187,7 @@ class AValueHeldAgainstWhatAnOperationAnswersRelatesTheTwoTest {
                 behavior m : (p: P) -> Bool
                 let m (p) = p.s == String.lowercase(p.s)
                 """);
-        assertTrue(said(againstItself).stream().allMatch(line -> line.contains("not read")),
+        assertTrue(said(againstItself).stream().allMatch(NotRead::isOne),
                 againstItself);
     }
 

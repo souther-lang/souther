@@ -70,6 +70,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
         String report = report(ABOVE.formatted("\n    invariant x <= 9223372036854775797"));
 
         assertFalse(report.contains("may stop a run"), report);
+        assertFalse(report.contains("stop not resolved"), report);
         assertEquals(List.of(), suggested(report), report);
     }
 
@@ -97,6 +98,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 "\n    invariant birthday >= Date(\"-999999999-01-02\")"));
 
         assertFalse(report.contains("may stop a run"), report);
+        assertFalse(report.contains("stop not resolved"), report);
         assertEquals(List.of(), suggested(report), report);
     }
 
@@ -314,11 +316,12 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
         assertEquals(1, keeping.size(), document::toString);
         assertEquals(1, keeping.getFirst().size(), document::toString);
         JsonNode bound = keeping.getFirst().get(0);
-        assertEquals(Set.of("parameter", "type", "invariant"), Set.copyOf(bound.propertyNames()),
-                document::toString);
+        assertEquals(Set.of("parameter", "type", "invariant", "furthestOut"),
+                Set.copyOf(bound.propertyNames()), document::toString);
         assertEquals("x", bound.get("parameter").asString());
         assertEquals("Int", bound.get("type").asString());
         assertEquals("invariant value <= 9223372036854775797", bound.get("invariant").asString());
+        assertTrue(bound.get("furthestOut").asBoolean(), document::toString);
         EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest.assertShapedLikeTheSchema(document);
     }
 

@@ -80,7 +80,7 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
         for (String step : List.of("acc + a.q", "a.q + acc", "acc + a.q + 0", "(acc + a.q)")) {
             String report = report(model(step, "0", 4));
             assertTrue(report.contains("List.sum(xs[*].q)"), () -> step + ": " + report);
-            assertFalse(report.contains("not read"), () -> step + ": " + report);
+            assertFalse(NotRead.in(report), () -> step + ": " + report);
         }
     }
 
@@ -89,7 +89,7 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
     void aNameGivenWhatTheStepAddsIsTheSameStep() {
         String report = report(model("{ let grown = acc + a.q  grown }", "0", 4));
         assertTrue(report.contains("List.sum(xs[*].q)"), report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
 
         // No addition, so no total: what the run works out is all that places a row.
         String squared = report(model("{ let grown = acc * acc  grown + a.q }", "0", 4));
@@ -110,7 +110,7 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
         String report = report(model("acc + a.q", "10", 14));
         assertTrue(report.contains("List.sum(xs[*].q): = 4"), report);
         assertTrue(report.contains("List.sum(xs[*].q): = 3"), report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
 
         List<Long> totals = totalsOf(rowsOf(model("acc + a.q", "10", 14)), 1, 0);
         assertTrue(totals.contains(4L), () -> "the point on the line: " + totals);
@@ -122,7 +122,7 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
     void aSubtractionAddsTheNegativeOfWhatItTakes() {
         String report = report(model("acc - a.q", "10", 6));
         assertTrue(report.contains("List.sum({-1·q + 0 | xs[*]})"), report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
     }
 
     /** What the step adds may be made of the element's fields, and is the same total as a sum of it. */
@@ -130,7 +130,7 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
     void aComputedAdditionIsTheTotalOfWhatWasComputed() {
         String report = report(model("acc + a.q * 2 + a.p", "0", 5));
         assertTrue(report.contains("List.sum({1·p + 2·q + 0 | xs[*]})"), report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
     }
 
     /** A rule on the total over a list the rules leave empty is a rule on a total of nothing. */
@@ -158,7 +158,7 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
                     Decimal.compare(List.fold((acc, p) -> Decimal.add(acc, p.amount), 0.0m, ps), 0.0m) > 0
                 """);
         assertTrue(decimals.contains("List.sum(ps[*].amount)"), decimals);
-        assertFalse(decimals.contains("not read"), decimals);
+        assertFalse(NotRead.in(decimals), decimals);
 
         String wrapped = report("""
                 module example.folded
@@ -171,7 +171,7 @@ class AFoldThatOnlyAddsIsReadAsTheTotalOfWhatItAddsTest {
                 let over (ns) = List.fold((acc, n) -> acc + n.gross.value, 0, ns) > 100
                 """);
         assertTrue(wrapped.contains("List.sum(ns[*].gross)"), wrapped);
-        assertFalse(wrapped.contains("not read"), wrapped);
+        assertFalse(NotRead.in(wrapped), wrapped);
     }
 
     /**

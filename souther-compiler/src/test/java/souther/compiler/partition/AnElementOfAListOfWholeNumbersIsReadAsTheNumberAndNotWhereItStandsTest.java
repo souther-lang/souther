@@ -31,7 +31,10 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
     }
 
     /** The same comparison over an element of a list of the input is a line on the form, a
-     *  relation of the element to another value, and a rule a run may stop in. */
+     *  relation of the element to another value, and a rule a run that gets there stops in where
+     *  the sum is past its type. The sum is over an element, which no existence of a run stopping
+     *  is shown over, so the stop is said as not resolved, with the rows every run getting there
+     *  stops at. */
     @Test
     void theSameComparisonOverAnElementOfTheInputIsReadAsItWas() {
         List<String> report = report("a: Int, ns: List<Nat>",
@@ -39,34 +42,41 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
         assertEquals(List.of(
                 "· no line: comparison@4:41 — it relates the value here to another value rather"
                         + " than dividing the values here, about `ns[*]`",
-                "· may stop a run: comparison@4:41 — a run that reaches it may stop in an"
-                        + " operation it is read through; every run stops in a + ns[*] where"
-                        + " a + ns[*] is at least 9223372036854775808, in a + ns[*] + 3 where"
-                        + " a + ns[*] is 9223372036854775805 to 9223372036854775807"),
+                "· stop not resolved: comparison@4:41; whether a run stops in a + ns[*] is not"
+                        + " determined: " + ON_EACH_ELEMENT + "; whether a run stops in"
+                        + " a + ns[*] + 3 is not determined: " + ON_EACH_ELEMENT
+                        + "; a run that gets there stops in"
+                        + " a + ns[*] where a + ns[*] is at least 9223372036854775808, in"
+                        + " a + ns[*] + 3 where a + ns[*] is 9223372036854775805 to"
+                        + " 9223372036854775807, and no such run is shown to exist"),
                 report.stream().filter(line -> line.startsWith("· no line")
-                        || line.startsWith("· may stop")).toList());
+                        || line.startsWith("· may stop")
+                        || line.startsWith("· stop not resolved")).toList());
         assertEquals(List.of("7", "0", "7"), lines(compiled("a: Int, ns: List<Nat>",
                 "List.any(v -> a + v + 3 >= 10, List.map(n -> n.value, ns))")));
     }
 
     /**
      * A sum over where an element stands, past the type at some places and at none for every
-     * place of a row, stops some runs and no form of the input says which: it is a rule a run may
-     * stop in, with no rows where every run does.
+     * place of a row, may stop some runs and no form of the input says which: it is a rule whose
+     * stop is not resolved, with no rows where every run does.
      */
     @Test
-    void aSumPastItsTypeAtSomePlacesIsARuleARunMayStopIn() {
+    void aSumPastItsTypeAtSomePlacesIsARuleWhoseStopIsNotResolved() {
         List<String> report = report("a: Nat, xs: List<Int>",
                 "List.any(b -> b, List.mapIndexed((i, _) -> a.value + i >= 10, xs))");
-        assertEquals(List.of("· may stop a run: comparison@4:72 — a run that reaches it may stop"
-                        + " in an operation it is read through"),
-                report.stream().filter(line -> line.startsWith("· may stop")).toList());
+        assertEquals(List.of("· stop not resolved: comparison@4:72; whether a run stops in a + i"
+                        + " is not determined: " + ON_EACH_ELEMENT),
+                report.stream().filter(line -> line.startsWith("· may stop")
+                        || line.startsWith("· stop not resolved")).toList());
     }
 
     /**
      * A walk that does not stop on an answer makes every application, so the sum over the last
      * element stops every run where it is past the type, after the first got past; and each
-     * application still draws its own line, the stop taking none away.
+     * application still draws its own line, the stop taking none away. The sum is worked out on
+     * an application of a closure, where no existence of a run stopping is shown, so the stop is
+     * said as not resolved, with the rows every run getting there stops at.
      */
     @Test
     void aSumOverTheLastElementAFilterIsHandedStopsEveryRunPastIt() {
@@ -78,12 +88,19 @@ class AnElementOfAListOfWholeNumbersIsReadAsTheNumberAndNotWhereItStandsTest {
         List<String> report = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
                 .map(String::strip).toList();
-        assertEquals(List.of("· may stop a run: comparison@3:36 — a run that reaches it may stop"
-                        + " in an operation it is read through; every run stops in a + 10 where a"
-                        + " is at least 9223372036854775798"),
-                report.stream().filter(line -> line.startsWith("· may stop")).toList());
+        assertEquals(List.of("· stop not resolved: comparison@3:36; whether a run stops in a + 10"
+                        + " is not determined: " + ON_EACH_ELEMENT + "; a run that gets there"
+                        + " stops in a + 10 where a is at least 9223372036854775798, and no such"
+                        + " run is shown to exist"),
+                report.stream().filter(line -> line.startsWith("· may stop")
+                        || line.startsWith("· stop not resolved")).toList());
         assertEquals(List.of("0", "-10"), lines(compilation));
     }
+
+    /** Why a stop worked out on each element is not resolved, as the report says it. */
+    private static final String ON_EACH_ELEMENT = "it is worked out inside a function applied to"
+            + " each element, and a stop is looked for only where the comparison itself is"
+            + " evaluated";
 
     /** The values of the lines drawn in {@code m}, in the order they are measured. */
     private static List<String> lines(Compilation compilation) {

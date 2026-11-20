@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 import souther.compiler.ACompiledModel;
 import souther.compiler.DefaultStdlib;
+import souther.compiler.NotRead;
 import souther.compiler.ast.Hir;
 import souther.compiler.check.AnalysisBody;
 import souther.compiler.check.Carrier;
@@ -658,7 +659,7 @@ class HowLongThePathASearchAnswersIsReadTest {
         String human = humanReportOf(BEHAVIOR_OF_A_LINE.formatted(SEARCH,
                 "Found { steps = steps }"));
         String ofH = human.substring(human.indexOf("  h "));
-        assertFalse(ofH.contains("not read"), human);
+        assertFalse(NotRead.in(ofH), human);
         assertTrue(ofH.contains("borders 1"), human);
     }
 
@@ -762,7 +763,7 @@ class HowLongThePathASearchAnswersIsReadTest {
         assertFalse(json.contains("rule_about_a_derived_value"), human);
         assertTrue(json.contains("searched_line"), human);
         String ofTheChain = human.substring(human.indexOf("  approvalChainFor "));
-        assertFalse(ofTheChain.contains("not read"), human);
+        assertFalse(NotRead.in(ofTheChain), human);
         assertTrue(ofTheChain.contains("borders 3"), human);
         // Rows are offered for the points of every role's border, down to a line of five nodes
         // for the role that needs three above the submitter, each holding the submitter only at

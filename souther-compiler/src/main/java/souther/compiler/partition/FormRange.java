@@ -105,7 +105,7 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
      * ({@link #endsOf}), which a value there is held to. Null where the reading answers nothing
      * of the term ({@link Quantities#answersFor}).
      */
-    private static FormRange asWorkedOut(NumericTerm term, InputReading read) {
+    static FormRange asWorkedOut(NumericTerm term, InputReading read) {
         if (term instanceof NumericTerm.ProductOf product) {
             Function<NumericTerm, FormRange> factor = each -> asWorkedOut(each, read);
             return combined(BinOp.MUL, of(product.one(), factor), of(product.other(), factor));

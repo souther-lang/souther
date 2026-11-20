@@ -3,22 +3,26 @@ package souther.compiler.inputs;
 import souther.compiler.observe.ObservedValue;
 
 /**
- * The bound an author may declare on the data holding an input, where every run stops in an
+ * The bound an author may declare on the data holding an input, where a run may stop in an
  * operation past where the representation of its number stops: what holds the place, the side,
- * and the least bound that keeps every run from stopping there.
+ * and a bound within which no run stops there.
  *
  * <p>Where the representation stops is no line the model draws: a birthday in year −999999999 is
  * no birthday a specification means, and the bound that keeps a run from it is the domain's to
- * choose. So what is said is the side and how far it may go at the most, and not where it should
- * be: a birthday from 1900 on is the author's, and this says only that it is from the second day
- * there is.
+ * choose. So what is said is the side and how far it may go, and not where it should be: a
+ * birthday from 1900 on is the author's, and this says only that it is from the second day there
+ * is.
  *
- * @param holder what the invariant is declared on: a data that holds the place, or, for a
- *               parameter no data holds, a data the author introduces to hold it
- * @param atMost whether the bound holds the place from above
- * @param bound  the value at the bound, as a row would hold it
+ * @param holder      what the invariant is declared on: a data that holds the place, or, for a
+ *                    parameter no data holds, a data the author introduces to hold it
+ * @param atMost      whether the bound holds the place from above
+ * @param bound       the value at the bound, as a row would hold it
+ * @param furthestOut whether it is as far out as a bound can be: a run with the place one step
+ *                    past it is shown to stop. Otherwise it is enough to keep every run from the
+ *                    stop, and nothing is said of how far out one may go
  */
-public record ABoundThatKeepsEveryRunGoing(Holder holder, boolean atMost, ObservedValue bound) {
+public record ABoundThatKeepsEveryRunGoing(Holder holder, boolean atMost, ObservedValue bound,
+                                           boolean furthestOut) {
 
     public ABoundThatKeepsEveryRunGoing {
         if (holder == null || bound == null) {

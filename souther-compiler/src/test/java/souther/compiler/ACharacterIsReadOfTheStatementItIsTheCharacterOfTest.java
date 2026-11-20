@@ -42,7 +42,7 @@ class ACharacterIsReadOfTheStatementItIsTheCharacterOfTest {
                         String.characters(a)) then 1 else 0
                 """;
         String ofTheOuter = measured(nested.formatted("c"));
-        assertTrue(ofTheOuter.contains("not read"), ofTheOuter);
+        assertTrue(NotRead.in(ofTheOuter), ofTheOuter);
         assertFalse(ofTheOuter.contains("(b): "), ofTheOuter);
         String ofTheInner = measured(nested.formatted("d"));
         assertTrue(ofTheInner.contains("read as f/#(one of {0078})(b): = 1"), ofTheInner);

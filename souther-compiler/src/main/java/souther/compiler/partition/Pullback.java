@@ -12819,7 +12819,7 @@ final class Pullback {
                     Core node, InputReads at,
                     AffineForms.Outcome.StoppedAt<Quantity, InputReads> inside) {
                 try (Restore _ = elementsMet.set(held)) {
-                    return held.admits(node, at, read.rules().newtypes())
+                    return held.admits(node, Set.of(), at, read.rules().newtypes())
                             ? leafHeld(node, at, inside) : null;
                 }
             }

@@ -101,7 +101,7 @@ class AComparisonOverANumberOnlyARunWorksOutIsMeasuredOnTheRunsTest {
     void theComparisonIsALineOnHowFarApartItsSidesCameOut() {
         String report = report(THROUGH_A_CALL, ROWS);
 
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
         assertTrue(report.contains(MEASURED_ON_ITS_RUNS), report);
         assertTrue(report.contains("misses(xs) - 3"), report);
     }
@@ -208,7 +208,7 @@ class AComparisonOverANumberOnlyARunWorksOutIsMeasuredOnTheRunsTest {
                 """, List.of("([0]) -> [true]"));
 
         assertFalse(report.contains(MEASURED_ON_ITS_RUNS), report);
-        assertTrue(report.contains("not read"), report);
+        assertTrue(NotRead.in(report), report);
     }
 
     /** The row at three is the one at the line, and the row at two the one beside it. */

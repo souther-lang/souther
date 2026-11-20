@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
+import souther.compiler.NotRead;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -553,7 +554,7 @@ class AFoldThatAddsWhatEachKeyFilesAnswersTheTotalOfItsValuesTest {
             Compilation compilation = measured(withAFee.formatted(each.step(), each.walked()));
             assertFalse(json(compilation).contains("total(postings[*].amount"),
                     () -> each + ": " + report(compilation));
-            assertTrue(report(compilation).contains("not read"),
+            assertTrue(NotRead.in(report(compilation)),
                     () -> each + ": " + report(compilation));
         }
     }

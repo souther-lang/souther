@@ -462,7 +462,7 @@ final class Coverages {
                 pairsOf(subject.behavior(), readings, observed.rowsWereRead(), budget, body,
                         subject.quantities().region()),
                 partitioning.undivided(), partitioning.rulesWithoutALine(),
-                partitioning.rulesWhereARunMayStop(), partitioning.blocked(),
+                partitioning.stopsShown(), partitioning.blocked(),
                 // What the model asked and nothing answered, taken whole and not gathered as the
                 // axes are walked. The questions are the model's; whether a position could be
                 // measured is the separate answer `undivided` beside them carries, and a position

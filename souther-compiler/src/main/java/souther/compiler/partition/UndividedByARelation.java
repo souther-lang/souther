@@ -32,6 +32,7 @@ import souther.compiler.inputs.EachWayItComesOut;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.ABoundThatKeepsEveryRunGoing;
+import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputDomain;
@@ -136,7 +137,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -641,27 +641,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return told == WhatARelationLeavesUndivided.Told.EVERY;
         }
 
-        /**
-         * Whether a run working this out may stop in an operation told over a bound value: one is
-         * told only where no value the number takes is shown to keep it within its type, and a run
-         * stops in it at whichever value takes it past. Which rows hand the number such a value no
-         * form of the input's numbers says, and where every run stops says only where every value
-         * does.
-         */
-        boolean aRunMayStopOverABoundValue() {
-            return operations.stream().anyMatch(each -> !each.stopsOnRowsOfTheInput()
-                    && !each.overAValueWorkedOut());
-        }
-
-        /**
-         * The operations told over a value a run works out
-         * ({@link IntOperand.OfAValueWorkedOut}): what those values may come to shows where no
-         * run stops in them, and never that one does, so each is a stop left untold unless the
-         * way to it keeps it within its type.
-         */
-        List<IntOperation> overValuesWorkedOut() {
-            return operations.stream().filter(IntOperation::overAValueWorkedOut).toList();
-        }
     }
 
     UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
@@ -2847,26 +2826,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 List<Bounded> rows = new ArrayList<>(before);
                 rows.add(past);
                 List<EveryRunStops.Within> where = rowsWhere(rows, read, regions);
-                if (where != null) {
+                if (where != null && !where.isEmpty()) {
                     out.add(new EveryRunStops(written(it.form()), where));
                 }
             }
         }
         return List.copyOf(out);
-    }
-
-    /**
-     * What a run getting to the comparison works out somewhere — wherever the comparison is
-     * reached, on an arm of a choice it is read through, on an application of the closure it
-     * stands in — with the way of the rows that work it out there, worked out only when a bound
-     * asks for it: null where those rows cannot be put on a way, or it answers none. One way is
-     * one supplier, however many things are worked out along it.
-     */
-    record WorkedOutOn(StopEvidence stops, Supplier<Reachability.Reaching> way) {
-
-        WorkedOutOn {
-            Objects.requireNonNull(stops, "a run works something out");
-        }
     }
 
     /**
@@ -2880,117 +2845,85 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * where the representation of its number does and is over the values of one place — its
      * number weighed, or the count of the month its dates fall in ({@link MonthCount}). A bound
      * value an operation is over is taken at the ends of what it takes. Nothing where any one is
-     * over several places, since no bound on one keeps it within its type, or stops where the
+     * over several places or over a value a run works out, since no bound on one place keeps it
+     * within its type, or stops where the
      * clauses of a type a construction makes leave the number, which the model states and no
      * bound on the input is suggested for.
      *
-     * <p>As far out as a bound can be: within it no run stops in what is told, wherever it is
-     * worked out, and a row with the place just past it is shown to come along the way of an
-     * operation that sets the bound and get to it ({@link #addBoundPastWhichARowStops}), where
-     * that operation is past its type and the run stops — so any bound further out lets that run
-     * in. Only an operation every run along its way works out has a way to show that row on. A
-     * bound for which no such row is shown is not said, and neither is one past every value the
-     * place holds.
+     * <p>Safe: within the bound no run stops in what is told, wherever it is worked out. As far
+     * out as a bound can be only where a run with the place just past it is shown to stop
+     * ({@code shown}, which the stop assessment alone makes): then any bound further out lets that
+     * run in. Otherwise the bound is enough to keep every run from the stops told, and is said as
+     * no more. Not said past every value the place holds.
      */
     static List<ABoundThatKeepsEveryRunGoing> boundsThatKeepEveryRunGoing(
-            List<WorkedOutOn> worked, InputReading read) {
-        Map<TermPath, KeptWithin> kept = new LinkedHashMap<>();
-        for (WorkedOutOn each : worked) {
-            if (!each.stops().everyStopSaid()) {
+            List<StopEvidence> worked, InputReading read, List<AStopShown> shown) {
+        Map<TermPath, BigInteger[]> kept = new LinkedHashMap<>();
+        for (StopEvidence each : worked) {
+            if (!each.everyStopSaid()) {
                 return List.of();
             }
-            Working working = each.stops().operations();
-            Supplier<Reachability.Reaching> way = working.onEveryRun() ? each.way() : null;
-            for (IntOperation it : working.operations()) {
+            for (IntOperation it : each.operations().operations()) {
+                // Over a value a run works out, the operation is over no one place, and whether a
+                // run stops in it is the stop assessment's to say, not what that value's type is.
+                if (it.overAValueWorkedOut()) {
+                    return List.of();
+                }
                 if (stopsNoRow(it, read)) {
                     continue;
                 }
                 LinearForm<NumericTerm> atItsLeast = it.atItsEnd(false);
                 LinearForm<NumericTerm> atItsGreatest = it.atItsEnd(true);
                 if (!it.ofTheRepresentation() || atItsLeast == null || atItsGreatest == null
-                        || !keptWithin(atItsLeast, it.least(), null, way, kept)
-                        || !keptWithin(atItsGreatest, null, it.greatest(), way, kept)) {
+                        || !keptWithin(atItsLeast, it.least(), null, kept)
+                        || !keptWithin(atItsGreatest, null, it.greatest(), kept)) {
                     return List.of();
                 }
             }
         }
         List<ABoundThatKeepsEveryRunGoing> out = new ArrayList<>();
-        for (Map.Entry<TermPath, KeptWithin> each : kept.entrySet()) {
+        for (Map.Entry<TermPath, BigInteger[]> each : kept.entrySet()) {
             NumericTerm.ValueOf value = new NumericTerm.ValueOf(each.getKey());
             FormRange holds = FormRange.endsHeldByTheRules(value, read);
-            KeptWithin within = each.getValue();
-            if (within.least != null && (holds == null
-                    || holds.least().compareTo(ExactRatio.of(within.least)) < 0)) {
-                addBoundPastWhichARowStops(value, within.least, false, read,
-                        within.settingTheLeast, out);
+            BigInteger least = each.getValue()[0];
+            BigInteger greatest = each.getValue()[1];
+            if (least != null && (holds == null
+                    || holds.least().compareTo(ExactRatio.of(least)) < 0)) {
+                addTheBound(value, least, false, read, shown, out);
             }
-            if (within.greatest != null && (holds == null
-                    || holds.greatest().compareTo(ExactRatio.of(within.greatest)) > 0)) {
-                addBoundPastWhichARowStops(value, within.greatest, true, read,
-                        within.settingTheGreatest, out);
+            if (greatest != null && (holds == null
+                    || holds.greatest().compareTo(ExactRatio.of(greatest)) > 0)) {
+                addTheBound(value, greatest, true, read, shown, out);
             }
         }
         return List.copyOf(out);
     }
 
     /**
-     * The values of one place within which every operation over it is within its type, as far as
-     * the operations met so far say, each end with the ways of the operations that set it.
+     * {@code bound} on {@code value}, from above where {@code atMost}, into {@code out} where
+     * something holds the place: as far out as it can be where some stop {@code shown} has the
+     * place one step past it, and as enough to keep every run from the stops otherwise.
      */
-    private static final class KeptWithin {
-
-        private BigInteger least;
-        private BigInteger greatest;
-        private final Set<Supplier<Reachability.Reaching>> settingTheLeast =
-                new LinkedHashSet<>();
-        private final Set<Supplier<Reachability.Reaching>> settingTheGreatest =
-                new LinkedHashSet<>();
-
-        /** From {@code from}, where it is no null, by an operation worked out along {@code way}. */
-        void from(BigInteger from, Supplier<Reachability.Reaching> way) {
-            if (from == null) {
-                return;
-            }
-            int further = least == null ? 1 : from.compareTo(least);
-            if (further > 0) {
-                least = from;
-                settingTheLeast.clear();
-            }
-            if (further >= 0 && way != null) {
-                settingTheLeast.add(way);
-            }
-        }
-
-        /** To {@code to}, where it is no null, by an operation worked out along {@code way}. */
-        void to(BigInteger to, Supplier<Reachability.Reaching> way) {
-            if (to == null) {
-                return;
-            }
-            int further = greatest == null ? 1 : greatest.compareTo(to);
-            if (further > 0) {
-                greatest = to;
-                settingTheGreatest.clear();
-            }
-            if (further >= 0 && way != null) {
-                settingTheGreatest.add(way);
-            }
-        }
-
-        /** Whether some value lies within. */
-        boolean holdsAValue() {
-            return least == null || greatest == null || least.compareTo(greatest) <= 0;
+    private static void addTheBound(NumericTerm.ValueOf value, BigInteger bound, boolean atMost,
+                                    InputReading read, List<AStopShown> shown,
+                                    List<ABoundThatKeepsEveryRunGoing> out) {
+        BigInteger past = atMost ? bound.add(BigInteger.ONE) : bound.subtract(BigInteger.ONE);
+        AStopShown.NumberAt justPast = new AStopShown.NumberAt(value.position(), past);
+        boolean furthestOut = shown.stream().anyMatch(stop -> stop.at().contains(justPast));
+        ABoundThatKeepsEveryRunGoing one = aBoundOn(value, bound, atMost, furthestOut, read);
+        if (one != null) {
+            out.add(one);
         }
     }
 
     /**
      * Into {@code kept}, what {@code form} being from {@code least} or to {@code greatest} — the
-     * other null — asks of the one place it is over, met with what was there, the operation
-     * worked out along {@code way}: whether it is that place's number weighed, or the count of the
-     * month of its dates, and some value of the place meets it.
+     * other null — asks of the one place it is over, met with what was there: whether it is that
+     * place's number weighed, or the count of the month of its dates, and some value of the place
+     * meets it.
      */
     private static boolean keptWithin(LinearForm<NumericTerm> form, BigInteger least,
-                                      BigInteger greatest, Supplier<Reachability.Reaching> way,
-                                      Map<TermPath, KeptWithin> kept) {
+                                      BigInteger greatest, Map<TermPath, BigInteger[]> kept) {
         BigInteger shift = wholeOf(form.constant());
         if (shift == null || form.coefs().isEmpty()) {
             return false;
@@ -3020,57 +2953,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         } else {
             return false;
         }
-        KeptWithin ends = kept.computeIfAbsent(place, _ -> new KeptWithin());
-        ends.from(days[0], way);
-        ends.to(days[1], way);
-        return ends.holdsAValue();
-    }
-
-    /**
-     * {@code bound} on {@code value}, from above where {@code atMost}, into {@code out}, where a
-     * row with the value just past it is shown to come along one of {@code ways}, those of the
-     * operations that set the bound, and get to where that operation is worked out, and
-     * something holds the place. Shown as a row is: the bound, as the one-term relation it is,
-     * shown to fail there ({@link EachWayItComesOut.Shown#REACHED}), over what the model's
-     * declarations and the statements of the way leave, and on no way a run may stop on before
-     * it. The operation takes every value of the place past the bound past its type and is worked
-     * out by every run along its way, so that row stops in it.
-     */
-    private static void addBoundPastWhichARowStops(NumericTerm.ValueOf value, BigInteger bound,
-                                                   boolean atMost, InputReading read,
-                                                   Set<Supplier<Reachability.Reaching>> ways,
-                                                   List<ABoundThatKeepsEveryRunGoing> out) {
-        ExactRatio past = ExactRatio.of(atMost ? bound.add(BigInteger.ONE)
-                : bound.subtract(BigInteger.ONE));
-        // The bound works nothing out: a row is asked of no size of its form.
-        UndividedByARelation theBound = new UndividedByARelation(
-                List.of(ofTheInput(value, ExactRatio.ONE)), ExactRatio.of(bound).negated(),
-                atMost ? Rel.LE : Rel.GE, List.of(), Kind.AFFINE, null)
-                .workingOut(Working.NO_STOPS);
-        for (Supplier<Reachability.Reaching> along : ways) {
-            Reachability.Reaching way = along.get();
-            if (way == null) {
-                continue;
-            }
-            WhatItLeaves left = theBound.leftWhereRowsArrive(read, List.of(way),
-                    ComparisonWitnesses.AtAComparison.NONE);
-            OfASide side = (!left.rowsArrive() || !left.mayStopBefore().isEmpty()) ? null
-                    : left.outcomes().get(value);
-            if (side != null
-                    && side.outcomes().failingAt(past) == EachWayItComesOut.Shown.REACHED) {
-                ABoundThatKeepsEveryRunGoing one = aBoundOn(value, bound, atMost, read);
-                if (one != null) {
-                    out.add(one);
-                }
-                return;
-            }
+        BigInteger[] ends = kept.computeIfAbsent(place, _ -> new BigInteger[2]);
+        if (days[0] != null) {
+            ends[0] = ends[0] == null ? days[0] : ends[0].max(days[0]);
         }
+        if (days[1] != null) {
+            ends[1] = ends[1] == null ? days[1] : ends[1].min(days[1]);
+        }
+        return ends[0] == null || ends[1] == null || ends[0].compareTo(ends[1]) <= 0;
     }
 
     /**
      * {@code bound} on the values of {@code value}'s place, from above where {@code atMost}, as
-     * the invariant an author declares it — or null where the place is held by nothing an
-     * invariant can be declared on, or its values are no whole numbers or dates.
+     * the invariant an author declares it, as far out as it can be where {@code furthestOut} — or
+     * null where the place is held by nothing an invariant can be declared on, or its values are
+     * no whole numbers or dates.
      *
      * <p>The data is the place's own type where it is written under a name ({@code data Today =
      * Date}), whose invariant names it as its value, and otherwise the record the place is a field
@@ -3079,6 +2976,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static ABoundThatKeepsEveryRunGoing aBoundOn(NumericTerm.ValueOf value,
                                                          BigInteger bound, boolean atMost,
+                                                         boolean furthestOut,
                                                          InputReading read) {
         TermOrders orders = read.quantities().ordersOf(value);
         Carrier carrier = orders == null ? null : orders.answered();
@@ -3091,13 +2989,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Position position = read.domain().at(place);
         if (position != null && position.view().outermostName() != null) {
             return new ABoundThatKeepsEveryRunGoing(new ABoundThatKeepsEveryRunGoing.Holder.AData(
-                    position.view().outermostName().name(), "value"), atMost, at);
+                    position.view().outermostName().name(), "value"), atMost, at, furthestOut);
         }
         if (place.steps().isEmpty()) {
             return read.domain().typeAt(place, read.rules()) instanceof Type.Prim primitive
                     ? new ABoundThatKeepsEveryRunGoing(
                             new ABoundThatKeepsEveryRunGoing.Holder.AParameter(place.head(),
-                                    primitive.shown()), atMost, at)
+                                    primitive.shown()), atMost, at, furthestOut)
                     : null;
         }
         if (!(place.steps().getLast() instanceof TermPath.Step.Field(String field))) {
@@ -3108,49 +3006,32 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return read.domain().typeAt(record, read.rules()) instanceof Type.Ref(TypeSymbol data)
                 ? new ABoundThatKeepsEveryRunGoing(
                         new ABoundThatKeepsEveryRunGoing.Holder.AData(data.name(), field),
-                        atMost, at)
+                        atMost, at, furthestOut)
                 : null;
     }
 
     /**
-     * Whether a run on a row {@code regions} leave may stop in an operation {@code working}
-     * tells: one over a bound value no value of it is shown to keep within its type, or one over
-     * the input's numbers past one of its ends on some such row. What a run works out before it
-     * is not asked, since a run stopping there stops all the same; nor whether every operation is
-     * told, since one told is one a run works out. False where the regions leave no row.
+     * Whether no row {@code regions} leave takes {@code it} past either of its ends, where the rows
+     * a run stops at in it can be said as rows of the input ({@link IntOperation#stopsOnRowsOfTheInput}).
+     * The regions hold every row that arrives, so none past an end is none a run stops at. False
+     * where it is no such operation, which is not that some row takes it past.
      */
-    static boolean aRunMayStopIn(Working working, InputReading read, List<SearchRegion> regions) {
-        if (regions.isEmpty()) {
+    static boolean noRowTakesItPastItsEnds(IntOperation it, InputReading read,
+                                           List<SearchRegion> regions) {
+        if (!it.stopsOnRowsOfTheInput()) {
             return false;
         }
-        if (working.aRunMayStopOverABoundValue()) {
-            return true;
-        }
-        for (IntOperation it : working.operations()) {
-            LinearForm<NumericTerm> form = it.overTheInput();
-            if (form != null && (rowsWhere(List.of(new Bounded(form,
-                            it.greatest().add(BigInteger.ONE), null)), read, regions) != null
-                    || rowsWhere(List.of(new Bounded(form, null,
-                            it.least().subtract(BigInteger.ONE))), read, regions) != null)) {
-                return true;
-            }
-        }
-        return false;
+        LinearForm<NumericTerm> form = it.overTheInput();
+        return rowsWhere(List.of(new Bounded(form, it.greatest().add(BigInteger.ONE), null)), read,
+                regions) == null
+                && rowsWhere(List.of(new Bounded(form, null, it.least().subtract(BigInteger.ONE))),
+                        read, regions) == null;
     }
 
-    /** Whether {@code working} tells no operation, so that {@link #aRunMayStopIn} is false of it
-     *  on any region and the regions it is asked over do not need working out. That is no
-     *  claim that a run stops nowhere ({@link Working#NO_STOPS}). */
+    /** Whether {@code working} tells no operation. That is no claim that a run stops nowhere
+     *  ({@link Working#NO_STOPS}). */
     static boolean tellsNoOperation(Working working) {
         return working.operations().isEmpty();
-    }
-
-    /**
-     * Whether a run getting to this relation may stop in an operation the reading told over a
-     * bound value ({@link Working#aRunMayStopOverABoundValue}).
-     */
-    boolean aRunMayStopOverABoundValue() {
-        return working.aRunMayStopOverABoundValue();
     }
 
     /**
@@ -3196,8 +3077,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * The rows meeting every one of {@code bounds}, as each form of numbers they hold between two
      * ends: the forms alike but for the constant met into one, a form of one number said as that
-     * number's run within its type, and an end that is the type's own left unsaid. Null where no
-     * row meets them, or no region leaves one that does.
+     * number's run within its type, and an end that is the type's own left unsaid. Where every end
+     * is the type's own, so that the rows are every value the numbers can hold, those ends are
+     * said: rows there are are said. Null where no row meets them, or no region leaves one that
+     * does, and only there.
      */
     private static List<EveryRunStops.Within> rowsWhere(List<Bounded> bounds, InputReading read,
                                                         List<SearchRegion> regions) {
@@ -3235,6 +3118,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         List<EveryRunStops.Within> out = new ArrayList<>();
+        // The same with the type's own ends said, for rows that are every value there is.
+        List<EveryRunStops.Within> everyValue = new ArrayList<>();
         List<Bounded> asked = new ArrayList<>();
         for (Map.Entry<Map<NumericTerm, ExactRatio>, BigInteger[]> each : met.entrySet()) {
             LinearForm<NumericTerm> form = new LinearForm<>(ExactRatio.ZERO, each.getKey());
@@ -3251,14 +3136,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return null;
             }
             asked.add(new Bounded(form, least, greatest));
+            NumericTerm.FromOnePosition alone = form.coefs().size() == 1
+                    ? (NumericTerm.FromOnePosition) form.coefs().keySet().iterator().next() : null;
             BigInteger shownLeast = least != null && least.equals(typeLeast) ? null : least;
             BigInteger shownGreatest = greatest != null && greatest.equals(typeGreatest) ? null
                     : greatest;
             if (shownLeast != null || shownGreatest != null) {
-                out.add(new EveryRunStops.Within(written(form), shownLeast, shownGreatest,
-                        form.coefs().size() == 1
-                                ? (NumericTerm.FromOnePosition) form.coefs().keySet().iterator()
-                                        .next() : null));
+                out.add(new EveryRunStops.Within(written(form), shownLeast, shownGreatest, alone));
+            }
+            if (least != null || greatest != null) {
+                everyValue.add(new EveryRunStops.Within(written(form), least, greatest, alone));
             }
         }
         // And every number of them within its type, which every row is, for the regions: a
@@ -3268,10 +3155,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             asked.add(new Bounded(alone, typeEndOf(alone, true, read),
                     typeEndOf(alone, false, read)));
         }
+        if (regions.stream().noneMatch(region -> holdsARow(region, asked))) {
+            return null;
+        }
+        List<EveryRunStops.Within> said = out.isEmpty() ? everyValue : out;
         // In the order of what they are written as, which is what a report is compared by.
-        out.sort(Comparator.comparing(EveryRunStops.Within::form));
-        return out.isEmpty() || regions.stream().noneMatch(region -> holdsARow(region, asked))
-                ? null : out;
+        return said.stream().sorted(Comparator.comparing(EveryRunStops.Within::form)).toList();
     }
 
     /** Whether {@code region}, narrowed to {@code bounds}, is not shown to hold no row. A bound
@@ -11261,11 +11150,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * relation and whether the region shows each number a row ({@link #comingOutOn}), asked of
      * the sides as the way's own region holds them with every statement in
      * ({@link #sidesAlongTheWay}), and not of what a reading of the comparison's line widened.
-     * Beside those, where each side is one number, the value at its place, with every value its
-     * declarations hold taken ({@code realizes}), and no rule of the declarations, none put aside
-     * as that reading puts some, relating the two. Those are the {@link RowsOfTheWay.Premises},
-     * and the way's statements are what is left to say, which they are only where each is a form
-     * of the two numbers alone.
+     * Beside those, where each side is one number, the value at its place, with every value of
+     * its declared run taken (all a type holds, or the values between its ends and nothing else),
+     * and no rule of the declarations, none put aside as that reading puts some, relating the
+     * two. Those are the {@link RowsOfTheWay.Premises}, and the way's statements are what is left
+     * to say, which they are only where each is a form of the two numbers alone. What they narrow
+     * of the runs is the constraints' to say, exactly, where the region's whole run says nothing
+     * for a coefficient of two.
      */
     private RowsOfTheWay rowsOfTheWay(StatedWay way, SidesAlongTheWay along,
                                       List<Source> sources, InputReading read) {
@@ -11278,7 +11169,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         PlacesTiedAlongAWay tied = placesTiedAlong(along.conditions(), way.past(), read);
         RowsOfTheWay.Premises premises = new RowsOfTheWay.Premises(
                 terms.stream().allMatch(WhatARelationLeavesUndivided.Term::itsPlace),
-                terms.stream().allMatch(each -> each.holds().equals(each.realizes())),
+                sources.stream().allMatch(each -> each != null
+                        && (each.takes().every() || each.onlyItsEnds())),
                 apartByTheDeclarations(0, 1, sources, read),
                 everyRowAlongTheWayGetsToTheRelation(way.heldWhole(), way.past(), read,
                         way.region(), way.written(), way.declined()),

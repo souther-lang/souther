@@ -16,6 +16,7 @@ import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
@@ -149,12 +150,6 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 "List.length(List.map(x -> if x < 0 then x + 1 else 0, ds)) >= 2");
         FORMS.put("stepBeside", "List.fold((w, l) -> if l > w then l else w, 0, ds) <= q + 1");
 
-        TOLD_THOUGH_NONE_STOPS.put("totalOfNoElements", "a total is worked out exactly and its "
-                + "range is not derived from the ends of the elements and how many there are "
-                + "(FormRange.asWorkedOut says a total is not known), so a way that leaves no "
-                + "element does not rule the stop out");
-        TOLD_THOUGH_NONE_STOPS.put("lengthOfAStepOfNoElements", "the same, for what a step works "
-                + "out at the elements of a list the way leaves none of");
         NOT_TOLD.put("absOfANumber", "a call's own stop, here the least Int having no absolute "
                 + "value, is told by no reading as an operation of the call: only what it is "
                 + "made of is");
@@ -173,10 +168,8 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         FORMS.put("productOfTheElements", "List.product(ds) >= 10");
         FORMS.put("maxOfAStep", "Option.withDefault(0, List.max(List.map(x -> x + 1, ds))) >= 3");
         NOT_TOLD.put("maxPlusOne", "the operation over what the option holds is told on the arm "
-                + "of the match that opens it, the list holding an element; but a comparison over "
-                + "that value is stated as no condition, and a stop told on an arm is asked of "
-                + "rows only through the condition the comparison is stated as "
-                + "(GuardThresholds.aRunTakingAnArmMayStop): said as not read");
+                + "of the match that opens it, the list holding an element, and a stop on an arm "
+                + "is not shown (StopAssessment): said as not resolved");
         FORMS.put("maxPlusOne", "Option.withDefault(0, List.max(ds)) + 1 <= 10");
         NOT_TOLD.put("maxOfAWrittenListPlusOne", "the same, on an arm every run takes");
         NOT_TOLD.put("defaultPastTheTypePlusOne", "the same, where the default is past the type");
@@ -347,6 +340,42 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         // a part of a tuple beside a construction made only where its invariant holds
         FORMS.put("tuplePartBesideAPartMadeWhereItHolds", "{ let (a, r) = if q <= 5 "
                 + "then (q, Yen(0)) else (5, Yen(q - 5)) \n a } >= 3");
+
+        // A stop is shown only where it is worked out wherever the comparison is, over numbers a
+        // row of the input holds at a place, every other operation and every condition on the way
+        // read whole (StopAssessment). Each of these is a stop a run comes to and none of that is
+        // shown of, so it is said as not resolved.
+        notShown("an operation on an arm of a choice", "armOfAChoice",
+                "takenFromAProductInAnArm", "elementsOfAChosenListThatAgree");
+        notShown("an operation over what a choice comes to, a value a run works out and no "
+                + "number of the input", "armPastTheType", "totalOfWrittenChoices");
+        notShown("an operation worked out on each application of a closure", "lengthOfAStep",
+                "lengthOfACancelledStep", "lengthOfAConditionStep", "lengthOfAFlatStep",
+                "lengthOfAShiftedStep", "lengthOfASortedStep", "lengthOfAStepAtAnIndex",
+                "lengthOfAStepInAWrittenList", "lengthOfATakenStep", "lengthOfATupleStep",
+                "lengthOfAnUnusedBinding", "lengthOfACancelledConstantStep", "emptyOfAStep",
+                "everyOfAStep", "everyOfAShiftedStep", "maxOfAStep", "maxOfAStepByQ",
+                "totalOfAStep", "totalOfAStepOverAStep", "totalOfChoicesAStepMakes",
+                "totalOfTakenSteps", "foldOfAStep", "totalOfThePositionsTimesTheElements",
+                "totalOfTheSameChoice", "totalOfWhatAFilterKeeps",
+                "totalOfWhatAFilterKeepsHeldAgainstWhatItKeeps");
+        notShown("a total of the elements, worked out exactly: no value of the elements is put "
+                + "to it", "totalOfTheElements", "foldOfTheElements", "foldAddingAChoice",
+                "sumOfAChoiceStep", "sumCarriedInATuple");
+        notShown("a product of two numbers of the input, which is no form a value is put to",
+                "productOfTwoNumbers");
+        notShown("beside a call whose own stop no reading tells as an operation, here the least "
+                + "Int having no absolute value", "absOfASum", "absInALetBody");
+        notShown("a construction on the way refused at some q, which asks something of a run "
+                + "that no run is shown not to meet", "fieldBesideARefusedPart");
+    }
+
+    /** Each of {@code names} as a stop a run comes to that is said as not resolved, for
+     *  {@code why}. */
+    private static void notShown(String why, String... names) {
+        for (String name : names) {
+            NOT_TOLD.put(name, why + ": said as not resolved");
+        }
     }
 
     @Test
@@ -391,17 +420,21 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 toldAndNoRunStops.add(names.get(at));
             }
         }
-        assertEquals(new TreeSet<>(TOLD_THOUGH_NONE_STOPS.keySet()), toldAndNoRunStops,
-                "told of a stop, and no run of the numbers tried stops, beside the stops the "
-                        + "compiler cannot yet rule out");
-        assertEquals(new TreeSet<>(NOT_TOLD.keySet()), stopsAndNothingTold,
-                "a run stops and no note says so, beside the forms the compiler cannot yet tell");
-        assertEquals(new TreeSet<>(), stopsAndNothingSaid,
-                "a run stops and the report says nothing of it, not even that it is not read to "
-                        + "the end, beside the forms whose stop no reading knows to ask of");
-        assertEquals(new TreeSet<>(UNTOLD_THOUGH_NONE_STOPS.keySet()), untoldAndNoRunStops,
-                "the report says a run may stop where nothing says, and no run stops, beside the "
-                        + "stops the compiler cannot yet rule out nor tell");
+        assertAll(
+                () -> assertEquals(new TreeSet<>(TOLD_THOUGH_NONE_STOPS.keySet()),
+                        toldAndNoRunStops, "told of a stop, and no run of the numbers tried "
+                                + "stops, beside the stops the compiler cannot yet rule out"),
+                () -> assertEquals(new TreeSet<>(NOT_TOLD.keySet()), stopsAndNothingTold,
+                        "a run stops and no note says so, beside the forms the compiler cannot "
+                                + "yet tell"),
+                () -> assertEquals(new TreeSet<>(), stopsAndNothingSaid,
+                        "a run stops and the report says nothing of it, not even that it is not "
+                                + "read to the end, beside the forms whose stop no reading knows "
+                                + "to ask of"),
+                () -> assertEquals(new TreeSet<>(UNTOLD_THOUGH_NONE_STOPS.keySet()),
+                        untoldAndNoRunStops, "the report says a run may stop where nothing "
+                                + "says, and no run stops, beside the stops the compiler cannot "
+                                + "yet rule out nor tell"));
     }
 
     private static final int MAY_STOP = 0;
@@ -437,8 +470,11 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
             if (started.matches()) {
                 current = started.group(1);
                 out.put(current, new int[3]);
-            } else if (current != null && line.contains("may stop a run")) {
+            } else if (current != null && line.startsWith("· may stop a run:")) {
                 out.get(current)[MAY_STOP]++;
+            } else if (current != null && line.startsWith("· stop not resolved:")) {
+                out.get(current)[NOT_READ]++;
+                out.get(current)[UNTOLD]++;
             } else if (current != null && line.startsWith("· not read:")) {
                 out.get(current)[NOT_READ]++;
                 if (line.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD)) {

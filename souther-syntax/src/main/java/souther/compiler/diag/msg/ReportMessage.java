@@ -526,15 +526,75 @@ public sealed interface ReportMessage extends Message {
 
     record SentTo(String at) implements ReportMessage, Prose {}
 
-    record MayStopARun(String rule, Message every, Message asks, String calls)
+    record MayStopARun(String rule, Message every, String calls)
+            implements ReportMessage, Prose {}
+
+    /** A rule where whether a run stops on its way through it is not resolved: of the operations
+     *  it works out ({@code unresolved}, each said by {@link StopNotShownIn} or
+     *  {@link StopNotShownInWhatItWorksOut}), of what the constructions on the way ask
+     *  ({@code asks}), or both. */
+    record StopNotShown(String rule, Message unresolved, Message every, Message asks,
+                        String calls)
+            implements ReportMessage, Prose {}
+
+    /** Whether a run stops in {@code operation} is not resolved, for {@code why}. */
+    record StopNotShownIn(String operation, Message why) implements ReportMessage, Prose {}
+
+    /** Whether a run stops in something worked out that no operation names is not resolved, for
+     *  {@code why}. */
+    record StopNotShownInWhatItWorksOut(Message why) implements ReportMessage, Prose {}
+
+    /** Why a stop is not resolved: something worked out is read as no operation. */
+    record NoOperationIsReadThere() implements ReportMessage, Prose {}
+
+    /** Why: the comparison stops a run on rows it states, and no input reaching them is looked
+     *  for. */
+    record TheComparisonStopsOnRowsItStates() implements ReportMessage, Prose {}
+
+    /** Why: the operation is worked out on one arm of a choice. */
+    record ItIsWorkedOutOnAnArm() implements ReportMessage, Prose {}
+
+    /** Why: the operation is worked out inside a function applied to each element. */
+    record ItIsWorkedOutOnEachElement() implements ReportMessage, Prose {}
+
+    /** Why: another part of the comparison may stop a run first and is not read. */
+    record AnotherPartIsNotRead() implements ReportMessage, Prose {}
+
+    /** Why: something evaluated before the comparison may stop a run first. */
+    record SomethingBeforeItMayStopARun() implements ReportMessage, Prose {}
+
+    /** Why: a condition on the way is no comparison of whole numbers of the input. */
+    record AConditionOnTheWayIsNotRead() implements ReportMessage, Prose {}
+
+    /** Why: the operation is over a value the body works out. */
+    record ItIsOverAValueTheBodyWorksOut() implements ReportMessage, Prose {}
+
+    /** Why: the input's types declare invariants or cases, and no input meeting them is built. */
+    record NoInputMeetingTheTypesIsBuilt() implements ReportMessage, Prose {}
+
+    /** Why: no input tried takes the operation past its type. */
+    record NoInputTriedTakesItPastItsType() implements ReportMessage, Prose {}
+
+    /** Why: the inputs tried ran out before one took the operation past its type. */
+    record TheInputsTriedRanOut() implements ReportMessage, Prose {}
+
+    /** Where a run that gets to a rule stops, said of a rule where no run is shown to get
+     *  there. */
+    record ARunGettingThereStops(String stops) implements ReportMessage, Prose {}
+
+    /** What the constructions on the way to a rule ask of a run, no run being shown not to meet
+     *  it: {@code asks}, each said by {@link ConstructionAsks} or {@link ConstructionNeverPassed}. */
+    record WhatTheConstructionsOnTheWayAskIsNotDetermined(Message asks)
             implements ReportMessage, Prose {}
 
     /**
      * The invariant an author may declare on {@code data}, the data holding an input, that keeps
      * every run from the stop said above it, where that stop is where the representation of a
-     * number stops: the furthest out a bound can be, which the domain may put further in.
+     * number stops, which the domain may put further in. {@code furthest} says, where it is so,
+     * that the bound is as far out as one can be ({@link AFurtherBoundLetsInAStop}), and nothing
+     * otherwise.
      */
-    record ABoundOnTheInputKeepsEveryRunGoing(String data, String invariant)
+    record ABoundOnTheInputKeepsEveryRunGoing(String data, String invariant, Message furthest)
             implements ReportMessage, Prose {}
 
     /**
@@ -542,8 +602,12 @@ public sealed interface ReportMessage extends Message {
      * the invariant is declared on a data of that type the author introduces and takes the
      * parameter as.
      */
-    record ABoundOnAParameterKeepsEveryRunGoing(String parameter, String type, String invariant)
+    record ABoundOnAParameterKeepsEveryRunGoing(String parameter, String type, String invariant,
+                                                Message furthest)
             implements ReportMessage, Prose {}
+
+    /** That a bound one step further out lets in a run that stops: one is shown to. */
+    record AFurtherBoundLetsInAStop() implements ReportMessage, Prose {}
 
     /** What one construction on the way to a rule asks of a run that works it out. */
     record ConstructionAsks(String construction, String at, String asked)

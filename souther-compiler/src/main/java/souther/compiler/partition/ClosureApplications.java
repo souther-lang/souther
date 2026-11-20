@@ -236,19 +236,19 @@ sealed interface ClosureApplications {
          * on {@code on}, carrying what this one carries, and made by the calls this one is and
          * by {@code by}, where a call some source wrote made it — and made on every element of
          * {@code everyOf}, where it is one application standing for every element of that
-         * position, on every element this one is — and handed {@code values}, which the walk
-         * makes wherever this one is made.
+         * position, on every element this one is — and handed {@code values}, which are made
+         * wherever {@code held} holds: where the container holds them.
          *
          * <p>Which call made an application is carried here and handed on only by these, so
          * nothing a reading reads it in passing ({@code WhatExplainsACountIsReadOnlyWhereItIsTold}).
          */
         Application inside(InputReads names, Proposition where, ElementsMetOn on,
                            Optional<MadeBy> by, Optional<TermPath> everyOf,
-                           List<Denotation> values) {
+                           List<Denotation> values, Proposition held) {
             List<MadeBy> deeper = new ArrayList<>(madeBy);
             by.ifPresent(deeper::add);
             List<Handed> handedDeeper = new ArrayList<>(handed);
-            values.forEach(value -> handedDeeper.add(new Handed(value, reached)));
+            values.forEach(value -> handedDeeper.add(new Handed(value, held)));
             return new Application(names, where, carriedIntoTheFirst, on, deeper,
                     madeOnEvery.inside(everyOf), handedDeeper);
         }
@@ -285,16 +285,16 @@ sealed interface ClosureApplications {
     }
 
     /**
-     * A value a walk hands an application of a closure, and where the walk is entered. A walk
-     * over a container makes every element of it before handing any, so what making the value
-     * works out is worked out wherever the walk is entered, whether or not the application is
-     * made.
+     * A value a walk hands an application of a closure, and where it is made: where the container
+     * holds it. A container holds every element of it before a walk hands any, so what making the
+     * value works out is worked out wherever the container holds it, whether or not the
+     * application is made.
      */
-    record Handed(Denotation value, Proposition walkEntered) {
+    record Handed(Denotation value, Proposition madeWhere) {
 
         public Handed {
             Objects.requireNonNull(value, "a value is handed");
-            Objects.requireNonNull(walkEntered, "by a walk entered somewhere");
+            Objects.requireNonNull(madeWhere, "and is made somewhere");
         }
     }
 
@@ -450,6 +450,10 @@ sealed interface ClosureApplications {
                             .map(one -> keptBy(one.keptWhere(), read)).toList();
                     List<Proposition> reached = WhereAnApplicationIsMade.reached(answers, keptBy,
                             how, around.reached());
+                    // Where the container holds each element, which is where it is made: kept,
+                    // whatever the applications before it answered.
+                    List<Proposition> held = WhereAnApplicationIsMade.reached(null, keptBy,
+                            HowAClosureIsApplied.TO_EVERY_ELEMENT, around.reached());
                     for (int at = 0; at < each.size(); at++) {
                         int ordinal = at;
                         InputReads names = each.get(at).reads();
@@ -464,7 +468,7 @@ sealed interface ClosureApplications {
                         }
                         out.add(around.inside(names, reached.get(at), around.metOn(),
                                 madeBy.map(call -> new MadeBy(asWritten(call, symbols), ordinal)),
-                                Optional.empty(), values));
+                                Optional.empty(), values, held.get(at)));
                     }
                 }
                 case InputReads.Applications.NoneHanded _ -> {
@@ -480,7 +484,8 @@ sealed interface ClosureApplications {
                             where.map(some -> WhereAnApplicationIsMade.past(around.reached(),
                                     some.holdingSomething())).orElse(around.reached()),
                             metOn(block, containers, around, entered, read), Optional.empty(),
-                            everyElementOf(block, containers, around, read), List.of()));
+                            everyElementOf(block, containers, around, read), List.of(),
+                            around.reached()));
                 }
                 case InputReads.Applications.Unsaid _ -> {
                     return new NotSaid(around.metOn().notSaidAnywhere(new ReadingGap.ReachNotRead(

@@ -333,6 +333,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   whose applications are not one run
      * @param readOn     which applications of the closures the comparison stands in read each
      *                   line and relation it drew, beside them; nothing where it was read once
+     * @param beforeIt   whether nothing a run works out before the comparison ends it, whatever
+     *                   the input ({@link #nothingBeforeItEndsARun}), worked out the first time it
+     *                   is asked: most comparisons are never asked it, and the walk goes down the
+     *                   body from its top
      */
     record Reading(ConstructOccurrence occurrence, Stated statement, Citation at,
                    InputReads reads,
@@ -343,7 +347,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    ClosureApplications applying, ConstructOccurrence runsAs, CallContext context,
                    SaidOnTheWay saidOnTheWay, ComparisonWitnesses.AtAComparison witnesses,
                    DemandReading.Answered getsPast, List<ConstructionAsk> asks,
-                   ElementsNamed readsTheElements, LinesReadOn readOn) {
+                   ElementsNamed readsTheElements, LinesReadOn readOn,
+                   Supplier<Boolean> beforeIt) {
 
         Reading {
             if (occurrence == null || statement == null || at == null
@@ -351,11 +356,22 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     || stopsIn == null || onTheArms == null || applying == null || runsAs == null
                     || context == null
                     || saidOnTheWay == null || witnesses == null || getsPast == null
-                    || asks == null || readsTheElements == null || readOn == null) {
+                    || asks == null || readsTheElements == null || readOn == null
+                    || beforeIt == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
             }
             asks = List.copyOf(asks);
+        }
+
+        /**
+         * Whether nothing a run works out before the comparison ends it, whatever the input
+         * ({@link WhatARunWorksOutBeforeACount#nothingBeforeItEndsARun}), in the behavior's own
+         * body: false inside a helper's body read at a call, whose parts before it are not this
+         * body's.
+         */
+        boolean nothingBeforeItEndsARun() {
+            return beforeIt.get();
         }
 
         /**
@@ -393,7 +409,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             worksOutOnEach.ifPresent(applications -> applications.forEach(one -> {
                 out.add(new WorkedOutAt(one.stops(), one.reached(), null));
                 one.handed().forEach(made -> out.add(new WorkedOutAt(made.stops(),
-                        made.walkEntered(), null)));
+                        made.madeWhere(), null)));
                 one.arms().forEach(arm -> out.add(new WorkedOutAt(arm.stops(),
                         one.reached(), arm)));
             }));
@@ -1268,7 +1284,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             numbering), stopsWhere,
                     worksOutOnEach, stopsIn, onTheArms, applying, stated.written(), in.context(),
                     besideIt.said(), witnesses,
-                    past.answered(), past.asks(), readsTheElements, readOn));
+                    past.answered(), past.asks(), readsTheElements, readOn,
+                    new Pullback.Once<>(() -> in.context().equals(CallContext.OF_THE_BODY)
+                            && WhatARunWorksOutBeforeACount.nothingBeforeItEndsARun(in.root(),
+                                    e))));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.
