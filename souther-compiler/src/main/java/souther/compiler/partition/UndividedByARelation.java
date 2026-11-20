@@ -2651,7 +2651,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                          ComparisonWitnesses.AtAComparison witnesses) {
         DemandReading.Answered past = way.gotPastAsAsked();
         RowsWay rows = new RowsWay(stated(read, sources, carriers, way.region(), conditions,
-                heldWhole, declined, past, way.narrowedBy()));
+                heldWhole, declined, past, way.narrowedBy(), false));
         if (noRowComesAlong(rows, read)) {
             return WhatItLeaves.NO_ROW_COMES_ALONG;
         }
@@ -2678,7 +2678,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return all;
         });
         StatedWay ofTheModel = stated(read, sources, carriers, model, conditions, heldWhole,
-                declined, past.without(stops), modelBy);
+                declined, past.without(stops), modelBy, true);
         if (leavesNoRow(ofTheModel, read)) {
             return reached(linesAlong(read, sources, carriers, rows.stated(), remainders,
                     witnesses, run, reaches), run, read, witnesses);
@@ -3801,7 +3801,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                                    Optional<List<TakenConstraint>> applied,
                                    ComparisonWitnesses.AtAComparison witnesses) {
         RowsWay rows = new RowsWay(stated(read, sources, carriers, region, written, heldWhole,
-                declined, past, applied));
+                declined, past, applied, false));
         if (noRowComesAlong(rows, read)) {
             return WhatItLeaves.NO_ROW_COMES_ALONG;
         }
@@ -4005,6 +4005,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                of every one of them before any is taken away for the relation's own reading
      * @param byTheCalendar what the calendar answers of the dates {@code written} names, asked
      *                once for the way however often whether it leaves no row is
+     * @param endsLeftOut whether this is the model's reading of the way, which leaves out where a
+     *                representation stops ({@link Reachability.Reaching#gotPastAtTheEnds}): the
+     *                rows it holds are the model's, and a run may stop at some of them
      */
     private record StatedWay(SearchRegion region, List<OnAWay> written, boolean heldWhole,
                              Optional<Set<String>> declined, DemandReading.Answered past,
@@ -4014,13 +4017,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                              List<OnAWay> unfree, RoomOnTheWay lengthsRoom,
                              Rebuilding rebuilt, WayRead entire,
                              WhatStatementsOfOneFormDecide.Verdict decided,
-                             PlacesTiedAlongAWay byTheCalendar) {}
+                             PlacesTiedAlongAWay byTheCalendar, boolean endsLeftOut) {}
 
     /** The way stating {@code written} over {@code region}, as {@link StatedWay} says. */
     private StatedWay stated(InputReading read, List<Source> sources, List<Carrier> carriers,
                              SearchRegion region, List<OnAWay> written, boolean heldWhole,
                              Optional<Set<String>> declined, DemandReading.Answered past,
-                             Optional<List<TakenConstraint>> applied) {
+                             Optional<List<TakenConstraint>> applied, boolean endsLeftOut) {
         // A way stating nothing but that the rows are off the line this relation draws — the form
         // held unequal to nought, as `sign == 0` taken the other way holds
         // `Decimal.compare(a, b)` — ties no side to anything: it takes the rows on the line away,
@@ -4061,7 +4064,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 unfree.stream().map(OnAWay::affine).toList(), askedAsAStatement());
         return new StatedWay(region, written, heldWhole, declined, past, applied, asStated,
                 inWholeSteps, offItsLine, covered, unfree, lengthsRoom, rebuilt, entire, decided,
-                datesTheWayStates(written, read));
+                datesTheWayStates(written, read), endsLeftOut);
     }
 
     /**
@@ -11048,7 +11051,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 everyRowAlongTheWayGetsToTheRelation(way.heldWhole(), way.past(), read,
                         way.region(), way.written(), way.declined()),
                 numbers.stream().allMatch(each -> whatTheRegionShowsOfItIsARow(each,
-                        along.conditions(), way.past(), way.declined(), tied, read)));
+                        along.conditions(), way.past(), way.declined(), tied, read)),
+                !way.endsLeftOut());
         List<TwoIntegerConstraints.Constraint<NumericTerm>> stated = new ArrayList<>();
         for (OnAWay each : along.conditions()) {
             TakenConstraint.Affine affine = each.affine();

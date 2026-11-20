@@ -94,47 +94,6 @@ class AConditionTheDeclarationsSettleDoesNotTieTheComparisonBesideItTest {
     }
 
     /**
-     * Where a representation stops on the way is no line the model draws, and is told. A row gets
-     * to the comparison only where {@code eaches + pack} is a number an {@code Int} holds, so at
-     * {@code eaches = Int.MAX - 2} only a {@code pack} of two or less does; the rows of the model
-     * leave {@code pack} up to half of {@code Int.MAX}, and the stop is what the report says of
-     * the rest. So the rows of the way are read over the model, and nothing is read over them
-     * without the stop being said.
-     */
-    @Test
-    void aStopOfARepresentationBeforeTheComparisonIsToldAndIsNoLineOfTheRows() {
-        Compilation compilation = Compilation.ofSource("""
-                module m1
-
-                data Eaches = Int
-                    invariant value >= 0
-                data PackSize = Int
-                    invariant value >= 0 && value <= 4611686018427387903
-                data Whole = { n: Int }
-                data Part = { left: Int }
-
-                behavior split : (eaches: Eaches, pack: PackSize) -> Whole | Part
-
-                let split (eaches, pack) = {
-                    guard eaches.value + pack.value >= 0 && eaches.value >= pack.value
-                            && eaches.value < 2 * pack.value else Part { left = 1 }
-                    Whole { n = 1 }
-                }
-
-                example split
-                    | "a" : (Eaches(12), PackSize(12)) -> Whole { n = 1 }
-                    | "b" : (Eaches(30), PackSize(12)) -> Part { left = 1 }
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        ACompiledModel.compiles(compilation);
-        JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(compilation.texts())));
-        assertTrue(List.of(READ).containsAll(reasonsNotRead(report)), report::toString);
-        assertEquals(List.of("eaches + pack at least 9223372036854775808"), stopsOf(report),
-                report::toString);
-    }
-
-    /**
      * A question the rows of the way are counted by that passes a limit is said to have, with the
      * figure it passed, and is not left as a relation nothing was shown of. {@code 4097 * pack}
      * rounds the bounds of {@code pack} by 4097 and by 1 and so leaves 4097 classes of

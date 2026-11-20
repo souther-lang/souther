@@ -96,6 +96,56 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
         assertEquals(new TreeSet<>(names), read, "forms read");
     }
 
+    /**
+     * Two neighbouring values of {@code e} that the program tells apart by a stop before the
+     * comparison are not joined by the report. With {@code e + p} held to an {@code Int}, the
+     * least {@code p} that makes {@code e < 2 * p} hold is the greatest {@code p} the sum allows
+     * at the one {@code e}, and one more than it at the next: a row each way at the first and a
+     * stop where the comparison would hold at the second.
+     */
+    @Test
+    void aStopBeforeTheComparisonTellsTwoNeighboursApartAndTheReportDoesNotReadThem()
+            throws Exception {
+        String model = """
+                module demo
+
+                data Eaches = Int
+                    invariant value >= 0
+                data PackSize = Int
+                    invariant value >= 0 && value <= 4611686018427387903
+                data In = { e: Eaches, p: PackSize }
+                data Out = Int
+
+                behavior b : (i: In) -> Out
+                let b (i) = Out { value =
+                    if i.e.value + i.p.value >= 0 && i.e.value >= i.p.value
+                            && i.e.value < 2 * i.p.value then 1 else 2 }
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(model),
+                ATiedWayIsReadAsTheProgramRunSaysTest.class.getClassLoader());
+        Object behavior = Emitted.behavior(loader, "demo", "b").getConstructor().newInstance();
+        long p = 3_074_457_345_618_258_603L;
+        assertEquals(1, ranTo(loader, behavior, 6_148_914_691_236_517_204L, p));
+        assertEquals(-1, ranTo(loader, behavior, 6_148_914_691_236_517_205L, p));
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
+        JsonNode report = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        assertTrue(!isRead(behaviorNamed(report, "b")), report::toString);
+        assertTrue(report.toString().contains("everyRunStops"), "the stop is told");
+    }
+
+    /** What the program comes to at {@code e} and {@code p}, or -1 where the run stops. */
+    private static int ranTo(ClassLoader loader, Object behavior, long e, long p)
+            throws Exception {
+        Object in = Codecs.decoded(loader, "demo.In", Map.of("e", e, "p", p));
+        try {
+            return ((Number) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in)))
+                    .intValue();
+        } catch (ConstraintViolation stopped) {
+            return -1;
+        }
+    }
+
     /** {@code e} and {@code p} of the form, as the fields of the input. */
     private static String written(String form) {
         return form.replaceAll("\\be\\b", "i.e.value").replaceAll("\\bp\\b", "i.p.value");

@@ -16,11 +16,11 @@ import java.util.List;
  * function asking which values have a row beside them takes this and cannot be handed constraints
  * that only bound the rows from outside.
  *
- * <p>The rows of the model: where a number comes to one its representation does not hold on the
- * way, which stops a run, is no line the model draws, and is told by the reading that tells the
- * stops of a way ({@code gotPastAtTheEnds}) and not kept off the rows here. What does restrict
- * them, the statements of the way and what the operators before it narrow beside the ends, is
- * every constraint given.
+ * <p>The rows a run gets to the end of: a row is a row where every operation on the way and in the
+ * relation is worked out, as {@link WhatARelationLeavesUndivided.Leaves} says of what it leaves a
+ * value. So where a number comes to one its representation does not hold, which stops a run, the
+ * constraints hold that too, among everything the operators before the relation narrow; and a
+ * reading that leaves those ends out, the model's, holds rows a run stops at, and makes none.
  *
  * <p>Made only by {@link #of}, which asks for the facts the claim rests on as
  * {@link Premises}, one named fact for each, so that a reader making one has to state every one
@@ -57,17 +57,22 @@ public final class RowsOfTheWay {
      * @param eachNumberIsARowOfTheRegion      the region shows each number's values as the values of
      *                                         a row along the way: nothing it did not take in, no
      *                                         number of a set another number names, turns on it
+     * @param noEndOfARepresentationIsLeftOut  the reading is not the model's, which leaves out
+     *                                         where a representation stops on the way: the
+     *                                         constraints are those of rows a run gets to the end
+     *                                         of
      */
     public record Premises(boolean eachNumberIsTheValueAtItsPlace,
                            boolean everyValueOfItsDeclaredRunIsTaken,
                            boolean noRuleOfTheDeclarationsRelatesThem,
                            boolean everyRowAlongTheWayGetsToTheRelation,
-                           boolean eachNumberIsARowOfTheRegion) {
+                           boolean eachNumberIsARowOfTheRegion,
+                           boolean noEndOfARepresentationIsLeftOut) {
 
         boolean allHold() {
             return eachNumberIsTheValueAtItsPlace && everyValueOfItsDeclaredRunIsTaken
                     && noRuleOfTheDeclarationsRelatesThem && everyRowAlongTheWayGetsToTheRelation
-                    && eachNumberIsARowOfTheRegion;
+                    && eachNumberIsARowOfTheRegion && noEndOfARepresentationIsLeftOut;
         }
     }
 
