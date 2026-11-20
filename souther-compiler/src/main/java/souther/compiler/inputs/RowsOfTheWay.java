@@ -27,6 +27,13 @@ public final class RowsOfTheWay {
      * What a reader states of the way and the declarations, each a fact it has shown and the
      * constraints are the rows only if every one holds.
      *
+     * <p>The two that are about the rows along the way as a whole are the owner's: the reader that
+     * reads a way says whether every row along it gets to the relation and whether the region
+     * shows each number a row, and a premise here is that answer and not a list of what the
+     * reader remembered to look for. What bears on the rows of a way is more than its statements
+     * (what an earlier operation works out, what a run ties, what a condition it declined says),
+     * and only the reader that holds all of it can say none of it does.
+     *
      * @param eachNumberIsTheValueAtItsPlace   neither number is taken of something else, a part of
      *                                         a date or a count, which a rule between them may name
      *                                         in a way the constraints do not
@@ -37,17 +44,24 @@ public final class RowsOfTheWay {
      *                                         numbers, none put aside as a reading of one line puts
      *                                         some: a rule left out is a point the constraints
      *                                         keep that is no row
-     * @param theWayDeclinedNothing            every condition on the way to the comparison was
-     *                                         read, so that no statement of it is missing here
+     * @param everyRowAlongTheWayGetsToTheRelation nothing the way left unread bears on the
+     *                                         relation, and no run along the way may stop on what
+     *                                         it reads: what an operation before works out, what a
+     *                                         run ties, what a closure before it works out
+     * @param eachNumberIsARowOfTheRegion      the region shows each number's values as the values of
+     *                                         a row along the way: nothing it did not take in, no
+     *                                         number of a set another number names, turns on it
      */
     public record Premises(boolean eachNumberIsTheValueAtItsPlace,
                            boolean everyValueOfItsDeclaredRunIsTaken,
                            boolean noRuleOfTheDeclarationsRelatesThem,
-                           boolean theWayDeclinedNothing) {
+                           boolean everyRowAlongTheWayGetsToTheRelation,
+                           boolean eachNumberIsARowOfTheRegion) {
 
         boolean allHold() {
             return eachNumberIsTheValueAtItsPlace && everyValueOfItsDeclaredRunIsTaken
-                    && noRuleOfTheDeclarationsRelatesThem && theWayDeclinedNothing;
+                    && noRuleOfTheDeclarationsRelatesThem && everyRowAlongTheWayGetsToTheRelation
+                    && eachNumberIsARowOfTheRegion;
         }
     }
 

@@ -112,6 +112,19 @@ class AConditionTheDeclarationsSettleDoesNotTieTheComparisonBesideItTest {
     }
 
     /**
+     * What an earlier comparison works out ties the two numbers too: {@code eaches + pack} must come
+     * to a number an {@code Int} holds for a row to get to the comparison after it, so over the
+     * whole of {@code Int} the rows of the way are not what its statements say, and the comparison
+     * is not read over them.
+     */
+    @Test
+    void anEarlierComparisonThatMayStopARunKeepsTheComparisonAfterItNotRead() {
+        JsonNode report = reportOf("",
+                "eaches.value + pack.value >= 0 && eaches.value < pack.value", "0", "24");
+        assertFalse(List.of(READ).containsAll(reasonsNotRead(report)), report::toString);
+    }
+
+    /**
      * A question the rows of the way are counted by that passes a limit is said to have, with the
      * figure it passed, and is not left as a relation nothing was shown of. {@code 4097 * pack}
      * rounds the bounds of {@code pack} by 4097 and by 1 and so leaves 4097 classes of

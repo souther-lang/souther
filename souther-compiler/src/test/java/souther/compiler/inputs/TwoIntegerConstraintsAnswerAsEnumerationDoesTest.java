@@ -17,6 +17,7 @@ import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -92,6 +93,12 @@ class TwoIntegerConstraintsAnswerAsEnumerationDoesTest {
                 ExactRatio.of(BigInteger.ONE, BigInteger.TWO), "y", ExactRatio.ONE.negated())),
                 Rel.LT));
         assertEquals(once, TwoIntegerConstraints.of("x", "y", halved).shadowOn("x"));
+    }
+
+    @Test
+    void oneNumberGivenTwiceIsNotTwoNumbers() {
+        assertThrows(IllegalArgumentException.class, () -> TwoIntegerConstraints.of("x", "x",
+                List.of(new Row(1, 0, -1, Rel.EQ).asAConstraint())));
     }
 
     @Test

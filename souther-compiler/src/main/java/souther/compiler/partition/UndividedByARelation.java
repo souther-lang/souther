@@ -2487,8 +2487,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         Optional<Set<String>> declined = parametersDeclined(way);
         DemandReading.Answered past = way.gotPastAsAsked();
-        if (!nothingUnreadBearsOnIt(way)
-                || mayStopOnWhatItReads(past, read, way.region(), written, declined, Set.of())) {
+        if (!everyRowAlongTheWayGetsToTheRelation(nothingUnreadBearsOnIt(way), past, read,
+                way.region(), written, declined)) {
             return Optional.of(Map.of());
         }
         List<Carrier> carriers = declared.carriers();
@@ -3203,6 +3203,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             out.addAll(named.get());
         }
         return Optional.of(out);
+    }
+
+    /**
+     * Whether every row along a way gets to the relation: nothing the way left unread bears on it
+     * ({@code nothingUnreadBears}, {@link #nothingUnreadBearsOnIt}), and no run along it may stop
+     * on what it reads ({@link #mayStopOnWhatItReads}).
+     *
+     * <p>The one place this is said. What a claim about the rows along a way, that one is shown
+     * each way or that a value has a row beside it, rests on is this and not a list of what the
+     * claim's reader remembered of the way: every claim asks it here, so what a new source of
+     * restriction on the rows (an operation before, a run that ties, a condition declined) comes to
+     * is answered once for all of them.
+     */
+    private boolean everyRowAlongTheWayGetsToTheRelation(boolean nothingUnreadBears,
+                                                         DemandReading.Answered past,
+                                                         InputReading read, SearchRegion region,
+                                                         List<OnAWay> written,
+                                                         Optional<Set<String>> declined) {
+        return nothingUnreadBears
+                && !mayStopOnWhatItReads(past, read, region, written, declined, Set.of());
     }
 
     /**
@@ -4266,17 +4286,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         // A side nothing above showed anything of, where the way ties the two sides, is asked of
         // the rows of the way: no side runs apart from the other there.
-        RowsOfTheWay rowsOfTheWay = !offItsLine && sides.size() == 2
+        SidesAlongTheWay ofTheWay = !offItsLine && sides.size() == 2
                 && !standApart(0, 1, independent)
-                ? rowsOfTheWay(way, terms, sources, read) : null;
+                ? sidesAlongTheWay(way.written(), way.past(), way.region(), read, sources,
+                        carriers)
+                : null;
+        RowsOfTheWay rowsOfTheWay = ofTheWay == null ? null
+                : rowsOfTheWay(way, ofTheWay, sources, read);
         for (int at = 0; rowsOfTheWay != null && at < sides.size(); at++) {
             if (leaves.get(at) != null || out.containsAll(sides.get(at).madeOf())) {
                 continue;
             }
             WhatARelationLeavesUndivided.Leaves tied =
                     WhatARelationLeavesUndivided.leavesAlongATie(rowsOfTheWay,
-                            rowsOfTheWay.numbers(), terms, at, constant, relation,
-                            greatestOf(carriers.get(at)), operations, stopped);
+                            rowsOfTheWay.numbers(), ofTheWay.terms(), at, constant, relation,
+                            greatestOf(carriers.get(at)), ofTheWay.operations(), stopped);
             if (tied instanceof WhatARelationLeavesUndivided.Leaves.Undivided) {
                 out.addAll(sides.get(at).madeOf());
             } else {
@@ -10995,30 +11019,35 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * are not shown to be everything the way and the declarations hold of them
      * ({@link RowsOfTheWay}).
      *
-     * <p>Shown where each side is one number, the value at its place, with every value its
-     * declarations hold taken ({@code realizes}) and no rule of the declarations relating the
-     * two; where the way declined nothing and every statement of it is a form of those two
-     * numbers alone, so that what it states is all it states of them. Those are the
-     * {@link RowsOfTheWay.Premises} it states, one for each.
+     * <p>Shown by what asks the same of a way elsewhere: whether every row along it gets to the
+     * relation and whether the region shows each number a row ({@link #comingOutOn}), asked of
+     * the sides as the way's own region holds them with every statement in
+     * ({@link #sidesAlongTheWay}), and not of what a reading of the comparison's line widened.
+     * Beside those, where each side is one number, the value at its place, with every value its
+     * declarations hold taken ({@code realizes}), and no rule of the declarations, none put aside
+     * as that reading puts some, relating the two. Those are the {@link RowsOfTheWay.Premises},
+     * and the way's statements are what is left to say, which they are only where each is a form
+     * of the two numbers alone.
      */
-    private RowsOfTheWay rowsOfTheWay(StatedWay way,
-                                      List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms,
+    private RowsOfTheWay rowsOfTheWay(StatedWay way, SidesAlongTheWay along,
                                       List<Source> sources, InputReading read) {
+        List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms = along.terms();
         List<NumericTerm> numbers = sides.stream().map(Side::number).toList();
         if (terms.size() != 2 || numbers.contains(null) || numbers.get(0).equals(numbers.get(1))
                 || terms.stream().anyMatch(each -> each.spacing() != Granularity.DISCRETE)) {
             return null;
         }
-        // Every rule of the declarations counts, and none is put aside as a reading of the
-        // comparison's own line puts some: that holds of the rows at the line and says nothing of
-        // the rows at every other value of a side.
+        PlacesTiedAlongAWay tied = placesTiedAlong(along.conditions(), way.past(), read);
         RowsOfTheWay.Premises premises = new RowsOfTheWay.Premises(
                 terms.stream().allMatch(WhatARelationLeavesUndivided.Term::itsPlace),
                 terms.stream().allMatch(each -> each.holds().equals(each.realizes())),
                 apartByTheDeclarations(0, 1, sources, read),
-                way.heldWhole() && way.declined().map(Set::isEmpty).orElse(false));
+                everyRowAlongTheWayGetsToTheRelation(way.heldWhole(), way.past(), read,
+                        way.region(), way.written(), way.declined()),
+                numbers.stream().allMatch(each -> whatTheRegionShowsOfItIsARow(each,
+                        along.conditions(), way.past(), way.declined(), tied, read)));
         List<TwoIntegerConstraints.Constraint<NumericTerm>> stated = new ArrayList<>();
-        for (OnAWay each : way.written()) {
+        for (OnAWay each : along.conditions()) {
             TakenConstraint.Affine affine = each.affine();
             if (affine == null || each.elementsOf() != null || each.bySome() != null
                     || each.byEvery() != null) {

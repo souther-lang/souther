@@ -105,6 +105,12 @@ public final class TwoIntegerConstraints<A> {
      */
     public static <A> TwoIntegerConstraints<A> of(A first, A second,
                                                   List<Constraint<A>> given) {
+        if (first.equals(second)) {
+            // One number twice would put every coefficient of it on both, and ask a different
+            // question than the constraints state: a call that has the one number has no business
+            // here, and it is no constraint that is not worked out.
+            throw new IllegalArgumentException("two numbers, and one given twice: " + first);
+        }
         TwoIntegerConstraints<A> held = new TwoIntegerConstraints<>(first, second, List.of());
         for (Constraint<A> each : given) {
             held = held.with(each.form(), each.rel());
