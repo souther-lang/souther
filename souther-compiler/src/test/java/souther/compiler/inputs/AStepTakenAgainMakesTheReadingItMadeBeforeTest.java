@@ -2,7 +2,6 @@ package souther.compiler.inputs;
 
 import org.junit.jupiter.api.Test;
 
-import souther.compiler.carrier.Membership;
 import souther.compiler.check.ElementBindings;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -29,7 +28,7 @@ class AStepTakenAgainMakesTheReadingItMadeBeforeTest {
 
     private static final InputReads TOP = InputReads.ofParameters(
             Map.of(new BindingId(OWNER, 0), "p"), DeclaredInput.NONE, ElementBindings.NONE,
-            ValueDefinitions.NONE, Membership.none());
+            ValueDefinitions.NONE, souther.compiler.carrier.Membership.none());
 
     @Test
     void aBindingEnteredAgainIsTheReadingEnteredBefore() {
