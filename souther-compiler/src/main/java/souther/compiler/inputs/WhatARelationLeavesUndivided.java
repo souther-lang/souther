@@ -1450,7 +1450,7 @@ public final class WhatARelationLeavesUndivided {
          *  none or has no end. */
         private static BigInteger endOf(NumericDomain.Bounds slice, boolean low) {
             WholeRun whole = WholeRun.ofTheValues(slice);
-            return whole == null || !whole.holdsAWholeNumber() ? null
+            return (whole == null || !whole.holdsAWholeNumber()) ? null
                     : low ? whole.low() : whole.high();
         }
 
