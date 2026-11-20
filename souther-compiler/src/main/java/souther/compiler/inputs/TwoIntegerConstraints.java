@@ -213,13 +213,13 @@ public final class TwoIntegerConstraints<A> {
                 unboundedBelow = true;
             } else {
                 BigInteger first = r.add(period.multiply(range[0]));
-                least = least == null || first.compareTo(least) < 0 ? first : least;
+                least = (least == null || first.compareTo(least) < 0) ? first : least;
             }
             if (range[1] == null) {
                 unboundedAbove = true;
             } else {
                 BigInteger last = r.add(period.multiply(range[1]));
-                greatest = greatest == null || last.compareTo(greatest) > 0 ? last : greatest;
+                greatest = (greatest == null || last.compareTo(greatest) > 0) ? last : greatest;
             }
         }
         if (!any) {
@@ -279,10 +279,10 @@ public final class TwoIntegerConstraints<A> {
         }
         if (slope.signum() > 0) {
             BigInteger most = floorDivide(limit, slope);
-            steps[1] = steps[1] == null || most.compareTo(steps[1]) < 0 ? most : steps[1];
+            steps[1] = (steps[1] == null || most.compareTo(steps[1]) < 0) ? most : steps[1];
         } else {
             BigInteger fewest = ceilDivide(limit, slope);
-            steps[0] = steps[0] == null || fewest.compareTo(steps[0]) > 0 ? fewest : steps[0];
+            steps[0] = (steps[0] == null || fewest.compareTo(steps[0]) > 0) ? fewest : steps[0];
         }
         return steps[0] == null || steps[1] == null || steps[0].compareTo(steps[1]) <= 0;
     }
