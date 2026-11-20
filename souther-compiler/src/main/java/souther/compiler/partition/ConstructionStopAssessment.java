@@ -266,15 +266,17 @@ final class ConstructionStopAssessment {
                     (part, _) -> all[0] = all[0] && getsPast(part, asks, passed));
             return all[0];
         }
-        if (node instanceof Core.Construct) {
-            ConstructionAsk known = asks.stream().filter(ask -> ask.of(node)).findFirst()
-                    .orElse(null);
-            if (known == null || !known.requirement().overTheInput()) {
+        for (Core each : Core.subexpressionsAt(node)) {
+            if (Core.withoutStanding(each) instanceof Core.Construct) {
+                ConstructionAsk known = asks.stream().filter(ask -> ask.of(each)).findFirst()
+                        .orElse(null);
+                if (known == null || !known.requirement().overTheInput()) {
+                    return false;
+                }
+                passed.add(known);
+            } else if (!WhatARunMayEndFor.itself(each).endsNone()) {
                 return false;
             }
-            passed.add(known);
-        } else if (!WhatARunMayEndFor.itself(node).endsNone()) {
-            return false;
         }
         boolean[] all = {true};
         Core.forEachChild(node, child -> all[0] = all[0] && getsPast(child, asks, passed));
