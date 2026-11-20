@@ -30,9 +30,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
 
-    /** The note of {@code q + 1}. The number is a field of a record that writes a clause, which
-     *  may tie it to what stands beside it, so no value of the input is shown holding it and the
-     *  stop is one not resolved, with the rows every run getting there stops at. */
+    /** The note of {@code q + 1}. The number is a field of a record that writes a clause, and no
+     *  run its rules leave it is shown, so no value of the input is shown holding it and the stop
+     *  is one not resolved, with the rows every run getting there stops at. */
     private static final String THE_STOP = "a run that gets there stops in k.q + 1 where k.q is"
             + " at least 9223372036854775807, and no such run is shown to exist";
 

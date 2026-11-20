@@ -136,9 +136,11 @@ final class AValueOfTheInput {
             return aValueIsShownToExist(type, read) ? 0 : -1;
         }
         if (!view.wrappers().stream().allMatch(name -> writesNoClause(name, rules))
-                || !(view.shape() instanceof Shape.Product product)
-                || !writesNoClause(product.name(), rules)) {
+                || !(view.shape() instanceof Shape.Product product)) {
             return -1;
+        }
+        if (!writesNoClause(product.name(), rules)) {
+            return heldBesideItsClauses(at, product, places, read, out) ? 1 : -1;
         }
         int found = 0;
         for (Map.Entry<String, Type> field : product.fields().entrySet()) {
@@ -149,6 +151,49 @@ final class AValueOfTheInput {
             found += here;
         }
         return found;
+    }
+
+    /**
+     * Whether a value of the record {@code product} at {@code at}, whose declaration writes a
+     * clause, holds any whole number of a run at the one place of {@code places} below it, put on
+     * {@code out}: the place a field of it holding a number, and the run the one its rules leave
+     * the field, every number of which is that field of some value they all hold of
+     * ({@link DeclaredBounds#wholeRunOfAField}). Not shown where two places are asked below it,
+     * which a run of each alone says nothing of together.
+     */
+    private static boolean heldBesideItsClauses(TermPath at, Shape.Product product,
+                                                Set<TermPath> places, InputReading read,
+                                                Map<TermPath, WholeRun> out) {
+        List<TermPath> below = places.stream().filter(place -> place.steps().size()
+                > at.steps().size() && place.prefix(at.steps().size()).equals(at)).toList();
+        if (below.size() != 1 || below.getFirst().steps().size() != at.steps().size() + 1
+                || !(below.getFirst().steps().getLast() instanceof TermPath.Step.Field(String f))
+                || !(product.name() instanceof TypeSymbol.AtModule record)
+                || !(product.fields().get(f) instanceof Type.Prim prim)
+                || (prim != Type.Prim.INT && prim != Type.Prim.DECIMAL)) {
+            return false;
+        }
+        WholeRun run = wholeOf(DeclaredBounds.wholeRunOfAField(record, f, read.ruleReading()));
+        if (run == null) {
+            return false;
+        }
+        out.put(below.getFirst(), run);
+        return true;
+    }
+
+    /** The whole numbers of {@code run}, every one between its least and greatest, or null where
+     *  it is none, holds none, or an end names no number. */
+    private static WholeRun wholeOf(NumericDomain.Bounds run) {
+        if (run == null || !run.holdsAValue()) {
+            return null;
+        }
+        BigInteger least = run.min() == null ? null : run.min().wholeAdmitted(true);
+        BigInteger greatest = run.max() == null ? null : run.max().wholeAdmitted(false);
+        if ((run.min() != null && least == null) || (run.max() != null && greatest == null)
+                || (least != null && greatest != null && least.compareTo(greatest) > 0)) {
+            return null;
+        }
+        return new WholeRun(least, greatest);
     }
 
     /**
@@ -166,18 +211,7 @@ final class AValueOfTheInput {
         if (view.wrappers().stream().allMatch(name -> writesNoClause(name, read.rules()))) {
             return (aNumber || aDate || anEnumeration(view)) ? WholeRun.OPEN : null;
         }
-        NumericDomain.Bounds run = aNumber ? DeclaredBounds.wholeRunOf(view, read.ruleReading())
-                : null;
-        if (run == null || !run.holdsAValue()) {
-            return null;
-        }
-        BigInteger least = run.min() == null ? null : run.min().wholeAdmitted(true);
-        BigInteger greatest = run.max() == null ? null : run.max().wholeAdmitted(false);
-        if ((run.min() != null && least == null) || (run.max() != null && greatest == null)
-                || (least != null && greatest != null && least.compareTo(greatest) > 0)) {
-            return null;
-        }
-        return new WholeRun(least, greatest);
+        return aNumber ? wholeOf(DeclaredBounds.wholeRunOf(view, read.ruleReading())) : null;
     }
 
     /**

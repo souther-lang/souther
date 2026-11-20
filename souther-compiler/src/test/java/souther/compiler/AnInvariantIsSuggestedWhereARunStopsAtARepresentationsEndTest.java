@@ -280,6 +280,27 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
         assertEquals(List.of(), suggested(report), report);
     }
 
+    /** A field of a record whose clauses bound it holds the run they leave it, every number of
+     *  which is that field of some value of the record: the stop is shown there, and the bound is
+     *  declared beside the clause. */
+    @Test
+    void aFieldARecordsClauseBoundsIsShownToStopWithinWhatTheClauseLeavesIt() {
+        String report = report("""
+                module m
+
+                data P = { x: Int, y: Int }
+                    invariant x >= 0
+
+                behavior f : (p: P) -> Bool
+                let f (p) = p.x + 1 > 0
+                """);
+
+        assertEquals(List.of("· declaring `invariant x <= 9223372036854775806` on P keeps every run"
+                + " from taking a number past its type there; a bound one step further out lets in"
+                + " a run that does, and the value to declare is the one the domain has"),
+                suggested(report), report);
+    }
+
     /** A bound a record's clause on the same field leaves no value beside is no region. */
     @Test
     void aBoundARecordsClauseLeavesNoValueBesideIsNoRegion() {

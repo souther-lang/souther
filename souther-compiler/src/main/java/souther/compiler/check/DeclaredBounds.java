@@ -297,6 +297,17 @@ public final class DeclaredBounds {
     }
 
     /**
+     * The run of numbers the rules of the record {@code record} leave its field {@code field},
+     * every one of which is that field of some value of the record its rules all hold of — or null
+     * where the bounds are not shown to be the whole of what the rules leave it
+     * ({@link FieldDomains#wholeRunAt}).
+     */
+    public static NumericDomain.Bounds wholeRunOfAField(TypeSymbol.AtModule record, String field,
+                                                        RuleReadingContext reading) {
+        return FieldDomains.of(record, reading).wholeRunAt(RuleKey.of(field));
+    }
+
+    /**
      * Where making {@code construct}, a value of {@code type}, answers: for the numbers the whole
      * run its clauses leave ({@link #wholeRunOf}) holds, as the number it wraps is. Over an
      * {@code Int} that is the run within the ends of an {@code Int}
