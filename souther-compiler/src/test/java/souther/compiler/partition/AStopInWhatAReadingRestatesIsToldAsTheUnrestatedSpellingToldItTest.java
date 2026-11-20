@@ -30,9 +30,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
 
-    /** The note of {@code q + 1}. The input holds a value of a sum, which a value of the input is
-     *  not shown to exist over, so the stop is one not resolved, with the rows every run getting
-     *  there stops at. */
+    /** The note of {@code q + 1}. The input holds a value of a record that states a clause, which
+     *  a value of the input is not shown to exist over, so the stop is one not resolved, with the
+     *  rows every run getting there stops at. */
     private static final String THE_STOP = "a run that gets there stops in q + 1 where q is at"
             + " least 9223372036854775807, and no such run is shown to exist";
 
@@ -209,10 +209,11 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
      *  once, as the model says them. */
     private static Map<String, List<String>> told() {
         StringBuilder model = new StringBuilder("module m\n\ndata Tier = Low | High\n"
-                + "data Row = { price: Int, qty: Int }\n");
+                + "data Row = { price: Int, qty: Int }\n"
+                + "data Kept = { n: Int }\n    invariant n >= 0\n");
         CONDITIONS.forEach((name, condition) -> model.append("\nbehavior ").append(name)
-                .append(" : (ds: List<Int>, q: Int, t: Tier, rs: List<Row>) -> Int\nlet ")
-                .append(name).append(" (ds, q, t, rs) = if ").append(condition)
+                .append(" : (ds: List<Int>, q: Int, t: Tier, rs: List<Row>, k: Kept) -> Int\nlet ")
+                .append(name).append(" (ds, q, t, rs, k) = if ").append(condition)
                 .append(" then 1 else 2\n"));
         Compilation compilation = ACompiledModel.measured(model.toString(),
                 new Adequacy.Asked(Adequacy.Level.OFF, false));

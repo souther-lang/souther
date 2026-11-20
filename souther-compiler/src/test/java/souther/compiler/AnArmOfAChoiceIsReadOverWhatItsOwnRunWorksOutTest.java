@@ -43,22 +43,22 @@ class AnArmOfAChoiceIsReadOverWhatItsOwnRunWorksOutTest {
     }
 
     /** Dates are spaced a day apart, so the same arm is read over them as over whole numbers. The
-     *  move on the arm is said as a stop of the rule, one not resolved: it is worked out on an arm
-     *  of a choice, where no existence of a run stopping is shown. */
+     *  move on the arm is said as a stop of the rule, shown: a run taking the arm at the last day
+     *  there is moves past the calendar. */
     @Test
     void anAdditionOnAnArmLeavesNoValueOfTheOtherSideUnreadOverDate() {
         String human = comparison("h: Date, d: Date, s: Date",
                 "(h, d, s) -> (if d >= h then Date.addDays(1, d) else d) >= s");
 
         assertFalse(human.contains(NOT_SHOWN), human);
-        assertTrue(human.contains("stop not resolved:"), human);
+        assertTrue(human.contains("may stop a run:"), human);
     }
 
     /**
      * A choice nested in an arm decides its own arms by what it works out, which the fork around it
      * does not tell: {@code d + 1} stops a run at the greatest {@code Int}, whichever arm the inner
      * choice then takes, and the report says so. Where {@code d + 1} is handed to a call on the
-     * arm and not compared, the stop is said of the outer comparison as one not resolved.
+     * arm and not compared, the stop is said of the outer comparison, shown on the arm.
      */
     @Test
     void anArmOfAChoiceNestedInAForkIsNotToldByWhatTheForkDecided() {
@@ -70,7 +70,7 @@ class AnArmOfAChoiceIsReadOverWhatItsOwnRunWorksOutTest {
 
         String byAnOperation = comparison("h: Int, d: Int, s: Int",
                 "(h, d, s) -> (if d >= h then Int.max(d + 1, h) else d) >= s");
-        assertTrue(byAnOperation.contains("stop not resolved:"), byAnOperation);
+        assertTrue(byAnOperation.contains("may stop a run:"), byAnOperation);
     }
 
     /** The same where the way is a membership, which states nothing of the numbers. */

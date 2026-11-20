@@ -7,9 +7,11 @@ import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhyAStopIsNotShown;
+import souther.compiler.numeric.Count;
 import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
+import souther.compiler.numeric.Rel;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -181,11 +183,20 @@ final class StopAssessment {
     }
 
     /** Each operation {@code judged} leave unresolved, as written, and why, in the order they were
-     *  judged: none written where no operation names the stop. */
+     *  judged: none written where no operation names the stop. Not one a run is shown to stop in
+     *  where it is worked out elsewhere: whether a run stops in it is then answered. */
     static List<AStopNotShown> stopsNotShown(List<Judgement> judged) {
+        List<UndividedByARelation.IntOperation> stopping = new ArrayList<>();
+        for (Judgement each : judged) {
+            if (each instanceof Judgement.Stops(Shown shown)) {
+                stopping.add(shown.operation());
+            }
+        }
         List<AStopNotShown> out = new ArrayList<>();
         for (Judgement each : judged) {
-            if (each instanceof Judgement.Unresolved(var operation, WhyAStopIsNotShown why)) {
+            if (each instanceof Judgement.Unresolved(var operation, WhyAStopIsNotShown why)
+                    && (operation == null
+                            || stopping.stream().noneMatch(operation::sameOperationAs))) {
                 out.add(new AStopNotShown(Optional.ofNullable(operation)
                         .map(it -> UndividedByARelation.written(it.form())), why));
             }
@@ -205,7 +216,10 @@ final class StopAssessment {
         if (place.worked().madeWhere() != null) {
             return new Judgement.Unresolved(operation, WhyAStopIsNotShown.ON_AN_APPLICATION);
         }
-        if (place.worked().onAnArm() != null) {
+        // On an arm, a run gets there only where taking it holds, which is on the way only where
+        // the comparison is stated as a condition: then the value tried is asked to meet it with
+        // the rest of the way.
+        if (each.statedAsACondition().isEmpty() && place.worked().onAnArm() != null) {
             return new Judgement.Unresolved(operation, WhyAStopIsNotShown.ON_AN_ARM);
         }
         if (!working.exact() || working.aStopUntold() || !working.onEveryRun()) {
@@ -220,6 +234,9 @@ final class StopAssessment {
             if (entry instanceof OnTheWay.TakenIn(var _,
                     RowDemand.Relational(TakenConstraint.Affine affine), var _, var _)) {
                 way.add(affine);
+            } else if (entry instanceof OnTheWay.Narrowed narrowed
+                    && aPlaceOnItsOrder(narrowed) instanceof List<TakenConstraint.Affine> holes) {
+                way.addAll(holes);
             } else if (!(entry instanceof OnTheWay.Settled(var _, var _, boolean thisWay)
                     && thisWay)) {
                 return new Judgement.Unresolved(operation, WhyAStopIsNotShown.A_CONDITION_NOT_READ);
@@ -265,6 +282,27 @@ final class StopAssessment {
         return new Judgement.Unresolved(operation, left[0] <= 0
                 ? WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED
                 : WhyAStopIsNotShown.NO_VALUE_FOUND);
+    }
+
+    /**
+     * A narrowing of a position to some of its cases, as what a value of it has to meet: where it
+     * stands on its order is none of the places the narrowing leaves out, each a statement that
+     * it is not there. Null where that is not all the narrowing asks — it asks of what a case
+     * holds — or where the position is on no order, so that no place is left out.
+     */
+    private static List<TakenConstraint.Affine> aPlaceOnItsOrder(OnTheWay.Narrowed narrowed) {
+        if (!narrowed.crossings().isEmpty() || narrowed.onItsOrder().isEmpty()) {
+            return null;
+        }
+        List<TakenConstraint.Affine> out = new ArrayList<>();
+        for (TakenConstraint.AwayFrom hole : narrowed.onItsOrder()) {
+            if (!(hole.at() instanceof Count count)) {
+                return null;
+            }
+            out.add(new TakenConstraint.Affine(new LinearForm<>(count.exactly().negated(),
+                    Map.of(hole.term(), ExactRatio.ONE)), Rel.NE));
+        }
+        return out;
     }
 
     /**

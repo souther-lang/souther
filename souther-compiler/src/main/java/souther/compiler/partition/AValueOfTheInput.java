@@ -4,6 +4,7 @@ import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.PublishedDeclarationResult;
 import souther.compiler.check.RuleReadingSource;
 import souther.compiler.check.Shape;
+import souther.compiler.check.SumCases;
 import souther.compiler.check.TypeView;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
@@ -39,9 +40,11 @@ final class AValueOfTheInput {
     /**
      * Whether a value of the input {@code read} reads exists holding any whole number at each of
      * {@code places}, within the ends of what the place holds: every position of the input is of
-     * a type that states nothing of its values, and each place is a whole number or a date
-     * wearing no name, reached from a parameter through fields alone. A date is the count of its
-     * days, and every count between the calendar's first day and its last is a day there is.
+     * a type that states nothing of its values, and each place is a whole number, a date or a
+     * case of an enumeration wearing no name, reached from a parameter through fields alone. A
+     * date is the count of its days, and every count between the calendar's first day and its
+     * last is a day there is; a case of an enumeration is where it stands on the order its cases
+     * are declared in, and every place on that order is a case.
      */
     static boolean holdsAnyWholeNumbersAt(InputReading read, Collection<TermPath> places) {
         InputDomain domain = read.domain();
@@ -58,9 +61,9 @@ final class AValueOfTheInput {
                 return false;
             }
             TypeView view = viewOf(at.type(), rules);
-            if (!view.wrappers().isEmpty()
-                    || !(view.shape() instanceof Shape.Scalar(Type.Prim prim))
-                    || (prim != Type.Prim.INT && prim != Type.Prim.DATE)) {
+            boolean aNumber = view.shape() instanceof Shape.Scalar(Type.Prim prim)
+                    && (prim == Type.Prim.INT || prim == Type.Prim.DATE);
+            if (!view.wrappers().isEmpty() || !(aNumber || anEnumeration(view))) {
                 return false;
             }
         }
@@ -77,6 +80,9 @@ final class AValueOfTheInput {
         if (!view.wrappers().stream().allMatch(name -> writesNoClause(name, rules))) {
             return false;
         }
+        if (anEnumeration(view)) {
+            return true;
+        }
         return switch (view.shape()) {
             case Shape.Scalar _, Shape.Container _, Shape.Optional _ -> true;
             case Shape.Product product -> writesNoClause(product.name(), rules);
@@ -85,6 +91,14 @@ final class AValueOfTheInput {
                     .allMatch(each -> statesNothing(viewOf(each, rules), rules));
             default -> false;
         };
+    }
+
+    /** Whether {@code view} is an enumeration: a sum every case of which is a unit, sharing
+     *  nothing, so a value of it is which case it is and nothing a clause can state. */
+    private static boolean anEnumeration(TypeView view) {
+        return view.shape() instanceof Shape.Sum sum
+                && sum.reaches() instanceof SumCases.Enumeration
+                && sum.common() instanceof Shape.CommonProduct.None;
     }
 
     /** Whether the declaration {@code name} writes no clause and spreads nothing, as it publishes

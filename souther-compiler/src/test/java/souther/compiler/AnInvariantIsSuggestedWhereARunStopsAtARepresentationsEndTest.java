@@ -210,6 +210,35 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 report);
     }
 
+    /** Stated as a condition, the arm a run takes is put on the way: a value of the input is shown
+     *  to take the arm and stop there, and the bound is as far out as it can be by that run. */
+    private static final String ON_AN_ARM = """
+            module m
+
+            data Terms = Net15 | Net30
+
+            data Invoice = { terms: Terms, issuedOn: Date }
+
+            let nominal (i: Invoice): Date =
+                match i.terms with
+                    | Net15 -> Date.addDays(15, i.issuedOn)
+                    | Net30 -> Date.addDays(30, i.issuedOn)
+
+            behavior f : (i: Invoice) -> Int
+            let f (i) = if Date.addDays(1, nominal(i)) > Date("2000-01-01") then 1 else 2
+            """;
+
+    @Test
+    void aRunTakingTheArmThatStopsNearestIsShownAndSetsTheBound() {
+        String report = report(ON_AN_ARM);
+
+        assertTrue(report.contains("· may stop a run:"), report);
+        assertEquals(List.of("· declaring `invariant issuedOn <= Date(\"+999999999-11-30\")` on"
+                + " Invoice keeps every run from stopping there; a bound one step further out lets"
+                + " in a run that stops there, and the value to declare is the one the domain has"),
+                suggested(report), report);
+    }
+
     /** A walk makes every element of a list before a search looks at any: the element no row
      *  gets to the search with is made by every run all the same, and bounds the input. */
     @Test
