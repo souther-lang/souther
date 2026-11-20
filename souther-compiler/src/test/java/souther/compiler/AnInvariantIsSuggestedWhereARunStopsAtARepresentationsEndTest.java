@@ -280,6 +280,43 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
         assertEquals(List.of(), suggested(report), report);
     }
 
+    /** A bound a record's clause on the same field leaves no value beside is no region. */
+    @Test
+    void aBoundARecordsClauseLeavesNoValueBesideIsNoRegion() {
+        String report = report("""
+                module m
+
+                data P = { x: Int }
+                    invariant x >= 1
+
+                behavior f : (p: P) -> Bool
+                let f (p) = p.x + 9223372036854775807 > 0
+                """);
+
+        assertEquals(List.of(), suggested(report), report);
+    }
+
+    /** Two arms that bound two places one data holds from either side, leaving it no value, are
+     *  no region. */
+    @Test
+    void armsThatBoundTheDataTwoPlacesShareFromEitherSideAreNoRegion() {
+        String report = report("""
+                module m
+
+                data Amount = Int
+
+                data P = { a: Amount, b: Amount, chooseA: Bool }
+
+                behavior f : (p: P) -> Bool
+                let f (p) = (if p.chooseA then (p.a.value + 9223372036854775807) + 1
+                    else (p.b.value - 9223372036854775807) - 2) > 0
+                """);
+
+        assertTrue(report.contains("· may stop a run") || report.contains("· stop not resolved"),
+                report);
+        assertEquals(List.of(), suggested(report), report);
+    }
+
     /** Readings of one rule that together leave a place no value say no region. */
     @Test
     void readingsOfOneRuleThatTogetherLeaveNoValueSayNoRegion() {
@@ -417,6 +454,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
         assertTrue(report.lines().map(String::strip).anyMatch(line ->
                 (line.startsWith("· may stop a run:") || line.startsWith("· stop not resolved:"))
                         && line.contains("-Date.day(p.on) + p.on")), report);
+        assertFalse(report.contains("· not read:"), report);
     }
 
     /** A value chosen by cases is worked out on each arm a run takes: the bound is the arm's that
