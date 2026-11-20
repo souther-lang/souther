@@ -34,8 +34,9 @@ import java.util.Map;
  * step along it, so the {@code x} the class holds are a run of its steps, and the {@code x} of all
  * of them are what this answers: exactly a run when the classes' runs fill the one run between
  * their least and greatest, and no answer when they do not (the even numbers are not a run).
- * More classes than {@link #MOST_CLASSES}, or more pairs of bounds over all the classes than
- * {@link #MOST_WORK}, is no answer either.
+ * More bounds than {@link #MOST_BOUNDS}, more classes than {@link #MOST_CLASSES}, or more pairs
+ * of bounds over all the classes than {@link #MOST_STEPS}, is no answer either, and says which
+ * limit was reached ({@link Shadow.OverTheLimit}).
  */
 public final class TwoIntegerConstraints<A> {
 
@@ -43,12 +44,15 @@ public final class TwoIntegerConstraints<A> {
      *  coefficients of the other number is not worked out. */
     public static final int MOST_CLASSES = 4096;
 
-    /** The most constraints held: pairs of them are asked, so the work is their square. */
-    private static final int MOST_CONSTRAINTS = 64;
+    /** The most bounds one question holds: pairs of them are asked, so the work is their square. */
+    public static final int MOST_BOUNDS = 64;
 
     /** The most steps of one question: a pair of bounds at a residue class is one, so a few
      *  classes of many bounds and many classes of a few are each worked out. */
-    private static final long MOST_WORK = 1L << 17;
+    public static final int MOST_STEPS = 1 << 17;
+
+    /** Which limit of a question was reached. */
+    public enum Limit { CLASSES, BOUNDS, STEPS }
 
     /**
      * The whole numbers of one of the two that have a whole number of the other beside them.
@@ -71,11 +75,11 @@ public final class TwoIntegerConstraints<A> {
         record NotARun() implements Shadow {}
 
         /**
-         * More was asked than a question is worked out in ({@link #MOST_CLASSES},
-         * {@link #MOST_WORK}), so nothing is said of the numbers that have a partner: they may be
-         * a run, or none.
+         * More was asked than a question is worked out in, and {@code limit} is the one that was
+         * reached, so nothing is said of the numbers that have a partner: they may be a run, or
+         * none.
          */
-        record OverTheLimit() implements Shadow {}
+        record OverTheLimit(Limit limit) implements Shadow {}
     }
 
     /** One constraint: {@code form rel 0}. */
@@ -147,7 +151,7 @@ public final class TwoIntegerConstraints<A> {
             case NE -> throw new IllegalStateException("refused above");
         }
         List<Bound> kept = new ArrayList<>(new LinkedHashSet<>(next));
-        return kept.size() > MOST_CONSTRAINTS ? null : new TwoIntegerConstraints<>(x, y, kept);
+        return new TwoIntegerConstraints<>(x, y, kept);
     }
 
     /**
@@ -175,6 +179,9 @@ public final class TwoIntegerConstraints<A> {
     }
 
     private static Shadow shadow(List<Bound> all) {
+        if (all.size() > MOST_BOUNDS) {
+            return new Shadow.OverTheLimit(Limit.BOUNDS);
+        }
         List<Bound> lower = new ArrayList<>();
         List<Bound> upper = new ArrayList<>();
         List<Bound> alone = new ArrayList<>();
@@ -203,13 +210,13 @@ public final class TwoIntegerConstraints<A> {
             }
         }
         if (period.compareTo(BigInteger.valueOf(MOST_CLASSES)) > 0) {
-            return new Shadow.OverTheLimit();
+            return new Shadow.OverTheLimit(Limit.CLASSES);
         }
         int classes = period.intValueExact();
         // The work is the pairs of bounds asked at every class, which neither limit above bounds
         // by itself.
-        if ((long) classes * (1L * lower.size() * upper.size() + alone.size() + 1) > MOST_WORK) {
-            return new Shadow.OverTheLimit();
+        if ((long) classes * (1L * lower.size() * upper.size() + alone.size() + 1) > MOST_STEPS) {
+            return new Shadow.OverTheLimit(Limit.STEPS);
         }
         BigInteger[][] slopes = slopesOf(period, lower, upper);
         BigInteger[][] steps = new BigInteger[classes][];

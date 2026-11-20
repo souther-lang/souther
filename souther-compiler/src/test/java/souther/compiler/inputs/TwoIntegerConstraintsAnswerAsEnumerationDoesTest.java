@@ -117,7 +117,7 @@ class TwoIntegerConstraintsAnswerAsEnumerationDoesTest {
         }
         system.add(new Row(1, 0, 0, Rel.GE).asAConstraint());
         system.add(new Row(1, 0, -1_000_000, Rel.LE).asAConstraint());
-        assertEquals(new Shadow.OverTheLimit(),
+        assertEquals(new Shadow.OverTheLimit(TwoIntegerConstraints.Limit.STEPS),
                 TwoIntegerConstraints.of("x", "y", system).shadowOn("x"));
     }
 
@@ -131,7 +131,8 @@ class TwoIntegerConstraintsAnswerAsEnumerationDoesTest {
                 new Row(1, 0, 0, Rel.GE).asAConstraint(),
                 new Row(1, 0, -9999, Rel.LE).asAConstraint()))
                 .shadowOn("x") instanceof Shadow.OverTheLimit);
-        assertEquals(new Shadow.OverTheLimit(), TwoIntegerConstraints.of("x", "y", List.of(
+        assertEquals(new Shadow.OverTheLimit(TwoIntegerConstraints.Limit.CLASSES),
+                TwoIntegerConstraints.of("x", "y", List.of(
                 new Row(1, -4097, 0, Rel.LE).asAConstraint(),
                 new Row(-1, 1, 0, Rel.LE).asAConstraint(),
                 new Row(1, 0, 0, Rel.GE).asAConstraint(),
@@ -144,9 +145,11 @@ class TwoIntegerConstraintsAnswerAsEnumerationDoesTest {
         for (int i = 0; i < 64; i++) {
             constraints.add(new Row(1, 0, -i, Rel.LE).asAConstraint());
         }
-        assertEquals(true, TwoIntegerConstraints.of("x", "y", constraints) != null);
+        assertEquals(new Shadow.Run(null, BigInteger.ZERO),
+                TwoIntegerConstraints.of("x", "y", constraints).shadowOn("x"));
         constraints.add(new Row(1, 0, -64, Rel.LE).asAConstraint());
-        assertNull(TwoIntegerConstraints.of("x", "y", constraints));
+        assertEquals(new Shadow.OverTheLimit(TwoIntegerConstraints.Limit.BOUNDS),
+                TwoIntegerConstraints.of("x", "y", constraints).shadowOn("x"));
     }
 
     /** No bound on either number, and a bound on one side only. */

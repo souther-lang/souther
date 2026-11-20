@@ -4276,7 +4276,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             WhatARelationLeavesUndivided.Leaves tied =
                     WhatARelationLeavesUndivided.leavesAlongATie(rowsOfTheWay,
                             rowsOfTheWay.numbers(), terms, at, constant, relation,
-                            greatestOf(carriers.get(at)), operations);
+                            greatestOf(carriers.get(at)), operations, stopped);
             if (tied instanceof WhatARelationLeavesUndivided.Leaves.Undivided) {
                 out.addAll(sides.get(at).madeOf());
             } else {

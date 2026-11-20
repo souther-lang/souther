@@ -13,6 +13,8 @@ import souther.compiler.numeric.Place;
 import souther.compiler.numeric.Rel;
 import souther.compiler.numeric.WholeNumberRuns;
 import souther.compiler.numeric.WholeNumberSet;
+import souther.compiler.observe.Figure;
+import souther.compiler.observe.WorkFigure;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -1238,7 +1240,7 @@ public final class WhatARelationLeavesUndivided {
     public static <P> Leaves leavesAlongATie(RowsOfTheWay rows, List<NumericTerm> numbers,
                                              List<Term<P>> terms, int at, ExactRatio constant,
                                              Rel relation, BigInteger greatest,
-                                             Operations operations) {
+                                             Operations operations, Set<Figure> stopped) {
         if (terms.size() != 2 || constant == null || !rows.numbers().equals(numbers)
                 || relation == Rel.EQ || relation == Rel.NE
                 || terms.stream().anyMatch(each -> each.weight().isZero())
@@ -1253,8 +1255,15 @@ public final class WhatARelationLeavesUndivided {
                 relation.denied());
         NumericTerm number = numbers.get(at);
         WholeRun held = WholeRun.ofTheValues(terms.get(at).holds());
-        WholeRun holds = holding == null ? null : runOf(holding.shadowOn(number));
-        WholeRun fails = failing == null ? null : runOf(failing.shadowOn(number));
+        TwoIntegerConstraints.Shadow shadowHolding =
+                holding == null ? null : holding.shadowOn(number);
+        TwoIntegerConstraints.Shadow shadowFailing =
+                failing == null ? null : failing.shadowOn(number);
+        // A limit reached is said, and is not taken for a set that is no run.
+        stopAtTheLimit(shadowHolding, stopped);
+        stopAtTheLimit(shadowFailing, stopped);
+        WholeRun holds = shadowHolding == null ? null : runOf(shadowHolding);
+        WholeRun fails = shadowFailing == null ? null : runOf(shadowFailing);
         if (held == null || holds == null || fails == null) {
             return null;
         }
@@ -1267,6 +1276,22 @@ public final class WhatARelationLeavesUndivided {
         }
         return runs.isEmpty() ? new Leaves.Undivided()
                 : Leaves.Settled.ofWhole(inOrder(runs, true), held.low(), held.high());
+    }
+
+    /** The figure a question stopped at, put with the ones the search stopped at, where it stopped
+     *  at a limit. */
+    private static void stopAtTheLimit(TwoIntegerConstraints.Shadow shadow, Set<Figure> stopped) {
+        if (shadow instanceof TwoIntegerConstraints.Shadow.OverTheLimit(
+                TwoIntegerConstraints.Limit limit)) {
+            stopped.add(switch (limit) {
+                case CLASSES -> WorkFigure.CLASSES_OF_A_WHOLE_NUMBER_QUESTION
+                        .at(TwoIntegerConstraints.MOST_CLASSES);
+                case BOUNDS -> WorkFigure.BOUNDS_OF_A_WHOLE_NUMBER_QUESTION
+                        .at(TwoIntegerConstraints.MOST_BOUNDS);
+                case STEPS -> WorkFigure.STEPS_OF_A_WHOLE_NUMBER_QUESTION
+                        .at(TwoIntegerConstraints.MOST_STEPS);
+            });
+        }
     }
 
     /** The whole numbers a shadow holds, none for one that holds none, and null for no answer. */

@@ -112,6 +112,21 @@ class AConditionTheDeclarationsSettleDoesNotTieTheComparisonBesideItTest {
     }
 
     /**
+     * A question the rows of the way are counted by that passes a limit is said to have, with the
+     * figure it passed, and is not left as a relation nothing was shown of. {@code 4097 * pack}
+     * rounds the bounds of {@code pack} by 4097 and by 1 and so leaves 4097 classes of
+     * {@code eaches}, one more than a question is worked out over, where the numbers run far
+     * enough for the line {@code eaches = 4097 * pack} to cross them.
+     */
+    @Test
+    void aQuestionOverTheLimitSaysWhichFigureItStoppedAt() {
+        JsonNode report = reportOf("    invariant value <= 10000000",
+                "eaches.value >= pack.value && eaches.value < 4097 * pack.value", "12", "0");
+        assertTrue(report.toString().contains("classes_of_a_whole_number_question"),
+                report::toString);
+    }
+
+    /**
      * Rows of the way are only what its statements leave where no rule of the declarations relates
      * the two numbers as well: {@code eaches >= pack} held by the record they are fields of is a
      * rule the statements do not state, and the comparison is not read over their rows.
