@@ -11029,11 +11029,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * relation and whether the region shows each number a row ({@link #comingOutOn}), asked of
      * the sides as the way's own region holds them with every statement in
      * ({@link #sidesAlongTheWay}), and not of what a reading of the comparison's line widened.
-     * Beside those, where each side is one number, the value at its place, with every value its
-     * declarations hold taken ({@code realizes}), and no rule of the declarations, none put aside
-     * as that reading puts some, relating the two. Those are the {@link RowsOfTheWay.Premises},
-     * and the way's statements are what is left to say, which they are only where each is a form
-     * of the two numbers alone.
+     * Beside those, where each side is one number, the value at its place, with every value of
+     * its declared run taken (all a type holds, or the values between its ends and nothing else),
+     * and no rule of the declarations, none put aside as that reading puts some, relating the
+     * two. Those are the {@link RowsOfTheWay.Premises}, and the way's statements are what is left
+     * to say, which they are only where each is a form of the two numbers alone. What they narrow
+     * of the runs is the constraints' to say, exactly, where the region's whole run says nothing
+     * for a coefficient of two.
      */
     private RowsOfTheWay rowsOfTheWay(StatedWay way, SidesAlongTheWay along,
                                       List<Source> sources, InputReading read) {
@@ -11046,7 +11048,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         PlacesTiedAlongAWay tied = placesTiedAlong(along.conditions(), way.past(), read);
         RowsOfTheWay.Premises premises = new RowsOfTheWay.Premises(
                 terms.stream().allMatch(WhatARelationLeavesUndivided.Term::itsPlace),
-                terms.stream().allMatch(each -> each.holds().equals(each.realizes())),
+                sources.stream().allMatch(each -> each != null
+                        && (each.takes().every() || each.onlyItsEnds())),
                 apartByTheDeclarations(0, 1, sources, read),
                 everyRowAlongTheWayGetsToTheRelation(way.heldWhole(), way.past(), read,
                         way.region(), way.written(), way.declined()),

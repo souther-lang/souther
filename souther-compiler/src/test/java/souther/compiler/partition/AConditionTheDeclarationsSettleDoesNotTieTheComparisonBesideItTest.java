@@ -145,6 +145,61 @@ class AConditionTheDeclarationsSettleDoesNotTieTheComparisonBesideItTest {
         assertFalse(List.of(READ).containsAll(reasonsNotRead(report)), report::toString);
     }
 
+    /**
+     * A quotient rounded to a whole number is two lines, {@code eaches >= pack} and
+     * {@code eaches < 2 * pack}, each on the way to the other, so it is read as the two are read
+     * written out. The lines step on the whole numbers: at {@code eaches = 3} the packs that hold
+     * the comparison start at two, and at {@code eaches = 4} at the same, so no line runs through
+     * them, and what is read is every value of a number a row is shown for, each way.
+     */
+    @Test
+    void aQuotientRoundedToAWholeNumberIsReadAsTheLinesItIs() {
+        for (String[] each : new String[][] {
+                {"Rational.toInt(DOWN, eaches.value / pack.value) == 1", "12", "30"},
+                {"Rational.toInt(UP, eaches.value / pack.value) == 2", "24", "36"}}) {
+            JsonNode report = reportOf(BOUND, each[0], each[1], each[2]);
+            assertTrue(List.of("rule_never_turns_on_this_line", READ)
+                    .containsAll(reasonsNotRead(report)), report::toString);
+            assertEquals(List.of(), stopsOf(report), report::toString);
+        }
+    }
+
+    /**
+     * A pack of one or three leaves {@code eaches = 2} no row: {@code eaches >= pack} holds there
+     * only at one, and {@code eaches < 2 * pack} not at one. Every value of the run a pack is
+     * held to is not one it takes, so the rows are not the whole numbers the lines leave, and the
+     * report does not say a row comes out each way at every value.
+     */
+    @Test
+    void aPackThatSkipsAValueIsNotReadAsTheLinesLeaveIt() {
+        Compilation compilation = Compilation.ofSource("""
+                module m1
+
+                data Eaches = Int
+                    invariant value >= 0 && value <= 5
+                data PackSize = Int
+                    invariant value >= 1 && value <= 3 && value /= 2
+                data Whole = { n: Int }
+                data Part = { left: Int }
+
+                behavior split : (eaches: Eaches, pack: PackSize) -> Whole | Part
+
+                let split (eaches, pack) = {
+                    guard eaches.value >= pack.value && eaches.value < 2 * pack.value else Part { left = 1 }
+                    Whole { n = 1 }
+                }
+
+                example split
+                    | "a" : (Eaches(3), PackSize(3)) -> Whole { n = 1 }
+                    | "b" : (Eaches(0), PackSize(3)) -> Part { left = 1 }
+                """, "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        assertFalse(List.of(READ).containsAll(reasonsNotRead(report)), report::toString);
+    }
+
     /** The reasons of the places not read, each as many times as it is said. */
     private static List<String> reasonsNotRead(JsonNode report) {
         List<String> out = new ArrayList<>();
