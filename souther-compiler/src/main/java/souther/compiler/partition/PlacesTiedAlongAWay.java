@@ -31,58 +31,60 @@ import java.util.function.Predicate;
  * first asked of, which asks every two places whether one bears on the other, and kept for every
  * question after.
  *
- * <p>A set is held where every statement and narrowing reading a place of it is either a form of
- * parts of dates or a truth of a place, and some values hold them all. The forms are asked of the
- * calendar ({@link DatesThatHoldEveryStatement}), as statements of one date each, which a part of
- * a date inside a container is not ({@link WhatStatementsOfOneFormDecide#outsideEveryContainer}),
- * and over dates the declarations leave every date, or every date between its ends. A truth holds
- * at a place a row may hold either truth at, and each place is held to one of them: a place of a
- * truth is no number of a form, so the truths and the forms are held apart.
+ * <p>A set is held where every statement and narrowing reading a place of it is answered by an
+ * owner of some values of its kind, and the answers hold together. A truth is held where some row
+ * holds it at its place whatever every other place holds, and no other truth is asked there: a
+ * truth is of a place no form reads a number of, so it holds apart from the forms. The forms are
+ * held where they are of parts of dates and the calendar finds dates holding them all
+ * ({@link DatesThatHoldEveryStatement}), asked as statements of one date each, which a part of a
+ * date inside a container is not ({@link WhatStatementsOfOneFormDecide#outsideEveryContainer}),
+ * over the dates the declarations leave each date where no rule ties it to another place.
  *
- * <p>A set anything else reads is not held: nothing asked it. It is still said to be held by no
- * dates where no dates hold its forms. A form of anything but parts of dates is not asked of the
- * calendar, and the set is neither held nor said to be held by no dates.
+ * <p>A set anything else reads is not held: nothing answered it. Where no dates hold its forms,
+ * none hold them and the rest beside them, so it is said to be held by no dates all the same. A
+ * form of anything but parts of dates is not asked of the calendar, and the set is neither held
+ * nor said to be held by no dates.
  */
-final class DatesHeldApartAlongAWay {
+final class PlacesTiedAlongAWay {
 
     private final List<UndividedByARelation.OnAWay> conditions;
     private final List<TakenConstraint> narrowing;
     private final Collection<TermPath> alsoNamed;
     private final Function<NumericTerm.TakenOf, DateTranslation> daysOf;
-    private final Predicate<TermPath> eitherTruthAt;
+    private final Predicate<RowDemand.ATruth> aRowHolds;
     /** The sets, once worked out. */
     private Sets sets;
-    /** What is answered of each set, by the place it is filed under, once asked. */
+    /** What the calendar answers of the forms of each set, by the place it is filed under, once
+     *  asked. */
     private final Map<TermPath, DatesThatHoldEveryStatement.Answer> held = new LinkedHashMap<>();
 
-    private DatesHeldApartAlongAWay(List<UndividedByARelation.OnAWay> conditions,
-                                    List<TakenConstraint> narrowing,
-                                    Collection<TermPath> alsoNamed,
-                                    Function<NumericTerm.TakenOf, DateTranslation> daysOf,
-                                    Predicate<TermPath> eitherTruthAt) {
+    private PlacesTiedAlongAWay(List<UndividedByARelation.OnAWay> conditions,
+                                List<TakenConstraint> narrowing,
+                                Collection<TermPath> alsoNamed,
+                                Function<NumericTerm.TakenOf, DateTranslation> daysOf,
+                                Predicate<RowDemand.ATruth> aRowHolds) {
         this.conditions = conditions;
         this.narrowing = narrowing;
         this.alsoNamed = alsoNamed;
         this.daysOf = daysOf;
-        this.eitherTruthAt = eitherTruthAt;
+        this.aRowHolds = aRowHolds;
     }
 
     /**
      * The sets of places {@code conditions} and {@code narrowing} tie, among them the places
      * {@code alsoNamed} are read off, which nothing need state.
      *
-     * @param daysOf        the dates the declarations leave the date a part is taken of, as the
-     *                      days a move by nothing is defined at, or null where they leave it
-     *                      anything else
-     * @param eitherTruthAt whether a row may hold either truth at a place, whatever else it holds
+     * @param daysOf    the dates the declarations leave the date a part is taken of, as the days a
+     *                  move by nothing is defined at, or null where they leave it anything else
+     * @param aRowHolds whether some row holds a truth at its place, whatever every other place
+     *                  holds
      */
-    static DatesHeldApartAlongAWay of(List<UndividedByARelation.OnAWay> conditions,
-                                      List<TakenConstraint> narrowing,
-                                      Collection<TermPath> alsoNamed,
-                                      Function<NumericTerm.TakenOf, DateTranslation> daysOf,
-                                      Predicate<TermPath> eitherTruthAt) {
-        return new DatesHeldApartAlongAWay(conditions, narrowing, alsoNamed, daysOf,
-                eitherTruthAt);
+    static PlacesTiedAlongAWay of(List<UndividedByARelation.OnAWay> conditions,
+                                  List<TakenConstraint> narrowing,
+                                  Collection<TermPath> alsoNamed,
+                                  Function<NumericTerm.TakenOf, DateTranslation> daysOf,
+                                  Predicate<RowDemand.ATruth> aRowHolds) {
+        return new PlacesTiedAlongAWay(conditions, narrowing, alsoNamed, daysOf, aRowHolds);
     }
 
     /** Every place {@code terms} are read off, in order, each once. */
@@ -109,8 +111,8 @@ final class DatesHeldApartAlongAWay {
 
     /**
      * The places tied to {@code place}, where none of them is tied to a place of {@code side} and
-     * some dates hold everything the way says of them — or empty, where the side is tied to it,
-     * no dates are found to hold it, and the way may then have no row at all, or either is a
+     * some values hold everything the way says of them — or empty, where the side is tied to it,
+     * no values are shown to hold it, and the way may then have no row at all, or either is a
      * place the way was not told of.
      */
     Optional<Set<TermPath>> heldApartFrom(NumericTerm side, TermPath place) {
@@ -123,14 +125,36 @@ final class DatesHeldApartAlongAWay {
                 return Optional.empty();
             }
         }
-        return answerOf(of.top(place)) instanceof DatesThatHoldEveryStatement.Found
-                ? Optional.of(tiedTo(place)) : Optional.empty();
+        return someValuesHold(of.top(place)) ? Optional.of(tiedTo(place)) : Optional.empty();
     }
 
     /**
-     * Whether no dates hold every statement and narrowing this was made of that reads some set:
-     * then no row holds them all. A set no dates hold is read by parts of dates and nothing else,
-     * so where nothing this was made of reads one, none is, and no set is worked out.
+     * Whether some values hold every statement and narrowing of the way reading the set filed
+     * under {@code filed}: each is a truth some row holds at its place, which holds no other, or a
+     * form of parts of dates some dates hold with the rest of the forms. The calendar is asked
+     * last, and only of a set nothing else leaves unheld.
+     */
+    private boolean someValuesHold(TermPath filed) {
+        Sets of = sets();
+        if (of.readByNoForm.contains(filed)) {
+            return false;
+        }
+        for (Map.Entry<TermPath, Set<Boolean>> each
+                : of.truths.getOrDefault(filed, Map.of()).entrySet()) {
+            if (each.getValue().size() != 1 || !aRowHolds.test(
+                    new RowDemand.ATruth(each.getKey(), each.getValue().iterator().next()))) {
+                return false;
+            }
+        }
+        return !of.stated.containsKey(filed)
+                || datesOf(filed) instanceof DatesThatHoldEveryStatement.Found;
+    }
+
+    /**
+     * Whether no dates hold the forms of parts of dates of some set this was made of: then no row
+     * holds them, nor them and the rest of what reads the set. A set no dates hold is read by
+     * parts of dates, so where nothing this was made of reads one, none is, and no set is worked
+     * out.
      */
     boolean someSetNoDatesHold() {
         if (conditions.stream().noneMatch(each -> each.affine() != null
@@ -139,7 +163,7 @@ final class DatesHeldApartAlongAWay {
             return false;
         }
         for (TermPath each : sets().stated.keySet()) {
-            if (answerOf(each) == DatesThatHoldEveryStatement.Otherwise.NONE_HOLD) {
+            if (datesOf(each) == DatesThatHoldEveryStatement.Otherwise.NONE_HOLD) {
                 return true;
             }
         }
@@ -151,8 +175,10 @@ final class DatesHeldApartAlongAWay {
                 && taken.takenAs() instanceof TakenAs.PartOfDate);
     }
 
-    private DatesThatHoldEveryStatement.Answer answerOf(TermPath filed) {
-        return held.computeIfAbsent(filed, this::someDatesHold);
+    /** What the calendar answers of the forms reading the set filed under {@code filed}. */
+    private DatesThatHoldEveryStatement.Answer datesOf(TermPath filed) {
+        return held.computeIfAbsent(filed,
+                each -> someDatesHoldAll(sets().stated.getOrDefault(each, List.of())));
     }
 
     /** The places the way ties to {@code place}, itself among them; none where the way was not
@@ -169,25 +195,6 @@ final class DatesHeldApartAlongAWay {
             }
         }
         return out;
-    }
-
-    /**
-     * What is answered of every statement and narrowing of the way reading the set filed under
-     * {@code filed}: the calendar's answer of its forms, no dates where it states none, and
-     * nothing found where a truth of it is not held or something else reads it. Dates holding the
-     * forms are not shown to hold the rest, and where no dates hold the forms none hold the rest
-     * beside them.
-     */
-    private DatesThatHoldEveryStatement.Answer someDatesHold(TermPath filed) {
-        Sets of = sets();
-        List<TakenConstraint.Affine> forms = of.stated.getOrDefault(filed, List.of());
-        DatesThatHoldEveryStatement.Answer ofTheForms = forms.isEmpty()
-                ? new DatesThatHoldEveryStatement.Found(List.of()) : someDatesHoldAll(forms);
-        boolean allHeld = !of.readByNoForm.contains(filed)
-                && of.truths.getOrDefault(filed, Map.of()).entrySet().stream().allMatch(each ->
-                        each.getValue().size() == 1 && eitherTruthAt.test(each.getKey()));
-        return !allHeld && ofTheForms instanceof DatesThatHoldEveryStatement.Found
-                ? DatesThatHoldEveryStatement.Otherwise.NOT_SHOWN : ofTheForms;
     }
 
     /**

@@ -51,7 +51,7 @@ class NoDatesHoldOnlyWhatIsSaidOfOneDateTest {
     }
 
     private static boolean someSetNoDatesHold(List<List<UndividedByARelation.OnAWay>> sets) {
-        return DatesHeldApartAlongAWay.of(sets.stream().flatMap(List::stream).toList(),
+        return PlacesTiedAlongAWay.of(sets.stream().flatMap(List::stream).toList(),
                 List.of(), List.of(), _ -> DateTranslation.none(), _ -> false)
                 .someSetNoDatesHold();
     }

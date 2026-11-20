@@ -14,9 +14,9 @@ import java.util.function.Predicate;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * A set of places read only by truths is held where a row may hold either truth at each place
- * and the way holds each to one of them: some row holds that truth there. Held to both, or at a
- * place a row may not hold either at, it is not.
+ * A set of places read only by truths is held where some row holds each truth asked at its place
+ * and the way holds each place to one of them. Held to both, or to a truth no row holds there, it
+ * is not.
  */
 class ATruthIsHeldWhereARowMayHoldEitherTruthTest {
 
@@ -29,13 +29,13 @@ class ATruthIsHeldWhereARowMayHoldEitherTruthTest {
     }
 
     private static Optional<Set<TermPath>> heldApart(List<OnAWay> truths,
-                                                     Predicate<TermPath> eitherTruthAt) {
-        return DatesHeldApartAlongAWay.of(truths, List.of(), List.of(SIDE), _ -> null,
-                eitherTruthAt).heldApartFrom(new NumericTerm.ValueOf(SIDE), FLAG);
+                                                     Predicate<RowDemand.ATruth> aRowHolds) {
+        return PlacesTiedAlongAWay.of(truths, List.of(), List.of(SIDE), _ -> null, aRowHolds)
+                .heldApartFrom(new NumericTerm.ValueOf(SIDE), FLAG);
     }
 
     @Test
-    void oneTruthAtAPlaceARowMayHoldEitherAtIsHeld() {
+    void aTruthSomeRowHoldsIsHeld() {
         assertEquals(Optional.of(Set.of(FLAG)), heldApart(List.of(holding(true)), _ -> true));
     }
 
@@ -46,7 +46,7 @@ class ATruthIsHeldWhereARowMayHoldEitherTruthTest {
     }
 
     @Test
-    void aTruthAtAPlaceARowMayNotHoldEitherAtIsNotHeld() {
+    void aTruthNoRowIsShownToHoldIsNotHeld() {
         assertEquals(Optional.empty(), heldApart(List.of(holding(true)), _ -> false));
     }
 }
