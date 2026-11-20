@@ -579,6 +579,12 @@ public sealed interface SearchMessage extends Message {
 
     record PairsOfClassesCounted() implements SearchMessage, Prose {}
 
+    record ClassesOfAWholeNumberQuestion() implements SearchMessage, Prose {}
+
+    record BoundsOfAWholeNumberQuestion() implements SearchMessage, Prose {}
+
+    record StepsOfAWholeNumberQuestion() implements SearchMessage, Prose {}
+
     record CombinationsOfAGroupMeasured() implements SearchMessage, Prose {}
 
     record RunsReplacingAnArm() implements SearchMessage, Prose {}
