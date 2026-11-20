@@ -58,6 +58,12 @@ class WhatAnArmWorksOutIsAskedOfTheRunsThatEnterItTest {
     }
 
     @Test
+    void aValueBoundOnTheArmIsWorkedOutOnlyByTheRunsThatEnterIt() {
+        assertTrue(theLeftSideEndsNoRun(
+                "(if n > 5 then { let x = n - 1 \n x } else 3) >= k"));
+    }
+
+    @Test
     void anArmNoRunEntersWithTheOneAboveItEndsNoRun() {
         assertTrue(theLeftSideEndsNoRun(
                 "(if n > 5 then (if n < 3 then n + 1 else 0) else 0) >= k"));

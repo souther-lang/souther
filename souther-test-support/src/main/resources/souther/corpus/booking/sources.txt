@@ -5,3 +5,4 @@ holds.sou
 deposits.sou
 codes.sou
 stays.sou
+allowances.sou

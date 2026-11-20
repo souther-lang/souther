@@ -582,6 +582,9 @@ class WhereAnOperatorMayStillBeHeldIsWrittenDownTest {
             new Held("souther.compiler.partition.WorkedOutToReachIt.aTotalWithinAnInt",
                     "works out where a total lies: what each element comes to times the most"
                             + " elements there are"),
+            new Held("souther.compiler.partition.WorkedOutToReachIt.heldByTheTest",
+                    "asks the operator a filter's test is written with what it joins its two"
+                            + " conditions as, and reads the sides of a join holding both"),
             new Held("souther.compiler.partition.WorkedOutToReachIt.whatItComesTo",
                     "hands the operator a run works out to the arithmetic of the numbers its"
                             + " operands come to, for whether it passes its type"),
