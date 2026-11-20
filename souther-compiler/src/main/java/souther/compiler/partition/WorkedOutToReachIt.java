@@ -54,8 +54,8 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -596,13 +596,16 @@ final class WorkedOutToReachIt {
     /**
      * Whether {@code value} is an operation that ends a run on its divisor alone, only where that
      * is nought, as the operation's owner says ({@link Pullback#theDivisorItAloneStopsOn}), and
-     * the divisor comes to another whole number whatever the run is: {@code Int.floorMod(x, 7)}
-     * ends none.
+     * the numbers the divisor comes to ({@link #numbersOf}) leave nought out, whether it is one
+     * number, as in {@code Int.floorMod(x, 7)}, or a range a declaration holds it to.
      */
     private boolean stopsOnlyOnAnOperandThatIsNotNought(Denotation value) {
         Core operand = Pullback.theDivisorItAloneStopsOn(value.value());
-        return operand != null && value.at().folded(operand, read.rules().symbols(),
-                read.rules().newtypes()).orElse(null) instanceof Long by && by != 0;
+        if (operand == null) {
+            return false;
+        }
+        FormRange numbers = numbersOf(new Denotation(operand, value.at()));
+        return numbers != null && !numbers.holds(ExactRatio.ZERO);
     }
 
     /**
@@ -1266,23 +1269,9 @@ final class WorkedOutToReachIt {
                 .map(Core.FieldValue::value).findFirst().orElse(null);
     }
 
-    /** Every element of {@code list} where it is a list written out, each as written — through a
-     *  value it refers to, run as the value is defined, or the one value a name was given — or
-     *  null where it is none. */
+    /** Every element of {@code list} where it is a list written out, each as written, or null
+     *  where it is none ({@link WrittenOutElements#of}). */
     private List<Denotation> elementsWrittenOut(Denotation list) {
-        Core written = Core.withoutStanding(list.value());
-        if (written instanceof Core.MaterialisedValue) {
-            Denotation defined = list.at().taken(written);
-            return defined == null ? null : elementsWrittenOut(defined);
-        }
-        if (written instanceof Core.Read && boundTo(list) instanceof List<Denotation> given
-                && given.size() == 1) {
-            return elementsWrittenOut(given.getFirst());
-        }
-        if (written instanceof Core.ListLit literal) {
-            return literal.elements().stream().map(each -> new Denotation(each, list.at()))
-                    .toList();
-        }
         return WrittenOutElements.of(list, read.rules().symbols(), read.rules().newtypes())
                 instanceof WrittenOutElements.Walked.Each each
                 ? each.asWritten().stream().map(ReadMeaning.Occurrence::value).toList() : null;
@@ -1422,9 +1411,15 @@ final class WorkedOutToReachIt {
             }
             // A run of names read off one value: a place where the whole run is one, and
             // otherwise read one name at a time.
-            case Core.FieldProjection projection -> value.at().pathOf(written, newtypes)
-                    instanceof ValuesAt.At(var at) ? atAPlace(at, arms)
-                    : originOf(new Denotation(projection.lastAccess(), value.at()), arms);
+            case Core.FieldProjection projection -> {
+                if (value.at().pathOf(written, newtypes) instanceof ValuesAt.At(var at)) {
+                    yield atAPlace(at, arms);
+                }
+                WhereAValueComesFrom ofTheElements =
+                        originOfAPathOfTheElements(written, value.at(), arms, null);
+                yield ofTheElements != null ? ofTheElements
+                        : originOf(new Denotation(projection.lastAccess(), value.at()), arms);
+            }
             case Core.FieldAccess access -> {
                 if (value.at().pathOf(written, newtypes) instanceof ValuesAt.At(var at)) {
                     yield atAPlace(at, arms);
@@ -1432,6 +1427,11 @@ final class WorkedOutToReachIt {
                 // What each construction the value may be gives the field, held to what the rules
                 // of its type leave it.
                 FormRange left = numbersTheRulesLeave(access);
+                WhereAValueComesFrom ofTheElements =
+                        originOfAPathOfTheElements(written, value.at(), arms, left);
+                if (ofTheElements != null) {
+                    yield ofTheElements;
+                }
                 List<Denotation> made = valuesItMayBe(new Denotation(access.target(), value.at()));
                 if (made == null) {
                     yield derived(left);
@@ -1558,6 +1558,82 @@ final class WorkedOutToReachIt {
             candidates.add(one);
         }
         return candidates.isEmpty() ? null : WhereAValueComesFrom.oneOf(candidates);
+    }
+
+    /**
+     * Where the numbers {@code path}, a way down from a name a closure is handed an element on,
+     * comes to come from, read in {@code where}: the place that way reaches inside each element
+     * of the container the closure walks, as that list is written out, each held to what the
+     * rules of its type leave it ({@code left}, null where they leave it open). An element a test
+     * may drop is one of them, and dropping it only narrows what the closure is handed. Null where
+     * the name is no element of a container, the way is no place inside an element, or an element
+     * written out stands at no place.
+     */
+    private WhereAValueComesFrom originOfAPathOfTheElements(Core path, InputReads where,
+                                                            ArmsTaken arms, FormRange left) {
+        Core.Read name = theNameTheAccessesAreReadOff(path);
+        return name == null ? null : originOfAWayInTheElements(path, name, where, arms, left);
+    }
+
+    /** The name a run of accesses is read off, or null where it is read off anything else. */
+    private static Core.Read theNameTheAccessesAreReadOff(Core path) {
+        Core root = Core.withoutStanding(path);
+        while (true) {
+            switch (root) {
+                case Core.FieldAccess access -> root = Core.withoutStanding(access.target());
+                case Core.FieldProjection projection ->
+                        root = Core.withoutStanding(projection.base());
+                default -> {
+                    return (root instanceof Core.Read name && name.binding() != null) ? name : null;
+                }
+            }
+        }
+    }
+
+    /** A name {@code let} binds to the one value it is given, as a helper's parameter is to what
+     *  it is applied to, is followed to the name that is handed an element: the value may be that
+     *  name or a way down from it, which the way read here goes through. */
+    private WhereAValueComesFrom originOfAWayInTheElements(Core path, Core.Read name,
+                                                           InputReads reading, ArmsTaken arms,
+                                                           FormRange left) {
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        Map<BindingId, Core> held = new HashMap<>();
+        Core.Read current = name;
+        InputReads where = reading;
+        Core container = where.containerOfTheElementHandedTo(current.binding());
+        while (container == null) {
+            List<Denotation> given = boundTo(new Denotation(current, where));
+            Core.Read next = given.size() != 1 ? null
+                    : theNameTheAccessesAreReadOff(given.getFirst().value());
+            if (next == null || held.containsKey(current.binding())) {
+                return null;
+            }
+            held.put(current.binding(), given.getFirst().value());
+            current = next;
+            where = given.getFirst().at();
+            container = where.containerOfTheElementHandedTo(current.binding());
+        }
+        ElementProjection way = ElementProjection.read(path, current.binding(), held, newtypes);
+        List<Denotation> elements = way == null ? null
+                : elementsWrittenOut(new Denotation(container, where));
+        if (elements == null || elements.isEmpty()) {
+            return null;
+        }
+        List<WhereAValueComesFrom> candidates = new ArrayList<>();
+        for (Denotation each : elements) {
+            if (!(each.at().pathOf(Core.withoutStanding(each.value()), newtypes)
+                    instanceof ValuesAt.At(var at))) {
+                return null;
+            }
+            TermPath place = way.from(at);
+            FormRange one = rangeOfAPlace(place, arms);
+            if (one == null) {
+                return null;
+            }
+            candidates.add(new WhereAValueComesFrom.AtAPlace(place,
+                    left == null ? one : one.meet(left)));
+        }
+        return WhereAValueComesFrom.oneOf(candidates);
     }
 
     /** The numbers the rules of the type {@code access} reads a field of leave that field
