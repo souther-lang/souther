@@ -79,6 +79,7 @@ import java.util.SequencedMap;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * The values a behavior's body compares its inputs against.
@@ -1496,27 +1497,44 @@ public final class GuardThresholds {
      * includes making the value it is handed, which a strict walk makes for every element before
      * any application whether or not the application is made: a bound kept from every stop said
      * is kept from that one too, though no row is shown along its way.
+     *
+     * <p>The ways are worked out only where a bound asks for one, once for each place things are
+     * worked out at, however many are worked out there.
      */
     private static List<UndividedByARelation.WorkedOutOn> whereARunWorksItOut(
             ComparisonReadings.Reading each, Reachability toIt, Reachability beforeIt,
             InputReading read, List<ComparisonArrival> arrivals, WaysToACase wayToACase,
             Function<Proposition, ReachingCuts.Stating> aCase) {
+        Map<Optional<Proposition>, Supplier<Reachability.Reaching>> ways = new HashMap<>();
         List<UndividedByARelation.WorkedOutOn> out = new ArrayList<>();
         for (ComparisonReadings.Reading.WorkedOutAt worked : each.whatARunWorksOut()) {
-            if (!aRowArrivesWhereItIsWorkedOut(each, worked, toIt, arrivals, wayToACase)) {
-                out.add(new UndividedByARelation.WorkedOutOn(worked.stops(), null));
-                continue;
-            }
             Proposition reached = reachedWhere(worked);
-            Reachability way = (reached == null
-                    || (reached instanceof Proposition.Always(boolean holds) && holds)) ? beforeIt
-                    : each.statedAsACondition().isEmpty() ? null
-                    : Reachability.of(new WayToTheBorder(each.wayToACase(aCase.apply(reached))),
-                            read.quantities().region());
             out.add(new UndividedByARelation.WorkedOutOn(worked.stops(),
-                    way instanceof Reachability.Reaching reaching ? reaching : null));
+                    ways.computeIfAbsent(Optional.ofNullable(reached), _ -> new Pullback.Once<>(
+                            () -> theWayItIsWorkedOutAlong(each, reached, toIt, beforeIt, read,
+                                    arrivals, wayToACase, aCase)))));
         }
         return out;
+    }
+
+    /**
+     * The way of the rows that work out what is worked out where {@code reached} holds, or
+     * wherever the comparison is reached where it is null: none where no row is shown to arrive
+     * there, or that cannot be put on the way.
+     */
+    private static Reachability.Reaching theWayItIsWorkedOutAlong(
+            ComparisonReadings.Reading each, Proposition reached, Reachability toIt,
+            Reachability beforeIt, InputReading read, List<ComparisonArrival> arrivals,
+            WaysToACase wayToACase, Function<Proposition, ReachingCuts.Stating> aCase) {
+        if (reached != null && !aRowMayArrivePast(each, reached, toIt, arrivals, wayToACase)) {
+            return null;
+        }
+        Reachability way = (reached == null
+                || (reached instanceof Proposition.Always(boolean holds) && holds)) ? beforeIt
+                : each.statedAsACondition().isEmpty() ? null
+                : Reachability.of(new WayToTheBorder(each.wayToACase(aCase.apply(reached))),
+                        read.quantities().region());
+        return way instanceof Reachability.Reaching reaching ? reaching : null;
     }
 
     /** What a run states to get past the arm or make the application {@code worked} is worked

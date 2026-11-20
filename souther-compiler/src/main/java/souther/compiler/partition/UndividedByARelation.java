@@ -136,6 +136,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -2857,10 +2858,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * What a run getting to the comparison works out somewhere — wherever the comparison is
      * reached, on an arm of a choice it is read through, on an application of the closure it
-     * stands in — with the way of the rows that work it out there, or null where those rows cannot
-     * be put on a way.
+     * stands in — with the way of the rows that work it out there, worked out only when a bound
+     * asks for it: null where those rows cannot be put on a way, or it answers none. One way is
+     * one supplier, however many things are worked out along it.
      */
-    record WorkedOutOn(StopEvidence stops, Reachability.Reaching way) {
+    record WorkedOutOn(StopEvidence stops, Supplier<Reachability.Reaching> way) {
 
         WorkedOutOn {
             Objects.requireNonNull(stops, "a run works something out");
@@ -2898,7 +2900,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 return List.of();
             }
             Working working = each.stops().operations();
-            Reachability.Reaching way = working.onEveryRun() ? each.way() : null;            for (IntOperation it : working.operations()) {
+            Supplier<Reachability.Reaching> way = working.onEveryRun() ? each.way() : null;
+            for (IntOperation it : working.operations()) {
                 if (stopsNoRow(it, read)) {
                     continue;
                 }
@@ -2938,11 +2941,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         private BigInteger least;
         private BigInteger greatest;
-        private final List<Reachability.Reaching> settingTheLeast = new ArrayList<>();
-        private final List<Reachability.Reaching> settingTheGreatest = new ArrayList<>();
+        private final Set<Supplier<Reachability.Reaching>> settingTheLeast =
+                new LinkedHashSet<>();
+        private final Set<Supplier<Reachability.Reaching>> settingTheGreatest =
+                new LinkedHashSet<>();
 
         /** From {@code from}, where it is no null, by an operation worked out along {@code way}. */
-        void from(BigInteger from, Reachability.Reaching way) {
+        void from(BigInteger from, Supplier<Reachability.Reaching> way) {
             if (from == null) {
                 return;
             }
@@ -2957,7 +2962,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
 
         /** To {@code to}, where it is no null, by an operation worked out along {@code way}. */
-        void to(BigInteger to, Reachability.Reaching way) {
+        void to(BigInteger to, Supplier<Reachability.Reaching> way) {
             if (to == null) {
                 return;
             }
@@ -2984,7 +2989,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * month of its dates, and some value of the place meets it.
      */
     private static boolean keptWithin(LinearForm<NumericTerm> form, BigInteger least,
-                                      BigInteger greatest, Reachability.Reaching way,
+                                      BigInteger greatest, Supplier<Reachability.Reaching> way,
                                       Map<TermPath, KeptWithin> kept) {
         BigInteger shift = wholeOf(form.constant());
         if (shift == null || form.coefs().isEmpty()) {
@@ -3033,7 +3038,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static void addBoundPastWhichARowStops(NumericTerm.ValueOf value, BigInteger bound,
                                                    boolean atMost, InputReading read,
-                                                   List<Reachability.Reaching> ways,
+                                                   Set<Supplier<Reachability.Reaching>> ways,
                                                    List<ABoundThatKeepsEveryRunGoing> out) {
         ExactRatio past = ExactRatio.of(atMost ? bound.add(BigInteger.ONE)
                 : bound.subtract(BigInteger.ONE));
@@ -3042,11 +3047,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 List.of(ofTheInput(value, ExactRatio.ONE)), ExactRatio.of(bound).negated(),
                 atMost ? Rel.LE : Rel.GE, List.of(), Kind.AFFINE, null)
                 .workingOut(Working.NO_STOPS);
-        for (Reachability.Reaching way : ways) {
+        for (Supplier<Reachability.Reaching> along : ways) {
+            Reachability.Reaching way = along.get();
+            if (way == null) {
+                continue;
+            }
             WhatItLeaves left = theBound.leftWhereRowsArrive(read, List.of(way),
                     ComparisonWitnesses.AtAComparison.NONE);
             OfASide side = (!left.rowsArrive() || !left.mayStopBefore().isEmpty()) ? null
-                    : left.outcomes().get(value);            if (side != null
+                    : left.outcomes().get(value);
+            if (side != null
                     && side.outcomes().failingAt(past) == EachWayItComesOut.Shown.REACHED) {
                 ABoundThatKeepsEveryRunGoing one = aBoundOn(value, bound, atMost, read);
                 if (one != null) {
