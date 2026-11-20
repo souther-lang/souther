@@ -7660,34 +7660,14 @@ final class Pullback {
          */
         private Located emittingBeneath(Denotation container, List<Kept> pending,
                                         List<Kept> located) {
-            ElementBindings.PiecesOfEachElement assembled =
-                    ElementBindings.piecesOfEachElement(container.value(), blockIn(container));
-            if (assembled == null
-                    || assembled.piece() != PieceOfAnElement.WHAT_THE_CLOSURE_ANSWERS) {
+            WrittenByOneArm written = writtenByOneArm(container, blockIn(container));
+            if (written == null) {
                 return null;
             }
-            Core chosen = Core.withoutStanding(assembled.step().body());
-            Choice choice = Choice.of(chosen);
-            if (choice == null || choice.kind() == Choice.Kind.THE_ARGUMENTS) {
-                return null;
-            }
-            int writing = -1;
-            for (int i = 0; i < choice.arms().size(); i++) {
-                if (!(Core.withoutStanding(choice.arms().get(i).answers())
-                        instanceof Core.ListLit list) || list.elements().size() > 1) {
-                    return null;
-                }
-                if (list.elements().size() == 1) {
-                    if (writing >= 0) {
-                        return null;
-                    }
-                    writing = i;
-                }
-            }
-            if (writing < 0) {
-                return null;
-            }
-            Choice.Arm arm = choice.arms().get(writing);
+            ElementBindings.PiecesOfEachElement assembled = written.assembled();
+            Core chosen = written.choice();
+            int writing = written.arm();
+            Choice.Arm arm = Choice.of(chosen).arms().get(writing);
             Core element = ((Core.ListLit) Core.withoutStanding(arm.answers())).elements()
                     .getFirst();
             Denotation walked = container.at().standing(assembled.walked(),
@@ -10534,6 +10514,57 @@ final class Pullback {
     /** The block a closure is, read where {@code container} stands. */
     private Function<Core, Core.Block> blocksAt(Denotation container) {
         return blocksAt(container, read.rules().symbols(), read.rules().newtypes());
+    }
+
+    /**
+     * A container that is the lists a closure answered of each element of another put end to end,
+     * where the closure's body is a choice with one arm writing one element and every other arm
+     * writing none: an element of it exists where that arm is taken, and only there.
+     *
+     * @param assembled how the container is put together
+     * @param choice    the closure's body, the choice
+     * @param arm       which of its arms writes the element, as {@link Choice} numbers them
+     */
+    record WrittenByOneArm(ElementBindings.PiecesOfEachElement assembled, Core choice, int arm) {}
+
+    /**
+     * {@link WrittenByOneArm} of {@code container}, its closures read through {@code blocks} — or
+     * null where it is not so put together. Two arms writing, or an arm writing more than one, is
+     * a container whose elements' existence turns on more than one arm, and is not one.
+     */
+    static WrittenByOneArm writtenByOneArm(Denotation container,
+                                           Function<Core, Core.Block> blocks) {
+        ElementBindings.PiecesOfEachElement assembled =
+                ElementBindings.piecesOfEachElement(container.value(), blocks);
+        if (assembled == null
+                || assembled.piece() != PieceOfAnElement.WHAT_THE_CLOSURE_ANSWERS) {
+            return null;
+        }
+        Core chosen = Core.withoutStanding(assembled.step().body());
+        Choice choice = Choice.of(chosen);
+        if (choice == null || choice.kind() == Choice.Kind.THE_ARGUMENTS) {
+            return null;
+        }
+        int writing = -1;
+        for (int i = 0; i < choice.arms().size(); i++) {
+            if (!(Core.withoutStanding(choice.arms().get(i).answers())
+                    instanceof Core.ListLit list) || list.elements().size() > 1) {
+                return null;
+            }
+            if (list.elements().size() == 1) {
+                if (writing >= 0) {
+                    return null;
+                }
+                writing = i;
+            }
+        }
+        return writing < 0 ? null : new WrittenByOneArm(assembled, chosen, writing);
+    }
+
+    /** {@link WrittenByOneArm} of {@code container}, its closures read where it stands. */
+    static WrittenByOneArm writtenByOneArm(Denotation container, Symbols symbols,
+                                           DeclarationNewtypes newtypes) {
+        return writtenByOneArm(container, blocksAt(container, symbols, newtypes));
     }
 
     private static Function<Core, Core.Block> blocksAt(Denotation container, Symbols symbols,

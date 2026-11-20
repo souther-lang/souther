@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * The conditions one reading of a body met, and the name each of them goes by.
@@ -87,6 +88,15 @@ final class ConditionNumbering {
      *  a subtree: what is met is the fork and which of its arms, and there is no node of its own to
      *  be at. A {@code match} and an attempt both, since an arm of either is met the same way. */
     private final Map<Core, Map<Integer, ConditionOccurrence>> arms = new IdentityHashMap<>();
+    /** What entering each arm of each fork states, by the fork under the names in force there and
+     *  which of its arms ({@link #walkedInto}, {@link #referredTo}). */
+    private final Map<Site, Map<Integer, Entered>> entered = new HashMap<>();
+
+    /**
+     * What entering one arm states, and whether the walk has entered it yet or only a way that
+     * refers to it has asked.
+     */
+    private record Entered(ReachingCuts.Stating stated, boolean walked) {}
     private final Map<ConditionOccurrence, Citation> metAt;
     /** The copies each entry this reading put on a way was read off, by the entry itself, shared
      *  with every place this reading reads. Two equal entries are two entries here, each read off
@@ -193,6 +203,51 @@ final class ConditionNumbering {
                     "this reading has already named arm " + part + " of a fork: " + already);
         }
         return named.get(part);
+    }
+
+    /**
+     * What the walk entering {@code part} of {@code fork} under {@code reads} states: made by
+     * {@code stating}, or what a way referring to that arm already made of it
+     * ({@link #referredTo}).
+     *
+     * <p>Refused where the walk has entered the arm under these names already, for the reason
+     * naming it twice is ({@link #metEntering}). Under other names {@code stating} names it again,
+     * and is refused there.
+     */
+    ReachingCuts.Stating walkedInto(Core fork, int part, InputReads reads,
+                                    Supplier<ReachingCuts.Stating> stating) {
+        Map<Integer, Entered> made =
+                entered.computeIfAbsent(new Site(fork, reads), _ -> new HashMap<>());
+        Entered already = made.get(part);
+        if (already != null && already.walked()) {
+            throw new IllegalStateException("this reading has already walked into arm " + part
+                    + " of a fork under the same names");
+        }
+        ReachingCuts.Stating stated = already != null ? already.stated() : stating.get();
+        made.put(part, new Entered(stated, true));
+        return stated;
+    }
+
+    /**
+     * What entering {@code part} of {@code fork} under {@code reads} states, for a way that is on
+     * that arm without the walk entering it there: made by {@code stating} where neither the walk
+     * nor another such way made it yet, and what they made otherwise.
+     *
+     * <p>An element one arm writes, handed to another closure, is on the way into that closure,
+     * and the arm it is on is the one the walk into the arm meets. Both are the one arm a row
+     * took, so it is named once ({@link #metEntering}), whichever of them asks first.
+     */
+    ReachingCuts.Stating referredTo(Core fork, int part, InputReads reads,
+                                    Supplier<ReachingCuts.Stating> stating) {
+        Map<Integer, Entered> made =
+                entered.computeIfAbsent(new Site(fork, reads), _ -> new HashMap<>());
+        Entered already = made.get(part);
+        if (already != null) {
+            return already.stated();
+        }
+        ReachingCuts.Stating stated = stating.get();
+        made.put(part, new Entered(stated, false));
+        return stated;
     }
 
     /**

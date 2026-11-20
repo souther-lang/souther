@@ -4657,6 +4657,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 partnerOfThis = ValuesWithin.all(ValueSet.matching(both));
                 partnerLengths = LengthRuns.EVERY;
             }
+            // A side that is a piece the way holds to a language gets to the relation only where
+            // the piece is one of that language's strings, and a string with no such piece is one
+            // no run gets here with. What the declarations leave the sides does not show such a
+            // string undivided here: it is shown as that language parts it, where the strings
+            // below are worked out, and is left as the declarations showed it where they are not.
+            boolean shownUndivided = undivided && !(ofThePieces != null && here.piece() != null);
             StringsAPartnerCanHold strings = partnerCanHold(at == 0, here, there, partnerOfThis,
                     partnerLengths, mineHolds, called);
             if (strings != null && ofThePieces != null && !heldThere) {
@@ -4675,7 +4681,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (strings == null || strings.mayBe().isEmpty()
                     || strings.mayBe() instanceof ValueSet.WholeRuns
                     || strings.mayBe() instanceof ValueSet.WholeSteps
-                    || (!undivided && strings.mayBe().isAny() && strings.leavesNoneOpen())) {
+                    || (!shownUndivided && strings.mayBe().isAny() && strings.leavesNoneOpen())) {
                 continue;
             }
             // A side shown undivided says nothing of its own, unless the way keeps some of its
@@ -4683,10 +4689,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             // them.
             if (!reaches.test(mine.subjectPath(),
                     room.place() == null ? Set.of() : Set.of(room.place()))
-                    || (undivided && room.counts() == null)) {
+                    || (shownUndivided && room.counts() == null)) {
                 continue;
             }
-            if (!(undivided && strings.leavesNoneOpen())) {
+            if (!(shownUndivided && strings.leavesNoneOpen())) {
                 out.put(mine, strings);
             }
         }

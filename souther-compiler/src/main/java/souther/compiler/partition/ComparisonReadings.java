@@ -1480,15 +1480,21 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             // And what its answer may turn on, read on each application: where an operation's own
             // body forks on what the closure answers, that is what the fork turns on
             // ({@link ForkDependencies}).
+            //
+            // An element one arm of another closure wrote exists only where that arm was taken, so
+            // a run handed it is on the way that arm is: what entering the arm states goes onto the
+            // way in here, as it does onto the way of what is written inside the arm.
             case Core.Block block -> {
                 in.oneApplication().entering(block, shortOfEachElement(block, reads, in));
+                List<OnTheWay> handed = past(assumed, writtenUnder(block, reads, in, numbering));
                 ScopeStep.forEachChild(block, (child, step) -> {
                     ClosureApplications applied = applying.into(block, step, reads, in.read());
                     if (child == block.body()) {
                         answeredBy(block, applied, in);
                     }
                     walk(child, in, reads.entering(step, symbols, in.newtypes()), applied, flow,
-                            assumed, live, out, forks, numbering);
+                            child == block.body() ? handed : assumed, live, out, forks,
+                            numbering);
                 });
                 in.oneApplication().leaving();
             }
@@ -1506,9 +1512,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     walk(arm.answers(), in, reads.choosing(arm.decidedBy(), symbols, in.newtypes()),
                             applying.choosing(arm.decidedBy(), symbols, in.newtypes(), on ->
                                     in.conditions().arm(attempt, which, on).proposition()), flow,
-                            past(assumed, numbering.said(
-                                    ReachingCuts.attempting(attempt, part, arm.answers().pos(),
-                                            in.read(), reads, numbering))),
+                            past(assumed, numbering.said(attempting(attempt, part, in.read(),
+                                    reads, numbering))),
                             live, out, forks, numbering);
                 }
             }
@@ -1819,6 +1824,75 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         List<OnTheWay> out = new ArrayList<>(assumed);
         out.addAll(stated);
         return List.copyOf(out);
+    }
+
+    /**
+     * What entering the arm that wrote the element {@code block} is handed states, where the
+     * closure is applied over one container that is no option, and one arm of a choice the
+     * container's own closure is wrote every element of it ({@link Pullback#writtenByOneArm}) —
+     * nothing otherwise. Read where that arm stands, under the name its closure gives the element
+     * it walks, as a walk into that arm reads it.
+     *
+     * <p>Only of the arm, and only where no other arm writes: an element two arms write exists
+     * where either was taken, and neither alone is on the way.
+     */
+    private static List<OnTheWay> writtenUnder(Core.Block block, InputReads reads, Body in,
+                                               ConditionNumbering numbering) {
+        List<InputReads.AppliedOver> appliedOver = reads.containersAppliedOver(block);
+        if (appliedOver.size() != 1 || appliedOver.getFirst().anOption()) {
+            return List.of();
+        }
+        Denotation container = appliedOver.getFirst().container();
+        Pullback.WrittenByOneArm written = Pullback.writtenByOneArm(container, in.symbols(),
+                in.newtypes());
+        if (written == null) {
+            return List.of();
+        }
+        Core.Block step = written.assembled().step();
+        List<InputReads> inside = new ArrayList<>();
+        ScopeStep.forEachChild(step, (child, into) -> {
+            if (child == step.body()) {
+                inside.add(container.at().entering(into, in.symbols(), in.newtypes()));
+            }
+        });
+        if (inside.size() != 1) {
+            return List.of();
+        }
+        InputReads at = inside.getFirst();
+        int part = written.arm();
+        return switch (written.choice()) {
+            case Core.IfConstructed attempt -> numbering.said(onTheAttempt(attempt, part,
+                    in.read(), at, numbering));
+            case Core.If iff -> numbering.said(ReachingCuts.stating(Condition.of(iff.cond(), at,
+                    in.symbols(), in.newtypes(), numbering), in.read(), part == 0,
+                    in.conditions()));
+            default -> List.of();
+        };
+    }
+
+    /** What the walk entering arm {@code part} of {@code attempt} states
+     *  ({@link ReachingCuts#attempting}, {@link ConditionNumbering#walkedInto}). */
+    private static ReachingCuts.Stating attempting(Core.IfConstructed attempt, int part,
+                                                   InputReading read, InputReads reads,
+                                                   ConditionNumbering numbering) {
+        return numbering.walkedInto(attempt, part, reads,
+                () -> statingTheAttempt(attempt, part, read, reads, numbering));
+    }
+
+    /** The same, for a way on that arm the walk does not enter it by
+     *  ({@link ConditionNumbering#referredTo}). */
+    private static ReachingCuts.Stating onTheAttempt(Core.IfConstructed attempt, int part,
+                                                     InputReading read, InputReads reads,
+                                                     ConditionNumbering numbering) {
+        return numbering.referredTo(attempt, part, reads,
+                () -> statingTheAttempt(attempt, part, read, reads, numbering));
+    }
+
+    private static ReachingCuts.Stating statingTheAttempt(Core.IfConstructed attempt, int part,
+                                                          InputReading read, InputReads reads,
+                                                          ConditionNumbering numbering) {
+        return ReachingCuts.attempting(attempt, part,
+                Choice.of(attempt).arms().get(part).answers().pos(), read, reads, numbering);
     }
 
     /** The same, for what standing inside one arm of a fork establishes ({@link
