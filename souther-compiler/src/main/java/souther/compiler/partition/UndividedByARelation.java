@@ -3461,7 +3461,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     taken.demand() instanceof RowDemand.OnARemainder on ? on : null,
                     taken.demand() instanceof RowDemand.ForTheRun run ? run.statement() : null,
                     taken.demand() instanceof RowDemand.ForAll every
-                            ? every.ofEachElement() : null));
+                            ? every.ofEachElement() : null,
+                    taken.demand() instanceof RowDemand.ATruth truth ? truth : null));
         });
         way.requirements().refinements().keySet()
                 .forEach(at -> out.add(new OnAWay(Set.of(at), true, null, null)));
@@ -3527,15 +3528,24 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *                   which places no row — or null
      * @param byEvery    what it asks every element of {@code elementsOf} to meet, where it asks
      *                   that of every element — or null
+     * @param truth      the truth it holds a position to, where it is that — or null
      */
     record OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
                   TermPath elementsOf, RowDemand.AnElementMeets bySome,
                   PartsLeftAlone leavesAlone, RowDemand.ForTheRun ofThePieces,
                   RowDemand.OnARemainder onARemainder, Proposition statedOfTheRun,
-                  RowDemand.AnElementMeets byEvery) {
+                  RowDemand.AnElementMeets byEvery, RowDemand.ATruth truth) {
 
         /** The parts of a date a statement of the other parts says nothing of. */
         enum PartsLeftAlone { NONE, YEARS, MONTHS_AND_DAYS }
+
+        OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
+               TermPath elementsOf, RowDemand.AnElementMeets bySome, PartsLeftAlone leavesAlone,
+               RowDemand.ForTheRun ofThePieces, RowDemand.OnARemainder onARemainder,
+               Proposition statedOfTheRun, RowDemand.AnElementMeets byEvery) {
+            this(positions, whatStands, relation, elementsOf, bySome, leavesAlone, ofThePieces,
+                    onARemainder, statedOfTheRun, byEvery, null);
+        }
 
         OnAWay(Set<TermPath> positions, boolean whatStands, TakenConstraint relation,
                TermPath elementsOf, RowDemand.AnElementMeets bySome, PartsLeftAlone leavesAlone,
@@ -3557,7 +3567,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         OnAWay leavingAlone(PartsLeftAlone parts) {
             return new OnAWay(positions, whatStands, relation, elementsOf, bySome, parts,
-                    ofThePieces, onARemainder, statedOfTheRun, byEvery);
+                    ofThePieces, onARemainder, statedOfTheRun, byEvery, truth);
         }
         /** Whether this says nothing of {@code term} because it is a part of a date this leaves
          *  alone. */
@@ -3758,7 +3768,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private static DatesHeldApartAlongAWay datesTheWayStates(List<OnAWay> written,
                                                              InputReading read) {
         return DatesHeldApartAlongAWay.of(written, List.of(), List.of(),
-                taken -> daysOfTheDate(taken, read));
+                taken -> daysOfTheDate(taken, read), at -> eitherTruthStandsAt(at, read));
+    }
+
+    /** Whether a row may hold either truth at {@code at}, whatever else it holds: no rule reads
+     *  the place, and no container holds it, which a row may hold no element of. */
+    private static boolean eitherTruthStandsAt(TermPath at, InputReading read) {
+        return at.containersHoldingIt().isEmpty()
+                && !namedByTheDeclarations(at, read).isReadByARule();
     }
 
     /**
@@ -4261,10 +4278,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * in years in which every month and day the sides take of each date is one. Either way the
      * rest of the way names such a date by that part and nothing else.
      *
-     * <p>Nothing the region does not hold: a statement it did not take in, or whose places are not
-     * said ({@link OnAWay#turnsOn}); what the run ties or owes ({@link #theRunTiesTheValueAt}); a
-     * condition declined under a named place's parameter — any, where which parameters it may
-     * name is not said.
+     * <p>Nothing the region does not hold turns on a place named: a statement it did not take in,
+     * or whose places are not said ({@link OnAWay#turnsOn}); what the run ties or owes
+     * ({@link #theRunTiesTheValueAt}); a condition declined under a named place's parameter — any,
+     * where which parameters it may name is not said. A statement the region did not take in over
+     * places nothing else here names is of a set the side is not tied to. That it turns on nothing
+     * named does not show some values hold it, and where none do no row is along the way. So the
+     * side is shown only where some values are shown to hold everything the way says of the set,
+     * as for a date named by two numbers ({@link DatesHeldApartAlongAWay}: dates for the parts of
+     * dates, either truth for a truth), and nothing the run ties, owes or declined turns on a
+     * place of it.
      */
     private boolean whatTheRegionShowsOfItIsARow(NumericTerm side,
                                                  List<OnAWay> conditions,
@@ -4343,9 +4366,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         for (OnAWay each : notTakenIn) {
             Optional<Set<TermPath>> turnsOn = each.turnsOn();
-            if (turnsOn.isEmpty() || named.stream().anyMatch(place ->
+            if (turnsOn.isEmpty() || turnsOn.get().isEmpty() || named.stream().anyMatch(place ->
                     touchesAny(turnsOn.get(), List.of(place))
                             || turnsOn.get().stream().anyMatch(place::bearsOn))) {
+                return false;
+            }
+            // Over places nothing the region holds names: that the statement turns on nothing
+            // else is not that some values hold it, which is asked of the set it is of.
+            TermPath one = turnsOn.get().iterator().next();
+            if (!heldApart.contains(one)) {
+                Optional<Set<TermPath>> held = apart.heldApartFrom(side, one);
+                if (held.isEmpty()) {
+                    return false;
+                }
+                heldApart.addAll(held.get());
+            }
+        }
+        for (TermPath place : heldApart) {
+            if (!named.contains(place) && (theRunTiesTheValueAt(place, past)
+                    || declined.isEmpty() || declined.get().contains(place.head()))) {
                 return false;
             }
         }
@@ -4365,7 +4404,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return DatesHeldApartAlongAWay.of(conditions, past.narrowing(), ofTheSides,
-                taken -> daysOfTheDate(taken, read));
+                taken -> daysOfTheDate(taken, read), at -> eitherTruthStandsAt(at, read));
     }
 
     /**
