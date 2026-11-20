@@ -1283,6 +1283,10 @@ final class WorkedOutToReachIt {
                 && given.size() == 1) {
             return elementsWrittenOut(given.getFirst());
         }
+        if (written instanceof Core.LetIn let) {
+            return elementsWrittenOut(new Denotation(let.body(),
+                    list.at().and(let.binder(), let.value())));
+        }
         if (written instanceof Core.ListLit literal) {
             return literal.elements().stream().map(each -> new Denotation(each, list.at()))
                     .toList();

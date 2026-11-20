@@ -224,6 +224,69 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
         }
     }
 
+    private static final String THE_MONTHS_ARE_FILTERED_AFTER_A_GUARD = """
+            module demo
+
+            data Yen = Int
+                invariant value >= 0
+            data Pay = { base: Yen, extra: Yen, days: Int }
+                %s
+            data Window = { first: Pay, second: Pay, third: Pay }
+            data Row = { grade: Int, lowerBound: Yen }
+            data Decision = { grade: Int }
+            data NoMonth = { n: Int }
+            let table: List<Row> = [
+                Row { grade = 1, lowerBound = Yen(0) },
+                Row { grade = 2, lowerBound = Yen(100) } ]
+            let totalOf (p: Pay): Yen = p.base + p.extra
+            let gradeRowFor (m: Yen): Row =
+                List.fold((acc, r) -> if r.lowerBound <= m then r else acc,
+                          Row { grade = 0, lowerBound = Yen(0) }, table)
+            let monthsOf (w: Window): List<Pay> = [ w.first, w.second, w.third ]
+            let payableOf (w: Window): List<Pay> =
+                List.filter(r -> r.days >= 17, monthsOf(w))
+            let averageOf (records: List<Pay>): Yen =
+                Yen(Rational.toInt(DOWN,
+                    List.sum(List.map(p -> totalOf(p).value, records)) / List.length(records)))
+
+            behavior f : (w: Window) -> Decision | NoMonth
+                constructs Decision, Row, Yen, NoMonth
+            let f (w) = {
+                let payable = payableOf(w)
+                guard List.length(payable) >= 1 else NoMonth { n = 0 }
+                Decision { grade = gradeRowFor(averageOf(payable)).grade }
+            }
+            """;
+
+    /** Whether the report says a run may end where nothing says so, of a model whose months are the
+     *  ones a filter kept of three, averaged after a guard that one was kept. */
+    private static boolean someStopIsLeftUntold(String bounds) {
+        Compilation compilation = Compilation.ofSource(
+                THE_MONTHS_ARE_FILTERED_AFTER_A_GUARD.formatted(bounds), "Main");
+        compilation.measure(Adequacy.Asked.fullReport());
+        ACompiledModel.compiles(compilation);
+        return AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                .anyMatch(line -> line.contains("may end the run where nothing here says"));
+    }
+
+    /**
+     * The months reach the average through a helper that is handed what another helper answered,
+     * which the inliner leaves as a {@code let} around the filter: each month is still one of the
+     * three written, and the total of them is within an {@code Int}.
+     */
+    @Test
+    void anAverageOfTheMonthsAFilterKeptAfterAGuardLeavesNoStopUntold() {
+        assertFalse(someStopIsLeftUntold("""
+                invariant base.value <= 1000000000000
+                    invariant extra.value <= 1000000000000"""));
+    }
+
+    @Test
+    void theSameAverageWithNoBoundLeavesAStopUntold() {
+        assertTrue(someStopIsLeftUntold(""));
+    }
+
     /** Control: the same months with no bound on each amount can pass an {@code Int} in the total
      *  of a month or of the three, and a run stops there. */
     @Test
