@@ -7,6 +7,7 @@ import souther.compiler.meaning.Proposition;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /**
  * What a run getting to a comparison works out on the way to its answer, every operation of it,
@@ -39,14 +40,45 @@ record StopEvidence(UndividedByARelation.Working operations) {
      * that takes another works none of it out, so none of it is said of every run getting to the
      * comparison.
      *
-     * @param reached where the arm is taken
-     * @param stops   what a run taking it works out there
+     * <p>Where the arm is taken is worked out the first time a reader asks: most arms are asked
+     * only what a run works out, and an arm of many ways would otherwise join the conditions of
+     * each for nobody.
      */
-    record OnAnArm(Proposition reached, StopEvidence stops) {
+    static final class OnAnArm {
 
-        OnAnArm {
+        private final Supplier<Proposition> reached;
+        private final StopEvidence stops;
+
+        /** An arm taken where {@code reached} holds, a run taking which works out {@code stops}. */
+        OnAnArm(Proposition reached, StopEvidence stops) {
+            this(supplied(reached), stops);
+        }
+
+        private OnAnArm(Supplier<Proposition> reached, StopEvidence stops) {
+            this.reached = reached;
+            this.stops = Objects.requireNonNull(stops,
+                    "and a run taking it works something out");
+        }
+
+        /** The same, where the arm is taken worked out by {@code reached} when it is asked. */
+        static OnAnArm takenWhere(Supplier<Proposition> reached, StopEvidence stops) {
+            return new OnAnArm(new Pullback.Once<>(() -> Objects.requireNonNull(reached.get(),
+                    "an arm is taken somewhere, if only nowhere")), stops);
+        }
+
+        private static Supplier<Proposition> supplied(Proposition reached) {
             Objects.requireNonNull(reached, "an arm is taken somewhere, if only nowhere");
-            Objects.requireNonNull(stops, "and a run taking it works something out");
+            return () -> reached;
+        }
+
+        /** Where the arm is taken. */
+        Proposition reached() {
+            return reached.get();
+        }
+
+        /** What a run taking it works out there. */
+        StopEvidence stops() {
+            return stops;
         }
     }
 

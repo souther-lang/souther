@@ -20,6 +20,7 @@ import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.DecisionSubject;
 import souther.compiler.meaning.PartedString;
 import souther.compiler.meaning.PositionsAStatementReads;
+import souther.compiler.meaning.PositionsAStatementReads.ReadSubject;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.Quantity;
 import souther.compiler.meaning.ReadThroughNames;
@@ -903,6 +904,24 @@ final class DemandReading {
             case Condition.Truth truth ->
                     conditions.truth(truth.value(), truth.reads(), read).proposition();
         };
+    }
+
+    /**
+     * Whether {@link #regionAnswered} can be asked {@code stated} under {@code read}: every place
+     * it is read off is one the reading holds a value at, and every other thing it reads is a
+     * value a binding holds outside every application of a closure
+     * ({@link PositionsAStatementReads#everyPlaceAndValueOf}).
+     *
+     * <p>A statement read where a closure is handed what an optional of the input holds is of a
+     * place under that optional, which no reading of this behavior's input names: what such a
+     * statement says holds on the runs it is said of, and no region of this input carries it.
+     */
+    static boolean placedInTheRegion(Proposition stated, InputReading read) {
+        return PositionsAStatementReads.everyPlaceAndValueOf(stated)
+                .map(subjects -> subjects.stream().allMatch(each ->
+                        !(each instanceof ReadSubject.At(TermPath place))
+                                || read.quantities().answersFor(new NumericTerm.ValueOf(place))))
+                .orElse(false);
     }
 
     /**

@@ -114,7 +114,7 @@ final class YearsAWayAllows {
                 giving[date].get(Math.floorMod(year, YEARS_OF_A_CYCLE))
                         && MonthsAndDaysOfOneDate.coversEveryValueInYear(
                                 partsOfEachDate.get(date), (int) year, shifts.get(date)),
-                wholeYears, YearsAWayAllows::toInts);
+                wholeYears, YearsAWayAllows::toInts, new Looked());
     }
 
     /**
@@ -128,21 +128,43 @@ final class YearsAWayAllows {
      * <p>The years of the cycle are where some day gives what the caller asks of the date, which a
      * year only some days of which the date may be need not have among them: so whether the years
      * are taken is what {@code made} makes of them, and the search goes on past those it makes
-     * nothing of.
+     * nothing of. Every year that could hold the statements not looked at is told to
+     * {@code looked}; why {@code made} makes nothing of one, the caller tells it.
      *
      * @param ofTheCycle for each date, the years of a cycle, by the year modulo four hundred
      * @param allowed    for each date, its first and last year
      * @param made       what the caller makes of the years, or null where it makes nothing
      */
     static <T> T holding(List<Statement> statements, List<BitSet> ofTheCycle,
-                         List<int[]> allowed, Function<long[], T> made) {
+                         List<int[]> allowed, Function<long[], T> made, Looked looked) {
         int dates = ofTheCycle.size();
         if (dates == 0 || dates > MOST_DATES || allowed.size() != dates
                 || !staysInsideTheType(statements)) {
+            looked.missed();
             return null;
         }
         return years(statements, (date, year) ->
-                ofTheCycle.get(date).get(Math.floorMod(year, YEARS_OF_A_CYCLE)), allowed, made);
+                ofTheCycle.get(date).get(Math.floorMod(year, YEARS_OF_A_CYCLE)), allowed, made,
+                looked);
+    }
+
+    /**
+     * Whether a search looked at everything that could hold what it was asked: told by whatever
+     * passes something by, so that a search that finds nothing says none holds only where nothing
+     * was passed.
+     */
+    static final class Looked {
+
+        private boolean everything = true;
+
+        /** Something that could hold it was passed by. */
+        void missed() {
+            everything = false;
+        }
+
+        boolean everything() {
+            return everything;
+        }
     }
 
     /** Whether a year is one a date may be put in, before the statements are asked of it. */
@@ -155,7 +177,7 @@ final class YearsAWayAllows {
      *  statements, which stay inside the type, hold at, each one {@code taken} allows — or null
      *  where none is found. */
     private static <T> T years(List<Statement> statements, Taken taken, List<int[]> allowed,
-                               Function<long[], T> made) {
+                               Function<long[], T> made, Looked looked) {
         int dates = allowed.size();
         long[][] weights = new long[statements.size()][dates];
         long[] constants = new long[statements.size()];
@@ -166,7 +188,8 @@ final class YearsAWayAllows {
                 weights[i][year.date()] += asLong(year.weight());
             }
         }
-        return search(statements, weights, constants, taken, allowed, made, new long[dates], 0);
+        return search(statements, weights, constants, taken, allowed, made, looked,
+                new long[dates], 0);
     }
 
     private static int[] toInts(long[] years) {
@@ -183,7 +206,7 @@ final class YearsAWayAllows {
      */
     private static <T> T search(List<Statement> statements, long[][] weights, long[] constants,
                                 Taken taken, List<int[]> allowed, Function<long[], T> made,
-                                long[] chosen, int date) {
+                                Looked looked, long[] chosen, int date) {
         if (date == chosen.length) {
             for (int i = 0; i < constants.length; i++) {
                 if (!statements.get(i).relation().holds(Long.signum(valueAt(weights[i],
@@ -194,13 +217,13 @@ final class YearsAWayAllows {
             return made.apply(chosen);
         }
         for (long year : yearsToLookAt(statements, weights, constants, chosen, date,
-                allowed.get(date))) {
+                allowed.get(date), looked)) {
             if (!taken.at(date, year)) {
                 continue;
             }
             chosen[date] = year;
-            T found = search(statements, weights, constants, taken, allowed, made, chosen,
-                    date + 1);
+            T found = search(statements, weights, constants, taken, allowed, made, looked,
+                    chosen, date + 1);
             if (found != null) {
                 return found;
             }
@@ -226,10 +249,13 @@ final class YearsAWayAllows {
      * bounds the first through it. So it does not depend on which date is chosen first. The date
      * after it is eliminated from the statements as they stand over the whole numbers, each
      * statement written as sums that are not below nought.
+     *
+     * <p>Every year that could hold the statements is in the interval and on the lattice, and
+     * where the years given are fewer than those, {@code looked} is told.
      */
     private static List<Long> yearsToLookAt(List<Statement> statements, long[][] weights,
                                             long[] constants, long[] chosen, int date,
-                                            int[] allowed) {
+                                            int[] allowed, Looked looked) {
         int later = date + 1 < chosen.length ? date + 1 : -1;
         Bounds bounds = new Bounds();
         bounds.low = bounds.low.max(BigInteger.valueOf(allowed[0]));
@@ -295,6 +321,9 @@ final class YearsAWayAllows {
                 }
             }
         }
+        if (!BigInteger.valueOf(out.size()).equals(lattice.yearsBetween(bounds.low, bounds.high))) {
+            looked.missed();
+        }
         return List.copyOf(out);
     }
 
@@ -325,6 +354,13 @@ final class YearsAWayAllows {
         /** The greatest year on the lattice that is not past {@code year}. */
         BigInteger atOrBelow(BigInteger year) {
             return year.subtract(year.subtract(residue).mod(modulus));
+        }
+
+        /** How many years on the lattice are from {@code low} to {@code high}, both counted. */
+        BigInteger yearsBetween(BigInteger low, BigInteger high) {
+            BigInteger first = low.add(residue.subtract(low).mod(modulus));
+            return first.compareTo(high) > 0 ? BigInteger.ZERO
+                    : high.subtract(first).divide(modulus).add(BigInteger.ONE);
         }
     }
 

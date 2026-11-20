@@ -2426,7 +2426,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         List<OnAWay> written = conditionsOf(way, remainder);
         if (leavesNoRow(WhatStatementsOfOneFormDecide.of(
                 written.stream().map(OnAWay::affine).toList(), askedAsAStatement()), written,
-                read)) {
+                datesTheWayStates(written, read), read)) {
             return Optional.empty();
         }
         Optional<Set<String>> declined = parametersDeclined(way);
@@ -3746,18 +3746,34 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * Whether what {@code way} states leaves no row: statements of the form this relation is of
      * that no point of it meets ({@link WhatStatementsOfOneFormDecide.Verdict#noRowArrives}), or
      * of a piece of a string no string the way holds is, or one no string lacking the separator
-     * the way counts is. Of what the way states alone, and of no region.
+     * the way counts is, or of parts of dates no dates hold
+     * ({@link DatesHeldApartAlongAWay#someSetNoDatesHold}). Of what the way states alone, and of
+     * no region.
      */
     private boolean leavesNoRow(StatedWay way, InputReading read) {
-        return leavesNoRow(way.decided(), way.written(), read);
+        return leavesNoRow(way.decided(), way.written(), way.byTheCalendar(), read);
     }
 
     /** The same, of a way stating {@code written}, whose statements of this relation's form come
-     *  to {@code decided}. */
+     *  to {@code decided} and whose dates the calendar answers as {@code byTheCalendar} says. */
     private boolean leavesNoRow(WhatStatementsOfOneFormDecide.Verdict decided,
-                                List<OnAWay> written, InputReading read) {
+                                List<OnAWay> written, DatesHeldApartAlongAWay byTheCalendar,
+                                InputReading read) {
         return decided.noRowArrives() || noStringIsThePieceTheWayHolds(written)
-                || noStringIsWithoutTheSeparatorTheWayCounts(written, read);
+                || noStringIsWithoutTheSeparatorTheWayCounts(written, read)
+                || byTheCalendar.someSetNoDatesHold();
+    }
+
+    /**
+     * What the calendar answers of the dates a way stating {@code written} names: every statement
+     * of it holds at every row along the way, so a set of dates none hold is a way no row comes
+     * along. Of what the way states alone, and of nothing the run narrows, which the relation's
+     * own operators narrow as well.
+     */
+    private static DatesHeldApartAlongAWay datesTheWayStates(List<OnAWay> written,
+                                                             InputReading read) {
+        return DatesHeldApartAlongAWay.of(written, List.of(), List.of(),
+                taken -> daysOfTheDate(taken, read));
     }
 
     /**
@@ -3858,6 +3874,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      *
      * @param decided what the statements of the form this relation is of left of it decide, asked
      *                of every one of them before any is taken away for the relation's own reading
+     * @param byTheCalendar what the calendar answers of the dates {@code written} names, asked
+     *                once for the way however often whether it leaves no row is
      */
     private record StatedWay(SearchRegion region, List<OnAWay> written, boolean heldWhole,
                              Optional<Set<String>> declined, DemandReading.Answered past,
@@ -3866,7 +3884,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                              boolean offItsLine, List<RemainderCoverage.Proof> covered,
                              List<OnAWay> unfree, RoomOnTheWay lengthsRoom,
                              Rebuilding rebuilt, WayRead entire,
-                             WhatStatementsOfOneFormDecide.Verdict decided) {}
+                             WhatStatementsOfOneFormDecide.Verdict decided,
+                             DatesHeldApartAlongAWay byTheCalendar) {}
 
     /** The way stating {@code written} over {@code region}, as {@link StatedWay} says. */
     private StatedWay stated(InputReading read, List<Source> sources, List<Carrier> carriers,
@@ -3912,7 +3931,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         WhatStatementsOfOneFormDecide.Verdict decided = WhatStatementsOfOneFormDecide.of(
                 unfree.stream().map(OnAWay::affine).toList(), askedAsAStatement());
         return new StatedWay(region, written, heldWhole, declined, past, applied, asStated,
-                inWholeSteps, offItsLine, covered, unfree, lengthsRoom, rebuilt, entire, decided);
+                inWholeSteps, offItsLine, covered, unfree, lengthsRoom, rebuilt, entire, decided,
+                datesTheWayStates(written, read));
     }
 
     /**
@@ -4672,6 +4692,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 partnerOfThis = ValuesWithin.all(ValueSet.matching(both));
                 partnerLengths = LengthRuns.EVERY;
             }
+            // A side that is a piece the way holds to a language gets to the relation only where
+            // the piece is one of that language's strings, and a string with no such piece is one
+            // no run gets here with. What the declarations leave the sides does not show such a
+            // string undivided here: it is shown as that language parts it, where the strings
+            // below are worked out, and is left as the declarations showed it where they are not.
+            boolean shownUndivided = undivided && !(ofThePieces != null && here.piece() != null);
             StringsAPartnerCanHold strings = partnerCanHold(at == 0, here, there, partnerOfThis,
                     partnerLengths, mineHolds, called);
             if (strings != null && ofThePieces != null && !heldThere) {
@@ -4690,7 +4716,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (strings == null || strings.mayBe().isEmpty()
                     || strings.mayBe() instanceof ValueSet.WholeRuns
                     || strings.mayBe() instanceof ValueSet.WholeSteps
-                    || (!undivided && strings.mayBe().isAny() && strings.leavesNoneOpen())) {
+                    || (!shownUndivided && strings.mayBe().isAny() && strings.leavesNoneOpen())) {
                 continue;
             }
             // A side shown undivided says nothing of its own, unless the way keeps some of its
@@ -4698,10 +4724,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             // them.
             if (!reaches.test(mine.subjectPath(),
                     room.place() == null ? Set.of() : Set.of(room.place()))
-                    || (undivided && room.counts() == null)) {
+                    || (shownUndivided && room.counts() == null)) {
                 continue;
             }
-            if (!(undivided && strings.leavesNoneOpen())) {
+            if (!(shownUndivided && strings.leavesNoneOpen())) {
                 out.put(mine, strings);
             }
         }
@@ -5256,11 +5282,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return through == null || theirLengths.isEvery() ? through
                     : through.shownAt(theirLengths);
         }
-        if (there.piece() != null) {
-            return stringsThatAreThePiece(there.piece(), theirStrings, mine, called);
-        }
-        if (here.piece() != null) {
-            return stringsWithAPiece(here.piece(), theirStrings, mine, called);
+        // A function of the piece and the strings of the two sides alone, asked again of every way
+        // the relation is read along: worked out once in a reading ({@link
+        // OneReading#besideAPiece}).
+        if (there.piece() != null || here.piece() != null) {
+            boolean ofThePiece = there.piece() != null;
+            PiecesOfAString piece = ofThePiece ? there.piece() : here.piece();
+            return OneReading.besideAPiece(new OneReading.BesideAPiece(ofThePiece, piece,
+                    theirStrings, mine, called), () -> ofThePiece
+                            ? stringsThatAreThePiece(piece, theirStrings, mine, called)
+                            : stringsWithAPiece(piece, theirStrings, mine, called));
         }
         if (theirStrings.isEmpty()) {
             return null;
@@ -5544,21 +5575,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (seen != null) {
             return seen;
         }
-        // A function of the piece's separator and window, the conversion and the strings alone,
-        // read against an allowance of its own: what a reading asked once it is handed back
-        // ({@link OneReading#piecesAConversionAnswers}).
-        Optional<OneReading.PiecesAnswered> read = OneReading.piecesAConversionAnswers(
-                piece.separator(), piece.window(), conversion, whole,
-                () -> piecesAnswered(piece, conversion, whole));
-        if (read.isEmpty()) {
+        // Otherwise the pieces of what the conversion answers of the strings it is exactly a map
+        // on, and what a piece may be besides: any string of the code points it leaves alone.
+        Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
+        CodeMap map = CaseMaps.of(conversion);
+        Language exact = map.strings(meter);
+        Language kept = exact == null ? null : whole.and(exact, meter);
+        Language answers = kept == null ? null : map.answersTo(kept, meter);
+        StringsOfAPiece.Shown shown = answers == null ? null
+                : StringsOfAPiece.piecesOfValuesIn(answers, piece.separator(),
+                        piece.window().from(), piece.until(), meter);
+        Language alone = CodeMap.stringsOf(map.leftAlone(), meter);
+        Language mayBe = (shown == null || alone == null) ? null
+                : alone.or(shown.ofTheValues(), meter);
+        if (mayBe == null) {
             return null;
         }
-        StringsOfAPiece.Shown shown = read.get().shown();
-        Language mayBe = read.get().mayBe();
-        List<String> notShown = operationsNotExactOver(conversion, whole);
         return StringsAPartnerCanHold.unreached(ValueSet.matching(shown.ofTheValues()),
                 ValueSet.matching(mayBe), called)
-                .withTheImagesNotShownOf(notShown);
+                .withTheImagesNotShownOf(operationsNotExactOver(conversion, whole));
     }
 
     /**
@@ -5611,27 +5646,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 ValueSet.matching(mayBeAtAll), called);
         return canBe.equals(mayBeAtAll) ? out
                 : out.withTheImagesNotShownOf(conversion.operations());
-    }
-
-    /**
-     * The pieces of what {@code conversion} answers of the strings of {@code whole} that are pieces
-     * of its values, and what a piece may be besides — or empty past the allowance.
-     */
-    private static Optional<OneReading.PiecesAnswered> piecesAnswered(
-            PiecesOfAString piece, CaseMapping conversion, Language whole) {
-        Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
-        CodeMap map = CaseMaps.of(conversion);
-        Language exact = map.strings(meter);
-        Language kept = exact == null ? null : whole.and(exact, meter);
-        Language answers = kept == null ? null : map.answersTo(kept, meter);
-        StringsOfAPiece.Shown shown = answers == null ? null
-                : StringsOfAPiece.piecesOfValuesIn(answers, piece.separator(),
-                        piece.window().from(), piece.until(), meter);
-        Language alone = CodeMap.stringsOf(map.leftAlone(), meter);
-        Language mayBe = shown == null || alone == null ? null
-                : alone.or(shown.ofTheValues(), meter);
-        return mayBe == null ? Optional.empty()
-                : Optional.of(new OneReading.PiecesAnswered(shown, mayBe));
     }
 
     /**

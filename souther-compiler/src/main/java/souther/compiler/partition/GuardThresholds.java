@@ -1427,9 +1427,10 @@ public final class GuardThresholds {
     private static boolean aRowArrivesWhereItIsWorkedOut(
             ComparisonReadings.Reading each, ComparisonReadings.Reading.WorkedOutAt worked,
             Reachability toIt, List<ComparisonArrival> arrivals, WaysToACase wayToACase) {
-        if (worked.takenWhere() != null) {
-            Proposition reached = worked.madeWhere() == null ? worked.takenWhere()
-                    : WhereAnApplicationIsMade.past(worked.madeWhere(), worked.takenWhere());
+        Proposition taken = worked.takenWhere();
+        if (taken != null) {
+            Proposition reached = worked.madeWhere() == null ? taken
+                    : WhereAnApplicationIsMade.past(worked.madeWhere(), taken);
             return each.statedAsACondition().isEmpty()
                     || ComparisonAssessment.someRowArrives(wayToACase.apply(reached), arrivals);
         }
