@@ -1327,8 +1327,10 @@ final class WorkedOutToReachIt {
      * The numbers {@code value} comes to, or null where that is not known: a number the fold works
      * out, what the place of the input it reads holds, what every value a name was given comes to,
      * what the library declares a call answers for the numbers it is handed
-     * ({@link ResultRange}), what an operation makes of its operands' numbers, and either arm of a
-     * choice, each on the runs that enter it. Each expression is asked once
+     * ({@link ResultRange}), what an operation makes of its operands' numbers, an element of a
+     * container a call answered and an arm opened, what a walk keeping its seed or an element
+     * comes to, and any arm of a choice, each on the runs that enter it with the names it binds.
+     * Each expression is asked once
      * ({@link #numbersAsked}), where it is written, as an expression {@link #endsNoRun} meets is.
      * On the runs that entered the arms this is asked past ({@link #onTheArm}).
      */
@@ -1370,11 +1372,12 @@ final class WorkedOutToReachIt {
             return new FormRange(ExactRatio.of(number), ExactRatio.of(number));
         }
         return switch (written) {
-            case Core.Read _ -> {
+            case Core.Read name -> {
                 List<Denotation> given = boundTo(value);
                 if (given.isEmpty()) {
                     yield value.at().pathOf(written, newtypes) instanceof ValuesAt.At(var at)
-                            ? rangeOfAPlace(at, arms) : null;
+                            ? rangeOfAPlace(at, arms)
+                            : numbersOfAnOpenedElement(name, value.at(), arms);
                 }
                 FormRange hull = null;
                 for (Denotation each : given) {
@@ -1386,6 +1389,8 @@ final class WorkedOutToReachIt {
                 }
                 yield hull;
             }
+            case Core.PreservedCall _ when numbersAWalkKeeps(value, arms) instanceof FormRange kept ->
+                    kept;
             case Core.PreservedCall call when AnOperationApplied.of(call) instanceof AnOperationApplied
                     applied -> {
                 NumericDomain.Bounds runs = ResultRange.of(
@@ -1440,18 +1445,18 @@ final class WorkedOutToReachIt {
             }
             case Core.Binary _, Core.Neg _ -> written.type() == Type.INT
                     ? heldToAnInt(whatItComesTo(value, arms)) : null;
-            // Either arm a run enters: one no run enters adds nothing.
-            case Core.If fork -> {
+            // Any arm a run enters, read with the names it binds: one no run enters adds nothing.
+            case Core.If _, Core.Match _ -> {
                 FormRange hull = null;
-                for (Part arm : partsOf(fork)) {
-                    if (arm.arm() < 0) {
-                        continue;
-                    }
-                    ArmsTaken entered = arms.entering(fork, arm.arm(), value.at());
+                List<Choice.Arm> choices = Choice.of(written).arms();
+                for (int arm = 0; arm < choices.size(); arm++) {
+                    ArmsTaken entered = arms.entering(written, arm, value.at());
                     if (entered.leaveNoRun(read)) {
                         continue;
                     }
-                    FormRange one = numbersOf(new Denotation(arm.expression(), value.at()),
+                    InputReads inside = value.at().choosing(choices.get(arm).decidedBy(), symbols,
+                            newtypes);
+                    FormRange one = numbersOf(new Denotation(choices.get(arm).answers(), inside),
                             entered);
                     if (one == null) {
                         yield null;
@@ -1461,6 +1466,80 @@ final class WorkedOutToReachIt {
                 yield hull;
             }
             default -> null;
+        };
+    }
+
+    /**
+     * The numbers {@code name}, read in {@code at}, comes to where an arm bound it to what a call
+     * answering an element of a container holds ({@link BoundOperationFacts#answersAnElementOf}):
+     * those an element of that container comes to. Null where it is no such name, or those are
+     * not known.
+     */
+    private FormRange numbersOfAnOpenedElement(Core.Read name, InputReads at, ArmsTaken arms) {
+        InputReads.ElementOpened opened = at.elementOpenedBy(name.binding());
+        if (opened == null || !(AnOperationApplied.of(Core.withoutStanding(opened.call().value()))
+                instanceof AnOperationApplied answered)) {
+            return null;
+        }
+        var container = DefaultBoundOperationFacts.get().answersAnElementOf(answered.operation());
+        Core of = container == null ? null : answered.argument(container);
+        return of == null ? null : numbersOfAnElementOf(new Denotation(of, opened.call().at()),
+                arms);
+    }
+
+    /**
+     * The numbers a walk from a seed comes to whose step answers the element it is handed or what
+     * it was carried and nothing else ({@link #answersTheElementOrWhatItCarried}): the seed, or an
+     * element of the container it walks, whichever the last step answered. Null where
+     * {@code value} is no such walk, or the numbers of the seed or of an element are not known.
+     */
+    private FormRange numbersAWalkKeeps(Denotation value, ArmsTaken arms) {
+        Denotation met = value.at().denotes(Core.withoutStanding(value.value()),
+                read.rules().symbols(), read.rules().newtypes());
+        SeededWalk walk = met == null ? null : SeededWalk.of(met.value(), closure ->
+                Core.withoutStanding(closure) instanceof Core.Block block ? block : null);
+        if (walk == null || !answersTheElementOrWhatItCarried(walk.step().body(),
+                walk.element().binding(), walk.accumulator().binding())) {
+            return null;
+        }
+        FormRange seed = numbersOf(new Denotation(walk.seed(), met.at()), arms);
+        FormRange element = numbersOfAnElementOf(new Denotation(walk.container(), met.at()), arms);
+        return (seed == null || element == null) ? null : seed.hull(element);
+    }
+
+    /**
+     * The numbers an element of {@code container} comes to, on the runs that entered
+     * {@code arms}: those of each element of a list written out, or those of the place every
+     * element it holds stands at. Null where it is neither, or holds no element written out.
+     */
+    private FormRange numbersOfAnElementOf(Denotation container, ArmsTaken arms) {
+        List<Denotation> written = elementsWrittenOut(container);
+        if (written != null) {
+            FormRange hull = null;
+            for (Denotation each : written) {
+                FormRange one = numbersOf(each, arms);
+                if (one == null) {
+                    return null;
+                }
+                hull = hull == null ? one : hull.hull(one);
+            }
+            return hull;
+        }
+        return switch (container.at().everyElementOf(container.value(),
+                read.rules().newtypes())) {
+            case ValuesHeld.At(TermPath at) -> rangeOfAPlace(at, arms);
+            case ValuesHeld.MayStandAt(List<TermPath> among) -> {
+                FormRange hull = null;
+                for (TermPath each : among) {
+                    FormRange one = rangeOfAPlace(each, arms);
+                    if (one == null) {
+                        yield null;
+                    }
+                    hull = hull == null ? one : hull.hull(one);
+                }
+                yield hull;
+            }
+            case ValuesHeld.NotAPosition _ -> null;
         };
     }
 

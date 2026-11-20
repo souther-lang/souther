@@ -324,13 +324,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * A number an operation of whole numbers is over: a number of the input, or the value of a
-     * name read off a container, whose values are what the container holds there.
+     * A number an operation of whole numbers is over: a number of the input, the value of a
+     * name read off a container, whose values are what the container holds there, or a value a
+     * run works out whose numbers are known and stand at no row.
      *
      * <p>A bound number is one only where what the container hands the name says the values it
      * takes, as two forms of the input's numbers: where an element a walk hands its step stands,
-     * and the element of a list of every whole number between two. Any other value an operation
-     * reads is not told of here, and the operation is not told.
+     * and the element of a list of every whole number between two. A value worked out is one only
+     * where the numbers it comes to are known. Any other value an operation reads is not told of
+     * here, and the operation is not told.
      */
     sealed interface IntOperand {
 
@@ -425,6 +427,37 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             @Override
             public String toString() {
                 return name;
+            }
+        }
+
+        /**
+         * A value a run works out that is no number of the input and no name read off a
+         * container, as the reading of the comparison held it aside ({@code atom}), and the
+         * numbers it is known to come to. No row of the input says which of them a run gets, so
+         * an operation over it is said where some of them take it past its type, and no row is
+         * placed at that.
+         */
+        record OfAValueWorkedOut(NumericTerm atom, FormRange range) implements IntOperand {
+
+            public OfAValueWorkedOut {
+                Objects.requireNonNull(atom, "the value as the reading held it aside");
+                Objects.requireNonNull(range, "an operation over a value is told where what it "
+                        + "comes to is known");
+            }
+
+            @Override
+            public LinearForm<NumericTerm> atItsEnd(boolean greatest) {
+                return null;
+            }
+
+            @Override
+            public FormRange range(InputReading read) {
+                return range;
+            }
+
+            @Override
+            public String toString() {
+                return atom.toString();
             }
         }
     }
@@ -2178,6 +2211,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return switch (operand) {
             case IntOperand.OfTheInput(NumericTerm term) -> term;
             case IntOperand.OfABinding(Quantity.OfABinding value, String _) -> value;
+            // A value worked out stands at no row, so it is a side of no relation.
+            case IntOperand.OfAValueWorkedOut worked -> worked;
         };
     }
 

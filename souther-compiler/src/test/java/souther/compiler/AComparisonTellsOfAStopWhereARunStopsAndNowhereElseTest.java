@@ -172,9 +172,29 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 + "container holds is no term (FormRange.aTotal asks of a sum)");
         FORMS.put("productOfTheElements", "List.product(ds) >= 10");
         FORMS.put("maxOfAStep", "Option.withDefault(0, List.max(List.map(x -> x + 1, ds))) >= 3");
-        NOT_TOLD.put("maxPlusOne", "the comparison is not read, so there is no range for what "
-                + "it works out");
+        NOT_TOLD.put("maxPlusOne", "the operation over what the option holds is told on the arm "
+                + "of the match that opens it, the list holding an element; but a comparison over "
+                + "that value is stated as no condition, and a stop told on an arm is asked of "
+                + "rows only through the condition the comparison is stated as "
+                + "(GuardThresholds.aRunTakingAnArmMayStop): said as not read");
         FORMS.put("maxPlusOne", "Option.withDefault(0, List.max(ds)) + 1 <= 10");
+        UNTOLD_THOUGH_NONE_STOPS.put("maxPlusOneGuarded", "what the option holds comes to what "
+                + "the place of the elements holds, which a test held of every element on the way "
+                + "does not narrow; the stop on the arm is then asked of no row, and is said "
+                + "untold");
+        NOT_TOLD.put("maxOfAWrittenListPlusOne", "the same, on an arm every run takes");
+        NOT_TOLD.put("defaultPastTheTypePlusOne", "the same, where the default is past the type");
+        // what an option holds, from the elements of the list or the default: a stop where one of
+        // them is past where the operation keeps within the type, and none where none is
+        FORMS.put("maxOfAWrittenListPlusOne", "Option.withDefault(0, List.max([q, 3])) + 1 >= 3");
+        FORMS.put("maxOfAWrittenListPlusOneWithinTheType",
+                "Option.withDefault(0, List.max([1, 2])) + 1 >= 3");
+        FORMS.put("defaultPastTheTypePlusOne",
+                "Option.withDefault(9223372036854775807, List.max(ds)) + 1 >= 3");
+        FORMS.put("maxPlusOneGuarded",
+                "List.all(x -> x < 9223372036854775807, ds) && Option.withDefault(0, List.max(ds))"
+                        + " + 1 <= 10");
+        FORMS.put("maxOfAStepByQ", "Option.withDefault(0, List.max(List.map(x -> x - q, ds))) >= 3");
         NOT_TOLD.put("foldOfAProduct", "AddedOfEachElement reads only a step that adds to the "
                 + "answer so far; an operation over the running value has no operand that is a "
                 + "place of the input");
@@ -227,15 +247,23 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 "List.length(List.map(x -> if x > 5 then x + 1 else 0, ds)) >= 2");
         // an operation over what a reading cannot tell the stop of, and where it is told
         String walk = "List.fold((w, l) -> if l > w then l else w, 0, ds)";
-        NOT_TOLD.put("walkPlusOne", "the operation is over what a walk came to, which no "
-                + "operation told is over: said as not read");
         FORMS.put("walkPlusOne", walk + " + 1 <= 10");
-        NOT_TOLD.put("walkAgainstAnOption", "the same, over what an option holds: said as not "
+        // the same walk from a seed past where the operation keeps within the type, and over a
+        // list written out whose every element and seed keep it within
+        FORMS.put("walkFromTheGreatestSeedPlusOne",
+                "List.fold((w, l) -> if l > w then l else w, 9223372036854775807, ds) + 1 >= 3");
+        FORMS.put("walkOverAWrittenListPlusOneWithinTheType",
+                "List.fold((w, l) -> if l > w then l else w, 0, [1, 2]) + 1 >= 3");
+        NOT_TOLD.put("walkAgainstAnOption", "the operation over what the option holds, against "
+                + "a walk, is told on no arm or application the report asks of: said as not "
                 + "read");
         FORMS.put("walkAgainstAnOption", walk + " <= Option.withDefault(0, List.max(ds)) + 1");
-        NOT_TOLD.put("armOfAWalkPlusOne", "the same, in an arm");
+        NOT_TOLD.put("armOfAWalkPlusOne", "the same, the operation over the walk in an arm");
         FORMS.put("armOfAWalkPlusOne", "(if q > 3 then " + walk + " + 1 else 0) >= 2");
-        NOT_TOLD.put("remainderOfAWalkPlusOne", "the same, in what a remainder divides");
+        NOT_TOLD.put("remainderOfAWalkPlusOne", "what the remainder divides is a part of an "
+                + "expression held aside, told beside it only where it is read as a number of the "
+                + "input (tellWhatIsWorkedOutIn); an operation over a walk is no such number and "
+                + "is passed over, though what the walk comes to is known");
         FORMS.put("remainderOfAWalkPlusOne", "Int.floorMod(" + walk + " + 1, 7) >= 3");
         NOT_TOLD.put("armOfAWalkPlusOneInAClosure", "the same, in an arm of what a closure "
                 + "works out on each element");

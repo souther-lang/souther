@@ -16,10 +16,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * An operation a run works out over a value that is no number of the input — what a walk came to,
- * what an option holds — may end the run where nothing says. Where a run gets to the comparison and
- * works one out, the report does not say the measurement is complete: it says the stops of what is
- * worked out are not all told, and the line the comparison draws stays where it was read. Where no
- * run works the operation out, or it cannot stop, it says nothing of the kind.
+ * what an option holds — may end the run where no row says. Where a run gets to the comparison and
+ * works one out, the report does not read it as one that stops nothing: where what the value comes
+ * to is known and takes the operation past its type, it says a run may stop in it; where it is
+ * not, or the operation is worked out where no row is asked, it says the stops of what is worked
+ * out are not all told and the measurement is partial. The line the comparison draws stays where
+ * it was read. Where no run works the operation out, or it cannot stop, it says nothing of the
+ * kind.
  */
 class AnOperationOverWhatAWalkCameToIsNotReadAsOneThatStopsNothingTest {
 
@@ -28,11 +31,24 @@ class AnOperationOverWhatAWalkCameToIsNotReadAsOneThatStopsNothingTest {
     private static final String NOT_ALL_TOLD = "an operation that may end the run where nothing"
             + " here says";
 
+    private static final String MAY_STOP = "may stop a run";
+
+    /** What the walk comes to is the seed or an element, any {@code Int}, so one more may pass
+     *  the type. */
     @Test
-    void aSumOverWhatAFoldCameToIsNotReadAsOneThatStopsNothing() {
+    void aSumOverWhatAFoldCameToIsToldAsOneARunMayStopIn() {
         String report = reportOf(THE_WALK + " + 1 <= 10");
-        assertTrue(report.contains(NOT_ALL_TOLD), report);
-        assertTrue(report.contains("measurement: partial"), report);
+        assertTrue(report.contains(MAY_STOP), report);
+        assertFalse(report.contains(NOT_ALL_TOLD), report);
+    }
+
+    /** The same walk over a list written out comes to its seed or one of its elements, and one
+     *  more is still an {@code Int}. */
+    @Test
+    void nothingIsToldWhereWhatTheFoldCameToKeepsTheOperationWithinItsType() {
+        String report = reportOf("List.fold((w, l) -> if l > w then l else w, 0, [1, 2]) + 1 <= 10");
+        assertFalse(report.contains(MAY_STOP), report);
+        assertFalse(report.contains(NOT_ALL_TOLD), report);
     }
 
     @Test
@@ -74,19 +90,19 @@ class AnOperationOverWhatAWalkCameToIsNotReadAsOneThatStopsNothingTest {
     private static final String ANOTHER_WALK = "List.fold((w, l) -> if l > w then l else w, 1, ds)";
 
     @Test
-    void aSumOverTwoValuesHeldAsideIsNotReadAsOneThatStopsNothing() {
+    void aSumOverTwoValuesHeldAsideIsToldAsOneARunMayStopIn() {
         String report = reportOf(THE_WALK + " + " + ANOTHER_WALK + " + 1 <= 10");
-        assertTrue(report.contains(NOT_ALL_TOLD), report);
-        assertTrue(report.contains("measurement: partial"), report);
+        assertTrue(report.contains(MAY_STOP), report);
+        assertFalse(report.contains(NOT_ALL_TOLD), report);
     }
 
-    /** A stop that is told is not the one left untold beside it: the sum over the input is told
-     *  as one a run may stop in, and the sum over what the walk came to is said all the same. */
+    /** The sum over the input and the sum over what the walk came to are both told as ones a run
+     *  may stop in, and neither is left untold. */
     @Test
-    void aStopToldBesideOneLeftUntoldIsSaidAsBoth() {
+    void aStopOverTheInputAndOneOverWhatAWalkCameToAreBothTold() {
         String report = reportOf(THE_WALK + " + 1 <= q + 1");
-        assertTrue(report.contains("may stop a run"), report);
-        assertTrue(report.contains(NOT_ALL_TOLD), report);
+        assertTrue(report.contains(MAY_STOP), report);
+        assertFalse(report.contains(NOT_ALL_TOLD), report);
     }
 
     /** What adds up the addends of the comparison is answered for by what drew its line. */

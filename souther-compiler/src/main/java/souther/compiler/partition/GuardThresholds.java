@@ -1411,17 +1411,36 @@ public final class GuardThresholds {
      * may arrive at the place it is worked out: the comparison, an application of the closure it
      * stands in, an arm of a choice it is read through, or an arm an application takes. Where the
      * comparison is stated as no condition, nothing says which rows take an arm, and one may.
+     * A stop told where it is asked of no row ({@link #aStopToldThereIsAskedOfNoRow}) is left
+     * untold all the same.
      */
     private static boolean somethingWorkedOutIsNotAllTold(
             ComparisonReadings.Reading each, Reachability toIt, List<ComparisonArrival> arrivals,
             WaysToACase wayToACase) {
         for (ComparisonReadings.Reading.WorkedOutAt worked : each.whatARunWorksOut()) {
-            if (worked.stops().operations().aStopUntold()
+            if ((worked.stops().operations().aStopUntold()
+                    || aStopToldThereIsAskedOfNoRow(each, worked))
                     && aRowArrivesWhereItIsWorkedOut(each, worked, toIt, arrivals, wayToACase)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Whether an operation told in what {@code worked} works out is one no row is asked to stop
+     * in: one on an arm, or in an application not made on every run, where the comparison is
+     * stated as no condition. The rows that take the arm or make the application are put on the
+     * way only through that condition ({@link #aRunTakingAnArmMayStop},
+     * {@link #aRunMakingItMayStop}), so what is told there says nothing of any run.
+     */
+    private static boolean aStopToldThereIsAskedOfNoRow(
+            ComparisonReadings.Reading each, ComparisonReadings.Reading.WorkedOutAt worked) {
+        if (each.statedAsACondition().isPresent() || worked.stops().tellsNoOperation()) {
+            return false;
+        }
+        return worked.takenWhere() != null || (worked.madeWhere() != null
+                && !(worked.madeWhere() instanceof Proposition.Always(boolean holds) && holds));
     }
 
     private static boolean aRowArrivesWhereItIsWorkedOut(
