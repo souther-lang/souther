@@ -24,7 +24,9 @@ import souther.compiler.numeric.NumericDomain;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -312,18 +314,22 @@ final class ConstructionStopAssessment {
      * That rests on a step being a value a run gets past or stops at, which is what
      * {@link Evaluated#inOrder} lists: the construction an attempt tests, which takes the other arm
      * where it is refused, is the attempt's deciding and no step of it.
+     *
+     * <p>What those parts work out whenever they run is gathered once, and each construction among
+     * {@code asks} is looked for in it, since asking it part by part of each would go down the tree
+     * once for every construction and every part.
      */
     private static List<ConstructionAsk.Requirement.Is> gotPast(List<Core> onEveryRun,
                                                                List<ConstructionAsk> asks,
                                                                ConstructionAsk ask) {
+        Set<Core> worked = Collections.newSetFromMap(new IdentityHashMap<>());
+        onEveryRun.forEach(part -> Evaluated.runningWhenever(part, worked));
         List<ConstructionAsk.Requirement.Is> out = new ArrayList<>();
         for (ConstructionAsk other : asks) {
             if (other.made() == ask.made()) {
                 continue;
             }
-            boolean passed = onEveryRun.stream()
-                    .anyMatch(part -> Evaluated.runsWhenever(part, other.made()));
-            if (passed) {
+            if (worked.contains(other.made())) {
                 other.requirement().heldWhereItIs().stream()
                         .filter(is -> is.exact() != null).forEach(out::add);
             }
