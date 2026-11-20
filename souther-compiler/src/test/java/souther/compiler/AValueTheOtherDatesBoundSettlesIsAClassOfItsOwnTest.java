@@ -439,17 +439,17 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
     }
 
     /**
-     * Statements of another date that no date holds, the thirtieth of February: no row comes
-     * along the way, so the ages are not read off what the region leaves there. Read there,
-     * they would be read of rows there are none of.
+     * Statements of another date that no date holds, the thirtieth of February: the way says no
+     * row comes along it, and the comparison of ages, which is only along it, is read as one no
+     * row arrives at.
      */
     @Test
-    void statementsOfAnotherDateThatNoDateHoldsLeaveTheAgesUnread() {
-        List<String> unread = unread(divided(
-                readAgainBeside("Date.month(d) == 2 && Date.day(d) == 30")));
+    void statementsOfAnotherDateThatNoDateHoldsLeaveNoRowAlongTheWay() {
+        List<String> unread = unreadOfTheComparisonsIn(divided(
+                readAgainBeside("Date.month(d) == 2 && Date.day(d) == 30")), "old");
 
-        assertTrue(unread.containsAll(List.of("Date.year(on)", "Date.year(p.birthday)")),
-                unread.toString());
+        assertEquals(List.of("Date.year(on) NOTHING_ARRIVES_AT_THE_RULES_LINE",
+                "Date.year(p.birthday) NOTHING_ARRIVES_AT_THE_RULES_LINE"), unread);
     }
 
     /**

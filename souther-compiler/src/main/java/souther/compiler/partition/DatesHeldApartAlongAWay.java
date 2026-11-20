@@ -29,9 +29,11 @@ import java.util.function.Function;
  * as fewer places than it turns on.
  *
  * <p>A set is held where every statement and narrowing reading a place of it is a form of parts
- * of dates the declarations leave every date, or every date between its ends, and some dates hold
- * them all ({@link DatesThatHoldEveryStatement}). Anything else read there is not asked of the
- * calendar, and the set is not held.
+ * of dates outside every container that the declarations leave every date, or every date between
+ * its ends, and some dates hold them all ({@link DatesThatHoldEveryStatement}). Anything else read
+ * there is not asked of the calendar, and the set is neither held nor said to be held by no dates.
+ * A part of a date inside a container may be of another element in each statement, so the
+ * statements are not of one date there.
  */
 final class DatesHeldApartAlongAWay {
 
@@ -39,8 +41,8 @@ final class DatesHeldApartAlongAWay {
     private final List<TakenConstraint> narrowing;
     private final Function<NumericTerm.TakenOf, DateTranslation> daysOf;
     private final Map<TermPath, TermPath> above = new LinkedHashMap<>();
-    /** Whether some dates hold each set, by the place it is filed under, once asked. */
-    private final Map<TermPath, Boolean> held = new LinkedHashMap<>();
+    /** What the calendar answers of each set, by the place it is filed under, once asked. */
+    private final Map<TermPath, DatesThatHoldEveryStatement.Answer> held = new LinkedHashMap<>();
 
     private DatesHeldApartAlongAWay(List<UndividedByARelation.OnAWay> conditions,
                                     List<TakenConstraint> narrowing,
@@ -112,8 +114,27 @@ final class DatesHeldApartAlongAWay {
                 return Optional.empty();
             }
         }
-        return held.computeIfAbsent(top(place), this::someDatesHold)
+        return answerOf(top(place)) instanceof DatesThatHoldEveryStatement.Found
                 ? Optional.of(tiedTo(place)) : Optional.empty();
+    }
+
+    /**
+     * Whether no dates hold every statement and narrowing this was made of that reads some set:
+     * then no row holds them all.
+     */
+    boolean someSetNoDatesHold() {
+        Set<TermPath> filed = new LinkedHashSet<>();
+        above.keySet().forEach(place -> filed.add(top(place)));
+        for (TermPath each : filed) {
+            if (answerOf(each) == DatesThatHoldEveryStatement.Otherwise.NONE_HOLD) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private DatesThatHoldEveryStatement.Answer answerOf(TermPath filed) {
+        return held.computeIfAbsent(filed, this::someDatesHold);
     }
 
     /** The places the way ties to {@code place}, itself among them; none where the way was not
@@ -132,16 +153,16 @@ final class DatesHeldApartAlongAWay {
     }
 
     /**
-     * Whether some dates hold every statement and narrowing of the way reading the set filed under
-     * {@code filed}. Every place one of them reads is tied to the others it reads, so each is of
-     * one set, and the set of any place it reads is the set it is of.
+     * What the calendar answers of every statement and narrowing of the way reading the set filed
+     * under {@code filed}. Every place one of them reads is tied to the others it reads, so each
+     * is of one set, and the set of any place it reads is the set it is of.
      */
-    private boolean someDatesHold(TermPath filed) {
+    private DatesThatHoldEveryStatement.Answer someDatesHold(TermPath filed) {
         List<TakenConstraint.Affine> stated = new ArrayList<>();
         for (UndividedByARelation.OnAWay statement : conditions) {
             if (isOf(placesOf(statement), filed)) {
                 if (statement.affine() == null) {
-                    return false;
+                    return DatesThatHoldEveryStatement.Otherwise.NOT_SHOWN;
                 }
                 stated.add(statement.affine());
             }
@@ -149,7 +170,7 @@ final class DatesHeldApartAlongAWay {
         for (TakenConstraint each : narrowing) {
             if (isOf(placesReadOff(each.terms()), filed)) {
                 if (!(each instanceof TakenConstraint.Affine affine)) {
-                    return false;
+                    return DatesThatHoldEveryStatement.Otherwise.NOT_SHOWN;
                 }
                 stated.add(affine);
             }
@@ -162,11 +183,14 @@ final class DatesHeldApartAlongAWay {
     }
 
     /**
-     * Whether some dates hold every one of {@code statements}: false where a term of one is
-     * anything but a part of a date the declarations leave every date, or every date between its
-     * ends, or a weight or a constant is not a whole number.
+     * What the calendar answers of {@code statements}: not shown where a term of one is anything
+     * but a part of a date outside every container the declarations leave every date, or every
+     * date between its ends, or a weight or a constant is not a whole number.
      */
-    private boolean someDatesHoldAll(List<TakenConstraint.Affine> statements) {
+    private DatesThatHoldEveryStatement.Answer someDatesHoldAll(
+            List<TakenConstraint.Affine> statements) {
+        DatesThatHoldEveryStatement.Answer notShown =
+                DatesThatHoldEveryStatement.Otherwise.NOT_SHOWN;
         Map<TermPath, Integer> dates = new LinkedHashMap<>();
         List<DateTranslation> days = new ArrayList<>();
         List<DatesThatHoldEveryStatement.Statement> asked = new ArrayList<>();
@@ -176,14 +200,15 @@ final class DatesHeldApartAlongAWay {
             for (Map.Entry<NumericTerm, ExactRatio> term : each.form().coefs().entrySet()) {
                 if (!(term.getKey() instanceof NumericTerm.TakenOf taken)
                         || !(taken.takenAs() instanceof TakenAs.PartOfDate(
-                                TakenAs.DatePart part))) {
-                    return false;
+                                TakenAs.DatePart part))
+                        || taken.position().insideAContainer()) {
+                    return notShown;
                 }
                 Integer date = dates.get(taken.position());
                 if (date == null) {
                     DateTranslation ofIt = daysOf.apply(taken);
                     if (ofIt == null) {
-                        return false;
+                        return notShown;
                     }
                     date = dates.size();
                     dates.put(taken.position(), date);
@@ -191,7 +216,7 @@ final class DatesHeldApartAlongAWay {
                 }
                 Long weight = YearsAWayAllows.asLongOrNull(term.getValue());
                 if (weight == null) {
-                    return false;
+                    return notShown;
                 }
                 weighed.merge(new DatesThatHoldEveryStatement.Part(date, part,
                         taken.transformation().translation()), BigInteger.valueOf(weight),
@@ -201,17 +226,17 @@ final class DatesHeldApartAlongAWay {
             for (Map.Entry<DatesThatHoldEveryStatement.Part, BigInteger> part
                     : weighed.entrySet()) {
                 if (part.getValue().bitLength() >= Long.SIZE) {
-                    return false;
+                    return notShown;
                 }
                 parts.put(part.getKey(), part.getValue().longValue());
             }
             Long constant = YearsAWayAllows.asLongOrNull(each.form().constant());
             if (constant == null) {
-                return false;
+                return notShown;
             }
             asked.add(new DatesThatHoldEveryStatement.Statement(parts, constant, each.rel()));
         }
-        return DatesThatHoldEveryStatement.some(asked, days) != null;
+        return DatesThatHoldEveryStatement.some(asked, days);
     }
 
     private void tieAll(Set<TermPath> places) {
