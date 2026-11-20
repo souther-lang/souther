@@ -2455,7 +2455,7 @@ sealed interface ComparisonAssessment {
             boolean drawnByAnInvariant, ComparisonWitnesses.AtAComparison witnesses) {
         // A line made on one term against a place: its form is that term and nothing is added.
         return onTheQuantity(at, cutting, authored, read, drawnByAnInvariant, witnesses,
-                UndividedByARelation.Working.NOTHING);
+                UndividedByARelation.Working.AS_THE_FORM);
     }
 
     /**

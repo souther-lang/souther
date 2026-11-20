@@ -115,11 +115,13 @@ record StopEvidence(UndividedByARelation.Working operations) {
         return UndividedByARelation.aRunMayStopIn(operations, read, regions);
     }
 
-    /** Whether {@link #aRunMayStopIn} is false over every region, so that no region need be
-     *  worked out to ask it ({@link UndividedByARelation#noRunMayStopIn}). Not said where a stop
-     *  is left untold, which is not shown to be none. */
-    boolean noRunMayStopAnywhere() {
-        return !operations.aStopUntold() && UndividedByARelation.noRunMayStopIn(operations);
+    /** Whether no operation is told, so that {@link #aRunMayStopIn} is false over every region
+     *  and no region need be worked out to ask it ({@link UndividedByARelation#tellsNoOperation}).
+     *  Nothing is said of whether a run stops: no reading made, one that met something it told
+     *  nothing for, and one that showed no operation stops all tell no operation. Not said where
+     *  a stop is left untold. */
+    boolean tellsNoOperation() {
+        return !operations.aStopUntold() && UndividedByARelation.tellsNoOperation(operations);
     }
 
     /**

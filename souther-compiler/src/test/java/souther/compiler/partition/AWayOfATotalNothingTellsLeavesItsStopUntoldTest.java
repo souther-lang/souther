@@ -61,7 +61,7 @@ class AWayOfATotalNothingTellsLeavesItsStopUntoldTest {
     @Test
     void aWayWhereNoRunMayStopSaysNothing() {
         assertEquals(List.of(),
-                onTheWays(waysOf(1), _ -> UndividedByARelation.Working.NOTHING));
+                onTheWays(waysOf(1), _ -> UndividedByARelation.Working.NO_STOPS));
     }
 
     @Test

@@ -2418,7 +2418,7 @@ record Cutting(BorderQuantity of, Level at, ComparisonClaim claim,
      */
     private static Read.AgainstAnotherValue against(List<FilingCoordinate> over,
                                                     Proposition stated) {
-        return against(over, stated, UndividedByARelation.Working.NOTHING);
+        return against(over, stated, UndividedByARelation.Working.AS_THE_FORM);
     }
 
     /**

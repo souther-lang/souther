@@ -85,7 +85,7 @@ class AComparisonIsToldToBeEveryOperationOnlyWhereNothingItReadsCanStopARunUntol
      */
     @Test
     void aComparisonThatDrewNoLineTellsNothingOfWhatTheProgramWorksOut() {
-        UndividedByARelation.Working walked = UndividedByARelation.Working.NOTHING;
+        UndividedByARelation.Working walked = UndividedByARelation.Working.NO_STOPS;
         AffineReading.WorkedOut worked = AffineReading.WorkedOut.ofWhatIsToldOf(walked).noLine();
         assertEquals(UndividedByARelation.Working.UNREAD,
                 AffineReading.OfAComparison.workingOf(new AffineReading.OfAComparison.CutsNothing(
@@ -99,7 +99,7 @@ class AComparisonIsToldToBeEveryOperationOnlyWhereNothingItReadsCanStopARunUntol
      *  even where nothing was left to draw a line on. */
     @Test
     void aComparisonThatDrewNoLineStillTellsWhatARunWorksOutToStopIn() {
-        UndividedByARelation.Working walked = UndividedByARelation.Working.NOTHING;
+        UndividedByARelation.Working walked = UndividedByARelation.Working.NO_STOPS;
         AffineReading.WorkedOut worked = AffineReading.WorkedOut.ofWhatIsToldOf(walked).noLine();
         assertEquals(walked, AffineReading.OfAComparison.worksOut(
                 new AffineReading.OfAComparison.CutsNothing(Set.of(), ExactRatio.ZERO, worked))

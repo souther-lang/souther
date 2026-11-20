@@ -125,7 +125,7 @@ class ALineIsDroppedByAProofAtEveryPlaceItIsWatchedTest {
                 ComparisonAssessment.Places.AT_NO_VALUE, new AuthoredPointMapping.Proven(
                         WrittenLine.THE_COMPARISON, cutting.claim(),
                         Derivation.AComparisonRead.Facing.NOTHING_WRITTEN, true),
-                UndividedByARelation.Working.NOTHING);
+                UndividedByARelation.Working.AS_THE_FORM);
     }
 
     /** Nothing on the way, over what the declarations leave. */
