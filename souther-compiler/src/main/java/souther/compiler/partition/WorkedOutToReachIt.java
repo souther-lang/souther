@@ -311,32 +311,40 @@ final class WorkedOutToReachIt {
      * <p>Told apart by the arms, so that what one way shows is never the answer on another. The
      * region is made only where a reader asks for it, once for the reading whichever reader asks
      * ({@link RegionLeft}), from the region the arms before the last leave.
+     *
+     * <p>Held as the last arm past the ones before it, with how many there are and what they hash
+     * to, so that entering one more arm costs the same however deep the way is: a list copied at
+     * every arm would cost the square of the depth to reach it, and two lists of arms compared
+     * whole would cost the depth on every lookup of an answer.
      */
     private static final class ArmsTaken {
 
-        static final ArmsTaken NONE = new ArmsTaken(List.of(), null);
+        static final ArmsTaken NONE = new ArmsTaken(null, null);
 
-        private final List<ArmTaken> arms;
+        /** The arm entered last, or null where none is. */
+        private final ArmTaken last;
         /** These without the last arm, or null where there are none. */
         private final ArmsTaken past;
+        private final int depth;
+        private final int hash;
         private RegionLeft left;
         /** The reading {@code left} was asked under. */
         private InputReading leftOf;
 
-        private ArmsTaken(List<ArmTaken> arms, ArmsTaken past) {
-            this.arms = arms;
+        private ArmsTaken(ArmTaken last, ArmsTaken past) {
+            this.last = last;
             this.past = past;
+            this.depth = past == null ? 0 : past.depth + 1;
+            this.hash = past == null ? 0 : past.hash * 31 + last.hashCode();
         }
 
         boolean isEmpty() {
-            return arms.isEmpty();
+            return last == null;
         }
 
         /** These, and arm {@code part} of {@code fork} read at {@code at} past them. */
         ArmsTaken entering(Core fork, int part, InputReads at) {
-            List<ArmTaken> more = new ArrayList<>(arms);
-            more.add(new ArmTaken(fork, part, at));
-            return new ArmsTaken(List.copyOf(more), this);
+            return new ArmsTaken(new ArmTaken(fork, part, at), this);
         }
 
         /** Whether these are {@code earlier}, or were entered past it: the very arms taken on
@@ -359,32 +367,44 @@ final class WorkedOutToReachIt {
         /** Whether the region these leave is shown to hold no row, under {@code read}: no run
          *  enters every one of them, and nothing past them is worked out on any run. */
         boolean leaveNoRun(InputReading read) {
-            return !arms.isEmpty() && left(read).holdsNoRow();
+            return !isEmpty() && left(read).holdsNoRow();
         }
 
         /** What these leave under {@code read}: the one the reading keeps for no arm, or what the
          *  one before keeps for the last arm. Kept with these, but for no arm, which stands for
          *  every reading. */
         private RegionLeft left(InputReading read) {
-            if (arms.isEmpty()) {
+            if (isEmpty()) {
                 return read.derived(RegionLeft.class,
                         _ -> new RegionLeft(read.quantities().region()));
             }
             if (left == null || leftOf != read) {
                 leftOf = read;
-                left = past.left(read).past(arms.getLast(), read);
+                left = past.left(read).past(last, read);
             }
             return left;
         }
 
+        /** The same arms in the same order: compared last arm first, and the arms before it only
+         *  where the depth, the hash and that arm agree. */
         @Override
         public boolean equals(Object other) {
-            return this == other || (other instanceof ArmsTaken that && arms.equals(that.arms));
+            ArmsTaken one = this;
+            Object two = other;
+            while (one != two) {
+                if (!(two instanceof ArmsTaken that) || one.depth != that.depth
+                        || one.hash != that.hash || !Objects.equals(one.last, that.last)) {
+                    return false;
+                }
+                one = one.past;
+                two = that.past;
+            }
+            return true;
         }
 
         @Override
         public int hashCode() {
-            return arms.hashCode();
+            return hash;
         }
     }
 
@@ -841,37 +861,82 @@ final class WorkedOutToReachIt {
 
     /**
      * What a path of the element handed on {@code element} comes to where {@code container} keeps
-     * the elements of another container a test holds of
-     * ({@link BoundOperationFacts#keepsWhereItHolds}), as the library says it does:
-     * an element kept is one of that container's, standing where its elements stand
-     * ({@link InputReads#elementAt}), and one of which what the test states holds
-     * ({@link WhatConditionsState#truth}, {@link #heldByWhatItStates}). Null where the container
-     * keeps by no test, the test is no closure of one value, or its elements stand at no place.
+     * elements of another container a test holds of ({@link BoundOperationFacts#keepsWhereItHolds}),
+     * as the library says it does: an element kept is one of that container's, standing where its
+     * elements stand ({@link InputReads#elementAt}), and one of which what every test that kept it
+     * states holds ({@link #whatEachTestThatKeptItStates}, {@link #heldByWhatItStates}). Null where
+     * no container on the way keeps by a test, or its elements stand at no place.
      */
     private Function<ElementProjection, FormRange> keptByATest(InputReads where, BindingId element,
                                                                Core container) {
-        DeclarationNewtypes newtypes = read.rules().newtypes();
-        if (!(Core.withoutStanding(container) instanceof Core.PreservedCall call)) {
+        if (!(where.elementAt(element, read.rules().newtypes())
+                instanceof ValuesAt.At(TermPath at))) {
             return null;
         }
-        BoundOperationFacts.Kept keeps =
-                DefaultBoundOperationFacts.get().keepsWhereItHolds(call.operation());
-        if (keeps == null
-                || !(Core.withoutStanding(CallArguments.of(keeps.closure(), call))
-                        instanceof Core.Block test)
-                || test.params().size() != 1
-                || !(where.elementAt(element, newtypes) instanceof ValuesAt.At(TermPath at))) {
+        List<Proposition> stated = whatEachTestThatKeptItStates(new Denotation(container, where));
+        if (stated.isEmpty()) {
             return null;
         }
-        // What the test states of the element it is handed, which is of the place the elements
-        // of the container it walks stand at.
-        Proposition stated = WhatConditionsState.of(read).truth(test.body(), where, read)
-                .proposition();
         return place -> {
             TermPath kept = place.from(at);
-            return heldByWhatItStates(rangeOfAPlace(kept, ArmsTaken.NONE),
-                    new NumericTerm.ValueOf(kept), stated);
+            NumericTerm term = new NumericTerm.ValueOf(kept);
+            FormRange range = rangeOfAPlace(kept, ArmsTaken.NONE);
+            for (Proposition each : stated) {
+                range = heldByWhatItStates(range, term, each);
+            }
+            return range;
         };
+    }
+
+    /**
+     * What each test that kept an element of {@code container} states of the element it was
+     * handed: the test of the operation that made the container, where it keeps the elements of
+     * another a test holds of, and so on into the container it took them from, as far as one
+     * keeps them. Every element kept on the way is one each of those tests held of, which is what
+     * the library says such an operation keeps. A test that is no closure of one value states
+     * nothing here, and the container it took its elements from is followed all the same. A name
+     * a container is given is read as the one value it was given.
+     *
+     * <p>Each is of the place the elements of the container it walks stand at, which an element
+     * kept on the way stands at too, where the reading takes the parameter of the test as the
+     * element it is handed; a statement of any other value says nothing of that place and is
+     * passed over where it is read ({@link #heldByWhatItStates}).
+     */
+    private List<Proposition> whatEachTestThatKeptItStates(Denotation container) {
+        List<Proposition> out = new ArrayList<>();
+        Set<Core> walked = Collections.newSetFromMap(new IdentityHashMap<>());
+        Denotation at = theOneValueOf(container);
+        while (at != null && Core.withoutStanding(at.value()) instanceof Core.PreservedCall call
+                && walked.add(call)) {
+            BoundOperationFacts.Kept keeps =
+                    DefaultBoundOperationFacts.get().keepsWhereItHolds(call.operation());
+            if (keeps == null) {
+                break;
+            }
+            if (Core.withoutStanding(CallArguments.of(keeps.closure(), call))
+                    instanceof Core.Block test && test.params().size() == 1) {
+                out.add(WhatConditionsState.of(read).truth(test.body(), at.at(), read)
+                        .proposition());
+            }
+            at = theOneValueOf(new Denotation(CallArguments.of(keeps.source(), call), at.at()));
+        }
+        return out;
+    }
+
+    /** {@code value}, or the one value it was given where it is a name given one, and so on: the
+     *  name itself where it was given none, as a parameter is, and null where it stands for
+     *  several. */
+    private Denotation theOneValueOf(Denotation value) {
+        Denotation at = value;
+        Set<Core> walked = Collections.newSetFromMap(new IdentityHashMap<>());
+        while (Core.withoutStanding(at.value()) instanceof Core.Read name && walked.add(name)) {
+            List<Denotation> given = boundTo(at);
+            if (given.size() != 1) {
+                return given.isEmpty() ? at : null;
+            }
+            at = given.getFirst();
+        }
+        return at;
     }
 
     /**

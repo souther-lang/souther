@@ -23,11 +23,20 @@ class WhatAFilterKeepsIsHeldToWhatItsTestStatesTest {
     /** Whether working out the left side of the one comparison against {@code k}, where a step
      *  adds one to each element {@code test} keeps of {@code ds}, ends no run. */
     private static boolean aStepOverWhatItKeepsEndsNoRun(String test) {
+        return theLeftSideEndsNoRun("",
+                "List.length(List.map(x -> x + 1, List.filter(y -> %s, ds))) >= k"
+                        .formatted(test));
+    }
+
+    /** Whether working out the left side of the one comparison against {@code k} {@code body}
+     *  writes, over {@code ds}, ends no run, beside the helpers {@code helpers}. */
+    private static boolean theLeftSideEndsNoRun(String helpers, String body) {
         ReadComparisons read = ReadComparisons.ofTheAnalysis("""
                 module w1
+                %s
                 behavior m : (ds: List<Int>, k: Int) -> Bool
-                let m (ds, k) = List.length(List.map(x -> x + 1, List.filter(y -> %s, ds))) >= k
-                """.formatted(test), "m");
+                let m (ds, k) = %s
+                """.formatted(helpers, body), "m");
         List<ComparisonReadings.Reading> againstK = read.comparisons().stream()
                 .filter(each -> each.statement()
                         instanceof ComparisonReadings.Stated.AComparison compared
@@ -65,5 +74,38 @@ class WhatAFilterKeepsIsHeldToWhatItsTestStatesTest {
     @Test
     void oneOfTwoStatementsSaysNothingOfEveryKeptElement() {
         assertFalse(aStepOverWhatItKeepsEndsNoRun("y < 100 || y > 200"));
+    }
+
+    /** An element the outer filter kept was kept by the inner one first, and both tests hold of
+     *  it; two tests that each bound it from below leave it reaching the greatest {@code Int}. */
+    @Test
+    void everyFilterAnElementWasKeptByHoldsOfIt() {
+        assertTrue(theLeftSideEndsNoRun("", """
+                List.length(List.map(x -> x + 1, \
+                List.filter(y -> y > 0, List.filter(z -> z < 100, ds)))) >= k"""));
+        assertFalse(theLeftSideEndsNoRun("", """
+                List.length(List.map(x -> x + 1, \
+                List.filter(y -> y > 0, List.filter(z -> z > 5, ds)))) >= k"""), "control");
+    }
+
+    @Test
+    void aNameTheKeptElementsAreGivenIsWhatItWasGiven() {
+        assertTrue(theLeftSideEndsNoRun("", """
+                { let kept = List.filter(y -> y < 100, ds) \n \
+                List.length(List.map(x -> x + 1, kept)) >= k }"""));
+    }
+
+    @Test
+    void aTestAHelperStatesIsWhatTheHelperStates() {
+        assertTrue(theLeftSideEndsNoRun("let small (y: Int): Bool = y < 100",
+                "List.length(List.map(x -> x + 1, List.filter(y -> small(y), ds))) >= k"));
+    }
+
+    /** What a test states holds of what it kept, and says nothing of whether working the test
+     *  out stops a run: {@code y + 1} is worked out of every element, kept or not. */
+    @Test
+    void aTestThatMayStopARunStillMay() {
+        assertFalse(theLeftSideEndsNoRun("",
+                "List.length(List.filter(y -> y + 1 < 0, ds)) >= k"));
     }
 }
