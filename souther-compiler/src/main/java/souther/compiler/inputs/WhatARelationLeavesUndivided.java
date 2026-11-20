@@ -1302,6 +1302,10 @@ public final class WhatARelationLeavesUndivided {
     /** The most values of one term a way's rows are looked at to show a row each way. */
     private static final int MOST_VALUES_ASKED = 64;
 
+    /** A run this many values or more apart, first to last, may be shown along a line; a shorter
+     *  one is asked value by value, which a denominator of up to this many steps cannot fool. */
+    private static final BigInteger ALONE = BigInteger.valueOf(8);
+
     /**
      * Whether every value of {@code values} has a computed row of the way at which {@code relation}
      * holds, and one at which it fails.
@@ -1329,13 +1333,13 @@ public final class WhatARelationLeavesUndivided {
 
         /**
          * Whether each value from {@code first} to {@code last} has a computed row each way. A
-         * value is asked alone where there are three or fewer. Of more, where the ends of the
-         * other term at the first value, the one after it and the last lie on one line, they lie
-         * on it at every value between, and the rows at the line's two ends show the whole run.
-         * Where they do not, each half is asked in turn.
+         * short run ({@link #ALONE}) is asked value by value. Of a longer one, where the ends of
+         * the other term at the first value, the one after it and the last lie on one line, they
+         * lie on it at every value between, and the rows at the line's two ends show the whole
+         * run. Where they do not, each half is asked in turn.
          */
         boolean aRowEachWay(BigInteger first, BigInteger last) {
-            boolean alone = last.subtract(first).compareTo(BigInteger.TWO) <= 0;
+            boolean alone = last.subtract(first).compareTo(ALONE) < 0;
             List<BigInteger> asked = new ArrayList<>();
             if (alone) {
                 for (BigInteger value = first; value.compareTo(last) <= 0;
@@ -1391,58 +1395,31 @@ public final class WhatARelationLeavesUndivided {
         }
 
         /**
-         * Whether one end of the other term, at the three values asked, lies on one line, and the
-         * relation holds along it and fails along it at both ends of the run. A whole number
-         * between the end and one further in is a row, and the relation, a form monotone in the
-         * other term, comes out at it as it does at those two: where the end is a whole number at
-         * each value they are one.
+         * Whether one end of the other term, at the three values asked, lies on one line, and
+         * the relation comes out at the computed rows at that end at both ends of the run, each
+         * way. The end is a whole number, rounded in from what the way says, and the line is
+         * taken for the end at every value between: a function that rounds in by a denominator
+         * {@code c} stands off a line by a fraction of a step, so three values {@code c} or more
+         * steps apart do not lie on one unless the end is a line. A run of fewer values than that
+         * is asked value by value ({@link #ALONE}).
          */
         private boolean aLineCarriesARowEachWay(List<BigInteger> asked,
                                                 List<NumericDomain.Bounds> there) {
             boolean holding = false;
             boolean failing = false;
             for (boolean low : List.of(true, false)) {
-                List<ExactRatio> ends = there.stream().map(each -> endOf(each, low)).toList();
+                List<BigInteger> ends = there.stream().map(each -> endOf(each, low)).toList();
                 if (ends.contains(null) || !onOneLine(asked, ends)) {
                     continue;
                 }
-                ExactRatio step = ends.get(1).minus(ends.getFirst()).orNull();
-                if (step == null) {
-                    continue;
-                }
-                boolean whole = ends.getFirst().isWhole() && step.isWhole()
-                        && there.stream().allMatch(each -> (low ? each.min() : each.max())
-                                .inclusive());
-                ExactRatio inward = whole ? ExactRatio.ZERO
-                        : low ? ExactRatio.ONE : ExactRatio.ONE.negated();
-                holding |= comesOutAlong(relation, asked, there, ends, inward, low);
-                failing |= comesOutAlong(relation.denied(), asked, there, ends, inward, low);
+                holding |= aComputedRowComesOut(relation, asked.getFirst(), ends.getFirst())
+                        && aComputedRowComesOut(relation, asked.getLast(), ends.getLast());
+                failing |= aComputedRowComesOut(relation.denied(), asked.getFirst(),
+                        ends.getFirst())
+                        && aComputedRowComesOut(relation.denied(), asked.getLast(),
+                                ends.getLast());
             }
             return holding && failing;
-        }
-
-        /** Whether {@code rel} comes out at both ends of the run along the line {@code ends}. */
-        private boolean comesOutAlong(Rel rel, List<BigInteger> asked,
-                                      List<NumericDomain.Bounds> there, List<ExactRatio> ends,
-                                      ExactRatio inward, boolean low) {
-            return List.of(0, 2).stream().allMatch(sample -> aRowComesOutBetween(rel,
-                    asked.get(sample), there.get(sample), ends.get(sample), inward, low));
-        }
-
-        /** Whether {@code relation} holds at the end of the other term at {@code value} and at
-         *  the point {@code inward} from it, and a computed row stands at the whole end. */
-        private boolean aRowComesOutBetween(Rel rel, BigInteger value,
-                                            NumericDomain.Bounds slice, ExactRatio end,
-                                            ExactRatio inward, boolean low) {
-            ExactRatio far = end.plus(inward).orNull();
-            WholeRun whole = WholeRun.ofTheValues(slice);
-            BigInteger row = whole == null ? null : low ? whole.low() : whole.high();
-            ExactRatio other = endOf(slice, !low);
-            return far != null && row != null && other != null
-                    && (low ? far.compareTo(other) <= 0 : far.compareTo(other) >= 0)
-                    && rel.holds(signOf(ExactRatio.of(value), end))
-                    && rel.holds(signOf(ExactRatio.of(value), far))
-                    && aComputedRowComesOut(rel, value, row);
         }
 
         /** The sign of the form at the term standing at {@code value} and the other at
@@ -1469,20 +1446,19 @@ public final class WhatARelationLeavesUndivided {
                             i -> ExactRatio.of(i == at ? value : other)));
         }
 
-        /** The end of {@code slice} as a number, or null where it has none. */
-        private static ExactRatio endOf(NumericDomain.Bounds slice, boolean low) {
-            Endpoint end = low ? slice.min() : slice.max();
-            return (end != null && end.at() instanceof Count count) ? count.exactly() : null;
+        /** The least or the greatest whole number {@code slice} holds, or null where it holds
+         *  none or has no end. */
+        private static BigInteger endOf(NumericDomain.Bounds slice, boolean low) {
+            WholeRun whole = WholeRun.ofTheValues(slice);
+            return whole == null || !whole.holdsAWholeNumber() ? null
+                    : low ? whole.low() : whole.high();
         }
 
         /** Whether {@code ends}, at the values {@code asked}, lie on one line: the last as far
          *  from the first as the second is, over the steps the values are apart. */
-        private static boolean onOneLine(List<BigInteger> asked, List<ExactRatio> ends) {
-            ExactRatio step = ends.get(1).minus(ends.getFirst()).orNull();
-            ExactRatio across = ends.get(2).minus(ends.getFirst()).orNull();
-            ExactRatio expected = step == null ? null : step.times(ExactRatio.of(
-                    asked.get(2).subtract(asked.getFirst()))).orNull();
-            return across != null && expected != null && across.compareTo(expected) == 0;
+        private static boolean onOneLine(List<BigInteger> asked, List<BigInteger> ends) {
+            return ends.get(2).subtract(ends.getFirst()).equals(ends.get(1)
+                    .subtract(ends.getFirst()).multiply(asked.get(2).subtract(asked.getFirst())));
         }
     }
 
