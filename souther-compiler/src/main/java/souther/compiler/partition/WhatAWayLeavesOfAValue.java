@@ -9,7 +9,6 @@ import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,17 +35,23 @@ final class WhatAWayLeavesOfAValue {
     private final SearchRegion region;
     private final List<OnTheWay> onTheWay;
 
-    /**
-     * What the way leaves of the values a run works out on it.
-     *
-     * @param region   what the way leaves of the input's numbers
-     * @param onTheWay the conditions on the way, read for what every element of a container is
-     *                 stated to meet
-     */
-    WhatAWayLeavesOfAValue(InputReading read, SearchRegion region, List<OnTheWay> onTheWay) {
+    private WhatAWayLeavesOfAValue(InputReading read, SearchRegion region,
+                                   List<OnTheWay> onTheWay) {
         this.read = read;
         this.region = region;
         this.onTheWay = List.copyOf(onTheWay);
+    }
+
+    /**
+     * What the way {@code onTheWay} leaves of the values a run works out on it, or null where no
+     * row takes it. The region it leaves the input's numbers and what every element of a
+     * container is stated to meet are both read off the same conditions, so neither is of
+     * another way than the other.
+     */
+    static WhatAWayLeavesOfAValue along(InputReading read, List<OnTheWay> onTheWay) {
+        return Reachability.of(new WayToTheBorder(onTheWay), read.quantities().region())
+                instanceof Reachability.Reaching reaching
+                ? new WhatAWayLeavesOfAValue(read, reaching.region(), onTheWay) : null;
     }
 
     /**
@@ -83,8 +88,9 @@ final class WhatAWayLeavesOfAValue {
         return switch (origin) {
             case WhereAValueComesFrom.Fixed(FormRange range) -> Optional.of(range);
             case WhereAValueComesFrom.Derived(FormRange range) -> Optional.of(range);
-            case WhereAValueComesFrom.AtAPlace(TermPath place, FormRange range) -> atAPlace(place, range);
-            case WhereAValueComesFrom.OneOf(List<WhereAValueComesFrom> candidates) -> {
+            case WhereAValueComesFrom.AtAPlace(TermPath place, FormRange range) ->
+                    atAPlace(place, range);
+            case WhereAValueComesFrom.OneOf(List<WhereAValueComesFrom> candidates, var _) -> {
                 FormRange hull = null;
                 for (WhereAValueComesFrom each : candidates) {
                     Optional<FormRange> one = leftOf(each);
@@ -97,12 +103,17 @@ final class WhatAWayLeavesOfAValue {
         };
     }
 
-    /** What {@code place}, read to hold {@code range}, holds along the way: none where the way
-     *  leaves no row, or it is an element of a container the way leaves holding none. */
+    /**
+     * What {@code place}, read to hold {@code range}, holds along the way: none where the way
+     * leaves no row, or it stands inside the elements of containers the way leaves holding none
+     * of it. Inside the elements of a container, at any depth ({@link TermPath#containersHoldingIt}),
+     * it holds what every element of each of those containers is stated to meet.
+     */
     private Optional<FormRange> atAPlace(TermPath place, FormRange range) {
-        TermPath container = containerOf(place);
-        if (container == null) {
-            return narrowed(LinearForm.atom(new NumericTerm.ValueOf(place)), range);
+        LinearForm<NumericTerm> at = LinearForm.atom(new NumericTerm.ValueOf(place));
+        List<TermPath> holding = place.containersHoldingIt();
+        if (holding.isEmpty()) {
+            return narrowed(at, range);
         }
         NumericTerm howMany = InputNumber.howManyStandAt(place, read.domain(), read.rules());
         if (howMany != null && narrowed(LinearForm.atom(howMany),
@@ -116,13 +127,13 @@ final class WhatAWayLeavesOfAValue {
         SearchRegion elements = region;
         for (OnTheWay each : onTheWay) {
             if (each instanceof OnTheWay.TakenIn(var _, RowDemand.ForAll every, var _, var _)
-                    && every.container().equals(container) && every.ofEachElement().oneWay()) {
+                    && holding.contains(every.container()) && every.ofEachElement().oneWay()) {
                 for (RowDemand.Relational relation : every.relations()) {
                     elements = relation.constraint().narrowing(elements);
                 }
             }
         }
-        return narrowedIn(elements, LinearForm.atom(new NumericTerm.ValueOf(place)), range);
+        return narrowedIn(elements, at, range);
     }
 
     /** {@code range}, what {@code form} was read to come to, as the region of the way leaves it. */
@@ -141,15 +152,5 @@ final class WhatAWayLeavesOfAValue {
                         ? Optional.empty() : Optional.of(held);
             }
         };
-    }
-
-    /** The container {@code place} is every element of, where it stands as one; null where it
-     *  is no element. */
-    private static TermPath containerOf(TermPath place) {
-        List<TermPath.Step> steps = place.steps();
-        if (steps.isEmpty() || !(steps.getLast() instanceof TermPath.Step.Element)) {
-            return null;
-        }
-        return TermPath.of(place.head(), new ArrayList<>(steps.subList(0, steps.size() - 1)));
     }
 }

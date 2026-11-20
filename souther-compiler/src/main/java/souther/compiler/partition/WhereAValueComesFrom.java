@@ -47,18 +47,26 @@ sealed interface WhereAValueComesFrom {
      * One of {@code candidates}, whichever a run takes: either arm of a choice, any value a name
      * was given, an element of a list written out, or what a walk keeping its seed or an element
      * comes to. Two or more, or one where only one is left.
+     *
+     * @param range what any of them comes to, worked out once when this is made: an answer the
+     *              reader of numbers keeps, asked as often as the value is read
      */
-    record OneOf(List<WhereAValueComesFrom> candidates) implements WhereAValueComesFrom {
+    record OneOf(List<WhereAValueComesFrom> candidates, FormRange range)
+            implements WhereAValueComesFrom {
 
         public OneOf {
             candidates = List.copyOf(candidates);
+            Objects.requireNonNull(range, "what any of them comes to");
             if (candidates.isEmpty()) {
                 throw new IllegalArgumentException("a value is one of some candidates");
             }
         }
 
-        @Override
-        public FormRange range() {
+        public OneOf(List<WhereAValueComesFrom> candidates) {
+            this(candidates, hullOf(candidates));
+        }
+
+        private static FormRange hullOf(List<WhereAValueComesFrom> candidates) {
             FormRange hull = candidates.getFirst().range();
             for (WhereAValueComesFrom each : candidates.subList(1, candidates.size())) {
                 hull = hull.hull(each.range());

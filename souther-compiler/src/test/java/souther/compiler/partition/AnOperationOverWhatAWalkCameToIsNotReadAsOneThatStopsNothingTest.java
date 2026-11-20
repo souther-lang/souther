@@ -105,6 +105,15 @@ class AnOperationOverWhatAWalkCameToIsNotReadAsOneThatStopsNothingTest {
 
     private static final String ANOTHER_WALK = "List.fold((w, l) -> if l > w then l else w, 1, ds)";
 
+    /** A stop that is told is not the one left untold beside it: the sum over the input is told
+     *  as one a run may stop in, and the sum over what the walk came to is said all the same. */
+    @Test
+    void aStopToldBesideOneLeftUntoldIsSaidAsBoth() {
+        String report = reportOf(THE_WALK + " + 1 <= q + 1");
+        assertTrue(report.contains(MAY_STOP), report);
+        assertTrue(report.contains(NOT_ALL_TOLD), report);
+    }
+
     @Test
     void aSumOverTwoValuesHeldAsideIsNotReadAsOneThatStopsNothing() {
         String report = reportOf(THE_WALK + " + " + ANOTHER_WALK + " + 1 <= 10");
