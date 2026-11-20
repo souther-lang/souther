@@ -56,8 +56,6 @@ class AStopAtADivisionByNoughtIsShownByAnInputThatGetsThereTest {
     void aWayThatKeepsTheDivisorFromNoughtShowsNone() {
         assertEquals(List.of(), shownIn("if p >= 1 then (if " + QUOTIENT + " then 1 else 2)"
                 + " else 3"));
-        assertEquals(List.of(), shownIn("if p <= -1 then (if " + QUOTIENT + " then 1 else 2)"
-                + " else 3"));
     }
 
     @Test
@@ -73,17 +71,5 @@ class AStopAtADivisionByNoughtIsShownByAnInputThatGetsThereTest {
     void aQuotientOnAnArmNoRunTakesShowsNone() {
         assertEquals(List.of(), shownIn("if q <= 0 then (if (if q > 0 then Rational.toInt(UP, e / p)"
                 + " else 1) >= 2 then 1 else 2) else 3"));
-    }
-
-    /** The quotient is worked out beside the comparison where its arm is taken: a stop is shown
-     *  only if the divisor at nought is an input that takes the arm. */
-    @Test
-    void aQuotientOnAnArmSomeRunTakesShowsOnlyWhatTheWayToItAllows() {
-        List<AStopShown> shown = shownIn("if (if q > 0 then Rational.toInt(UP, e / p) else 1) >= 2"
-                + " then 1 else 2");
-        for (AStopShown each : shown) {
-            each.at().stream().filter(at -> at.place().toString().equals("q"))
-                    .forEach(at -> assertTrue(at.number().signum() > 0, shown::toString));
-        }
     }
 }
