@@ -45,19 +45,30 @@ class NoDatesHoldOnlyWhatIsSaidOfOneDateTest {
                 null);
     }
 
-    private static boolean noDatesHoldTheThirtiethOfFebruaryAt(TermPath at) {
-        return DatesHeldApartAlongAWay.of(
-                List.of(is(part("month", at), 2, at), is(part("day", at), 30, at)), List.of(),
-                List.of(), _ -> DateTranslation.none()).someSetNoDatesHold();
+    /** {@code month} and {@code day} of the date at {@code at}. */
+    private static List<UndividedByARelation.OnAWay> theDay(long month, long day, TermPath at) {
+        return List.of(is(part("month", at), month, at), is(part("day", at), day, at));
     }
 
-    @Test
-    void theThirtiethOfFebruaryOfADateIsHeldByNone() {
-        assertTrue(noDatesHoldTheThirtiethOfFebruaryAt(TermPath.of("d")));
+    private static boolean someSetNoDatesHold(List<List<UndividedByARelation.OnAWay>> sets) {
+        return DatesHeldApartAlongAWay.of(sets.stream().flatMap(List::stream).toList(),
+                List.of(), List.of(), _ -> DateTranslation.none()).someSetNoDatesHold();
     }
 
+    /**
+     * A way stating one date some dates hold, the thirtieth of February of a date in a container,
+     * which the calendar is not asked of, and of a date outside every container, which no date
+     * is: no dates hold a set of it, whichever comes first; without the last, none is said,
+     * though the calendar shows no dates for the second.
+     */
     @Test
-    void theMonthAndTheDayOfADateInAContainerAreNotSaidOfOneDate() {
-        assertFalse(noDatesHoldTheThirtiethOfFebruaryAt(TermPath.of("ds").element()));
+    void aSetNoDatesHoldIsSaidBesideSetsHeldAndSetsNotShown() {
+        List<UndividedByARelation.OnAWay> held = theDay(2, 29, TermPath.of("d"));
+        List<UndividedByARelation.OnAWay> notShown = theDay(2, 30, TermPath.of("ds").element());
+        List<UndividedByARelation.OnAWay> none = theDay(2, 30, TermPath.of("f"));
+
+        assertTrue(someSetNoDatesHold(List.of(held, notShown, none)));
+        assertTrue(someSetNoDatesHold(List.of(none, held, notShown)));
+        assertFalse(someSetNoDatesHold(List.of(held, notShown)));
     }
 }

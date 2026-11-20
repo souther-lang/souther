@@ -26,7 +26,8 @@ import java.util.function.Function;
  * at or under the other, or through a place tied to each. What a statement reads is what each of
  * its numbers is read off ({@link NumericTerm#placesReadOff}): a product reads every place of
  * either factor, and a number taken with arguments the places of those too, so no number is read
- * as fewer places than it turns on.
+ * as fewer places than it turns on. The sets are worked out when first asked of, which asks every
+ * two places whether one bears on the other, and kept for every question after.
  *
  * <p>A set is held where every statement and narrowing reading a place of it is a form of parts
  * of dates the declarations leave every date, or every date between its ends, and some dates hold
@@ -39,16 +40,20 @@ final class DatesHeldApartAlongAWay {
 
     private final List<UndividedByARelation.OnAWay> conditions;
     private final List<TakenConstraint> narrowing;
+    private final Collection<TermPath> alsoNamed;
     private final Function<NumericTerm.TakenOf, DateTranslation> daysOf;
-    private final Map<TermPath, TermPath> above = new LinkedHashMap<>();
+    /** The sets, once worked out. */
+    private Sets sets;
     /** What the calendar answers of each set, by the place it is filed under, once asked. */
     private final Map<TermPath, DatesThatHoldEveryStatement.Answer> held = new LinkedHashMap<>();
 
     private DatesHeldApartAlongAWay(List<UndividedByARelation.OnAWay> conditions,
                                     List<TakenConstraint> narrowing,
+                                    Collection<TermPath> alsoNamed,
                                     Function<NumericTerm.TakenOf, DateTranslation> daysOf) {
         this.conditions = conditions;
         this.narrowing = narrowing;
+        this.alsoNamed = alsoNamed;
         this.daysOf = daysOf;
     }
 
@@ -63,23 +68,7 @@ final class DatesHeldApartAlongAWay {
                                       List<TakenConstraint> narrowing,
                                       Collection<TermPath> alsoNamed,
                                       Function<NumericTerm.TakenOf, DateTranslation> daysOf) {
-        DatesHeldApartAlongAWay out = new DatesHeldApartAlongAWay(conditions, narrowing, daysOf);
-        alsoNamed.forEach(place -> out.above.putIfAbsent(place, place));
-        for (UndividedByARelation.OnAWay each : conditions) {
-            out.tieAll(placesOf(each));
-        }
-        for (TakenConstraint each : narrowing) {
-            out.tieAll(placesReadOff(each.terms()));
-        }
-        List<TermPath> places = List.copyOf(out.above.keySet());
-        for (TermPath one : places) {
-            for (TermPath other : places) {
-                if (!one.equals(other) && (one.bearsOn(other) || other.bearsOn(one))) {
-                    out.tie(one, other);
-                }
-            }
-        }
-        return out;
+        return new DatesHeldApartAlongAWay(conditions, narrowing, alsoNamed, daysOf);
     }
 
     /** Every place {@code terms} are read off, in order, each once. */
@@ -106,31 +95,41 @@ final class DatesHeldApartAlongAWay {
      * place the way was not told of.
      */
     Optional<Set<TermPath>> heldApartFrom(NumericTerm side, TermPath place) {
-        if (!above.containsKey(place)) {
+        Sets of = sets();
+        if (!of.names(place)) {
             return Optional.empty();
         }
         for (TermPath ofTheSide : side.placesReadOff()) {
-            if (!above.containsKey(ofTheSide) || top(ofTheSide).equals(top(place))) {
+            if (!of.names(ofTheSide) || of.top(ofTheSide).equals(of.top(place))) {
                 return Optional.empty();
             }
         }
-        return answerOf(top(place)) instanceof DatesThatHoldEveryStatement.Found
+        return answerOf(of.top(place)) instanceof DatesThatHoldEveryStatement.Found
                 ? Optional.of(tiedTo(place)) : Optional.empty();
     }
 
     /**
      * Whether no dates hold every statement and narrowing this was made of that reads some set:
-     * then no row holds them all.
+     * then no row holds them all. A set no dates hold is read by parts of dates and nothing else,
+     * so where nothing this was made of reads one, none is, and no set is worked out.
      */
     boolean someSetNoDatesHold() {
-        Set<TermPath> filed = new LinkedHashSet<>();
-        above.keySet().forEach(place -> filed.add(top(place)));
-        for (TermPath each : filed) {
+        if (conditions.stream().noneMatch(each -> each.affine() != null
+                && readsAPartOfADate(each.affine().terms()))
+                && narrowing.stream().noneMatch(each -> readsAPartOfADate(each.terms()))) {
+            return false;
+        }
+        for (TermPath each : sets().stated.keySet()) {
             if (answerOf(each) == DatesThatHoldEveryStatement.Otherwise.NONE_HOLD) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static boolean readsAPartOfADate(Collection<NumericTerm> terms) {
+        return terms.stream().anyMatch(term -> term instanceof NumericTerm.TakenOf taken
+                && taken.takenAs() instanceof TakenAs.PartOfDate);
     }
 
     private DatesThatHoldEveryStatement.Answer answerOf(TermPath filed) {
@@ -140,11 +139,12 @@ final class DatesHeldApartAlongAWay {
     /** The places the way ties to {@code place}, itself among them; none where the way was not
      *  told of it. */
     Set<TermPath> tiedTo(TermPath place) {
+        Sets of = sets();
         Set<TermPath> out = new LinkedHashSet<>();
-        if (above.containsKey(place)) {
-            TermPath filed = top(place);
-            for (TermPath each : above.keySet()) {
-                if (top(each).equals(filed)) {
+        if (of.names(place)) {
+            TermPath filed = of.top(place);
+            for (TermPath each : of.above.keySet()) {
+                if (of.top(each).equals(filed)) {
                     out.add(each);
                 }
             }
@@ -154,32 +154,12 @@ final class DatesHeldApartAlongAWay {
 
     /**
      * What the calendar answers of every statement and narrowing of the way reading the set filed
-     * under {@code filed}. Every place one of them reads is tied to the others it reads, so each
-     * is of one set, and the set of any place it reads is the set it is of.
+     * under {@code filed}: not shown where one of them is no form.
      */
     private DatesThatHoldEveryStatement.Answer someDatesHold(TermPath filed) {
-        List<TakenConstraint.Affine> stated = new ArrayList<>();
-        for (UndividedByARelation.OnAWay statement : conditions) {
-            if (isOf(placesOf(statement), filed)) {
-                if (statement.affine() == null) {
-                    return DatesThatHoldEveryStatement.Otherwise.NOT_SHOWN;
-                }
-                stated.add(statement.affine());
-            }
-        }
-        for (TakenConstraint each : narrowing) {
-            if (isOf(placesReadOff(each.terms()), filed)) {
-                if (!(each instanceof TakenConstraint.Affine affine)) {
-                    return DatesThatHoldEveryStatement.Otherwise.NOT_SHOWN;
-                }
-                stated.add(affine);
-            }
-        }
-        return someDatesHoldAll(stated);
-    }
-
-    private boolean isOf(Set<TermPath> read, TermPath filed) {
-        return !read.isEmpty() && top(read.iterator().next()).equals(filed);
+        Sets of = sets();
+        return of.readByNoForm.contains(filed) ? DatesThatHoldEveryStatement.Otherwise.NOT_SHOWN
+                : someDatesHoldAll(of.stated.getOrDefault(filed, List.of()));
     }
 
     /**
@@ -241,31 +221,92 @@ final class DatesHeldApartAlongAWay {
         return DatesThatHoldEveryStatement.some(asked, days);
     }
 
-    private void tieAll(Set<TermPath> places) {
-        TermPath first = null;
-        for (TermPath each : places) {
-            above.putIfAbsent(each, each);
-            if (first == null) {
-                first = each;
-            } else {
-                tie(first, each);
+    private Sets sets() {
+        if (sets == null) {
+            sets = Sets.of(conditions, narrowing, alsoNamed);
+        }
+        return sets;
+    }
+
+    /**
+     * The sets of places a way ties, each filed under one of its places, and the forms of the
+     * statements and narrowings reading each set, filed the same way: every place one of them
+     * reads is tied to the others it reads, so each is of one set. A set some statement or
+     * narrowing that is no form reads is filed among {@link #readByNoForm}.
+     */
+    private static final class Sets {
+
+        private final Map<TermPath, TermPath> above = new LinkedHashMap<>();
+        private final Map<TermPath, List<TakenConstraint.Affine>> stated = new LinkedHashMap<>();
+        private final Set<TermPath> readByNoForm = new LinkedHashSet<>();
+
+        static Sets of(List<UndividedByARelation.OnAWay> conditions,
+                       List<TakenConstraint> narrowing, Collection<TermPath> alsoNamed) {
+            Sets out = new Sets();
+            alsoNamed.forEach(place -> out.above.putIfAbsent(place, place));
+            List<Set<TermPath>> read = new ArrayList<>();
+            List<TakenConstraint.Affine> what = new ArrayList<>();
+            for (UndividedByARelation.OnAWay each : conditions) {
+                read.add(placesOf(each));
+                what.add(each.affine());
+            }
+            for (TakenConstraint each : narrowing) {
+                read.add(placesReadOff(each.terms()));
+                what.add(each instanceof TakenConstraint.Affine affine ? affine : null);
+            }
+            read.forEach(out::tieAll);
+            List<TermPath> places = List.copyOf(out.above.keySet());
+            for (TermPath one : places) {
+                for (TermPath other : places) {
+                    if (!one.equals(other) && (one.bearsOn(other) || other.bearsOn(one))) {
+                        out.tie(one, other);
+                    }
+                }
+            }
+            for (int at = 0; at < read.size(); at++) {
+                if (read.get(at).isEmpty()) {
+                    continue;
+                }
+                TermPath filed = out.top(read.get(at).iterator().next());
+                if (what.get(at) == null) {
+                    out.readByNoForm.add(filed);
+                } else {
+                    out.stated.computeIfAbsent(filed, _ -> new ArrayList<>()).add(what.get(at));
+                }
+            }
+            return out;
+        }
+
+        boolean names(TermPath place) {
+            return above.containsKey(place);
+        }
+
+        TermPath top(TermPath place) {
+            TermPath at = place;
+            while (!above.get(at).equals(at)) {
+                at = above.get(at);
+            }
+            return at;
+        }
+
+        private void tieAll(Set<TermPath> places) {
+            TermPath first = null;
+            for (TermPath each : places) {
+                above.putIfAbsent(each, each);
+                if (first == null) {
+                    first = each;
+                } else {
+                    tie(first, each);
+                }
             }
         }
-    }
 
-    private TermPath top(TermPath place) {
-        TermPath at = place;
-        while (!above.get(at).equals(at)) {
-            at = above.get(at);
-        }
-        return at;
-    }
-
-    private void tie(TermPath one, TermPath other) {
-        TermPath a = top(one);
-        TermPath b = top(other);
-        if (!a.equals(b)) {
-            above.put(a, b);
+        private void tie(TermPath one, TermPath other) {
+            TermPath a = top(one);
+            TermPath b = top(other);
+            if (!a.equals(b)) {
+                above.put(a, b);
+            }
         }
     }
 }

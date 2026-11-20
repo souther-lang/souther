@@ -242,8 +242,8 @@ class DatesAreFoundOnlyWhereTheCalendarHasThemTest {
                         EVERY_DATE.thenAddDays(335)));
         assertTrue(holdAt(List.of(equal), List.of(LocalDate.of(2001, 2, 15))));
 
-        assertTrue(found(List.of(between(LocalDate.of(2001, 1, 1), LocalDate.of(2001, 12, 31))),
-                equal) != DatesThatHoldEveryStatement.Otherwise.NONE_HOLD);
+        assertEquals(DatesThatHoldEveryStatement.Otherwise.NOT_SHOWN, found(List.of(between(
+                LocalDate.of(2001, 1, 1), LocalDate.of(2001, 12, 31))), equal));
     }
 
     /** More dates than the years are chosen together for, or more choices of what their months
