@@ -2477,7 +2477,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private Optional<Map<NumericTerm, EachWayItComesOut>> comingOutOn(InputReading read,
                                                                       SidesAsDeclared declared,
                                                                       Reachability.Reaching way) {
-        List<OnAWay> written = conditionsOf(way, remainder);
+        List<OnAWay> written = conditionsOf(way, remainder, read.quantities().region());
         if (leavesNoRow(WhatStatementsOfOneFormDecide.of(
                 written.stream().map(OnAWay::affine).toList(), askedAsAStatement()), written,
                 datesTheWayStates(written, read), read)) {
@@ -2606,7 +2606,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 out = out == null ? none : out.alongBoth(none);
                 continue;
             }
-            List<OnAWay> conditions = conditionsOf(each, remainder);
+            List<OnAWay> conditions = conditionsOf(each, remainder, read.quantities().region());
             boolean heldWhole = nothingUnreadBearsOnIt(each);
             Optional<Set<String>> declined = parametersDeclined(each);
             DemandReading.Answered past = each.gotPastAsAsked();
@@ -3502,10 +3502,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * What a way states, as what each statement turns on: what it took in, each as the demand it
-     * is, and each case it requires.
+     * What a way states beside what {@code declared} leaves, as what each statement turns on: what
+     * it took in, each as the demand it is, and each case it requires.
+     *
+     * <p>A relation of numbers that every row {@code declared} leaves meets is no statement of the
+     * way: it keeps no row off the relation asked of it. Kept, it ties the numbers it names to one
+     * another, so that no value of either is shown to be reached whatever the other holds.
      */
-    private static List<OnAWay> conditionsOf(Reachability.Reaching way, RemainderSide remainder) {
+    private static List<OnAWay> conditionsOf(Reachability.Reaching way, RemainderSide remainder,
+                                             SearchRegion declared) {
         List<OnAWay> out = new ArrayList<>();
         way.boundedOnTheWay().forEach(taken -> {
             // Where the relation's remainder lies, which is read apart ({@link
@@ -3516,6 +3521,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             TakenConstraint relation = taken.demand() instanceof RowDemand.Relational(
                     TakenConstraint constraint) ? constraint : null;
+            if (relation instanceof TakenConstraint.Affine affine
+                    && leavesNoRowOff(declared, affine)) {
+                return;
+            }
             out.add(new OnAWay(positionsADemandTurnsOn(taken.demand()),
                     relation instanceof TakenConstraint.Affine(var form, var rel, var _)
                             && rel != Rel.NE && form.coefs().size() == 1
@@ -3538,6 +3547,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         way.requirements().atANameTheCasesShare()
                 .forEach(at -> out.add(new OnAWay(Set.of(at), true, null, null)));
         return out;
+    }
+
+    /**
+     * Whether {@code declared} taking the denial of {@code relation} in leaves no row: a region
+     * that refuses it, or that cannot be shown empty, shows nothing. What the operations in the
+     * relation may stop a run at is said where the ways' ends are, and not by this.
+     */
+    private static boolean leavesNoRowOff(SearchRegion declared, TakenConstraint.Affine relation) {
+        return declared.assuming(relation.form(), relation.rel().denied())
+                instanceof SearchRegion.Assumption.Taken(SearchRegion off)
+                && off.emptiness().isPresent();
     }
 
     /**
