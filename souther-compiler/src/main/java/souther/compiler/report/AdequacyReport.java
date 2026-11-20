@@ -33,6 +33,7 @@ import souther.compiler.types.SourceConstructOrigin;
 import souther.compiler.types.ValueName;
 import souther.compiler.types.WrittenOwner;
 import souther.compiler.check.RuleCitation;
+import souther.compiler.check.RuleKey;
 import souther.compiler.check.RuleCitations;
 import souther.compiler.check.RuleRef;
 import souther.compiler.numeric.Towards;
@@ -7284,7 +7285,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             default -> throw new IllegalStateException("a bound kept on an input is a whole number"
                     + " or a date: " + bound.bound());
         };
-        return "invariant " + bound.holder().named() + (bound.atMost() ? " <= " : " >= ")
+        RuleKey named = bound.holder().named();
+        return "invariant " + (named.isTheValueItself() ? "value" : named.toString())
+                + (bound.atMost() ? " <= " : " >= ")
                 + value;
     }
 

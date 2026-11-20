@@ -38,6 +38,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
+import souther.compiler.inputs.RuleAddress;
 import souther.compiler.inputs.WhatKeepsEveryRunGoing;
 import souther.compiler.inputs.WhereAnEquationHolds;
 import souther.compiler.inputs.PositionBounds;
@@ -2907,15 +2908,19 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     /**
      * What an invariant bounding the values at {@code place} is declared on, or null where it is
      * held by nothing one can be: the place's own type where it is written under a name
-     * ({@code data Today = Date}), whose invariant names it as its value, and otherwise the record
-     * the place is a field of. A parameter whose type is a primitive is held by no data, and the
+     * ({@code data Today = Date}), whose invariant names it as the value itself, and otherwise the
+     * record the place is a field of, under what that record's rules call it
+     * ({@link RuleAddress#of}). A parameter whose type is a primitive is held by no data, and the
      * bound is on a data of that type the author introduces for it.
+     *
+     * <p>The one answer to it: what a declaration bounds is asked of this, both ways.
      */
     static ABoundThatKeepsEveryRunGoing.Holder holderOf(TermPath place, InputReading read) {
         Position position = read.domain().at(place);
         if (position != null && position.view().outermostName() != null) {
             return position.view().outermostName() instanceof TypeSymbol.AtModule named
-                    ? new ABoundThatKeepsEveryRunGoing.Holder.AData(named, "value") : null;
+                    ? new ABoundThatKeepsEveryRunGoing.Holder.AData(named, RuleKey.THE_VALUE)
+                    : null;
         }
         if (place.steps().isEmpty()) {
             return read.domain().typeAt(place, read.rules()) instanceof Type.Prim primitive
@@ -2923,14 +2928,11 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             primitive.shown())
                     : null;
         }
-        if (!(place.steps().getLast() instanceof TermPath.Step.Field(String field))) {
-            return null;
-        }
-        TermPath record = TermPath.of(place.head(),
-                place.steps().subList(0, place.steps().size() - 1));
-        return read.domain().typeAt(record, read.rules())
+        TermPath record = place.prefix(place.steps().size() - 1);
+        RuleAddress named = RuleAddress.of(record, place);
+        return named != null && read.domain().typeAt(record, read.rules())
                 instanceof Type.Ref(TypeSymbol.AtModule data)
-                ? new ABoundThatKeepsEveryRunGoing.Holder.AData(data, field) : null;
+                ? new ABoundThatKeepsEveryRunGoing.Holder.AData(data, named.key()) : null;
     }
 
     /**

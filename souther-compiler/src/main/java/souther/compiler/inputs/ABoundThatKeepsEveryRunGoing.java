@@ -1,5 +1,6 @@
 package souther.compiler.inputs;
 
+import souther.compiler.check.RuleKey;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.TypeSymbol;
 
@@ -62,18 +63,19 @@ public record ABoundThatKeepsEveryRunGoing(Holder holder, boolean atMost, BigInt
     /** What an invariant keeping a run from the stop is declared on. */
     public sealed interface Holder {
 
-        /** The place as the invariant names it. */
-        String named();
+        /** What the invariant calls the place, as the rules of what it is declared on name it
+         *  ({@link RuleAddress}): the value itself, or a field read from it. */
+        RuleKey named();
 
         /**
          * A data the model declares, which is the declaration and not its name: two modules may
          * each declare a data of one name, and an invariant on one is none on the other.
          *
          * @param data  the data whose invariant names the place
-         * @param named the place as that invariant names it: a field of the data, or its value
-         *              where the data is the place's own type
+         * @param named what that invariant calls the place: a field of the data, or the value
+         *              itself where the data is the place's own type
          */
-        record AData(TypeSymbol.AtModule data, String named) implements Holder {
+        record AData(TypeSymbol.AtModule data, RuleKey named) implements Holder {
 
             public AData {
                 if (data == null || named == null) {
@@ -99,8 +101,8 @@ public record ABoundThatKeepsEveryRunGoing(Holder holder, boolean atMost, BigInt
             }
 
             @Override
-            public String named() {
-                return "value";
+            public RuleKey named() {
+                return RuleKey.THE_VALUE;
             }
         }
     }
