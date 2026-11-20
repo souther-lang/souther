@@ -7283,30 +7283,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
     private static Message stopsNotShownSaid(List<AStopNotShown> notShown, Page page) {
         StringBuilder out = new StringBuilder();
         for (AStopNotShown each : notShown) {
-            out.append(page.say(stopNotShownSaid(each)));
+            Message why = switch (each.why()) {
+                case NO_OPERATION_TOLD -> new ReportMessage.NoOperationIsReadThere();
+                case ON_ROWS_OF_THE_STATEMENT -> new ReportMessage.TheComparisonStopsOnRowsItStates();
+                case ON_AN_ARM -> new ReportMessage.ItIsWorkedOutOnAnArm();
+                case ON_AN_APPLICATION -> new ReportMessage.ItIsWorkedOutOnEachElement();
+                case NOT_EVERY_OPERATION_TOLD -> new ReportMessage.AnotherPartIsNotRead();
+                case SOMETHING_BEFORE_IT_MAY_STOP -> new ReportMessage.SomethingBeforeItMayStopARun();
+                case A_CONDITION_NOT_READ -> new ReportMessage.AConditionOnTheWayIsNotRead();
+                case NOT_OVER_THE_INPUT -> new ReportMessage.ItIsOverAValueTheBodyWorksOut();
+                case NO_VALUE_SHOWN -> new ReportMessage.NoInputMeetingTheTypesIsBuilt();
+                case NO_VALUE_FOUND -> new ReportMessage.NoInputTriedTakesItPastItsType();
+                case NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED -> new ReportMessage.TheInputsTriedRanOut();
+            };
+            out.append(page.say(each.operation()
+                    .<Message>map(operation -> new ReportMessage.StopNotShownIn(operation, why))
+                    .orElseGet(() -> new ReportMessage.StopNotShownInWhatItWorksOut(why))));
         }
         return new ReportMessage.Verbatim(out.toString());
-    }
-
-    /** One operation whether a run stops in is not resolved, and why, as the words after the
-     *  rule say it. */
-    static Message stopNotShownSaid(AStopNotShown each) {
-        Message why = switch (each.why()) {
-            case NO_OPERATION_TOLD -> new ReportMessage.NoOperationIsReadThere();
-            case ON_ROWS_OF_THE_STATEMENT -> new ReportMessage.TheComparisonStopsOnRowsItStates();
-            case ON_AN_ARM -> new ReportMessage.ItIsWorkedOutOnAnArm();
-            case ON_AN_APPLICATION -> new ReportMessage.ItIsWorkedOutOnEachElement();
-            case NOT_EVERY_OPERATION_TOLD -> new ReportMessage.AnotherPartIsNotRead();
-            case SOMETHING_BEFORE_IT_MAY_STOP -> new ReportMessage.SomethingBeforeItMayStopARun();
-            case A_CONDITION_NOT_READ -> new ReportMessage.AConditionOnTheWayIsNotRead();
-            case NOT_OVER_THE_INPUT -> new ReportMessage.ItIsOverAValueTheBodyWorksOut();
-            case NO_VALUE_SHOWN -> new ReportMessage.NoInputMeetingTheTypesIsBuilt();
-            case NO_VALUE_FOUND -> new ReportMessage.NoInputTriedTakesItPastItsType();
-            case NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED -> new ReportMessage.TheInputsTriedRanOut();
-        };
-        return each.operation()
-                .<Message>map(operation -> new ReportMessage.StopNotShownIn(operation, why))
-                .orElseGet(() -> new ReportMessage.StopNotShownInWhatItWorksOut(why));
     }
 
     /** Where every run getting to a rule stops, as the human report says it after the rule. */

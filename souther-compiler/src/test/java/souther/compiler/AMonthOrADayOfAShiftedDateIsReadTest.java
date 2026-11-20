@@ -171,7 +171,7 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
 
                 assertEquals(0, compilation.errors().size(), where);
                 assertFalse(report.contains("no row is at"), where);
-                assertFalse(report.contains("not read"), where);
+                assertFalse(NotRead.in(report), where);
                 assertEquals(verdicts(itself), verdicts(report), where);
             }
         }
@@ -326,7 +326,7 @@ class AMonthOrADayOfAShiftedDateIsReadTest {
         String report = report(compiled(AGE.formatted(", lag: Int", ", lag",
                 "Date.addDays(0 - lag, birthday)", "")));
 
-        assertTrue(report.contains("not read"), report);
+        assertTrue(NotRead.in(report), report);
         assertFalse(report.contains("measurement: complete"), report);
         assertFalse(report.contains("Date.month((birthday"), report);
     }

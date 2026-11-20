@@ -64,6 +64,6 @@ class AComparisonThatStoppedIsFiledWhereItsValuesCameFromTest {
         String written = report("0");
 
         assertEquals(lineAbout(written, "border "), lineAbout(chosen, "border "), chosen);
-        assertEquals(chosen.contains("not read"), written.contains("not read"), chosen);
+        assertEquals(NotRead.in(chosen), NotRead.in(written), chosen);
     }
 }

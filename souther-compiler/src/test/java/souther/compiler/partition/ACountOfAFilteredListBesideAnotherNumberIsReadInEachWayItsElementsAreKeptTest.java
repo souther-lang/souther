@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.NotRead;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -223,7 +224,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     void aCountALawWeighsIsReadInEachWayAsACountTheSourceWrote() {
         String report = report(guarded(
                 "List.isEmpty(List.drop(k, List.filter(x -> x > 0, [a, b])))"));
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
         assertTrue(report.contains("read as f/k: = 2"), report);
     }
 
@@ -329,7 +330,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
         Compilation compilation = compiled(guarded(kept), after);
         String counted = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
-        assertFalse(counted.contains("not read"), counted);
+        assertFalse(NotRead.in(counted), counted);
         Set<String> owed = owedOfEveryRule(compilation, theGuard(kept, after));
         assertTrue(owed.stream().anyMatch(each -> each.startsWith("guard ")),
                 () -> kept + " owes points of the guard's own: " + owed);
@@ -400,7 +401,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     @Test
     void aStatementNoReaderDecidesStopsForItsOwnReason() {
         String report = report(guarded("k >= List.length(List.filter(x -> x * x > 3, [a, b]))"));
-        List<String> unread = report.lines().filter(line -> line.contains("not read")).toList();
+        List<String> unread = report.lines().filter(NotRead::isOne).toList();
         assertFalse(unread.isEmpty(), report);
         assertTrue(unread.stream().allMatch(line ->
                         line.contains("a product of two values that are not constants")),
@@ -429,7 +430,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
         assertTrue(report.contains("read as f/#xs [xs[*] > 0] - k: = 0"), report);
         assertEquals(List.of(),
-                report.lines().filter(line -> line.contains("not read")).toList(), report);
+                report.lines().filter(NotRead::isOne).toList(), report);
     }
 
     /** What the way to the comparison leaves of {@code k} is read before the ways: where it is at
@@ -455,7 +456,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     @Test
     void aCountAloneIsReadAsWhichOfItsStatementsHold() {
         String report = report(guarded("List.length(" + MANY + ") >= 1"));
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
     }
 
     /** And the same where a law weighs it: what {@code List.drop} is handed is a constant, so its
@@ -463,7 +464,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     @Test
     void aCountALawWeighsAloneIsReadAsWhichOfItsStatementsHold() {
         String report = report(guarded("List.isEmpty(List.drop(1, " + MANY + "))"));
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
     }
 
     /** A count beside another number inside a factor is no count a way of keeping makes a form
@@ -472,7 +473,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     @Test
     void aCountWhoseWaysLeaveTheProductNoFormIsNotReadInThem() {
         String report = report(guarded("k * (a + List.length(" + MANY + ")) >= 3"));
-        List<String> unread = report.lines().filter(line -> line.contains("not read")).toList();
+        List<String> unread = report.lines().filter(NotRead::isOne).toList();
         assertFalse(unread.isEmpty(), report);
         assertTrue(unread.stream().allMatch(line ->
                 line.contains("a product of two values that are not constants")), report);
@@ -491,7 +492,7 @@ class ACountOfAFilteredListBesideAnotherNumberIsReadInEachWayItsElementsAreKeptT
     void aCountThatCancelsIsNotReadInItsWays() {
         String cancelled = report(guarded("List.length(" + MANY + ") + " + COUNT
                 + " >= List.length(" + MANY + ") + k"));
-        assertFalse(cancelled.contains("not read"), cancelled);
+        assertFalse(NotRead.in(cancelled), cancelled);
         Set<String> uncancelled = linesOnK(report(guarded(COUNT + " >= k")));
         assertFalse(uncancelled.isEmpty());
         assertEquals(uncancelled, linesOnK(cancelled));

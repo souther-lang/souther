@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.NotRead;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -37,7 +38,7 @@ class ASizeAPositionOrAnElementIsMeasuredByTheRowsThatReachItTest {
     private static void assertAdequate(String source) {
         String report = reportOf(source);
         assertTrue(report.contains("adequacy: satisfied"), report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
     }
 
     /**

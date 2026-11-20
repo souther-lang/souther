@@ -168,7 +168,7 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
         String report = reportOf(LOOKED_UP.replace("module example.looked", "module example.twice")
                 .replace("\n    invariant List.allDistinctBy(.sku, rows)", ""));
 
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
         assertTrue(report.contains("allocate — read what this measure went without"), report);
     }
 
@@ -196,7 +196,7 @@ class TheResponseOfAnInjectedBehaviorTiesNoNumberOfTheInputTest {
     void aMatchOnTheResponseBeforeAComparisonLeavesItRead() {
         String report = reportOf(CHOSEN);
 
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
         assertFalse(report.contains("not accounted for"), report);
     }
 

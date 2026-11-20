@@ -157,7 +157,7 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
     @Test
     void aRangeOfMoreThanAreWrittenOutIsNotReadAndEndsAtTheFigure() {
         String report = measured("List.sum(List.map(n -> a.pay, List.rangeInclusive(1, 1025)))");
-        assertTrue(report.contains("not read"), report);
+        assertTrue(NotRead.in(report), report);
         assertNotEquals(measured("a.pay"), report);
     }
 
@@ -210,7 +210,7 @@ class ATotalOverAListTheBodyWritesOutIsReadTest {
     void anElementThatIsNoFormStopsOnlyTheWaysThatKeepIt() {
         String report = measured("List.sum(List.map(m -> m.pay * m.days * m.pay,"
                 + " List.filter(m -> m.days >= 17, [a, b])))");
-        assertTrue(report.contains("not read"), report);
+        assertTrue(NotRead.in(report), report);
         assertFalse(report.contains("states no law"), report);
     }
 

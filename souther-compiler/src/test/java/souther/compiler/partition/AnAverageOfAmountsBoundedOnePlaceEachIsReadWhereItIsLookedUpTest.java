@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.NotRead;
 import souther.compiler.UnreadBesideItsStops;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -254,7 +255,7 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
-                .anyMatch(line -> line.contains("not read")
+                .anyMatch(line -> NotRead.isOne(line)
                         && line.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD));
     }
 

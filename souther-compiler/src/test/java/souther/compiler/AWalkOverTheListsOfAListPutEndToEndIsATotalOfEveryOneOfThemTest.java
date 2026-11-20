@@ -77,7 +77,7 @@ class AWalkOverTheListsOfAListPutEndToEndIsATotalOfEveryOneOfThemTest {
             String report = report(total(body.formatted(4)));
             assertTrue(report.contains("List.sum(ledger.entries[*].postings[*].q)"),
                     () -> body + ": " + report);
-            assertFalse(report.contains("not read"), () -> body + ": " + report);
+            assertFalse(NotRead.in(report), () -> body + ": " + report);
         }
     }
 
@@ -413,7 +413,7 @@ class AWalkOverTheListsOfAListPutEndToEndIsATotalOfEveryOneOfThemTest {
                 """;
         String report = report(model);
         assertTrue(report.contains("List.sum(entries[*].postings[*].amount)"), report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
         assertFalse(report.contains("made from this one"), report);
 
         List<java.math.BigDecimal> totals = new ArrayList<>();
@@ -453,7 +453,7 @@ class AWalkOverTheListsOfAListPutEndToEndIsATotalOfEveryOneOfThemTest {
                     then Many else Few
                 """);
         assertTrue(report.contains("List.sum(groups[*].bs[*].cs[*].q)"), report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
     }
 
     /** What each row's postings come to, over every entry of every ledger it writes. */

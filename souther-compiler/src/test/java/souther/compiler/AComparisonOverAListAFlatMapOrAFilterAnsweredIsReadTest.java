@@ -84,7 +84,7 @@ class AComparisonOverAListAFlatMapOrAFilterAnsweredIsReadTest {
     }
 
     private static List<String> notRead(String report) {
-        return report.lines().filter(line -> line.contains("not read")
+        return report.lines().filter(line -> NotRead.isOne(line)
                 || line.contains("not accounted for")).toList();
     }
 

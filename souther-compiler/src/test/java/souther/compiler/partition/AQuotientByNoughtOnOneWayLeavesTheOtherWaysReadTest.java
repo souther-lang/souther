@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.NotRead;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -86,7 +87,7 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
         List<String> written = lineBetweenAAndK(MODEL.formatted(ABOVE, "a >= k"));
         assertEquals(1, written.size(), written.toString());
         assertEquals(written, lineBetweenAAndK(MODEL.formatted(ABOVE, QUOTIENT)));
-        assertFalse(human(MODEL.formatted(ABOVE, QUOTIENT)).contains("not read"));
+        assertFalse(NotRead.in(human(MODEL.formatted(ABOVE, QUOTIENT))));
     }
 
     /**
@@ -106,7 +107,7 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
         List<String> written = lineBetweenAAndK(MODEL.formatted(ABOVE, "a >= k"));
         String model = MODEL.formatted("", QUOTIENT);
         assertEquals(written, lineBetweenAAndK(model));
-        assertFalse(human(model).contains("not read"));
+        assertFalse(NotRead.in(human(model)));
     }
 
     /**
@@ -147,7 +148,7 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
     void withoutAGuardTheWayThatStopsIsSaidBesideTheLineTheOtherWayDraws() {
         String report = human(MODEL.formatted("", QUOTIENT));
         assertTrue(saysAStop(report), report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
         assertEquals(1, lineBetweenAAndK(MODEL.formatted("", QUOTIENT)).size());
     }
 
@@ -193,7 +194,7 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
                 "(if a > 0 then a / 1 else b / 0) >= k")) {
             String report = human(MODEL.formatted("", guard));
             assertTrue(saysAStop(report), guard + "\n" + report);
-            assertFalse(report.contains("not read"), guard + "\n" + report);
+            assertFalse(NotRead.in(report), guard + "\n" + report);
         }
         // The quotient by nought stands inside a sum of two Rationals. The sum stops no run, and
         // the stop is said all the same where it stands.

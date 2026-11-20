@@ -73,7 +73,7 @@ class WhatALookupAnswersComparedWithAConstantIsALineOnTheEntryTest {
         for (String model : List.of(AS_A_WHOLE, THROUGH_THE_DEFAULT)) {
             String report = report(measured(model));
 
-            assertFalse(report.contains("not read"), report);
+            assertFalse(NotRead.in(report), report);
             assertTrue(report.contains("measurement: complete"), report);
             assertEquals(linesRead(written), linesRead(report), report);
         }
