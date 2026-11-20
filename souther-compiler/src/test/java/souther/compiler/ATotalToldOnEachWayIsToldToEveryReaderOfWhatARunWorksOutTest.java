@@ -20,8 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * every reader of what a run works out, and not only to the reading that stopped at it: the
  * evaluation of the answer of an arm, the condition of a choice read under a rule of its own, and
  * the quotient a mean is. Kept where {@code q} is above nought, a way keeps two of it and a run
- * may pass an {@code Int} there: the stop is told, and no reader says a run may stop where nothing
- * here says.
+ * may pass an {@code Int} there: the stop is said of the rule, as one not resolved, and no reader
+ * says a run may stop where nothing here says.
  *
  * <p>Kept only below a hundred, no way a run takes passes the type, and nothing is told: a stop
  * said on rows wider than the way's is found there, both where the total is read once for every
@@ -87,8 +87,10 @@ class ATotalToldOnEachWayIsToldToEveryReaderOfWhatARunWorksOutTest {
         assertEquals(EXPECTED, said, report);
     }
 
-    /** How many {@code may stop a run} notes, and how many said to stop where nothing says, each
-     *  behavior's report holds. */
+    /** How many notes of a stop said of a rule, and how many said to stop where nothing says, each
+     *  behavior's report holds. A stop in a total is one no existence of a stopping run is shown
+     *  for, and is said as {@code stop not resolved}; one shown is said as
+     *  {@code may stop a run}. */
     private static Map<String, int[]> notes(String report) {
         Pattern header = Pattern.compile("^(\\w+)\\s+implemented\\b.*");
         Map<String, int[]> out = new LinkedHashMap<>();
@@ -98,7 +100,8 @@ class ATotalToldOnEachWayIsToldToEveryReaderOfWhatARunWorksOutTest {
             if (started.matches()) {
                 current = started.group(1);
                 out.put(current, new int[2]);
-            } else if (current != null && line.contains("may stop a run")) {
+            } else if (current != null && (line.contains("may stop a run")
+                    || line.contains("stop not resolved:"))) {
                 out.get(current)[0]++;
             } else if (current != null && line.startsWith("· not read:")
                     && line.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD)) {

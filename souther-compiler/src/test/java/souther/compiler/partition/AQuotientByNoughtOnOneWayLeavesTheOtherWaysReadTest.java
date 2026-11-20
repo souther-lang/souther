@@ -130,7 +130,14 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
         }
     }
 
-    private static final String MAY_STOP_A_RUN = "may stop a run:";
+    /**
+     * Whether {@code report} says of a rule that a run reaching it stops in what it works out:
+     * as a stop shown to exist, or as one not resolved. A division by nought on some ways is one
+     * no existence of a stopping run is shown for, and is said as not resolved.
+     */
+    private static boolean saysAStop(String report) {
+        return report.contains("may stop a run:") || report.contains("stop not resolved:");
+    }
 
     /**
      * Without the guard, the way that divides by nought is a place where a run stops, said beside
@@ -139,7 +146,7 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
     @Test
     void withoutAGuardTheWayThatStopsIsSaidBesideTheLineTheOtherWayDraws() {
         String report = human(MODEL.formatted("", QUOTIENT));
-        assertTrue(report.contains(MAY_STOP_A_RUN), report);
+        assertTrue(saysAStop(report), report);
         assertFalse(report.contains("not read"), report);
         assertEquals(1, lineBetweenAAndK(MODEL.formatted("", QUOTIENT)).size());
     }
@@ -147,7 +154,7 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
     /** Under the guard no row takes the way that divides by nought, and nothing is said of it. */
     @Test
     void underAGuardThatRulesTheWayOutNoRunStopsAndNothingIsSaid() {
-        assertFalse(human(MODEL.formatted(ABOVE, QUOTIENT)).contains(MAY_STOP_A_RUN));
+        assertFalse(saysAStop(human(MODEL.formatted(ABOVE, QUOTIENT))));
     }
 
     /**
@@ -162,7 +169,7 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
         String report = human(MODEL.formatted("",
                 "(if " + QUOTIENT.replace(">= k", "< 0") + " then 1 else 2) >= b"));
         assertFalse(report.contains("measurement: complete"), report);
-        assertTrue(report.contains(MAY_STOP_A_RUN) || report.contains("not read:"), report);
+        assertTrue(saysAStop(report) || report.contains("not read:"), report);
     }
 
     /**
@@ -173,7 +180,7 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
     @Test
     void aStopTheWaysBeforeItAreNotShownToRuleOutIsSaidAsOneThatMayHappen() {
         String guards = "guard a * b > 0 else No\n    guard b > 0 else No";
-        assertTrue(human(MODEL.formatted(guards, QUOTIENT)).contains(MAY_STOP_A_RUN));
+        assertTrue(saysAStop(human(MODEL.formatted(guards, QUOTIENT))));
     }
 
     /**
@@ -185,13 +192,13 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
         for (String guard : List.of("(if a > 0 then a / 0 else b / 1) >= k",
                 "(if a > 0 then a / 1 else b / 0) >= k")) {
             String report = human(MODEL.formatted("", guard));
-            assertTrue(report.contains(MAY_STOP_A_RUN), guard + "\n" + report);
+            assertTrue(saysAStop(report), guard + "\n" + report);
             assertFalse(report.contains("not read"), guard + "\n" + report);
         }
         // The quotient by nought stands inside a sum of two Rationals. The sum stops no run, and
         // the stop is said all the same where it stands.
         String sum = "a / 1 + (if b > 0 then 1 / 1 else 1 / 0) >= k";
-        assertTrue(human(MODEL.formatted("", sum)).contains(MAY_STOP_A_RUN), sum);
+        assertTrue(saysAStop(human(MODEL.formatted("", sum))), sum);
     }
 
     private static final String MATCHED =
@@ -203,13 +210,14 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
      */
     @Test
     void anArmOfAMatchStopsARunOnlyWhereTheArmIsTaken() {
-        assertFalse(human(MODEL.formatted(ABOVE, MATCHED)).contains(MAY_STOP_A_RUN));
-        assertTrue(human(MODEL.formatted("", MATCHED)).contains(MAY_STOP_A_RUN));
+        assertFalse(saysAStop(human(MODEL.formatted(ABOVE, MATCHED))));
+        assertTrue(saysAStop(human(MODEL.formatted("", MATCHED))));
     }
 
     /**
      * The finding is about a rule, and names it by the identity the document gives every rule a
-     * finding is about.
+     * finding is about. A division by nought is a stop not resolved, and that finding is the one
+     * said of the rule.
      */
     @Test
     void aRuleSomeRunsStopInIsNamedByItsRuleIdInTheDocument() {
@@ -220,11 +228,13 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
                 .get("modules").get(0).get("behaviors").get(0).get("findings");
         List<JsonNode> stopping = new ArrayList<>();
         for (JsonNode each : findings) {
-            if (each.get("kind").asString().equals("rule_may_stop_a_run")) {
+            String kind = each.get("kind").asString();
+            if (kind.equals("rule_may_stop_a_run") || kind.equals("rule_stop_not_shown")) {
                 stopping.add(each);
             }
         }
         assertEquals(1, stopping.size(), findings.toString());
+        assertEquals("rule_stop_not_shown", stopping.getFirst().get("kind").asString());
         assertTrue(stopping.getFirst().has("ruleId"), stopping.getFirst().toString());
         assertFalse(stopping.getFirst().has("reason"), stopping.getFirst().toString());
     }
@@ -233,7 +243,7 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
     @Test
     void aComparisonEveryRunStopsInIsNotSaidTwice() {
         String report = human(MODEL.formatted("", "a / 0 >= k"));
-        assertFalse(report.contains(MAY_STOP_A_RUN), report);
+        assertFalse(saysAStop(report), report);
         assertTrue(report.contains(SUCH_A_RUN_STOPS), report);
     }
 
@@ -257,8 +267,8 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
     @Test
     void aClosureMadeOnTwoValuesOneOfWhichStopsSaysBoth() {
         String report = human(ALL.formatted("[1, 0]"));
-        assertTrue(report.contains(MAY_STOP_A_RUN), report);
-        assertFalse(human(ALL.formatted("[1, 2]")).contains(MAY_STOP_A_RUN));
+        assertTrue(saysAStop(report), report);
+        assertFalse(saysAStop(human(ALL.formatted("[1, 2]"))));
     }
 
     /**
@@ -269,8 +279,8 @@ class AQuotientByNoughtOnOneWayLeavesTheOtherWaysReadTest {
     void anApplicationThatStopsIsNotLostToOneThatCutsNothing() {
         String model = ALL.replace("10 / d >= k", "10 / d >= 1");
         String report = human(model.formatted("[1, 0]"));
-        assertTrue(report.contains(MAY_STOP_A_RUN), report);
-        assertFalse(human(model.formatted("[1, 2]")).contains(MAY_STOP_A_RUN));
+        assertTrue(saysAStop(report), report);
+        assertFalse(saysAStop(human(model.formatted("[1, 2]"))));
     }
 
     /** The reason is the stop's, not the reading's: a division by nought stops the run. */

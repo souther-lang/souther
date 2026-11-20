@@ -12,22 +12,25 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * One rule of the model that a run reaching it may stop in: an operation it is read through ends
- * the run, such as a division by nought on one of the ways it is worked out.
+ * One rule of the model that some run reaching it stops in: an operation it is read through ends
+ * the run, such as a number worked out past its type.
  *
- * <p>A possibility and not a run shown to exist. The conditions of the ways to the rule are asked
- * whether they leave a row for the stop, and a stop is dropped only where they are shown to leave
- * none; where that is not shown it stays, as every other fact read off the way does.
+ * <p>Shown and not a possibility. Said only where a value of the input is shown to exist that gets
+ * to the operation, has nothing before it end the run, and works the operation out past its ends;
+ * what the ways to the rule leave a number holds rows that never arrive, and is never what shows
+ * one does. Where neither a stop nor that there is none is shown, that is said apart
+ * ({@link RuleWhereAStopIsNotShown}), and of the same rule as this where one operation of it is
+ * shown to stop a run and another is not resolved.
  *
  * <p>Said of the rule and apart from the line it draws, and whatever else is said of it. A rule
- * whose ways divide by nought on some of them draws its line on the others; one where a run that
- * gets past it comes out the same for every row has no line to draw; and neither is a rule with no
- * line ({@link RuleWithoutALine}) for having a run that stops. A rule every run stops in is a rule
- * with no line, said by its own reason ({@link BlockReason.ComparisonAnswersNowhere}).
+ * some of whose runs stop draws its line on the others; one where a run that gets past it comes
+ * out the same for every row has no line to draw; and neither is a rule with no line
+ * ({@link RuleWithoutALine}) for having a run that stops. A rule every run stops in is a rule with
+ * no line, said by its own reason ({@link BlockReason.ComparisonAnswersNowhere}).
  *
  * <p>And where it is known, at which values every run that gets to the rule stops: an operation the
- * rule is read through comes to past its type there whatever else it is over holds. Those are
- * proofs and not possibilities, and still name no row — the ways before the rule are what decide
+ * rule is read through comes to past its type there whatever else it is over holds. Those say where
+ * a run stops if one gets there, and name no row — the ways before the rule are what decide
  * whether a row gets there.
  *
  * @param rule      which rule
@@ -35,15 +38,10 @@ import java.util.Set;
  * @param readAt    every copy of the model's code the rule was read at here
  * @param everyRunStops the runs of the values at the rule's places at which every run getting to
  *                  it stops, each once; empty where none is known
- * @param asks      what each construction a run works out on the way to the rule asks of it, each
- *                  once and as written: the condition on the run that the stop of a run that does
- *                  not meet it is a stop for, and which the declarations do not already hold. A
- *                  possibility of a stop and not a row that stops, as the rest of this is; empty
- *                  where no construction asks anything of the run
  */
 public record RuleWhereARunMayStop(RuleRef rule, Set<RuleReportAnchor> reachedBy,
-                                   ModelOccurrences readAt, List<EveryRunStops> everyRunStops,
-                                   List<WhatAConstructionAsks> asks) {
+                                   ModelOccurrences readAt, List<EveryRunStops> everyRunStops)
+        implements WhatIsShownOfAStop {
 
     public RuleWhereARunMayStop {
         if (rule == null || readAt == null) {
@@ -52,7 +50,6 @@ public record RuleWhereARunMayStop(RuleRef rule, Set<RuleReportAnchor> reachedBy
         reachedBy = reachedBy == null ? Set.of() : Set.copyOf(reachedBy);
         RuleCitation.requireReached(rule, reachedBy);
         everyRunStops = List.copyOf(new LinkedHashSet<>(everyRunStops));
-        asks = List.copyOf(new LinkedHashSet<>(asks));
     }
 
     /** One reader's finding about a rule a run may stop in. */
@@ -63,15 +60,8 @@ public record RuleWhereARunMayStop(RuleRef rule, Set<RuleReportAnchor> reachedBy
     /** The same, with the values at which every run getting to the rule stops. */
     public static RuleWhereARunMayStop of(RuleCitation cited, ModelOccurrences readAt,
                                           List<EveryRunStops> everyRunStops) {
-        return of(cited, readAt, everyRunStops, List.of());
-    }
-
-    /** The same, with what each construction on the way to the rule asks of a run. */
-    public static RuleWhereARunMayStop of(RuleCitation cited, ModelOccurrences readAt,
-                                          List<EveryRunStops> everyRunStops,
-                                          List<WhatAConstructionAsks> asks) {
         return new RuleWhereARunMayStop(cited.rule(), RuleCitation.anchorOf(cited), readAt,
-                everyRunStops, asks);
+                everyRunStops);
     }
 
     /** How a reader finds the rule, as for a rule with no line ({@link RuleWithoutALine#cited}). */
@@ -80,17 +70,16 @@ public record RuleWhereARunMayStop(RuleRef rule, Set<RuleReportAnchor> reachedBy
     }
 
     /** Both readers' findings, as one: the rule, with every place either reached it at. */
-    public RuleWhereARunMayStop mergedWith(RuleWhereARunMayStop other) {
-        if (!rule.equals(other.rule)) {
+    @Override
+    public RuleWhereARunMayStop mergedWith(WhatIsShownOfAStop other) {
+        if (!(other instanceof RuleWhereARunMayStop that) || !rule.equals(that.rule)) {
             throw new IllegalArgumentException("two findings put together are one rule a run may"
-                    + " stop in: " + rule + " and " + other.rule);
+                    + " stop in: " + rule + " and " + other);
         }
         Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
-        both.addAll(other.reachedBy);
+        both.addAll(that.reachedBy);
         List<EveryRunStops> stops = new ArrayList<>(everyRunStops);
-        stops.addAll(other.everyRunStops);
-        List<WhatAConstructionAsks> asked = new ArrayList<>(asks);
-        asked.addAll(other.asks);
-        return new RuleWhereARunMayStop(rule, both, readAt.and(other.readAt), stops, asked);
+        stops.addAll(that.everyRunStops);
+        return new RuleWhereARunMayStop(rule, both, readAt.and(that.readAt), stops);
     }
 }

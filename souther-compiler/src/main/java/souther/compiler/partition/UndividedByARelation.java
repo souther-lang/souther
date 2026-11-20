@@ -638,27 +638,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return told == WhatARelationLeavesUndivided.Told.EVERY;
         }
 
-        /**
-         * Whether a run working this out may stop in an operation told over a bound value: one is
-         * told only where no value the number takes is shown to keep it within its type, and a run
-         * stops in it at whichever value takes it past. Which rows hand the number such a value no
-         * form of the input's numbers says, and where every run stops says only where every value
-         * does.
-         */
-        boolean aRunMayStopOverABoundValue() {
-            return operations.stream().anyMatch(each -> !each.stopsOnRowsOfTheInput()
-                    && !each.overAValueWorkedOut());
-        }
-
-        /**
-         * The operations told over a value a run works out
-         * ({@link IntOperand.OfAValueWorkedOut}): what those values may come to shows where no
-         * run stops in them, and never that one does, so each is a stop left untold unless the
-         * way to it keeps it within its type.
-         */
-        List<IntOperation> overValuesWorkedOut() {
-            return operations.stream().filter(IntOperation::overAValueWorkedOut).toList();
-        }
     }
 
     UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
@@ -2892,44 +2871,27 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * Whether a run on a row {@code regions} leave may stop in an operation {@code working}
-     * tells: one over a bound value no value of it is shown to keep within its type, or one over
-     * the input's numbers past one of its ends on some such row. What a run works out before it
-     * is not asked, since a run stopping there stops all the same; nor whether every operation is
-     * told, since one told is one a run works out. False where the regions leave no row.
+     * Whether no row {@code regions} leave takes {@code it} past either of its ends, where the rows
+     * a run stops at in it can be said as rows of the input ({@link IntOperation#stopsOnRowsOfTheInput}).
+     * The regions hold every row that arrives, so none past an end is none a run stops at. False
+     * where it is no such operation, which is not that some row takes it past.
      */
-    static boolean aRunMayStopIn(Working working, InputReading read, List<SearchRegion> regions) {
-        if (regions.isEmpty()) {
+    static boolean noRowTakesItPastItsEnds(IntOperation it, InputReading read,
+                                           List<SearchRegion> regions) {
+        if (!it.stopsOnRowsOfTheInput()) {
             return false;
         }
-        if (working.aRunMayStopOverABoundValue()) {
-            return true;
-        }
-        for (IntOperation it : working.operations()) {
-            LinearForm<NumericTerm> form = it.overTheInput();
-            if (form != null && (rowsWhere(List.of(new Bounded(form,
-                            it.greatest().add(BigInteger.ONE), null)), read, regions) != null
-                    || rowsWhere(List.of(new Bounded(form, null,
-                            it.least().subtract(BigInteger.ONE))), read, regions) != null)) {
-                return true;
-            }
-        }
-        return false;
+        LinearForm<NumericTerm> form = it.overTheInput();
+        return rowsWhere(List.of(new Bounded(form, it.greatest().add(BigInteger.ONE), null)), read,
+                regions) == null
+                && rowsWhere(List.of(new Bounded(form, null, it.least().subtract(BigInteger.ONE))),
+                        read, regions) == null;
     }
 
-    /** Whether {@code working} tells no operation, so that {@link #aRunMayStopIn} is false of it
-     *  on any region and the regions it is asked over do not need working out. That is no
-     *  claim that a run stops nowhere ({@link Working#NO_STOPS}). */
+    /** Whether {@code working} tells no operation. That is no claim that a run stops nowhere
+     *  ({@link Working#NO_STOPS}). */
     static boolean tellsNoOperation(Working working) {
         return working.operations().isEmpty();
-    }
-
-    /**
-     * Whether a run getting to this relation may stop in an operation the reading told over a
-     * bound value ({@link Working#aRunMayStopOverABoundValue}).
-     */
-    boolean aRunMayStopOverABoundValue() {
-        return working.aRunMayStopOverABoundValue();
     }
 
     /**

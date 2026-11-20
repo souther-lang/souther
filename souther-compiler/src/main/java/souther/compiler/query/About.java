@@ -508,13 +508,12 @@ public sealed interface About {
     }
 
     /**
-     * A rule of the model that a run reaching it may stop in: an operation it is read through ends
-     * the run on some of the ways it is worked out, such as a division by nought, and the ways
-     * before the rule do not rule such a run out.
+     * A rule of the model that some run reaching it is shown to stop in: an operation it is read
+     * through ends the run, such as a number worked out past its type
+     * ({@link souther.compiler.inputs.RuleWhereARunMayStop}).
      *
-     * <p>A possibility and not a run shown to exist. The conditions on the way are asked whether
-     * they leave a row for the stop, and a stop is dropped only where they are shown to leave none;
-     * where that is not shown, the stop stays, as every other fact read off the way does.
+     * <p>A run shown to exist and not a possibility. Where neither that one stops nor that none
+     * does is shown, that is {@link ARuleWhoseStopIsNotShown}, which may be said of the same rule.
      *
      * <p>Said of the rule whatever else is said of it, and independent of the line it draws: a
      * rule that draws a line on the runs that do not stop, one that comes out the same for every
@@ -525,6 +524,33 @@ public sealed interface About {
     record ARuleThatMayStopARun(souther.compiler.inputs.RuleWhereARunMayStop finding)
             implements OfARule {
         public ARuleThatMayStopARun {
+            java.util.Objects.requireNonNull(finding, "a finding is about something");
+        }
+
+        @Override
+        public souther.compiler.check.RuleRef rule() {
+            return finding.rule();
+        }
+
+        @Override
+        public Set<RuleCitation> cited() {
+            return finding.cited();
+        }
+    }
+
+    /**
+     * A rule of the model where whether a run stops on its way through it is not resolved: neither
+     * that one does nor that none does is shown, of something it works out or of what a
+     * construction on the way to it asks of a run
+     * ({@link souther.compiler.inputs.RuleWhereAStopIsNotShown}).
+     *
+     * <p>Not a stop and not that there is none. Said of the rule whatever places it is filed at,
+     * and beside a stop shown in the same rule; what it leaves a place's border is said of the
+     * place apart, and this is no part of it.
+     */
+    record ARuleWhoseStopIsNotShown(souther.compiler.inputs.RuleWhereAStopIsNotShown finding)
+            implements OfARule {
+        public ARuleWhoseStopIsNotShown {
             java.util.Objects.requireNonNull(finding, "a finding is about something");
         }
 

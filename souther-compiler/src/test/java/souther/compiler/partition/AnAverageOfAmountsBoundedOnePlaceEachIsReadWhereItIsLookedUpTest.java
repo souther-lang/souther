@@ -276,16 +276,19 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
     }
 
     /** Control: without a bound on each amount the total of two can pass the greatest
-     *  {@code Int}, and a run stops there; bounded, none does. */
+     *  {@code Int}, and a run getting there stops; bounded, none does. The stop is said with the
+     *  rows it turns on, as one not resolved: the amounts are totalled in what a helper answers
+     *  over values the declarations bound, which no existence of a stopping run is shown over. */
     @Test
-    void theSameAverageOfAmountsWithNoBoundIsToldToStopWhereATotalPassesAnInt() {
+    void theSameAverageOfAmountsWithNoBoundIsSaidToStopWhereATotalPassesAnInt() {
         assertTrue(stopsWhereATotalPassesAnInt(report("", "", AVERAGE_WRITTEN_AT_THE_CALL)));
         assertFalse(stopsWhereATotalPassesAnInt(report(BOUNDS, "", AVERAGE_WRITTEN_AT_THE_CALL)));
     }
 
-    /** Whether {@code report} says a run stops where the total of a month passes an {@code Int}. */
+    /** Whether {@code report} says a run that gets there stops where the total of a month passes
+     *  an {@code Int}. */
     private static boolean stopsWhereATotalPassesAnInt(List<String> report) {
-        return report.stream().anyMatch(line -> line.contains("may stop a run")
+        return report.stream().anyMatch(line -> line.contains("stop not resolved:")
                 && line.contains("w.first.base + w.first.extra is at least 9223372036854775808"));
     }
 }

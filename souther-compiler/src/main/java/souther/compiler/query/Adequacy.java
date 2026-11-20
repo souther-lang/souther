@@ -44,7 +44,10 @@ import souther.compiler.partition.RunPlacement;
 import souther.compiler.partition.RuleStep;
 import souther.compiler.partition.ShownBy;
 import souther.compiler.partition.WhereNothingIsAnswered;
+import souther.compiler.inputs.RuleWhereARunMayStop;
+import souther.compiler.inputs.RuleWhereAStopIsNotShown;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.inputs.WhatIsShownOfAStop;
 
 
 import souther.compiler.coverage.AlignedObservation;
@@ -4582,7 +4585,8 @@ public final class Adequacy {
                     new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
                             .Reason.AN_ACCOUNT_OF_WHAT_THE_ROWS_DID);
             // What the model says, read to the end. A row does not change it.
-            case About.APositionNoLineDivides _, About.ARuleThatMayStopARun _ ->
+            case About.APositionNoLineDivides _, About.ARuleThatMayStopARun _,
+                 About.ARuleWhoseStopIsNotShown _ ->
                     new GenerationOutcome.NotApplicable(GenerationOutcome.NotApplicable
                             .Reason.A_FACT_ABOUT_THE_MODEL);
             // <b>Asked of the finding and not read off which kind it is.</b> The two reasons here
@@ -6285,7 +6289,7 @@ public final class Adequacy {
                     // What this compiler could not read, and what it read to the end and found the
                     // model says nothing at. Neither is work a row does anything about.
                     case About.APositionNoLineDivides _, About.ARuleWithoutALine _,
-                         About.ARuleThatMayStopARun _,
+                         About.ARuleThatMayStopARun _, About.ARuleWhoseStopIsNotShown _,
                          About.ARuleNothingClassified _, About.APositionThisCouldNotRead _,
                          About.APositionReadWiderThanItsRules _,
                          About.APositionWhoseRulesWereNotReached _,
@@ -6779,6 +6783,7 @@ public final class Adequacy {
                                     About.APositionThisCouldNotRead _,
                                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
                                     About.ARuleThatMayStopARun _,
+                                    About.ARuleWhoseStopIsNotShown _,
                                     About.APositionWhoseRulesWereNotReached _,
                                     About.APositionReadWiderThanItsRules _,
                                     About.AQuestionNothingAnswered _ ->
@@ -8279,15 +8284,25 @@ public final class Adequacy {
          */
         PARTITION_VALUES_NOT_SEPARATED(null),
         /**
-         * A rule of the model that a run reaching it may stop in, such as a division by nought on
-         * one of the ways it is worked out, where the ways before it do not rule the run out.
+         * A rule of the model that some run reaching it is shown to stop in, such as a number
+         * worked out past its type on one of the ways it is worked out.
          *
          * <p>Its own finding beside {@link #PARTITION_NOT_READ}. The rule was read, so nothing is
-         * missing from the measure; what a reader is told is that a run may end in it, which no
-         * line says. A possibility, not a run shown to exist. A rule every run stops in is told as
-         * a rule that draws no line, with its own reason.
+         * missing from the measure; what a reader is told is that a run ends in it, which no line
+         * says. A run shown to exist, not a possibility. A rule every run stops in is told as a
+         * rule that draws no line, with its own reason.
          */
-        RULE_MAY_STOP_A_RUN(null);
+        RULE_MAY_STOP_A_RUN(null),
+        /**
+         * A rule of the model where whether a run stops on its way through it is not resolved:
+         * neither that one does nor that none does is shown, of something it works out or of what
+         * a construction on the way asks of a run.
+         *
+         * <p>Its own finding beside {@link #RULE_MAY_STOP_A_RUN}, and said of the same rule where
+         * one operation is shown to stop a run and another is not resolved. Not a stop, and no
+         * part of what holds a place's border open, which is said of the place.
+         */
+        RULE_STOP_NOT_SHOWN(null);
 
         private final DiagnosticCode code;
 
@@ -8357,7 +8372,7 @@ public final class Adequacy {
                     About.APointOfABorder _, About.ALineTheRowsDoNotTellFromAnother _,
                     About.ATiltOfADerivedValueNoRowShows _, About.APositionNoLineDivides _,
                     About.ARuleWithoutALine _, About.ARuleNothingClassified _,
-                    About.ARuleThatMayStopARun _,
+                    About.ARuleThatMayStopARun _, About.ARuleWhoseStopIsNotShown _,
                     About.APositionThisCouldNotRead _, About.APositionReadWiderThanItsRules _,
                     About.APositionWhoseRulesWereNotReached _, About.AQuestionNothingAnswered _ ->
                     whereItIsDeclared(db, module, finding.subject());
@@ -8657,6 +8672,7 @@ public final class Adequacy {
                 case About.ARuleWithoutALine _, About.ARuleNothingClassified _ ->
                         Kind.PARTITION_NOT_READ;
                 case About.ARuleThatMayStopARun _ -> Kind.RULE_MAY_STOP_A_RUN;
+                case About.ARuleWhoseStopIsNotShown _ -> Kind.RULE_STOP_NOT_SHOWN;
                 // One word, whatever stopped the reading, and the reason beside it says which.
                 // PARTITION_RULES_NOT_REACHED belongs to the finding above — a position the axes
                 // did measure — and the two write nothing but the position, so sharing the word
@@ -10152,11 +10168,14 @@ public final class Adequacy {
                                     new About.APositionThisCouldNotRead(position);
                         }));
             }
-            // And the rules some run reaching them stops in, which are read and draw their lines:
-            // nothing is missing from the measure, and a reader is told what the lines leave out.
-            for (souther.compiler.inputs.RuleWhereARunMayStop each
-                    : partition.rulesWhereARunMayStop()) {
-                out.add(Finding.noticed(behavior.name(), new About.ARuleThatMayStopARun(each)));
+            // And the rules some run reaching them is shown to stop in, and those where whether
+            // one does is not resolved, which are read and draw their lines: nothing is missing
+            // from the measure, and a reader is told what the lines leave out.
+            for (WhatIsShownOfAStop each : partition.stopsShown()) {
+                out.add(Finding.noticed(behavior.name(), switch (each) {
+                    case RuleWhereARunMayStop stops -> new About.ARuleThatMayStopARun(stops);
+                    case RuleWhereAStopIsNotShown open -> new About.ARuleWhoseStopIsNotShown(open);
+                }));
             }
             // And what the reading could not hold together, which is neither of the two above: no
             // rule is answerable for it and nothing went unreached. Said whatever the axes made of
@@ -10665,6 +10684,7 @@ public final class Adequacy {
                         case About.ACaseNothingWasSeenToProduce _,
                                 About.APositionNoLineDivides _, About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
                                 About.ARuleNothingClassified _, About.ARuleThatMayStopARun _,
+                                About.ARuleWhoseStopIsNotShown _,
                                 About.APositionWhoseRulesWereNotReached _,
                                 About.APositionReadWiderThanItsRules _,
                                 About.AQuestionNothingAnswered _ ->
@@ -10867,6 +10887,7 @@ public final class Adequacy {
                         About.APositionNoLineDivides _,
                         About.APositionThisCouldNotRead _, About.ARuleWithoutALine _,
                         About.ARuleNothingClassified _, About.ARuleThatMayStopARun _,
+                        About.ARuleWhoseStopIsNotShown _,
                         About.APositionWhoseRulesWereNotReached _,
                         About.APositionReadWiderThanItsRules _,
                         About.AQuestionNothingAnswered _ -> { }

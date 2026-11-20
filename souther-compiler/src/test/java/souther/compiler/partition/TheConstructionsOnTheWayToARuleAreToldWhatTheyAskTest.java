@@ -78,7 +78,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
     }
 
     private static void collect(JsonNode node, List<JsonNode> out) {
-        if (node.isObject() && node.path("kind").asString().equals("rule_may_stop_a_run")
+        if (node.isObject() && node.path("kind").asString().equals("rule_stop_not_shown")
                 && node.has("asks")) {
             node.get("asks").forEach(out::add);
         }
@@ -227,7 +227,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
     }
 
     private static void collectPerFinding(JsonNode node, List<List<JsonNode>> out) {
-        if (node.isObject() && node.path("kind").asString().equals("rule_may_stop_a_run")
+        if (node.isObject() && node.path("kind").asString().equals("rule_stop_not_shown")
                 && node.has("asks")) {
             out.add(List.copyOf(node.get("asks").values()));
         }

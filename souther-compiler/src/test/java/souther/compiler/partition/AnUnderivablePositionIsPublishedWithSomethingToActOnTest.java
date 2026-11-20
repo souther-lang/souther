@@ -195,9 +195,10 @@ class AnUnderivablePositionIsPublishedWithSomethingToActOnTest {
             // A rule filed at the position and read from end to end, which is the model stating
             // something rather than the position being short of anything.
                  About.ARuleWithoutALine _,
-            // A rule a run may stop in: what it says is a possibility beside the line it draws, so
-            // no reading of a position fell short of it.
-                 About.ARuleThatMayStopARun _,
+            // A rule a run is shown to stop in, or one where whether a run stops is not resolved:
+            // what it says is beside the line it draws and of the rule, so no reading of a
+            // position fell short of it.
+                 About.ARuleThatMayStopARun _, About.ARuleWhoseStopIsNotShown _,
             // The values the position was read as, wider than its rules leave them: a fact about
             // the set and about no rule, and about a position that may well be measured.
                  About.APositionReadWiderThanItsRules _,

@@ -526,7 +526,34 @@ public sealed interface ReportMessage extends Message {
 
     record SentTo(String at) implements ReportMessage, Prose {}
 
-    record MayStopARun(String rule, Message every, Message asks, String calls)
+    record MayStopARun(String rule, Message every, String calls)
+            implements ReportMessage, Prose {}
+
+    /** A rule where whether a run stops on its way through it is not resolved: of what it works
+     *  out ({@code evaluating}), of what the constructions on the way ask ({@code asks}), or
+     *  both. */
+    record StopNotShown(String rule, Message evaluating, Message every, Message asks,
+                        String calls)
+            implements ReportMessage, Prose {}
+
+    /** Where a run that gets to a rule stops, said of a rule where no run is shown to get
+     *  there. */
+    record ARunGettingThereStops(String stops) implements ReportMessage, Prose {}
+
+    /**
+     * The invariant an author may declare on {@code data} that is enough to keep every run from
+     * the stop said above it, said where no run is shown to stop there now: a bound that keeps a
+     * run from that stop, and no more.
+     */
+    record ABoundOnTheInputWouldKeepEveryRunFromIt(String data, String invariant)
+            implements ReportMessage, Prose {}
+
+    /** Neither that evaluating a rule stops a run nor that it does not is shown. */
+    record WhetherEvaluatingItStopsARunIsNotDetermined() implements ReportMessage, Prose {}
+
+    /** What the constructions on the way to a rule ask of a run, no run being shown not to meet
+     *  it: {@code asks}, each said by {@link ConstructionAsks} or {@link ConstructionNeverPassed}. */
+    record WhatTheConstructionsOnTheWayAskIsNotDetermined(Message asks)
             implements ReportMessage, Prose {}
 
     /**

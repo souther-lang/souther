@@ -1,7 +1,6 @@
 package souther.compiler.inputs;
 
 import souther.compiler.check.RuleCitation;
-import souther.compiler.check.RuleRef;
 import souther.compiler.meaning.CaseExpansion;
 import souther.compiler.types.ModelOccurrences;
 import souther.compiler.values.ValuesWithin;
@@ -10,6 +9,7 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What the readers found about the rules that came to no line here, and the rules among them
@@ -36,13 +36,14 @@ import java.util.Map;
  *                     asked of the reasons rather than read off this
  * @param unclassified the rules nothing worked out the questions of, each holding the measures it
  *                     leaves open
- * @param stopping     the rules a run reaching them may stop in: said beside the rules that came to
- *                     no line because it is what the same readers find of a rule, and apart from
- *                     them because it says nothing of whether the rule draws a line
+ * @param stopping     what is shown of a run stopping at each rule: that one does, or that whether
+ *                     one does is not resolved, each rule once for each. Said beside the rules that
+ *                     came to no line because it is what the same readers find of a rule, and
+ *                     apart from them because it says nothing of whether the rule draws a line
  */
 public record RulesWithNoLine(List<RuleWithoutALine> reported,
                               List<StandingQuestion.Unclassified> unclassified,
-                              List<RuleWhereARunMayStop> stopping,
+                              List<WhatIsShownOfAStop> stopping,
                               List<CasesAtARule<CaseExpansion.CameTo>> expanded,
                               List<CasesAtARule<List<CaseExpansion.MultipliedHelper>>> costly) {
 
@@ -61,7 +62,7 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
     /** The same, with no rule's cases told of beside a line that was read at a cost. */
     public RulesWithNoLine(List<RuleWithoutALine> reported,
                            List<StandingQuestion.Unclassified> unclassified,
-                           List<RuleWhereARunMayStop> stopping,
+                           List<WhatIsShownOfAStop> stopping,
                            List<CasesAtARule<CaseExpansion.CameTo>> expanded) {
         this(reported, unclassified, stopping, expanded, List.of());
     }
@@ -69,7 +70,7 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
     /** The same, with no rule's cases told of. */
     public RulesWithNoLine(List<RuleWithoutALine> reported,
                            List<StandingQuestion.Unclassified> unclassified,
-                           List<RuleWhereARunMayStop> stopping) {
+                           List<WhatIsShownOfAStop> stopping) {
         this(reported, unclassified, stopping, List.of(), List.of());
     }
 
@@ -168,7 +169,8 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
 
         private final Map<Object, RuleWithoutALine> reported = new LinkedHashMap<>();
         private final Map<Object, StandingQuestion.Unclassified> unclassified = new LinkedHashMap<>();
-        private final Map<RuleRef, RuleWhereARunMayStop> stopping = new LinkedHashMap<>();
+        /** By the kind of finding and the rule, so that each rule has each said of it once. */
+        private final Map<List<Object>, WhatIsShownOfAStop> stopping = new LinkedHashMap<>();
         private final Map<CasesAtARule.Key, CasesAtARule<CaseExpansion.CameTo>> expanded =
                 new LinkedHashMap<>();
         private final Map<CasesAtARule.Key, CasesAtARule<List<CaseExpansion.MultipliedHelper>>>
@@ -205,7 +207,7 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
             costly.merge(one.key(), one, CasesAtARule::mergedWith);
         }
 
-        /** A rule a run reaching it may stop in, which is what a report says of it. */
+        /** A rule some run reaching it is shown to stop in, which is what a report says of it. */
         public void mayStopARun(RuleCitation cited, ModelOccurrences readAt) {
             mayStopARun(cited, readAt, List.of());
         }
@@ -213,16 +215,23 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
         /** The same, with the values at which every run getting to the rule stops. */
         public void mayStopARun(RuleCitation cited, ModelOccurrences readAt,
                                 List<EveryRunStops> everyRunStops) {
-            mayStopARun(cited, readAt, everyRunStops, List.of());
+            stopped(RuleWhereARunMayStop.of(cited, readAt, everyRunStops));
         }
 
-        /** The same, with what each construction on the way to the rule asks of a run. */
-        public void mayStopARun(RuleCitation cited, ModelOccurrences readAt,
-                                List<EveryRunStops> everyRunStops,
-                                List<WhatAConstructionAsks> asks) {
-            RuleWhereARunMayStop one = RuleWhereARunMayStop.of(cited, readAt, everyRunStops,
-                    asks);
-            stopping.merge(one.rule(), one, RuleWhereARunMayStop::mergedWith);
+        /** A rule where whether a run stops is not resolved, why, what each construction on the
+         *  way to it asks of a run, and the values at which every run getting there stops
+         *  ({@link RuleWhereAStopIsNotShown}). */
+        public void stopNotShown(RuleCitation cited, ModelOccurrences readAt,
+                                 Set<WhyAStopIsNotShown> notShown,
+                                 List<WhatAConstructionAsks> asks,
+                                 List<EveryRunStops> everyRunStops) {
+            stopped(RuleWhereAStopIsNotShown.of(cited, readAt, notShown, asks, everyRunStops));
+        }
+
+        /** One a reader already made, folded with what is said of the same rule alike. */
+        public void stopped(WhatIsShownOfAStop one) {
+            stopping.merge(List.of(one.getClass(), one.rule()), one,
+                    WhatIsShownOfAStop::mergedWith);
         }
 
         /** One more finding, which is what a report says about the rule at that place. */
@@ -328,8 +337,7 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
         public void addAll(RulesWithNoLine other) {
             other.reported().forEach(this::add);
             other.unclassified().forEach(this::asked);
-            other.stopping().forEach(one ->
-                    stopping.merge(one.rule(), one, RuleWhereARunMayStop::mergedWith));
+            other.stopping().forEach(this::stopped);
             other.expanded().forEach(this::expanded);
             other.costly().forEach(this::costly);
         }

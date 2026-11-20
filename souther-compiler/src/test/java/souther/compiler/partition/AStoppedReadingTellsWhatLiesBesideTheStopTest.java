@@ -200,7 +200,8 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
     /** An operation is told over the value the stopped expression comes to, which no row of the
      *  input is placed at. */
     private static void assertToldOverWhatTheStopComesTo(UndividedByARelation.Working working) {
-        assertTrue(!working.overValuesWorkedOut().isEmpty(), working::toString);
+        assertTrue(working.operations().stream()
+                .anyMatch(UndividedByARelation.IntOperation::overAValueWorkedOut), working::toString);
     }
 
     /** No row is shown computed, and no operation is told. */
