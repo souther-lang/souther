@@ -686,6 +686,9 @@ class EveryBudgetOfThisCompilerIsReadWhereItIsDeclaredToBeTest {
                     "walks a progression as far as this walks one, and says that is why"),
             Map.entry("souther.compiler.partition.LevelCandidateSource#<clinit>()V",
                     "how many levels a side is asked at"),
+            Map.entry("souther.compiler.partition.StopAssessment#<clinit>()V",
+                    "how many values of the input are put to the proof of a stop, which, spent,"
+                            + " leaves it unresolved and says so as why"),
             Map.entry("souther.compiler.partition.NumericWitness#<clinit>()V",
                     "how many values a position on the way is tried at, and how many places of its"
                             + " run are looked at to find them"),

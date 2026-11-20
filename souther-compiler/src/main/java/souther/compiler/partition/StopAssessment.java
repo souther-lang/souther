@@ -236,10 +236,15 @@ final class StopAssessment {
         if (!AValueOfTheInput.holdsAnyWholeNumbersAt(read, places)) {
             return new Judgement.Unresolved(operation, WhyAStopIsNotShown.NO_VALUE_SHOWN);
         }
-        Shown shown = aValueItStopsAt(operation, others, way, List.copyOf(numbers), read);
-        return shown == null
-                ? new Judgement.Unresolved(operation, WhyAStopIsNotShown.NO_VALUE_FOUND)
-                : new Judgement.Stops(shown);
+        int[] left = {MOST_VALUES_TRIED};
+        Shown shown = aValueItStopsAt(operation, others, way, List.copyOf(numbers), read, left);
+        if (shown != null) {
+            return new Judgement.Stops(shown);
+        }
+        // Where the values ran out with the figure, more may be left untried, and that is said.
+        return new Judgement.Unresolved(operation, left[0] <= 0
+                ? WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED
+                : WhyAStopIsNotShown.NO_VALUE_FOUND);
     }
 
     /**
@@ -247,18 +252,19 @@ final class StopAssessment {
      * and taking {@code operation} past one of its own, or null where none of those tried is. Each
      * number but one is tried at a few values — nought and one either side, the ends of its place,
      * and on both sides of where a condition on the way of it alone turns — and the one left is
-     * put where it takes the operation just past an end.
+     * put where it takes the operation just past an end. Each value tried spends one of
+     * {@code left}, and none is tried once it is spent.
      */
     private static Shown aValueItStopsAt(UndividedByARelation.IntOperation operation,
                                          List<UndividedByARelation.IntOperation> others,
                                          List<TakenConstraint.Affine> way,
-                                         List<NumericTerm> numbers, InputReading read) {
+                                         List<NumericTerm> numbers, InputReading read,
+                                         int[] left) {
         LinearForm<NumericTerm> form = operation.overTheInput();
         Map<NumericTerm, List<ExactRatio>> tried = new LinkedHashMap<>();
         for (NumericTerm number : numbers) {
             tried.put(number, valuesToTry(number, way, read));
         }
-        int[] left = {MOST_VALUES_TRIED};
         // A form of no number comes to its constant whatever the input holds: what is looked for
         // is a value on the way.
         if (form.coefs().isEmpty()) {

@@ -27,6 +27,10 @@ public enum WhyAStopIsNotShown {
     NOT_OVER_THE_INPUT,
     /** No value of the input is shown to exist holding the numbers asked. */
     NO_VALUE_SHOWN,
-    /** No value tried is on the way and takes it past its ends. */
-    NO_VALUE_FOUND
+    /** No value tried is on the way and takes it past its ends, every value there was to try
+     *  tried. */
+    NO_VALUE_FOUND,
+    /** No value tried is, and as many were tried as a search for an assignment on the way tries
+     *  of one position, with more left. */
+    NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED
 }

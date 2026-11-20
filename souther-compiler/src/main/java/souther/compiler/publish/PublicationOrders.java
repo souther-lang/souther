@@ -492,7 +492,8 @@ public final class PublicationOrders {
                     WhyAStopIsNotShown.A_CONDITION_NOT_READ,
                     WhyAStopIsNotShown.NOT_OVER_THE_INPUT,
                     WhyAStopIsNotShown.NO_VALUE_SHOWN,
-                    WhyAStopIsNotShown.NO_VALUE_FOUND));
+                    WhyAStopIsNotShown.NO_VALUE_FOUND,
+                    WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED));
 
     /**
      * What may stop a run on the way to a point, in the order a reader looking up the body for it
