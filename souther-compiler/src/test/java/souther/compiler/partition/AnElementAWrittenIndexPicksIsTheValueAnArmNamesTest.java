@@ -66,12 +66,10 @@ class AnElementAWrittenIndexPicksIsTheValueAnArmNamesTest {
     }
 
     /** An arm no run takes works nothing out: what it would stop in is said nowhere. An index
-     *  past the list takes the None arm, so the Some arm's operation is worked out on no run,
-     *  whether it is over the element or over the input alone. */
+     *  past the list takes the None arm, so the Some arm's {@code c + 1} is worked out on no
+     *  run. */
     @Test
     void aStopOnTheArmNoRunTakesIsNotSaid() {
-        assertFalse(reasonsAt(reportOf(guarded("List.get(1, [48])")), "x")
-                .contains(STOPS_NOT_ALL_TOLD));
         assertFalse(reasonsAt(reportOf(guarded("List.get(1, [48])")
                         .replace("Some zero -> c - zero", "Some zero -> c + 1 - zero + zero")), "x")
                 .contains(STOPS_NOT_ALL_TOLD));

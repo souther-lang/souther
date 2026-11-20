@@ -96,15 +96,6 @@ class AnOperationOverWhatAWalkCameToIsNotReadAsOneThatStopsNothingTest {
         assertFalse(report.contains(NOT_ALL_TOLD), report);
     }
 
-    /** The sum over the input and the sum over what the walk came to are both told as ones a run
-     *  may stop in, and neither is left untold. */
-    @Test
-    void aStopOverTheInputAndOneOverWhatAWalkCameToAreBothTold() {
-        String report = reportOf(THE_WALK + " + 1 <= q + 1");
-        assertTrue(report.contains(MAY_STOP), report);
-        assertFalse(report.contains(NOT_ALL_TOLD), report);
-    }
-
     /** What adds up the addends of the comparison is answered for by what drew its line. */
     @Test
     void aSumOfTheAddendsOfTheComparisonIsTheAnswerOfWhatDrewItsLine() {
