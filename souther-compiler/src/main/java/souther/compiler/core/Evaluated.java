@@ -121,7 +121,12 @@ public final class Evaluated {
             case Core.If iff -> always(iff.cond());
             case Core.LetIn let -> always(let.value());
             case Core.Match match -> always(match.scrutinee());
-            case Core.IfConstructed constructed -> always(constructed.construct());
+            // What the value is built of, and not the building: whether it is built is what the
+            // attempt decides, as a condition decides an `if`, and a value its type refuses takes
+            // the other arm and ends no run. So the construction is no value a run works out on
+            // its way and gets past, which is what a step is; asked of a step, it would read a
+            // refused attempt as a run that got past what the type asks.
+            case Core.IfConstructed constructed -> inOrder(constructed.construct());
         };
     }
 

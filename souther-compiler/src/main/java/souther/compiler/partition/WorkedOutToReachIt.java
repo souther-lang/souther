@@ -1743,12 +1743,10 @@ final class WorkedOutToReachIt {
     static List<Part> partsOf(Core written) {
         List<Part> parts = new ArrayList<>();
         Core fork = Core.withoutStanding(written);
-        if (fork instanceof Core.IfConstructed tested) {
-            tested.construct().values().forEach(field -> parts.add(new Part(field.value(), -1)));
-        } else {
-            for (Evaluated.Step step : Evaluated.inOrder(written)) {
-                parts.add(new Part(step.expression(), -1));
-            }
+        // Of an attempt, what the construction is built of: the building is the attempt's
+        // deciding, and no step of it ({@link Evaluated#inOrder}).
+        for (Evaluated.Step step : Evaluated.inOrder(written)) {
+            parts.add(new Part(step.expression(), -1));
         }
         if (fork instanceof Core.If || fork instanceof Core.Match
                 || fork instanceof Core.IfConstructed) {

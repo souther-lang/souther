@@ -176,6 +176,44 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
                 BigInteger.ONE.negate())), stops.constructions().getFirst().at());
     }
 
+    private static final String AN_ATTEMPT_FIRST = """
+            module w1
+            data Count = Int invariant value >= 0
+            data Out = { n: Count, ok: Bool, within: Bool }
+            behavior m : (q: Int) -> Out constructs Out, Count
+            let m (q) = {
+                let ok = if Count(q) as made then true else false
+                Out { n = MADE, ok = ok, within = RULE }
+            }
+            """;
+
+    /**
+     * An attempt that is refused takes the other arm, and a run going on from it has met none of
+     * what the type asks: a construction after it asking the same stops the run at a value the
+     * attempt refused, and is a stop shown there.
+     */
+    @Test
+    void anAttemptRefusedIsNoConstructionARunGotPast() {
+        List<WhatIsShownOfAStop> shown = stopsShown(ACompiledModel.answered(AN_ATTEMPT_FIRST
+                .replace("MADE", "Count(q)").replace("RULE", "q <= 3")));
+        assertEquals(List.of(RuleWhereARunMayStop.class), kinds(shown));
+        RuleWhereARunMayStop stops = (RuleWhereARunMayStop) shown.getFirst();
+        assertEquals(List.of(new AStopShown.NumberAt(TermPath.of("q"), BigInteger.ONE.negate())),
+                stops.constructions().getFirst().at());
+    }
+
+    /**
+     * Nor are the rows that get to a rule after an attempt narrowed by what the type asks: the
+     * values it refuses go on down the other arm, and a rule below them draws its line there.
+     */
+    @Test
+    void anAttemptRefusedNarrowsNoRowOfTheRulesAfterIt() {
+        Compilation compilation = ACompiledModel.answered(AN_ATTEMPT_FIRST
+                .replace("MADE", "Count(0)").replace("RULE", "q < -5"));
+        assertEquals(List.of(), divided(compilation).rulesWithoutALine());
+        assertEquals(List.of(), stopsShown(compilation));
+    }
+
     /** What a construction on the way asks of a run, where something worked out before it may
      *  end the run first, is said as not resolved and never as a stop. */
     @Test

@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import org.junit.jupiter.api.Test;
+import souther.compiler.diag.PhysicalPos;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.inputs.AConstructionStopShown;
 import souther.compiler.inputs.AStopShown;
@@ -115,9 +116,16 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
         FORMS.put("product", new Form("OneH", "Held",
                 "OneH { h = Held(Decimal.multiply(d, e)), w = Decimal.compare(d, 3.0m) <= 0 }"));
         FORMS.put("aConstant", new Form("OneC", "Count", "OneC { a = Count(5), w = q <= 3 }"));
-        // a construction an attempt tests, which takes the other arm where it is refused
+        // a construction an attempt tests, which takes the other arm where it is refused: alone,
+        // before a construction asking what it would have, and before a rule below what it asks
         FORMS.put("attempted", new Form("OneC", "Count",
                 "{ let n = if Count(q) as m then m else Count(0) \n OneC { a = n, w = q <= 3 } }"));
+        FORMS.put("attemptedThenMade", new Form("CountFlag", "Count",
+                "{ let ok = if Count(q) as m then true else false \n "
+                        + "CountFlag { a = Count(q), ok = ok, w = q <= 3 } }"));
+        FORMS.put("attemptedBeforeARuleBelowIt", new Form("CountFlag", "Count",
+                "{ let ok = if Count(q) as m then true else false \n "
+                        + "CountFlag { a = Count(0), ok = ok, w = q < -5 } }"));
         // something before it that may end a run first
         FORMS.put("overflowFirst", new Form("OneC", "Count",
                 "OneC { a = Count(q + 1), w = q <= 3 }"));
@@ -157,6 +165,7 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
                 data CountBig = { a: Count, b: Big, w: Bool }
                 data CountAbove = { a: Count, b: AboveMinusFive, w: Bool }
                 data CountWithin = { a: Count, b: Within, w: Bool }
+                data CountFlag = { a: Count, ok: Bool, w: Bool }
                 data OneS = { s: Small, w: Bool }
                 data OneH = { h: Held, w: Bool }
                 data TwoH = { a: Held, b: Held, w: Bool }
@@ -197,8 +206,11 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
                     in.put(field, field.equals("q") ? (Object) number.number().longValueExact()
                             : new BigDecimal(number.number()));
                 }
-                if (!stopsAtA(loader, behavior, in, shown.asks().construction())) {
-                    shownAndItsValueDoesNotStop.add(names.get(at) + " at " + in);
+                PhysicalPos written = SourceRendering.namedByIdentity(compilation.texts())
+                        .layouts().resolve(shown.asks().at());
+                if (!stopsAt(loader, behavior, in, shown.asks().construction(), written)) {
+                    shownAndItsValueDoesNotStop.add(names.get(at) + " at " + in + ", told of "
+                            + shown.asks().construction() + " at " + written);
                 }
             }
             if (stops && counts[SHOWN] == 0) {
@@ -214,7 +226,8 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
                                 + "stops"),
                 () -> assertEquals(new TreeSet<>(), shownAndItsValueDoesNotStop,
                         "told that a run stops at a construction, and the run of the value the "
-                                + "stop rests on does not stop at a construction of that type"),
+                                + "stop rests on does not stop at that construction where it is "
+                                + "written"),
                 () -> assertEquals(new TreeSet<>(NOT_SHOWN.keySet()), stopsAndNotShown,
                         "a run stops and no stop is shown, beside the forms the compiler cannot "
                                 + "yet show"),
@@ -251,17 +264,20 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
         }
     }
 
-    /** Whether the run of {@code raw} stops at a construction of {@code type}, its invariant not
-     *  holding: not past it, and not at anything else first. */
-    private static boolean stopsAtA(ClassLoader loader, Object behavior, Map<String, Object> raw,
-                                    String type) throws Exception {
+    /** Whether the run of {@code raw} stops at the construction of {@code type} written at
+     *  {@code written}, its invariant not holding: not past it, and not at anything else first,
+     *  another construction of the same type included. */
+    private static boolean stopsAt(ClassLoader loader, Object behavior, Map<String, Object> raw,
+                                   String type, PhysicalPos written) throws Exception {
         Object in = Codecs.decoded(loader, "demo.In", raw);
         try {
             Codecs.apply(behavior, in);
             return false;
         } catch (ConstraintViolation stopped) {
             return stopped.failure() instanceof InvariantFailure failure
-                    && failure.type().equals(type);
+                    && failure.type().equals(type) && stopped.site() != null
+                    && stopped.site().line() == written.line()
+                    && stopped.site().column() == written.column();
         }
     }
 

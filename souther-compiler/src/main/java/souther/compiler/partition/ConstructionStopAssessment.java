@@ -18,6 +18,7 @@ import souther.compiler.numeric.LinearForm;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -32,9 +33,8 @@ import java.util.function.Predicate;
  * operation, answered of what a construction asks.
  *
  * <p>{@link Judgement.Safe} is a proof that every run taking the way to the comparison and getting
- * to the construction meets what it asks, or that it ends no run: the way holds it, a construction
- * every such run has got past by then asks as much, or it is the construction an attempt tests,
- * which takes the other arm where it is refused. {@link Judgement.Stops} is a proof that some run does not, and
+ * to the construction meets what it asks: the way holds it, or a construction every such run has
+ * got past by then asks as much. {@link Judgement.Stops} is a proof that some run does not, and
  * rests on one value of the input that exists ({@link AValueOfTheInput}), meets every condition on
  * the way to the comparison, gets to the construction with nothing before it ending the run, and
  * does not meet what it asks. {@link Judgement.Unresolved} is everything else.
@@ -51,6 +51,11 @@ import java.util.function.Predicate;
  *
  * <p>Asked of the way to the comparison, as what is said of the construction is said of the rule:
  * a run that does not take that way is a run to some other rule.
+ *
+ * <p>Asked of the constructions whose condition the reading of the way read
+ * ({@link ComparisonReadings.Reading#asks}), and of no other. A construction on an arm of a value
+ * worked out before the rule is none of those, and nothing here says of it either way: that no
+ * finding names a construction is not that no run stops there.
  */
 final class ConstructionStopAssessment {
 
@@ -113,20 +118,21 @@ final class ConstructionStopAssessment {
                               Predicate<Proposition> heldOnTheWay,
                               InputReading read) {
         List<Judgement> out = new ArrayList<>();
+        // Whether the way holds a part is asked of each part once, however many times it is read.
+        Map<Proposition, Boolean> held = new HashMap<>();
+        Predicate<Proposition> onTheWay = part -> held.computeIfAbsent(part, heldOnTheWay::test);
         for (ConstructionAsk ask : asked) {
-            WhatARunWorksOutBeforeACount.ToAConstruction to = each.toAConstruction(ask.made());
-            // The construction an attempt tests takes the other arm where it is refused, and asks
-            // nothing of a run.
-            if (to instanceof WhatARunWorksOutBeforeACount.ToAConstruction.Attempted) {
+            // What asks nothing, or nothing the way does not hold, is safe whatever the tree says,
+            // and the tree is walked only for what is left.
+            if (ask.toldOf(is -> onTheWay.test(is.read())).isEmpty()) {
                 out.add(new Judgement.Safe(ask));
                 continue;
             }
             Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> before =
-                    to instanceof WhatARunWorksOutBeforeACount.BeforeAConstruction known
-                            ? Optional.of(known) : Optional.empty();
+                    each.workedOutBefore(ask.made());
             List<ConstructionAsk.Requirement.Is> gotPast = before
                     .map(it -> gotPast(it.onEveryRun(), each.asks(), ask)).orElse(List.of());
-            Optional<WhatAConstructionAsks> told = ask.toldOf(is -> heldOnTheWay.test(is.read())
+            Optional<WhatAConstructionAsks> told = ask.toldOf(is -> onTheWay.test(is.read())
                     || (is.exact() != null && gotPast.stream()
                             .anyMatch(past -> past.exact().implies(is.exact()))));
             if (told.isEmpty()) {
@@ -178,6 +184,12 @@ final class ConstructionStopAssessment {
      * constructions among {@code asks} it has got past ask: each part of a condition that holds
      * wherever the condition does, of every construction the parts in {@code onEveryRun} work out
      * whenever they run, read over numbers of the input.
+     *
+     * <p>A run that got here worked each of those out and was not ended by it, and a construction
+     * whose type refuses what it is handed ends the run — so it was built, and what it asks holds.
+     * That rests on a step being a value a run gets past or stops at, which is what
+     * {@link Evaluated#inOrder} lists: the construction an attempt tests, which takes the other arm
+     * where it is refused, is the attempt's deciding and no step of it.
      */
     private static List<ConstructionAsk.Requirement.Is> gotPast(List<Core> onEveryRun,
                                                                List<ConstructionAsk> asks,
@@ -255,7 +267,7 @@ final class ConstructionStopAssessment {
      * looked for meeting what {@code passed} ask: every node of it ends no run whatever the input,
      * or is a construction among {@code asks} whose condition is read over numbers of the input,
      * which is then added to {@code passed}. The construction an attempt tests takes the other arm
-     * where it is refused, and ends nothing.
+     * where it is refused, and ends nothing ({@link WhatARunMayEndFor#forEachWorkedOut}).
      */
     private static boolean getsPast(Core e, List<ConstructionAsk> asks,
                                     List<ConstructionAsk> passed) {

@@ -337,10 +337,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   the input ({@link #nothingBeforeItEndsARun}), worked out the first time it
      *                   is asked: most comparisons are never asked it, and the walk goes down the
      *                   body from its top
-     * @param beforeAConstruction what is known of a run on the way getting to each construction
-     *                   among {@code asks} ({@link WhatARunWorksOutBeforeACount#toAConstruction});
-     *                   nothing inside a helper's body read at a call, whose parts before it are
-     *                   not this body's
+     * @param beforeAConstruction what a run works out before each construction among
+     *                   {@code asks}, where every run on the way gets to it unless something before
+     *                   ends the run
+     *                   ({@link WhatARunWorksOutBeforeACount#workedOutBeforeAConstruction}); empty
+     *                   where that is not shown, and inside a helper's body read at a call, whose
+     *                   parts before it are not this body's
      */
     record Reading(ConstructOccurrence occurrence, Stated statement, Citation at,
                    InputReads reads,
@@ -353,7 +355,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    DemandReading.Answered getsPast, List<ConstructionAsk> asks,
                    ElementsNamed readsTheElements, LinesReadOn readOn,
                    Supplier<Boolean> beforeIt,
-                   Function<Core.Construct, WhatARunWorksOutBeforeACount.ToAConstruction>
+                   Function<Core.Construct,
+                           Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction>>
                            beforeAConstruction) {
 
         Reading {
@@ -380,9 +383,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             return beforeIt.get();
         }
 
-        /** What is known of a run on the way getting to {@code made}, one of the constructions
-         *  among {@link #asks} ({@code beforeAConstruction}). */
-        WhatARunWorksOutBeforeACount.ToAConstruction toAConstruction(Core.Construct made) {
+        /** What a run works out before {@code made}, one of the constructions among
+         *  {@link #asks} ({@code beforeAConstruction}). */
+        Optional<WhatARunWorksOutBeforeACount.BeforeAConstruction> workedOutBefore(
+                Core.Construct made) {
             return beforeAConstruction.apply(made);
         }
 
@@ -1300,8 +1304,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                             && WhatARunWorksOutBeforeACount.nothingBeforeItEndsARun(in.root(),
                                     e)),
                     made -> in.context().equals(CallContext.OF_THE_BODY)
-                            ? WhatARunWorksOutBeforeACount.toAConstruction(in.root(), e, made)
-                            : new WhatARunWorksOutBeforeACount.ToAConstruction.NotShown()));
+                            ? WhatARunWorksOutBeforeACount.workedOutBeforeAConstruction(in.root(),
+                                    e, made)
+                            : Optional.empty()));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.
