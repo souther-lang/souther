@@ -708,9 +708,9 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 "(L" + CORE + "$FieldAccess;Ljava/util/Map;)Z", Reading.ONE_ACCESS, ONE);
         row(out, c + "inputs/ElementValue$Reader", "recordOperationsOf", "(" + core + ")V",
                 Reading.STRUCTURE, EVALUATION);
-        row(out, c + "partition/WorkedOutToReachIt", "numbersNotYetAsked", "(L" + c
+        row(out, c + "partition/WorkedOutToReachIt", "originNotYetAsked", "(L" + c
                         + "inputs/Denotation;L" + c + "partition/WorkedOutToReachIt$ArmsTaken;)L"
-                        + c + "partition/FormRange;",
+                        + c + "partition/WhereAValueComesFrom;",
                 Reading.NAMES, READS_THE_NAMES);
         row(out, c + "partition/WorkedOutToReachIt", "valuesItMayBe", "(L" + c
                         + "inputs/Denotation;)Ljava/util/List;",

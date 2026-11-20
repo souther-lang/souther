@@ -306,6 +306,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     && over.coefs().keySet().stream().noneMatch(FormRange::aTotal);
         }
 
+        /** Whether this is over a value a run works out ({@link IntOperand.OfAValueWorkedOut}). */
+        boolean overAValueWorkedOut() {
+            return form.coefs().keySet().stream()
+                    .anyMatch(IntOperand.OfAValueWorkedOut.class::isInstance);
+        }
+
         /**
          * The form at the least it comes to over the values each bound number takes, or at the
          * greatest: each bound number put at the end of its values that weighs the form down, or
@@ -325,13 +331,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * A number an operation of whole numbers is over: a number of the input, or the value of a
-     * name read off a container, whose values are what the container holds there.
+     * A number an operation of whole numbers is over: a number of the input, the value of a
+     * name read off a container, whose values are what the container holds there, or a value a
+     * run works out whose numbers are known and stand at no row.
      *
      * <p>A bound number is one only where what the container hands the name says the values it
      * takes, as two forms of the input's numbers: where an element a walk hands its step stands,
-     * and the element of a list of every whole number between two. Any other value an operation
-     * reads is not told of here, and the operation is not told.
+     * and the element of a list of every whole number between two. A value worked out is one only
+     * where the numbers it comes to are known. Any other value an operation reads is not told of
+     * here, and the operation is not told.
      */
     sealed interface IntOperand {
 
@@ -426,6 +434,38 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             @Override
             public String toString() {
                 return name;
+            }
+        }
+
+        /**
+         * A value a run works out that is no number of the input and no name read off a
+         * container, as the reading of the comparison held it aside ({@code atom}), and where the
+         * numbers it is known to come to come from. No row of the input says which of them a run
+         * gets, so no row is placed at an operation over it, and that some of them take the
+         * operation past its type says no run stops in it: only that a way that keeps them all
+         * within shows none does ({@link WhatAWayLeavesOfAValue}).
+         */
+        record OfAValueWorkedOut(NumericTerm atom, WhereAValueComesFrom origin) implements IntOperand {
+
+            public OfAValueWorkedOut {
+                Objects.requireNonNull(atom, "the value as the reading held it aside");
+                Objects.requireNonNull(origin, "an operation over a value is told where what it "
+                        + "comes to is known");
+            }
+
+            @Override
+            public LinearForm<NumericTerm> atItsEnd(boolean greatest) {
+                return null;
+            }
+
+            @Override
+            public FormRange range(InputReading read) {
+                return origin.range();
+            }
+
+            @Override
+            public String toString() {
+                return atom.toString();
             }
         }
     }
@@ -606,7 +646,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * does.
          */
         boolean aRunMayStopOverABoundValue() {
-            return operations.stream().anyMatch(each -> !each.stopsOnRowsOfTheInput());
+            return operations.stream().anyMatch(each -> !each.stopsOnRowsOfTheInput()
+                    && !each.overAValueWorkedOut());
+        }
+
+        /**
+         * The operations told over a value a run works out
+         * ({@link IntOperand.OfAValueWorkedOut}): what those values may come to shows where no
+         * run stops in them, and never that one does, so each is a stop left untold unless the
+         * way to it keeps it within its type.
+         */
+        List<IntOperation> overValuesWorkedOut() {
+            return operations.stream().filter(IntOperation::overAValueWorkedOut).toList();
         }
     }
 
@@ -2179,6 +2230,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return switch (operand) {
             case IntOperand.OfTheInput(NumericTerm term) -> term;
             case IntOperand.OfABinding(Quantity.OfABinding value, String _) -> value;
+            // A value worked out stands at no row, so it is a side of no relation.
+            case IntOperand.OfAValueWorkedOut worked -> worked;
         };
     }
 

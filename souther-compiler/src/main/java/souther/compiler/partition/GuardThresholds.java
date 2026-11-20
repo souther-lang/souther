@@ -409,14 +409,8 @@ public final class GuardThresholds {
                                     || each.worksOutOnEach().map(applications -> applications
                                             .stream().anyMatch(one -> one.stops()
                                                     .aRunMayStopOverABoundValue()
-                                                    && ((one.reached() instanceof Proposition
-                                                            .Always(boolean holds) && holds)
-                                                            ? ComparisonAssessment.someRowArrives(
-                                                                    toIt, arrivals)
-                                                            : (each.statedAsACondition().isEmpty()
-                                                            || ComparisonAssessment.someRowArrives(
-                                                                    wayToACase.apply(one.reached()),
-                                                                    arrivals)))))
+                                                    && aRowMayArrivePast(each, one.reached(),
+                                                            toIt, arrivals, wayToACase)))
                                             .orElseGet(() -> each.stopsIn()
                                                     .map(StopEvidence::aRunMayStopOverABoundValue)
                                                     .orElseGet(() -> arrived.relationsRead()
@@ -456,7 +450,7 @@ public final class GuardThresholds {
                             boolean stopsNotFullyRead = aRowArrives
                                     && !(arrived instanceof ComparisonAssessment.AnswersNowhere)
                                     && somethingWorkedOutIsNotAllTold(each, toIt, arrivals,
-                                            wayToACase);
+                                            wayToACase, read);
                             reached(cuts, stated, each, readingsOf(arrived), aCase, aPart);
                             lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
                                     whereMet(each, helper -> runsOnce.computeIfAbsent(helper,
@@ -1411,12 +1405,17 @@ public final class GuardThresholds {
      * may arrive at the place it is worked out: the comparison, an application of the closure it
      * stands in, an arm of a choice it is read through, or an arm an application takes. Where the
      * comparison is stated as no condition, nothing says which rows take an arm, and one may.
+     * A stop told where it is asked of no row ({@link #aStopToldThereIsAskedOfNoRow}) is left
+     * untold all the same, and so is one over a value a run works out that the way there does
+     * not keep within its type ({@link #aValueWorkedOutIsNotKeptWithin}).
      */
     private static boolean somethingWorkedOutIsNotAllTold(
             ComparisonReadings.Reading each, Reachability toIt, List<ComparisonArrival> arrivals,
-            WaysToACase wayToACase) {
+            WaysToACase wayToACase, InputReading read) {
         for (ComparisonReadings.Reading.WorkedOutAt worked : each.whatARunWorksOut()) {
-            if (worked.stops().operations().aStopUntold()
+            if ((worked.stops().operations().aStopUntold()
+                    || aStopToldThereIsAskedOfNoRow(each, worked)
+                    || aValueWorkedOutIsNotKeptWithin(each, worked, wayToACase, read))
                     && aRowArrivesWhereItIsWorkedOut(each, worked, toIt, arrivals, wayToACase)) {
                 return true;
             }
@@ -1424,24 +1423,82 @@ public final class GuardThresholds {
         return false;
     }
 
+    /**
+     * Whether an operation told in what {@code worked} works out is one no row is asked to stop
+     * in: one on an arm, or in an application not made on every run, where the comparison is
+     * stated as no condition. The rows that take the arm or make the application are put on the
+     * way only through that condition ({@link #aRunTakingAnArmMayStop},
+     * {@link #aRunMakingItMayStop}), so what is told there says nothing of any run. One over a
+     * value a run works out is asked of the way instead ({@link #aValueWorkedOutIsNotKeptWithin}).
+     */
+    private static boolean aStopToldThereIsAskedOfNoRow(
+            ComparisonReadings.Reading each, ComparisonReadings.Reading.WorkedOutAt worked) {
+        if (each.statedAsACondition().isPresent() || worked.stops().operations().operations()
+                .stream().allMatch(UndividedByARelation.IntOperation::overAValueWorkedOut)) {
+            return false;
+        }
+        return worked.takenWhere() != null || (worked.madeWhere() != null
+                && !(worked.madeWhere() instanceof Proposition.Always(boolean holds) && holds));
+    }
+
+    /**
+     * Whether an operation {@code worked} tells over a value a run works out
+     * ({@link UndividedByARelation.Working#overValuesWorkedOut}) is one the way to where it is
+     * worked out does not keep within its type ({@link WhatAWayLeavesOfAValue}): the way to the
+     * comparison, with what the arm or application it is worked out on puts on it where the
+     * comparison is stated as a condition that puts it on the way. Such an operation is no stop a
+     * run is shown to come to, and none it is shown not to.
+     */
+    private static boolean aValueWorkedOutIsNotKeptWithin(
+            ComparisonReadings.Reading each, ComparisonReadings.Reading.WorkedOutAt worked,
+            WaysToACase wayToACase, InputReading read) {
+        List<UndividedByARelation.IntOperation> over =
+                worked.stops().operations().overValuesWorkedOut();
+        if (over.isEmpty()) {
+            return false;
+        }
+        Proposition reached = reachedWhere(worked);
+        List<OnTheWay> way = (reached == null || each.statedAsACondition().isEmpty())
+                ? each.assumed() : each.wayToACase(wayToACase.putOn(reached));
+        WhatAWayLeavesOfAValue left = WhatAWayLeavesOfAValue.along(read, way);
+        return left != null
+                && over.stream().anyMatch(operation -> !left.keepsWithinItsType(operation));
+    }
+
+    /** Whether a row may arrive where {@code worked} is worked out: at the comparison itself, or
+     *  past what its arm or application states ({@link #aRowMayArrivePast}). */
     private static boolean aRowArrivesWhereItIsWorkedOut(
             ComparisonReadings.Reading each, ComparisonReadings.Reading.WorkedOutAt worked,
             Reachability toIt, List<ComparisonArrival> arrivals, WaysToACase wayToACase) {
+        Proposition reached = reachedWhere(worked);
+        return reached == null || aRowMayArrivePast(each, reached, toIt, arrivals, wayToACase);
+    }
+
+    /** What a run states to get past the arm or make the application {@code worked} is worked
+     *  out on, or null where it is worked out wherever the comparison is. */
+    private static Proposition reachedWhere(ComparisonReadings.Reading.WorkedOutAt worked) {
         Proposition taken = worked.takenWhere();
-        if (taken != null) {
-            Proposition reached = worked.madeWhere() == null ? taken
-                    : WhereAnApplicationIsMade.past(worked.madeWhere(), taken);
-            return each.statedAsACondition().isEmpty()
-                    || ComparisonAssessment.someRowArrives(wayToACase.apply(reached), arrivals);
+        return taken == null ? worked.madeWhere()
+                : worked.madeWhere() == null ? taken
+                : WhereAnApplicationIsMade.past(worked.madeWhere(), taken);
+    }
+
+    /**
+     * Whether a row arriving at the comparison {@code each} may get past {@code reached}, what a
+     * run states to take an arm or make an application on the way there ({@code toIt}). A
+     * statement every run holds is passed by every row that arrives, and one none holds by none,
+     * whether or not the comparison is stated as a condition. Any other is put on the way through
+     * that condition, and where the comparison is stated as none, nothing says which rows get past
+     * it, and one may.
+     */
+    private static boolean aRowMayArrivePast(
+            ComparisonReadings.Reading each, Proposition reached, Reachability toIt,
+            List<ComparisonArrival> arrivals, WaysToACase wayToACase) {
+        if (reached instanceof Proposition.Always(boolean holds)) {
+            return holds && ComparisonAssessment.someRowArrives(toIt, arrivals);
         }
-        if (worked.madeWhere() == null) {
-            return true;
-        }
-        if (worked.madeWhere() instanceof Proposition.Always(boolean holds) && holds) {
-            return ComparisonAssessment.someRowArrives(toIt, arrivals);
-        }
-        return each.statedAsACondition().isEmpty() || ComparisonAssessment.someRowArrives(
-                wayToACase.apply(worked.madeWhere()), arrivals);
+        return each.statedAsACondition().isEmpty()
+                || ComparisonAssessment.someRowArrives(wayToACase.apply(reached), arrivals);
     }
 
     /** The region {@code way} leaves, or none where nothing reaches along it. */
