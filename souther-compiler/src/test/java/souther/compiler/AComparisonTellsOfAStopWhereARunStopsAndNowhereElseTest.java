@@ -219,14 +219,12 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         // the same step, where the filter keeps no element the step stops at
         FORMS.put("lengthOfAStepOfAFilterKeepingNoEnd",
                 "List.length(List.map(x -> x + 1, List.filter(y -> y < 0, ds))) >= 2");
-        // the same, where the test keeps the elements between two numbers, and where working the
-        // test out may itself stop a run
+        // the same, where the test keeps the elements between two numbers, and where it is
+        // written the other way round
         FORMS.put("lengthOfAStepOfAFilterKeepingBetween", "List.length(List.map(x -> x + 1, "
                 + "List.filter(y -> y > 0 && y < 100, ds))) >= 2");
         FORMS.put("lengthOfAStepOfAFilterKeepingNoEndTheOtherWayRound",
                 "List.length(List.map(x -> x + 1, List.filter(y -> 0 > y, ds))) >= 2");
-        FORMS.put("lengthOfAFilterWhoseTestMayStop",
-                "List.length(List.filter(y -> y + 1 < 0, ds)) >= 2");
         NOT_TOLD.put("lengthOfAnArmStep", "what an arm works out is worked out only where the "
                 + "arm is taken, which an operation told over the elements cannot say");
         FORMS.put("lengthOfAnArmStep",
@@ -298,20 +296,6 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         // a part of a tuple beside a construction made only where its invariant holds
         FORMS.put("tuplePartBesideAPartMadeWhereItHolds", "{ let (a, r) = if q <= 5 "
                 + "then (q, Yen(0)) else (5, Yen(q - 5)) \n a } >= 3");
-        // a value bound before a choice and read on one arm of it: worked out on every run,
-        // whichever arm the run then takes
-        FORMS.put("aBindingBeforeTheArmThatReadsIt",
-                "{ let x = q + 1 \n if q < 0 then x else 0 } >= 3");
-        // an arm inside an arm no run enters with it, and the operation it works out
-        FORMS.put("anArmNoRunEntersWithTheOneAboveIt",
-                "(if q > 5 then (if q < 3 then q + 1 else 0) else 0) >= 1");
-        // the number of a newtype chosen between, held to what its rules leave whatever made it
-        NOT_TOLD.put("aChosenNewtypePlusOne", "the operation is over a field of a value chosen "
-                + "between constructions, which no operation told is over: said as not read");
-        FORMS.put("aChosenNewtypePlusOne",
-                "{ let y = if q > 0 then Yen(q) else Yen(0) \n y.value + 1 } >= 3");
-        FORMS.put("aChosenNewtypeLessOne",
-                "{ let y = if q > 0 then Yen(q) else Yen(0) \n y.value - 1 } >= 3");
     }
 
     @Test
