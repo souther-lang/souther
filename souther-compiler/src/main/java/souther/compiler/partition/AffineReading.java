@@ -1651,7 +1651,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     if (aside.aChoice) {
                         aside.rangeIs(rangeOfTheArms(node, at));
                     } else if (aside.range == null) {
-                        aside.rangeIs(reached.numbersOf(new Denotation(node, at)));
+                        aside.originIs(reached.originOf(new Denotation(node, at)));
                     }
                 }
                 return new AffineForms.Leaf.Form<>(LinearForm.atom(aside.atom));
@@ -2629,7 +2629,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * of the input says ({@link UndividedByARelation.IntOperand.OfAValueWorkedOut}).
          */
         boolean toldOverWhatItComesTo(WhatWasTold told, InputReading ofTheInput) {
-            if (held == null || over.stream().anyMatch(each -> each.range == null)) {
+            if (held == null || over.stream().anyMatch(each -> each.origin == null)) {
                 return false;
             }
             UndividedByARelation.IntOperation operation = new UndividedByARelation.IntOperation(
@@ -2637,7 +2637,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                             .filter(each -> each.atom.equals(atom)).findFirst()
                             .<UndividedByARelation.IntOperand>map(each ->
                                     new UndividedByARelation.IntOperand.OfAValueWorkedOut(atom,
-                                            each.range))
+                                            each.origin))
                             .orElseGet(() -> new UndividedByARelation.IntOperand.OfTheInput(atom)))),
                     held.least(), held.greatest(), after);
             if (!UndividedByARelation.stopsNoRow(operation, ofTheInput)) {
@@ -3445,6 +3445,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             private final boolean theStop;
             private boolean met;
             private FormRange range;
+            /** Where {@link #range} comes from, which a way to the comparison may narrow; null
+             *  where the range is not known. */
+            private WhereAValueComesFrom origin;
             /** The bound value the derivation reads the expression as, where an operation of
              *  whole numbers can be over it; null otherwise. */
             private UndividedByARelation.IntOperand.OfABinding bound;
@@ -3464,8 +3467,17 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 return first;
             }
 
+            /** That the expression comes to {@code range}, worked out by an analysis that says
+             *  nothing of where it comes from. */
             void rangeIs(FormRange range) {
                 this.range = range;
+                this.origin = range == null ? null : new WhereAValueComesFrom.Derived(range);
+            }
+
+            /** That the expression comes to what {@code origin} says, from where it says. */
+            void originIs(WhereAValueComesFrom origin) {
+                this.origin = origin;
+                this.range = origin == null ? null : origin.range();
             }
 
             void boundIs(UndividedByARelation.IntOperand.OfABinding bound) {

@@ -197,11 +197,10 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
                 "(if p then 0 else 1) + (if q then 9223372036854775807 else 0) >= k"));
     }
 
-    /** An operation is told, and a run may stop in it on rows no form of the input's numbers
-     *  places. */
+    /** An operation is told over the value the stopped expression comes to, which no row of the
+     *  input is placed at. */
     private static void assertToldOverWhatTheStopComesTo(UndividedByARelation.Working working) {
-        assertTrue(!working.operations().isEmpty() && working.aRunMayStopOverABoundValue(),
-                working::toString);
+        assertTrue(!working.overValuesWorkedOut().isEmpty(), working::toString);
     }
 
     /** No row is shown computed, and no operation is told. */

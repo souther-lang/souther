@@ -468,7 +468,7 @@ final class WorkedOutToReachIt {
                                boolean closuresApart, Predicate<Denotation> toldElsewhere,
                                Predicate<Denotation> ownStopsSaidOnTheirWays,
                                ArmsTaken onTheWay,
-                               Map<Core, Map<ReadAt, Optional<FormRange>>> numbersAsked) {
+                               Map<Core, Map<ReadAt, Optional<WhereAValueComesFrom>>> numbersAsked) {
         this.read = Objects.requireNonNull(read);
         this.beyond = Objects.requireNonNull(beyond);
         this.closuresApart = closuresApart;
@@ -1334,55 +1334,68 @@ final class WorkedOutToReachIt {
         return numbersOf(value, onTheWay);
     }
 
-    /** What {@link #numbersOf} answered of each expression, wherever it was read, for as long as
+    /** Where the numbers {@link #numbersOf} answers of {@code value} come from, which a way to
+     *  it may narrow ({@link WhereAValueComesFrom}); null where they are not known. */
+    WhereAValueComesFrom originOf(Denotation value) {
+        return originOf(value, onTheWay);
+    }
+
+    /** What {@link #originOf} answered of each expression, wherever it was read, for as long as
      *  this is asked: a chain of names is followed once however many expressions read it. The
      *  expression is the node written, and where it was read is told apart by what each name in
      *  it stands for and by the arms the runs it is asked of entered. None where the numbers are
-     *  not known or are still being asked. */
-    private final Map<Core, Map<ReadAt, Optional<FormRange>>> numbersAsked;
+     *  not known or are still being asked. The numbers and where they come from are one answer,
+     *  asked once. */
+    private final Map<Core, Map<ReadAt, Optional<WhereAValueComesFrom>>> numbersAsked;
 
     private FormRange numbersOf(Denotation value, ArmsTaken arms) {
+        WhereAValueComesFrom origin = originOf(value, arms);
+        return origin == null ? null : origin.range();
+    }
+
+    private WhereAValueComesFrom originOf(Denotation value, ArmsTaken arms) {
         Core written = Core.withoutStanding(value.value());
-        Map<ReadAt, Optional<FormRange>> where =
+        Map<ReadAt, Optional<WhereAValueComesFrom>> where =
                 numbersAsked.computeIfAbsent(written, _ -> new HashMap<>());
         ReadAt at = new ReadAt(value.at(), arms);
-        Optional<FormRange> known = where.get(at);
+        Optional<WhereAValueComesFrom> known = where.get(at);
         if (known != null) {
             return known.orElse(null);
         }
         where.put(at, Optional.empty());
-        FormRange numbers = numbersNotYetAsked(value, arms);
-        where.put(at, Optional.ofNullable(numbers));
-        return numbers;
+        WhereAValueComesFrom origin = originNotYetAsked(value, arms);
+        where.put(at, Optional.ofNullable(origin));
+        return origin;
     }
 
-    private FormRange numbersNotYetAsked(Denotation value, ArmsTaken arms) {
+    private WhereAValueComesFrom originNotYetAsked(Denotation value, ArmsTaken arms) {
         Core written = Core.withoutStanding(value.value());
         Symbols symbols = read.rules().symbols();
         DeclarationNewtypes newtypes = read.rules().newtypes();
         if (value.at().folded(written, symbols, newtypes).orElse(null) instanceof Long number) {
-            return new FormRange(ExactRatio.of(number), ExactRatio.of(number));
+            return new WhereAValueComesFrom.Fixed(new FormRange(ExactRatio.of(number),
+                    ExactRatio.of(number)));
         }
         return switch (written) {
             case Core.Read name -> {
                 List<Denotation> given = boundTo(value);
                 if (given.isEmpty()) {
                     yield value.at().pathOf(written, newtypes) instanceof ValuesAt.At(var at)
-                            ? rangeOfAPlace(at, arms)
-                            : numbersOfAnOpenedElement(name, value.at(), arms);
+                            ? atAPlace(at, arms)
+                            : originOfAnOpenedElement(name, value.at(), arms);
                 }
-                FormRange hull = null;
+                List<WhereAValueComesFrom> candidates = new ArrayList<>();
                 for (Denotation each : given) {
-                    FormRange one = numbersOf(each, arms);
+                    WhereAValueComesFrom one = originOf(each, arms);
                     if (one == null) {
                         yield null;
                     }
-                    hull = hull == null ? one : hull.hull(one);
+                    candidates.add(one);
                 }
-                yield hull;
+                yield WhereAValueComesFrom.oneOf(candidates);
             }
-            case Core.PreservedCall _ when numbersAWalkKeeps(value, arms) instanceof FormRange kept ->
-                    kept;
+            case Core.PreservedCall _ when originOfAWalkKept(value, arms)
+                    instanceof WhereAValueComesFrom kept -> kept;
             case Core.PreservedCall call when AnOperationApplied.of(call) instanceof AnOperationApplied
                     applied -> {
                 NumericDomain.Bounds runs = ResultRange.of(
@@ -1391,10 +1404,10 @@ final class WorkedOutToReachIt {
                                 && value.at().folded(handed, symbols, newtypes).orElse(null)
                                         instanceof Long number
                                 ? Optional.of(BigDecimal.valueOf(number)) : Optional.empty());
-                yield runs.min() != null && runs.max() != null
+                yield derived(runs.min() != null && runs.max() != null
                         ? FormRange.ofTheWholeNumbersIn(runs)
                         : written.type() == Type.INT ? heldToAnInt(whatItComesTo(value, arms))
-                        : null;
+                        : null);
             }
             // A behavior called comes to what its body does, read with what the call hands it.
             case Core.Call _ when AnOperationApplied.of(written) instanceof AnOperationApplied
@@ -1405,23 +1418,23 @@ final class WorkedOutToReachIt {
                 InputReads inside = body.isEmpty() ? null : value.at().calling(behavior,
                         body.get(), applied.args(), newtypes);
                 yield inside == null ? null
-                        : numbersOf(new Denotation(body.get().body(), inside), arms);
+                        : originOf(new Denotation(body.get().body(), inside), arms);
             }
             // A run of names read off one value: a place where the whole run is one, and
             // otherwise read one name at a time.
             case Core.FieldProjection projection -> value.at().pathOf(written, newtypes)
-                    instanceof ValuesAt.At(var at) ? rangeOfAPlace(at, arms)
-                    : numbersOf(new Denotation(projection.lastAccess(), value.at()), arms);
+                    instanceof ValuesAt.At(var at) ? atAPlace(at, arms)
+                    : originOf(new Denotation(projection.lastAccess(), value.at()), arms);
             case Core.FieldAccess access -> {
                 if (value.at().pathOf(written, newtypes) instanceof ValuesAt.At(var at)) {
-                    yield rangeOfAPlace(at, arms);
+                    yield atAPlace(at, arms);
                 }
                 // What each construction the value may be gives the field, held to what the rules
                 // of its type leave it.
                 FormRange left = numbersTheRulesLeave(access);
                 List<Denotation> made = valuesItMayBe(new Denotation(access.target(), value.at()));
                 if (made == null) {
-                    yield left;
+                    yield derived(left);
                 }
                 FormRange hull = null;
                 for (Denotation each : made) {
@@ -1429,17 +1442,17 @@ final class WorkedOutToReachIt {
                     FormRange one = field == null ? null
                             : numbersOf(new Denotation(field, each.at()), arms);
                     if (one == null) {
-                        yield left;
+                        yield derived(left);
                     }
                     hull = hull == null ? one : hull.hull(one);
                 }
-                yield hull == null ? left : left == null ? hull : hull.meet(left);
+                yield derived(hull == null ? left : left == null ? hull : hull.meet(left));
             }
             case Core.Binary _, Core.Neg _ -> written.type() == Type.INT
-                    ? heldToAnInt(whatItComesTo(value, arms)) : null;
+                    ? derived(heldToAnInt(whatItComesTo(value, arms))) : null;
             // Any arm a run enters, read with the names it binds: one no run enters adds nothing.
             case Core.If _, Core.Match _ -> {
-                FormRange hull = null;
+                List<WhereAValueComesFrom> candidates = new ArrayList<>();
                 List<Choice.Arm> choices = Choice.of(written).arms();
                 for (int arm = 0; arm < choices.size(); arm++) {
                     ArmsTaken entered = arms.entering(written, arm, value.at());
@@ -1448,26 +1461,38 @@ final class WorkedOutToReachIt {
                     }
                     InputReads inside = value.at().choosing(choices.get(arm).decidedBy(), symbols,
                             newtypes);
-                    FormRange one = numbersOf(new Denotation(choices.get(arm).answers(), inside),
+                    WhereAValueComesFrom one = originOf(new Denotation(choices.get(arm).answers(), inside),
                             entered);
                     if (one == null) {
                         yield null;
                     }
-                    hull = hull == null ? one : hull.hull(one);
+                    candidates.add(one);
                 }
-                yield hull;
+                yield candidates.isEmpty() ? null : WhereAValueComesFrom.oneOf(candidates);
             }
             default -> null;
         };
     }
 
+    /** {@code range} worked out otherwise, or null where it is not known. */
+    private static WhereAValueComesFrom derived(FormRange range) {
+        return range == null ? null : new WhereAValueComesFrom.Derived(range);
+    }
+
+    /** What {@code place} holds on the runs that entered {@code arms}, or null where that is not
+     *  known ({@link #rangeOfAPlace}). */
+    private WhereAValueComesFrom atAPlace(TermPath place, ArmsTaken arms) {
+        FormRange range = rangeOfAPlace(place, arms);
+        return range == null ? null : new WhereAValueComesFrom.AtAPlace(place, range);
+    }
+
     /**
-     * The numbers {@code name}, read in {@code at}, comes to where an arm bound it to what a call
-     * answering an element of a container holds ({@link BoundOperationFacts#answersAnElementOf}):
-     * those an element of that container comes to. Null where it is no such name, or those are
-     * not known.
+     * Where the numbers {@code name}, read in {@code at}, comes to come from where an arm bound it
+     * to what a call answering an element of a container holds
+     * ({@link BoundOperationFacts#answersAnElementOf}): an element of that container. Null where it
+     * is no such name, or those are not known.
      */
-    private FormRange numbersOfAnOpenedElement(Core.Read name, InputReads at, ArmsTaken arms) {
+    private WhereAValueComesFrom originOfAnOpenedElement(Core.Read name, InputReads at, ArmsTaken arms) {
         InputReads.ElementOpened opened = at.elementOpenedBy(name.binding());
         if (opened == null || !(AnOperationApplied.of(Core.withoutStanding(opened.call().value()))
                 instanceof AnOperationApplied answered)) {
@@ -1475,17 +1500,18 @@ final class WorkedOutToReachIt {
         }
         var container = DefaultBoundOperationFacts.get().answersAnElementOf(answered.operation());
         Core of = container == null ? null : answered.argument(container);
-        return of == null ? null : numbersOfAnElementOf(new Denotation(of, opened.call().at()),
+        return of == null ? null : originOfAnElementOf(new Denotation(of, opened.call().at()),
                 arms);
     }
 
     /**
-     * The numbers a walk from a seed comes to whose step answers the element it is handed or what
-     * it was carried and nothing else ({@link #answersTheElementOrWhatItCarried}): the seed, or an
-     * element of the container it walks, whichever the last step answered. Null where
-     * {@code value} is no such walk, or the numbers of the seed or of an element are not known.
+     * Where the numbers a walk from a seed comes to come from, whose step answers the element it
+     * is handed or what it was carried and nothing else ({@link #answersTheElementOrWhatItCarried}):
+     * the seed, or an element of the container it walks, whichever the last step answered. Null
+     * where {@code value} is no such walk, or the numbers of the seed or of an element are not
+     * known.
      */
-    private FormRange numbersAWalkKeeps(Denotation value, ArmsTaken arms) {
+    private WhereAValueComesFrom originOfAWalkKept(Denotation value, ArmsTaken arms) {
         Denotation met = value.at().denotes(Core.withoutStanding(value.value()),
                 read.rules().symbols(), read.rules().newtypes());
         SeededWalk walk = met == null ? null : SeededWalk.of(met.value(), closure ->
@@ -1494,45 +1520,44 @@ final class WorkedOutToReachIt {
                 walk.element().binding(), walk.accumulator().binding())) {
             return null;
         }
-        FormRange seed = numbersOf(new Denotation(walk.seed(), met.at()), arms);
-        FormRange element = numbersOfAnElementOf(new Denotation(walk.container(), met.at()), arms);
-        return (seed == null || element == null) ? null : seed.hull(element);
+        WhereAValueComesFrom seed = originOf(new Denotation(walk.seed(), met.at()), arms);
+        WhereAValueComesFrom element = originOfAnElementOf(new Denotation(walk.container(), met.at()), arms);
+        return (seed == null || element == null) ? null
+                : new WhereAValueComesFrom.OneOf(List.of(seed, element));
     }
 
     /**
-     * The numbers an element of {@code container} comes to, on the runs that entered
-     * {@code arms}: those of each element of a list written out, or those of the place every
-     * element it holds stands at. Null where it is neither, or holds no element written out.
+     * Where the numbers an element of {@code container} comes to come from, on the runs that
+     * entered {@code arms}: each element of a list written out, or the place every element it
+     * holds stands at. Null where it is neither, or holds no element written out.
      */
-    private FormRange numbersOfAnElementOf(Denotation container, ArmsTaken arms) {
+    private WhereAValueComesFrom originOfAnElementOf(Denotation container, ArmsTaken arms) {
         List<Denotation> written = elementsWrittenOut(container);
+        List<WhereAValueComesFrom> candidates = new ArrayList<>();
         if (written != null) {
-            FormRange hull = null;
             for (Denotation each : written) {
-                FormRange one = numbersOf(each, arms);
+                WhereAValueComesFrom one = originOf(each, arms);
                 if (one == null) {
                     return null;
                 }
-                hull = hull == null ? one : hull.hull(one);
+                candidates.add(one);
             }
-            return hull;
+            return candidates.isEmpty() ? null : WhereAValueComesFrom.oneOf(candidates);
         }
-        return switch (container.at().everyElementOf(container.value(),
+        List<TermPath> places = switch (container.at().everyElementOf(container.value(),
                 read.rules().newtypes())) {
-            case ValuesHeld.At(TermPath at) -> rangeOfAPlace(at, arms);
-            case ValuesHeld.MayStandAt(List<TermPath> among) -> {
-                FormRange hull = null;
-                for (TermPath each : among) {
-                    FormRange one = rangeOfAPlace(each, arms);
-                    if (one == null) {
-                        yield null;
-                    }
-                    hull = hull == null ? one : hull.hull(one);
-                }
-                yield hull;
-            }
-            case ValuesHeld.NotAPosition _ -> null;
+            case ValuesHeld.At(TermPath at) -> List.of(at);
+            case ValuesHeld.MayStandAt(List<TermPath> among) -> among;
+            case ValuesHeld.NotAPosition _ -> List.of();
         };
+        for (TermPath each : places) {
+            WhereAValueComesFrom one = atAPlace(each, arms);
+            if (one == null) {
+                return null;
+            }
+            candidates.add(one);
+        }
+        return candidates.isEmpty() ? null : WhereAValueComesFrom.oneOf(candidates);
     }
 
     /** The numbers the rules of the type {@code access} reads a field of leave that field

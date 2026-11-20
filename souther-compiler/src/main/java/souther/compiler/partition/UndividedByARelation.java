@@ -306,6 +306,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     && over.coefs().keySet().stream().noneMatch(FormRange::aTotal);
         }
 
+        /** Whether this is over a value a run works out ({@link IntOperand.OfAValueWorkedOut}). */
+        boolean overAValueWorkedOut() {
+            return form.coefs().keySet().stream()
+                    .anyMatch(IntOperand.OfAValueWorkedOut.class::isInstance);
+        }
+
         /**
          * The form at the least it comes to over the values each bound number takes, or at the
          * greatest: each bound number put at the end of its values that weighs the form down, or
@@ -433,16 +439,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         /**
          * A value a run works out that is no number of the input and no name read off a
-         * container, as the reading of the comparison held it aside ({@code atom}), and the
-         * numbers it is known to come to. No row of the input says which of them a run gets, so
-         * an operation over it is said where some of them take it past its type, and no row is
-         * placed at that.
+         * container, as the reading of the comparison held it aside ({@code atom}), and where the
+         * numbers it is known to come to come from. No row of the input says which of them a run
+         * gets, so no row is placed at an operation over it, and that some of them take the
+         * operation past its type says no run stops in it: only that a way that keeps them all
+         * within shows none does ({@link WhatAWayLeavesOfAValue}).
          */
-        record OfAValueWorkedOut(NumericTerm atom, FormRange range) implements IntOperand {
+        record OfAValueWorkedOut(NumericTerm atom, WhereAValueComesFrom origin) implements IntOperand {
 
             public OfAValueWorkedOut {
                 Objects.requireNonNull(atom, "the value as the reading held it aside");
-                Objects.requireNonNull(range, "an operation over a value is told where what it "
+                Objects.requireNonNull(origin, "an operation over a value is told where what it "
                         + "comes to is known");
             }
 
@@ -453,7 +460,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
             @Override
             public FormRange range(InputReading read) {
-                return range;
+                return origin.range();
             }
 
             @Override
@@ -639,7 +646,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * does.
          */
         boolean aRunMayStopOverABoundValue() {
-            return operations.stream().anyMatch(each -> !each.stopsOnRowsOfTheInput());
+            return operations.stream().anyMatch(each -> !each.stopsOnRowsOfTheInput()
+                    && !each.overAValueWorkedOut());
+        }
+
+        /**
+         * The operations told over a value a run works out
+         * ({@link IntOperand.OfAValueWorkedOut}): what those values may come to shows where no
+         * run stops in them, and never that one does, so each is a stop left untold unless the
+         * way to it keeps it within its type.
+         */
+        List<IntOperation> overValuesWorkedOut() {
+            return operations.stream().filter(IntOperation::overAValueWorkedOut).toList();
         }
     }
 
