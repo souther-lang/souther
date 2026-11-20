@@ -21,19 +21,65 @@ import java.util.Objects;
  * reader is sent to where every run along the way stops ({@link DecisionReading.EveryRunStops}).
  * The clauses of one construction a way goes through are each one of these, beside each other.
  *
- * @param states what getting past the clause states, in the words a composer of a row works from
- * @param at     where the construction is written, or null where the code it stands in was made
- *               with no place
- * @param clause the clause of the invariant it is held to, or that a declaration whose clauses
- *               govern the value was not reached and what it states is that the invariant was not
- *               read ({@link ClauseOfAConstruction})
+ * <p>A value, equal to another holding the same three, and a class rather than a record so that its
+ * hash is worked out once: a way holds a set of these, and two ways are told apart, wherever the
+ * walk gathering them meets one again, by asking each of one's set whether the other holds it —
+ * which hashes every one of them, down through every condition it states, each time.
  */
-public record PassedConstruction(List<OnTheWay> states, SourcePos at,
-                                 ClauseOfAConstruction clause) {
+public final class PassedConstruction {
 
-    public PassedConstruction {
-        states = List.copyOf(states);
-        Objects.requireNonNull(clause, "a construction is held to a clause, or to an invariant"
-                + " not reached");
+    private final List<OnTheWay> states;
+    private final SourcePos at;
+    private final ClauseOfAConstruction clause;
+    private final int hash;
+
+    /**
+     * @param states what getting past the clause states, in the words a composer of a row works
+     *               from
+     * @param at     where the construction is written, or null where the code it stands in was
+     *               made with no place
+     * @param clause the clause of the invariant it is held to, or that a declaration whose clauses
+     *               govern the value was not reached and what it states is that the invariant was
+     *               not read ({@link ClauseOfAConstruction})
+     */
+    public PassedConstruction(List<OnTheWay> states, SourcePos at,
+                              ClauseOfAConstruction clause) {
+        this.states = List.copyOf(states);
+        this.at = at;
+        this.clause = Objects.requireNonNull(clause, "a construction is held to a clause, or to"
+                + " an invariant not reached");
+        this.hash = Objects.hash(this.states, at, clause);
+    }
+
+    /** What getting past the clause states. */
+    public List<OnTheWay> states() {
+        return states;
+    }
+
+    /** Where the construction is written, or null where the code it stands in has no place. */
+    public SourcePos at() {
+        return at;
+    }
+
+    /** The clause it is held to. */
+    public ClauseOfAConstruction clause() {
+        return clause;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof PassedConstruction that && hash == that.hash
+                && states.equals(that.states) && Objects.equals(at, that.at)
+                && clause.equals(that.clause);
+    }
+
+    @Override
+    public int hashCode() {
+        return hash;
+    }
+
+    @Override
+    public String toString() {
+        return "PassedConstruction[states=" + states + ", at=" + at + ", clause=" + clause + "]";
     }
 }
