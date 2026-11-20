@@ -79,19 +79,11 @@ class AGuardOverAFlatMapOfAnAttemptedConstructionIsCarriedToTheComparisonItTurns
         assertTrue(report.contains("email is divided by comparison"), report);
     }
 
-    /** The same where the piece is kept by a condition rather than by an attempt. */
-    @Test
-    void theStringThePiecesAreOfIsDividedByWhatAConditionAsksOfAPiece() {
-        String report = reported("p -> if String.matches(\"[a-z.]+\", p) then [ p ] else []");
-
-        assertTrue(report.contains("email is divided by comparison"), report);
-    }
-
     /** Where both arms write the piece, a piece reaches the equality whichever is taken, and
-     *  neither arm's condition is on the way to it. */
+     *  neither arm's statement is on the way to it. */
     @Test
     void theStringThePiecesAreOfIsNotDividedWhereEveryArmWritesThePiece() {
-        String report = reported("p -> if String.matches(\"[a-z.]+\", p) then [ p ] else [ p ]");
+        String report = reported("p -> if D(p) as n then [ p ] else [ p ]");
 
         assertFalse(report.contains("email is divided by comparison"), report);
     }

@@ -1835,6 +1835,11 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *
      * <p>Only of the arm, and only where no other arm writes: an element two arms write exists
      * where either was taken, and neither alone is on the way.
+     *
+     * <p>Only of an attempt's arm, which the walk into the arm puts on the way every application
+     * shares. What an {@code if}'s condition came to inside a closure whose applications are said
+     * goes onto what each application is reached under, and not onto that way, so it is not put on
+     * it here either.
      */
     private static List<OnTheWay> writtenUnder(Core.Block block, InputReads reads, Body in,
                                                ConditionNumbering numbering) {
@@ -1858,16 +1863,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         if (inside.size() != 1) {
             return List.of();
         }
-        InputReads at = inside.getFirst();
-        int part = written.arm();
-        return switch (Core.withoutStanding(written.choice())) {
-            case Core.IfConstructed attempt -> numbering.said(onTheAttempt(attempt, part,
-                    in.read(), at, numbering));
-            case Core.If iff -> numbering.said(ReachingCuts.stating(Condition.of(iff.cond(), at,
-                    in.symbols(), in.newtypes(), numbering), in.read(), part == 0,
-                    in.conditions()));
-            default -> List.of();
-        };
+        return Core.withoutStanding(written.choice()) instanceof Core.IfConstructed attempt
+                ? numbering.said(onTheAttempt(attempt, written.arm(), in.read(),
+                        inside.getFirst(), numbering))
+                : List.of();
     }
 
     /** What the walk entering arm {@code part} of {@code attempt} states
