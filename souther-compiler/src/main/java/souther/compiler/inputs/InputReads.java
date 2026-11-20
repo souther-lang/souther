@@ -126,6 +126,19 @@ public final class InputReads {
     /** {@link #hashCode}, worked out the first time it is asked: nothing here changes, and what it
      *  is worked out from holds every value bound on the way here. Nought where it has not been. */
     private int hash;
+    /** The readings made from this one by a step a walk takes again. No part of what this reading
+     *  is. */
+    private final StepsFrom<InputReads> steps = new StepsFrom<>();
+
+    /** The steps from one reading to another a walk takes again ({@link StepsFrom}). */
+    private enum Step {
+        /** Inside what a binder binds ({@link #and}). */
+        INSIDE,
+        /** Standing in other names ({@link #withNames}). */
+        IN_THE_NAMES,
+        /** Taking what another reading takes ({@link #carryingWhatIsTaken(Denotation)}). */
+        TAKING_WHAT_IS_TAKEN
+    }
     /** Where each node {@link #pathOf} was asked of stands here, under the declarations
      *  {@link #pathsUnder}; null until it is first asked. No part of what this reading is. */
     private Map<Core, ValuesAt> paths;
@@ -1154,9 +1167,9 @@ public final class InputReads {
                 && applied.widths().equals(at.applied.widths())) {
             return value;
         }
-        return new Denotation(value.value(), new InputReads(at.names, at.alternatives, at.declared,
-                at.dependencies,
-                at.applied.as(applied.readings(), applied.widths(), taken)));
+        return new Denotation(value.value(), at.steps.madeBy(Step.TAKING_WHAT_IS_TAKEN, applied,
+                null, () -> new InputReads(at.names, at.alternatives, at.declared, at.dependencies,
+                        at.applied.as(applied.readings(), applied.widths(), taken))));
     }
 
     /** The same, of an occurrence: its value and each thing it was kept by. */
@@ -2977,8 +2990,8 @@ public final class InputReads {
 
     /** This reading, standing in the names {@code at}. */
     InputReads withNames(BindingEnvironment at) {
-        return at == names ? this
-                : new InputReads(at, alternatives, declared, dependencies, applied);
+        return at == names ? this : steps.madeBy(Step.IN_THE_NAMES, at, null,
+                () -> new InputReads(at, alternatives, declared, dependencies, applied));
     }
 
     /**
@@ -3026,9 +3039,11 @@ public final class InputReads {
 
     /** The same, inside what {@code binder} binds. */
     public InputReads and(Core.Binder binder, Core value) {
-        BindingEnvironment inside = names.inside(binder, value);
-        return inside == names ? this
-                : new InputReads(inside, alternatives, declared, dependencies, applied);
+        return steps.madeBy(Step.INSIDE, binder, value, () -> {
+            BindingEnvironment inside = names.inside(binder, value);
+            return inside == names ? this
+                    : new InputReads(inside, alternatives, declared, dependencies, applied);
+        });
     }
 
     /**
