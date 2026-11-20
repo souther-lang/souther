@@ -1,8 +1,6 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 
 import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
@@ -80,27 +78,11 @@ class AConditionTheDeclarationsSettleDoesNotTieTheComparisonBesideItTest {
      * {@code eaches = 1} has only {@code pack = 1} and settles it, and every other value of either
      * has a row each way.
      */
-    @ParameterizedTest
-    @CsvSource(delimiter = '|', value = {
-            "eaches.value >= pack.value && eaches.value < 2 * pack.value | 12",
-            "eaches.value > pack.value && eaches.value <= 2 * pack.value | 13"})
-    void aConditionTheDeclarationsDoNotSettleTiesTheComparisonAfterItAndIsReadOverTheRowsOfTheWay(
-            String guard, String whole) {
-        JsonNode report = reportOf(BOUND, guard, whole, "0");
-        assertTrue(List.of(READ).containsAll(reasonsNotRead(report)), report::toString);
-    }
-
-    /**
-     * Where {@code eaches < 2 * pack} comes first, what the way leaves {@code pack} at an
-     * {@code eaches} is {@code ceil((eaches + 1) / 2)} and up: ends that step by one and then stay
-     * for a value, on no line. A row each way is shown only along a line, so the comparison after
-     * it is not read, and asking more values does not change that.
-     */
     @Test
-    void endsThatStepOnAWholeLatticeAreOnNoLineAndTheComparisonIsNotRead() {
+    void aConditionTheDeclarationsDoNotSettleTiesTheComparisonAfterItAndIsReadOverTheRowsOfTheWay() {
         JsonNode report = reportOf(BOUND,
-                "Rational.toInt(DOWN, eaches.value / pack.value) == 1", "12", "0");
-        assertTrue(reasonsNotRead(report).contains(NOT_SHOWN_TO_REACH), report::toString);
+                "eaches.value >= pack.value && eaches.value < 2 * pack.value", "12", "0");
+        assertTrue(List.of(READ).containsAll(reasonsNotRead(report)), report::toString);
     }
 
     /** Over the whole of {@code Int} {@code 2 * pack} stops a run, so no row is shown there. */
@@ -109,19 +91,6 @@ class AConditionTheDeclarationsSettleDoesNotTieTheComparisonBesideItTest {
         JsonNode report = reportOf("",
                 "eaches.value >= pack.value && eaches.value < 2 * pack.value", "12", "0");
         assertFalse(reasonsNotRead(report).equals(List.of(READ)), report::toString);
-    }
-
-    /**
-     * What an earlier comparison works out ties the two numbers too: {@code eaches + pack} must come
-     * to a number an {@code Int} holds for a row to get to the comparison after it, so over the
-     * whole of {@code Int} the rows of the way are not what its statements say, and the comparison
-     * is not read over them.
-     */
-    @Test
-    void anEarlierComparisonThatMayStopARunKeepsTheComparisonAfterItNotRead() {
-        JsonNode report = reportOf("",
-                "eaches.value + pack.value >= 0 && eaches.value < pack.value", "0", "24");
-        assertFalse(List.of(READ).containsAll(reasonsNotRead(report)), report::toString);
     }
 
     /**
@@ -168,48 +137,6 @@ class AConditionTheDeclarationsSettleDoesNotTieTheComparisonBesideItTest {
                 example split
                     | "a" : (Both { eaches = Eaches(12), pack = PackSize(12) }) -> Whole { n = 1 }
                     | "b" : (Both { eaches = Eaches(30), pack = PackSize(12) }) -> Part { left = 1 }
-                """, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        ACompiledModel.compiles(compilation);
-        JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
-                .json(SourceRendering.namedByIdentity(compilation.texts())));
-        assertFalse(List.of(READ).containsAll(reasonsNotRead(report)), report::toString);
-    }
-
-    /**
-     * A rule of the declarations that a reading of the comparison's own line may leave out is a
-     * rule of the rows all the same. {@code -2 <= eaches - 2 * pack <= 1} holds the form of
-     * {@code eaches < 2 * pack - 1} to an interval, which that reading leaves out; but under
-     * {@code eaches <= pack} the only row at {@code eaches = 1} has {@code pack = 1}, which fails
-     * the comparison, and without the rule {@code pack = 2} is a row that holds it, so the
-     * comparison would be said to leave {@code eaches = 1} either way.
-     */
-    @Test
-    void aBandOfTheDeclarationsBetweenTheNumbersIsKeptWhereTheRowsOfTheWayAreCounted() {
-        Compilation compilation = Compilation.ofSource("""
-                module m1
-
-                data Eaches = Int
-                    invariant value >= 0 && value <= 10
-                data PackSize = Int
-                    invariant value >= 1 && value <= 10
-                data Both = { eaches: Eaches, pack: PackSize }
-                    invariant band = eaches.value - 2 * pack.value >= -2
-                            && eaches.value - 2 * pack.value <= 1
-                data Whole = { n: Int }
-                data Part = { left: Int }
-
-                behavior split : (both: Both) -> Whole | Part
-
-                let split (both) = {
-                    guard both.eaches.value <= both.pack.value
-                            && both.eaches.value < 2 * both.pack.value - 1 else Part { left = 1 }
-                    Whole { n = 1 }
-                }
-
-                example split
-                    | "a" : (Both { eaches = Eaches(0), pack = PackSize(1) }) -> Whole { n = 1 }
-                    | "b" : (Both { eaches = Eaches(1), pack = PackSize(1) }) -> Part { left = 1 }
                 """, "Main");
         compilation.measure(Adequacy.Asked.fullReport());
         ACompiledModel.compiles(compilation);

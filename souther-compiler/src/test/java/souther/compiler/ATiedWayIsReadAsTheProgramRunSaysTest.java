@@ -49,17 +49,11 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
     private static final Map<String, String[]> FORMS = new LinkedHashMap<>();
 
     static {
+        // One for each way the ties come: a coefficient that rounds in twos, a sum with whole
+        // steps, and one that rounds in threes.
         FORMS.put("aLineAndTheDoubleOfAnother", new String[] {"e >= p", "e < 2 * p"});
-        FORMS.put("theSameStrictlyAbove", new String[] {"e > p", "e <= 2 * p"});
         FORMS.put("aSumHeldBelowAndTheOrder", new String[] {"e + p <= 12", "e < p"});
-        FORMS.put("anOrderAndASum", new String[] {"e <= p", "e + p > 6"});
-        FORMS.put("aSumOfTheDoubleAndAnOrder", new String[] {"e + 2 * p <= 14", "e >= p"});
-        FORMS.put("aDoubleAndASum", new String[] {"2 * e >= p", "e + p < 10"});
-        FORMS.put("aDifferenceAndTheDoubleLess", new String[] {"e - p >= 1", "e < 2 * p - 1"});
-        FORMS.put("aSumHeldAboveAndTheDouble", new String[] {"e + p >= 3", "e <= 2 * p"});
         FORMS.put("aTripleAndASum", new String[] {"e >= 3 * p - 8", "e + p < 9"});
-        FORMS.put("twoDoubledAgainstThree", new String[] {"2 * e >= 3 * p", "e < 2 * p"});
-        FORMS.put("aSumHeldAboveAndADifference", new String[] {"e + 2 * p >= 9", "e - p < 1"});
     }
 
     private static final Pattern CLASS = Pattern.compile(

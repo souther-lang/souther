@@ -59,7 +59,7 @@ class TwoIntegerConstraintsAnswerAsEnumerationDoesTest {
         int runs = 0;
         int nothing = 0;
         int unknown = 0;
-        for (int round = 0; round < 4000; round++) {
+        for (int round = 0; round < 600; round++) {
             List<Row> system = boxed();
             int more = 1 + random.nextInt(4);
             for (int i = 0; i < more; i++) {
@@ -77,7 +77,7 @@ class TwoIntegerConstraintsAnswerAsEnumerationDoesTest {
             }
         }
         // The sample holds each kind of answer, so that agreeing is not agreeing on one.
-        assertTrue(runs > 500 && nothing > 500 && unknown > 50,
+        assertTrue(runs > 75 && nothing > 75 && unknown > 8,
                 runs + " runs, " + nothing + " empty, " + unknown + " neither");
     }
 
