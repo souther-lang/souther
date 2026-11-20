@@ -59,6 +59,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -241,17 +242,23 @@ final class WorkedOutToReachIt {
      * the region holding every run that enters the arm.
      *
      * <p>Told apart by the arms, so that what one way shows is never the answer on another. The
-     * region is made only where a reader asks for it.
+     * region is made only where a reader asks for it, once for the reading whichever reader asks
+     * ({@link RegionLeft}), from the region the arms before the last leave.
      */
     private static final class ArmsTaken {
 
-        static final ArmsTaken NONE = new ArmsTaken(List.of());
+        static final ArmsTaken NONE = new ArmsTaken(List.of(), null);
 
         private final List<ArmTaken> arms;
-        private SearchRegion region;
+        /** These without the last arm, or null where there are none. */
+        private final ArmsTaken past;
+        private RegionLeft left;
+        /** The reading {@code left} was asked under. */
+        private InputReading leftOf;
 
-        private ArmsTaken(List<ArmTaken> arms) {
+        private ArmsTaken(List<ArmTaken> arms, ArmsTaken past) {
             this.arms = arms;
+            this.past = past;
         }
 
         boolean isEmpty() {
@@ -260,43 +267,99 @@ final class WorkedOutToReachIt {
 
         /** These, and arm {@code part} of {@code fork} read at {@code at} past them. */
         ArmsTaken entering(Core fork, int part, InputReads at) {
-            List<ArmTaken> past = new ArrayList<>(arms);
-            past.add(new ArmTaken(fork, part, at));
-            return new ArmsTaken(List.copyOf(past));
+            List<ArmTaken> more = new ArrayList<>(arms);
+            more.add(new ArmTaken(fork, part, at));
+            return new ArmsTaken(List.copyOf(more), this);
         }
 
-        /** The region of the input every run that entered these leaves, under {@code read}. */
+        /** The region of the input every run that entered these leaves, under {@code read}: what
+         *  the declarations leave where there are none. */
         SearchRegion region(InputReading read) {
-            if (region == null) {
-                WhatConditionsState conditions = WhatConditionsState.of(read);
-                SearchRegion narrowed = read.quantities().region();
-                for (ArmTaken each : arms) {
-                    Proposition stated = conditions.arm(each.fork(), each.part(), each.at())
-                            .proposition();
-                    for (TakenConstraint taken : DemandReading.regionAnswered(stated, read)
-                            .narrowing()) {
-                        narrowed = taken.narrowing(narrowed);
-                    }
-                }
-                region = narrowed;
-            }
-            return region;
+            return left(read).region();
         }
 
         /** Whether the region these leave is shown to hold no row, under {@code read}: no run
          *  enters every one of them, and nothing past them is worked out on any run. */
         boolean leaveNoRun(InputReading read) {
-            return !arms.isEmpty() && region(read).emptiness().isPresent();
+            return !arms.isEmpty() && left(read).holdsNoRow();
+        }
+
+        /** What these leave under {@code read}: the one the reading keeps for no arm, or what the
+         *  one before keeps for the last arm. Kept with these, but for no arm, which stands for
+         *  every reading. */
+        private RegionLeft left(InputReading read) {
+            if (arms.isEmpty()) {
+                return read.derived(RegionLeft.class,
+                        _ -> new RegionLeft(read.quantities().region()));
+            }
+            if (left == null || leftOf != read) {
+                leftOf = read;
+                left = past.left(read).past(arms.getLast(), read);
+            }
+            return left;
         }
 
         @Override
         public boolean equals(Object other) {
-            return other instanceof ArmsTaken that && arms.equals(that.arms);
+            return this == other || (other instanceof ArmsTaken that && arms.equals(that.arms));
         }
 
         @Override
         public int hashCode() {
             return arms.hashCode();
+        }
+    }
+
+    /**
+     * The region a run that entered some arms leaves, whether it is shown to hold no row, which is
+     * asked of it only where a reader asks and then once, and what a run entering one more arm
+     * leaves, by that arm.
+     *
+     * <p>Kept with the reading of the input from the region it leaves with no arm entered: a
+     * function of the arms and the reading alone, asked by every reader of what a run works out
+     * over the same body. One arm past another is asked of the one before by that arm alone, so
+     * what a list of arms leaves is found one arm at a time and never by the whole list.
+     */
+    private static final class RegionLeft {
+
+        private final SearchRegion region;
+        private volatile Boolean holdsNoRow;
+        private final Map<ArmTaken, RegionLeft> past = new ConcurrentHashMap<>();
+
+        RegionLeft(SearchRegion region) {
+            this.region = region;
+        }
+
+        SearchRegion region() {
+            return region;
+        }
+
+        /** What a run that also entered {@code arm} leaves: this region narrowed by what entering
+         *  it states, as far as the region carries it. */
+        RegionLeft past(ArmTaken arm, InputReading read) {
+            RegionLeft known = past.get(arm);
+            if (known != null) {
+                return known;
+            }
+            SearchRegion narrowed = region;
+            Proposition stated = WhatConditionsState.of(read)
+                    .arm(arm.fork(), arm.part(), arm.at()).proposition();
+            for (TakenConstraint taken : DemandReading.regionAnswered(stated, read)
+                    .narrowing()) {
+                narrowed = taken.narrowing(narrowed);
+            }
+            RegionLeft made = new RegionLeft(narrowed);
+            RegionLeft had = past.putIfAbsent(arm, made);
+            return had != null ? had : made;
+        }
+
+        boolean holdsNoRow() {
+            Boolean known = holdsNoRow;
+            if (known == null) {
+                known = region.emptiness().isPresent();
+                holdsNoRow = known;
+            }
+            return known;
         }
     }
 
