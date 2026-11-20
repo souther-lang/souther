@@ -409,14 +409,8 @@ public final class GuardThresholds {
                                     || each.worksOutOnEach().map(applications -> applications
                                             .stream().anyMatch(one -> one.stops()
                                                     .aRunMayStopOverABoundValue()
-                                                    && ((one.reached() instanceof Proposition
-                                                            .Always(boolean holds) && holds)
-                                                            ? ComparisonAssessment.someRowArrives(
-                                                                    toIt, arrivals)
-                                                            : (each.statedAsACondition().isEmpty()
-                                                            || ComparisonAssessment.someRowArrives(
-                                                                    wayToACase.apply(one.reached()),
-                                                                    arrivals)))))
+                                                    && aRowMayArrivePast(each, one.reached(),
+                                                            toIt, arrivals, wayToACase)))
                                             .orElseGet(() -> each.stopsIn()
                                                     .map(StopEvidence::aRunMayStopOverABoundValue)
                                                     .orElseGet(() -> arrived.relationsRead()
@@ -1443,24 +1437,34 @@ public final class GuardThresholds {
                 && !(worked.madeWhere() instanceof Proposition.Always(boolean holds) && holds));
     }
 
+    /** Whether a row may arrive where {@code worked} is worked out: at the comparison itself, or
+     *  past what its arm or application states ({@link #aRowMayArrivePast}). */
     private static boolean aRowArrivesWhereItIsWorkedOut(
             ComparisonReadings.Reading each, ComparisonReadings.Reading.WorkedOutAt worked,
             Reachability toIt, List<ComparisonArrival> arrivals, WaysToACase wayToACase) {
         Proposition taken = worked.takenWhere();
-        if (taken != null) {
-            Proposition reached = worked.madeWhere() == null ? taken
-                    : WhereAnApplicationIsMade.past(worked.madeWhere(), taken);
-            return each.statedAsACondition().isEmpty()
-                    || ComparisonAssessment.someRowArrives(wayToACase.apply(reached), arrivals);
+        Proposition reached = taken == null ? worked.madeWhere()
+                : worked.madeWhere() == null ? taken
+                : WhereAnApplicationIsMade.past(worked.madeWhere(), taken);
+        return reached == null || aRowMayArrivePast(each, reached, toIt, arrivals, wayToACase);
+    }
+
+    /**
+     * Whether a row arriving at the comparison {@code each} may get past {@code reached}, what a
+     * run states to take an arm or make an application on the way there ({@code toIt}). A
+     * statement every run holds is passed by every row that arrives, and one none holds by none,
+     * whether or not the comparison is stated as a condition. Any other is put on the way through
+     * that condition, and where the comparison is stated as none, nothing says which rows get past
+     * it, and one may.
+     */
+    private static boolean aRowMayArrivePast(
+            ComparisonReadings.Reading each, Proposition reached, Reachability toIt,
+            List<ComparisonArrival> arrivals, WaysToACase wayToACase) {
+        if (reached instanceof Proposition.Always(boolean holds)) {
+            return holds && ComparisonAssessment.someRowArrives(toIt, arrivals);
         }
-        if (worked.madeWhere() == null) {
-            return true;
-        }
-        if (worked.madeWhere() instanceof Proposition.Always(boolean holds) && holds) {
-            return ComparisonAssessment.someRowArrives(toIt, arrivals);
-        }
-        return each.statedAsACondition().isEmpty() || ComparisonAssessment.someRowArrives(
-                wayToACase.apply(worked.madeWhere()), arrivals);
+        return each.statedAsACondition().isEmpty()
+                || ComparisonAssessment.someRowArrives(wayToACase.apply(reached), arrivals);
     }
 
     /** The region {@code way} leaves, or none where nothing reaches along it. */

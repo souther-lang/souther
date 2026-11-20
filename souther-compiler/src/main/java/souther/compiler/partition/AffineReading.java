@@ -1651,7 +1651,8 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     if (aside.aChoice) {
                         aside.rangeIs(rangeOfTheArms(node, at));
                     } else if (aside.range == null) {
-                        aside.rangeIs(reached.numbersOf(new Denotation(node, at)));                    }
+                        aside.rangeIs(reached.numbersOf(new Denotation(node, at)));
+                    }
                 }
                 return new AffineForms.Leaf.Form<>(LinearForm.atom(aside.atom));
             }
@@ -2590,6 +2591,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             return true;
         }
 
+        /** The same, worked out after the operations moved {@code by} on: where it is taken into
+         *  a reading that told {@code by} operations before it ({@link WhatWasTold#absorb}). */
+        SumOverTheStop shifted(int by) {
+            return new SumOverTheStop(node, form, over, least, greatest,
+                    after.stream().map(at -> at + by).toList());
+        }
+
         /** The same operation, as one over what the expression held aside is worked out to. */
         OverTheStop overWhatItComesTo() {
             return new OverTheStop(node, form, List.of(over),
@@ -2606,6 +2614,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                List<StoppedValues.Held> over,
                                WhereAnOperatorAnswers.WhereItsExactValueIsHeld held,
                                List<Integer> after) {
+
+        /** The same, worked out after the operations moved {@code by} on
+         *  ({@link SumOverTheStop#shifted}). */
+        OverTheStop shifted(int by) {
+            return new OverTheStop(node, form, over, held,
+                    after.stream().map(at -> at + by).toList());
+        }
 
         /**
          * Whether this is told to {@code told} as the operation over what each expression held
@@ -2889,7 +2904,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * What {@code apart}, a reading of part of the comparison tried on its own, was told,
          * taken as told here after everything told so far: each operation and each of decimals
          * moved past the ones already here, with what it was worked out of moved with it, and the
-         * forms it knows the operation or the place of carried over to where they now stand.
+         * forms it knows the operation or the place of carried over to where they now stand. An
+         * operation over the stop still to be asked of the comparison is moved with them: what it
+         * is worked out after is where those operations stood in {@code apart}.
          */
         void absorb(WhatWasTold apart) {
             toldMore();
@@ -2897,9 +2914,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             for (int i = 0; i < apart.operations.size(); i++) {
                 add(apart.at.get(i), apart.operations.get(i).shifted(ofWholeNumbers));
             }
-            sumsOverTheStop.addAll(apart.sumsOverTheStop);
+            apart.sumsOverTheStop.forEach(each ->
+                    sumsOverTheStop.add(each.shifted(ofWholeNumbers)));
             aStopUntold |= apart.aStopUntold;
-            operationsOverTheStopValue.addAll(apart.operationsOverTheStopValue);
+            apart.operationsOverTheStopValue.forEach(each ->
+                    operationsOverTheStopValue.add(each.shifted(ofWholeNumbers)));
             countsOverTheStop.addAll(apart.countsOverTheStop);
             readByATerm.addAll(apart.readByATerm);
             leftToTheWitness.addAll(apart.leftToTheWitness);
