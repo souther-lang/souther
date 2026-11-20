@@ -7310,7 +7310,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 : new ReportMessage.Nothing();
         return switch (bound.holder()) {
             case ABoundThatKeepsEveryRunGoing.Holder.AData data ->
-                    new ReportMessage.ABoundOnTheInputKeepsEveryRunGoing(data.data(),
+                    new ReportMessage.ABoundOnTheInputKeepsEveryRunGoing(data.data().key().qualified(),
                             invariantWritten(bound), furthest);
             case ABoundThatKeepsEveryRunGoing.Holder.AParameter parameter ->
                     new ReportMessage.ABoundOnAParameterKeepsEveryRunGoing(parameter.parameter(),
@@ -11535,7 +11535,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                 ObjectNode keeping = bounds.addObject();
                 switch (each.holder()) {
                     case ABoundThatKeepsEveryRunGoing.Holder.AData data ->
-                            keeping.put("data", data.data());
+                            keeping.put("data", data.data().key().qualified());
                     case ABoundThatKeepsEveryRunGoing.Holder.AParameter parameter -> {
                         keeping.put("parameter", parameter.parameter());
                         keeping.put("type", parameter.type());

@@ -2914,8 +2914,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     static ABoundThatKeepsEveryRunGoing.Holder holderOf(TermPath place, InputReading read) {
         Position position = read.domain().at(place);
         if (position != null && position.view().outermostName() != null) {
-            return new ABoundThatKeepsEveryRunGoing.Holder.AData(
-                    position.view().outermostName().name(), "value");
+            return position.view().outermostName() instanceof TypeSymbol.AtModule named
+                    ? new ABoundThatKeepsEveryRunGoing.Holder.AData(named, "value") : null;
         }
         if (place.steps().isEmpty()) {
             return read.domain().typeAt(place, read.rules()) instanceof Type.Prim primitive
@@ -2928,8 +2928,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         TermPath record = TermPath.of(place.head(),
                 place.steps().subList(0, place.steps().size() - 1));
-        return read.domain().typeAt(record, read.rules()) instanceof Type.Ref(TypeSymbol data)
-                ? new ABoundThatKeepsEveryRunGoing.Holder.AData(data.name(), field) : null;
+        return read.domain().typeAt(record, read.rules())
+                instanceof Type.Ref(TypeSymbol.AtModule data)
+                ? new ABoundThatKeepsEveryRunGoing.Holder.AData(data, field) : null;
     }
 
     /**

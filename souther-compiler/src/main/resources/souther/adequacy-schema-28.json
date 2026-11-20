@@ -4815,7 +4815,7 @@
               "properties": {
                 "data": {
                   "type": "string",
-                  "description": "The data the invariant is declared on: the place's own type where it is written under a name, otherwise the record the place is a field of. Absent where the place is a parameter no data holds."
+                  "description": "The data the invariant is declared on, qualified by the module that declares it, as two modules may each declare a data of one name: the place's own type where it is written under a name, otherwise the record the place is a field of. Absent where the place is a parameter no data holds."
                 },
                 "parameter": {
                   "type": "string",

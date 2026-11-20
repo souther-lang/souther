@@ -1,6 +1,7 @@
 package souther.compiler.inputs;
 
 import souther.compiler.observe.ObservedValue;
+import souther.compiler.types.TypeSymbol;
 
 import java.math.BigInteger;
 
@@ -65,13 +66,14 @@ public record ABoundThatKeepsEveryRunGoing(Holder holder, boolean atMost, BigInt
         String named();
 
         /**
-         * A data the model declares.
+         * A data the model declares, which is the declaration and not its name: two modules may
+         * each declare a data of one name, and an invariant on one is none on the other.
          *
          * @param data  the data whose invariant names the place
          * @param named the place as that invariant names it: a field of the data, or its value
          *              where the data is the place's own type
          */
-        record AData(String data, String named) implements Holder {
+        record AData(TypeSymbol.AtModule data, String named) implements Holder {
 
             public AData {
                 if (data == null || named == null) {

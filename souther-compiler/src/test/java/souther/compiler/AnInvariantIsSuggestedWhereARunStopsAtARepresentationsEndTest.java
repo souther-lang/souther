@@ -5,10 +5,12 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.diag.SourceRendering;
+import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -58,7 +60,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
     void aSumPastTheGreatestIntIsKeptFromByAnUpperBoundOnTheField() {
         String report = report(ABOVE.formatted(""));
 
-        assertEquals(List.of("· declaring `invariant x <= 9223372036854775797` on P keeps every"
+        assertEquals(List.of("· declaring `invariant x <= 9223372036854775797` on m.P keeps every"
                 + " run from taking a number past its type there; a bound one step further out lets"
                 + " in a run that does, and the value to declare is the one the domain has"),
                 suggested(report),
@@ -90,7 +92,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
     void aDateMovedPastTheFirstDayIsKeptFromByALowerBoundOnTheField() {
         String report = report(A_DAY_BACK.formatted(""));
 
-        assertEquals(List.of("· declaring `invariant birthday >= Date(\"-999999999-01-02\")` on P"
+        assertEquals(List.of("· declaring `invariant birthday >= Date(\"-999999999-01-02\")` on m.P"
                 + " keeps every run from taking a number past its type there; a bound one step"
                 + " further out lets in a run that does, and the value to declare is the one the"
                 + " domain has"),
@@ -131,7 +133,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 """);
 
         assertTrue(suggested(report).contains("· declaring `invariant birthday >="
-                + " Date(\"-999999999-01-02\")` on P keeps every run from taking a number past its"
+                + " Date(\"-999999999-01-02\")` on m.P keeps every run from taking a number past its"
                 + " type there; a bound one step further out lets in a run that does, and the value"
                 + " to declare is the"
                 + " one the domain has"), report);
@@ -153,7 +155,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 """);
 
         assertTrue(suggested(report).contains("· declaring `invariant birthday >="
-                + " Date(\"-999999999-01-03\")` on P keeps every run from taking a number past its"
+                + " Date(\"-999999999-01-03\")` on m.P keeps every run from taking a number past its"
                 + " type there; a bound one step further out lets in a run that does, and the value"
                 + " to declare is the"
                 + " one the domain has"), report);
@@ -177,7 +179,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 """);
 
         assertTrue(suggested(report).stream().anyMatch(line -> line.startsWith(
-                "· declaring `invariant x <= 9223372036854775806` on P keeps every run from taking"
+                "· declaring `invariant x <= 9223372036854775806` on m.P keeps every run from taking"
                         + " a number past its type there; a bound one step further out")), report);
     }
 
@@ -197,7 +199,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 let f (p) = 2 * p.a.value >= 3
                 """);
 
-        assertEquals(List.of("· declaring `invariant value <= 4611686018427387903` on Amount keeps"
+        assertEquals(List.of("· declaring `invariant value <= 4611686018427387903` on m.Amount keeps"
                 + " every run from taking a number past its type there; a bound one step further"
                 + " out lets in a run that does, and the value to declare is the one the domain"
                 + " has"),
@@ -238,7 +240,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 let f (p) = p.a.value + 10 > p.b.value + 20
                 """);
 
-        assertEquals(List.of("· declaring `invariant value <= 9223372036854775787` on Amount keeps"
+        assertEquals(List.of("· declaring `invariant value <= 9223372036854775787` on m.Amount keeps"
                 + " every run from taking a number past its type there; a bound one step further"
                 + " out lets in a run that does, and the value to declare is the one the domain"
                 + " has"), suggested(report), report);
@@ -295,10 +297,37 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 let f (p) = p.x + 1 > 0
                 """);
 
-        assertEquals(List.of("· declaring `invariant x <= 9223372036854775806` on P keeps every run"
+        assertEquals(List.of("· declaring `invariant x <= 9223372036854775806` on m.P keeps every run"
                 + " from taking a number past its type there; a bound one step further out lets in"
                 + " a run that does, and the value to declare is the one the domain has"),
                 suggested(report), report);
+    }
+
+    /** Two modules that each declare a data of one name declare two data: bounds on the one are
+     *  none on the other, and each is said on its own, the module naming which. */
+    @Test
+    void dataOfOneNameTwoModulesDeclareAreBoundedApart() {
+        Compilation compilation = ACompiledModel.compiles(Compiler.analyzedModules(List.of(
+                "module a exposing ( Amount )\n\ndata Amount = Int\n",
+                "module b exposing ( Amount )\n\ndata Amount = Int\n",
+                """
+                module m
+
+                import a as A
+                import b as B
+
+                data P = { x: A.Amount, y: B.Amount }
+
+                behavior f : (p: P) -> Bool
+                let f (p) = (p.x.value + 9223372036854775807) + 1
+                    > (p.y.value - 9223372036854775807) - 2
+                """), ModulePath.EMPTY, new ArrayList<>(), READ));
+        String report = AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+
+        assertEquals(Set.of("invariant value <= -1` on a.Amount", "invariant value >= 1` on b.Amount"),
+                Set.copyOf(suggested(report).stream().map(line -> line.substring(
+                        line.indexOf("invariant"), line.indexOf(" keeps"))).toList()), report);
     }
 
     /** A bound a record's clause on the same field leaves no value beside is no region. */
@@ -372,7 +401,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 """);
 
         assertTrue(suggested(report).contains("· declaring `invariant birthday >="
-                + " Date(\"-999999999-01-03\")` on P keeps every run from taking a number past its"
+                + " Date(\"-999999999-01-03\")` on m.P keeps every run from taking a number past its"
                 + " type there, and the value to declare is the one the domain has"), report);
     }
 
@@ -394,7 +423,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
 
         assertEquals(1, suggested(report).size(), report);
         assertTrue(suggested(report).getFirst().startsWith(
-                "· declaring `invariant birthday >= Date(\"-999999999-01-02\")` on P"), report);
+                "· declaring `invariant birthday >= Date(\"-999999999-01-02\")` on m.P"), report);
     }
 
     /** Shifts that move by nothing together stop where one of them is past the calendar. */
@@ -405,7 +434,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
 
         assertEquals(1, suggested(report).size(), report);
         assertTrue(suggested(report).getFirst().startsWith(
-                "· declaring `invariant birthday >= Date(\"-999999999-01-02\")` on P"), report);
+                "· declaring `invariant birthday >= Date(\"-999999999-01-02\")` on m.P"), report);
     }
 
     @Test
@@ -435,7 +464,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
 
         assertEquals(1, suggested(report).size(), report);
         assertTrue(suggested(report).getFirst().startsWith(
-                "· declaring `invariant on <= Date(\"+999999999-11-30\")` on P"), report);
+                "· declaring `invariant on <= Date(\"+999999999-11-30\")` on m.P"), report);
     }
 
     @Test
@@ -444,7 +473,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
 
         assertEquals(1, suggested(report).size(), report);
         assertTrue(suggested(report).getFirst().startsWith(
-                "· declaring `invariant on >= Date(\"-999999999-02-01\")` on P"), report);
+                "· declaring `invariant on >= Date(\"-999999999-02-01\")` on m.P"), report);
     }
 
     @Test
@@ -486,7 +515,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 .replace(" then 1 else 2", ""));
 
         assertEquals(List.of("· declaring `invariant issuedOn <= Date(\"+999999999-11-30\")` on"
-                + " Invoice keeps every run from taking a number past its type there; a bound one"
+                + " m.Invoice keeps every run from taking a number past its type there; a bound one"
                 + " step further out lets in a run that does, and the value to declare is the one"
                 + " the domain has"),
                 suggested(report), report);
@@ -547,7 +576,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
 
         assertEquals(1, suggested(report).size(), report);
         assertTrue(suggested(report).getFirst().startsWith(
-                "· declaring `invariant x <= 9223372036854775805` on P"), report);
+                "· declaring `invariant x <= 9223372036854775805` on m.P"), report);
     }
 
     /** Stated as a condition, the arm a run takes is put on the way: a value of the input is shown
@@ -574,7 +603,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
 
         assertTrue(report.contains("· may stop a run:"), report);
         assertEquals(List.of("· declaring `invariant issuedOn <= Date(\"+999999999-11-30\")` on"
-                + " Invoice keeps every run from taking a number past its type there; a bound one"
+                + " m.Invoice keeps every run from taking a number past its type there; a bound one"
                 + " step further out lets in a run that does, and the value to declare is the one"
                 + " the domain has"),
                 suggested(report), report);
@@ -629,7 +658,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
         assertFalse(report.contains("· not read:"), report);
         assertEquals(1, suggested(report).size(), report);
         assertTrue(suggested(report).getFirst().startsWith(
-                "· declaring `invariant on <= Date(\"+999999999-11-30\")` on P"), report);
+                "· declaring `invariant on <= Date(\"+999999999-11-30\")` on m.P"), report);
     }
 
     /** A place whose own type is written under a name is bounded in that type, as its value. */
@@ -646,7 +675,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
 
         assertEquals(1, suggested(report).size(), report);
         assertTrue(suggested(report).getFirst().startsWith(
-                "· declaring `invariant value <= 9223372036854775806` on Day"), report);
+                "· declaring `invariant value <= 9223372036854775806` on m.Day"), report);
     }
 
     @Test

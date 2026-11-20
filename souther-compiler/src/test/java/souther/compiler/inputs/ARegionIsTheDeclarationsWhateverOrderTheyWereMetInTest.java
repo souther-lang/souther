@@ -19,9 +19,9 @@ class ARegionIsTheDeclarationsWhateverOrderTheyWereMetInTest {
     private static final ABoundThatKeepsEveryRunGoing.Held OPEN =
             new ABoundThatKeepsEveryRunGoing.Held(null, null);
 
-    private static ABoundThatKeepsEveryRunGoing on(String field, boolean atMost, long at) {
+    private static ABoundThatKeepsEveryRunGoing on(String parameter, boolean atMost, long at) {
         return new ABoundThatKeepsEveryRunGoing(
-                new ABoundThatKeepsEveryRunGoing.Holder.AData("P", field), atMost,
+                new ABoundThatKeepsEveryRunGoing.Holder.AParameter(parameter, "Int"), atMost,
                 BigInteger.valueOf(at), new ObservedValue.Integer(at), OPEN);
     }
 
