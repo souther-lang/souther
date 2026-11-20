@@ -337,6 +337,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
      *                   the input ({@link #nothingBeforeItEndsARun}), worked out the first time it
      *                   is asked: most comparisons are never asked it, and the walk goes down the
      *                   body from its top
+     * @param beforeAConstruction what is known of a run on the way getting to each construction
+     *                   among {@code asks} ({@link WhatARunWorksOutBeforeACount#toAConstruction});
+     *                   nothing inside a helper's body read at a call, whose parts before it are
+     *                   not this body's
      */
     record Reading(ConstructOccurrence occurrence, Stated statement, Citation at,
                    InputReads reads,
@@ -348,7 +352,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                    SaidOnTheWay saidOnTheWay, ComparisonWitnesses.AtAComparison witnesses,
                    DemandReading.Answered getsPast, List<ConstructionAsk> asks,
                    ElementsNamed readsTheElements, LinesReadOn readOn,
-                   Supplier<Boolean> beforeIt) {
+                   Supplier<Boolean> beforeIt,
+                   Function<Core.Construct, WhatARunWorksOutBeforeACount.ToAConstruction>
+                           beforeAConstruction) {
 
         Reading {
             if (occurrence == null || statement == null || at == null
@@ -357,7 +363,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     || context == null
                     || saidOnTheWay == null || witnesses == null || getsPast == null
                     || asks == null || readsTheElements == null || readOn == null
-                    || beforeIt == null) {
+                    || beforeIt == null || beforeAConstruction == null) {
                 throw new IllegalArgumentException(
                         "a reading is of some comparison of the model, placed somewhere");
             }
@@ -372,6 +378,12 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
          */
         boolean nothingBeforeItEndsARun() {
             return beforeIt.get();
+        }
+
+        /** What is known of a run on the way getting to {@code made}, one of the constructions
+         *  among {@link #asks} ({@code beforeAConstruction}). */
+        WhatARunWorksOutBeforeACount.ToAConstruction toAConstruction(Core.Construct made) {
+            return beforeAConstruction.apply(made);
         }
 
         /**
@@ -1286,7 +1298,10 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                     past.answered(), past.asks(), readsTheElements, readOn,
                     new Pullback.Once<>(() -> in.context().equals(CallContext.OF_THE_BODY)
                             && WhatARunWorksOutBeforeACount.nothingBeforeItEndsARun(in.root(),
-                                    e))));
+                                    e)),
+                    made -> in.context().equals(CallContext.OF_THE_BODY)
+                            ? WhatARunWorksOutBeforeACount.toAConstruction(in.root(), e, made)
+                            : new WhatARunWorksOutBeforeACount.ToAConstruction.NotShown()));
         }
         // A fork the reading of the runs takes a way out of, under the closures the walk is in. A
         // value standing as a wider type is no fork, and a fork under it is met one step down.

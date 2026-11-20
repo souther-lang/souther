@@ -153,10 +153,10 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
         assertEquals(List.of(), kinds(compiled("q: Int", "if q < 0 && q + 10 > 3 then 1 else 2")));
     }
 
-    /** What a construction on the way asks of a run, which no run is shown not to meet, is said
-     *  as not resolved and never as a stop, where nothing the rule works out is unresolved. */
+    /** What a construction on the way asks of a run, which an admissible value on the way does
+     *  not meet, is a stop shown, resting on that value, and nothing is left unresolved. */
     @Test
-    void whatAConstructionAsksIsNotResolvedAndNoStop() {
+    void whatAConstructionAsksThatAValueOnTheWayDoesNotMeetIsAStop() {
         Compilation compilation = ACompiledModel.answered("""
                 module w1
                 data Refund = Decimal invariant value >= 0.0m
@@ -166,6 +166,26 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
                     refund = Refund(gross),
                     within = Decimal.compare(gross, limit) <= 0
                 }
+                """);
+        List<WhatIsShownOfAStop> shown = stopsShown(compilation);
+        assertEquals(List.of(RuleWhereARunMayStop.class), kinds(shown));
+        RuleWhereARunMayStop stops = (RuleWhereARunMayStop) shown.getFirst();
+        assertTrue(stops.shown().isEmpty());
+        assertEquals(1, stops.constructions().size());
+        assertEquals(List.of(new AStopShown.NumberAt(TermPath.of("gross"),
+                BigInteger.ONE.negate())), stops.constructions().getFirst().at());
+    }
+
+    /** What a construction on the way asks of a run, where something worked out before it may
+     *  end the run first, is said as not resolved and never as a stop. */
+    @Test
+    void whatAConstructionAsksAfterSomethingThatMayEndTheRunIsNotResolved() {
+        Compilation compilation = ACompiledModel.answered("""
+                module w1
+                data Count = Int invariant value >= 0
+                data Out = { n: Count, within: Bool }
+                behavior m : (x: Int, c: Int) -> Out constructs Out, Count
+                let m (x, c) = Out { n = Count(x + 1), within = x <= c }
                 """);
         List<WhatIsShownOfAStop> shown = stopsShown(compilation);
         assertEquals(List.of(RuleWhereAStopIsNotShown.class), kinds(shown));

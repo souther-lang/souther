@@ -23,6 +23,7 @@ import souther.compiler.check.ScopeStep;
 import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
 import souther.compiler.inputs.EveryRunStops;
+import souther.compiler.inputs.AConstructionStopShown;
 import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.AStopNotShown;
 import souther.compiler.inputs.WhatAConstructionAsks;
@@ -439,14 +440,19 @@ public final class GuardThresholds {
                             boolean stopsNotFullyRead = toItsValue.aRowArrives(toItself.toIt())
                                     && !(arrived instanceof ComparisonAssessment.AnswersNowhere)
                                     && somethingWorkedOutIsNotAllTold(each, toItsValue, read);
+                            // And what is shown of a run on the way stopping at a construction
+                            // it works out first, which no run that does not get there does.
+                            List<ConstructionStopAssessment.Judgement> made = aRowGetsThere
+                                    ? constructionsOnTheWay(each, before, read, arrived)
+                                    : List.of();
                             reached(cuts, stated, each, readingsOf(arrived), aCase, aPart);
                             lineAt(behavior, stated, at, each.occurrence().origin(), each.at(),
                                     whereMet(each, helper -> runsOnce.computeIfAbsent(helper,
                                             called -> plan.runsOnce(called, emitted))),
                                     reaches, arrived, each.readOn(), shown,
+                                    ConstructionStopAssessment.stopsShown(made, read),
                                     stopsNotShown, stopsNotFullyRead, stops,
-                                    aRowGetsThere ? asksOfARunReaching(each.asks(), before, read,
-                                            arrived) : List.of(), found,
+                                    ConstructionStopAssessment.notShown(made), found,
                                     between, throughADerivedValue, partnered, withoutALine,
                                     readOn);
                         }
@@ -1150,9 +1156,9 @@ public final class GuardThresholds {
     }
 
     /**
-     * What the constructions on the way to a comparison ask of a run that gets there, as a report
-     * says it of the rule: what each asks that the way to the rule does not already hold, of
-     * those that ask it of a number of a place the comparison reads.
+     * What is shown of a run on the way to a comparison stopping at each construction on the way
+     * ({@link ConstructionStopAssessment}), as a report says it of the rule: of those that ask it
+     * of a number of a place the comparison reads.
      *
      * <p>The way is asked before the constructions narrow it ({@code ways}), so that a statement
      * the run met on the way holds what a construction asks and no construction is held by what it
@@ -1164,22 +1170,18 @@ public final class GuardThresholds {
      * and said under every rule it is said as many times as there are rules: all of them, where
      * what the comparison reads cannot be named. And none is dropped where the way is not known.
      */
-    private static List<WhatAConstructionAsks> asksOfARunReaching(
-            List<ConstructionAsk> asks, List<SearchRegion> ways, InputReading read,
+    private static List<ConstructionStopAssessment.Judgement> constructionsOnTheWay(
+            ComparisonReadings.Reading each, List<SearchRegion> ways, InputReading read,
             ComparisonAssessment arrived) {
-        if (asks.isEmpty()) {
+        if (each.asks().isEmpty()) {
             return List.of();
         }
         Predicate<Proposition> heldOnTheWay = stated -> !ways.isEmpty() && ways.stream()
                 .allMatch(way -> DemandReading.heldBy(stated, read, way));
         Optional<Set<TermPath>> reads = placesRead(arrived);
-        List<WhatAConstructionAsks> told = new ArrayList<>();
-        for (ConstructionAsk each : asks) {
-            if (reads.map(each.bearing()::bearsOn).orElse(true)) {
-                each.toldOf(heldOnTheWay).ifPresent(told::add);
-            }
-        }
-        return told;
+        List<ConstructionAsk> bearing = each.asks().stream()
+                .filter(ask -> reads.map(ask.bearing()::bearsOn).orElse(true)).toList();
+        return ConstructionStopAssessment.of(each, bearing, heldOnTheWay, read);
     }
 
     /** The places the relations of the comparison read, or empty where it reads no relation, or
@@ -1212,8 +1214,12 @@ public final class GuardThresholds {
      * settled ({@code read}). Nothing here reads the comparison again.
      *
      * @param shown what shows a run stops in it, none where no stop is shown
+     * @param constructionsShown what shows a run on the way stops at a construction, none where
+     *              no such stop is shown
      * @param stops the values at which every run getting to the comparison stops in what it works
      *              out
+     * @param asks  what each construction on the way asks of a run, of which neither that a run
+     *              on the way stops there nor that none does is shown
      */
     private static void lineAt(String behavior, ModelOccurrence stated,
                                EmittedComparisonState.Instrumented at,
@@ -1222,6 +1228,7 @@ public final class GuardThresholds {
                                RuleReachNumbering reaches,
                                ComparisonAssessment read, LinesReadOn linesReadOn,
                                List<AStopShown> shown,
+                               List<AConstructionStopShown> constructionsShown,
                                List<AStopNotShown> stopsNotShown,
                                boolean stopsNotFullyRead,
                                List<EveryRunStops> stops,
@@ -1238,24 +1245,25 @@ public final class GuardThresholds {
         partnered.addAll(stringsPartnersCanHold(behavior, stated, wrote, anchor, read,
                 partnered.size()));
         publish(behavior, stated, wrote, anchor, read, withoutALine);
-        // And where some run getting to it is shown to stop in it, with the values at which every
-        // run there stops where those are known: those say where a run stops if one gets there,
-        // and not that one does.
-        if (!shown.isEmpty()) {
+        // And where some run getting to it is shown to stop in it, or some run on the way to it at
+        // a construction, with the values at which every run there stops where those are known:
+        // those say where a run stops if one gets there, and not that one does.
+        boolean aStopIsShown = !shown.isEmpty() || !constructionsShown.isEmpty();
+        if (aStopIsShown) {
             withoutALine.mayStopARun(
                     new RuleCitation.Written(new RuleRef.Comparison(behavior, wrote), anchor),
-                    ModelOccurrences.of(stated), shown, stops);
+                    ModelOccurrences.of(stated), shown, constructionsShown, stops);
         }
         // And, apart from that, where whether a run stops is not resolved: something it works
         // out of which neither is shown, or what a construction on the way asks of a run, which
-        // no run is shown not to meet. Of the rule, whatever places it is filed at, and with the
-        // values every run there stops at where no run is shown to: those are proved all the
-        // same, and that alone leaves nothing unresolved.
+        // no run is shown not to meet nor to meet. Of the rule, whatever places it is filed at,
+        // and with the values every run there stops at where no run is shown to: those are proved
+        // all the same, and that alone leaves nothing unresolved.
         if (!stopsNotShown.isEmpty() || !asks.isEmpty()) {
             withoutALine.stopNotShown(
                     new RuleCitation.Written(new RuleRef.Comparison(behavior, wrote), anchor),
                     ModelOccurrences.of(stated), stopsNotShown, asks,
-                    shown.isEmpty() ? stops : List.of());
+                    aStopIsShown ? List.of() : stops);
         }
         // Where what a run works out to evaluate it is not read far enough to say which rows get
         // past it, the border of each place it is filed at waits on it: the line stands where it

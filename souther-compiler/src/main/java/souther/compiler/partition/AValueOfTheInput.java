@@ -39,8 +39,9 @@ final class AValueOfTheInput {
     /**
      * Whether a value of the input {@code read} reads exists holding any whole number at each of
      * {@code places}: every position of the input is of a type that states nothing of its values,
-     * and each place is a whole number wearing no name, reached from a parameter through fields
-     * alone.
+     * and each place is a number wearing no name, reached from a parameter through fields alone.
+     * An {@code Int} holds every whole number between its ends, which a caller keeps a value
+     * within, and a {@code Decimal} is any finite decimal number, which every whole number is.
      */
     static boolean holdsAnyWholeNumbersAt(InputReading read, Collection<TermPath> places) {
         InputDomain domain = read.domain();
@@ -59,7 +60,7 @@ final class AValueOfTheInput {
             TypeView view = viewOf(at.type(), rules);
             if (!view.wrappers().isEmpty()
                     || !(view.shape() instanceof Shape.Scalar(Type.Prim prim))
-                    || prim != Type.Prim.INT) {
+                    || (prim != Type.Prim.INT && prim != Type.Prim.DECIMAL)) {
                 return false;
             }
         }

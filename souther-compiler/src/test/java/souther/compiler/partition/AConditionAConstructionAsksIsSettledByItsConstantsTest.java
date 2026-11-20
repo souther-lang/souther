@@ -2,12 +2,18 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhatAConstructionAsks;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.numeric.Rel;
 import souther.compiler.partition.ConstructionAsk.Requirement;
+import souther.compiler.types.OccurrenceLineage;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeKey;
+import souther.compiler.types.TypeSymbol;
+import souther.compiler.types.TypeSymbols;
 
 import java.util.List;
 import java.util.Optional;
@@ -36,8 +42,21 @@ class AConditionAConstructionAsksIsSettledByItsConstantsTest {
     private static final WhatAConstructionAsks.Bearing EVERY_RULE =
             new WhatAConstructionAsks.OnEveryRule();
 
+    /** Whether a part is one the way holds. */
+    private static boolean onTheWay(Requirement.Is is) {
+        return HELD.equals(is.read());
+    }
+
+    private static final TypeSymbol.AtModule HELD_TYPE =
+            TypeSymbols.declared(new TypeKey("demo", "Held"));
+
+    /** A construction of {@code Held}, which the asks below are of. */
+    private static final Core.Construct MADE = new Core.Construct(HELD_TYPE,
+            List.of(new Core.FieldValue("value", new Core.Int(1, Type.INT, NOWHERE), NOWHERE)),
+            Type.ref(HELD_TYPE), OccurrenceLineage.ORIGINAL, NOWHERE);
+
     private static Requirement ask(String form, Proposition read) {
-        return new Requirement.Is(new WhatAConstructionAsks.Is(form, Rel.GE, "0"), read);
+        return new Requirement.Is(new WhatAConstructionAsks.Is(form, Rel.GE, "0"), read, null);
     }
 
     private static final Requirement X = ask("x", NOT_HELD);
@@ -81,19 +100,19 @@ class AConditionAConstructionAsksIsSettledByItsConstantsTest {
     @Test
     void whatTheWayHoldsIsLeftOutOfWhatIsAskedPartByPart() {
         Requirement held = ask("w", HELD);
-        assertEquals(Requirement.ALWAYS, held.leavingOut(HELD::equals));
-        assertEquals(Y, Requirement.and(held, Y).leavingOut(HELD::equals));
-        assertEquals(Requirement.ALWAYS, Requirement.or(held, Y).leavingOut(HELD::equals));
+        assertEquals(Requirement.ALWAYS, held.leavingOut(is -> onTheWay(is)));
+        assertEquals(Y, Requirement.and(held, Y).leavingOut(is -> onTheWay(is)));
+        assertEquals(Requirement.ALWAYS, Requirement.or(held, Y).leavingOut(is -> onTheWay(is)));
         assertEquals(new Requirement.OneOf(List.of(X, Y)),
-                Requirement.or(X, Y).leavingOut(HELD::equals));
-        assertEquals(Requirement.NEVER, Requirement.NEVER.leavingOut(HELD::equals));
+                Requirement.or(X, Y).leavingOut(is -> onTheWay(is)));
+        assertEquals(Requirement.NEVER, Requirement.NEVER.leavingOut(is -> onTheWay(is)));
     }
 
     /** A construction no run gets past ends a run whichever place the rule reads, and whatever
      *  the way to the rule holds. */
     @Test
     void aConstructionNoRunGetsPastIsToldUnderEveryRuleWhateverTheWayHolds() {
-        ConstructionAsk never = new ConstructionAsk("Held", NOWHERE, EVERY_RULE,
+        ConstructionAsk never = new ConstructionAsk(MADE, "Held", NOWHERE, EVERY_RULE,
                 Requirement.NEVER);
         assertEquals(true, never.bearing().bearsOn(Set.of(TermPath.of("y"))));
         assertEquals(Optional.of(new WhatAConstructionAsks.Never()),
@@ -103,7 +122,9 @@ class AConditionAConstructionAsksIsSettledByItsConstantsTest {
     @Test
     void anAskIsOfSomeTypeAtSomePlaceUnderSomeRulesAndNumbersOfNoPlaceAreNotPlaces() {
         assertThrows(IllegalArgumentException.class,
-                () -> new ConstructionAsk(null, NOWHERE, EVERY_RULE, Requirement.NEVER));
+                () -> new ConstructionAsk(MADE, null, NOWHERE, EVERY_RULE, Requirement.NEVER));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ConstructionAsk(null, "Held", NOWHERE, EVERY_RULE, Requirement.NEVER));
         assertThrows(IllegalArgumentException.class,
                 () -> new WhatAConstructionAsks.OnPlaces(Set.of()));
     }
@@ -111,13 +132,13 @@ class AConditionAConstructionAsksIsSettledByItsConstantsTest {
     @Test
     void whatIsToldIsWhatIsLeftAndNothingWhereNothingIs() {
         Requirement both = Requirement.and(ask("w", HELD), Y);
-        ConstructionAsk one = new ConstructionAsk("Held", NOWHERE, EVERY_RULE, both);
+        ConstructionAsk one = new ConstructionAsk(MADE, "Held", NOWHERE, EVERY_RULE, both);
         assertEquals(Optional.of(new WhatAConstructionAsks.Is("y", Rel.GE, "0")),
-                one.toldOf(HELD::equals).map(WhatAConstructionAsks::asks));
-        assertEquals(Optional.empty(), new ConstructionAsk("Held", NOWHERE, EVERY_RULE,
-                ask("w", HELD)).toldOf(HELD::equals));
+                one.toldOf(is -> onTheWay(is)).map(WhatAConstructionAsks::asks));
+        assertEquals(Optional.empty(), new ConstructionAsk(MADE, "Held", NOWHERE, EVERY_RULE,
+                ask("w", HELD)).toldOf(is -> onTheWay(is)));
         assertEquals(Optional.of(new WhatAConstructionAsks.Never()),
-                new ConstructionAsk("Held", NOWHERE, EVERY_RULE, Requirement.NEVER)
-                        .toldOf(HELD::equals).map(WhatAConstructionAsks::asks));
+                new ConstructionAsk(MADE, "Held", NOWHERE, EVERY_RULE, Requirement.NEVER)
+                        .toldOf(is -> onTheWay(is)).map(WhatAConstructionAsks::asks));
     }
 }

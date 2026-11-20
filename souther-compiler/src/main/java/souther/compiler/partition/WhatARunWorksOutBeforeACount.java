@@ -338,6 +338,146 @@ final class WhatARunWorksOutBeforeACount {
     }
 
     /**
+     * What is known of a run on the way to {@code comparison} getting to {@code made}, a
+     * construction in {@code root}'s tree: that it is the construction an attempt tests, which
+     * takes the other arm where it is refused and ends no run; what is worked out before it where
+     * every run on the way works it out unless something before ends the run
+     * ({@link #workedOutBeforeAConstruction}); or neither.
+     */
+    static ToAConstruction toAConstruction(Core root, Core comparison, Core.Construct made) {
+        List<Core> toIt = root == null ? null : wayDownTo(root, made);
+        if (toIt != null && toIt.size() >= 2
+                && toIt.get(toIt.size() - 2) instanceof Core.IfConstructed attempt
+                && attempt.construct() == made) {
+            return new ToAConstruction.Attempted();
+        }
+        BeforeAConstruction before = workedOutBeforeAConstruction(root, comparison, made);
+        return before == null ? new ToAConstruction.NotShown() : before;
+    }
+
+    /** What is known of a run getting to a construction ({@link #toAConstruction}). */
+    sealed interface ToAConstruction
+            permits ToAConstruction.Attempted, ToAConstruction.NotShown, BeforeAConstruction {
+
+        /** It is the construction an attempt tests, and ends no run. */
+        record Attempted() implements ToAConstruction {}
+
+        /** That every run on the way gets to it unless something before ends the run is not
+         *  shown. */
+        record NotShown() implements ToAConstruction {}
+    }
+
+    /**
+     * What a run works out before {@code made}, a construction in {@code root}'s tree, where every
+     * run that takes the arms the way to {@code comparison} takes works {@code made} out unless
+     * something before it ends the run — or null where that is not shown.
+     *
+     * <p>Shown where the two part at a node that works {@code made}'s side out on every run
+     * before it enters {@code comparison}'s — a step that always runs and comes first, or the value
+     * of a {@code let} whose body the comparison is in — and every node from there down to
+     * {@code made} enters the next whenever it runs. A branch, an arm, a right operand that runs
+     * only where the left comes out one way and the body of a function value are entered on some
+     * runs, and the way to the comparison says nothing of which; above the two parting, they are
+     * the comparison's way too, and its conditions are what say which arm is taken. Not where a
+     * function value stands above them, whose body runs once for each application.
+     *
+     * <p>What it works out first is told twice ({@link BeforeAConstruction}).
+     */
+    private static BeforeAConstruction workedOutBeforeAConstruction(Core root, Core comparison,
+                                                                    Core.Construct made) {
+        List<Core> toIt = root == null ? null : wayDownTo(root, made);
+        List<Core> toTheComparison = root == null ? null : wayDownTo(root, comparison);
+        if (toIt == null || toTheComparison == null) {
+            return null;
+        }
+        int parting = 0;
+        while (parting + 1 < toIt.size() && parting + 1 < toTheComparison.size()
+                && toIt.get(parting + 1) == toTheComparison.get(parting + 1)) {
+            parting++;
+        }
+        if (parting + 1 >= toIt.size() || parting + 1 >= toTheComparison.size()) {
+            return null;
+        }
+        for (Core above : toIt.subList(0, parting + 1)) {
+            if (above instanceof Core.Block) {
+                return null;
+            }
+        }
+        if (!firstOnEveryRun(toIt.get(parting), toIt.get(parting + 1),
+                toTheComparison.get(parting + 1))) {
+            return null;
+        }
+        for (int i = parting + 1; i + 1 < toIt.size(); i++) {
+            if (!entersWhenever(toIt.get(i), toIt.get(i + 1))) {
+                return null;
+            }
+        }
+        List<Core> some = workedOutUpTo(root, made, false);
+        List<Core> every = workedOutUpTo(root, made, true);
+        if (some == null || every == null) {
+            return null;
+        }
+        List<Core> ofIt = Evaluated.inOrder(made).stream().map(Evaluated.Step::expression)
+                .toList();
+        List<Core> onSomeRun = new ArrayList<>(some.subList(0, some.size() - 1));
+        onSomeRun.addAll(ofIt);
+        List<Core> onEveryRun = new ArrayList<>(every.subList(0, every.size() - 1));
+        onEveryRun.addAll(ofIt);
+        return new BeforeAConstruction(onSomeRun, onEveryRun);
+    }
+
+    /**
+     * What a run works out before a construction it gets to ({@link #workedOutBeforeAConstruction}),
+     * as two questions ask it.
+     *
+     * @param onSomeRun  every part a run getting to it may work out first, a part that runs only
+     *                   on some runs counted as running, as {@link #nothingBeforeItEndsARun} counts
+     *                   them, and what it is made of: what may end a run before it is in these
+     * @param onEveryRun the parts every run getting to it works out first, and what it is made
+     *                   of: what a run that gets to it has got past is in these
+     */
+    record BeforeAConstruction(List<Core> onSomeRun, List<Core> onEveryRun)
+            implements ToAConstruction {
+
+        BeforeAConstruction {
+            onSomeRun = List.copyOf(onSomeRun);
+            onEveryRun = List.copyOf(onEveryRun);
+        }
+    }
+
+    /** Whether {@code node} works {@code first} out on every run it runs on, before it enters
+     *  {@code then}. */
+    private static boolean firstOnEveryRun(Core node, Core first, Core then) {
+        if (node instanceof Core.LetIn let) {
+            return first == let.value() && then == let.body();
+        }
+        if (node instanceof Core.Block) {
+            return false;
+        }
+        List<Evaluated.Step> steps = Evaluated.inOrder(node);
+        for (Evaluated.Step step : steps) {
+            if (step.expression() == then) {
+                return false;
+            }
+            if (step.expression() == first) {
+                return step instanceof Evaluated.Step.Always;
+            }
+        }
+        return false;
+    }
+
+    /** Whether {@code node} enters {@code child} whenever it runs. */
+    private static boolean entersWhenever(Core node, Core child) {
+        return switch (node) {
+            case Core.LetIn _, Core.Widen _ -> true;
+            case Core.Block _ -> false;
+            default -> Evaluated.inOrder(node).stream()
+                    .anyMatch(step -> step instanceof Evaluated.Step.Always
+                            && step.expression() == child);
+        };
+    }
+
+    /**
      * What every run that reaches {@code comparison}, a node of {@code root}'s tree, has worked out
      * by then — the comparison included — or none where it is not in the tree, or stands in a
      * closure.
