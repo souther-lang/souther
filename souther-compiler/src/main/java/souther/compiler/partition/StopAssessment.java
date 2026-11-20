@@ -2,8 +2,9 @@ package souther.compiler.partition;
 
 import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.InputReading;
-import souther.compiler.inputs.ReasonsAStopIsNotShown;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.Position;
+import souther.compiler.inputs.ReasonsAStopIsNotShown;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.WhyAStopIsNotShown;
 import souther.compiler.numeric.ExactAnswer;
@@ -155,17 +156,22 @@ final class StopAssessment {
 
     /**
      * What shows a run stops in what {@code judged} are of, as a finding says it: each stop shown,
-     * its operation as written and the number the value of the input holds at each place. Made
-     * from what was shown here and from nothing else, so a finding that a run stops is said only
-     * where this compiler has shown one does.
+     * its operation as written and the number the value of the input holds at each place, in the
+     * order the input {@code read} reads declares its places. Made from what was shown here and
+     * from nothing else, so a finding that a run stops is said only where this compiler has shown
+     * one does.
      */
-    static List<AStopShown> stopsShown(List<Judgement> judged) {
+    static List<AStopShown> stopsShown(List<Judgement> judged, InputReading read) {
         List<AStopShown> out = new ArrayList<>();
         for (Judgement each : judged) {
             if (each instanceof Judgement.Stops(Shown shown)) {
-                Map<TermPath, BigInteger> at = new LinkedHashMap<>();
-                shown.at().forEach((term, value) -> at.put(
-                        ((NumericTerm.ValueOf) term).position(), value.floor().orNull()));
+                List<AStopShown.NumberAt> at = new ArrayList<>();
+                for (Position place : read.domain().positions()) {
+                    ExactRatio held = shown.at().get(new NumericTerm.ValueOf(place.path()));
+                    if (held != null) {
+                        at.add(new AStopShown.NumberAt(place.path(), held.floor().orNull()));
+                    }
+                }
                 out.add(new AStopShown(
                         UndividedByARelation.written(shown.operation().form()), at));
             }

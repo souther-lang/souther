@@ -19,7 +19,6 @@ import souther.compiler.query.Compilation;
 import java.math.BigInteger;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -203,8 +202,8 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
                 "if q > 0 && q + 1 > 3 then 1 else 2"));
         assertEquals(List.of(RuleWhereARunMayStop.class), kinds(shown));
         // And it carries what shows it: the operation, and the value of q it stops at.
-        assertEquals(List.of(new AStopShown("q + 1",
-                        Map.of(TermPath.of("q"), BigInteger.valueOf(Long.MAX_VALUE)))),
+        assertEquals(List.of(new AStopShown("q + 1", List.of(new AStopShown.NumberAt(
+                        TermPath.of("q"), BigInteger.valueOf(Long.MAX_VALUE))))),
                 ((RuleWhereARunMayStop) shown.getFirst()).shown());
     }
 

@@ -416,7 +416,7 @@ public final class GuardThresholds {
                                                             .apply(each.stopsWhere().get())),
                                             read)
                                     : List.of();
-                            List<AStopShown> shown = StopAssessment.stopsShown(judged);
+                            List<AStopShown> shown = StopAssessment.stopsShown(judged, read);
                             // And the values at which every run getting to it stops in what it
                             // works out.
                             List<SearchRegion> before = regionsOf(toItself.toIt());
