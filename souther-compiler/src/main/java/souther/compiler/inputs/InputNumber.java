@@ -34,6 +34,7 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -72,8 +73,9 @@ public final class InputNumber {
      */
     public static NumericTerm of(Core e, InputDomain inputs, InputReads reads,
                                  RuleReadingSource source, ElementsMet met) {
-        return met.admits(e, reads, source.newtypes())
-                ? ofAlone(e, inputs, reads, source) : null;
+        NumericTerm one = alone(formAlone(e, inputs, reads, source));
+        return met.admits(e, elementsHeldIn(one == null ? null : LinearForm.atom(one)), reads,
+                source.newtypes()) ? one : null;
     }
 
     /**
@@ -87,11 +89,30 @@ public final class InputNumber {
      */
     public static LinearForm<NumericTerm> formOf(Core e, InputDomain inputs, InputReads reads,
                                                  RuleReadingSource source, ElementsMet met) {
-        if (!met.admits(e, reads, source.newtypes())) {
-            return null;
+        LinearForm<NumericTerm> alone = formAlone(e, inputs, reads, source);
+        LinearForm<NumericTerm> form = alone != null ? alone
+                : codePointsWeighed(e, inputs, reads, source);
+        return met.admits(e, elementsHeldIn(form), reads, source.newtypes()) ? form : null;
+    }
+
+    /**
+     * The elements of containers {@code form} holds a number of: the innermost element each of
+     * its numbers read at one position stands in. None of a number gathered across a container,
+     * which is of every element and of no one of them.
+     */
+    private static Set<ElementsNamed.Slot> elementsHeldIn(LinearForm<NumericTerm> form) {
+        if (form == null) {
+            return Set.of();
         }
-        LinearForm<NumericTerm> form = formAlone(e, inputs, reads, source);
-        return form != null ? form : codePointsWeighed(e, inputs, reads, source);
+        Set<ElementsNamed.Slot> out = new LinkedHashSet<>();
+        for (NumericTerm term : form.coefs().keySet()) {
+            if (term instanceof NumericTerm.FromOnePosition one
+                    && ElementsNamed.Slot.innermostOf(one.position()) instanceof
+                    ElementsNamed.Slot slot) {
+                out.add(slot);
+            }
+        }
+        return out;
     }
 
     /**

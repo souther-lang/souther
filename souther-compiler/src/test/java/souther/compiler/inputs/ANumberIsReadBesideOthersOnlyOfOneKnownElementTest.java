@@ -24,6 +24,9 @@ class ANumberIsReadBesideOthersOnlyOfOneKnownElementTest {
     private static final ElementsNamed.Slot AN_ITEM = ElementsNamed.Slot.innermostOf(
             TermPath.of("x").then("items").element());
 
+    private static final ElementsNamed.Slot A_LINE = ElementsNamed.Slot.innermostOf(
+            TermPath.of("x").then("lines").element());
+
     private static final BindingOwner OWNER = new BindingOwner.OfValue("probe", "f");
     private static final BindingId A = new BindingId(OWNER, 1);
     private static final BindingId B = new BindingId(OWNER, 2);
@@ -33,14 +36,24 @@ class ANumberIsReadBesideOthersOnlyOfOneKnownElementTest {
                 .map(name -> new ElementsNamed.Named(AN_ITEM, name)).toList());
     }
 
+    /** A number of an item read through {@code names}, held where an item stands. */
+    private static boolean admits(ElementsMet met, BindingId... names) {
+        return met.admits(through(names), Set.of(AN_ITEM));
+    }
+
+    /** A number held at {@code at} and read through no name, as what a lookup answers is. */
+    private static boolean admitsThroughNoName(ElementsMet met, ElementsNamed.Slot at) {
+        return met.admits(ElementsNamed.NONE, Set.of(at));
+    }
+
     /** The same element read again is taken; another element of the container is not. */
     @Test
     void oneElementIsTakenAgainAndAnotherIsRefused() {
         ElementsMet met = new ElementsMet();
-        assertTrue(met.admits(through(A)));
-        assertTrue(met.admits(through(A)));
+        assertTrue(admits(met, A));
+        assertTrue(admits(met, A));
         assertFalse(met.crowded());
-        assertFalse(met.admits(through(B)));
+        assertFalse(admits(met, B));
         assertTrue(met.crowded());
     }
 
@@ -49,7 +62,7 @@ class ANumberIsReadBesideOthersOnlyOfOneKnownElementTest {
     @Test
     void aNumberOfAnElementNotKnownIsRefused() {
         ElementsMet met = new ElementsMet();
-        assertFalse(met.admits(ElementsNamed.of(List.of(), Set.of(AN_ITEM))));
+        assertFalse(met.admits(ElementsNamed.of(List.of(), Set.of(AN_ITEM)), Set.of(AN_ITEM)));
         assertTrue(met.crowded());
     }
 
@@ -57,8 +70,43 @@ class ANumberIsReadBesideOthersOnlyOfOneKnownElementTest {
     @Test
     void aNumberOfTwoElementsAtOnceIsRefused() {
         ElementsMet met = new ElementsMet();
-        assertFalse(met.admits(through(A, B)));
+        assertFalse(admits(met, A, B));
         assertTrue(met.crowded());
+    }
+
+    /**
+     * A number of an element read through no name is taken where nothing else of the container
+     * has been read, and is no element any other read is known to be: an item named after it is
+     * refused, and so is another read through no name, which may be another entry.
+     */
+    @Test
+    void anElementReadThroughNoNameStandsBesideNothingElseOfItsContainer() {
+        ElementsMet named = new ElementsMet();
+        assertTrue(admitsThroughNoName(named, AN_ITEM));
+        assertFalse(admits(named, A));
+        assertTrue(named.crowded());
+
+        ElementsMet twice = new ElementsMet();
+        assertTrue(admitsThroughNoName(twice, AN_ITEM));
+        assertFalse(admitsThroughNoName(twice, AN_ITEM));
+    }
+
+    /** Nor beside an element a name stands for, read before it. */
+    @Test
+    void anElementReadThroughNoNameIsRefusedBesideANamedOne() {
+        ElementsMet met = new ElementsMet();
+        assertTrue(admits(met, A));
+        assertFalse(admitsThroughNoName(met, AN_ITEM));
+        assertTrue(met.crowded());
+    }
+
+    /** An element of another container is another element, whatever it was read through. */
+    @Test
+    void anElementOfAnotherContainerIsTakenBesideIt() {
+        ElementsMet met = new ElementsMet();
+        assertTrue(admitsThroughNoName(met, AN_ITEM));
+        assertTrue(admitsThroughNoName(met, A_LINE));
+        assertFalse(met.crowded());
     }
 
     /**
@@ -69,40 +117,47 @@ class ANumberIsReadBesideOthersOnlyOfOneKnownElementTest {
     @Test
     void aMarkIsRewoundToAsOftenAsThereAreWaysFromIt() {
         ElementsMet met = new ElementsMet();
-        assertTrue(met.admits(through(A)));
+        assertTrue(admits(met, A));
         ElementsMet.Mark atTheParting = met.mark();
 
-        assertFalse(met.admits(through(B)));
+        assertFalse(admits(met, B));
         met.rewind(atTheParting);
         assertFalse(met.crowded());
-        assertTrue(met.admits(through(A)));
+        assertTrue(admits(met, A));
 
-        assertFalse(met.admits(through(B)));
+        assertFalse(admits(met, B));
         met.rewind(atTheParting);
         assertFalse(met.crowded());
-        assertTrue(met.admits(through(A)));
-        assertFalse(met.admits(through(B)));
+        assertTrue(admits(met, A));
+        assertFalse(admits(met, B));
     }
 
     /** The elements put back are those of the object a reading made on it asks of, which is the
-     *  one rewound and not another standing in for it. */
+     *  one rewound and not another standing in for it: an element read through no name as well. */
     @Test
     void aMarkRewindsTheObjectItWasTakenOf() {
         ElementsMet met = new ElementsMet();
         ElementsMet.Mark none = met.mark();
-        assertTrue(met.admits(through(A)));
-        assertFalse(met.admits(through(B)));
+        assertTrue(admits(met, A));
+        assertFalse(admits(met, B));
 
         met.rewind(none);
 
         assertFalse(met.crowded());
-        assertTrue(met.admits(through(B)));
-        assertFalse(met.admits(through(A)));
+        assertTrue(admitsThroughNoName(met, AN_ITEM));
+
+        met.rewind(none);
+
+        assertTrue(admits(met, B));
+        assertFalse(admits(met, A));
     }
 
     /** A number read by itself is put in no form beside another, and is held to nothing. */
     @Test
     void aNumberReadByItselfIsHeldToNothing() {
-        assertTrue(ElementsMet.NONE.admits(ElementsNamed.of(List.of(), Set.of(AN_ITEM))));
+        assertTrue(ElementsMet.NONE.admits(ElementsNamed.of(List.of(), Set.of(AN_ITEM)),
+                Set.of(AN_ITEM)));
+        assertTrue(admitsThroughNoName(ElementsMet.NONE, AN_ITEM));
+        assertTrue(admitsThroughNoName(ElementsMet.NONE, AN_ITEM));
     }
 }
