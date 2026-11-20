@@ -493,6 +493,8 @@ final class WhatARunWorksOutBeforeACount {
      *  applied, and the construction an attempt tests, which is the attempt's own deciding. */
     private static boolean entersOnSomeRun(Core node, Core child, Core made) {
         return switch (node) {
+            // A value standing as a wider type enters what it holds whenever it runs.
+            case Core.Widen _ -> true;
             case Core.Block _ -> false;
             case Core.IfConstructed attempt -> child != attempt.construct() || child != made;
             default -> true;

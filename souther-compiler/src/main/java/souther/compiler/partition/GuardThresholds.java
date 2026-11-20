@@ -1267,13 +1267,8 @@ public final class GuardThresholds {
      * here, by {@link BoundaryPolicy}, and what the comparison comes to was read where that was
      * settled ({@code read}). Nothing here reads the comparison again.
      *
-     * @param shown what shows a run stops in it, none where no stop is shown
-     * @param constructionsShown what shows a run on the way stops at a construction, none where
-     *              no such stop is shown
-     * @param stops the values at which every run getting to the comparison stops in what it works
-     *              out
-     * @param asks  what each construction on the way asks of a run, of which neither that a run
-     *              on the way stops there nor that none does is shown
+     * @return the rule as a report cites it, which what is said of a run stopping on the way to
+     *         it is said of ({@link #stopsSaid})
      */
     private static RuleCitation.Written lineAt(String behavior, ModelOccurrence stated,
                                                EmittedComparisonState.Instrumented at,
