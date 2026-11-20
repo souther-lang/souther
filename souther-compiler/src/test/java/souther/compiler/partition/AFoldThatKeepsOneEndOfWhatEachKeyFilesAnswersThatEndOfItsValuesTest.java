@@ -6,6 +6,7 @@ import org.opentest4j.AssertionFailedError;
 
 import souther.compiler.ACompiledModel;
 import souther.compiler.DocumentShape;
+import souther.compiler.NotRead;
 import souther.compiler.diag.SourceLayouts;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -260,7 +261,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                 }
                 """);
         assertEquals(List.of(), report(compilation).lines()
-                .filter(line -> line.contains("not read")).toList(), () -> report(compilation));
+                .filter(NotRead::isOne).toList(), () -> report(compilation));
         assertEquals(1, bordersOf(compilation).size(), () -> report(compilation));
         assertTrue(json(compilation).contains("least(touches[*].days by account)"),
                 () -> report(compilation));
@@ -987,7 +988,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
 
     /** The lines saying a place is not read, of any comparison. */
     private static List<String> unreadAnywhere(String report) {
-        return report.lines().filter(line -> line.contains("not read")).toList();
+        return report.lines().filter(NotRead::isOne).toList();
     }
 
     /** The lines saying the place {@code place} is not read. */
@@ -1037,7 +1038,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
                         || line.contains("about `least(touches[*].days by account)`"))
                 .map(AT_A_COMPARISON::matcher).filter(Matcher::find)
                 .map(found -> found.group(0)).collect(Collectors.toSet());
-        return report.lines().filter(line -> line.contains("not read")
+        return report.lines().filter(line -> NotRead.isOne(line)
                 && filtered.stream().noneMatch(line::contains)).toList();
     }
 
@@ -1100,7 +1101,7 @@ class AFoldThatKeepsOneEndOfWhatEachKeyFilesAnswersThatEndOfItsValuesTest {
 
                     let stale (touches) = Map.keys(sinceOf(touches))
                     """.formatted(WITHIN_A_HUNDRED, step)));
-            assertTrue(report.contains("not read"), () -> step + "\n" + report);
+            assertTrue(NotRead.in(report), () -> step + "\n" + report);
         }
     }
 

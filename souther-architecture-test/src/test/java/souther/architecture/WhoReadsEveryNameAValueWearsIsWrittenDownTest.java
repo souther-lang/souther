@@ -173,6 +173,8 @@ class WhoReadsEveryNameAValueWearsIsWrittenDownTest {
                     THE_POSITION),
             row(INPUTS + "TermOrdering", "namesWorn", "(" + TYPE + INNERS + ")Ljava/util/List;",
                     THE_SPINE),
+            row(PARTITION + "AValueOfTheInput", "viewOf",
+                    "(" + TYPE + SOURCE + ")L" + TYPE_VIEW + ";", THE_POSITION),
             row(PARTITION + "BehaviorInputs", "view", "(" + TYPE + ")L" + TYPE_VIEW + ";",
                     THE_POSITION),
             row(PARTITION + "CardinalityComposer", "compose",

@@ -148,7 +148,7 @@ class WhatAnOptionMadeByAClosureHoldsIsWhatTheClosureMadeTest {
         for (String model : List.of(OWN, MATCHED)) {
             String report = report(model);
 
-            assertFalse(report.contains("not read"), report);
+            assertFalse(NotRead.in(report), report);
             assertTrue(report.contains("measurement: complete"), report);
         }
     }
@@ -339,7 +339,7 @@ class WhatAnOptionMadeByAClosureHoldsIsWhatTheClosureMadeTest {
     void aFieldOfTheEntryComparedWithAStringIsALineOnTheField() {
         String report = report(A_FIELD_AGAINST_A_STRING);
 
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
         assertTrue(report.contains("measurement: complete"), report);
         assertTrue(report.contains("read as f/m[*].holder: = x"), report);
         assertTrue(report.contains("decision    rules 1"), report);
@@ -502,7 +502,7 @@ class WhatAnOptionMadeByAClosureHoldsIsWhatTheClosureMadeTest {
                 """)) {
             String report = report(model);
 
-            assertFalse(report.contains("not read"), report);
+            assertFalse(NotRead.in(report), report);
             assertTrue(report.contains("measurement: complete"), report);
         }
     }

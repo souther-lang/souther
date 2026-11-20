@@ -13,7 +13,7 @@ import souther.compiler.inputs.InputQuestion;
 import souther.compiler.inputs.PositionReadingBlocked;
 import souther.compiler.inputs.PositionValuesNotSeparated;
 import souther.compiler.inputs.RuleSite;
-import souther.compiler.inputs.RuleWhereARunMayStop;
+import souther.compiler.inputs.WhatIsShownOfAStop;
 import souther.compiler.inputs.RuleWithoutALine;
 import souther.compiler.inputs.StandingQuestion;
 import souther.compiler.inputs.WhatAQuestionStandsOn;
@@ -97,7 +97,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                                 PairSpace pairs,
                                 List<souther.compiler.partition.UndividedPosition> notDerivable,
                                 List<souther.compiler.inputs.RuleWithoutALine> rulesWithoutALine,
-                                List<souther.compiler.inputs.RuleWhereARunMayStop> rulesWhereARunMayStop,
+                                List<WhatIsShownOfAStop> stopsShown,
                                 List<souther.compiler.inputs.PositionReadingBlocked> blocked,
                                 List<souther.compiler.inputs.PositionValuesNotSeparated> notSeparated,
                                 List<Unanswered> unanswered,
@@ -112,14 +112,14 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                              PairSpace pairs,
                              List<UndividedPosition> notDerivable,
                              List<RuleWithoutALine> rulesWithoutALine,
-                             List<RuleWhereARunMayStop> rulesWhereARunMayStop,
+                             List<WhatIsShownOfAStop> stopsShown,
                              List<PositionReadingBlocked> blocked,
                              List<PositionValuesNotSeparated> notSeparated,
                              List<Unanswered> unanswered,
                              List<Incompleteness> whyUnclassified,
                              List<CasesAtARule<CaseExpansion.CameTo>> caseExpansions,
                              List<StopPastTheRepresentation> stopsPastTheRepresentation) {
-        this(partitioned, pairs, notDerivable, rulesWithoutALine, rulesWhereARunMayStop, blocked,
+        this(partitioned, pairs, notDerivable, rulesWithoutALine, stopsShown, blocked,
                 notSeparated, unanswered, whyUnclassified, caseExpansions,
                 stopsPastTheRepresentation, List.of());
     }
@@ -129,13 +129,13 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                              PairSpace pairs,
                              List<UndividedPosition> notDerivable,
                              List<RuleWithoutALine> rulesWithoutALine,
-                             List<RuleWhereARunMayStop> rulesWhereARunMayStop,
+                             List<WhatIsShownOfAStop> stopsShown,
                              List<PositionReadingBlocked> blocked,
                              List<PositionValuesNotSeparated> notSeparated,
                              List<Unanswered> unanswered,
                              List<Incompleteness> whyUnclassified,
                              List<CasesAtARule<CaseExpansion.CameTo>> caseExpansions) {
-        this(partitioned, pairs, notDerivable, rulesWithoutALine, rulesWhereARunMayStop, blocked,
+        this(partitioned, pairs, notDerivable, rulesWithoutALine, stopsShown, blocked,
                 notSeparated, unanswered, whyUnclassified, caseExpansions, List.of());
     }
 
@@ -144,12 +144,12 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
                              PairSpace pairs,
                              List<UndividedPosition> notDerivable,
                              List<RuleWithoutALine> rulesWithoutALine,
-                             List<RuleWhereARunMayStop> rulesWhereARunMayStop,
+                             List<WhatIsShownOfAStop> stopsShown,
                              List<PositionReadingBlocked> blocked,
                              List<PositionValuesNotSeparated> notSeparated,
                              List<Unanswered> unanswered,
                              List<Incompleteness> whyUnclassified) {
-        this(partitioned, pairs, notDerivable, rulesWithoutALine, rulesWhereARunMayStop, blocked,
+        this(partitioned, pairs, notDerivable, rulesWithoutALine, stopsShown, blocked,
                 notSeparated, unanswered, whyUnclassified, List.of());
     }
 
@@ -202,7 +202,7 @@ public record PartitionEvidence(Measure<List<AxisCoverage>> partitioned,
     public PartitionEvidence {
         notDerivable = List.copyOf(notDerivable);
         rulesWithoutALine = List.copyOf(rulesWithoutALine);
-        rulesWhereARunMayStop = List.copyOf(rulesWhereARunMayStop);
+        stopsShown = List.copyOf(stopsShown);
         notSeparated = List.copyOf(notSeparated);
         blocked = List.copyOf(blocked);
         unanswered = List.copyOf(unanswered);

@@ -30,8 +30,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
 
-    private static final String THE_STOP = "every run stops in q + 1 where q is at least "
-            + "9223372036854775807";
+    /** The note of {@code q + 1}. The input holds a value of a sum, which a value of the input is
+     *  not shown to exist over, so the stop is one not resolved, with the rows every run getting
+     *  there stops at. */
+    private static final String THE_STOP = "a run that gets there stops in q + 1 where q is at"
+            + " least 9223372036854775807, and no such run is shown to exist";
 
     private static final Map<String, String> CONDITIONS = new LinkedHashMap<>();
 
@@ -202,7 +205,8 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
         assertEquals(List.of(), TOLD.get("matchArmNoStop"));
     }
 
-    /** The notes of each behavior, each of the conditions read once, as the model says them. */
+    /** The notes of a stop of each behavior, shown or not resolved, each of the conditions read
+     *  once, as the model says them. */
     private static Map<String, List<String>> told() {
         StringBuilder model = new StringBuilder("module m\n\ndata Tier = Low | High\n"
                 + "data Row = { price: Int, qty: Int }\n");
@@ -221,7 +225,8 @@ class AStopInWhatAReadingRestatesIsToldAsTheUnrestatedSpellingToldItTest {
             Matcher started = header.matcher(line);
             if (started.matches()) {
                 current = out.computeIfAbsent(started.group(1), _ -> new ArrayList<>());
-            } else if (current != null && line.contains("may stop a run")) {
+            } else if (current != null && (line.contains("may stop a run")
+                    || line.contains("stop not resolved:"))) {
                 current.add(line);
             }
         }

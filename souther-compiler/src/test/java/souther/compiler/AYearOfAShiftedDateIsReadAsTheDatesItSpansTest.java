@@ -237,7 +237,7 @@ class AYearOfAShiftedDateIsReadAsTheDatesItSpansTest {
                 "Date.year(Date.addDays(1, b)) == 1000000000")) {
             String report = about(comparison);
 
-            assertFalse(report.contains("not read"), comparison + "\n" + report);
+            assertFalse(NotRead.in(report), comparison + "\n" + report);
             assertFalse(report.contains("read as f/b"), comparison + "\n" + report);
         }
     }

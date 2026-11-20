@@ -141,7 +141,7 @@ class AStringBesideAPieceOfItIsReadWhereTheWayStatesTheTwoTest {
         ACompiledModel.compiles(compilation);
         String page = AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
-        return page.lines().filter(line -> line.contains("not read")
+        return page.lines().filter(line -> NotRead.isOne(line)
                 || line.contains("not accounted for")).toList();
     }
 

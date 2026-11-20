@@ -47,7 +47,7 @@ class AStringChosenByCasesIsComparedAsTheCaseTakenTest {
     }
 
     private static void readToTheEnd(String report) {
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
         assertTrue(report.contains("measurement: complete"), report);
         assertFalse(report.contains("nothing could show a row can be written"), report);
     }

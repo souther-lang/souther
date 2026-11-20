@@ -64,18 +64,13 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     private static final String LEAST = "-9223372036854775808";
 
     /** The rows every run stops at, as {@code operation where form least..greatest and ...},
-     *  an end the type already holds left blank. */
+     *  an end the type already holds left blank, read from the finding of the rule whichever of a
+     *  stop shown or one not resolved it is. */
     private static List<String> everyRunStops(String type, String bound, String before,
                                               String comparison) {
-        Compilation compilation = measured(MODEL.formatted(type, bound, before, comparison));
-        JsonNode findings = JsonMapper.builder().build()
-                .readTree(AdequacyReport.of(compilation)
-                        .json(SourceRendering.namedByIdentity(compilation.texts())))
-                .get("modules").get(0).get("behaviors").get(0).get("findings");
         List<String> out = new ArrayList<>();
-        for (JsonNode each : findings) {
-            if (each.get("kind").asString().equals("rule_may_stop_a_run")
-                    && each.has("everyRunStops")) {
+        for (JsonNode each : stopsSaid(type, bound, before, comparison)) {
+            if (each.has("everyRunStops")) {
                 for (JsonNode stop : each.get("everyRunStops")) {
                     List<String> where = new ArrayList<>();
                     for (JsonNode within : stop.get("where")) {
@@ -200,13 +195,13 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     void anOperationOfOneArmStopsNoRunThatTakesAnotherArm() {
         assertEquals(List.of(),
                 everyRunStops("Int", "x", "", "(if y > 0 then x + 1 else x) == z"));
-        assertEquals(1, mayStop("Int", "x", "", "(if y > 0 then x + 1 else x) == z").size());
-        assertEquals(List.of(), mayStop("Int", "x", "guard y <= 0 else No { n = 0 }",
+        assertEquals(1, stopsSaid("Int", "x", "", "(if y > 0 then x + 1 else x) == z").size());
+        assertEquals(List.of(), stopsSaid("Int", "x", "guard y <= 0 else No { n = 0 }",
                 "(if y > 0 then x + 1 else x) == z"));
         String byCases = "(match x with | A -> y + 1 | B -> y) == z";
         assertEquals(List.of(), everyRunStops("Kind", "x", "", byCases));
-        assertEquals(1, mayStop("Kind", "x", "", byCases).size());
-        assertEquals(List.of(), mayStop("Kind", "x", "guard x == B else No { n = 0 }", byCases));
+        assertEquals(1, stopsSaid("Kind", "x", "", byCases).size());
+        assertEquals(List.of(), stopsSaid("Kind", "x", "guard x == B else No { n = 0 }", byCases));
         assertTrue(everyRunStops("Int", "x", "",
                         "(if y > 0 then x + 1 else x) + (z + 1) == 0").stream()
                 .noneMatch(stop -> stop.startsWith("x + 1 ")),
@@ -244,8 +239,8 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
         for (String[] pair : pairs) {
             assertEquals(everyRunStops("Int", "x", "", pair[0]),
                     everyRunStops("Int", "x", "", pair[1]), pair[0] + " | " + pair[1]);
-            assertEquals(mayStop("Int", "x", "", pair[0]).size(),
-                    mayStop("Int", "x", "", pair[1]).size(), pair[0] + " | " + pair[1]);
+            assertEquals(stopsSaid("Int", "x", "", pair[0]).size(),
+                    stopsSaid("Int", "x", "", pair[1]).size(), pair[0] + " | " + pair[1]);
         }
         assertEquals(List.of(), everyRunStops("Int", "x", "", "Int.multiply(x, z) + (y + 1) == 0"));
         assertEquals(List.of("x + 1 where x " + GREATEST + ".."),
@@ -263,7 +258,7 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
         String comparison = "List.any(n -> x + n >= 10, List.rangeInclusive(3, z))";
         assertEquals(List.of("n + x where x " + plus(GREATEST, -2) + ".."),
                 everyRunStops("Int", "x", "", comparison));
-        assertEquals(1, mayStop("Int", "x", "", comparison).size());
+        assertEquals(1, stopsSaid("Int", "x", "", comparison).size());
     }
 
     /**
@@ -275,7 +270,7 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     void aSumOverWhereAnElementStandsStopsNoRowsEveryRunAndSomeRuns() {
         String comparison = "List.any(b -> b, List.mapIndexed((i, _) -> y + i >= 10, x))";
         assertEquals(List.of(), everyRunStops("List<Int>", "x", "", comparison));
-        assertEquals(1, mayStop("List<Int>", "x", "", comparison).size());
+        assertEquals(1, stopsSaid("List<Int>", "x", "", comparison).size());
     }
 
     /**
@@ -300,7 +295,7 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     @Test
     void aSumOnAnApplicationMadeOnlyPastAnAnswerStopsOnlyTheRunsThatMakeIt() {
         assertEquals(List.of(), everyRunStops("Int", "x", "", "List.any(n -> n + x >= 0, [0, 10])"));
-        assertEquals(List.of(), mayStop("Int", "x", "", "List.any(n -> n + x >= 0, [0, 10])"));
+        assertEquals(List.of(), stopsSaid("Int", "x", "", "List.any(n -> n + x >= 0, [0, 10])"));
         assertEquals(List.of("x + 10 where x " + plus(GREATEST, -9) + ".."),
                 everyRunStops("Int", "x", "", "List.any(n -> n + x < 0, [0, 10])"));
     }
@@ -309,7 +304,7 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     @Test
     void aSumInAClosureAppliedToNothingStopsNoRun() {
         assertEquals(List.of(),
-                mayStop("Int", "x", "", "List.all(n -> n + x >= 0, List.take(0, [0, 10]))"));
+                stopsSaid("Int", "x", "", "List.all(n -> n + x >= 0, List.take(0, [0, 10]))"));
     }
 
     /** One past where an element stands is at most how many a list holds, which an {@code Int}
@@ -318,7 +313,7 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     void oneAddedToWhereAnElementStandsStopsNoRun() {
         String comparison = "List.any(b -> b, List.mapIndexed((i, _) -> i + 1 == y, x))";
         assertEquals(List.of(), everyRunStops("List<Int>", "x", "", comparison));
-        assertEquals(List.of(), mayStop("List<Int>", "x", "", comparison));
+        assertEquals(List.of(), stopsSaid("List<Int>", "x", "", comparison));
     }
 
     /**
@@ -358,7 +353,7 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
         assertFalse(ofTheSum.isEmpty(), "the sum alone stops every run past it");
         assertEquals(ofTheSum, everyRunStops("List<Int>", "x", "",
                 over.formatted("Int.floorMod(y + n, 7) >= 1")));
-        assertEquals(1, mayStop("List<Int>", "x", "",
+        assertEquals(1, stopsSaid("List<Int>", "x", "",
                 over.formatted("Int.floorMod(y + n, 7) >= 1")).size());
     }
 
@@ -379,8 +374,8 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
         for (String dividend : List.of("x + z", "x + 1")) {
             String comparison = "(if y > 0 then Int.floorMod(" + dividend + ", 7) else 1) >= 1";
             assertEquals(List.of(), everyRunStops("Int", "x", "", comparison), dividend);
-            assertEquals(1, mayStop("Int", "x", "", comparison).size(), dividend);
-            assertEquals(List.of(), mayStop("Int", "x", "guard y <= 0 else No { n = 0 }",
+            assertEquals(1, stopsSaid("Int", "x", "", comparison).size(), dividend);
+            assertEquals(List.of(), stopsSaid("Int", "x", "guard y <= 0 else No { n = 0 }",
                     comparison), dividend);
         }
     }
@@ -389,7 +384,7 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
      *  nothing is said of it. */
     @Test
     void theSumARemainderIsOfKeptWithinItsTypeStopsNoRun() {
-        assertEquals(List.of(), mayStop("Small", "Small(x)",
+        assertEquals(List.of(), stopsSaid("Small", "Small(x)",
                 "guard x >= 0 && z >= 0 && z <= 10 else No { n = 0 }",
                 "Int.floorMod(x - z, 7) >= 1"));
     }
@@ -403,9 +398,9 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     @Test
     void theSumARemainderIsOfOverAWholeNumberInTurnStopsARunAsTheSumAloneDoes() {
         String over = "List.isEmpty(List.filter(n -> %s, List.rangeInclusive(0, y)))";
-        List<JsonNode> ofTheSum = mayStop("Int", "x", "", over.formatted("x + n >= 1"));
+        List<JsonNode> ofTheSum = stopsSaid("Int", "x", "", over.formatted("x + n >= 1"));
         assertEquals(1, ofTheSum.size(), ofTheSum::toString);
-        assertEquals(1, mayStop("Int", "x", "",
+        assertEquals(1, stopsSaid("Int", "x", "",
                 over.formatted("Int.floorMod(x + n, 7) == 0")).size());
         assertEquals(everyRunStops("Int", "x", "", over.formatted("x + n >= 1")),
                 everyRunStops("Int", "x", "", over.formatted("Int.floorMod(x + n, 7) == 0")));
@@ -416,7 +411,7 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
     @Test
     void aSumUnderTheSumARemainderOverAWholeNumberInTurnIsOfStopsARunFirst() {
         String over = "List.isEmpty(List.filter(n -> %s, List.rangeInclusive(0, y)))";
-        assertEquals(1, mayStop("Int", "x", "",
+        assertEquals(1, stopsSaid("Int", "x", "",
                 over.formatted("Int.floorMod((x + n) + 1, 7) == 0")).size());
         assertEquals(everyRunStops("Int", "x", "", over.formatted("(x + n) + 1 >= 1")),
                 everyRunStops("Int", "x", "",
@@ -428,22 +423,24 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
      *  do not, it may stop one. */
     @Test
     void theSumARemainderOverAWholeNumberInTurnIsOfStopsNoRunThatDoesNotWorkItOutPastItsType() {
-        assertEquals(List.of(), mayStop("Int", "x", "guard y < 0 else No { n = 0 }",
+        assertEquals(List.of(), stopsSaid("Int", "x", "guard y < 0 else No { n = 0 }",
                 "List.isEmpty(List.filter(n -> Int.floorMod(x + n, 7) == 0,"
                         + " List.rangeInclusive(0, y)))"));
         String between = "List.isEmpty(List.filter(n -> Int.floorMod(x + z + n, 7) == 0,"
                 + " List.rangeInclusive(1, %s)))";
-        assertEquals(1, mayStop("Int", "x", "", between.formatted("1")).size());
-        assertEquals(List.of(), mayStop("Int", "x", "", between.formatted("0")));
+        assertEquals(1, stopsSaid("Int", "x", "", between.formatted("1")).size());
+        assertEquals(List.of(), stopsSaid("Int", "x", "", between.formatted("0")));
         String upTo = "List.isEmpty(List.filter(n -> Int.floorMod(n + %s, 7) == 0,"
                 + " List.rangeInclusive(0, List.length(x))))";
-        assertEquals(1, mayStop("List<Int>", "x", "", upTo.formatted(GREATEST)).size());
-        assertEquals(List.of(), mayStop("List<Int>", "x", "", upTo.formatted("5")));
+        assertEquals(1, stopsSaid("List<Int>", "x", "", upTo.formatted(GREATEST)).size());
+        assertEquals(List.of(), stopsSaid("List<Int>", "x", "", upTo.formatted("5")));
     }
 
-    /** The findings that a rule of {@code f} is one a run may stop in. */
-    private static List<JsonNode> mayStop(String type, String bound, String before,
-                                          String comparison) {
+    /** The findings that a rule of {@code f} is one a run may stop in: a stop shown to exist, or
+     *  one not resolved. An operation on an arm, on an application of a closure or over an element
+     *  is one no existence of a stopping run is shown for, and its stop is said as not resolved. */
+    private static List<JsonNode> stopsSaid(String type, String bound, String before,
+                                            String comparison) {
         Compilation compilation = measured(MODEL.formatted(type, bound, before, comparison));
         JsonNode findings = JsonMapper.builder().build()
                 .readTree(AdequacyReport.of(compilation)
@@ -451,7 +448,8 @@ class AnOperationPastItsTypeStopsEveryRunThatGetsToItsComparisonTest {
                 .get("modules").get(0).get("behaviors").get(0).get("findings");
         List<JsonNode> out = new ArrayList<>();
         for (JsonNode each : findings) {
-            if (each.get("kind").asString().equals("rule_may_stop_a_run")) {
+            String kind = each.get("kind").asString();
+            if (kind.equals("rule_may_stop_a_run") || kind.equals("rule_stop_not_shown")) {
                 out.add(each);
             }
         }

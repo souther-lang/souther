@@ -336,8 +336,7 @@ final class WholeValuesMeeting {
 
     /** What {@code form} comes to with each number it is of at {@code values} — null where one is
      *  not there, or the arithmetic cannot say. */
-    private static ExactRatio valueOf(LinearForm<NumericTerm> form,
-                                      Map<NumericTerm, ExactRatio> values) {
+    static ExactRatio valueOf(LinearForm<NumericTerm> form, Map<NumericTerm, ExactRatio> values) {
         ExactRatio at = form.constant();
         for (Map.Entry<NumericTerm, ExactRatio> term : inOneOrder(form)) {
             ExactRatio value = values.get(term.getKey());

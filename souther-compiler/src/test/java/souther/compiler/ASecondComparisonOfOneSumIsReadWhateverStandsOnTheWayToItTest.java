@@ -99,7 +99,7 @@ class ASecondComparisonOfOneSumIsReadWhateverStandsOnTheWayToItTest {
         String human = measured(MODEL);
 
         assertTrue(human.contains("measurement: complete"), human);
-        assertFalse(human.contains("not read"), human);
+        assertFalse(NotRead.in(human), human);
     }
 
 }

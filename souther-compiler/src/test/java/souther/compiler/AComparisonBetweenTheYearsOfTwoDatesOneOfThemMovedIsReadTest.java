@@ -364,7 +364,7 @@ class AComparisonBetweenTheYearsOfTwoDatesOneOfThemMovedIsReadTest {
         assertTrue(report.contains("read as f/birthday + days"), report);
         assertTrue(report.contains("it relates the value here to another value rather than"
                 + " dividing the values here, about `days`"), report);
-        assertTrue(report.contains("every run stops in birthday + days where birthday + days is"
+        assertTrue(report.contains("stops in birthday + days where birthday + days is"
                 + " at least 365241780472"), report);
         assertTrue(report.contains("in birthday + days where birthday + days is at most"
                 + " -365243219163"), report);

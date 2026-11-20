@@ -113,7 +113,7 @@ class AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest {
     void twiceANumberIsTrueAtTheEvenValuesAndNeverAtTheOdd() {
         String source = model("", "x: Int", "x * 2 == cap").replace("(x, cap) = x", "(x, cap) = x");
         String said = report(source);
-        assertFalse(said.contains("not read"), said);
+        assertFalse(NotRead.in(said), said);
         assertTrue(said.contains("cap is divided by"), said);
         List<RowsOfABlock.Row> rows = rows(source);
         List<BigInteger> canBe = capsFor(rows, "cap: cap can be 2 * x at cap");
@@ -141,7 +141,7 @@ class AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest {
     void aTotalOfDoubledElementsIsTrueAtTheEvenValuesAndNeverAtTheOdd() {
         String source = model("", "xs: List<Int>", DOUBLED + " == cap");
         String said = report(source);
-        assertFalse(said.contains("not read"), said);
+        assertFalse(NotRead.in(said), said);
         List<RowsOfABlock.Row> rows = rows(source);
         List<BigInteger> canBe = capsFor(rows,
                 "cap: cap can be List.sum({2·the element itself + 0 | xs[*]}) at cap");
@@ -155,7 +155,7 @@ class AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest {
     void aTotalOverWhatAFilterKeepsIsTrueAtNoughtAndFromSixAndNeverBetween() {
         String source = model(LINE, "lines: List<Line>", FILTERED + " == cap");
         String said = report(source);
-        assertFalse(said.contains("not read"), said);
+        assertFalse(NotRead.in(said), said);
         List<RowsOfABlock.Row> rows = rows(source);
         String sum = "List.sum({if 1·qty + -5 > 0 then 1·qty + 0 else 0 | lines[*]})";
         List<BigInteger> canBe = rows.stream().filter(row -> row.fills().stream()
@@ -227,7 +227,7 @@ class AnEquationBesideAWeighedNumberIsToldByWhatTheWeighingReachesTest {
     void anInequalityPartsTheNumberByTheSameValues() {
         List<RowsOfABlock.Row> rows = rows(model("", "x: Int", "x * 2 /= cap"));
         String said = report(model("", "x: Int", "x * 2 /= cap"));
-        assertFalse(said.contains("not read"), said);
+        assertFalse(NotRead.in(said), said);
         List<BigInteger> canBe = capsFor(rows, "cap: cap can be 2 * x at cap");
         List<RowsOfABlock.Row> never = rowsOfTheClass(rows, "cap: cap is never 2 * x");
         assertFalse(canBe.isEmpty(), rows.toString());

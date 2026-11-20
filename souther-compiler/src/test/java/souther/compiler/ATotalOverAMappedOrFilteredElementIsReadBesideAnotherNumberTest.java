@@ -50,14 +50,14 @@ class ATotalOverAMappedOrFilteredElementIsReadBesideAnotherNumberTest {
     @Test
     void aPlainTotalIsReadAsItWas() {
         String said = report(model("xs: List<Int>", "List.sum(xs)", "<="));
-        assertFalse(said.contains("not read"), said);
+        assertFalse(NotRead.in(said), said);
     }
 
     @Test
     void aTotalOfDoubledElementsIsReadBesideAnotherNumberByAnOrder() {
         for (String relation : new String[] {"<=", "<", ">=", ">"}) {
             String said = report(model("xs: List<Int>", DOUBLED, relation));
-            assertFalse(said.contains("not read"), relation + "\n" + said);
+            assertFalse(NotRead.in(said), relation + "\n" + said);
         }
     }
 
@@ -65,7 +65,7 @@ class ATotalOverAMappedOrFilteredElementIsReadBesideAnotherNumberTest {
     void aTotalOverWhatAFilterKeepsIsReadBesideAnotherNumberByAnOrder() {
         for (String relation : new String[] {"<=", "<", ">=", ">"}) {
             String said = report(model("lines: List<Line>", FILTERED, relation));
-            assertFalse(said.contains("not read"), relation + "\n" + said);
+            assertFalse(NotRead.in(said), relation + "\n" + said);
         }
     }
 
@@ -78,7 +78,7 @@ class ATotalOverAMappedOrFilteredElementIsReadBesideAnotherNumberTest {
     void anEqualityBesideAStepsTotalIsReadAsTheClassesItIsTrueAt() {
         for (String said : List.of(report(model("xs: List<Int>", DOUBLED, "==")),
                 report(model("lines: List<Line>", FILTERED, "==")))) {
-            assertFalse(said.contains("not read"), said);
+            assertFalse(NotRead.in(said), said);
             assertTrue(said.contains("cap is divided by"), said);
         }
     }
@@ -88,6 +88,6 @@ class ATotalOverAMappedOrFilteredElementIsReadBesideAnotherNumberTest {
     @Test
     void aNumberAddedToEachElementLeavesNoRemainder() {
         String said = report(model("xs: List<Int>", "List.sum(List.map(x -> x * 2 + 1, xs))", "<="));
-        assertTrue(said.contains("not read"), said);
+        assertTrue(NotRead.in(said), said);
     }
 }

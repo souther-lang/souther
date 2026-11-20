@@ -61,6 +61,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
         String report = report(ABOVE.formatted("\n    invariant x <= 9223372036854775797"));
 
         assertFalse(report.contains("may stop a run"), report);
+        assertFalse(report.contains("stop not resolved"), report);
         assertEquals(List.of(), suggested(report), report);
     }
 
@@ -88,6 +89,7 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 "\n    invariant birthday >= Date(\"-999999999-01-02\")"));
 
         assertFalse(report.contains("may stop a run"), report);
+        assertFalse(report.contains("stop not resolved"), report);
         assertEquals(List.of(), suggested(report), report);
     }
 

@@ -72,7 +72,7 @@ class AMeanOverAFilteredListIsReadWithOneWayOfKeepingTest {
      */
     private static void assertReadToTheEnd(String report) {
         assertFalse(report.contains(NO_QUOTIENT_READ), report);
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
     }
 
     /** The line the report gives as what no input gets past, which is the way that is never taken. */
@@ -88,7 +88,7 @@ class AMeanOverAFilteredListIsReadWithOneWayOfKeepingTest {
     @Test
     void theCountOfAFilteredListIsReadForEachWayOfKeeping() {
         String report = report(guarded("List.length(" + PAYABLE + ") >= 2"));
-        assertFalse(report.contains("not read"), report);
+        assertFalse(NotRead.in(report), report);
     }
 
     /**

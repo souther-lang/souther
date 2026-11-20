@@ -230,7 +230,7 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
                 match d with
                         | A { amount } -> amount * amount
                         | B { amount } -> amount"""));
-        assertTrue(report.contains("not read"), report);
+        assertTrue(NotRead.in(report), report);
         assertFalse(report.contains("List.sum({"), report);
     }
 
@@ -471,7 +471,7 @@ class AMatchOnTheElementInsideAWalkIsReadCaseByCaseTest {
      * and that a run may stop where nothing says ({@link UnreadBesideItsStops}).
      */
     private static boolean unreadBeyondReach(String report) {
-        return report.lines().anyMatch(line -> line.contains("not read")
+        return report.lines().anyMatch(line -> NotRead.isOne(line)
                 && !line.contains("not shown to reach every value here")
                 && !line.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD));
     }

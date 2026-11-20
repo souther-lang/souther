@@ -3,6 +3,7 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.NotRead;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
@@ -61,7 +62,7 @@ class AnElementAClosureWritesUnderAnArmExistsWhereThatArmIsTakenTest {
     }
 
     private static List<String> notRead(String report) {
-        return report.lines().filter(line -> line.contains("not read")
+        return report.lines().filter(line -> NotRead.isOne(line)
                 || line.contains("not accounted for")).toList();
     }
 
