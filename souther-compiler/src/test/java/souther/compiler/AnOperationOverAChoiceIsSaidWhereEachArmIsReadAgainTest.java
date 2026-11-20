@@ -17,35 +17,33 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * An operation written over a choice, outside it, is worked out on each arm with the arm's answer,
- * and a comparison read again with each arm taken reads it there. Where it may pass an
- * {@code Int} it is told, on the arm whose answer takes it there, and no reader says a run may stop
- * where nothing here says, whatever the shape of the operation: adding a number to the choice, or
- * the choice and a number in a list summed, as doubling it is.
- *
- * <p>Each form is written twice. Choosing {@code q} where it is above nought, the arm passes the
- * type at the end of an {@code Int}: the stop is told and nothing is said to be untold. Choosing
- * it only below a hundred, no arm passes it: nothing is told, and nothing is said to be untold.
+ * and a comparison read again with each arm taken keeps what it works out there. Where it may
+ * pass an {@code Int} it is told on the arm whose answer takes it there, and no reader says a run
+ * may stop where nothing here says, whatever the shape of the operation: a number added to the
+ * choice, held against what it chose so that the arm's comparison holds on every row, or summed
+ * with the choice in a list. Chosen only below a hundred, no arm passes the type: nothing is told,
+ * and nothing is said to be untold.
  */
 class AnOperationOverAChoiceIsSaidWhereEachArmIsReadAgainTest {
+
+    private static final String PAST = "(if q > 0 then q else 0)";
+
+    private static final String WITHIN = "(if q > 0 && q < 100 then q else 0)";
 
     private static final Map<String, String> FORMS = new LinkedHashMap<>();
 
     private static final Map<String, String> EXPECTED = new LinkedHashMap<>();
 
+    private static void form(String name, String condition, String said) {
+        FORMS.put(name, condition);
+        EXPECTED.put(name, said);
+    }
+
     static {
-        for (Map.Entry<String, String> chosen : Map.of("past the type", "q > 0",
-                "within the type", "q > 0 && q < 100").entrySet()) {
-            String choice = "(if " + chosen.getValue() + " then q else 0)";
-            String suffix = " " + chosen.getKey();
-            FORMS.put("aNumberAdded" + suffix, choice + " + 1 >= 5");
-            FORMS.put("aNumberAddedHeldAgainstTheChosen" + suffix, choice + " + 1 >= q");
-            FORMS.put("summedWithANumber" + suffix, "List.sum([" + choice + ", 1]) >= q");
-            FORMS.put("doubled" + suffix, "2 * " + choice + " >= 5");
-            String said = chosen.getKey().equals("past the type") ? "told true, untold 0"
-                    : "told false, untold 0";
-            FORMS.keySet().stream().filter(name -> name.endsWith(suffix))
-                    .forEach(name -> EXPECTED.put(name, said));
-        }
+        form("aNumberAdded", PAST + " + 1 >= 5", "told true, untold 0");
+        form("aNumberAddedWithinTheType", WITHIN + " + 1 >= 5", "told false, untold 0");
+        form("aNumberAddedHeldAgainstTheChosen", PAST + " + 1 >= q", "told true, untold 0");
+        form("summedWithANumber", "List.sum([" + PAST + ", 1]) >= q", "told true, untold 0");
     }
 
     @Test

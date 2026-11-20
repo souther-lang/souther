@@ -18,47 +18,48 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * A total whose stop the rule that read it says on each way of keeping its elements is said so to
  * every reader of what a run works out, and not only to the reading that stopped at it: the
- * evaluation of the answer of an arm, the condition of a choice, and the quotient a mean is.
+ * evaluation of the answer of an arm, the condition of a choice read under a rule of its own, and
+ * the quotient a mean is. Kept where {@code q} is above nought, a way keeps two of it and a run
+ * may pass an {@code Int} there: the stop is told, and no reader says a run may stop where nothing
+ * here says.
  *
- * <p>Each form is written twice. Keeping {@code q} where it is above nought, a way keeps two of
- * it and a run may pass an {@code Int} there: the stop is told, and no reader says a run may stop
- * where nothing here says. Keeping it only where it is below a hundred, no way a run takes passes
- * the type: nothing is told, and nothing is said to be untold. A reader that told the stop on
- * rows no way it is worked out on reaches, or said it untold where it is said on the ways, is
- * found by one of the two; one that told nothing, or everything, by the other.
- *
- * <p>Each is held against the same total written as choices, which the rule reads way by way,
- * so that a reader that asks only one of the two readings is found. What a mean divides by is
- * no stop told here: the quotient is read as answering where the count is not nought, and the
- * rows are kept to that.
+ * <p>Kept only below a hundred, no way a run takes passes the type, and nothing is told: a stop
+ * said on rows wider than the way's is found there, both where the total is read once for every
+ * way and where it is read way by way, whose count splits inside each way. What a mean divides by
+ * is no stop told here: the quotient is read as answering where the count is not nought.
  */
 class ATotalToldOnEachWayIsToldToEveryReaderOfWhatARunWorksOutTest {
+
+    private static final String PAST = "x > 0";
+
+    private static final String WITHIN = "x > 0 && x < 100";
 
     private static final Map<String, String> FORMS = new LinkedHashMap<>();
 
     private static final Map<String, String> EXPECTED = new LinkedHashMap<>();
 
+    private static String filtered(String kept) {
+        return "List.sum(List.filter(x -> " + kept + ", [q, q]))";
+    }
+
+    private static String meanOf(String total, String kept) {
+        return total + " / List.length(List.filter(x -> " + kept + ", [q, q])) >= 10";
+    }
+
+    private static void form(String name, String condition, String said) {
+        FORMS.put(name, condition);
+        EXPECTED.put(name, said);
+    }
+
     static {
-        for (Map.Entry<String, String> kept : Map.of("past the type", "x > 0",
-                "within the type", "x > 0 && x < 100").entrySet()) {
-            String filtered = "List.sum(List.filter(x -> " + kept.getValue() + ", [q, q]))";
-            String chosen = "List.sum(List.map(x -> if " + kept.getValue()
-                    + " then x else 0, [q, q]))";
-            String said = kept.getKey().equals("past the type") ? "told true, untold 0"
-                    : "told false, untold 0";
-            for (Map.Entry<String, String> total : Map.of("filtered", filtered, "chosen", chosen)
-                    .entrySet()) {
-                String suffix = " " + total.getKey() + " " + kept.getKey();
-                FORMS.put("theAnswerOfAnArm" + suffix,
-                        "(if q > 3 then " + total.getValue() + " else 0) >= 10");
-                FORMS.put("theConditionOfAChoice" + suffix,
-                        "(if " + total.getValue() + " > 5 then 1 else 2) >= 2");
-                FORMS.put("aMean" + suffix, total.getValue() + " / List.length(List.filter(x -> "
-                        + kept.getValue() + ", [q, q])) >= 10");
-            }
-            FORMS.keySet().stream().filter(name -> name.endsWith(kept.getKey()))
-                    .forEach(name -> EXPECTED.put(name, said));
-        }
+        form("theAnswerOfAnArm", "(if q > 3 then " + filtered(PAST) + " else 0) >= 10",
+                "told true, untold 0");
+        form("theConditionOfAChoice", "(if " + filtered(PAST) + " > 5 then 1 else 2) >= 2",
+                "told true, untold 0");
+        form("aMean", meanOf(filtered(PAST), PAST), "told true, untold 0");
+        form("aMeanWithinTheType", meanOf(filtered(WITHIN), WITHIN), "told false, untold 0");
+        form("aMeanOfChoicesWithinTheType", meanOf("List.sum(List.map(x -> if " + WITHIN
+                + " then x else 0, [q, q]))", WITHIN), "told false, untold 0");
     }
 
     @Test

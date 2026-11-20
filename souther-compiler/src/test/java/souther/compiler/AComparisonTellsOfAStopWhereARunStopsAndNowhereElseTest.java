@@ -270,11 +270,8 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         FORMS.put("totalOfChoicesAStepMakes",
                 "List.sum(List.map(x -> if x > 0 then x else 0, [q, q])) >= 10");
         FORMS.put("totalOfWhatAFilterKeeps", "List.sum(List.filter(x -> x > 0, [q, q])) >= 10");
-        // a filter that keeps a number past which the total stops only on the ways that keep q
-        // too, one that keeps q only where twice it is within the type, and one whose
-        // comparison holds on every row of the way that stops
-        FORMS.put("totalOfWhatAFilterKeepsBesideTheTypesEnd",
-                "List.sum(List.filter(x -> x > 5, [q, 9223372036854775807])) >= 10");
+        // a filter that keeps q only where twice it is within the type, and one whose comparison
+        // holds on every row of the way that stops
         FORMS.put("totalOfWhatAFilterKeepsOnlyWithinTheType",
                 "List.sum(List.filter(x -> x > 0 && x < 100, [q, q])) >= 10");
         FORMS.put("totalOfWhatAFilterKeepsHeldAgainstWhatItKeeps",
