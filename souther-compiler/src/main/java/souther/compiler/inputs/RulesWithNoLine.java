@@ -213,15 +213,17 @@ public record RulesWithNoLine(List<RuleWithoutALine> reported,
         /** The same, with the values at which every run getting to the rule stops. */
         public void mayStopARun(RuleCitation cited, ModelOccurrences readAt,
                                 List<EveryRunStops> everyRunStops) {
-            mayStopARun(cited, readAt, everyRunStops, List.of());
+            mayStopARun(cited, readAt, everyRunStops, List.of(), List.of());
         }
 
-        /** The same, with what each construction on the way to the rule asks of a run. */
+        /** The same, with what each construction on the way to the rule asks of a run, and the
+         *  bounds on the input that keep every run from stopping in it. */
         public void mayStopARun(RuleCitation cited, ModelOccurrences readAt,
                                 List<EveryRunStops> everyRunStops,
-                                List<WhatAConstructionAsks> asks) {
+                                List<WhatAConstructionAsks> asks,
+                                List<ABoundThatKeepsEveryRunGoing> keeping) {
             RuleWhereARunMayStop one = RuleWhereARunMayStop.of(cited, readAt, everyRunStops,
-                    asks);
+                    asks, keeping);
             stopping.merge(one.rule(), one, RuleWhereARunMayStop::mergedWith);
         }
 

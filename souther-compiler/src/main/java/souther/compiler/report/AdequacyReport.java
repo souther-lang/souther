@@ -4506,15 +4506,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         constructionsAsk(it.asks(), page, rendering, declaredIn),
                         inCopies(it.readAt(), behavior.conditionPlaces().copies(),
                                 page, declaredIn)));
-                // And, where a stop is where the representation of a number stops, the invariant
-                // that keeps every run from it, under the line that says where it is.
-                for (EveryRunStops stop : it.everyRunStops()) {
-                    if (stop.keeping() != null) {
-                        out.append("          · ").append(page.say(
-                                new ReportMessage.ABoundOnTheInputKeepsEveryRunGoing(
-                                        stop.keeping().data(), invariantWritten(stop.keeping()))))
-                                .append(NEW_LINE);
-                    }
+                // And, where the stops are where the representation of a number stops, the
+                // invariants that keep every run from them, under the line that says the rule.
+                for (ABoundThatKeepsEveryRunGoing bound : it.keeping()) {
+                    out.append("          · ").append(page.say(keepingSaid(bound)))
+                            .append(NEW_LINE);
                 }
             }
         }
@@ -7253,7 +7249,21 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
             default -> throw new IllegalStateException("a bound kept on an input is a whole number"
                     + " or a date: " + bound.bound());
         };
-        return "invariant " + bound.named() + (bound.atMost() ? " <= " : " >= ") + value;
+        return "invariant " + bound.holder().named() + (bound.atMost() ? " <= " : " >= ")
+                + value;
+    }
+
+    /** The line that says {@code bound}: on the data that holds the place, or on a data the
+     *  author introduces for a parameter no data holds. */
+    private static ReportMessage keepingSaid(ABoundThatKeepsEveryRunGoing bound) {
+        return switch (bound.holder()) {
+            case ABoundThatKeepsEveryRunGoing.Holder.AData data ->
+                    new ReportMessage.ABoundOnTheInputKeepsEveryRunGoing(data.data(),
+                            invariantWritten(bound));
+            case ABoundThatKeepsEveryRunGoing.Holder.AParameter parameter ->
+                    new ReportMessage.ABoundOnAParameterKeepsEveryRunGoing(parameter.parameter(),
+                            parameter.type(), invariantWritten(bound));
+        };
     }
 
     /** Where every run getting to a rule stops, as the human report says it after the rule. */
@@ -11405,11 +11415,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion,
                         bound.put("greatest", within.greatest());
                     }
                 }
-                if (each.keeping() != null) {
-                    ObjectNode keeping = one.putObject("keeping");
-                    keeping.put("data", each.keeping().data());
-                    keeping.put("invariant", invariantWritten(each.keeping()));
+            }
+        }
+        // And the invariants that keep every run getting to a rule a run may stop in from
+        // stopping there, where its stops are where the representation of a number stops.
+        if (finding.about() instanceof About.ARuleThatMayStopARun(var it)
+                && !it.keeping().isEmpty()) {
+            ArrayNode bounds = f.putArray("keeping");
+            for (ABoundThatKeepsEveryRunGoing each : it.keeping()) {
+                ObjectNode keeping = bounds.addObject();
+                switch (each.holder()) {
+                    case ABoundThatKeepsEveryRunGoing.Holder.AData data ->
+                            keeping.put("data", data.data());
+                    case ABoundThatKeepsEveryRunGoing.Holder.AParameter parameter -> {
+                        keeping.put("parameter", parameter.parameter());
+                        keeping.put("type", parameter.type());
+                    }
                 }
+                keeping.put("invariant", invariantWritten(each));
             }
         }
         // And what each construction on the way to a rule a run may stop in asks of a run that

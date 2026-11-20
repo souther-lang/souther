@@ -68,6 +68,18 @@ public final class CalendarMonths {
         return Math.floorMod(month - FIRST + Math.floorMod(months, A_YEAR), A_YEAR) + FIRST;
     }
 
+    /**
+     * The month counted {@code count}, twelve times its year and its month added — or null where
+     * that is past the calendar's first or last year. The months of a date are a run of the
+     * dates, so the dates whose count is at most some count are those up to the last day of that
+     * month, and those whose count is at least it are those from its first day.
+     */
+    public static YearMonth counted(long count) {
+        long year = Math.floorDiv(count - FIRST, A_YEAR);
+        return year < Year.MIN_VALUE || year > Year.MAX_VALUE ? null
+                : YearMonth.of((int) year, Math.floorMod(count - FIRST, A_YEAR) + FIRST);
+    }
+
     /** The months from the first month of year nought to the one {@code date} falls in. */
     private static long monthsFromYearNought(LocalDate date) {
         return date.getYear() * (long) A_YEAR + date.getMonthValue() - FIRST;

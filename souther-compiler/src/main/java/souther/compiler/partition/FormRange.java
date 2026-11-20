@@ -298,6 +298,11 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
     private static boolean liesWithin(FormRange ends, LinearForm<NumericTerm> form,
                                       InputReading read, Map<NumericTerm, FormRange> standIns,
                                       BigInteger leastAllowed, BigInteger greatestAllowed) {
+        // A date and its own parts are no numbers apart: what such a form comes to is read off
+        // the date.
+        if (MonthCount.rangeOf(form, read) instanceof FormRange ofOneDate) {
+            return ofOneDate.liesWithin(leastAllowed, greatestAllowed);
+        }
         return ends != null && (ends.liesWithin(leastAllowed, greatestAllowed)
                 || ends.within(form, read, standIns).liesWithin(leastAllowed, greatestAllowed));
     }
@@ -322,6 +327,13 @@ record FormRange(ExactRatio least, ExactRatio greatest) {
         ExactRatio from = tighter(least, runs.min(), true);
         ExactRatio to = tighter(greatest, runs.max(), false);
         return new FormRange(from, to);
+    }
+
+    /** The ends of the place {@code term} stands at, held to what the rules say of it, or null
+     *  where it has none at either end. */
+    static FormRange endsHeldByTheRules(NumericTerm term, InputReading read) {
+        FormRange ends = endsOf(term, read);
+        return ends == null ? null : ends.within(LinearForm.atom(term), read, Map.of());
     }
 
     /** The ends of the place {@code term} stands at, or null where it has none at either end. */

@@ -40,10 +40,15 @@ import java.util.Set;
  *                  not meet it is a stop for, and which the declarations do not already hold. A
  *                  possibility of a stop and not a row that stops, as the rest of this is; empty
  *                  where no construction asks anything of the run
+ * @param keeping   the bounds on the input that together keep every run getting to the rule from
+ *                  stopping in it, each once, where every operation it may stop in stops where the
+ *                  representation of its number does and is over the values of one place
+ *                  ({@link ABoundThatKeepsEveryRunGoing}); empty where some stop is any other
  */
 public record RuleWhereARunMayStop(RuleRef rule, Set<RuleReportAnchor> reachedBy,
                                    ModelOccurrences readAt, List<EveryRunStops> everyRunStops,
-                                   List<WhatAConstructionAsks> asks) {
+                                   List<WhatAConstructionAsks> asks,
+                                   List<ABoundThatKeepsEveryRunGoing> keeping) {
 
     public RuleWhereARunMayStop {
         if (rule == null || readAt == null) {
@@ -53,6 +58,7 @@ public record RuleWhereARunMayStop(RuleRef rule, Set<RuleReportAnchor> reachedBy
         RuleCitation.requireReached(rule, reachedBy);
         everyRunStops = List.copyOf(new LinkedHashSet<>(everyRunStops));
         asks = List.copyOf(new LinkedHashSet<>(asks));
+        keeping = List.copyOf(new LinkedHashSet<>(keeping));
     }
 
     /** One reader's finding about a rule a run may stop in. */
@@ -63,15 +69,17 @@ public record RuleWhereARunMayStop(RuleRef rule, Set<RuleReportAnchor> reachedBy
     /** The same, with the values at which every run getting to the rule stops. */
     public static RuleWhereARunMayStop of(RuleCitation cited, ModelOccurrences readAt,
                                           List<EveryRunStops> everyRunStops) {
-        return of(cited, readAt, everyRunStops, List.of());
+        return of(cited, readAt, everyRunStops, List.of(), List.of());
     }
 
-    /** The same, with what each construction on the way to the rule asks of a run. */
+    /** The same, with what each construction on the way to the rule asks of a run, and the
+     *  bounds that keep every run from stopping in it. */
     public static RuleWhereARunMayStop of(RuleCitation cited, ModelOccurrences readAt,
                                           List<EveryRunStops> everyRunStops,
-                                          List<WhatAConstructionAsks> asks) {
+                                          List<WhatAConstructionAsks> asks,
+                                          List<ABoundThatKeepsEveryRunGoing> keeping) {
         return new RuleWhereARunMayStop(cited.rule(), RuleCitation.anchorOf(cited), readAt,
-                everyRunStops, asks);
+                everyRunStops, asks, keeping);
     }
 
     /** How a reader finds the rule, as for a rule with no line ({@link RuleWithoutALine#cited}). */
@@ -91,6 +99,9 @@ public record RuleWhereARunMayStop(RuleRef rule, Set<RuleReportAnchor> reachedBy
         stops.addAll(other.everyRunStops);
         List<WhatAConstructionAsks> asked = new ArrayList<>(asks);
         asked.addAll(other.asks);
-        return new RuleWhereARunMayStop(rule, both, readAt.and(other.readAt), stops, asked);
+        List<ABoundThatKeepsEveryRunGoing> bounds = new ArrayList<>(keeping);
+        bounds.addAll(other.keeping);
+        return new RuleWhereARunMayStop(rule, both, readAt.and(other.readAt), stops, asked,
+                bounds);
     }
 }

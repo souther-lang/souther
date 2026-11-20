@@ -1,6 +1,8 @@
 package souther.compiler;
 
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
@@ -8,6 +10,7 @@ import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -20,14 +23,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * as far out as it can be. The value itself is the domain's, so what is said is that bound, and
  * declaring it takes the stop away.
  *
+ * <p>A parameter no data holds is bounded in a data of its type the author introduces for it.
+ *
  * <p>Not where a run stops where the clauses of a type a construction makes leave the number,
  * which the model already states and its own words are about; nor where it stops on a sum of two
- * inputs, which no bound on either alone keeps it from; nor on a place no data holds.
+ * inputs, which no bound on either alone keeps it from.
  */
 class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
 
+    /** What the reading says, rows not looked for: the suggestion is said of the reading. */
+    private static final Adequacy.Asked READ = new Adequacy.Asked(Adequacy.Level.OFF, false);
+
     private static String report(String source) {
-        Compilation compilation = ACompiledModel.measured(source, Adequacy.Asked.fullReport());
+        Compilation compilation = ACompiledModel.measured(source, READ);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
     }
@@ -51,8 +59,9 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
         String report = report(ABOVE.formatted(""));
 
         assertEquals(List.of("· declaring `invariant x <= 9223372036854775797` on P keeps every"
-                + " run from stopping there; this is the furthest out the bound can be, and the"
-                + " value to declare is the one the domain has"), suggested(report), report);
+                + " run from stopping there; a bound one step further out lets in a run that stops"
+                + " there, and the value to declare is the one the domain has"), suggested(report),
+                report);
     }
 
     /** Declared, the run stops nowhere, and nothing is suggested. */
@@ -91,6 +100,163 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
         assertEquals(List.of(), suggested(report), report);
     }
 
+    /** The year of a date shifted by days is a number of the date it is shifted from, which a run
+     *  works out only where the shifts get there. */
+    private static final String THE_YEAR_OF_A_SHIFT = """
+            module m
+
+            data P = { birthday: Date }%s
+
+            behavior f : (p: P, on: Date) -> Bool
+            let f (p, on) = Date.year(on) - Date.year(%s) >= 60
+            """;
+
+    @Test
+    void aShiftTakenThroughAYearIsKeptFromByALowerBoundOnTheField() {
+        String report = report(THE_YEAR_OF_A_SHIFT.formatted("",
+                "Date.addDays(0 - 1, p.birthday)"));
+
+        assertEquals(1, suggested(report).size(), report);
+        assertTrue(suggested(report).getFirst().startsWith(
+                "· declaring `invariant birthday >= Date(\"-999999999-01-02\")` on P"), report);
+    }
+
+    /** Shifts that move by nothing together stop where one of them is past the calendar. */
+    @Test
+    void shiftsThatMoveByNothingStopAtTheFirstDayAllTheSame() {
+        String report = report(THE_YEAR_OF_A_SHIFT.formatted("",
+                "Date.addDays(1, Date.addDays(0 - 1, p.birthday))"));
+
+        assertEquals(1, suggested(report).size(), report);
+        assertTrue(suggested(report).getFirst().startsWith(
+                "· declaring `invariant birthday >= Date(\"-999999999-01-02\")` on P"), report);
+    }
+
+    @Test
+    void theBoundOnTheShiftedDateDeclaredTakesTheStopAway() {
+        String report = report(THE_YEAR_OF_A_SHIFT.formatted(
+                "\n    invariant birthday >= Date(\"-999999999-01-02\")",
+                "Date.addDays(0 - 1, p.birthday)"));
+
+        assertFalse(report.contains("may stop a run"), report);
+    }
+
+    /** A date moved by months inside what the comparison holds aside stops where the month it
+     *  lands in is past the calendar, which is a run of the dates it moves. */
+    private static final String MOVED_BY_MONTHS = """
+            module m
+
+            data P = { from: Date, on: Date }%s
+
+            behavior f : (p: P) -> Bool
+            let f (p) = Int.floorMod(Date.daysBetween(p.from, Date.addMonths(%s, p.on)), 7) >= 1
+            """;
+
+    @Test
+    void aDateMovedPastTheLastMonthIsKeptFromByTheLastDayOfTheMonthBefore() {
+        String report = report(MOVED_BY_MONTHS.formatted("", "1"));
+
+        assertEquals(1, suggested(report).size(), report);
+        assertTrue(suggested(report).getFirst().startsWith(
+                "· declaring `invariant on <= Date(\"+999999999-11-30\")` on P"), report);
+    }
+
+    @Test
+    void aDateMovedBeforeTheFirstMonthIsKeptFromByTheFirstDayOfTheMonthAfter() {
+        String report = report(MOVED_BY_MONTHS.formatted("", "0 - 1"));
+
+        assertEquals(1, suggested(report).size(), report);
+        assertTrue(suggested(report).getFirst().startsWith(
+                "· declaring `invariant on >= Date(\"-999999999-02-01\")` on P"), report);
+    }
+
+    @Test
+    void theBoundOnTheMonthDeclaredTakesTheStopAway() {
+        String report = report(MOVED_BY_MONTHS.formatted(
+                "\n    invariant on <= Date(\"+999999999-11-30\")", "1"));
+
+        assertFalse(report.contains("may stop a run"), report);
+        assertFalse(report.contains("· not read:"), report);
+    }
+
+    /** A value chosen by cases is worked out on each arm a run takes: the bound is the arm's that
+     *  stops nearest, and a row past it takes that arm. */
+    @Test
+    void aValueChosenByCasesIsBoundedByTheArmThatStopsNearest() {
+        String report = report("""
+                module m
+
+                data Terms = Net15 | Net30
+
+                data Invoice = { terms: Terms, issuedOn: Date }
+
+                let nominal (i: Invoice): Date =
+                    match i.terms with
+                        | Net15 -> Date.addDays(15, i.issuedOn)
+                        | Net30 -> Date.addDays(30, i.issuedOn)
+
+                behavior f : (i: Invoice) -> Bool
+                let f (i) = Date.addDays(1, nominal(i)) > Date("2000-01-01")
+                """);
+
+        assertEquals(1, suggested(report).size(), report);
+        assertTrue(suggested(report).getFirst().startsWith(
+                "· declaring `invariant issuedOn <= Date(\"+999999999-11-30\")` on Invoice"),
+                report);
+    }
+
+    /** A walk makes every element of a list before a search looks at any: the element no row
+     *  gets to the search with is made by every run all the same, and bounds the input. */
+    @Test
+    void anElementASearchNeverGetsToIsMadeByEveryRunAllTheSame() {
+        String report = report("""
+                module m
+
+                import List ( map, find, rangeInclusive )
+
+                behavior f : (s: Date, from: Date) -> Date
+                let f (s, from) =
+                    rangeInclusive(0, 2)
+                        |> map(n -> Date.addDays(n, from))
+                        |> find(d -> Int.floorMod(Date.daysBetween(s, d), 7) >= 1)
+                        |> Option.withDefault(from)
+                """);
+
+        assertEquals(List.of("· no data holds `from`, whose type is `Date`: introducing a data of"
+                + " `Date` that declares `invariant value <= Date(\"+999999999-12-29\")`"),
+                introduced(report).stream().map(line -> line.substring(0, line.indexOf(", and")))
+                        .toList(), report);
+    }
+
+    /** Days moved off the first of a month, one move over another and in an arm of a choice, stop
+     *  where that first day moved by all of them is past the calendar. */
+    @Test
+    void daysMovedOffTheFirstOfAMonthInAnArmStopWhereTheMonthIsPastTheCalendar() {
+        String report = report("""
+                module m
+
+                data T = A | B
+
+                data P = { on: Date, t: T }
+
+                let monthStart (d: Date): Date = Date.addDays(1 - Date.day(d), d)
+
+                let nominal (p: P): Date =
+                    match p.t with
+                        | A -> Date.addDays(2, Date.addDays(0 - 1,
+                                Date.addMonths(1, monthStart(p.on))))
+                        | B -> p.on
+
+                behavior f : (s: Date, p: P) -> Bool
+                let f (s, p) = Int.floorMod(Date.daysBetween(s, nominal(p)), 7) >= 1
+                """);
+
+        assertFalse(report.contains("· not read:"), report);
+        assertEquals(1, suggested(report).size(), report);
+        assertTrue(suggested(report).getFirst().startsWith(
+                "· declaring `invariant on <= Date(\"+999999999-11-30\")` on P"), report);
+    }
+
     /** A place whose own type is written under a name is bounded in that type, as its value. */
     @Test
     void aPlaceOfANamedTypeIsBoundedInThatType() {
@@ -123,17 +289,49 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
         assertEquals(List.of(), suggested(report), report);
     }
 
+    /** A parameter no data holds is bounded in a data the author introduces for it, of its
+     *  type, as that data's value. */
     @Test
-    void aPlaceNoDataHoldsIsGivenNoBound() {
-        String report = report("""
-                module m
+    void aParameterNoDataHoldsIsBoundedInADataIntroducedForIt() {
+        String report = report(A_PARAMETER);
 
-                behavior f : (x: Int) -> Bool
-                let f (x) = x + 10 > 0
-                """);
+        assertEquals(List.of("· no data holds `x`, whose type is `Int`: introducing a data of"
+                + " `Int` that declares `invariant value <= 9223372036854775797`, and taking `x`"
+                + " as it, keeps every run from stopping there; a bound one step further out lets"
+                + " in a run that stops there, and the value to declare is the one the domain has"),
+                introduced(report), report);
+    }
 
-        assertTrue(report.contains("may stop a run"), report);
-        assertEquals(List.of(), suggested(report), report);
+    /** The document says the same: the parameter and its type in place of a data, and the
+     *  clause on the data's value, in a document the schema takes. */
+    @Test
+    void theDocumentNamesTheParameterAndItsTypeInPlaceOfAData() {
+        Compilation compilation = ACompiledModel.measured(A_PARAMETER, READ);
+        JsonNode document = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        List<JsonNode> keeping = document.findValues("keeping");
+
+        assertEquals(1, keeping.size(), document::toString);
+        assertEquals(1, keeping.getFirst().size(), document::toString);
+        JsonNode bound = keeping.getFirst().get(0);
+        assertEquals(Set.of("parameter", "type", "invariant"), Set.copyOf(bound.propertyNames()),
+                document::toString);
+        assertEquals("x", bound.get("parameter").asString());
+        assertEquals("Int", bound.get("type").asString());
+        assertEquals("invariant value <= 9223372036854775797", bound.get("invariant").asString());
+        EveryObjectThisWritesIsShapedTheWayTheSchemaSaysTest.assertShapedLikeTheSchema(document);
+    }
+
+    private static final String A_PARAMETER = """
+            module m
+
+            behavior f : (x: Int) -> Bool
+            let f (x) = x + 10 > 0
+            """;
+
+    private static List<String> introduced(String report) {
+        return report.lines().map(String::strip)
+                .filter(line -> line.startsWith("· no data holds ")).toList();
     }
 
     /** A construction stops a run where the clauses of the type it makes leave the number, which

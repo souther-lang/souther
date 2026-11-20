@@ -2189,6 +2189,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * end to give.
      */
     static boolean stopsNoRow(IntOperation operation, InputReading read) {
+        // A count of the months of one date comes to what the dates there do, which is no sum of
+        // what its year and its month come to apart.
+        FormRange counted = MonthCount.rangeOf(operation.overTheInput(), read);
+        if (counted != null) {
+            return counted.liesWithin(operation.least(), operation.greatest());
+        }
         Map<IntOperand, FormRange> ranges = new HashMap<>();
         for (IntOperand each : operation.form().coefs().keySet()) {
             FormRange range = each.range(read);
@@ -2785,8 +2791,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 rows.add(past);
                 List<EveryRunStops.Within> where = rowsWhere(rows, read, regions);
                 if (where != null) {
-                    out.add(new EveryRunStops(written(it.form()), where,
-                            it.ofTheRepresentation() ? keepingEveryRunGoing(where, read) : null));
+                    out.add(new EveryRunStops(written(it.form()), where));
                 }
             }
         }
@@ -2794,27 +2799,221 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * The bound on the input that keeps every run from the rows {@code where}: where they are the
-     * values of one place an input holds from some value on, or up to some value, that place held
-     * on the other side of it — or null where they are anything else, the place is held by no data
-     * an invariant can be declared on, or its values are no whole numbers or dates.
+     * What a run getting to the comparison works out somewhere — wherever the comparison is
+     * reached, on an arm of a choice it is read through, on an application of the closure it
+     * stands in — with the way of the rows that work it out there, or null where those rows cannot
+     * be put on a way.
+     */
+    record WorkedOutOn(StopEvidence stops, Reachability.Reaching way) {
+
+        WorkedOutOn {
+            Objects.requireNonNull(stops, "a run works something out");
+        }
+    }
+
+    /**
+     * The bounds on the input that keep every run getting to the comparison from stopping in what
+     * it works out, wherever it works it out ({@code worked}): for each place and side, the
+     * furthest out a bound on the values of that place can be with every operation that may stop
+     * a run over that place alone and within its type wherever the place is within the bound.
+     *
+     * <p>Said only where every stop a run may meet is said among {@code worked}
+     * ({@link StopEvidence#everyStopSaid}), and every operation of them that may stop a run stops
+     * where the representation of its number does and is over the values of one place — its
+     * number weighed, or the count of the month its dates fall in ({@link MonthCount}). A bound
+     * value an operation is over is taken at the ends of what it takes. Nothing where any one is
+     * over several places, since no bound on one keeps it within its type, or stops where the
+     * clauses of a type a construction makes leave the number, which the model states and no
+     * bound on the input is suggested for.
+     *
+     * <p>As far out as a bound can be: within it no run stops in what is told, wherever it is
+     * worked out, and a row with the place just past it is shown to come along the way of an
+     * operation that sets the bound and get to it ({@link #addBoundPastWhichARowStops}), where
+     * that operation is past its type and the run stops — so any bound further out lets that run
+     * in. Only an operation every run along its way works out has a way to show that row on. A
+     * bound for which no such row is shown is not said, and neither is one past every value the
+     * place holds.
+     */
+    static List<ABoundThatKeepsEveryRunGoing> boundsThatKeepEveryRunGoing(
+            List<WorkedOutOn> worked, InputReading read) {
+        Map<TermPath, KeptWithin> kept = new LinkedHashMap<>();
+        for (WorkedOutOn each : worked) {
+            if (!each.stops().everyStopSaid()) {
+                return List.of();
+            }
+            Working working = each.stops().operations();
+            Reachability.Reaching way = working.onEveryRun() ? each.way() : null;            for (IntOperation it : working.operations()) {
+                if (stopsNoRow(it, read)) {
+                    continue;
+                }
+                LinearForm<NumericTerm> atItsLeast = it.atItsEnd(false);
+                LinearForm<NumericTerm> atItsGreatest = it.atItsEnd(true);
+                if (!it.ofTheRepresentation() || atItsLeast == null || atItsGreatest == null
+                        || !keptWithin(atItsLeast, it.least(), null, way, kept)
+                        || !keptWithin(atItsGreatest, null, it.greatest(), way, kept)) {
+                    return List.of();
+                }
+            }
+        }
+        List<ABoundThatKeepsEveryRunGoing> out = new ArrayList<>();
+        for (Map.Entry<TermPath, KeptWithin> each : kept.entrySet()) {
+            NumericTerm.ValueOf value = new NumericTerm.ValueOf(each.getKey());
+            FormRange holds = FormRange.endsHeldByTheRules(value, read);
+            KeptWithin within = each.getValue();
+            if (within.least != null && (holds == null
+                    || holds.least().compareTo(ExactRatio.of(within.least)) < 0)) {
+                addBoundPastWhichARowStops(value, within.least, false, read,
+                        within.settingTheLeast, out);
+            }
+            if (within.greatest != null && (holds == null
+                    || holds.greatest().compareTo(ExactRatio.of(within.greatest)) > 0)) {
+                addBoundPastWhichARowStops(value, within.greatest, true, read,
+                        within.settingTheGreatest, out);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * The values of one place within which every operation over it is within its type, as far as
+     * the operations met so far say, each end with the ways of the operations that set it.
+     */
+    private static final class KeptWithin {
+
+        private BigInteger least;
+        private BigInteger greatest;
+        private final List<Reachability.Reaching> settingTheLeast = new ArrayList<>();
+        private final List<Reachability.Reaching> settingTheGreatest = new ArrayList<>();
+
+        /** From {@code from}, where it is no null, by an operation worked out along {@code way}. */
+        void from(BigInteger from, Reachability.Reaching way) {
+            if (from == null) {
+                return;
+            }
+            int further = least == null ? 1 : from.compareTo(least);
+            if (further > 0) {
+                least = from;
+                settingTheLeast.clear();
+            }
+            if (further >= 0 && way != null) {
+                settingTheLeast.add(way);
+            }
+        }
+
+        /** To {@code to}, where it is no null, by an operation worked out along {@code way}. */
+        void to(BigInteger to, Reachability.Reaching way) {
+            if (to == null) {
+                return;
+            }
+            int further = greatest == null ? 1 : greatest.compareTo(to);
+            if (further > 0) {
+                greatest = to;
+                settingTheGreatest.clear();
+            }
+            if (further >= 0 && way != null) {
+                settingTheGreatest.add(way);
+            }
+        }
+
+        /** Whether some value lies within. */
+        boolean holdsAValue() {
+            return least == null || greatest == null || least.compareTo(greatest) <= 0;
+        }
+    }
+
+    /**
+     * Into {@code kept}, what {@code form} being from {@code least} or to {@code greatest} — the
+     * other null — asks of the one place it is over, met with what was there, the operation
+     * worked out along {@code way}: whether it is that place's number weighed, or the count of the
+     * month of its dates, and some value of the place meets it.
+     */
+    private static boolean keptWithin(LinearForm<NumericTerm> form, BigInteger least,
+                                      BigInteger greatest, Reachability.Reaching way,
+                                      Map<TermPath, KeptWithin> kept) {
+        BigInteger shift = wholeOf(form.constant());
+        if (shift == null || form.coefs().isEmpty()) {
+            return false;
+        }
+        BigInteger from = least == null ? null : least.subtract(shift);
+        BigInteger to = greatest == null ? null : greatest.subtract(shift);
+        TermPath place;
+        BigInteger[] days;
+        if (form.coefs().size() == 1
+                && form.coefs().keySet().iterator().next() instanceof NumericTerm.ValueOf value
+                && wholeOf(form.coefs().get(value)) instanceof BigInteger weight
+                && weight.signum() != 0) {
+            place = value.position();
+            BigInteger low = from == null ? null : weight.signum() > 0 ? ceilingOf(from, weight)
+                    : floorOf(from, weight);
+            BigInteger high = to == null ? null : weight.signum() > 0 ? floorOf(to, weight)
+                    : ceilingOf(to, weight);
+            days = weight.signum() > 0 ? new BigInteger[] {low, high}
+                    : new BigInteger[] {high, low};
+        } else if (MonthCount.placeCounted(new LinearForm<>(ExactRatio.ZERO, form.coefs()))
+                instanceof TermPath dates) {
+            place = dates;
+            days = MonthCount.daysWithin(from, to);
+            if (days == null) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+        KeptWithin ends = kept.computeIfAbsent(place, _ -> new KeptWithin());
+        ends.from(days[0], way);
+        ends.to(days[1], way);
+        return ends.holdsAValue();
+    }
+
+    /**
+     * {@code bound} on {@code value}, from above where {@code atMost}, into {@code out}, where a
+     * row with the value just past it is shown to come along one of {@code ways}, those of the
+     * operations that set the bound, and get to where that operation is worked out, and
+     * something holds the place. Shown as a row is: the bound, as the one-term relation it is,
+     * shown to fail there ({@link EachWayItComesOut.Shown#REACHED}), over what the model's
+     * declarations and the statements of the way leave, and on no way a run may stop on before
+     * it. The operation takes every value of the place past the bound past its type and is worked
+     * out by every run along its way, so that row stops in it.
+     */
+    private static void addBoundPastWhichARowStops(NumericTerm.ValueOf value, BigInteger bound,
+                                                   boolean atMost, InputReading read,
+                                                   List<Reachability.Reaching> ways,
+                                                   List<ABoundThatKeepsEveryRunGoing> out) {
+        ExactRatio past = ExactRatio.of(atMost ? bound.add(BigInteger.ONE)
+                : bound.subtract(BigInteger.ONE));
+        // The bound works nothing out: a row is asked of no size of its form.
+        UndividedByARelation theBound = new UndividedByARelation(
+                List.of(ofTheInput(value, ExactRatio.ONE)), ExactRatio.of(bound).negated(),
+                atMost ? Rel.LE : Rel.GE, List.of(), Kind.AFFINE, null)
+                .workingOut(Working.NO_STOPS);
+        for (Reachability.Reaching way : ways) {
+            WhatItLeaves left = theBound.leftWhereRowsArrive(read, List.of(way),
+                    ComparisonWitnesses.AtAComparison.NONE);
+            OfASide side = !left.rowsArrive() || !left.mayStopBefore().isEmpty() ? null
+                    : left.outcomes().get(value);            if (side != null
+                    && side.outcomes().failingAt(past) == EachWayItComesOut.Shown.REACHED) {
+                ABoundThatKeepsEveryRunGoing one = aBoundOn(value, bound, atMost, read);
+                if (one != null) {
+                    out.add(one);
+                }
+                return;
+            }
+        }
+    }
+
+    /**
+     * {@code bound} on the values of {@code value}'s place, from above where {@code atMost}, as
+     * the invariant an author declares it — or null where the place is held by nothing an
+     * invariant can be declared on, or its values are no whole numbers or dates.
      *
      * <p>The data is the place's own type where it is written under a name ({@code data Today =
      * Date}), whose invariant names it as its value, and otherwise the record the place is a field
-     * of. A place that is a parameter of no such type is held by nothing an author declares.
+     * of. A parameter whose type is a primitive is held by no data, and the bound is on a data of
+     * that type the author introduces for it.
      */
-    private static ABoundThatKeepsEveryRunGoing keepingEveryRunGoing(
-            List<EveryRunStops.Within> where, InputReading read) {
-        if (where.size() != 1
-                || !(where.getFirst().alone() instanceof NumericTerm.ValueOf value)
-                || (where.getFirst().least() == null) == (where.getFirst().greatest() == null)) {
-            return null;
-        }
-        // From the least the run stops at up, so the place is held below it; or up to the
-        // greatest, so it is held above it.
-        boolean atMost = where.getFirst().least() != null;
-        BigInteger bound = atMost ? where.getFirst().least().subtract(BigInteger.ONE)
-                : where.getFirst().greatest().add(BigInteger.ONE);
+    private static ABoundThatKeepsEveryRunGoing aBoundOn(NumericTerm.ValueOf value,
+                                                         BigInteger bound, boolean atMost,
+                                                         InputReading read) {
         TermOrders orders = read.quantities().ordersOf(value);
         Carrier carrier = orders == null ? null : orders.answered();
         ObservedValue at = carrier == null ? null
@@ -2825,17 +3024,26 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         TermPath place = value.position();
         Position position = read.domain().at(place);
         if (position != null && position.view().outermostName() != null) {
-            return new ABoundThatKeepsEveryRunGoing(position.view().outermostName().name(),
-                    "value", atMost, at);
+            return new ABoundThatKeepsEveryRunGoing(new ABoundThatKeepsEveryRunGoing.Holder.AData(
+                    position.view().outermostName().name(), "value"), atMost, at);
         }
-        if (place.steps().isEmpty()
-                || !(place.steps().getLast() instanceof TermPath.Step.Field(String field))) {
+        if (place.steps().isEmpty()) {
+            return read.domain().typeAt(place, read.rules()) instanceof Type.Prim primitive
+                    ? new ABoundThatKeepsEveryRunGoing(
+                            new ABoundThatKeepsEveryRunGoing.Holder.AParameter(place.head(),
+                                    primitive.shown()), atMost, at)
+                    : null;
+        }
+        if (!(place.steps().getLast() instanceof TermPath.Step.Field(String field))) {
             return null;
         }
         TermPath record = TermPath.of(place.head(),
                 place.steps().subList(0, place.steps().size() - 1));
         return read.domain().typeAt(record, read.rules()) instanceof Type.Ref(TypeSymbol data)
-                ? new ABoundThatKeepsEveryRunGoing(data.name(), field, atMost, at) : null;
+                ? new ABoundThatKeepsEveryRunGoing(
+                        new ABoundThatKeepsEveryRunGoing.Holder.AData(data.name(), field),
+                        atMost, at)
+                : null;
     }
 
     /**
@@ -4244,7 +4452,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     && sides.get(at).madeOf().equals(List.of(FilingCoordinate.of(number)))
                     && (remainder == null || at != 0)
                     && (comesOut != null || WhatARelationLeavesUndivided.showsRowsEachWayOf(
-                            granularityOf(carriers.get(at)), constant, relation))) {
+                            granularityOf(carriers.get(at)), constant, relation)
+                            || settledAtEveryValue(leaves, at))) {
                 asked.add(at);
             }
         }
@@ -4267,6 +4476,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     ? WhatARelationLeavesUndivided.alongAWayThatDecidesIt(along.terms(), at,
                             constant, comesOut, granularityOf(carriers.get(at)),
                             greatestOf(carriers.get(at)), along.operations())
+                    : settledAtEveryValue(leaves, at)
+                    ? WhatARelationLeavesUndivided.ofASettledWholeNumber(along.terms().get(at),
+                            (WhatARelationLeavesUndivided.Leaves.Settled) leaves.get(at))
                     : WhatARelationLeavesUndivided.eachWayItComesOut(along.terms(), at, constant,
                             relation, FilingCoordinate::sharesAPlaceWith, along.independent(),
                             granularityOf(carriers.get(at)), greatestOf(carriers.get(at)),
@@ -4278,6 +4490,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
         }
         return out;
+    }
+
+    /** Whether the way's reading of the side at {@code at} settles it at whole numbers, which is
+     *  what says how a row at each of its values comes out ({@link
+     *  WhatARelationLeavesUndivided#ofASettledWholeNumber}). */
+    private static boolean settledAtEveryValue(List<WhatARelationLeavesUndivided.Leaves> leaves,
+                                               int at) {
+        return leaves != null && leaves.get(at)
+                instanceof WhatARelationLeavesUndivided.Leaves.Settled settled
+                && settled.whole();
     }
 
     /**

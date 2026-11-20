@@ -537,6 +537,14 @@ public sealed interface ReportMessage extends Message {
     record ABoundOnTheInputKeepsEveryRunGoing(String data, String invariant)
             implements ReportMessage, Prose {}
 
+    /**
+     * The same, where the input is {@code parameter}, a {@code type} no data of the model holds:
+     * the invariant is declared on a data of that type the author introduces and takes the
+     * parameter as.
+     */
+    record ABoundOnAParameterKeepsEveryRunGoing(String parameter, String type, String invariant)
+            implements ReportMessage, Prose {}
+
     /** What one construction on the way to a rule asks of a run that works it out. */
     record ConstructionAsks(String construction, String at, String asked)
             implements ReportMessage, Prose {}

@@ -22,6 +22,7 @@ import souther.compiler.check.UnreadComparison;
 import souther.compiler.check.ScopeStep;
 import souther.compiler.check.ValueOrigin;
 import souther.compiler.inputs.BlockReason;
+import souther.compiler.inputs.ABoundThatKeepsEveryRunGoing;
 import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.WhatAConstructionAsks;
 import souther.compiler.inputs.InputDomain;
@@ -449,6 +450,15 @@ public final class GuardThresholds {
                                                             new WayToTheBorder(each.wayToACase(
                                                                     aCase.apply(decides))),
                                                             read.quantities().region())));
+                            // And the bounds on the input that keep every run getting to it from
+                            // stopping in what it works out, wherever it works it out.
+                            List<ABoundThatKeepsEveryRunGoing> keeping = !aRowArrives
+                                    || arrived instanceof ComparisonAssessment.AnswersNowhere
+                                            ? List.of()
+                                            : UndividedByARelation.boundsThatKeepEveryRunGoing(
+                                                    whereARunWorksItOut(each, toIt, beforeIt,
+                                                            read, arrivals, wayToACase, aCase),
+                                                    read);
                             // And whether a run that gets to it works out an operation whose stops
                             // are not all told: asked of what is worked out where a row arrives,
                             // as the stops above are, and not of an application or an arm no row
@@ -464,7 +474,7 @@ public final class GuardThresholds {
                                     reaches, arrived, each.readOn(), aRunStops,
                                     stopsNotFullyRead, stops,
                                     aRowArrives ? asksOfARunReaching(each.asks(), before, read,
-                                            arrived) : List.of(), found,
+                                            arrived) : List.of(), keeping, found,
                                     between, throughADerivedValue, partnered, withoutALine,
                                     readOn);
                         }
@@ -1231,6 +1241,7 @@ public final class GuardThresholds {
      *
      * @param stops the values at which every run getting to the comparison stops in what it works
      *              out
+     * @param keeping the bounds on the input that keep every run getting to it from stopping there
      */
     private static void lineAt(String behavior, ModelOccurrence stated,
                                EmittedComparisonState.Instrumented at,
@@ -1242,6 +1253,7 @@ public final class GuardThresholds {
                                boolean stopsNotFullyRead,
                                List<EveryRunStops> stops,
                                List<WhatAConstructionAsks> asks,
+                               List<ABoundThatKeepsEveryRunGoing> keeping,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
                                List<DerivedValues.Settling> throughADerivedValue,
@@ -1261,7 +1273,7 @@ public final class GuardThresholds {
         if (aRunStops || !stops.isEmpty() || !asks.isEmpty()) {
             withoutALine.mayStopARun(
                     new RuleCitation.Written(new RuleRef.Comparison(behavior, wrote), anchor),
-                    ModelOccurrences.of(stated), stops, asks);
+                    ModelOccurrences.of(stated), stops, asks, keeping);
         }
         // Where what a run works out to evaluate it leaves a stop untold, whatever else is said
         // of a stop: one told is not the one left untold. It says nothing against the line: the
@@ -1415,8 +1427,7 @@ public final class GuardThresholds {
     private static boolean somethingWorkedOutIsNotAllTold(
             ComparisonReadings.Reading each, Reachability toIt, List<ComparisonArrival> arrivals,
             WaysToACase wayToACase) {
-        for (ComparisonReadings.Reading.WorkedOutAt worked : each.whatARunWorksOut()) {
-            if (worked.stops().operations().aStopUntold()
+        for (ComparisonReadings.Reading.WorkedOutAt worked : each.whatARunWorksOut()) {            if (worked.stops().operations().aStopUntold()
                     && aRowArrivesWhereItIsWorkedOut(each, worked, toIt, arrivals, wayToACase)) {
                 return true;
             }
@@ -1427,21 +1438,49 @@ public final class GuardThresholds {
     private static boolean aRowArrivesWhereItIsWorkedOut(
             ComparisonReadings.Reading each, ComparisonReadings.Reading.WorkedOutAt worked,
             Reachability toIt, List<ComparisonArrival> arrivals, WaysToACase wayToACase) {
-        Proposition taken = worked.takenWhere();
-        if (taken != null) {
-            Proposition reached = worked.madeWhere() == null ? taken
-                    : WhereAnApplicationIsMade.past(worked.madeWhere(), taken);
-            return each.statedAsACondition().isEmpty()
-                    || ComparisonAssessment.someRowArrives(wayToACase.apply(reached), arrivals);
-        }
-        if (worked.madeWhere() == null) {
+        Proposition reached = worked.workedOutWhere();
+        if (reached == null) {
             return true;
         }
-        if (worked.madeWhere() instanceof Proposition.Always(boolean holds) && holds) {
+        if (worked.takenWhere() == null
+                && reached instanceof Proposition.Always(boolean holds) && holds) {
             return ComparisonAssessment.someRowArrives(toIt, arrivals);
         }
-        return each.statedAsACondition().isEmpty() || ComparisonAssessment.someRowArrives(
-                wayToACase.apply(worked.madeWhere()), arrivals);
+        return each.statedAsACondition().isEmpty()
+                || ComparisonAssessment.someRowArrives(wayToACase.apply(reached), arrivals);
+    }
+
+    /**
+     * Everything a run getting to the comparison works out, each with the way of the rows that
+     * work it out: the way to the comparison where it is worked out wherever that is reached, and
+     * that way with where it is worked out put on it otherwise; none where that cannot be put on
+     * it, or no row is shown to arrive there ({@link #aRowArrivesWhereItIsWorkedOut}).
+     *
+     * <p>One no row arrives at is kept all the same. What an application of a closure works out
+     * includes making the value it is handed, which a strict walk makes for every element before
+     * any application whether or not the application is made: a bound kept from every stop said
+     * is kept from that one too, though no row is shown along its way.
+     */
+    private static List<UndividedByARelation.WorkedOutOn> whereARunWorksItOut(
+            ComparisonReadings.Reading each, Reachability toIt, Reachability beforeIt,
+            InputReading read, List<ComparisonArrival> arrivals, WaysToACase wayToACase,
+            Function<Proposition, ReachingCuts.Stating> aCase) {
+        List<UndividedByARelation.WorkedOutOn> out = new ArrayList<>();
+        for (ComparisonReadings.Reading.WorkedOutAt worked : each.whatARunWorksOut()) {
+            if (!aRowArrivesWhereItIsWorkedOut(each, worked, toIt, arrivals, wayToACase)) {
+                out.add(new UndividedByARelation.WorkedOutOn(worked.stops(), null));
+                continue;
+            }
+            Proposition reached = worked.workedOutWhere();
+            Reachability way = reached == null
+                    || (reached instanceof Proposition.Always(boolean holds) && holds) ? beforeIt
+                    : each.statedAsACondition().isEmpty() ? null
+                    : Reachability.of(new WayToTheBorder(each.wayToACase(aCase.apply(reached))),
+                            read.quantities().region());
+            out.add(new UndividedByARelation.WorkedOutOn(worked.stops(),
+                    way instanceof Reachability.Reaching reaching ? reaching : null));
+        }
+        return out;
     }
 
     /** The region {@code way} leaves, or none where nothing reaches along it. */

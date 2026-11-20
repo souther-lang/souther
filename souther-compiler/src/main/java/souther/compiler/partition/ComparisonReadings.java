@@ -379,6 +379,15 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             Proposition takenWhere() {
                 return onAnArm == null ? null : onAnArm.reached();
             }
+
+            /** Where a run works it out: where the application is made and the arm taken, or
+             *  null where it is worked out wherever the comparison is reached. */
+            Proposition workedOutWhere() {
+                Proposition taken = takenWhere();
+                return taken == null ? madeWhere
+                        : madeWhere == null ? taken
+                        : WhereAnApplicationIsMade.past(madeWhere, taken);
+            }
         }
 
         /**
@@ -393,6 +402,8 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             stopsIn.ifPresent(stops -> out.add(new WorkedOutAt(stops, null, null)));
             worksOutOnEach.ifPresent(applications -> applications.forEach(one -> {
                 out.add(new WorkedOutAt(one.stops(), one.reached(), null));
+                one.handed().forEach(made -> out.add(new WorkedOutAt(made.stops(),
+                        made.walkEntered(), null)));
                 one.arms().forEach(arm -> out.add(new WorkedOutAt(arm.stops(),
                         one.reached(), arm)));
             }));
@@ -1639,7 +1650,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
                 new ClosureApplications.Each(List.of(new ClosureApplications.Application(step,
                         WhereAnApplicationIsMade.nothingAsked(), Map.of(),
                         metOn.madeWhere(made.stated()).stoppingIn(list, onward.denied()),
-                        List.of(), ClosureApplications.MadeOnEvery.NOT_SHOWN))));
+                        List.of(), ClosureApplications.MadeOnEvery.NOT_SHOWN, List.of()))));
     }
 
     /**

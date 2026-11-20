@@ -26,10 +26,19 @@ import java.util.function.Supplier;
  * not, nothing is said of where a run stops. Where the owner of what may end a run says it may
  * end one there, the report says the comparison is not read to the end ({@link GuardThresholds}).
  *
- * @param operations every operation of whole numbers the run works out, in the order it does, and
- *                   whether that is every one and is worked out on every run getting there
+ * <p>What is not among {@code operations} may still be said: a reading that kept what a run
+ * works out on each arm of a choice, or on each way of a total, says the stops there and not
+ * here, and so does one that told a part beside the rows. {@code everyStopSaid} is that every
+ * stop a run getting here may meet is among these operations or among what the same reading
+ * says on its arms and ways ({@link ComparisonReadings.Reading#whatARunWorksOut}); not so where
+ * a stop is left untold, or left to an owner that says it nowhere among them.
+ *
+ * @param operations    every operation of whole numbers the run works out, in the order it does,
+ *                      and whether that is every one and is worked out on every run getting there
+ * @param everyStopSaid whether every stop a run getting here may meet is said, here or on the
+ *                      arms and ways the same reading says what is worked out on
  */
-record StopEvidence(UndividedByARelation.Working operations) {
+record StopEvidence(UndividedByARelation.Working operations, boolean everyStopSaid) {
 
     StopEvidence {
         Objects.requireNonNull(operations, "what a run works out, or that it is not known");
@@ -85,7 +94,7 @@ record StopEvidence(UndividedByARelation.Working operations) {
     /** What a reading that leaves nothing to a witness says a run works out: what a row of its
      *  lines gets past. */
     static StopEvidence ofWhatIsToldOf(UndividedByARelation.Working working) {
-        return new StopEvidence(working);
+        return new StopEvidence(working, working.exact() && !working.aStopUntold());
     }
 
     /** Whether every operation that can stop a run is among {@link #operations}: not where a
