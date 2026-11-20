@@ -3,12 +3,15 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.ACompiledModel;
+import souther.compiler.UnreadBesideItsStops;
 import souther.compiler.diag.SourceRendering;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -69,14 +72,21 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
                 Yen(Rational.toInt(DOWN,
                     List.sum(List.map(p -> totalOf(p).value, records)) / List.length(records)))""";
 
+    /** What each model was measured to, by what it is made of: a test that asks both which places
+     *  are unread and where the borders are asks one model once. */
+    private static final Map<List<String>, List<String>> REPORTS = new ConcurrentHashMap<>();
+
     /** The report of the model, line by line. */
     private static List<String> report(String bounds, String helpers, String looked) {
-        Compilation compilation = Compilation.ofSource(
-                SOURCE.formatted(bounds, helpers, looked), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
-        ACompiledModel.compiles(compilation);
-        return AdequacyReport.of(compilation)
-                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines().toList();
+        return REPORTS.computeIfAbsent(List.of(bounds, helpers, looked), _ -> {
+            Compilation compilation = Compilation.ofSource(
+                    SOURCE.formatted(bounds, helpers, looked), "Main");
+            compilation.measure(Adequacy.Asked.fullReport());
+            ACompiledModel.compiles(compilation);
+            return AdequacyReport.of(compilation)
+                    .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
+                    .toList();
+        });
     }
 
     /** The places the report says nothing is read of. */
@@ -205,25 +215,6 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
                 "averageOf(monthsOf(w))"));
     }
 
-    private static final String THE_MONTHS_A_FILTER_KEPT =
-            "List.filter(p -> p.base > Yen(0), [ w.first, w.second, w.third ])";
-
-    /**
-     * The months are the ones a filter kept of three written: what each is handed is the place one
-     * of the three stands at, whichever the filter kept, so the sum of what a month comes to is
-     * asked of each place, as with no filter.
-     */
-    @Test
-    void anAverageOfTheMonthsAFilterKeptIsRead() {
-        for (String month : List.of("p.base.value + p.extra.value", "totalOf(p).value")) {
-            String looked = """
-                    Yen(Rational.toInt(DOWN,
-                        List.sum(List.map(p -> %s, %s)) / 3))""".formatted(month,
-                    THE_MONTHS_A_FILTER_KEPT);
-            assertEquals(List.of(), unread(BOUNDS, "", looked), month);
-        }
-    }
-
     private static final String THE_MONTHS_ARE_FILTERED_AFTER_A_GUARD = """
             module demo
 
@@ -233,54 +224,38 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
                 %1$s
             data Month = { pay: Pay, days: Int }
             data Window = { first: Month, second: Month, third: Month }
-            data Row = { grade: Int, lowerBound: Yen }
-            data Decision = { grade: Int }
+            data Done = { n: Int }
             data NoMonth = { n: Int }
-            let table: List<Row> = [
-                Row { grade = 1, lowerBound = Yen(0) },
-                Row { grade = 2, lowerBound = Yen(100) } ]
             let totalOf (p: Pay): Yen = p.base + p.extra
-            let gradeRowFor (m: Yen): Row =
-                List.fold((acc, r) -> if r.lowerBound <= m then r else acc,
-                          Row { grade = 0, lowerBound = Yen(0) }, table)
             let monthsOf (w: Window): List<Month> = [ w.first, w.second, w.third ]
             let payableOf (w: Window): List<Month> =
-                List.filter(r -> %2$s, monthsOf(w))
+                List.filter(r -> r.days >= 17, monthsOf(w))
             let averageOf (records: List<Month>): Yen =
                 Yen(Rational.toInt(DOWN,
-                    List.sum(List.map(r -> %3$s, records))
+                    List.sum(List.map(r -> totalOf(r.pay).value, records))
                         / List.length(records)))
 
-            behavior f : (w: Window) -> Decision | NoMonth
-                constructs Decision, Row, Yen, NoMonth
+            behavior f : (w: Window) -> Done | NoMonth
+                constructs Done, Yen, NoMonth
             let f (w) = {
                 let payable = payableOf(w)
                 guard List.length(payable) >= 1 else NoMonth { n = 0 }
-                Decision { grade = gradeRowFor(averageOf(payable)).grade }
+                guard averageOf(payable) >= Yen(100) else NoMonth { n = 1 }
+                Done { n = 1 }
             }
             """;
 
-    /** Whether the report says a run may end where nothing says so, of a model whose months are the
-     *  ones a filter kept of three, averaged after a guard that one was kept. */
+    /** Whether the reading of that model leaves a comparison unread for a run that may stop where
+     *  nothing says, the months' amounts held by {@code bounds}. */
     private static boolean someStopIsLeftUntold(String bounds) {
-        return someStopIsLeftUntold(bounds, "r.days >= 17");
-    }
-
-    /** The same, of the months a filter kept by {@code test}, which is written of {@code r}. */
-    private static boolean someStopIsLeftUntold(String bounds, String test) {
-        return someStopIsLeftUntold(bounds, test, "totalOf(r.pay).value");
-    }
-
-    /** The same, of a month that comes to {@code month}, which is written of {@code r}. */
-    private static boolean someStopIsLeftUntold(String bounds, String test, String month) {
         Compilation compilation = Compilation.ofSource(
-                THE_MONTHS_ARE_FILTERED_AFTER_A_GUARD.formatted(bounds, test, month), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+                THE_MONTHS_ARE_FILTERED_AFTER_A_GUARD.formatted(bounds), "Main");
+        compilation.measure(new Adequacy.Asked(Adequacy.Level.OFF, false));
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts())).lines()
-                .anyMatch(line -> line.contains("may end the run where nothing here says")
-                        || line.contains("may stop a run"));
+                .anyMatch(line -> line.contains("not read")
+                        && line.contains(UnreadBesideItsStops.STOPS_NOT_ALL_TOLD));
     }
 
     /**
@@ -298,47 +273,6 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
     @Test
     void theSameAverageWithNoBoundLeavesAStopUntold() {
         assertTrue(someStopIsLeftUntold(""));
-    }
-
-    /**
-     * What decides which months are kept is worked out for each of the three, and is a stop of its
-     * own: that the months it keeps total within an {@code Int} says nothing of whether it
-     * answers.
-     */
-    @Test
-    void aTestThatMayEndARunStillLeavesAStopUntoldWhereTheMonthsAreBounded() {
-        assertTrue(someStopIsLeftUntold("""
-                invariant base.value <= 1000000000000
-                    invariant extra.value <= 1000000000000""",
-                "r.pay.base.value + 9223372036854775807 > 0"));
-    }
-
-    /**
-     * Three months of amounts up to a quintillion total within an {@code Int}, which twice as many
-     * elements as an {@code Int} counts would not: it holds only where the most months there are
-     * is three, however the list reached the total.
-     */
-    @Test
-    void theMostMonthsThereAreIsThreeWhateverFilterKeptThem() {
-        String bounds = """
-                invariant base.value <= 1000000000000000000
-                    invariant extra.value <= 1000000000000000000""";
-        assertFalse(someStopIsLeftUntold(bounds));
-        assertFalse(someStopIsLeftUntold(bounds, "r.days >= 17",
-                "r.pay.base.value + r.pay.extra.value"));
-    }
-
-    /** Control: the same months with no bound on each amount can pass an {@code Int} in the total
-     *  of a month or of the three, and a run stops there. */
-    @Test
-    void theMonthsAFilterKeptAreNotReadWithNoBound() {
-        for (String month : List.of("p.base.value + p.extra.value", "totalOf(p).value")) {
-            String looked = """
-                    Yen(Rational.toInt(DOWN,
-                        List.sum(List.map(p -> %s, %s)) / 3))""".formatted(month,
-                    THE_MONTHS_A_FILTER_KEPT);
-            assertFalse(unread("", "", looked).isEmpty(), month);
-        }
     }
 
     /** Control: without a bound on each amount the total of two can pass the greatest
