@@ -96,6 +96,13 @@ class AConstructionIsToldOfAStopWhereARunStopsThereTest {
         FORMS.put("anArmBesideEveryRun", new Form("TwoC", "Count",
                 "{ let m = if Decimal.compare(d, 0.0m) < 0 then Count(q) else Count(0) \n "
                         + "TwoC { a = m, b = Count(q), w = q <= 3 } }"));
+        // one in a function bound by a name, before the rule the function holds
+        FORMS.put("inANamedFunction", new Form("OneC", "Count",
+                "{ let f = x -> { let n = Count(x) \n n.value <= 3 } \n "
+                        + "OneC { a = Count(0), w = List.all(f, [q]) } }"));
+        // which applications of the function a run makes before the rule is not read, so no run
+        // is shown to get to it
+        NOT_SHOWN.put("inANamedFunction", WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN);
         // a construction over a place no rule on the way reads
         FORMS.put("overAPlaceNoRuleReads", new Form("OneC", "Count",
                 "OneC { a = Count(q), w = Decimal.compare(d, e) <= 0 }"));

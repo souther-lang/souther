@@ -320,8 +320,12 @@ final class WhatARunWorksOutBeforeACount {
 
     /**
      * Every construction a run on the way to {@code comparison}, a node of {@code root}'s tree,
-     * may work out before it, each once, in the order the parts holding them are worked out — none
-     * where it is not in the tree.
+     * may work out before it, each once, in the order the parts holding them are worked out — or
+     * empty where what a run works out before it is not read ({@link #workedOutUpTo}): it is not in
+     * the tree, or stands in a function value that is not handed to the call applying it, whose
+     * applications may come anywhere. Empty is that it is not read, and never that there is none:
+     * a reader then asks of every construction that may come first
+     * ({@link #everyConstructionIn}).
      *
      * <p>Every construction under a part a run may work out first ({@link #workedOutUpTo}, a part
      * that runs only on some runs counted as running), on whichever arm of it, and under a function
@@ -334,15 +338,31 @@ final class WhatARunWorksOutBeforeACount {
      * built is what the attempt decides ({@link Evaluated#inOrder}). What it is built of is among
      * them. And nothing under the comparison, which is the relation's own working out.
      */
-    static List<Core.Construct> constructionsARunMayMeetBefore(Core root, Core comparison) {
+    static Optional<List<Core.Construct>> constructionsARunMayMeetBefore(Core root,
+                                                                       Core comparison) {
         List<Core> parts = root == null ? null : workedOutUpTo(root, comparison, false, true);
         if (parts == null) {
-            return List.of();
+            return Optional.empty();
         }
         Set<Core> met = Collections.newSetFromMap(new IdentityHashMap<>());
         List<Core.Construct> out = new ArrayList<>();
         for (Core part : parts.subList(0, parts.size() - 1)) {
             constructionsUnder(part, comparison, null, met, out);
+        }
+        return Optional.of(List.copyOf(out));
+    }
+
+    /**
+     * Every construction written in {@code trees} but under {@code comparison}, each once, in the
+     * order the trees are walked: what a run may work out before a comparison whose way is not
+     * read, every one of which may be worked out first, and none of which a run is shown to get
+     * to. Not the construction an attempt tests, as above.
+     */
+    static List<Core.Construct> everyConstructionIn(List<Core> trees, Core comparison) {
+        Set<Core> met = Collections.newSetFromMap(new IdentityHashMap<>());
+        List<Core.Construct> out = new ArrayList<>();
+        for (Core tree : trees) {
+            constructionsUnder(tree, comparison, null, met, out);
         }
         return List.copyOf(out);
     }

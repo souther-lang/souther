@@ -17,7 +17,9 @@ import java.util.Optional;
  * @param made  the construction, the node of the tree that works it out
  * @param asked what it asks of a run that works it out
  * @param way   what stood on the way to it, as the walk met it ({@link WhereConstructionsAreMet});
- *              empty where the walk did not meet it on one way
+ *              empty where the walk did not meet it on one way, or what a run works out before
+ *              the comparison is not read, so that it is one of everything that may come first
+ *              and not one a run is shown to get to on the way
  */
 record AConstructionOnTheWay(Core.Construct made, Asked asked, Optional<List<OnTheWay>> way) {
 

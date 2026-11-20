@@ -13,6 +13,8 @@ import souther.compiler.report.AdequacyReport;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -165,6 +167,16 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                 "gross.value", "rate.value", "Decimal.min(fee, gross.value)"));
         assertEquals(List.of(), asksOf(compilation));
         assertTrue(!human(compilation).contains("a run gets past"), () -> human(compilation));
+        assertEveryOneSafe(compilation, "plan", 2);
+    }
+
+    /** That {@code behavior} has {@code howMany} constructions on the way to its rules and every
+     *  one of them is judged to stop no run: asked about, and not left out. */
+    private static void assertEveryOneSafe(Compilation compilation, String behavior,
+                                           int howMany) {
+        Map<Integer, Set<String>> judged = ConstructionsJudged.of(compilation, behavior);
+        assertEquals(howMany, judged.size(), judged::toString);
+        assertEquals(Set.of(Set.of("Safe")), Set.copyOf(judged.values()), judged::toString);
     }
 
     /** Of the two that the declarations do not hold, only that one is asked: the gross is held at
@@ -231,6 +243,7 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
         assertEquals(1, asks.size(), asks.toString());
         assertEquals(10, asks.getFirst().path("at").path("line").asInt(), asks.toString());
         assertEquals(List.of(), toldIn(report, "rule_stop_not_shown"));
+        assertEquals(Set.of("Safe"), ConstructionsJudged.of(compilation, "f").get(11));
     }
 
     /**
@@ -305,7 +318,9 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
         assertEquals(List.of(is("x", "at_least", "0")),
                 asksOf(compiled(madeOf("Decimal.max(-1.0m, x)"))).stream()
                         .map(one -> one.path("asked")).toList());
-        assertEquals(List.of(), asksOf(compiled(madeOf("Decimal.max(1.0m, x)"))));
+        Compilation settled = compiled(madeOf("Decimal.max(1.0m, x)"));
+        assertEquals(List.of(), asksOf(settled));
+        assertEveryOneSafe(settled, "f", 1);
         assertEquals(List.of(is("x", "at_least", "0")),
                 asksOf(compiled(madeOf("Decimal.min(1.0m, x)"))).stream()
                         .map(one -> one.path("asked")).toList());
@@ -332,8 +347,9 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                     if GUARD then Plan { p = Held(NUMBER), within = Decimal.compare(x, c) <= 0 }
                     else Plan { p = Held(0.0m), within = false }
                 """;
-        assertEquals(List.of(), asksOf(compiled(under.replace("GUARD", "x >= 0.0m")
-                .replace("NUMBER", "x"))));
+        Compilation held = compiled(under.replace("GUARD", "x >= 0.0m").replace("NUMBER", "x"));
+        assertEquals(List.of(), asksOf(held));
+        assertEquals(Set.of("Safe"), ConstructionsJudged.of(held, "f").get(10));
         assertEquals(List.of(is("x", "at_least", "0")), asksOf(compiled(
                 under.replace("GUARD", "y >= 0.0m").replace("NUMBER", "x"))).stream()
                 .map(one -> one.path("asked")).toList());
@@ -432,26 +448,58 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
     }
 
     /**
-     * A construction on an arm whose condition holds what it asks stops no run that takes the arm,
-     * and nothing is said of it under a rule after it.
+     * A rule in the body of a helper read at each call of it, as one walking a list by its head
+     * is, has what a run works out before it unread: a construction written before it in that
+     * body is said as one no run is shown to get to, and never left out.
      */
     @Test
-    void aConstructionOnAnArmThatHoldsWhatItAsksIsSaidNowhere() {
-        Compilation compilation = compiled(HEAD + """
+    void aConstructionBeforeARuleInAHelperReadAtItsCallIsNotLeftOut() {
+        Compilation compilation = compiled("""
+                module demo
+
+                data Held = Decimal
+                    invariant value >= 0.0m
+                data Plan = { within: Bool }
+
+                behavior f : (xs: List<Decimal>, c: Decimal) -> Plan
+                    constructs Plan, Held
+                let f (xs, c) = Plan { within = every(xs, c) }
+
+                partial let every (xs: List<Decimal>, c: Decimal): Bool = match List.get(0, xs) with
+                    | None -> true
+                    | Some x -> {
+                        let h = Held(x)
+                        Decimal.compare(h.value, c) <= 0 && every(List.drop(1, xs), c)
+                    }
+                """);
+        assertEquals(List.of("Held: reach_not_shown"), asksOf(compilation).stream()
+                .map(one -> one.path("construction").asString() + ": "
+                        + one.path("reason").asString())
+                .distinct().toList());
+    }
+
+    /**
+     * A construction on an arm whose condition holds what it asks stops no run that takes the arm:
+     * it is among the constructions on the way to the rule after it, and judged to stop none.
+     */
+    @Test
+    void aConstructionOnAnArmThatHoldsWhatItAsksIsJudgedSafe() {
+        Compilation compilation = compiled("""
+                module demo
+
+                data Refund = Decimal
+                    invariant value >= 0.0m
+                data Out = { refund: Refund, within: Bool }
+
                 behavior plan : (gross: Decimal, rate: Decimal, limit: Decimal) -> Out
                     constructs Out, Refund
-
                 let plan (gross, rate, limit) = {
                     let net = if Decimal.compare(gross, rate) <= 0 then Refund(0.0m)
                         else Refund(Decimal.subtract(gross, rate))
-                    Out {
-                        refund = net,
-                        fee = Refund(0.0m),
-                        within = Decimal.compare(gross, limit) <= 0
-                    }
+                    Out { refund = net, within = Decimal.compare(gross, limit) <= 0 }
                 }
                 """);
-        assertEquals(List.of(), asksOf(compilation));
+        assertEveryOneSafe(compilation, "plan", 2);
     }
 
     /**

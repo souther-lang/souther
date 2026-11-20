@@ -11,7 +11,8 @@ package souther.compiler.inputs;
  */
 public enum WhyAConstructionStopIsNotShown {
     /** That a run on the way to the rule gets to it is not shown: which runs do is not read, as
-     *  of one worked out inside a function value, or met by the walk on more than one way. */
+     *  of one worked out inside a function value, or met by the walk on more than one way, or of
+     *  every construction that may come before a rule whose way is not read. */
     REACH_NOT_SHOWN,
     /** What its type asks of the numbers it is made of is not read. */
     ASKS_NOT_READ,
