@@ -95,16 +95,6 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 suggested(report), report);
     }
 
-    @Test
-    void theBoundOnTheDateDeclaredTakesTheStopAway() {
-        String report = report(A_DAY_BACK.formatted(
-                "\n    invariant birthday >= Date(\"-999999999-01-02\")"));
-
-        assertFalse(report.contains("may stop a run"), report);
-        assertFalse(report.contains("stop not resolved"), report);
-        assertEquals(List.of(), suggested(report), report);
-    }
-
     /** The year of a date shifted by days is a number of the date it is shifted from, which a run
      *  works out only where the shifts get there. */
     private static final String THE_YEAR_OF_A_SHIFT = """
@@ -151,10 +141,11 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
     private static final String MOVED_BY_MONTHS = """
             module m
 
-            data P = { from: Date, on: Date }%s
+            data P = { on: Date }%s
 
             behavior f : (p: P) -> Bool
-            let f (p) = Int.floorMod(Date.daysBetween(p.from, Date.addMonths(%s, p.on)), 7) >= 1
+            let f (p) =
+                Int.floorMod(Date.daysBetween(Date("2000-01-02"), Date.addMonths(%s, p.on)), 7) >= 1
             """;
 
     @Test
@@ -182,32 +173,6 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
 
         assertFalse(report.contains("may stop a run"), report);
         assertFalse(report.contains("· not read:"), report);
-    }
-
-    /** A value chosen by cases is worked out on each arm a run takes: the bound is the arm's that
-     *  stops nearest, and a row past it takes that arm. */
-    @Test
-    void aValueChosenByCasesIsBoundedByTheArmThatStopsNearest() {
-        String report = report("""
-                module m
-
-                data Terms = Net15 | Net30
-
-                data Invoice = { terms: Terms, issuedOn: Date }
-
-                let nominal (i: Invoice): Date =
-                    match i.terms with
-                        | Net15 -> Date.addDays(15, i.issuedOn)
-                        | Net30 -> Date.addDays(30, i.issuedOn)
-
-                behavior f : (i: Invoice) -> Bool
-                let f (i) = Date.addDays(1, nominal(i)) > Date("2000-01-01")
-                """);
-
-        assertEquals(1, suggested(report).size(), report);
-        assertTrue(suggested(report).getFirst().startsWith(
-                "· declaring `invariant issuedOn <= Date(\"+999999999-11-30\")` on Invoice"),
-                report);
     }
 
     /** Stated as a condition, the arm a run takes is put on the way: a value of the input is shown

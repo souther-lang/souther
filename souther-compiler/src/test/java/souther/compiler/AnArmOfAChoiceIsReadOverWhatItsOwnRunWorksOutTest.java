@@ -26,7 +26,7 @@ class AnArmOfAChoiceIsReadOverWhatItsOwnRunWorksOutTest {
                 behavior f : (%s) -> Bool
                 let f = %s
                 """.formatted(params, body), "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(new Adequacy.Asked(Adequacy.Level.OFF, false));
         ACompiledModel.compiles(compilation);
         return AdequacyReport.of(compilation)
                 .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));

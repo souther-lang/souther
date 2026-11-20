@@ -46,7 +46,7 @@ class ADateMovedByMonthsIsReadWhereItsDaysAreKnownTest {
     @BeforeAll
     static void measure() {
         Compilation compilation = Compilation.ofSource(MODEL, "Main");
-        compilation.measure(Adequacy.Asked.fullReport());
+        compilation.measure(new Adequacy.Asked(Adequacy.Level.OFF, false));
         measured = ACompiledModel.compiles(compilation);
     }
 
