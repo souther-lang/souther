@@ -55,6 +55,7 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -600,13 +601,16 @@ final class WorkedOutToReachIt {
     /**
      * Whether {@code value} is an operation that ends a run on its divisor alone, only where that
      * is nought, as the operation's owner says ({@link Pullback#theDivisorItAloneStopsOn}), and
-     * the divisor comes to another whole number whatever the run is: {@code Int.floorMod(x, 7)}
-     * ends none.
+     * the numbers the divisor comes to ({@link #numbersOf}) leave nought out, whether it is one
+     * number, as in {@code Int.floorMod(x, 7)}, or a range a declaration holds it to.
      */
     private boolean stopsOnlyOnAnOperandThatIsNotNought(Denotation value) {
         Core operand = Pullback.theDivisorItAloneStopsOn(value.value());
-        return operand != null && value.at().folded(operand, read.rules().symbols(),
-                read.rules().newtypes()).orElse(null) instanceof Long by && by != 0;
+        if (operand == null) {
+            return false;
+        }
+        FormRange numbers = numbersOf(new Denotation(operand, value.at()));
+        return numbers != null && !numbers.holds(ExactRatio.ZERO);
     }
 
     /**
@@ -1412,9 +1416,14 @@ final class WorkedOutToReachIt {
             }
             // A run of names read off one value: a place where the whole run is one, and
             // otherwise read one name at a time.
-            case Core.FieldProjection projection -> value.at().pathOf(written, newtypes)
-                    instanceof ValuesAt.At(var at) ? rangeOfAPlace(at, arms)
-                    : numbersOf(new Denotation(projection.lastAccess(), value.at()), arms);
+            case Core.FieldProjection projection -> {
+                if (value.at().pathOf(written, newtypes) instanceof ValuesAt.At(var at)) {
+                    yield rangeOfAPlace(at, arms);
+                }
+                FormRange ofTheElements = numbersOfAPathOfTheElements(written, value.at(), arms);
+                yield ofTheElements != null ? ofTheElements
+                        : numbersOf(new Denotation(projection.lastAccess(), value.at()), arms);
+            }
             case Core.FieldAccess access -> {
                 if (value.at().pathOf(written, newtypes) instanceof ValuesAt.At(var at)) {
                     yield rangeOfAPlace(at, arms);
@@ -1422,6 +1431,10 @@ final class WorkedOutToReachIt {
                 // What each construction the value may be gives the field, held to what the rules
                 // of its type leave it.
                 FormRange left = numbersTheRulesLeave(access);
+                FormRange ofTheElements = numbersOfAPathOfTheElements(written, value.at(), arms);
+                if (ofTheElements != null) {
+                    yield left == null ? ofTheElements : ofTheElements.meet(left);
+                }
                 List<Denotation> made = valuesItMayBe(new Denotation(access.target(), value.at()));
                 if (made == null) {
                     yield left;
@@ -1462,6 +1475,73 @@ final class WorkedOutToReachIt {
             }
             default -> null;
         };
+    }
+
+    /**
+     * The numbers {@code path}, a way down from a name a closure is handed an element on, comes
+     * to, read in {@code where}: wherever each element of the container the closure walks stands,
+     * as that list is written out, the numbers that place holds. An element a test may drop is
+     * one of them, and dropping it only narrows what the closure is handed. Null where the name
+     * is no element of a container, the way is no place inside an element, or an element written
+     * out stands at no place.
+     */
+    private FormRange numbersOfAPathOfTheElements(Core path, InputReads where, ArmsTaken arms) {
+        Core root = path;
+        while (true) {
+            switch (root) {
+                case Core.FieldAccess access -> root = Core.withoutStanding(access.target());
+                case Core.FieldProjection projection ->
+                        root = Core.withoutStanding(projection.base());
+                default -> {
+                    if (!(root instanceof Core.Read name) || name.binding() == null) {
+                        return null;
+                    }
+                    return numbersOfAWayInTheElements(path, name, where, arms);
+                }
+            }
+        }
+    }
+
+    /** A name {@code let} binds to the one name it is given, as a helper's parameter is to what it
+     *  is applied to, is followed to the name that is handed an element. */
+    private FormRange numbersOfAWayInTheElements(Core path, Core.Read name,
+                                                 InputReads reading, ArmsTaken arms) {
+        DeclarationNewtypes newtypes = read.rules().newtypes();
+        Map<BindingId, Core> held = new HashMap<>();
+        Core.Read current = name;
+        InputReads where = reading;
+        Core container = where.containerOfTheElementHandedTo(current.binding());
+        while (container == null) {
+            List<Denotation> given = boundTo(new Denotation(current, where));
+            if (given.size() != 1
+                    || !(Core.withoutStanding(given.getFirst().value()) instanceof Core.Read next)
+                    || next.binding() == null || held.containsKey(next.binding())) {
+                return null;
+            }
+            held.put(current.binding(), next);
+            current = next;
+            where = given.getFirst().at();
+            container = where.containerOfTheElementHandedTo(current.binding());
+        }
+        ElementProjection way = ElementProjection.read(path, current.binding(), held, newtypes);
+        List<Denotation> elements = way == null ? null
+                : elementsWrittenOut(new Denotation(container, where));
+        if (elements == null || elements.isEmpty()) {
+            return null;
+        }
+        FormRange hull = null;
+        for (Denotation each : elements) {
+            if (!(each.at().pathOf(Core.withoutStanding(each.value()), newtypes)
+                    instanceof ValuesAt.At(var at))) {
+                return null;
+            }
+            FormRange one = rangeOfAPlace(way.from(at), arms);
+            if (one == null) {
+                return null;
+            }
+            hull = hull == null ? one : hull.hull(one);
+        }
+        return hull;
     }
 
     /** The numbers the rules of the type {@code access} reads a field of leave that field

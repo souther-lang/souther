@@ -205,6 +205,38 @@ class AnAverageOfAmountsBoundedOnePlaceEachIsReadWhereItIsLookedUpTest {
                 "averageOf(monthsOf(w))"));
     }
 
+    private static final String THE_MONTHS_A_FILTER_KEPT =
+            "List.filter(p -> p.base > Yen(0), [ w.first, w.second, w.third ])";
+
+    /**
+     * The months are the ones a filter kept of three written: what each is handed is the place one
+     * of the three stands at, whichever the filter kept, so the sum of what a month comes to is
+     * asked of each place, as with no filter.
+     */
+    @Test
+    void anAverageOfTheMonthsAFilterKeptIsRead() {
+        for (String month : List.of("p.base.value + p.extra.value", "totalOf(p).value")) {
+            String looked = """
+                    Yen(Rational.toInt(DOWN,
+                        List.sum(List.map(p -> %s, %s)) / 3))""".formatted(month,
+                    THE_MONTHS_A_FILTER_KEPT);
+            assertEquals(List.of(), unread(BOUNDS, "", looked), month);
+        }
+    }
+
+    /** Control: the same months with no bound on each amount can pass an {@code Int} in the total
+     *  of a month or of the three, and a run stops there. */
+    @Test
+    void theMonthsAFilterKeptAreNotReadWithNoBound() {
+        for (String month : List.of("p.base.value + p.extra.value", "totalOf(p).value")) {
+            String looked = """
+                    Yen(Rational.toInt(DOWN,
+                        List.sum(List.map(p -> %s, %s)) / 3))""".formatted(month,
+                    THE_MONTHS_A_FILTER_KEPT);
+            assertFalse(unread("", "", looked).isEmpty(), month);
+        }
+    }
+
     /** Control: without a bound on each amount the total of two can pass the greatest
      *  {@code Int}, and a run stops there; bounded, none does. */
     @Test
