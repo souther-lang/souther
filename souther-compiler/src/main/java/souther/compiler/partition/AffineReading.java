@@ -3043,7 +3043,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * whether it adds up the addends of the comparison, which the analysis that drew the lines
          * answers for, is asked once the comparison has been read ({@link #askedOfTheComparison}).
          */
-        void overTheStopValue(OverTheStop operation) {
+        private void overTheStopValue(OverTheStop operation) {
             exact = false;
             operationsOverTheStopValue.add(operation);
         }
