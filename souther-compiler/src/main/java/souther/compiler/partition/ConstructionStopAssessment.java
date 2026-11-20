@@ -160,10 +160,13 @@ final class ConstructionStopAssessment {
         for (AConstructionOnTheWay one : onTheWay) {
             out.add(switch (one.asked()) {
                 case AConstructionOnTheWay.Asked.Nothing _ -> new Judgement.Safe(one.made());
+                // Not read for want of the names where it is worked out, where the walk did not
+                // meet it on one way: that no run is shown to get to it is what is missing.
                 case AConstructionOnTheWay.Asked.NotRead _ -> new Judgement.Unresolved(one.made(),
                         new AConstructionStopNotShown(one.made().typeName().name(),
-                                one.made().pos(), Optional.empty(),
-                                WhyAConstructionStopIsNotShown.ASKS_NOT_READ),
+                                one.made().pos(), Optional.empty(), one.way().isPresent()
+                                        ? WhyAConstructionStopIsNotShown.ASKS_NOT_READ
+                                        : WhyAConstructionStopIsNotShown.REACH_NOT_SHOWN),
                         new WhatAConstructionAsks.OnEveryRule());
                 case AConstructionOnTheWay.Asked.Read(ConstructionAsk ask) ->
                         judged(each, one, ask, asks, waysTo, toTheComparison, read);

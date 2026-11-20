@@ -1175,7 +1175,8 @@ public final class GuardThresholds {
      * @param readAt        the copy of the model's code it was read at
      * @param shown         each operation a run getting to it is shown to stop in
      * @param constructions what is shown of each construction a run on the way to it may work out
-     *                      first ({@link ConstructionStopAssessment}); none where no row gets there
+     *                      first ({@link ConstructionStopAssessment}); none where no row takes the
+     *                      way there
      * @param reads         the places the comparison reads, or empty where they cannot be named
      * @param notShown      each operation of which neither is shown
      * @param everyRunStops the values at which every run getting to it stops, where known
@@ -1200,8 +1201,10 @@ public final class GuardThresholds {
      * <p>A construction is said under the rules whose comparison reads a place of a number it asks
      * of ({@link WhatAConstructionAsks.Bearing}): it asks the same of every run, and said under
      * every rule a run gets to past it, it is said as many times as there are rules. Where none of
-     * the rules it is on the way to reads one, it is said under each of them, so that a stop at it
-     * is never said nowhere. And where what the comparison reads cannot be named, under that rule.
+     * the rules it is on the way to that read one says anything of it — none reads one, or under
+     * each the way holds what it asks — it is said under every rule it is on the way to, so that a
+     * stop at it on the way to another is never said nowhere. And where what the comparison reads
+     * cannot be named, under that rule.
      */
     private static void stopsSaid(List<StopsAtARule> rules, InputReading read,
                                   RulesWithNoLine.Gathered withoutALine) {

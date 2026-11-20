@@ -10,8 +10,8 @@ package souther.compiler.inputs;
  * Which of them is missing is what a reader extends to resolve it.
  */
 public enum WhyAConstructionStopIsNotShown {
-    /** That a run on the way to the rule gets to it is not shown: it is worked out inside a
-     *  function value, or the way to it is not read. */
+    /** That a run on the way to the rule gets to it is not shown: which runs do is not read, as
+     *  of one worked out inside a function value, or met by the walk on more than one way. */
     REACH_NOT_SHOWN,
     /** What its type asks of the numbers it is made of is not read. */
     ASKS_NOT_READ,

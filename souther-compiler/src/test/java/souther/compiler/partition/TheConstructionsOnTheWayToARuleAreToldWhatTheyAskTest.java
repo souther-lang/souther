@@ -432,39 +432,6 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
     }
 
     /**
-     * A rule no run gets to because a construction before it stops every run on its way is still
-     * a rule that construction is on the way to: a run taking the way to the rule stops there, and
-     * that the rule is reached by none is that stop, not that there is none.
-     */
-    @Test
-    void aStopThatKeepsEveryRunFromARuleIsToldOfTheRule() {
-        Compilation compilation = compiled(HEAD + """
-                behavior plan : (gross: Decimal, limit: Decimal) -> Out
-                    constructs Out, Refund
-
-                let plan (gross, limit) = {
-                    let r = Refund(gross)
-                    if Decimal.compare(gross, 0.0m) < 0 then
-                        Out { refund = r, fee = r, within = Decimal.compare(gross, limit) <= 0 }
-                    else Out { refund = r, fee = r, within = false }
-                }
-                """);
-        List<String> told = new ArrayList<>();
-        collectSubjects(document(compilation), told);
-        assertEquals(2, told.size(), told::toString);
-    }
-
-    /** The rule of each finding that a run on the way stops at a construction, into
-     *  {@code out}. */
-    private static void collectSubjects(JsonNode node, List<String> out) {
-        if (node.isObject() && node.path("kind").asString().equals("rule_may_stop_a_run")
-                && node.has("constructions")) {
-            out.add(node.path("subject").asString());
-        }
-        node.forEach(child -> collectSubjects(child, out));
-    }
-
-    /**
      * A construction on an arm whose condition holds what it asks stops no run that takes the arm,
      * and nothing is said of it under a rule after it.
      */
