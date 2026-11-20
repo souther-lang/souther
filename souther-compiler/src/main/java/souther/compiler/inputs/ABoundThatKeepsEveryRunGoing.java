@@ -2,10 +2,13 @@ package souther.compiler.inputs;
 
 import souther.compiler.observe.ObservedValue;
 
+import java.math.BigInteger;
+
 /**
- * The bound an author may declare on the data holding an input, where a run may stop in an
- * operation past where the representation of its number stops: what holds the place, the side,
- * and a bound within which no run stops there.
+ * One bound an author may declare on the data holding an input, as one of the bounds that together
+ * keep every run from a stop past where the representation of a number stops
+ * ({@link WhatKeepsEveryRunGoing}): what holds the place, the side, and the value. Which bound it
+ * is, and nothing of what is shown of it.
  *
  * <p>Where the representation stops is no line the model draws: a birthday in year −999999999 is
  * no birthday a specification means, and the bound that keeps a run from it is the domain's to
@@ -13,21 +16,32 @@ import souther.compiler.observe.ObservedValue;
  * birthday from 1900 on is the author's, and this says only that it is from the second day there
  * is.
  *
- * @param holder      what the invariant is declared on: a data that holds the place, or, for a
- *                    parameter no data holds, a data the author introduces to hold it
- * @param atMost      whether the bound holds the place from above
- * @param bound       the value at the bound, as a row would hold it
- * @param furthestOut whether it is as far out as a bound can be: a run with the place one step
- *                    past it is shown to stop. Otherwise it is enough to keep every run from the
- *                    stop, and nothing is said of how far out one may go
+ * @param holder what the invariant is declared on: a data that holds the place, or, for a
+ *               parameter no data holds, a data the author introduces to hold it
+ * @param place  the place of the input the bound is on
+ * @param atMost whether the bound holds the place from above
+ * @param at     the whole number the place holds at the bound: the number, or the count of the days
+ *               of a date
+ * @param bound  the value at the bound, as a row would hold it
  */
-public record ABoundThatKeepsEveryRunGoing(Holder holder, boolean atMost, ObservedValue bound,
-                                           boolean furthestOut) {
+public record ABoundThatKeepsEveryRunGoing(Holder holder, TermPath place, boolean atMost,
+                                           BigInteger at, ObservedValue bound) {
 
     public ABoundThatKeepsEveryRunGoing {
-        if (holder == null || bound == null) {
+        if (holder == null || place == null || at == null || bound == null) {
             throw new IllegalArgumentException("a bound is on a place something holds, at a value");
         }
+    }
+
+    /** Whether {@code other} bounds the same place on the same side. */
+    boolean onTheSameSideAs(ABoundThatKeepsEveryRunGoing other) {
+        return place.equals(other.place) && atMost == other.atMost;
+    }
+
+    /** Whether this keeps the place within {@code other}: on the same side, no further out. */
+    boolean within(ABoundThatKeepsEveryRunGoing other) {
+        return onTheSameSideAs(other) && (atMost ? at.compareTo(other.at) <= 0
+                : at.compareTo(other.at) >= 0);
     }
 
     /** What an invariant keeping a run from the stop is declared on. */

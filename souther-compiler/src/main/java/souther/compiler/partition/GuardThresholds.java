@@ -27,6 +27,7 @@ import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.AStopNotShown;
 import souther.compiler.inputs.WhatAConstructionAsks;
+import souther.compiler.inputs.WhatKeepsEveryRunGoing;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
@@ -46,7 +47,10 @@ import souther.compiler.meaning.AuthoredPointMapping;
 import souther.compiler.meaning.Proposition;
 import souther.compiler.meaning.WhereAnApplicationIsMade;
 import souther.compiler.meaning.WhyUnread;
+import souther.compiler.numeric.ExactRatio;
+import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.Place;
+import souther.compiler.numeric.Rel;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.BooleanMeaning;
 import souther.compiler.core.Core;
@@ -69,6 +73,7 @@ import souther.compiler.types.ModelOccurrence;
 import souther.compiler.types.ModelOccurrences;
 import souther.compiler.types.Type;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -409,9 +414,10 @@ public final class GuardThresholds {
                             boolean aRowGetsThere = toItself.aRowArrives();
                             boolean stopsAsked = aRowGetsThere
                                     && !(arrived instanceof ComparisonAssessment.AnswersNowhere);
+                            List<StopAssessment.Place> places = stopsAsked
+                                    ? placesWorkedOut(each, arrived, toItself) : List.of();
                             List<StopAssessment.Judgement> judged = stopsAsked
-                                    ? StopAssessment.of(each,
-                                            placesWorkedOut(each, arrived, toItself),
+                                    ? StopAssessment.of(each, places,
                                             each.stopsWhere().isPresent()
                                                     && toItself.aRowArrives(toItself.toACase()
                                                             .apply(each.stopsWhere().get())),
@@ -431,14 +437,17 @@ public final class GuardThresholds {
                             // neither is shown, beside a stop shown in something else.
                             List<AStopNotShown> stopsNotShown =
                                     StopAssessment.stopsNotShown(judged);
-                            // And the bounds on the input that keep every run getting to it from
+                            // And the region of the input that keeps every run getting to it from
                             // stopping in what it works out, wherever it works it out.
-                            List<ABoundThatKeepsEveryRunGoing> keeping = !stopsAsked ? List.of()
+                            Optional<WhatKeepsEveryRunGoing> keeping = !stopsAsked
+                                    ? Optional.empty()
                                     : UndividedByARelation.boundsThatKeepEveryRunGoing(
                                             each.whatARunWorksOut().stream()
                                                     .map(ComparisonReadings.Reading
                                                             .WorkedOutAt::stops)
-                                                    .toList(), read, shown);
+                                                    .toList(), read)
+                                            .map(bounds -> theRegion(each, places, bounds,
+                                                    read));
                             // And, apart from that, whether what a run works out to get past it
                             // is read far enough to say where a line of it lies: a stop no
                             // operation tells, one told where no row is asked to stop in it, or
@@ -1223,7 +1232,8 @@ public final class GuardThresholds {
      * @param shown what shows a run stops in it, none where no stop is shown
      * @param stops the values at which every run getting to the comparison stops in what it works
      *              out
-     * @param keeping the bounds on the input that keep every run getting to it from stopping there
+     * @param keeping the region of the input that keeps every run getting to it from stopping
+     *                there, said of every finding of a stop the comparison makes
      */
     private static void lineAt(String behavior, ModelOccurrence stated,
                                EmittedComparisonState.Instrumented at,
@@ -1236,7 +1246,7 @@ public final class GuardThresholds {
                                boolean stopsNotFullyRead,
                                List<EveryRunStops> stops,
                                List<WhatAConstructionAsks> asks,
-                               List<ABoundThatKeepsEveryRunGoing> keeping,
+                               Optional<WhatKeepsEveryRunGoing> keeping,
                                List<LineEvidence> out,
                                List<LineDrawn> between,
                                List<DerivedValues.Settling> throughADerivedValue,
@@ -1266,7 +1276,7 @@ public final class GuardThresholds {
             withoutALine.stopNotShown(
                     new RuleCitation.Written(new RuleRef.Comparison(behavior, wrote), anchor),
                     ModelOccurrences.of(stated), stopsNotShown, asks,
-                    shown.isEmpty() ? stops : List.of(), shown.isEmpty() ? keeping : List.of());
+                    shown.isEmpty() ? stops : List.of(), keeping);
         }
         // Where what a run works out to evaluate it is not read far enough to say which rows get
         // past it, the border of each place it is filed at waits on it: the line stands where it
@@ -1413,6 +1423,38 @@ public final class GuardThresholds {
         WhatAWayLeavesOfAValue left = WhatAWayLeavesOfAValue.along(read, way);
         return left != null
                 && over.stream().anyMatch(operation -> !left.keepsWithinItsType(operation));
+    }
+
+    /**
+     * The region {@code bounds} make, with each said as far out as it can be where a run with its
+     * place one step past it and every other bound holding is shown to stop in what
+     * {@code each} works out at {@code places} ({@link StopAssessment#aRunStopsWithin}): a claim
+     * about the region, asked once it is whole.
+     */
+    private static WhatKeepsEveryRunGoing theRegion(ComparisonReadings.Reading each,
+                                                    List<StopAssessment.Place> places,
+                                                    List<ABoundThatKeepsEveryRunGoing> bounds,
+                                                    InputReading read) {
+        Set<ABoundThatKeepsEveryRunGoing> farOut = new LinkedHashSet<>();
+        for (ABoundThatKeepsEveryRunGoing bound : bounds) {
+            List<TakenConstraint.Affine> within = new ArrayList<>();
+            for (ABoundThatKeepsEveryRunGoing other : bounds) {
+                if (other != bound) {
+                    within.add(new TakenConstraint.Affine(new LinearForm<>(
+                            ExactRatio.of(other.at()).negated(),
+                            Map.of(new NumericTerm.ValueOf(other.place()), ExactRatio.ONE)),
+                            other.atMost() ? Rel.LE : Rel.GE));
+                }
+            }
+            BigInteger past = bound.atMost() ? bound.at().add(BigInteger.ONE)
+                    : bound.at().subtract(BigInteger.ONE);
+            within.add(new TakenConstraint.Affine(new LinearForm<>(ExactRatio.of(past).negated(),
+                    Map.of(new NumericTerm.ValueOf(bound.place()), ExactRatio.ONE)), Rel.EQ));
+            if (StopAssessment.aRunStopsWithin(each, places, within, read)) {
+                farOut.add(bound);
+            }
+        }
+        return new WhatKeepsEveryRunGoing(bounds, farOut);
     }
 
     /**

@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -36,16 +38,15 @@ import java.util.Set;
  *                  that is known: a proof of where a run stops if one gets there, and not that one
  *                  does, which is what is not resolved here. Never what makes this said: a stop
  *                  no run gets to is no stop left unresolved
- * @param keeping   the bounds on the input that together keep every run getting to the rule from
- *                  the stops told, each once ({@link ABoundThatKeepsEveryRunGoing}): enough to keep
- *                  a run from them whether or not one stops there now; empty where some stop is
- *                  where no such bound is said
+ * @param keeping   the region of the input that keeps every run getting to the rule from the
+ *                  stops told ({@link WhatKeepsEveryRunGoing}): enough to keep a run from them
+ *                  whether or not one stops there now; none where it is not said
  */
 public record RuleWhereAStopIsNotShown(RuleRef rule, Set<RuleReportAnchor> reachedBy,
                                        ModelOccurrences readAt, List<AStopNotShown> notShown,
                                        List<WhatAConstructionAsks> asks,
                                        List<EveryRunStops> everyRunStops,
-                                       List<ABoundThatKeepsEveryRunGoing> keeping)
+                                       Optional<WhatKeepsEveryRunGoing> keeping)
         implements WhatIsShownOfAStop {
 
     public RuleWhereAStopIsNotShown {
@@ -57,7 +58,7 @@ public record RuleWhereAStopIsNotShown(RuleRef rule, Set<RuleReportAnchor> reach
         notShown = List.copyOf(new LinkedHashSet<>(notShown));
         asks = List.copyOf(new LinkedHashSet<>(asks));
         everyRunStops = List.copyOf(new LinkedHashSet<>(everyRunStops));
-        keeping = List.copyOf(new LinkedHashSet<>(keeping));
+        Objects.requireNonNull(keeping, "a region kept, or none");
         if (notShown.isEmpty() && asks.isEmpty()) {
             throw new IllegalArgumentException("a stop is not shown for some reason: " + rule);
         }
@@ -68,9 +69,15 @@ public record RuleWhereAStopIsNotShown(RuleRef rule, Set<RuleReportAnchor> reach
                                               List<AStopNotShown> notShown,
                                               List<WhatAConstructionAsks> asks,
                                               List<EveryRunStops> everyRunStops,
-                                              List<ABoundThatKeepsEveryRunGoing> keeping) {
+                                              Optional<WhatKeepsEveryRunGoing> keeping) {
         return new RuleWhereAStopIsNotShown(cited.rule(), RuleCitation.anchorOf(cited), readAt,
                 notShown, asks, everyRunStops, keeping);
+    }
+
+    @Override
+    public RuleWhereAStopIsNotShown keptBy(Optional<WhatKeepsEveryRunGoing> region) {
+        return new RuleWhereAStopIsNotShown(rule, reachedBy, readAt, notShown, asks, everyRunStops,
+                region);
     }
 
     /** How a reader finds the rule, as for a rule with no line ({@link RuleWithoutALine#cited}). */
@@ -95,9 +102,7 @@ public record RuleWhereAStopIsNotShown(RuleRef rule, Set<RuleReportAnchor> reach
         asked.addAll(that.asks);
         List<EveryRunStops> stops = new ArrayList<>(everyRunStops);
         stops.addAll(that.everyRunStops);
-        List<ABoundThatKeepsEveryRunGoing> bounds = new ArrayList<>(keeping);
-        bounds.addAll(that.keeping);
         return new RuleWhereAStopIsNotShown(rule, both, readAt.and(that.readAt), open, asked,
-                stops, bounds);
+                stops, WhatKeepsEveryRunGoing.together(keeping, that.keeping));
     }
 }

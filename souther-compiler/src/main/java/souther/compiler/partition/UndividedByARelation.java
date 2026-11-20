@@ -32,7 +32,6 @@ import souther.compiler.inputs.EachWayItComesOut;
 import souther.compiler.inputs.ElementProjection;
 import souther.compiler.inputs.ElementValue;
 import souther.compiler.inputs.ABoundThatKeepsEveryRunGoing;
-import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.EveryRunStops;
 import souther.compiler.inputs.FilingCoordinate;
 import souther.compiler.inputs.InputDomain;
@@ -2850,24 +2849,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * clauses of a type a construction makes leave the number, which the model states and no
      * bound on the input is suggested for.
      *
-     * <p>Safe: within the bound no run stops in what is told, wherever it is worked out. As far
-     * out as a bound can be only where a run with the place just past it is shown to stop
-     * ({@code shown}, which the stop assessment alone makes): then any bound further out lets that
-     * run in. Otherwise the bound is enough to keep every run from the stops told, and is said as
-     * no more. Not said past every value the place holds.
+     * <p>The bounds are one region: within all of them no run stops in what is told, wherever it
+     * is worked out, and a bound needed and not said leaves the region unsaid, since the rest keep
+     * no run from the stop it would. How far out each goes is asked of the region once it is whole
+     * ({@code GuardThresholds}), and not here. Not said past every value the place holds.
+     *
+     * @return the bounds, none where no stop asks one; empty where the region is not said
      */
-    static List<ABoundThatKeepsEveryRunGoing> boundsThatKeepEveryRunGoing(
-            List<StopEvidence> worked, InputReading read, List<AStopShown> shown) {
+    static Optional<List<ABoundThatKeepsEveryRunGoing>> boundsThatKeepEveryRunGoing(
+            List<StopEvidence> worked, InputReading read) {
         Map<TermPath, BigInteger[]> kept = new LinkedHashMap<>();
         for (StopEvidence each : worked) {
             if (!each.everyStopSaid()) {
-                return List.of();
+                return Optional.empty();
             }
             for (IntOperation it : each.operations().operations()) {
                 // Over a value a run works out, the operation is over no one place, and whether a
                 // run stops in it is the stop assessment's to say, not what that value's type is.
                 if (it.overAValueWorkedOut()) {
-                    return List.of();
+                    return Optional.empty();
                 }
                 if (stopsNoRow(it, read)) {
                     continue;
@@ -2877,7 +2877,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 if (!it.ofTheRepresentation() || atItsLeast == null || atItsGreatest == null
                         || !keptWithin(atItsLeast, it.least(), null, kept)
                         || !keptWithin(atItsGreatest, null, it.greatest(), kept)) {
-                    return List.of();
+                    return Optional.empty();
                 }
             }
         }
@@ -2885,35 +2885,21 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (Map.Entry<TermPath, BigInteger[]> each : kept.entrySet()) {
             NumericTerm.ValueOf value = new NumericTerm.ValueOf(each.getKey());
             FormRange holds = FormRange.endsHeldByTheRules(value, read);
-            BigInteger least = each.getValue()[0];
-            BigInteger greatest = each.getValue()[1];
-            if (least != null && (holds == null
-                    || holds.least().compareTo(ExactRatio.of(least)) < 0)) {
-                addTheBound(value, least, false, read, shown, out);
-            }
-            if (greatest != null && (holds == null
-                    || holds.greatest().compareTo(ExactRatio.of(greatest)) > 0)) {
-                addTheBound(value, greatest, true, read, shown, out);
+            for (boolean atMost : new boolean[] {false, true}) {
+                BigInteger bound = each.getValue()[atMost ? 1 : 0];
+                if (bound == null || (holds != null && (atMost
+                        ? holds.greatest().compareTo(ExactRatio.of(bound)) <= 0
+                        : holds.least().compareTo(ExactRatio.of(bound)) >= 0))) {
+                    continue;
+                }
+                ABoundThatKeepsEveryRunGoing one = aBoundOn(value, bound, atMost, read);
+                if (one == null) {
+                    return Optional.empty();
+                }
+                out.add(one);
             }
         }
-        return List.copyOf(out);
-    }
-
-    /**
-     * {@code bound} on {@code value}, from above where {@code atMost}, into {@code out} where
-     * something holds the place: as far out as it can be where some stop {@code shown} has the
-     * place one step past it, and as enough to keep every run from the stops otherwise.
-     */
-    private static void addTheBound(NumericTerm.ValueOf value, BigInteger bound, boolean atMost,
-                                    InputReading read, List<AStopShown> shown,
-                                    List<ABoundThatKeepsEveryRunGoing> out) {
-        BigInteger past = atMost ? bound.add(BigInteger.ONE) : bound.subtract(BigInteger.ONE);
-        AStopShown.NumberAt justPast = new AStopShown.NumberAt(value.position(), past);
-        boolean furthestOut = shown.stream().anyMatch(stop -> stop.at().contains(justPast));
-        ABoundThatKeepsEveryRunGoing one = aBoundOn(value, bound, atMost, furthestOut, read);
-        if (one != null) {
-            out.add(one);
-        }
+        return Optional.of(List.copyOf(out));
     }
 
     /**
@@ -2965,9 +2951,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * {@code bound} on the values of {@code value}'s place, from above where {@code atMost}, as
-     * the invariant an author declares it, as far out as it can be where {@code furthestOut} — or
-     * null where the place is held by nothing an invariant can be declared on, or its values are
-     * no whole numbers or dates.
+     * the invariant an author declares it — or null where the place is held by nothing an
+     * invariant can be declared on, or its values are no whole numbers or dates.
      *
      * <p>The data is the place's own type where it is written under a name ({@code data Today =
      * Date}), whose invariant names it as its value, and otherwise the record the place is a field
@@ -2976,7 +2961,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      */
     private static ABoundThatKeepsEveryRunGoing aBoundOn(NumericTerm.ValueOf value,
                                                          BigInteger bound, boolean atMost,
-                                                         boolean furthestOut,
                                                          InputReading read) {
         TermOrders orders = read.quantities().ordersOf(value);
         Carrier carrier = orders == null ? null : orders.answered();
@@ -2989,13 +2973,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Position position = read.domain().at(place);
         if (position != null && position.view().outermostName() != null) {
             return new ABoundThatKeepsEveryRunGoing(new ABoundThatKeepsEveryRunGoing.Holder.AData(
-                    position.view().outermostName().name(), "value"), atMost, at, furthestOut);
+                    position.view().outermostName().name(), "value"), place, atMost, bound, at);
         }
         if (place.steps().isEmpty()) {
             return read.domain().typeAt(place, read.rules()) instanceof Type.Prim primitive
                     ? new ABoundThatKeepsEveryRunGoing(
                             new ABoundThatKeepsEveryRunGoing.Holder.AParameter(place.head(),
-                                    primitive.shown()), atMost, at, furthestOut)
+                                    primitive.shown()), place, atMost, bound, at)
                     : null;
         }
         if (!(place.steps().getLast() instanceof TermPath.Step.Field(String field))) {
@@ -3006,7 +2990,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return read.domain().typeAt(record, read.rules()) instanceof Type.Ref(TypeSymbol data)
                 ? new ABoundThatKeepsEveryRunGoing(
                         new ABoundThatKeepsEveryRunGoing.Holder.AData(data.name(), field),
-                        atMost, at, furthestOut)
+                        place, atMost, bound, at)
                 : null;
     }
 

@@ -130,6 +130,24 @@ final class StopAssessment {
      */
     static List<Judgement> of(ComparisonReadings.Reading each, List<Place> places,
                               boolean onRowsOfTheStatement, InputReading read) {
+        return of(each, places, onRowsOfTheStatement, List.of(), read);
+    }
+
+    /**
+     * Whether a run getting to {@code each} is shown to stop in something it works out at
+     * {@code places} with the input meeting every one of {@code within} as well: the same showing
+     * as {@link #of}, those statements put on the way of every place. What a region of the input
+     * is asked of where it is to be said as far out as it can go.
+     */
+    static boolean aRunStopsWithin(ComparisonReadings.Reading each, List<Place> places,
+                                   List<TakenConstraint.Affine> within, InputReading read) {
+        return of(each, places, false, within, read).stream()
+                .anyMatch(Judgement.Stops.class::isInstance);
+    }
+
+    private static List<Judgement> of(ComparisonReadings.Reading each, List<Place> places,
+                                      boolean onRowsOfTheStatement,
+                                      List<TakenConstraint.Affine> within, InputReading read) {
         List<Judgement> out = new ArrayList<>();
         if (onRowsOfTheStatement) {
             out.add(new Judgement.Unresolved(null, WhyAStopIsNotShown.ON_ROWS_OF_THE_STATEMENT));
@@ -150,7 +168,7 @@ final class StopAssessment {
                         || left.noRowTakesItPastItsEnds(operation)) {
                     out.add(new Judgement.Safe(operation, WhyNone.WITHIN_ITS_ENDS));
                 } else {
-                    out.add(aStopIn(each, place, at, read));
+                    out.add(aStopIn(each, place, at, within, read));
                 }
             }
         }
@@ -183,20 +201,11 @@ final class StopAssessment {
     }
 
     /** Each operation {@code judged} leave unresolved, as written, and why, in the order they were
-     *  judged: none written where no operation names the stop. Not one a run is shown to stop in
-     *  where it is worked out elsewhere: whether a run stops in it is then answered. */
+     *  judged: none written where no operation names the stop. */
     static List<AStopNotShown> stopsNotShown(List<Judgement> judged) {
-        List<UndividedByARelation.IntOperation> stopping = new ArrayList<>();
-        for (Judgement each : judged) {
-            if (each instanceof Judgement.Stops(Shown shown)) {
-                stopping.add(shown.operation());
-            }
-        }
         List<AStopNotShown> out = new ArrayList<>();
         for (Judgement each : judged) {
-            if (each instanceof Judgement.Unresolved(var operation, WhyAStopIsNotShown why)
-                    && (operation == null
-                            || stopping.stream().noneMatch(operation::sameOperationAs))) {
+            if (each instanceof Judgement.Unresolved(var operation, WhyAStopIsNotShown why)) {
                 out.add(new AStopNotShown(Optional.ofNullable(operation)
                         .map(it -> UndividedByARelation.written(it.form())), why));
             }
@@ -207,10 +216,11 @@ final class StopAssessment {
     /**
      * That a run stops in the operation at {@code at} of what {@code place} works out, or why that
      * is not shown. Where it is worked out, how the way gets there and what is worked out before it
-     * are asked first, and a value is looked for only where all of them are answered.
+     * are asked first, and a value is looked for only where all of them are answered. The value
+     * meets {@code within} as it meets the way.
      */
     private static Judgement aStopIn(ComparisonReadings.Reading each, Place place, int at,
-                                     InputReading read) {
+                                     List<TakenConstraint.Affine> within, InputReading read) {
         UndividedByARelation.Working working = place.worked().stops().operations();
         UndividedByARelation.IntOperation operation = working.operations().get(at);
         if (place.worked().madeWhere() != null) {
@@ -242,6 +252,7 @@ final class StopAssessment {
                 return new Judgement.Unresolved(operation, WhyAStopIsNotShown.A_CONDITION_NOT_READ);
             }
         }
+        way.addAll(within);
         LinearForm<NumericTerm> form = operation.overTheInput();
         // Every other operation a run may work out before this one: those this one is not worked
         // out before. One worked out of this one comes after it, and is not got to where it stops.

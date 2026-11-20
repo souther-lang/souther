@@ -95,6 +95,16 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 suggested(report), report);
     }
 
+    @Test
+    void theBoundOnTheDateDeclaredTakesTheStopAway() {
+        String report = report(A_DAY_BACK.formatted(
+                "\n    invariant birthday >= Date(\"-999999999-01-02\")"));
+
+        assertFalse(report.contains("may stop a run"), report);
+        assertFalse(report.contains("stop not resolved"), report);
+        assertEquals(List.of(), suggested(report), report);
+    }
+
     /** The year of a date shifted by days is a number of the date it is shifted from, which a run
      *  works out only where the shifts get there. */
     private static final String THE_YEAR_OF_A_SHIFT = """
@@ -173,6 +183,98 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
 
         assertFalse(report.contains("may stop a run"), report);
         assertFalse(report.contains("· not read:"), report);
+    }
+
+    /** Days moved back off the first of a month and forward again move it by nothing, and the
+     *  move back stops all the same where that first day is the calendar's: the stop is said. */
+    @Test
+    void aMoveOffTheFirstOfAMonthUndoneStopsWhereTheMoveBackDoes() {
+        String report = report("""
+                module m
+
+                data P = { on: Date }
+
+                let monthStart (d: Date): Date = Date.addDays(1 - Date.day(d), d)
+
+                behavior f : (p: P) -> Bool
+                let f (p) = Int.floorMod(Date.daysBetween(Date("2000-01-02"),
+                    Date.addDays(1, Date.addDays(0 - 1, monthStart(p.on)))), 7) >= 1
+                """);
+
+        assertTrue(report.lines().map(String::strip).anyMatch(line ->
+                (line.startsWith("· may stop a run:") || line.startsWith("· stop not resolved:"))
+                        && line.contains("-Date.day(p.on) + p.on")), report);
+    }
+
+    /** A value chosen by cases is worked out on each arm a run takes: the bound is the arm's that
+     *  stops nearest, where the comparison is the behavior's answer as where it is a condition. */
+    @Test
+    void aValueChosenByCasesIsBoundedByTheArmThatStopsNearest() {
+        String report = report(ON_AN_ARM.replace("Int\nlet f (i) = if ", "Bool\nlet f (i) = ")
+                .replace(" then 1 else 2", ""));
+
+        assertEquals(List.of("· declaring `invariant issuedOn <= Date(\"+999999999-11-30\")` on"
+                + " Invoice keeps every run from stopping there; a bound one step further out lets"
+                + " in a run that stops there, and the value to declare is the one the domain has"),
+                suggested(report), report);
+    }
+
+    /** How far out a bound goes is asked of the region: with the other bound held, no run past
+     *  either takes the arm that stops there, and neither is said to be as far out as it can be. */
+    @Test
+    void howFarOutABoundGoesIsAskedWithEveryOtherBoundHeld() {
+        String report = report("""
+                module m
+
+                data P = { x: Int, y: Int }
+
+                behavior f : (p: P) -> Int
+                let f (p) =
+                    if (if p.x == 9223372036854775807 then p.y + 1 else p.x + 1) > 0 then 1 else 0
+                """);
+
+        assertEquals(2, suggested(report).size(), report);
+        assertTrue(suggested(report).stream()
+                .noneMatch(line -> line.contains("one step further out")), report);
+    }
+
+    /** A rule read at two calls says one region, and where one call leaves its stop with no bound
+     *  said, no bound said keeps every run of the rule going. */
+    @Test
+    void aRuleReadWhereOneCallHasNoBoundSaysNone() {
+        String report = report("""
+                module m
+
+                data P = { x: Int, y: Int }
+
+                let h (a: Int): Bool = a + 1 > 0
+
+                behavior f : (p: P) -> Bool
+                let f (p) = h(p.x) && h(p.x - p.y)
+                """);
+
+        assertTrue(report.contains("· may stop a run"), report);
+        assertEquals(List.of(), suggested(report), report);
+    }
+
+    /** A rule read at two calls that bound one place differently says the tighter bound, once:
+     *  the looser keeps no run of the other call going. */
+    @Test
+    void aRuleReadAtTwoCallsSaysTheTighterBoundOnce() {
+        String report = report("""
+                module m
+
+                data P = { x: Int }
+
+                let h (a: Int): Bool = a + 1 > 0
+
+                behavior f : (p: P) -> Bool
+                let f (p) = h(p.x) && h(p.x + 1)
+                """);
+
+        assertEquals(1, suggested(report).size(), report);
+        assertTrue(suggested(report).getFirst().startsWith(
+                "· declaring `invariant x <= 9223372036854775805` on P"), report);
     }
 
     /** Stated as a condition, the arm a run takes is put on the way: a value of the input is shown
