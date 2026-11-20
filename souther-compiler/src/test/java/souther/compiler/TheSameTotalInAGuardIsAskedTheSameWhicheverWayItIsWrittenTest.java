@@ -113,10 +113,10 @@ class TheSameTotalInAGuardIsAskedTheSameWhicheverWayItIsWrittenTest {
     }
 
     /**
-     * Every way is asked for the same combinations, and every way but the filter under the same
-     * measure. A month's pay is any whole number, so the total may pass an {@code Int}: each way
-     * tells where on the ways its months are kept, and the filter, whose total is read once over
-     * every way of keeping, says it as a stop nothing tells, which leaves its measure partial.
+     * Every way is asked for the same combinations under the same measure. A month's pay is any
+     * whole number, so the total may pass an {@code Int}: each way tells where on the ways its
+     * months are kept, the filter too, whose total is read once over every way of keeping and
+     * worked out on each.
      */
     @Test
     void everyWayIsAskedForTheSameCombinationsUnderTheSameMeasure() {
@@ -127,11 +127,7 @@ class TheSameTotalInAGuardIsAskedTheSameWhicheverWayItIsWrittenTest {
             if (first == null) {
                 first = asked;
             }
-            Asked expected = way.equals("a filter")
-                    ? new Asked(first.combinations(), first.read(), first.unconfirmed(),
-                            first.notMeasured(), first.notJoined(), MeasurementStatus.PARTIAL)
-                    : first;
-            assertEquals(expected, asked, way);
+            assertEquals(first, asked, way);
         }
     }
 

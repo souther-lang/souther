@@ -212,10 +212,6 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         // an arm held aside beside another, whose operation its condition keeps within its type
         FORMS.put("anArmHeldAsideWhereItsConditionHolds",
                 "(if q > 7 then 1 else 2) + (if q > 5 then q - 1 else 3) >= q");
-        UNTOLD_THOUGH_NONE_STOPS.put("anArmHeldAsideWhereItsConditionHolds", "on each arm of "
-                + "the first choice the second is the value the reading stops at, and the sum of "
-                + "a number and that value is an operation over the stopped value that is no sum "
-                + "of the comparison's addends, which nothing tells");
         // the same step, where the filter keeps no element the step stops at
         FORMS.put("lengthOfAStepOfAFilterKeepingNoEnd",
                 "List.length(List.map(x -> x + 1, List.filter(y -> y < 0, ds))) >= 2");
@@ -267,12 +263,13 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
                 "List.sum([if q > 0 then q else 0, if q > 0 then q else 0]) >= 10");
         FORMS.put("totalOfChoicesAStepMakes",
                 "List.sum(List.map(x -> if x > 0 then x else 0, [q, q])) >= 10");
-        NOT_TOLD.put("totalOfWhatAFilterKeeps", "the comparison over the total is read once for "
-                + "every way the filter keeps the elements, with the total standing as one "
-                + "number, and the ways are written out only where a reader of the statement "
-                + "asks: no way's total is told as the operation it is, and the total is said as "
-                + "not read");
         FORMS.put("totalOfWhatAFilterKeeps", "List.sum(List.filter(x -> x > 0, [q, q])) >= 10");
+        // a filter that keeps q only where twice it is within the type, and one whose comparison
+        // holds on every row of the way that stops
+        FORMS.put("totalOfWhatAFilterKeepsOnlyWithinTheType",
+                "List.sum(List.filter(x -> x > 0 && x < 100, [q, q])) >= 10");
+        FORMS.put("totalOfWhatAFilterKeepsHeldAgainstWhatItKeeps",
+                "List.sum(List.filter(x -> x > 0, [q, 1])) >= q");
         // a step over what a step made, and a walk that starts again from a number written down
         FORMS.put("totalOfAStepOverAStep",
                 "List.sum(List.map(p -> 2 * p, List.map(x -> x, ds))) >= 10");

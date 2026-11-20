@@ -90,6 +90,11 @@ final class WorkedOutToReachIt {
     /** Expressions whose working out another reading told, whole: one that may end a run here
      *  gets past it all the same. */
     private final Predicate<Denotation> toldElsewhere;
+    /** Expressions whose own stop, apart from what they are made of, the analysis that read the
+     *  comparison says on each way it reads them in, told or said to be untold: a stop a run may
+     *  still come to, said elsewhere, so it answers only whether a stop is left unsaid here
+     *  ({@link #leavesItsOwnStopUntold}). */
+    private final Predicate<Denotation> ownStopsSaidOnTheirWays;
     /** The arms every run working out what this is asked of has entered, past which it is
      *  asked. */
     private final ArmsTaken onTheWay;
@@ -128,6 +133,12 @@ final class WorkedOutToReachIt {
          *  works out whenever it works out what the question was asked of: none past an arm, nor
          *  in the body of a closure, which works out only what it is handed. */
         private final Predicate<Denotation> tellsWhereItStops;
+        /** Where this question asks only whether a stop is left untold, the expressions whose own
+         *  stop the analysis says on each way it reads them in
+         *  ({@link #besideTheStopsSaidOnTheirWays}); null where it asks whether a run ends, which
+         *  a stop said elsewhere does not answer. Asked, as {@link #tellsWhereItStops} is, only of
+         *  what a run works out whenever it works out what the question was asked of. */
+        private final Predicate<Denotation> ownStopsSaid;
         /** The arms every run working out what this question is asked of has entered. */
         private final ArmsTaken arms;
 
@@ -136,21 +147,24 @@ final class WorkedOutToReachIt {
         }
 
         Question(boolean byTheNumbers, ArmsTaken arms) {
-            this(byTheNumbers, Set.of(), null, arms);
+            this(byTheNumbers, Set.of(), null, null, arms);
         }
 
         private Question(boolean byTheNumbers, Set<Core> heldWhereApplied,
-                         Predicate<Denotation> tellsWhereItStops, ArmsTaken arms) {
-            this(byTheNumbers, heldWhereApplied, tellsWhereItStops, arms, new IdentityHashMap<>(),
-                    new FoldedValue.Kept());
+                         Predicate<Denotation> tellsWhereItStops,
+                         Predicate<Denotation> ownStopsSaid, ArmsTaken arms) {
+            this(byTheNumbers, heldWhereApplied, tellsWhereItStops, ownStopsSaid, arms,
+                    new IdentityHashMap<>(), new FoldedValue.Kept());
         }
 
         private Question(boolean byTheNumbers, Set<Core> heldWhereApplied,
-                         Predicate<Denotation> tellsWhereItStops, ArmsTaken arms,
+                         Predicate<Denotation> tellsWhereItStops,
+                         Predicate<Denotation> ownStopsSaid, ArmsTaken arms,
                          Map<Core, List<Answered>> answered, FoldedValue.Kept folds) {
             this.byTheNumbers = byTheNumbers;
             this.heldWhereApplied = heldWhereApplied;
             this.tellsWhereItStops = tellsWhereItStops;
+            this.ownStopsSaid = ownStopsSaid;
             this.arms = arms;
             this.answered = answered;
             this.folds = folds;
@@ -162,15 +176,15 @@ final class WorkedOutToReachIt {
             Set<Core> both = Collections.newSetFromMap(new IdentityHashMap<>());
             both.addAll(heldWhereApplied);
             both.addAll(held);
-            return new Question(byTheNumbers, both, tellsWhereItStops, arms);
+            return new Question(byTheNumbers, both, tellsWhereItStops, ownStopsSaid, arms);
         }
 
         /** The same question of what only some runs work out, an arm or the body of a closure:
-         *  nothing past it is told by the asker, since a stop told there would be one on runs, or
-         *  of values, that never work it out. */
+         *  nothing past it is told by the asker or the analysis, since a stop told there would be
+         *  one on runs, or of values, that never work it out. */
         Question notOnEveryRun() {
-            return tellsWhereItStops == null ? this
-                    : new Question(byTheNumbers, heldWhereApplied, null, arms);
+            return (tellsWhereItStops == null && ownStopsSaid == null) ? this
+                    : new Question(byTheNumbers, heldWhereApplied, null, null, arms);
         }
 
         /** The same question of arm {@code part} of {@code fork}, read where it is ({@code at}):
@@ -178,7 +192,7 @@ final class WorkedOutToReachIt {
          *  had. */
         Question enteringArm(Core fork, int part, InputReads at) {
             Question past = notOnEveryRun();
-            return new Question(byTheNumbers, heldWhereApplied, null,
+            return new Question(byTheNumbers, heldWhereApplied, null, null,
                     arms.entering(fork, part, at), past.answered, past.folds);
         }
 
@@ -187,12 +201,18 @@ final class WorkedOutToReachIt {
         Question whereItWasBound() {
             return arms.isEmpty() ? this
                     : new Question(byTheNumbers, heldWhereApplied, tellsWhereItStops,
-                            ArmsTaken.NONE, answered, folds);
+                            ownStopsSaid, ArmsTaken.NONE, answered, folds);
         }
 
         /** Whether the asker tells the stops of {@code value}. */
         boolean tells(Denotation value) {
             return tellsWhereItStops != null && tellsWhereItStops.test(value);
+        }
+
+        /** Whether the analysis says the stop of {@code value}'s own working on its ways, where
+         *  this asks only whether a stop is left untold. */
+        boolean saidItsOwnStop(Denotation value) {
+            return ownStopsSaid != null && ownStopsSaid.test(value);
         }
 
         Boolean answerOf(Core written, InputReads at) {
@@ -365,18 +385,44 @@ final class WorkedOutToReachIt {
 
     private WorkedOutToReachIt(InputReading read, Predicate<Denotation> beyond,
                                boolean closuresApart) {
-        this(read, beyond, closuresApart, _ -> false, ArmsTaken.NONE, new IdentityHashMap<>());
+        this(read, beyond, closuresApart, _ -> false, _ -> false, ArmsTaken.NONE,
+                new IdentityHashMap<>());
     }
 
     private WorkedOutToReachIt(InputReading read, Predicate<Denotation> beyond,
                                boolean closuresApart, Predicate<Denotation> toldElsewhere,
+                               Predicate<Denotation> ownStopsSaidOnTheirWays,
                                ArmsTaken onTheWay, Map<Core, List<NumbersAt>> numbersAsked) {
         this.read = Objects.requireNonNull(read);
         this.beyond = Objects.requireNonNull(beyond);
         this.closuresApart = closuresApart;
         this.toldElsewhere = toldElsewhere;
+        this.ownStopsSaidOnTheirWays = Objects.requireNonNull(ownStopsSaidOnTheirWays);
         this.onTheWay = onTheWay;
         this.numbersAsked = numbersAsked;
+    }
+
+    /**
+     * The same, where the analysis that read the comparison says, on each way it reads them in,
+     * the own stop of every expression {@code said} holds of: a total read once for every way of
+     * keeping its elements, each way's total told as the operation it is or said to be left
+     * untold. What such an expression is made of is asked here as before, and a run may still
+     * stop in it, so it is no stop left unsaid here and nothing a row is shown to get past.
+     */
+    WorkedOutToReachIt besideTheStopsSaidOnTheirWays(Predicate<Core> said) {
+        Predicate<Denotation> before = ownStopsSaidOnTheirWays;
+        return new WorkedOutToReachIt(read, beyond, closuresApart, toldElsewhere,
+                value -> before.test(value) || said.test(value.value()), onTheWay,
+                numbersAsked);
+    }
+
+    /**
+     * Whether working out {@code value}, which a reading passed over, leaves a stop of its own
+     * unsaid: it may end a run, apart from what it is made of and what a name in it was given
+     * ({@link #ownWorkingEndsNoRun}), and the analysis does not say it on each way.
+     */
+    boolean leavesItsOwnStopUntold(Denotation value) {
+        return !ownWorkingEndsNoRun(value) && !ownStopsSaidOnTheirWays.test(value);
     }
 
     /**
@@ -386,7 +432,8 @@ final class WorkedOutToReachIt {
      */
     WorkedOutToReachIt onTheArm(Core fork, int part, InputReads at) {
         return new WorkedOutToReachIt(read, beyond, closuresApart, toldElsewhere,
-                onTheWay.entering(Core.withoutStanding(fork), part, at), numbersAsked);
+                ownStopsSaidOnTheirWays, onTheWay.entering(Core.withoutStanding(fork), part, at),
+                numbersAsked);
     }
 
     /** The same, of {@code part} of {@code written} read at {@code at}: on its arm where it is
@@ -411,7 +458,7 @@ final class WorkedOutToReachIt {
         return new WorkedOutToReachIt(read,
                 value -> before.test(value) || Core.withoutStanding(value.value()) == answered,
                 closuresApart, value -> told.contains(Core.withoutStanding(value.value())),
-                onTheWay, numbersAsked);
+                ownStopsSaidOnTheirWays, onTheWay, numbersAsked);
     }
 
     /**
@@ -421,7 +468,8 @@ final class WorkedOutToReachIt {
     WorkedOutToReachIt besideWhatIsTold(Predicate<Denotation> told) {
         Predicate<Denotation> before = toldElsewhere;
         return new WorkedOutToReachIt(read, beyond, closuresApart,
-                value -> before.test(value) || told.test(value), onTheWay, numbersAsked);
+                value -> before.test(value) || told.test(value), ownStopsSaidOnTheirWays,
+                onTheWay, numbersAsked);
     }
 
     /**
@@ -558,7 +606,7 @@ final class WorkedOutToReachIt {
                 || (standsFor.contains(Core.withoutStanding(value.value()))
                         && endsOnlyWhereItsOwnAnswerHasNoPlace(
                                 Core.withoutStanding(value.value()))),
-                closuresApart, toldElsewhere, onTheWay, numbersAsked);
+                closuresApart, toldElsewhere, ownStopsSaidOnTheirWays, onTheWay, numbersAsked);
     }
 
     private boolean endsOnlyWhereItsOwnAnswerHasNoPlace(Core written) {
@@ -917,7 +965,7 @@ final class WorkedOutToReachIt {
      * there is sent to no reader that would tell where it stops.
      */
     private boolean ownWorkingEndsNoRun(Denotation value, Question question) {
-        return itselfEndsNoRun(value) || beyond.test(value)
+        return itselfEndsNoRun(value) || beyond.test(value) || question.saidItsOwnStop(value)
                 || anOperatorWithAValue(value, question)
                 || (question.byTheNumbers && aTotalWithinAnInt(value))
                 || ((question.byTheNumbers || !question.arms.isEmpty())
@@ -940,7 +988,19 @@ final class WorkedOutToReachIt {
      */
     boolean endsNoRunUntoldWhereItWasPassedOver(Denotation value,
                                                Predicate<Denotation> tells) {
-        return endsNoRun(value, new Question(true, Set.of(), tells, onTheWay));
+        return endsNoRun(value, new Question(true, Set.of(), tells, ownStopsSaidOnTheirWays,
+                onTheWay));
+    }
+
+    /**
+     * Whether working out {@code value}, which a reading passed over, leaves no stop unsaid: every
+     * stop a run may come to there is none, or one the analysis says on each way
+     * ({@link #besideTheStopsSaidOnTheirWays}). Not whether a run ends, which a stop said
+     * elsewhere does not answer.
+     */
+    boolean leavesNoStopUntoldWhereItWasPassedOver(Denotation value) {
+        return endsNoRun(value, new Question(true, Set.of(), null, ownStopsSaidOnTheirWays,
+                onTheWay));
     }
 
     /**

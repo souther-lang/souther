@@ -361,16 +361,23 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         /**
          * What a run works out, and where ({@link #whatARunWorksOut}).
          *
-         * @param stops      what the run works out
-         * @param madeWhere  where the application of the closure the comparison stands in is
-         *                   made, or null where the comparison is not read on each application
-         * @param takenWhere where the arm of a choice is taken, or null where it is worked out
-         *                   whichever arm is taken
+         * @param stops     what the run works out
+         * @param madeWhere where the application of the closure the comparison stands in is
+         *                  made, or null where the comparison is not read on each application
+         * @param onAnArm   the arm of a choice it is worked out on, or null where it is worked
+         *                  out whichever arm is taken
          */
-        record WorkedOutAt(StopEvidence stops, Proposition madeWhere, Proposition takenWhere) {
+        record WorkedOutAt(StopEvidence stops, Proposition madeWhere,
+                           StopEvidence.OnAnArm onAnArm) {
 
             WorkedOutAt {
                 Objects.requireNonNull(stops, "a run works something out");
+            }
+
+            /** Where the arm it is worked out on is taken, or null where it is worked out
+             *  whichever arm is taken. */
+            Proposition takenWhere() {
+                return onAnArm == null ? null : onAnArm.reached();
             }
         }
 
@@ -387,9 +394,9 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
             worksOutOnEach.ifPresent(applications -> applications.forEach(one -> {
                 out.add(new WorkedOutAt(one.stops(), one.reached(), null));
                 one.arms().forEach(arm -> out.add(new WorkedOutAt(arm.stops(),
-                        one.reached(), arm.reached())));
+                        one.reached(), arm)));
             }));
-            onTheArms.forEach(arm -> out.add(new WorkedOutAt(arm.stops(), null, arm.reached())));
+            onTheArms.forEach(arm -> out.add(new WorkedOutAt(arm.stops(), null, arm)));
             return out;
         }
 
