@@ -1,0 +1,89 @@
+package souther.compiler;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.inputs.AStopShown;
+import souther.compiler.query.About;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A stop at a division is shown by an input that gets to the division and holds its divisor at
+ * nought, and by no other. What is shown is read off the finding itself, the division and the
+ * number each place holds, and not off how the report says it.
+ */
+class AStopAtADivisionByNoughtIsShownByAnInputThatGetsThereTest {
+
+    private static List<AStopShown> shownIn(String expression) {
+        Compilation compilation = ACompiledModel.measured("""
+                module demo
+
+                data Out = Int
+
+                behavior b : (e: Int, p: Int, q: Int) -> Out
+                let b (e, p, q) = Out { value = %s }
+                """.formatted(expression), Adequacy.Asked.fullReport());
+        List<AStopShown> out = new ArrayList<>();
+        for (Adequacy.Finding each : AdequacyReport.of(compilation).findings()) {
+            if (each.about() instanceof About.ARuleThatMayStopARun(var finding)) {
+                out.addAll(finding.shown());
+            }
+        }
+        return out;
+    }
+
+    private static final String QUOTIENT = "Rational.toInt(UP, e / p) >= 2";
+
+    @Test
+    void anInputThatHoldsTheDivisorAtNoughtShowsTheStop() {
+        List<AStopShown> shown = shownIn("if " + QUOTIENT + " then 1 else 2");
+        assertEquals(1, shown.size(), shown::toString);
+        assertEquals("division by p", shown.getFirst().operation());
+        assertEquals(1, shown.getFirst().at().stream()
+                .filter(each -> each.place().toString().equals("p")).count());
+        shown.getFirst().at().stream().filter(each -> each.place().toString().equals("p"))
+                .forEach(each -> assertEquals(0, each.number().signum()));
+    }
+
+    @Test
+    void aWayThatKeepsTheDivisorFromNoughtShowsNone() {
+        assertEquals(List.of(), shownIn("if p >= 1 then (if " + QUOTIENT + " then 1 else 2)"
+                + " else 3"));
+        assertEquals(List.of(), shownIn("if p <= -1 then (if " + QUOTIENT + " then 1 else 2)"
+                + " else 3"));
+    }
+
+    @Test
+    void aWayThatHoldsTheDivisorAtNoughtShowsTheStopAtIt() {
+        List<AStopShown> shown = shownIn("if p == 0 then (if " + QUOTIENT + " then 1 else 2)"
+                + " else 3");
+        assertTrue(shown.stream().anyMatch(each -> each.operation().equals("division by p")),
+                shown::toString);
+    }
+
+    /** The quotient is worked out on an arm no run takes: no run stops there, and none is shown. */
+    @Test
+    void aQuotientOnAnArmNoRunTakesShowsNone() {
+        assertEquals(List.of(), shownIn("if q <= 0 then (if (if q > 0 then Rational.toInt(UP, e / p)"
+                + " else 1) >= 2 then 1 else 2) else 3"));
+    }
+
+    /** The quotient is worked out beside the comparison where its arm is taken: a stop is shown
+     *  only if the divisor at nought is an input that takes the arm. */
+    @Test
+    void aQuotientOnAnArmSomeRunTakesShowsOnlyWhatTheWayToItAllows() {
+        List<AStopShown> shown = shownIn("if (if q > 0 then Rational.toInt(UP, e / p) else 1) >= 2"
+                + " then 1 else 2");
+        for (AStopShown each : shown) {
+            each.at().stream().filter(at -> at.place().toString().equals("q"))
+                    .forEach(at -> assertTrue(at.number().signum() > 0, shown::toString));
+        }
+    }
+}

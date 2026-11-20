@@ -106,9 +106,10 @@ final class StopAssessment {
     }
 
     /**
-     * That a run stops in {@link #operation}: the value of the input {@link #at}, a whole number at
-     * each place it is asked of, exists, gets to the operation and works it out past its ends.
-     * Made here and nowhere else, and only once all of that is shown.
+     * That a run stops at {@link #site}: the value of the input {@link #at}, a whole number at
+     * each place it is asked of, exists, gets to the site, and works it out past its ends or with
+     * its divisor at nought, as the site says. Made here and nowhere else, and only once all of
+     * that is shown.
      */
     static final class Shown {
 

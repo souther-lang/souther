@@ -2904,7 +2904,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         /**
          * That a run works out the quotient {@code division} by {@code divisor}, a form of the
          * input's numbers, after what it works out of its operands. It stops where the divisor is
-         * nought, which no row of a line is at ({@link QuotientByAValue.Read#answers}): so it is
+         * nought, which no row of a line is at ({@code QuotientByAValue.Read#answers}): so it is
          * told for where a run stops and is no operation a row gets past.
          */
         void divides(Core division, LinearForm<NumericTerm> divisor) {

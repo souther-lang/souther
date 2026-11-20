@@ -17,6 +17,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -75,6 +76,47 @@ class AProvedEdgeOfADatePartIsAPartSomeDateHasTest {
                 data Day = Date
                 """ + BODY);
         assertEquals(List.of("30", "29", "30 < Date.day(d) <= 31"), proved);
+    }
+
+    /** The days a run's date, a day on, is at: a February a day on is never the thirtieth. */
+    @Test
+    void aDayADateComesToOnceMovedIsProvedOnlyWhereSomeDateComesToIt() throws Exception {
+        String body = """
+
+                data Out = Int
+
+                behavior go : (d: Day) -> Out
+                let go (d) = Out { value = if Date.day(Date.addDays(1, d.value)) >= 31
+                                           then 1 else 2 }
+                """;
+        List<String> february = provedAt("""
+                module demo
+
+                data Day = Date
+                    invariant Date.month(value) == 2
+                """ + body);
+        assertFalse(february.contains("31") || february.contains("30"), february::toString);
+        List<String> anyDate = provedAt("""
+                module demo
+
+                data Day = Date
+                """ + body);
+        assertTrue(anyDate.containsAll(List.of("31", "30")), anyDate::toString);
+    }
+
+    /** What the report proves writable, by the number or run it is at. */
+    private static List<String> provedAt(String model) throws Exception {
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
+        JsonNode report = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        List<String> out = new ArrayList<>();
+        for (JsonNode each : report.findParents("knownWritable")) {
+            if (each.get("knownWritable").asBoolean() && each.toString().contains("it_is_proved")
+                    && each.path("against").isString()) {
+                out.add(each.path("against").asString());
+            }
+        }
+        return out;
     }
 
     /** The points proved writable on a day, as the report writes the day they are at. */

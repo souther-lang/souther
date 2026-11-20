@@ -22,14 +22,34 @@ class DatePartsLeftTest {
 
     @Test
     void aDayAFebruaryHasIsShown() {
-        assertTrue(february().someDateHas(TakenAs.DatePart.DAY, 1));
-        assertTrue(february().someDateHas(TakenAs.DatePart.DAY, 28));
-        assertTrue(february().someDateHas(TakenAs.DatePart.DAY, 29));
+        for (int day : new int[] {1, 28, 29}) {
+            assertTrue(DatePartsLeft.someDateHas(february(), TakenAs.DatePart.DAY, day, 0), "" + day);
+        }
     }
 
     @Test
     void aDayNoFebruaryHasIsNotShown() {
-        assertFalse(february().someDateHas(TakenAs.DatePart.DAY, 30));
-        assertFalse(february().someDateHas(TakenAs.DatePart.DAY, 31));
+        for (int day : new int[] {30, 31}) {
+            assertFalse(DatePartsLeft.someDateHas(february(), TakenAs.DatePart.DAY, day, 0), "" + day);
+        }
+    }
+
+    /** A date a day on from a February is the first of March or in February, so it is never the
+     *  thirty-first, and is the first of a March. */
+    @Test
+    void aDayAFebruaryComesToOnceMovedIsShownOnlyWhereOneDoes() {
+        assertFalse(DatePartsLeft.someDateHas(february(), TakenAs.DatePart.DAY, 31, 1));
+        assertFalse(DatePartsLeft.someDateHas(february(), TakenAs.DatePart.DAY, 30, 1));
+        assertTrue(DatePartsLeft.someDateHas(february(), TakenAs.DatePart.DAY, 29, 1));
+        assertTrue(DatePartsLeft.someDateHas(february(), TakenAs.DatePart.MONTH, 3, 1));
+        assertFalse(DatePartsLeft.someDateHas(february(), TakenAs.DatePart.MONTH, 4, 1));
+    }
+
+    @Test
+    void whereTheDatesAreLeftNoPartTheCalendarHasIsLeftOut() {
+        assertTrue(DatePartsLeft.someDateHas(null, TakenAs.DatePart.DAY, 31, 0));
+        assertTrue(DatePartsLeft.someDateHas(null, TakenAs.DatePart.DAY, 31, 1_000));
+        assertTrue(DatePartsLeft.someDateHas(null, TakenAs.DatePart.DAY, 31, -1_000));
+        assertFalse(DatePartsLeft.someDateHas(null, TakenAs.DatePart.DAY, 32, 0));
     }
 }

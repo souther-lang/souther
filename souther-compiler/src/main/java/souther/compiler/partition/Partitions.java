@@ -472,27 +472,41 @@ public final class Partitions {
         }
 
         /**
-         * Whether the part of a date {@code taken} is, at the number {@code line} falls at, is the
-         * part of a date the declarations leave: the operation's answer holds of every date, and a
-         * rule of the declarations on another part of the same date ({@code month == 2}) leaves
-         * dates that have no day of thirty. Where the declarations leave a class of dates, one
-         * of them having the part is what the calendar shows ({@link DatePartsLeft#someDateHas}),
-         * and a walk that shows none is no proof that there is none, so the edge is not known.
-         * Where they leave the date every date, nothing here changes the operation's answer.
+         * Whether the number {@code taken} is, at the number {@code line} falls at, is shown to be
+         * a number some date the declarations leave comes to. Said of a part of a date only: any
+         * other number is the operation's to say, and is no claim of the calendar.
+         *
+         * <p>Of a part of a date, true only where the calendar shows it ({@link
+         * DatePartsLeft#someDateHas}), with the date moved as the number moves it. What the
+         * declarations leave of the date is what they say of its parts ({@code month == 2}), or
+         * nothing; any other class of it is one nothing here reads, and a walk that shows no date
+         * is no proof that there is none. Neither is a proof, and both leave the edge not known.
          */
         private static boolean aDateHasThePartAt(NumericTerm.TakenOf taken, Border line,
                                                  Quantities reading) {
-            if (!(taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part))
-                    || taken.transformation().translation().offsetDays() != 0
-                    || !(reading.region().classAt(new NumericTerm.ValueOf(taken.position()))
-                            instanceof HeldClass.OfDays(DatePartsLeft left))) {
+            if (!(taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part))) {
                 return true;
             }
+            HeldClass held = reading.region().classAt(new NumericTerm.ValueOf(taken.position()));
+            if (held instanceof HeldClass.OfResidues || held instanceof HeldClass.NoValue) {
+                return false;
+            }
+            DatePartsLeft left = held instanceof HeldClass.OfDays(DatePartsLeft parts)
+                    ? parts : null;
             ExactRatio at = line.cut().cut().at().asANumber();
-            return at != null && at.isWhole()
+            // What the declarations hold the number to, of every rule they write on it, is a bound
+            // the number's edge lies within: a rule of two parts of the date shows in it where it
+            // shows nowhere in the class.
+            boolean within = switch (reading.projectionOfTheDeclarations(taken)) {
+                case NumericDomain.FormProjection.Within(NumericDomain.Bounds bounds) ->
+                        at != null && bounds.admits(at);
+                case NumericDomain.FormProjection.NothingIsLeft _ -> false;
+            };
+            return within && at.isWhole()
                     && at.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
                     && whole.bitLength() < Integer.SIZE
-                    && left.someDateHas(part, whole.intValueExact());
+                    && DatePartsLeft.someDateHas(left, part, whole.intValueExact(),
+                            taken.transformation().translation().offsetDays());
         }
 
         /**
