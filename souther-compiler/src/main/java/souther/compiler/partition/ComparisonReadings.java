@@ -1860,7 +1860,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
         }
         InputReads at = inside.getFirst();
         int part = written.arm();
-        return switch (written.choice()) {
+        return switch (Core.withoutStanding(written.choice())) {
             case Core.IfConstructed attempt -> numbering.said(onTheAttempt(attempt, part,
                     in.read(), at, numbering));
             case Core.If iff -> numbering.said(ReachingCuts.stating(Condition.of(iff.cond(), at,
