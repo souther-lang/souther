@@ -76,7 +76,7 @@ public final class CalendarMonths {
      */
     public static YearMonth counted(long count) {
         long year = Math.floorDiv(count - FIRST, A_YEAR);
-        return year < Year.MIN_VALUE || year > Year.MAX_VALUE ? null
+        return (year < Year.MIN_VALUE || year > Year.MAX_VALUE) ? null
                 : YearMonth.of((int) year, Math.floorMod(count - FIRST, A_YEAR) + FIRST);
     }
 

@@ -15981,7 +15981,7 @@ final class Pullback {
                                                        BigInteger[] within) {
         NumericTerm year = takenOfThePart(of, at, TakenAs.DatePart.YEAR);
         NumericTerm month = takenOfThePart(of, at, TakenAs.DatePart.MONTH);
-        return year == null || month == null ? null
+        return (year == null || month == null) ? null
                 : UndividedByARelation.IntOperation.overTheInput(
                         MonthCount.of(year, month, BigInteger.valueOf(more)), within[0],
                         within[1], List.of());
@@ -15992,8 +15992,8 @@ final class Pullback {
         ValueName.Stdlib taking = DefaultBoundOperationFacts.get().takesThePart(part);
         NumericTerm taken = taking == null ? null
                 : InputNumber.takenOf(taking, of, read.domain(), at, read.rules());
-        return taken instanceof NumericTerm.TakenOf it
-                && ValueTransformation.NONE.equals(it.transformation()) ? taken : null;
+        return (taken instanceof NumericTerm.TakenOf it
+                && ValueTransformation.NONE.equals(it.transformation())) ? taken : null;
     }
 
     /**

@@ -1508,8 +1508,8 @@ public final class GuardThresholds {
                 continue;
             }
             Proposition reached = reachedWhere(worked);
-            Reachability way = reached == null
-                    || (reached instanceof Proposition.Always(boolean holds) && holds) ? beforeIt
+            Reachability way = (reached == null
+                    || (reached instanceof Proposition.Always(boolean holds) && holds)) ? beforeIt
                     : each.statedAsACondition().isEmpty() ? null
                     : Reachability.of(new WayToTheBorder(each.wayToACase(aCase.apply(reached))),
                             read.quantities().region());

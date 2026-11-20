@@ -73,7 +73,7 @@ final class MonthCount {
                 return null;
             }
         }
-        return year != null && year.equals(month) ? year : null;
+        return (year != null && year.equals(month)) ? year : null;
     }
 
     /**
@@ -102,7 +102,7 @@ final class MonthCount {
                 return null;
             }
         }
-        return date != null && date.equals(day) ? date : null;
+        return (date != null && date.equals(day)) ? date : null;
     }
 
     /**
@@ -133,7 +133,7 @@ final class MonthCount {
         BigInteger least = counted != null ? countOf(days.least()) : dayBeforeItsMonth(days.least());
         BigInteger greatest = counted != null ? countOf(days.greatest())
                 : dayBeforeItsMonth(days.greatest());
-        return least == null || greatest == null ? null
+        return (least == null || greatest == null) ? null
                 : new FormRange(ExactRatio.of(least.add(shift)),
                         ExactRatio.of(greatest.add(shift)));
     }
@@ -157,8 +157,8 @@ final class MonthCount {
     /** {@code epochDay} where it is a day of the calendar, and null otherwise. */
     private static BigInteger dayOfTheCalendar(ExactRatio epochDay) {
         BigInteger day = wholeOf(epochDay);
-        return day == null || day.compareTo(BigInteger.valueOf(LocalDate.MIN.toEpochDay())) < 0
-                || day.compareTo(BigInteger.valueOf(LocalDate.MAX.toEpochDay())) > 0 ? null : day;
+        return (day == null || day.compareTo(BigInteger.valueOf(LocalDate.MIN.toEpochDay())) < 0
+                || day.compareTo(BigInteger.valueOf(LocalDate.MAX.toEpochDay())) > 0) ? null : day;
     }
 
     /** {@code number} where it is whole, and null otherwise. */
@@ -182,10 +182,10 @@ final class MonthCount {
                 || (least != null && greatest != null && least.compareTo(greatest) > 0)) {
             return null;
         }
-        BigInteger from = least == null || least.compareTo(first) <= 0 ? null
+        BigInteger from = (least == null || least.compareTo(first) <= 0) ? null
                 : BigInteger.valueOf(CalendarMonths.counted(least.longValueExact()).atDay(1)
                         .toEpochDay());
-        BigInteger to = greatest == null || greatest.compareTo(last) >= 0 ? null
+        BigInteger to = (greatest == null || greatest.compareTo(last) >= 0) ? null
                 : BigInteger.valueOf(CalendarMonths.counted(greatest.longValueExact())
                         .atEndOfMonth().toEpochDay());
         return new BigInteger[] {from, to};
@@ -222,7 +222,7 @@ final class MonthCount {
             return null;
         }
         LocalDate from = LocalDate.ofEpochDay(Math.max(earliest, first));
-        long least = from.getDayOfMonth() == 1 || earliest < first ? countOf(from)
+        long least = (from.getDayOfMonth() == 1 || earliest < first) ? countOf(from)
                 : countOf(from) + 1;
         long greatest = countOf(LocalDate.ofEpochDay(Math.min(latest, last)));
         return least > greatest ? null

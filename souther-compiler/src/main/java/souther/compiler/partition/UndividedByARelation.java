@@ -3042,7 +3042,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         for (Reachability.Reaching way : ways) {
             WhatItLeaves left = theBound.leftWhereRowsArrive(read, List.of(way),
                     ComparisonWitnesses.AtAComparison.NONE);
-            OfASide side = !left.rowsArrive() || !left.mayStopBefore().isEmpty() ? null
+            OfASide side = (!left.rowsArrive() || !left.mayStopBefore().isEmpty()) ? null
                     : left.outcomes().get(value);            if (side != null
                     && side.outcomes().failingAt(past) == EachWayItComesOut.Shown.REACHED) {
                 ABoundThatKeepsEveryRunGoing one = aBoundOn(value, bound, atMost, read);
