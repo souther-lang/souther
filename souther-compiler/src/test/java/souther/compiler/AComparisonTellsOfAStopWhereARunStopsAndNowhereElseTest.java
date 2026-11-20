@@ -220,9 +220,6 @@ class AComparisonTellsOfAStopWhereARunStopsAndNowhereElseTest {
         // an arm held aside beside another, whose operation its condition keeps within its type
         FORMS.put("anArmHeldAsideWhereItsConditionHolds",
                 "(if q > 7 then 1 else 2) + (if q > 5 then q - 1 else 3) >= q");
-        UNTOLD_THOUGH_NONE_STOPS.put("anArmHeldAsideWhereItsConditionHolds", "the condition of "
-                + "the arm narrows no range of q, so q - 1 is not shown to end no run, and what an "
-                + "arm works out is told by no reading of the part");
         // the same step, where the filter keeps no element the step stops at
         FORMS.put("lengthOfAStepOfAFilterKeepingNoEnd",
                 "List.length(List.map(x -> x + 1, List.filter(y -> y < 0, ds))) >= 2");

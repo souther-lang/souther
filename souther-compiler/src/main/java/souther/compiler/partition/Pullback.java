@@ -3251,6 +3251,11 @@ final class Pullback {
          *  ({@link #saidOnItsWays}). */
         private final Tallied.Table<Core, Boolean> saidOnItsWays =
                 said.table(IdentityHashMap::new);
+        /** The choices the rule read the comparison again on each arm of, each with whether what
+         *  the comparison works out on every arm was kept where a reader of where a run stops
+         *  finds it ({@link #saidOnItsArms}). */
+        private final Tallied.Table<Core, Boolean> saidOnItsArms =
+                said.table(IdentityHashMap::new);
         /** The expressions the rule read as the form of one operand of theirs, each with that
          *  operand ({@link AffineReading.WhatTheAnalysisAnswersFor#readByTheFormOf}). */
         private final Tallied.Table<Core, Core> readByTheFormOf =
@@ -3307,6 +3312,27 @@ final class Pullback {
          */
         boolean saidOnItsWays(Core held) {
             return Boolean.TRUE.equals(saidOnItsWays.get(held));
+        }
+
+        /** That the rule read the comparison again on one more arm of {@code choice}, and
+         *  {@code said} whether what it works out there was kept. One arm it was not kept on is
+         *  every arm's. */
+        void saysOnItsArms(Core choice, boolean said) {
+            Core bare = Core.withoutStanding(choice);
+            if (!said || saidOnItsArms.get(bare) == null) {
+                saidOnItsArms.put(bare, said);
+            }
+        }
+
+        /**
+         * Whether the rule read the comparison again on every arm of {@code held}, a choice, and
+         * kept what it works out on each where a reader of where a run stops finds it
+         * ({@link #saysOnItsArms}): every operation the comparison works out over the choice's
+         * value is then said on the arms, told or said to be untold. Not that any arm stops no
+         * run.
+         */
+        boolean saidOnItsArms(Core held) {
+            return Boolean.TRUE.equals(saidOnItsArms.get(held));
         }
 
         Core readByTheFormOf(Core held) {
@@ -3463,6 +3489,7 @@ final class Pullback {
             kept.onTheWays.view().forEach(onTheWays::put);
             // That a total's stop is said on its ways goes with what says it on each way.
             kept.saidOnItsWays.view().forEach(this::saysOnItsWays);
+            kept.saidOnItsArms.view().forEach(this::saysOnItsArms);
         }
     }
 
@@ -3674,7 +3701,8 @@ final class Pullback {
                 held -> theRule.dividendBesideTheRows(Core.withoutStanding(held)),
                 this::boundValueOf,
                 held -> theRule.landsInAMonth(Core.withoutStanding(held)),
-                held -> theRule.saidOnItsWays(Core.withoutStanding(held)));
+                held -> theRule.saidOnItsWays(Core.withoutStanding(held)),
+                held -> theRule.saidOnItsArms(Core.withoutStanding(held)));
     }
 
     /**
@@ -13620,9 +13648,14 @@ final class Pullback {
      * which a run taking another does not ({@link StopEvidence.OnAnArm}). Read off the comparison
      * as written, with the choice standing as the arm, by the rule that read it — the one this
      * arm concluded, or the one it is read under. Worked out only when asked.
+     *
+     * <p>Whether what the comparison works out on the arm was kept so is told of {@code choice},
+     * the choice the arm is one of ({@link Trial#saysOnItsArms}): kept where the reading holds a
+     * relation or a comparison read as cutting nothing to keep it by, which is where a reader of
+     * where a run stops finds it.
      */
-    private Derivation readOnAnArm(Derivation read, InputReads there) {
-        return readOnAnArm(read, there, null);
+    private Derivation readOnAnArm(Derivation read, InputReads there, Core choice) {
+        return readOnAnArm(read, there, null, choice);
     }
 
     /**
@@ -13630,8 +13663,10 @@ final class Pullback {
      * works out evaluating that answer is worked out before the comparison it is made of, and a
      * reading that stops at the choice (as an argument of an operation) does not tell it.
      */
-    private Derivation readOnAnArm(Derivation read, InputReads there, Denotation answered) {
+    private Derivation readOnAnArm(Derivation read, InputReads there, Denotation answered,
+                                   Core choice) {
         if (read == null || there == null || armsOfAComparison.isEmpty()) {
+            trial().saysOnItsArms(choice, false);
             return read;
         }
         StatedComparison stated = armsOfAComparison.newest();
@@ -13645,9 +13680,11 @@ final class Pullback {
                         answersOf(theRule)));
         OnThisArm arm = new OnThisArm(worksOut, evaluated,
                 restatingAQuotient.get() ? List.of() : whatDecidedTheArm());
-        for (ArmRead each : ArmRead.in(read)) {
+        List<ArmRead> keptBy = ArmRead.in(read);
+        for (ArmRead each : keptBy) {
             trial().readOnAnArm(each, arm);
         }
+        trial().saysOnItsArms(choice, !keptBy.isEmpty());
         if (answered != null) {
             trial().readOnAnArm(new ArmRead.OfTheAnswerOfAnArm(read), arm);
         }
@@ -13739,7 +13776,7 @@ final class Pullback {
                                 answersOf(trial()))),
                         iff, choiceAt.at(), condition, left,
                         arm -> readOnAnArm(again.apply(on -> on.taking(choice, arm, 1)),
-                                reads.taking(choice, arm, 1), arm))));
+                                reads.taking(choice, arm, 1), arm, choice))));
             }
             case Inside.AChoice(Denotation chosen) -> {
                 int arms = Choice.of(Core.withoutStanding(chosen.value())).arms().size();
@@ -13753,7 +13790,7 @@ final class Pullback {
                                 Core.withoutStanding(chosen.value()), chosen.at(), read,
                                 answersOf(trial()))),
                         arm -> readOnAnArm(again.apply(on -> on.taking(choice, arm, arms)),
-                                reads.taking(choice, arm, arms), arm)));
+                                reads.taking(choice, arm, arms), arm, choice)));
             }
             case Inside.ACall(Core call, ValueName.Behavior behavior, Denotation body) ->
                     new Derivation.ABehaviorsBody(behavior,
@@ -16575,14 +16612,14 @@ final class Pullback {
         Derivation byLeft = left.whole() == null ? null : byItsCases(left.whole(), at,
                 Optional.empty(),
                 side -> readOnAnArm(comparedCase(ASide.of(side), right, states, at),
-                        takenAs(left.whole(), side)));
+                        takenAs(left.whole(), side), left.whole().value()));
         if (byLeft != null) {
             return byLeft;
         }
         Derivation byRight = right.whole() == null ? null : byItsCases(right.whole(), at,
                 Optional.empty(),
                 side -> readOnAnArm(comparedCase(left, ASide.of(side), states, at),
-                        takenAs(right.whole(), side)));
+                        takenAs(right.whole(), side), right.whole().value()));
         if (byRight != null) {
             return byRight;
         }

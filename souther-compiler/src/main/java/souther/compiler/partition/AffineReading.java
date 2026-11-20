@@ -1433,9 +1433,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              * where the analysis that owns the stopped value answers for it, which is a sum of the
              * addends of the comparison over that value and no other held aside, asked once the
              * comparison has been read ({@link WhatLiesBesideTheStop#beside}), or is an operation
-             * over a bound value the derivation names, told then as the one it is. {@code node}
-             * works it out after the operations {@code after}. Anything else worked out over them
-             * is no owner's.
+             * over a bound value the derivation names, told then as the one it is. Or is over
+             * choices only whose every arm the rule read the comparison again on and kept what it
+             * works out there, which says this operation on each arm
+             * ({@link StoppedValues#saidOnItsArms}).
+             * {@code node} works it out after the operations {@code after}. Anything else worked
+             * out over them is no owner's.
              */
             private boolean stopsNoRowOrIsTheOwners(Core node, WhereAnOperatorAnswers where,
                                                     LinearForm<NumericTerm> form,
@@ -1460,6 +1463,14 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                         && stoppedAt.isAPlainStopOrABoundValue(over.get(0))) {
                     told.sumsOverTheStop.add(new SumOverTheStop(node, form, over.get(0),
                             held.least(), held.greatest(), after));
+                    return true;
+                }
+                // Over choices whose every arm the rule read the comparison again on and kept what
+                // it works out there, the operation is worked out on each arm with the arm's
+                // answer, and a run's stop in it is said on that arm, told or said to be untold. A
+                // row here is not shown to get past it.
+                if (over.stream().allMatch(stoppedAt::saidOnItsArms)) {
+                    told.toldOnlyForWhereARunStops();
                     return true;
                 }
                 return false;
@@ -3225,11 +3236,12 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                      BiFunction<Core, InputReads, Quantity.OfABinding> boundAs,
                                      Function<Core, UndividedByARelation.IntOperation>
                                              landsInAMonth,
-                                     Predicate<Core> saidOnItsWays) {
+                                     Predicate<Core> saidOnItsWays,
+                                     Predicate<Core> saidOnItsArms) {
 
         /** What no rule answers for: a comparison no rule read. */
         static final WhatTheAnalysisAnswersFor NOTHING = new WhatTheAnalysisAnswersFor(_ -> false,
-                _ -> null, _ -> null, (_, _) -> null, _ -> null, _ -> false);
+                _ -> null, _ -> null, (_, _) -> null, _ -> null, _ -> false, _ -> false);
 
         WhatTheAnalysisAnswersFor {
             Objects.requireNonNull(readAgain);
@@ -3238,17 +3250,18 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             Objects.requireNonNull(boundAs);
             Objects.requireNonNull(landsInAMonth);
             Objects.requireNonNull(saidOnItsWays);
+            Objects.requireNonNull(saidOnItsArms);
         }
 
         /**
          * What an analysis that reads the comparison again with each value of what
          * {@code readAgain} holds of answers for, and nothing else of its own, within this one:
-         * which totals the rule that read the comparison says the stop of on each way is the
-         * rule's, whichever analysis of it asks.
+         * what the rule that read the comparison says on the ways of a total and on the arms of a
+         * choice is the rule's, whichever analysis of it asks.
          */
         WhatTheAnalysisAnswersFor readingAgainOnly(Predicate<Core> readAgain) {
             return new WhatTheAnalysisAnswersFor(readAgain, _ -> null, _ -> null, (_, _) -> null,
-                    _ -> null, saidOnItsWays);
+                    _ -> null, saidOnItsWays, saidOnItsArms);
         }
     }
 
@@ -3318,6 +3331,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private static final class Held {
 
             private final NumericTerm atom;
+            private final Core expression;
             private final boolean aChoice;
             private final boolean theStop;
             private boolean met;
@@ -3328,6 +3342,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
 
             Held(NumericTerm atom, Core expression, boolean theStop) {
                 this.atom = atom;
+                this.expression = expression;
                 this.aChoice = Choice.of(Core.withoutStanding(expression)) != null;
                 this.theStop = theStop;
             }
@@ -3472,6 +3487,13 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          *  read whose value is a bound value. */
         StoppedValues heldAt(Core value) {
             return new StoppedValues(value, null, false, read, answersFor);
+        }
+
+        /** Whether the rule that read the comparison read it again on every arm of {@code held},
+         *  a choice, and kept what it works out on each
+         *  ({@link WhatTheAnalysisAnswersFor#saidOnItsArms}). */
+        boolean saidOnItsArms(Held held) {
+            return answersFor.saidOnItsArms().test(held.expression);
         }
 
         /** Whether {@code held} is the stopped expression or a bound value the derivation names,
