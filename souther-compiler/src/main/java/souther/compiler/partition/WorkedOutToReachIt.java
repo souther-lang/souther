@@ -9,7 +9,6 @@ import souther.compiler.check.CallArguments;
 import souther.compiler.check.CalledBody;
 import souther.compiler.check.Choice;
 import souther.compiler.check.ClausesInOrder;
-import souther.compiler.check.Comparison;
 import souther.compiler.check.DeclarationMeaning;
 import souther.compiler.check.DeclarationNewtypes;
 import souther.compiler.check.DeclaredBounds;
@@ -36,12 +35,14 @@ import souther.compiler.inputs.TermPath;
 import souther.compiler.inputs.ValuesAt;
 import souther.compiler.inputs.ValuesHeld;
 import souther.compiler.inputs.WrittenOutElements;
+import souther.compiler.meaning.DecisionAtom;
 import souther.compiler.meaning.Proposition;
+import souther.compiler.meaning.Relation;
+import souther.compiler.numeric.ExactAnswer;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
-import souther.compiler.semantics.ConditionJoin;
 import souther.compiler.semantics.ResultBound;
 import souther.compiler.semantics.ResultRange;
 import souther.compiler.semantics.WhereAnOperatorAnswers;
@@ -843,9 +844,9 @@ final class WorkedOutToReachIt {
      * the elements of another container a test holds of
      * ({@link BoundOperationFacts#keepsWhereItHolds}), as the library says it does:
      * an element kept is one of that container's, standing where its elements stand
-     * ({@link InputReads#elementAt}), and one the test held of ({@link #heldByTheTest}). Null where
-     * the container keeps by no test, the test is no closure of one value, or its elements stand at
-     * no place.
+     * ({@link InputReads#elementAt}), and one of which what the test states holds
+     * ({@link WhatConditionsState#truth}, {@link #heldByWhatItStates}). Null where the container
+     * keeps by no test, the test is no closure of one value, or its elements stand at no place.
      */
     private Function<ElementProjection, FormRange> keptByATest(InputReads where, BindingId element,
                                                                Core container) {
@@ -862,44 +863,57 @@ final class WorkedOutToReachIt {
                 || !(where.elementAt(element, newtypes) instanceof ValuesAt.At(TermPath at))) {
             return null;
         }
-        BindingId tested = test.params().getFirst().binding();
-        return place -> heldByTheTest(rangeOfAPlace(place.from(at), ArmsTaken.NONE), place,
-                test.body(), tested, where);
+        // What the test states of the element it is handed, which is of the place the elements
+        // of the container it walks stand at.
+        Proposition stated = WhatConditionsState.of(read).truth(test.body(), where, read)
+                .proposition();
+        return place -> {
+            TermPath kept = place.from(at);
+            return heldByWhatItStates(rangeOfAPlace(kept, ArmsTaken.NONE),
+                    new NumericTerm.ValueOf(kept), stated);
+        };
     }
 
     /**
-     * {@code range}, the numbers the path {@code place} of a value comes to, held to what
-     * {@code test} holding of that value, handed on {@code tested}, says of the path: each
-     * comparison of the path with a number written down, and both sides of {@code &&}. As it is
-     * where the test says nothing such of it; null where no number of it meets the test.
+     * {@code range}, the numbers {@code term} comes to, held to what {@code stated} holding says
+     * of it alone: each relation of a number times it against a number, and every part of
+     * statements held together. As it is where the statement says nothing such of it, and null
+     * where no number of it meets the statement.
      */
-    private FormRange heldByTheTest(FormRange range, ElementProjection place, Core test,
-                                    BindingId tested, InputReads at) {
-        if (range == null || !(Core.withoutStanding(test) instanceof Core.Binary binary)) {
-            return range;
+    private static FormRange heldByWhatItStates(FormRange range, NumericTerm term,
+                                                Proposition stated) {
+        if (range == null) {
+            return null;
         }
-        // Both sides hold of a value kept where the operator joins them so; a side of any other
-        // join holds of some kept values and not of others, and says nothing of every one.
-        if (ConditionJoin.of(binary.op()).orElse(null) == ConditionJoin.BOTH) {
-            return heldByTheTest(heldByTheTest(range, place, binary.left(), tested, at), place,
-                    binary.right(), tested, at);
-        }
-        if (!(Comparison.of(binary).orElse(null) instanceof Comparison compared)) {
-            return range;
-        }
-        DeclarationNewtypes newtypes = read.rules().newtypes();
-        Rel rel = compared.claim().statedRelation();
-        if (place.equals(ElementProjection.read(compared.left(), tested, Map.of(), newtypes))
-                && at.folded(compared.right(), read.rules().symbols(), newtypes).orElse(null)
-                        instanceof Long number) {
-            return range.heldTo(rel, ExactRatio.of(number));
-        }
-        if (place.equals(ElementProjection.read(compared.right(), tested, Map.of(), newtypes))
-                && at.folded(compared.left(), read.rules().symbols(), newtypes).orElse(null)
-                        instanceof Long number) {
-            return range.heldTo(rel.turned(), ExactRatio.of(number));
-        }
-        return range;
+        return switch (stated) {
+            case Proposition.All(var parts, var _, var _) -> {
+                FormRange held = range;
+                for (Proposition part : parts) {
+                    held = heldByWhatItStates(held, term, part);
+                    if (held == null) {
+                        yield null;
+                    }
+                }
+                yield held;
+            }
+            case Proposition.Compared(Relation.Affine affine, boolean holds, var _, var _)
+                    // A relation of one number of the input, weighed against nought.
+                    when affine.form().coefs().size() == 1
+                    && affine.form().coefs().keySet().iterator().next()
+                            instanceof DecisionAtom.OfTheInput(NumericTerm weighed, var _)
+                    && weighed.equals(term) -> {
+                // weight * term + constant against nought, which is term against what the
+                // constant comes to over the weight: a relation faces one way, so the weight of
+                // its one term is above nought.
+                ExactRatio weight = affine.form().coefs().values().iterator().next();
+                Rel met = holds ? affine.proposition() : affine.proposition().denied();
+                yield affine.form().constant().negated().dividedBy(weight)
+                        instanceof ExactAnswer.Held<ExactRatio>(ExactRatio level)
+                        ? range.heldTo(met, level)
+                        : range;
+            }
+            default -> range;
+        };
     }
 
     /** The numbers {@code place} holds on the runs that entered {@code arms}, held to where the
