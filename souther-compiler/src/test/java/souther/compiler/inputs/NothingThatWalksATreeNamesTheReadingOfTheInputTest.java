@@ -229,8 +229,14 @@ class NothingThatWalksATreeNamesTheReadingOfTheInputTest {
         return out;
     }
 
-    /** Whether {@code of} keeps an environment, which an answer and a cursor both do. */
+    /** Whether {@code of} keeps an environment, which an answer and a cursor both do, and the
+     *  environment itself does not: it is the one they keep. */
     private static boolean keepsAnEnvironment(ClassModel of) {
+        // What the environment keeps of itself, the readings a step from it made, is itself, and
+        // what it names is asked of it on its own.
+        if (of.thisClass().asInternalName().equals(ENVIRONMENT)) {
+            return false;
+        }
         for (FieldModel field : of.fields()) {
             if (field.fieldType().stringValue().equals("L" + ENVIRONMENT + ";")
                     || signatureOf(field).contains(ENVIRONMENT)) {
