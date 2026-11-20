@@ -83,13 +83,16 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
             let f (p) = Date.addDays(0 - 1, p.birthday) > Date("2000-01-01")
             """;
 
+    /** A date is a value of the input a stop is shown at: the first day there is, which the day
+     *  before is past, so the bound is as far out as it can be. */
     @Test
     void aDateMovedPastTheFirstDayIsKeptFromByALowerBoundOnTheField() {
         String report = report(A_DAY_BACK.formatted(""));
 
-        assertEquals(1, suggested(report).size(), report);
-        assertTrue(suggested(report).getFirst().startsWith(
-                "· declaring `invariant birthday >= Date(\"-999999999-01-02\")` on P"), report);
+        assertEquals(List.of("· declaring `invariant birthday >= Date(\"-999999999-01-02\")` on P"
+                + " keeps every run from stopping there; a bound one step further out lets in a run"
+                + " that stops there, and the value to declare is the one the domain has"),
+                suggested(report), report);
     }
 
     @Test

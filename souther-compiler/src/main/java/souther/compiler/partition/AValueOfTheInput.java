@@ -38,9 +38,10 @@ final class AValueOfTheInput {
 
     /**
      * Whether a value of the input {@code read} reads exists holding any whole number at each of
-     * {@code places}: every position of the input is of a type that states nothing of its values,
-     * and each place is a whole number wearing no name, reached from a parameter through fields
-     * alone.
+     * {@code places}, within the ends of what the place holds: every position of the input is of
+     * a type that states nothing of its values, and each place is a whole number or a date
+     * wearing no name, reached from a parameter through fields alone. A date is the count of its
+     * days, and every count between the calendar's first day and its last is a day there is.
      */
     static boolean holdsAnyWholeNumbersAt(InputReading read, Collection<TermPath> places) {
         InputDomain domain = read.domain();
@@ -59,7 +60,7 @@ final class AValueOfTheInput {
             TypeView view = viewOf(at.type(), rules);
             if (!view.wrappers().isEmpty()
                     || !(view.shape() instanceof Shape.Scalar(Type.Prim prim))
-                    || prim != Type.Prim.INT) {
+                    || (prim != Type.Prim.INT && prim != Type.Prim.DATE)) {
                 return false;
             }
         }
