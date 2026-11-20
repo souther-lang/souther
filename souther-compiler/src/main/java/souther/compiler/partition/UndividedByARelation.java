@@ -2523,7 +2523,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private record SidesAlongTheWay(List<WhatARelationLeavesUndivided.Term<FilingCoordinate>> terms,
                                     WhatARelationLeavesUndivided.Independence independent,
                                     WhatARelationLeavesUndivided.Operations operations,
-                                    List<OnAWay> conditions) {}
+                                    List<OnAWay> conditions,
+                                    List<TakenConstraint> narrowing) {}
 
     /** {@link SidesAlongTheWay} of the way stating {@code written} over {@code region}. */
     private SidesAlongTheWay sidesAlongTheWay(List<OnAWay> written, DemandReading.Answered past,
@@ -2540,7 +2541,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 operationsOverTheSides(read, entire.conditions(), true,
                         totalsWrittenByOneElement(terms),
                         numbers -> heldApart(numbers, read, theWay)),
-                entire.conditions());
+                entire.conditions(), entire.narrowing());
     }
 
     /** What this leaves its places over what the declarations leave. */
@@ -4286,8 +4287,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         }
         // A side nothing above showed anything of, where the way ties the two sides, is asked of
         // the rows of the way: no side runs apart from the other there.
-        SidesAlongTheWay ofTheWay = !offItsLine && sides.size() == 2
+        SidesAlongTheWay ofTheWay = !offItsLine && sides.size() == 2 && way.heldWhole()
                 && !standApart(0, 1, independent)
+                && IntStream.range(0, sides.size()).anyMatch(at -> leaves.get(at) == null
+                        && !out.containsAll(sides.get(at).madeOf()))
                 ? sidesAlongTheWay(way.written(), way.past(), way.region(), read, sources,
                         carriers)
                 : null;
@@ -11051,6 +11054,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             TakenConstraint.Affine affine = each.affine();
             if (affine == null || each.elementsOf() != null || each.bySome() != null
                     || each.byEvery() != null) {
+                return null;
+            }
+            stated.add(new TwoIntegerConstraints.Constraint<>(affine.form(), affine.rel()));
+        }
+        // What the operators before the relation narrow, and the relation's own working: a row
+        // gets to the comparison only where each holds, so they are rows' restrictions as much
+        // as what the way states. What the region carries of them is here whole or the rows are
+        // not claimed: one that is not a form of the two numbers alone (one that names a third, or
+        // is no line) is a restriction the constraints cannot hold.
+        for (TakenConstraint each : along.narrowing()) {
+            if (!(each instanceof TakenConstraint.Affine affine)) {
                 return null;
             }
             stated.add(new TwoIntegerConstraints.Constraint<>(affine.form(), affine.rel()));

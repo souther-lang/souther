@@ -53,7 +53,7 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
         // steps, and one that rounds in threes.
         FORMS.put("aLineAndTheDoubleOfAnother", new String[] {"e >= p", "e < 2 * p"});
         FORMS.put("aSumHeldBelowAndTheOrder", new String[] {"e + p <= 12", "e < p"});
-        FORMS.put("aTripleAndASum", new String[] {"e >= 3 * p - 8", "e + p < 9"});
+        FORMS.put("aTripleOfAnother", new String[] {"e >= p", "e < 3 * p"});
     }
 
     private static final Pattern CLASS = Pattern.compile(
@@ -91,9 +91,9 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
                 heldToTheProgram(names.get(at), axis, classesOf(behavior, axis), outcomes);
             }
         }
-        // That the report reads a form is what holds it to the program: more than one is read, so
-        // the agreement is not agreement on none.
-        assertTrue(read.size() >= 2, "forms read: " + read);
+        // That the report reads a form is what holds it to the program, so each of these is read:
+        // a form no longer read is a reading lost, and agreement on none is none.
+        assertEquals(new TreeSet<>(names), read, "forms read");
     }
 
     /** {@code e} and {@code p} of the form, as the fields of the input. */

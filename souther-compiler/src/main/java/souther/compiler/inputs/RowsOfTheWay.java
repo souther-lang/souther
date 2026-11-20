@@ -16,6 +16,12 @@ import java.util.List;
  * function asking which values have a row beside them takes this and cannot be handed constraints
  * that only bound the rows from outside.
  *
+ * <p>The rows of the model: where a number comes to one its representation does not hold on the
+ * way, which stops a run, is no line the model draws, and is told by the reading that tells the
+ * stops of a way ({@code gotPastAtTheEnds}) and not kept off the rows here. What does restrict
+ * them, the statements of the way and what the operators before it narrow beside the ends, is
+ * every constraint given.
+ *
  * <p>Made only by {@link #of}, which asks for the facts the claim rests on as
  * {@link Premises}, one named fact for each, so that a reader making one has to state every one
  * and cannot leave one out. It cannot check them: what a reader shows of a way and its
