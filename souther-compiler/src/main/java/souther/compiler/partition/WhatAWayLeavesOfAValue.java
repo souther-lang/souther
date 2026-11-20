@@ -5,6 +5,8 @@ import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
@@ -31,6 +33,10 @@ import java.util.Optional;
  * run is not shown to stop in, and is left untold.
  */
 final class WhatAWayLeavesOfAValue {
+
+    /** Nought alone. */
+    private static final NumericDomain.Bounds NOUGHT = new NumericDomain.Bounds(
+            Endpoint.inclusive(Count.of(0)), Endpoint.inclusive(Count.of(0)));
 
     private final InputReading read;
     private final SearchRegion region;
@@ -106,6 +112,18 @@ final class WhatAWayLeavesOfAValue {
      */
     boolean noRowTakesItPastItsEnds(UndividedByARelation.IntOperation operation) {
         return UndividedByARelation.noRowTakesItPastItsEnds(operation, read, List.of(region));
+    }
+
+    /**
+     * Whether no run along the way has {@code divisor}, a form of the input's numbers, at nought:
+     * the region the way leaves holds none of its values there. False where that is not shown.
+     */
+    boolean keepsAwayFromNought(LinearForm<NumericTerm> divisor) {
+        return switch (region.projectionOf(divisor)) {
+            case NumericDomain.FormProjection.NothingIsLeft _ -> true;
+            case NumericDomain.FormProjection.Within within ->
+                    !within.bounds().meet(NOUGHT).holdsAValue();
+        };
     }
 
     /** What {@code origin} comes to along the way; none where no run along it works it out. */

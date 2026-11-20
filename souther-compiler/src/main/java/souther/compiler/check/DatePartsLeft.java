@@ -1,5 +1,7 @@
 package souther.compiler.check;
 
+import souther.compiler.numeric.Count;
+import souther.compiler.numeric.Endpoint;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.semantics.TakenAs;
@@ -126,6 +128,17 @@ public record DatePartsLeft(Map<TakenAs.DatePart, NumericDomain.Bounds> byPart,
             }
         }
         return true;
+    }
+
+    /**
+     * Whether a date these leave has {@code part} at {@code value}, shown by a day the walk met.
+     * A walk that stopped with days unwalked shows none and says nothing of whether there are
+     * some, so false here is that this shows no such date and never that there is none.
+     */
+    public boolean someDateHas(TakenAs.DatePart part, int value) {
+        Endpoint at = Endpoint.inclusive(Count.of(value));
+        return !and(new DatePartsLeft(Map.of(part, new NumericDomain.Bounds(at, at))))
+                .walk(null, null, true, 1).days().isEmpty();
     }
 
     /** Whether the date {@code day} counts to has parts these leave. */

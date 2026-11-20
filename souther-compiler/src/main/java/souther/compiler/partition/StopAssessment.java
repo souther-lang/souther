@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import souther.compiler.abort.AbortKind;
 import souther.compiler.inputs.AStopNotShown;
 import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.InputReading;
@@ -55,23 +56,53 @@ final class StopAssessment {
         /** No row arrives where it is worked out. */
         NOT_WORKED_OUT,
         /** Every row the way leaves keeps it within its ends. */
-        WITHIN_ITS_ENDS
+        WITHIN_ITS_ENDS,
+        /** Every row the way leaves keeps the divisor away from nought. */
+        DIVISOR_AWAY_FROM_NOUGHT
     }
 
-    /** What is shown of one operation, or of what a run works out where no operation is told. */
+    /**
+     * Where a run may stop in working something out: an operation whose answer may lie past the
+     * ends of its type, or a quotient whose divisor may be nought. The first stops where the
+     * answer is outside its ends and the second where an operand is outside what the operation is
+     * defined on, so neither is said as the other.
+     */
+    sealed interface Site {
+
+        /** What is worked out there, as a finding writes it. */
+        String written();
+
+        /** An operation of whole numbers, and where its answer stops being one. */
+        record PastItsEnds(UndividedByARelation.IntOperation operation) implements Site {
+
+            @Override
+            public String written() {
+                return UndividedByARelation.written(operation.form());
+            }
+        }
+
+        /** A quotient, and where its divisor is nought ({@link AbortKind#DIVISION_BY_ZERO}). */
+        record ByNought(UndividedByARelation.Division division) implements Site {
+
+            @Override
+            public String written() {
+                return "division by " + UndividedByARelation.written(division.divisor());
+            }
+        }
+    }
+
+    /** What is shown of one place a run may stop, or of what a run works out where no site is
+     *  told. */
     sealed interface Judgement {
 
-        /** No run stops in {@code operation}. */
-        record Safe(UndividedByARelation.IntOperation operation, WhyNone why)
-                implements Judgement {}
+        /** No run stops at {@code site}. */
+        record Safe(Site site, WhyNone why) implements Judgement {}
 
-        /** Some run stops in the operation {@code shown} names. */
+        /** Some run stops at the site {@code shown} names. */
         record Stops(Shown shown) implements Judgement {}
 
-        /** Neither is shown of {@code operation}, or, where that is null, of a stop no operation
-         *  names. */
-        record Unresolved(UndividedByARelation.IntOperation operation, WhyAStopIsNotShown why)
-                implements Judgement {}
+        /** Neither is shown of {@code site}, or, where that is null, of a stop no site names. */
+        record Unresolved(Site site, WhyAStopIsNotShown why) implements Judgement {}
     }
 
     /**
@@ -81,17 +112,16 @@ final class StopAssessment {
      */
     static final class Shown {
 
-        private final UndividedByARelation.IntOperation operation;
+        private final Site site;
         private final Map<NumericTerm, ExactRatio> at;
 
-        private Shown(UndividedByARelation.IntOperation operation,
-                      Map<NumericTerm, ExactRatio> at) {
-            this.operation = operation;
+        private Shown(Site site, Map<NumericTerm, ExactRatio> at) {
+            this.site = site;
             this.at = Map.copyOf(at);
         }
 
-        UndividedByARelation.IntOperation operation() {
-            return operation;
+        Site site() {
+            return site;
         }
 
         Map<NumericTerm, ExactRatio> at() {
@@ -100,7 +130,7 @@ final class StopAssessment {
 
         @Override
         public String toString() {
-            return operation.form() + " at " + at;
+            return site.written() + " at " + at;
         }
     }
 
@@ -141,14 +171,24 @@ final class StopAssessment {
             }
             List<UndividedByARelation.IntOperation> operations = working.operations();
             for (int at = 0; at < operations.size(); at++) {
-                UndividedByARelation.IntOperation operation = operations.get(at);
+                Site site = new Site.PastItsEnds(operations.get(at));
                 if (left == null) {
-                    out.add(new Judgement.Safe(operation, WhyNone.NOT_WORKED_OUT));
-                } else if (left.keepsWithinItsType(operation)
-                        || left.noRowTakesItPastItsEnds(operation)) {
-                    out.add(new Judgement.Safe(operation, WhyNone.WITHIN_ITS_ENDS));
+                    out.add(new Judgement.Safe(site, WhyNone.NOT_WORKED_OUT));
+                } else if (left.keepsWithinItsType(operations.get(at))
+                        || left.noRowTakesItPastItsEnds(operations.get(at))) {
+                    out.add(new Judgement.Safe(site, WhyNone.WITHIN_ITS_ENDS));
                 } else {
-                    out.add(aStopIn(each, place, at, read));
+                    out.add(aStopIn(each, place, site, read));
+                }
+            }
+            for (UndividedByARelation.Division division : working.divisions()) {
+                Site site = new Site.ByNought(division);
+                if (left == null) {
+                    out.add(new Judgement.Safe(site, WhyNone.NOT_WORKED_OUT));
+                } else if (left.keepsAwayFromNought(division.divisor())) {
+                    out.add(new Judgement.Safe(site, WhyNone.DIVISOR_AWAY_FROM_NOUGHT));
+                } else {
+                    out.add(aStopIn(each, place, site, read));
                 }
             }
         }
@@ -173,8 +213,7 @@ final class StopAssessment {
                         at.add(new AStopShown.NumberAt(place.path(), held.floor().orNull()));
                     }
                 }
-                out.add(new AStopShown(
-                        UndividedByARelation.written(shown.operation().form()), at));
+                out.add(new AStopShown(shown.site().written(), at));
             }
         }
         return out;
@@ -185,35 +224,37 @@ final class StopAssessment {
     static List<AStopNotShown> stopsNotShown(List<Judgement> judged) {
         List<AStopNotShown> out = new ArrayList<>();
         for (Judgement each : judged) {
-            if (each instanceof Judgement.Unresolved(var operation, WhyAStopIsNotShown why)) {
-                out.add(new AStopNotShown(Optional.ofNullable(operation)
-                        .map(it -> UndividedByARelation.written(it.form())), why));
+            if (each instanceof Judgement.Unresolved(var site, WhyAStopIsNotShown why)) {
+                out.add(new AStopNotShown(Optional.ofNullable(site).map(Site::written), why));
             }
         }
         return out;
     }
 
     /**
-     * That a run stops in the operation at {@code at} of what {@code place} works out, or why that
-     * is not shown. Where it is worked out, how the way gets there and what is worked out before it
-     * are asked first, and a value is looked for only where all of them are answered.
+     * That a run stops at {@code site}, one of what {@code place} works out, or why that is not
+     * shown. Where it is worked out, how the way gets there and what is worked out before it are
+     * asked first, and a value is looked for only where all of them are answered.
      */
-    private static Judgement aStopIn(ComparisonReadings.Reading each, Place place, int at,
+    private static Judgement aStopIn(ComparisonReadings.Reading each, Place place, Site site,
                                      InputReading read) {
         UndividedByARelation.Working working = place.worked().stops().operations();
-        UndividedByARelation.IntOperation operation = working.operations().get(at);
         if (place.worked().madeWhere() != null) {
-            return new Judgement.Unresolved(operation, WhyAStopIsNotShown.ON_AN_APPLICATION);
+            return new Judgement.Unresolved(site, WhyAStopIsNotShown.ON_AN_APPLICATION);
         }
         if (place.worked().onAnArm() != null) {
-            return new Judgement.Unresolved(operation, WhyAStopIsNotShown.ON_AN_ARM);
+            return new Judgement.Unresolved(site, WhyAStopIsNotShown.ON_AN_ARM);
         }
-        if (!working.exact() || working.aStopUntold() || !working.onEveryRun()) {
-            return new Judgement.Unresolved(operation, WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD);
+        // A working is not on every run where the expression the comparison was stopped at may
+        // end a run before the operations it tells. A quotient is that expression or lies in it,
+        // is worked out wherever the comparison is, and is asked of what is worked out before it
+        // below, so only an operation is asked of the rest being worked out on every run.
+        if (!working.exact() || working.aStopUntold()
+                || (site instanceof Site.PastItsEnds && !working.onEveryRun())) {
+            return new Judgement.Unresolved(site, WhyAStopIsNotShown.NOT_EVERY_OPERATION_TOLD);
         }
         if (!each.nothingBeforeItEndsARun()) {
-            return new Judgement.Unresolved(operation,
-                    WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
+            return new Judgement.Unresolved(site, WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP);
         }
         List<TakenConstraint.Affine> way = new ArrayList<>();
         for (OnTheWay entry : place.way()) {
@@ -222,12 +263,14 @@ final class StopAssessment {
                 way.add(affine);
             } else if (!(entry instanceof OnTheWay.Settled(var _, var _, boolean thisWay)
                     && thisWay)) {
-                return new Judgement.Unresolved(operation, WhyAStopIsNotShown.A_CONDITION_NOT_READ);
+                return new Judgement.Unresolved(site, WhyAStopIsNotShown.A_CONDITION_NOT_READ);
             }
         }
-        LinearForm<NumericTerm> form = operation.overTheInput();
-        // Every other operation a run may work out before this one: those this one is not worked
-        // out before. One worked out of this one comes after it, and is not got to where it stops.
+        // Everything else a run may work out before this: what this is not worked out before.
+        // One worked out of this comes after it, and is not got to where it stops. Where this is a
+        // quotient, what is worked out after it is not told, so every operation is asked.
+        int at = site instanceof Site.PastItsEnds(var operation)
+                ? indexOf(working.operations(), operation) : -1;
         List<UndividedByARelation.IntOperation> others = new ArrayList<>();
         for (int other = 0; other < working.operations().size(); other++) {
             UndividedByARelation.IntOperation it = working.operations().get(other);
@@ -235,52 +278,84 @@ final class StopAssessment {
                 others.add(it);
             }
         }
+        List<UndividedByARelation.Division> dividing = new ArrayList<>();
+        for (UndividedByARelation.Division it : working.divisions()) {
+            if (!(site instanceof Site.ByNought(var division) && division == it)
+                    && !it.after().contains(at)) {
+                dividing.add(it);
+            }
+        }
         Set<NumericTerm> numbers = new LinkedHashSet<>();
         List<LinearForm<NumericTerm>> forms = new ArrayList<>();
-        forms.add(form);
+        forms.add(switch (site) {
+            case Site.PastItsEnds(var operation) -> operation.overTheInput();
+            case Site.ByNought(var division) -> division.divisor();
+        });
         others.forEach(it -> forms.add(it.overTheInput()));
+        dividing.forEach(it -> forms.add(it.divisor()));
         way.forEach(it -> forms.add(it.form()));
         Set<TermPath> places = new LinkedHashSet<>();
         for (LinearForm<NumericTerm> one : forms) {
             if (one == null) {
-                return new Judgement.Unresolved(operation, WhyAStopIsNotShown.NOT_OVER_THE_INPUT);
+                return new Judgement.Unresolved(site, WhyAStopIsNotShown.NOT_OVER_THE_INPUT);
             }
             for (NumericTerm term : one.coefs().keySet()) {
                 if (!(term instanceof NumericTerm.ValueOf(TermPath position))) {
-                    return new Judgement.Unresolved(operation, WhyAStopIsNotShown.NOT_OVER_THE_INPUT);
+                    return new Judgement.Unresolved(site, WhyAStopIsNotShown.NOT_OVER_THE_INPUT);
                 }
                 numbers.add(term);
                 places.add(position);
             }
         }
         if (!AValueOfTheInput.holdsAnyWholeNumbersAt(read, places)) {
-            return new Judgement.Unresolved(operation, WhyAStopIsNotShown.NO_VALUE_SHOWN);
+            return new Judgement.Unresolved(site, WhyAStopIsNotShown.NO_VALUE_SHOWN);
         }
         int[] left = {MOST_VALUES_TRIED};
-        Shown shown = aValueItStopsAt(operation, others, way, List.copyOf(numbers), read, left);
+        Before before = new Before(others, dividing, way);
+        Shown shown = aValueItStopsAt(site, before, List.copyOf(numbers), read, left);
         if (shown != null) {
             return new Judgement.Stops(shown);
         }
         // Where the values ran out with the figure, more may be left untried, and that is said.
-        return new Judgement.Unresolved(operation, left[0] <= 0
+        return new Judgement.Unresolved(site, left[0] <= 0
                 ? WhyAStopIsNotShown.NO_VALUE_FOUND_WITHIN_WHAT_IS_TRIED
                 : WhyAStopIsNotShown.NO_VALUE_FOUND);
     }
 
+    /** Where {@code operation} is among {@code operations}, by the object it is. */
+    private static int indexOf(List<UndividedByARelation.IntOperation> operations,
+                               UndividedByARelation.IntOperation operation) {
+        for (int at = 0; at < operations.size(); at++) {
+            if (operations.get(at) == operation) {
+                return at;
+            }
+        }
+        throw new IllegalArgumentException("an operation judged is one the working tells");
+    }
+
     /**
-     * A value of the input's {@code numbers} on the way, keeping {@code others} within their ends
-     * and taking {@code operation} past one of its own, or null where none of those tried is. Each
+     * What a run that stops at a site has got past before it: the conditions of the way, every
+     * operation within its ends and every quotient with its divisor away from nought.
+     */
+    private record Before(List<UndividedByARelation.IntOperation> operations,
+                          List<UndividedByARelation.Division> divisions,
+                          List<TakenConstraint.Affine> way) {}
+
+    /**
+     * A value of the input's {@code numbers} on the way, getting past what is worked out
+     * {@code before} and stopping at {@code site}, or null where none of those tried does. Each
      * number but one is tried at a few values — nought and one either side, the ends of its place,
      * and on both sides of where a condition on the way of it alone turns — and the one left is
-     * put where it takes the operation just past an end. Each value tried spends one of
-     * {@code left}, and none is tried once it is spent.
+     * put where it takes the operation just past an end, or the divisor to nought. Each value
+     * tried spends one of {@code left}, and none is tried once it is spent.
      */
-    private static Shown aValueItStopsAt(UndividedByARelation.IntOperation operation,
-                                         List<UndividedByARelation.IntOperation> others,
-                                         List<TakenConstraint.Affine> way,
-                                         List<NumericTerm> numbers, InputReading read,
-                                         int[] left) {
-        LinearForm<NumericTerm> form = operation.overTheInput();
+    private static Shown aValueItStopsAt(Site site, Before before, List<NumericTerm> numbers,
+                                         InputReading read, int[] left) {
+        LinearForm<NumericTerm> form = switch (site) {
+            case Site.PastItsEnds(var operation) -> operation.overTheInput();
+            case Site.ByNought(var division) -> division.divisor();
+        };
+        List<TakenConstraint.Affine> way = before.way();
         Map<NumericTerm, List<ExactRatio>> tried = new LinkedHashMap<>();
         for (NumericTerm number : numbers) {
             tried.put(number, valuesToTry(number, way, read));
@@ -289,12 +364,15 @@ final class StopAssessment {
         // is a value on the way.
         if (form.coefs().isEmpty()) {
             return tryingEach(numbers, 0, new LinkedHashMap<>(), tried, left,
-                    values -> stopsAt(operation, others, way, values)
-                            ? new Shown(operation, values) : null);
+                    values -> stopsAt(site, before, values) ? new Shown(site, values) : null);
         }
         for (boolean above : new boolean[] {true, false}) {
-            BigInteger past = above ? operation.greatest().add(BigInteger.ONE)
-                    : operation.least().subtract(BigInteger.ONE);
+            BigInteger past = switch (site) {
+                case Site.PastItsEnds(var operation) -> above
+                        ? operation.greatest().add(BigInteger.ONE)
+                        : operation.least().subtract(BigInteger.ONE);
+                case Site.ByNought _ -> BigInteger.ZERO;
+            };
             for (NumericTerm free : form.coefs().keySet()) {
                 List<NumericTerm> rest = numbers.stream().filter(each -> !each.equals(free))
                         .toList();
@@ -306,7 +384,7 @@ final class StopAssessment {
                     }
                     Map<NumericTerm, ExactRatio> at = new LinkedHashMap<>(values);
                     at.put(free, put);
-                    return stopsAt(operation, others, way, at) ? new Shown(operation, at) : null;
+                    return stopsAt(site, before, at) ? new Shown(site, at) : null;
                 });
                 if (found != null || left[0] <= 0) {
                     return found;
@@ -370,28 +448,39 @@ final class StopAssessment {
     }
 
     /**
-     * Whether a run with the input's numbers at {@code at} gets past every condition of
-     * {@code way}, works every one of {@code others} out within its ends, and works
-     * {@code operation} out past one of its own: each worked out exactly, and none of it shown
+     * Whether a run with the input's numbers at {@code at} gets past what is worked out
+     * {@code before}, every condition of the way, every operation within its ends and every
+     * divisor not nought, and stops at {@code site}: each worked out exactly, and none of it shown
      * where the arithmetic cannot say.
      */
-    private static boolean stopsAt(UndividedByARelation.IntOperation operation,
-                                   List<UndividedByARelation.IntOperation> others,
-                                   List<TakenConstraint.Affine> way,
-                                   Map<NumericTerm, ExactRatio> at) {
-        for (TakenConstraint.Affine condition : way) {
+    private static boolean stopsAt(Site site, Before before, Map<NumericTerm, ExactRatio> at) {
+        for (TakenConstraint.Affine condition : before.way()) {
             if (!WholeValuesMeeting.holdsAt(condition, at)) {
                 return false;
             }
         }
-        for (UndividedByARelation.IntOperation other : others) {
+        for (UndividedByARelation.IntOperation other : before.operations()) {
             ExactRatio comes = WholeValuesMeeting.valueOf(other.overTheInput(), at);
             if (comes == null || !withinItsEnds(comes, other)) {
                 return false;
             }
         }
-        ExactRatio comes = WholeValuesMeeting.valueOf(operation.overTheInput(), at);
-        return comes != null && !withinItsEnds(comes, operation);
+        for (UndividedByARelation.Division other : before.divisions()) {
+            ExactRatio divisor = WholeValuesMeeting.valueOf(other.divisor(), at);
+            if (divisor == null || divisor.signum() == 0) {
+                return false;
+            }
+        }
+        return switch (site) {
+            case Site.PastItsEnds(var operation) -> {
+                ExactRatio comes = WholeValuesMeeting.valueOf(operation.overTheInput(), at);
+                yield comes != null && !withinItsEnds(comes, operation);
+            }
+            case Site.ByNought(var division) -> {
+                ExactRatio divisor = WholeValuesMeeting.valueOf(division.divisor(), at);
+                yield divisor != null && divisor.signum() == 0;
+            }
+        };
     }
 
     private static boolean withinItsEnds(ExactRatio value,

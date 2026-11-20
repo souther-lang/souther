@@ -15,11 +15,13 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -61,18 +63,59 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
                 "Rational.toInt(UP, e / p) == 2"});
     }
 
+    /** The least {@code e} of the forms that run below nought. */
+    private static final int BELOW = -12;
+
+    /** Forms that run {@code e} from {@link #BELOW}: a quotient rounded toward nought, held at a
+     *  whole number below nought, which the way's own line does not cut. */
+    private static final Map<String, String[]> FORMS_BELOW_NOUGHT = new LinkedHashMap<>();
+
+    static {
+        FORMS_BELOW_NOUGHT.put("aQuotientDownAtMinusOne", new String[] {"e >= -100",
+                "Rational.toInt(DOWN, e / p) == -1"});
+        FORMS_BELOW_NOUGHT.put("aQuotientUpAtMinusTwo", new String[] {"e >= -100",
+                "Rational.toInt(UP, e / p) == -2"});
+        FORMS_BELOW_NOUGHT.put("aQuotientDownAtNought", new String[] {"e >= -100",
+                "Rational.toInt(DOWN, e / p) == 0"});
+        FORMS_BELOW_NOUGHT.put("aQuotientUpAtMinusOne", new String[] {"e >= -100",
+                "Rational.toInt(UP, e / p) == -1"});
+    }
+
     private static final Pattern CLASS = Pattern.compile(
             "^[^:]+: (-?\\d+) (<=|<) x (<=|<) (-?\\d+)$");
 
+    /** A class with no greatest value, {@code 3 <= x}, and one with no least, {@code x < 3}. */
+    private static final Pattern OPEN_ABOVE = Pattern.compile("^[^:]+: (-?\\d+) (<=|<) x$");
+    private static final Pattern OPEN_BELOW = Pattern.compile("^[^:]+: x (<=|<) (-?\\d+)$");
+
     @Test
     void whatTheReportReadsOfTwoTiedNumbersIsWhatTheProgramRunSays() throws Exception {
-        List<String> names = new ArrayList<>(FORMS.keySet());
+        heldToTheProgram(FORMS, 0, Set.of());
+    }
+
+    /**
+     * Where {@code e} runs below nought a quotient's two lines are sums of the two numbers, and a
+     * sum cut at two places is a value cut at several: its positions have no classes of their own
+     * and are owed a weight each, which the report says. So no class of {@code e} says anything
+     * of the quotient, and the report is held to saying the weight.
+     */
+    @Test
+    void whatTheReportReadsOfAQuotientAtAWholeNumberBelowNoughtIsWhatTheProgramRunSays()
+            throws Exception {
+        heldToTheProgram(FORMS_BELOW_NOUGHT, BELOW,
+                Set.of("aQuotientDownAtMinusOne", "aQuotientUpAtMinusTwo"));
+    }
+
+    private static void heldToTheProgram(Map<String, String[]> forms, int eLow,
+                                         Set<String> weighedForms) throws Exception {
+        List<String> names = new ArrayList<>(forms.keySet());
         StringBuilder model = new StringBuilder("module demo\n\n"
-                + "data Eaches = Int\n    invariant value >= 0 && value <= " + TOP + "\n"
+                + "data Eaches = Int\n" + (eLow < 0 ? ""
+                        : "    invariant value >= " + eLow + " && value <= " + TOP + "\n")
                 + "data PackSize = Int\n    invariant value >= 1 && value <= " + TOP + "\n"
                 + "data In = { e: Eaches, p: PackSize }\ndata Out = Int\n");
         for (int at = 0; at < names.size(); at++) {
-            String[] form = FORMS.get(names.get(at));
+            String[] form = forms.get(names.get(at));
             model.append("\nbehavior b").append(at).append(" : (i: In) -> Out\nlet b").append(at)
                     .append(" (i) = Out { value = if ").append(written(form[0]))
                     .append(" then (if ").append(written(form[1])).append(" then 1 else 2)")
@@ -85,20 +128,33 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(model.toString()),
                 ATiedWayIsReadAsTheProgramRunSaysTest.class.getClassLoader());
         TreeSet<String> read = new TreeSet<>();
+        TreeSet<String> weighed = new TreeSet<>();
+        Map<String, String> notRead = new LinkedHashMap<>();
         for (int at = 0; at < names.size(); at++) {
             JsonNode behavior = behaviorNamed(report, "b" + at);
+            // A value cut at several places has no classes of its positions: what they are owed
+            // in their place is a weight, which the report says, so no class is a claim here.
+            if (!behavior.get("partition").path("weights").isEmpty()) {
+                weighed.add(names.get(at));
+                continue;
+            }
             if (!isRead(behavior)) {
+                notRead.put(names.get(at), behavior.get("partition").get("notRead").toString());
                 continue;
             }
             read.add(names.get(at));
-            int[][] outcomes = outcomes(loader, at);
+            int[][] outcomes = outcomes(loader, at, eLow);
             for (String axis : List.of("i.e", "i.p")) {
-                heldToTheProgram(names.get(at), axis, classesOf(behavior, axis), outcomes);
+                heldToTheProgram(names.get(at), axis, classesOf(behavior, axis), outcomes, eLow);
             }
         }
         // That the report reads a form is what holds it to the program, so each of these is read:
-        // a form no longer read is a reading lost, and agreement on none is none.
-        assertEquals(new TreeSet<>(names), read, "forms read");
+        // a form no longer read is a reading lost, and agreement on none is none. The forms owed
+        // a weight are the ones named, so a form that starts to be read, or to be weighed, shows.
+        assertEquals(weighedForms, weighed, "forms weighed");
+        TreeSet<String> readForms = new TreeSet<>(names);
+        readForms.removeAll(weighedForms);
+        assertEquals(readForms, read, "forms read; not read: " + notRead);
     }
 
     /**
@@ -139,6 +195,158 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
         assertTrue(report.toString().contains("everyRunStops"), "the stop is told");
     }
 
+    /**
+     * Behind a gate that adds the two numbers, an order between them is told apart by a stop at
+     * values far from the small ones: at {@code p = 2^62} no {@code e} that passes the gate has
+     * the comparison come out as it does at {@code p = 1}, and one more than the greatest stops.
+     * A report that holds both to one class of {@code p} says what the program does not, whichever
+     * way the comparison is written.
+     */
+    @Test
+    void anOrderBehindASumThatMayStopIsNotReadWhateverWayItIsWritten() throws Exception {
+        List<String> readForms = new ArrayList<>();
+        for (String comparison : List.of("i.e.value < i.p.value", "i.e.value < 3 * i.p.value",
+                "2 * i.p.value >= i.e.value", "i.e.value < i.p.value + 1")) {
+            String model = """
+                    module demo
+
+                    data Eaches = Int
+                        invariant value >= 0
+                    data PackSize = Int
+                        invariant value >= 0
+                    data In = { e: Eaches, p: PackSize }
+                    data Out = Int
+
+                    behavior b : (i: In) -> Out
+                    let b (i) = Out { value =
+                        if i.e.value + i.p.value >= 0 then (if %s then 1 else 2) else 3 }
+                    """.formatted(comparison);
+            Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
+            JsonNode report = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
+                    .json(SourceRendering.namedByIdentity(compilation.texts())));
+            JsonNode partition = behaviorNamed(report, "b").get("partition");
+            if (isRead(behaviorNamed(report, "b")) && partition.path("weights").isEmpty()) {
+                readForms.add(comparison);
+            }
+        }
+        assertEquals(List.of(), readForms);
+    }
+
+    /**
+     * A divisor that may be nought: the run stops at a {@code p} of nought whatever {@code e} is,
+     * and at no other. A report that reads the quotient does not hold nought in one class with a
+     * {@code p} the program does not stop at.
+     */
+    @Test
+    void aDivisorThatMayBeNoughtIsNotHeldInOneClassWithADivisorTheRunDoesNotStopAt()
+            throws Exception {
+        String model = """
+                module demo
+
+                data Eaches = Int
+                    invariant value >= 0 && value <= 12
+                data PackSize = Int
+                    invariant value >= 0 && value <= 12
+                data In = { e: Eaches, p: PackSize }
+                data Out = Int
+
+                behavior b : (i: In) -> Out
+                let b (i) = Out { value =
+                    if Rational.toInt(UP, i.e.value / i.p.value) >= 2 then 1 else 2 }
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(model),
+                ATiedWayIsReadAsTheProgramRunSaysTest.class.getClassLoader());
+        Object behavior = Emitted.behavior(loader, "demo", "b").getConstructor().newInstance();
+        for (int e = 0; e <= TOP; e++) {
+            assertEquals(-1, ranTo(loader, behavior, e, 0));
+            assertTrue(ranTo(loader, behavior, e, 1) > 0);
+        }
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
+        JsonNode report = JsonMapper.builder().build().readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        JsonNode behaviorReport = behaviorNamed(report, "b");
+        // Read, a class holds no two values the run tells apart, and nought stops where one does
+        // not. Not read, no class is claimed.
+        if (isRead(behaviorReport)) {
+            for (int[] each : classesOf(behaviorReport, "i.p")) {
+                assertTrue(each[0] > 0 || each[1] < 1, "nought and one are one class of the"
+                        + " divisor: " + behaviorReport.get("partition").get("axes"));
+            }
+        }
+        assertFalse(isRead(behaviorReport), () -> behaviorReport.get("partition").toString());
+        // Declarations that state what the numbers hold leave no input shown to exist, so the stop
+        // is not shown, and is left unresolved and not taken for none.
+        String said = AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+        assertTrue(said.contains("stop not resolved"), said);
+        assertFalse(said.contains("· may stop a run"), said);
+    }
+
+    /**
+     * Where the input holds nothing of its values a run is shown to stop at a divisor of nought:
+     * the report says it, in the division and at the value the run stops at, and a divisor the
+     * way keeps from nought is said to stop no run.
+     */
+    @Test
+    void aDivisionByNoughtIsToldAsAStopWhereTheInputIsShownToHoldOne() throws Exception {
+        String stops = reportOf("""
+                module demo
+
+                data Out = Int
+
+                behavior b : (e: Int, p: Int) -> Out
+                let b (e, p) = Out { value =
+                    if Rational.toInt(UP, e / p) >= 2 then 1 else 2 }
+                """);
+        assertTrue(stops.contains("· may stop a run: comparison"), stops);
+        assertFalse(stops.contains("stop not resolved"), stops);
+        String keptAway = reportOf("""
+                module demo
+
+                data Out = Int
+
+                behavior b : (e: Int, p: Int) -> Out
+                let b (e, p) = Out { value =
+                    if p >= 1 then (if Rational.toInt(UP, e / p) >= 2 then 1 else 2) else 3 }
+                """);
+        assertFalse(keptAway.contains("may stop a run"), keptAway);
+        assertFalse(keptAway.contains("stop not resolved"), keptAway);
+    }
+
+    /**
+     * Of two divisions one in the other, the quotient of the first is no number the comparison is
+     * read through, so what a run works out is not all told, and a stop at either is left
+     * unresolved: none is shown at the second where the way holds the first's divisor at nought,
+     * which no run gets past, and none at the first, which the second does not come before.
+     */
+    @Test
+    void noStopIsShownAtADivisionWhereWhatARunWorksOutAroundItIsNotAllTold() {
+        for (String way : List.of("true", "p == 0", "q == 0")) {
+            String said = reportOf(quotientOfAQuotient(way));
+            assertFalse(said.contains("· may stop a run: comparison"), said);
+            assertTrue(said.contains("stop not resolved"), said);
+        }
+    }
+
+    /** {@code (e / p) / q} compared, on the way where {@code way} holds. */
+    private static String quotientOfAQuotient(String way) {
+        return """
+                module demo
+
+                data Out = Int
+
+                behavior b : (e: Int, p: Int, q: Int) -> Out
+                let b (e, p, q) = Out { value =
+                    if %s then (if Rational.toInt(UP, (e / p) / q) >= 2 then 1 else 2) else 3 }
+                """.formatted(way);
+    }
+
+    private static String reportOf(String model) {
+        Compilation compilation = ACompiledModel.measured(model, Adequacy.Asked.fullReport());
+        return AdequacyReport.of(compilation)
+                .humanInEnglish(SourceRendering.namedByIdentity(compilation.texts()));
+    }
+
     /** What the program comes to at {@code e} and {@code p}, or -1 where the run stops. */
     private static int ranTo(ClassLoader loader, Object behavior, long e, long p)
             throws Exception {
@@ -175,7 +383,7 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
                 return false;
             }
         }
-        return behavior.get("partition").get("axes").size() >= 2;
+        return !behavior.get("partition").get("axes").isEmpty();
     }
 
     /** The classes of the axis of {@code place}, each as the whole numbers it holds. */
@@ -187,37 +395,48 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
             }
             for (JsonNode label : axis.get("classes")) {
                 Matcher matched = CLASS.matcher(label.asString());
-                assertTrue(matched.matches(), "a class this reads: " + label);
-                int least = Integer.parseInt(matched.group(1))
-                        + (matched.group(2).equals("<") ? 1 : 0);
-                int greatest = Integer.parseInt(matched.group(4))
-                        - (matched.group(3).equals("<") ? 1 : 0);
-                out.add(new int[] {least, greatest});
+                Matcher above = OPEN_ABOVE.matcher(label.asString());
+                Matcher below = OPEN_BELOW.matcher(label.asString());
+                if (matched.matches()) {
+                    out.add(new int[] {
+                            Integer.parseInt(matched.group(1))
+                                    + (matched.group(2).equals("<") ? 1 : 0),
+                            Integer.parseInt(matched.group(4))
+                                    - (matched.group(3).equals("<") ? 1 : 0)});
+                } else if (above.matches()) {
+                    out.add(new int[] {Integer.parseInt(above.group(1))
+                            + (above.group(2).equals("<") ? 1 : 0), Integer.MAX_VALUE});
+                } else if (below.matches()) {
+                    out.add(new int[] {Integer.MIN_VALUE, Integer.parseInt(below.group(2))
+                            - (below.group(1).equals("<") ? 1 : 0)});
+                } else {
+                    throw new AssertionError("a class this reads: " + label);
+                }
             }
         }
-        assertTrue(!out.isEmpty(), "an axis of " + place);
-        return out;
+        // A place the report draws no axis of is one class.
+        return out.isEmpty() ? List.of(new int[] {Integer.MIN_VALUE, Integer.MAX_VALUE}) : out;
     }
 
     /**
      * What the program does at each pair: 0 where the way is not passed, 1 where it is and the
      * comparison comes out true, 2 where it comes out false, and -1 where the run stops.
      */
-    private static int[][] outcomes(ClassLoader loader, int at) throws Exception {
+    private static int[][] outcomes(ClassLoader loader, int at, int eLow) throws Exception {
         Object behavior = Emitted.behavior(loader, "demo", "b" + at)
                 .getConstructor().newInstance();
-        int[][] out = new int[TOP + 1][TOP + 1];
-        for (int e = 0; e <= TOP; e++) {
+        int[][] out = new int[TOP - eLow + 1][TOP + 1];
+        for (int e = eLow; e <= TOP; e++) {
             for (int p = 1; p <= TOP; p++) {
                 Object in = Codecs.decoded(loader, "demo.In", Map.of("e", (long) e, "p", (long) p));
                 try {
                     Object answer = Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
-                    out[e][p] = switch (((Number) answer).intValue()) {
+                    out[e - eLow][p] = switch (((Number) answer).intValue()) {
                         case 3 -> 0;
                         default -> ((Number) answer).intValue();
                     };
                 } catch (ConstraintViolation stopped) {
-                    out[e][p] = -1;
+                    out[e - eLow][p] = -1;
                 }
             }
         }
@@ -230,17 +449,17 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
      * to it (bit 1 true, bit 2 false; none where no row gets there).
      */
     private static void heldToTheProgram(String form, String place, List<int[]> classes,
-                                         int[][] outcomes) {
+                                         int[][] outcomes, int eLow) {
         boolean ofE = place.equals("i.e");
-        int low = ofE ? 0 : 1;
-        int[] way = new int[TOP + 1];
-        int[] comparison = new int[TOP + 1];
+        int low = ofE ? eLow : 1;
+        int[] way = new int[TOP - low + 1];
+        int[] comparison = new int[TOP - low + 1];
         for (int value = low; value <= TOP; value++) {
-            for (int other = ofE ? 1 : 0; other <= TOP; other++) {
-                int outcome = ofE ? outcomes[value][other] : outcomes[other][value];
+            for (int other = ofE ? 1 : eLow; other <= TOP; other++) {
+                int outcome = ofE ? outcomes[value - eLow][other] : outcomes[other - eLow][value];
                 assertTrue(outcome >= 0, form + ": a run stops at " + value + ", " + other);
-                way[value] |= outcome == 0 ? 2 : 1;
-                comparison[value] |= outcome == 1 ? 1 : outcome == 2 ? 2 : 0;
+                way[value - low] |= outcome == 0 ? 2 : 1;
+                comparison[value - low] |= outcome == 1 ? 1 : outcome == 2 ? 2 : 0;
             }
         }
         // A class holds no two values the program tells apart: the way is passed alike at them,
@@ -248,10 +467,10 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
         for (int[] each : classes) {
             for (int a = Math.max(each[0], low); a <= Math.min(each[1], TOP); a++) {
                 for (int b = a + 1; b <= Math.min(each[1], TOP); b++) {
-                    assertEquals(way[a], way[b], form + " " + place + ": " + a + " and " + b
-                            + " are in one class, and the way is passed differently");
-                    assertTrue(comparison[a] == 0 || comparison[b] == 0
-                                    || comparison[a] == comparison[b],
+                    assertEquals(way[a - low], way[b - low], form + " " + place + ": " + a
+                            + " and " + b + " are in one class, and the way is passed differently");
+                    assertTrue(comparison[a - low] == 0 || comparison[b - low] == 0
+                                    || comparison[a - low] == comparison[b - low],
                             form + " " + place + ": " + a + " and " + b + " are in one class, "
                                     + "and the comparison comes out differently");
                 }

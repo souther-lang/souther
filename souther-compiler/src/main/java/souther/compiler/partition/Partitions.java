@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import souther.compiler.check.DeclarationReadings;
 import souther.compiler.check.ClassMembers;
+import souther.compiler.check.DatePartsLeft;
 import souther.compiler.check.HeldClass;
 import souther.compiler.check.DefaultBoundOperationFacts;
 import souther.compiler.check.ReadingPolicy;
@@ -72,6 +73,7 @@ import net.unit8.notation199x.pattern.CodePoints;
 import souther.compiler.observe.Figure;
 import souther.compiler.observe.WorkFigure;
 import souther.compiler.semantics.CaseMapping;
+import souther.compiler.semantics.TakenAs;
 import net.unit8.notation199x.pattern.Meter;
 import souther.compiler.regex.PatternPlan;
 import souther.compiler.revision.RevisionKnowledge;
@@ -412,7 +414,7 @@ public final class Partitions {
          * in the corpus over collections that have no values. And false at a number of a string
          * the position's strings do not reach, and wherever a string position may hold no value:
          * a row is a whole value of the input. */
-        public boolean edgeIsKnownWritable(NumericTerm term, Border line) {
+        public boolean edgeIsKnownWritable(NumericTerm term, Border line, Quantities reading) {
             return strings.allowsAnEdgeAt(term, line.cut().cut().at().asANumber())
                     && !uncertain.contains(term) && switch (term) {
                 // What a location holds is what its type holds, so an edge on it is an edge some
@@ -425,7 +427,8 @@ public final class Partitions {
                 // numbers the moved values come to ({@link NumericTerm#intrinsicBounds}), and
                 // every one of them has a date, so the operation's answer holds of them.
                 case NumericTerm.TakenOf taken -> DefaultBoundOperationFacts.get()
-                        .everyAnswerItCanGiveHasASourceValue(taken.operation());
+                        .everyAnswerItCanGiveHasASourceValue(taken.operation())
+                        && aDateHasThePartAt(taken, line, reading);
                 // A string holding any number of the code points of a class is written by
                 // repeating one of them, as a string of any length is — and, counted in what a
                 // conversion makes of it, by repeating one the conversion leaves as it is.
@@ -466,6 +469,30 @@ public final class Partitions {
                 // both, which nothing here has shown the rules leave.
                 case NumericTerm.ProductOf _ -> false;
             };
+        }
+
+        /**
+         * Whether the part of a date {@code taken} is, at the number {@code line} falls at, is the
+         * part of a date the declarations leave: the operation's answer holds of every date, and a
+         * rule of the declarations on another part of the same date ({@code month == 2}) leaves
+         * dates that have no day of thirty. Where the declarations leave a class of dates, one
+         * of them having the part is what the calendar shows ({@link DatePartsLeft#someDateHas}),
+         * and a walk that shows none is no proof that there is none, so the edge is not known.
+         * Where they leave the date every date, nothing here changes the operation's answer.
+         */
+        private static boolean aDateHasThePartAt(NumericTerm.TakenOf taken, Border line,
+                                                 Quantities reading) {
+            if (!(taken.takenAs() instanceof TakenAs.PartOfDate(TakenAs.DatePart part))
+                    || taken.transformation().translation().offsetDays() != 0
+                    || !(reading.region().classAt(new NumericTerm.ValueOf(taken.position()))
+                            instanceof HeldClass.OfDays(DatePartsLeft left))) {
+                return true;
+            }
+            ExactRatio at = line.cut().cut().at().asANumber();
+            return at != null && at.isWhole()
+                    && at.floor() instanceof ExactAnswer.Held<BigInteger>(BigInteger whole)
+                    && whole.bitLength() < Integer.SIZE
+                    && left.someDateHas(part, whole.intValueExact());
         }
 
         /**

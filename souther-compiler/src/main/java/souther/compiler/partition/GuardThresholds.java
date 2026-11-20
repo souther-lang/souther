@@ -1356,7 +1356,8 @@ public final class GuardThresholds {
         for (ComparisonReadings.Reading.WorkedOutAt worked : each.whatARunWorksOut()) {
             if ((worked.stops().operations().aStopUntold()
                     || aStopToldThereIsAskedOfNoRow(each, worked)
-                    || aValueWorkedOutIsNotKeptWithin(each, worked, over.toACase(), read))
+                    || aValueWorkedOutIsNotKeptWithin(each, worked, over.toACase(), read)
+                    || aDivisorMayBeNought(each, worked, over.toACase(), read))
                     && aRowArrivesWhereItIsWorkedOut(each, worked, over)) {
                 return true;
             }
@@ -1405,6 +1406,28 @@ public final class GuardThresholds {
     }
 
     /**
+     * Whether a quotient {@code worked} tells is one the way to where it is worked out does not
+     * keep a divisor away from nought in: a run may stop there, and what the rows that get past it
+     * leave of the numbers is what a run that does not stop leaves, which says nothing of the
+     * divisor at nought. Along the way to the comparison, with what the arm or application it is
+     * worked out on puts on it, as {@link #aValueWorkedOutIsNotKeptWithin}.
+     */
+    private static boolean aDivisorMayBeNought(
+            ComparisonReadings.Reading each, ComparisonReadings.Reading.WorkedOutAt worked,
+            WaysToACase wayToACase, InputReading read) {
+        List<UndividedByARelation.Division> dividing = worked.stops().operations().divisions();
+        if (dividing.isEmpty()) {
+            return false;
+        }
+        Proposition reached = reachedWhere(worked);
+        List<OnTheWay> way = (reached == null || each.statedAsACondition().isEmpty())
+                ? each.assumed() : each.wayToACase(wayToACase.putOn(reached));
+        WhatAWayLeavesOfAValue left = WhatAWayLeavesOfAValue.along(read, way);
+        return left != null
+                && dividing.stream().anyMatch(it -> !left.keepsAwayFromNought(it.divisor()));
+    }
+
+    /**
      * Each place what a run getting to the comparison works out is worked out, anywhere
      * {@code each} says it is ({@link ComparisonReadings.Reading#whatARunWorksOut}), with whether a
      * row may arrive there ({@link #aRowArrivesWhereItIsWorkedOut}) and the way to it: the way to
@@ -1423,6 +1446,7 @@ public final class GuardThresholds {
             boolean arrives = over.aRowArrives();
             for (UndividedByARelation relation : arrived.relationsRead()) {
                 if (relation.working().operations().isEmpty()
+                        && relation.working().divisions().isEmpty()
                         && !relation.working().aStopUntold()) {
                     continue;
                 }
@@ -1435,6 +1459,7 @@ public final class GuardThresholds {
             // A place that tells no operation and no stop left untold has nothing to judge, and
             // its way is not worked out.
             if (worked.stops().operations().operations().isEmpty()
+                    && worked.stops().operations().divisions().isEmpty()
                     && !worked.stops().operations().aStopUntold()) {
                 continue;
             }

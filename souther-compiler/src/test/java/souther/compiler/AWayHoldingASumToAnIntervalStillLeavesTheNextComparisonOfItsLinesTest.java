@@ -142,7 +142,6 @@ class AWayHoldingASumToAnIntervalStillLeavesTheNextComparisonOfItsLinesTest {
                 "    guard a + b >= 100 else Low\n    guard b + a < 200 else High",
                 "    guard a + b >= 100 else Low\n    guard a + b + 5 < 200 else High",
                 "    guard a + b >= 100 else Low\n    guard 200 > a + b else High",
-                "    guard a + b >= 100 else Low\n    guard 2 * a + 2 * b < 400 else High",
                 "    guard a + b >= 100 else Low\n    guard a + b < 200 else High\n"
                         + "    guard a + b < 150 else High",
                 "    guard a >= 0 else Low\n    guard a + b >= 100 else Low\n"
@@ -150,6 +149,19 @@ class AWayHoldingASumToAnIntervalStillLeavesTheNextComparisonOfItsLinesTest {
             String report = report(guards);
             assertFalse(report.contains(NOT_READ), guards + "\n" + report);
         }
+    }
+
+    /**
+     * The sum written as twice each number is another program over unbounded numbers: {@code 2 * a}
+     * stops the run at an {@code a} of half the greatest {@code Int} and above, which the sum
+     * itself never does between the guards. A reading that held those values with the ones below
+     * would join two the program tells apart, so the guard is not read.
+     */
+    @Test
+    void aSumWrittenAsTwiceEachNumberIsNotReadWhereTheDoubleCanStop() {
+        String report = report("    guard a + b >= 100 else Low\n"
+                + "    guard 2 * a + 2 * b < 400 else High");
+        assertTrue(report.contains(NOT_READ), report);
     }
 
     /**
