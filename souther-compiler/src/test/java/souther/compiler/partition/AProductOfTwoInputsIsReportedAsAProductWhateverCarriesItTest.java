@@ -118,15 +118,23 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
         // Written out, the product is an operation the comparison tells of, so a row is computed
         // where it keeps inside the type and the relation is read. The quotient works out no
         // product: its dividend and divisor are the positions, and the divisor away from nought
-        // keeps every row computed, so the relation is read as well.
+        // keeps every row computed. A divisor the way does not keep from nought is one a run
+        // stops at, so what a run gets past it with is not shown and the relation is not read to
+        // the end.
         assertEquals(List.of(), stopped("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.any(i -> if i.p > 0 then i.q >= 10 * i.p
                             else if i.p < 0 then i.q <= 10 * i.p else false, xs)
                         """));
-        assertEquals(List.of(), stopped("""
+        assertEquals(List.of("xs[*].p: EVALUATION_STOPS_NOT_FULLY_READ",
+                        "xs[*].q: EVALUATION_STOPS_NOT_FULLY_READ"),
+                stopped("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.any(i -> i.q / i.p >= 10, xs)
+                        """));
+        assertEquals(List.of(), stopped("""
+                        behavior f : (xs: List<A>) -> Bool
+                        let f (xs) = List.any(i -> if i.p > 0 then i.q / i.p >= 10 else false, xs)
                         """));
     }
 
@@ -148,7 +156,8 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                             i -> i.q * i.p * i.q >= 1000 && i.q / i.p >= i.q, xs)) >= 1
                         """));
         // A quotient against a number counted beside the product is read, and leaves what the
-        // comparison written out over the product leaves.
+        // comparison written out over the product leaves, but for the stop at a divisor of
+        // nought, which the written out comparison has no divisor to say.
         assertEquals(reasons("""
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.length(List.filter(
@@ -158,7 +167,9 @@ class AProductOfTwoInputsIsReportedAsAProductWhateverCarriesItTest {
                         behavior f : (xs: List<A>) -> Bool
                         let f (xs) = List.length(List.filter(
                             i -> i.q * i.p * i.q >= 1000 && i.q / i.p >= 10, xs)) >= 1
-                        """));
+                        """).stream()
+                        .filter(each -> !each.endsWith("EVALUATION_STOPS_NOT_FULLY_READ"))
+                        .toList());
     }
 
     @Test

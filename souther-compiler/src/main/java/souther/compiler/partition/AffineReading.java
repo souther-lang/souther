@@ -2479,11 +2479,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
              */
             private void tellADivision(Core node, InputReads at) {
                 if (Core.withoutStanding(node) instanceof Core.Binary quotient
-                        && quotient.op() == BinOp.DIV
                         && AbortSites.ofAnOperator(quotient).contains(AbortKind.DIVISION_BY_ZERO)
-                        && composedBy(quotient.right(), at, this)
-                                instanceof LinearForm<NumericTerm> divisor) {
-                    told.divides(quotient, divisor);
+                        && at.pathOf(quotient.right(), ruleSource.newtypes())
+                                instanceof ValuesAt.At(TermPath divisor)) {
+                    told.divides(quotient, LinearForm.atom(new NumericTerm.ValueOf(divisor)));
                 }
             }
 

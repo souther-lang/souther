@@ -336,7 +336,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * A quotient a comparison works out, which stops a run where the divisor is nought: a stop of
      * the domain of the operation and not of where its answer lies, so it has no ends.
      *
-     * @param divisor what the quotient is divided by, as a form of the input's numbers
+     * @param divisor what the quotient is divided by, as a form of numbers of the input's places
+     *                and of nothing else: the region the way leaves answers for those alone, and a
+     *                value a reading held aside is one it has nothing to say of
      * @param after   the operations, by where they are among those the comparison works out, that
      *                are worked out before it on every run, as {@link IntOperation#after}
      */
@@ -344,7 +346,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
         Division {
             Objects.requireNonNull(divisor, "a quotient is divided by some form");
+            if (!isOverPlaces(divisor)) {
+                throw new IllegalArgumentException("a divisor told is a form of the input's"
+                        + " places: " + divisor);
+            }
             after = List.copyOf(new TreeSet<>(after));
+        }
+
+        /** Whether every number {@code form} is of is the value at a place of the input. */
+        static boolean isOverPlaces(LinearForm<NumericTerm> form) {
+            return form != null && form.coefs().keySet().stream()
+                    .allMatch(NumericTerm.ValueOf.class::isInstance);
         }
 
         /** The same quotient, worked out after the operations moved {@code by} on. */

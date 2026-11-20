@@ -274,7 +274,11 @@ class ARunThatStopsOnTheWayToAPositionIsNoWitnessThereTest {
                 "(d > 0 && a + " + FIRST_SUM + " - d >= 0) || a - b > 0",
                 Adequacy.Asked.fullReport())));
         assertEquals(List.of(READ), readings.get("b"), readings::toString);
-        assertEquals(List.of(NOT_SHOWN_REACHED), readings.get("a"), readings::toString);
+        // And what the relation settles of {@code a} is said of the values the sum is worked out
+        // at, which are no more than the values a run that works it out gets past: nothing is
+        // said of the others, so it is not shown to reach every value either.
+        assertEquals(List.of(NOT_SHOWN_REACHED, "relation_not_shown_to_reach_every_value"),
+                readings.get("a"), readings::toString);
     }
 
     /**
