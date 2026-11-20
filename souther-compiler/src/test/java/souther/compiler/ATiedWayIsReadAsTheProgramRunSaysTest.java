@@ -54,6 +54,11 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
         FORMS.put("aLineAndTheDoubleOfAnother", new String[] {"e >= p", "e < 2 * p"});
         FORMS.put("aSumHeldBelowAndTheOrder", new String[] {"e + p <= 12", "e < p"});
         FORMS.put("aTripleOfAnother", new String[] {"e >= p", "e < 3 * p"});
+        // A quotient rounded to a whole number is two lines, each on the way to the other.
+        FORMS.put("aQuotientRoundedDown", new String[] {"e >= 0",
+                "Rational.toInt(DOWN, e / p) == 1"});
+        FORMS.put("aQuotientRoundedUp", new String[] {"e >= 0",
+                "Rational.toInt(UP, e / p) == 2"});
     }
 
     private static final Pattern CLASS = Pattern.compile(
@@ -161,10 +166,12 @@ class ATiedWayIsReadAsTheProgramRunSaysTest {
     }
 
     /** Whether the report says nothing of the behavior but that its numbers are read: no place is
-     *  left not read for a reason that is not the rule relating the two. */
+     *  left not read for a reason that is a fact about no rule read to its end, which is that the
+     *  rule relates the two, or that a line of it is one no row turns on. */
     private static boolean isRead(JsonNode behavior) {
         for (JsonNode each : behavior.get("partition").get("notRead")) {
-            if (!each.get("reason").asString().equals("rule_relating_two_values")) {
+            if (!List.of("rule_relating_two_values", "rule_never_turns_on_this_line")
+                    .contains(each.get("reason").asString())) {
                 return false;
             }
         }
