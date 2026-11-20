@@ -988,6 +988,32 @@ public sealed interface RowDemand {
             return relationsAmong(ofEachElement.theWay());
         }
 
+        /**
+         * The relations every element of the container meets, whichever element it is: those the
+         * one way the reading states puts on the element itself ({@link AnElementMeets#asAsked}).
+         * What some element of a container inside the element is asked holds of that one alone,
+         * and what every element of one meets one of holds of none in particular, so neither is
+         * among them; an element meeting one of several ways meets none of them for sure, so
+         * there are none.
+         *
+         * <p>Not {@link #relations}, which is what a row written alike is composed to meet: it
+         * asks every element of a container inside the element what some element of it is
+         * asked, and so says more of the elements than they meet.
+         */
+        public List<Relational> heldOfEveryElement() {
+            List<List<AskedOfAnElement>> ways = ofEachElement.asAsked();
+            if (ways.size() != 1) {
+                return List.of();
+            }
+            List<Relational> out = new ArrayList<>();
+            for (AskedOfAnElement each : ways.getFirst()) {
+                if (each instanceof Relational relation) {
+                    out.add(relation);
+                }
+            }
+            return List.copyOf(out);
+        }
+
         /** The numbers the element is written with and the container's size, which are what a
          *  row composed for this places — the first where it writes an element, the second where
          *  it writes none. */

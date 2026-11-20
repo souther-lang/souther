@@ -993,7 +993,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     return false;
                 }
                 if (!stopsNoRowOrIsTheOwners(node, where, form, over, after)) {
-                    told.overTheStopValue(form);
+                    told.overTheStopValue(new OverTheStop(node, form, over,
+                            where instanceof WhereAnOperatorAnswers.WhereItsExactValueIsHeld held
+                                    ? held : null, after));
                 }
                 return true;
             }
@@ -1649,7 +1651,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                     if (aside.aChoice) {
                         aside.rangeIs(rangeOfTheArms(node, at));
                     } else if (aside.range == null) {
-                        aside.rangeIs(reached.numbersOf(new Denotation(node, at)));
+                        aside.originIs(reached.originOf(new Denotation(node, at)));
                     }
                 }
                 return new AffineForms.Leaf.Form<>(LinearForm.atom(aside.atom));
@@ -2588,6 +2590,61 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             }
             return true;
         }
+
+        /** The same, worked out after the operations moved {@code by} on: where it is taken into
+         *  a reading that told {@code by} operations before it ({@link WhatWasTold#absorb}). */
+        SumOverTheStop shifted(int by) {
+            return new SumOverTheStop(node, form, over, least, greatest,
+                    after.stream().map(at -> at + by).toList());
+        }
+
+        /** The same operation, as one over what the expression held aside is worked out to. */
+        OverTheStop overWhatItComesTo() {
+            return new OverTheStop(node, form, List.of(over),
+                    new WhereAnOperatorAnswers.WhereItsExactValueIsHeld(least, greatest), after);
+        }
+    }
+
+    /**
+     * An operation over expressions held aside that no owner of them places, worked out by
+     * {@code node} after the operations {@code after}, as {@code form} over the atoms they are
+     * held as; {@code held} is the ends it is held to, null where it is held to none.
+     */
+    private record OverTheStop(Core node, LinearForm<NumericTerm> form,
+                               List<StoppedValues.Held> over,
+                               WhereAnOperatorAnswers.WhereItsExactValueIsHeld held,
+                               List<Integer> after) {
+
+        /** The same, worked out after the operations moved {@code by} on
+         *  ({@link SumOverTheStop#shifted}). */
+        OverTheStop shifted(int by) {
+            return new OverTheStop(node, form, over, held,
+                    after.stream().map(at -> at + by).toList());
+        }
+
+        /**
+         * Whether this is told to {@code told} as the operation over what each expression held
+         * aside comes to, unless none of those numbers takes it past its ends: where every one of
+         * them is known. No row is placed at it, since which of its numbers a run gets no number
+         * of the input says ({@link UndividedByARelation.IntOperand.OfAValueWorkedOut}).
+         */
+        boolean toldOverWhatItComesTo(WhatWasTold told, InputReading ofTheInput) {
+            if (held == null || over.stream().anyMatch(each -> each.origin == null)) {
+                return false;
+            }
+            UndividedByARelation.IntOperation operation = new UndividedByARelation.IntOperation(
+                    form.over(atom -> LinearForm.atom(over.stream()
+                            .filter(each -> each.atom.equals(atom)).findFirst()
+                            .<UndividedByARelation.IntOperand>map(each ->
+                                    new UndividedByARelation.IntOperand.OfAValueWorkedOut(atom,
+                                            each.origin))
+                            .orElseGet(() -> new UndividedByARelation.IntOperand.OfTheInput(atom)))),
+                    held.least(), held.greatest(), after);
+            if (!UndividedByARelation.stopsNoRow(operation, ofTheInput)) {
+                told.add(node, operation);
+            }
+            return true;
+        }
     }
 
     /** What a reading of a comparison was told as it went: the operations of whole numbers, and
@@ -2610,8 +2667,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         private final List<SumOverTheStop> sumsOverTheStop = new ArrayList<>();
         /** The operations over the value the reading stopped at that no owner placed, to be asked
          *  of the form of the comparison. */
-        private final List<LinearForm<NumericTerm>> operationsOverTheStopValue =
-                new ArrayList<>();
+        private final List<OverTheStop> operationsOverTheStopValue = new ArrayList<>();
         /** The counts of a list whose working out is answered for only where the line the
          *  comparison draws on the count is at a count a list holds, to be asked of the form of
          *  the comparison. */
@@ -2848,7 +2904,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * What {@code apart}, a reading of part of the comparison tried on its own, was told,
          * taken as told here after everything told so far: each operation and each of decimals
          * moved past the ones already here, with what it was worked out of moved with it, and the
-         * forms it knows the operation or the place of carried over to where they now stand.
+         * forms it knows the operation or the place of carried over to where they now stand. An
+         * operation over the stop still to be asked of the comparison is moved with them: what it
+         * is worked out after is where those operations stood in {@code apart}.
          */
         void absorb(WhatWasTold apart) {
             toldMore();
@@ -2856,9 +2914,11 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             for (int i = 0; i < apart.operations.size(); i++) {
                 add(apart.at.get(i), apart.operations.get(i).shifted(ofWholeNumbers));
             }
-            sumsOverTheStop.addAll(apart.sumsOverTheStop);
+            apart.sumsOverTheStop.forEach(each ->
+                    sumsOverTheStop.add(each.shifted(ofWholeNumbers)));
             aStopUntold |= apart.aStopUntold;
-            operationsOverTheStopValue.addAll(apart.operationsOverTheStopValue);
+            apart.operationsOverTheStopValue.forEach(each ->
+                    operationsOverTheStopValue.add(each.shifted(ofWholeNumbers)));
             countsOverTheStop.addAll(apart.countsOverTheStop);
             readByATerm.addAll(apart.readByATerm);
             leftToTheWitness.addAll(apart.leftToTheWitness);
@@ -2998,31 +3058,35 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         }
 
         /**
-         * That {@code form}, an operation over the expressions held aside, no owner of them places:
+         * That {@code operation}, over the expressions held aside, no owner of them places:
          * whether it adds up the addends of the comparison, which the analysis that drew the lines
          * answers for, is asked once the comparison has been read ({@link #askedOfTheComparison}).
          */
-        void overTheStopValue(LinearForm<NumericTerm> form) {
+        private void overTheStopValue(OverTheStop operation) {
             exact = false;
-            operationsOverTheStopValue.add(form);
+            operationsOverTheStopValue.add(operation);
         }
 
         /**
          * What was left to the form {@code whole} of the comparison, asked now that it is read: a
          * sum over a bound value not told over that value, or any other operation over the
-         * stopped value, that is no sum of the comparison's addends, and a count over the stop
-         * whose line is at no count a list holds, are a stop told by nothing.
+         * stopped value, that is no sum of the comparison's addends, is told as the operation
+         * over what the values held aside come to where that is known, and is otherwise a stop
+         * told by nothing, as a count over the stop whose line is at no count a list holds is.
          */
         void askedOfTheComparison(LinearForm<NumericTerm> whole, InputReading ofTheInput) {
             // An operation over a bound value is one over that value, which a relation over it is
             // asked to get past.
             for (SumOverTheStop sum : sumsOverTheStop) {
                 if (!sum.toldOverItsValue(this, ofTheInput)) {
-                    operationsOverTheStopValue.add(sum.form());
+                    operationsOverTheStopValue.add(sum.overWhatItComesTo());
                 }
             }
-            for (LinearForm<NumericTerm> each : operationsOverTheStopValue) {
-                if (!WhatLiesBesideTheStop.areAddendsOf(each, whole)) {
+            // The analysis that drew the lines answers for a sum of the addends; only what no
+            // owner answers for is told here.
+            for (OverTheStop each : operationsOverTheStopValue) {
+                if (!WhatLiesBesideTheStop.areAddendsOf(each.form(), whole)
+                        && !each.toldOverWhatItComesTo(this, ofTheInput)) {
                     passedOverWhatMayEndARun();
                 }
             }
@@ -3381,6 +3445,9 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
             private final boolean theStop;
             private boolean met;
             private FormRange range;
+            /** Where {@link #range} comes from, which a way to the comparison may narrow; null
+             *  where the range is not known. */
+            private WhereAValueComesFrom origin;
             /** The bound value the derivation reads the expression as, where an operation of
              *  whole numbers can be over it; null otherwise. */
             private UndividedByARelation.IntOperand.OfABinding bound;
@@ -3400,8 +3467,17 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                 return first;
             }
 
+            /** That the expression comes to {@code range}, worked out by an analysis that says
+             *  nothing of where it comes from. */
             void rangeIs(FormRange range) {
                 this.range = range;
+                this.origin = range == null ? null : new WhereAValueComesFrom.Derived(range);
+            }
+
+            /** That the expression comes to what {@code origin} says, from where it says. */
+            void originIs(WhereAValueComesFrom origin) {
+                this.origin = origin;
+                this.range = origin == null ? null : origin.range();
             }
 
             void boundIs(UndividedByARelation.IntOperand.OfABinding bound) {
