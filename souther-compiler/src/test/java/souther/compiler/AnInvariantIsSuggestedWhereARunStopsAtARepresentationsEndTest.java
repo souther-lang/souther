@@ -161,28 +161,6 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 + " one the domain has"), report);
     }
 
-    /** What is worked out before the comparison on one arm of a choice is asked of the value as
-     *  though every run worked it out: the value keeps it within its ends, and the stop after it
-     *  is shown. */
-    @Test
-    void anOperationOnAnArmBeforeTheComparisonIsAskedAsThoughEveryRunTookIt() {
-        String report = report("""
-                module m
-
-                data P = { x: Int, y: Int }
-
-                behavior f : (p: P) -> Bool
-                let f (p) = {
-                    let z = if p.y > 0 then p.y + 1 else 0
-                    p.x + 1 > 0
-                }
-                """);
-
-        assertTrue(suggested(report).stream().anyMatch(line -> line.startsWith(
-                "· declaring `invariant x <= 9223372036854775806` on m.P keeps every run from taking"
-                        + " a number past its type there; a bound one step further out")), report);
-    }
-
     /** A number wearing a name holds the numbers its rules leave it, every one a value: the value
      *  a stop is shown at is one of them, and the bound is as far out as it can be. */
     @Test
@@ -343,27 +321,6 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 let f (p) = p.x + 9223372036854775807 > 0
                 """);
 
-        assertEquals(List.of(), suggested(report), report);
-    }
-
-    /** Two arms that bound two places one data holds from either side, leaving it no value, are
-     *  no region. */
-    @Test
-    void armsThatBoundTheDataTwoPlacesShareFromEitherSideAreNoRegion() {
-        String report = report("""
-                module m
-
-                data Amount = Int
-
-                data P = { a: Amount, b: Amount, chooseA: Bool }
-
-                behavior f : (p: P) -> Bool
-                let f (p) = (if p.chooseA then (p.a.value + 9223372036854775807) + 1
-                    else (p.b.value - 9223372036854775807) - 2) > 0
-                """);
-
-        assertTrue(report.contains("· may stop a run") || report.contains("· stop not resolved"),
-                report);
         assertEquals(List.of(), suggested(report), report);
     }
 

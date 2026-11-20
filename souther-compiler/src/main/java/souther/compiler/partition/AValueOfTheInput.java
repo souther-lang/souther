@@ -12,6 +12,7 @@ import souther.compiler.check.TypeView;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
+import souther.compiler.inputs.RuleAddress;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
@@ -158,7 +159,8 @@ final class AValueOfTheInput {
      * clause, holds any whole number of a run at the one place of {@code places} below it, put on
      * {@code out}: the place a field of it holding a number, and the run the one its rules leave
      * the field, every number of which is that field of some value they all hold of
-     * ({@link DeclaredBounds#wholeRunOfAField}). Not shown where two places are asked below it,
+     * ({@link DeclaredBounds#wholeRunAt}), as they call it ({@link RuleAddress#of}). Not
+     * shown where two places are asked below it,
      * which a run of each alone says nothing of together.
      */
     private static boolean heldBesideItsClauses(TermPath at, Shape.Product product,
@@ -173,7 +175,9 @@ final class AValueOfTheInput {
                 || (prim != Type.Prim.INT && prim != Type.Prim.DECIMAL)) {
             return false;
         }
-        WholeRun run = wholeOf(DeclaredBounds.wholeRunOfAField(record, f, read.ruleReading()));
+        RuleAddress named = RuleAddress.of(at, below.getFirst());
+        WholeRun run = named == null ? null
+                : wholeOf(DeclaredBounds.wholeRunAt(record, named.key(), read.ruleReading()));
         if (run == null) {
             return false;
         }
