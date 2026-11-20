@@ -34,7 +34,8 @@ import java.util.Map;
  * step along it, so the {@code x} the class holds are a run of its steps, and the {@code x} of all
  * of them are what this answers: exactly a run when the classes' runs fill the one run between
  * their least and greatest, and no answer when they do not (the even numbers are not a run).
- * More classes than {@link #MOST_CLASSES} is no answer either.
+ * More classes than {@link #MOST_CLASSES}, or more pairs of bounds over all the classes than
+ * {@link #MOST_WORK}, is no answer either.
  */
 public final class TwoIntegerConstraints<A> {
 
@@ -44,6 +45,10 @@ public final class TwoIntegerConstraints<A> {
 
     /** The most constraints held: pairs of them are asked, so the work is their square. */
     private static final int MOST_CONSTRAINTS = 64;
+
+    /** The most steps of one question: a pair of bounds at a residue class is one, so a few
+     *  classes of many bounds and many classes of a few are each worked out. */
+    private static final long MOST_WORK = 1L << 17;
 
     /**
      * The whole numbers of one of the two that have a whole number of the other beside them.
@@ -194,6 +199,12 @@ public final class TwoIntegerConstraints<A> {
             return new Shadow.Unknown();
         }
         int classes = period.intValueExact();
+        // The work is the pairs of bounds asked at every class, which neither limit above bounds
+        // by itself.
+        if ((long) classes * (1L * lower.size() * upper.size() + alone.size() + 1) > MOST_WORK) {
+            return new Shadow.Unknown();
+        }
+        BigInteger[][] slopes = slopesOf(period, lower, upper);
         BigInteger[][] steps = new BigInteger[classes][];
         BigInteger least = null;
         BigInteger greatest = null;
@@ -202,7 +213,7 @@ public final class TwoIntegerConstraints<A> {
         boolean any = false;
         for (int residue = 0; residue < classes; residue++) {
             BigInteger[] range = stepsOfClass(BigInteger.valueOf(residue), period, lower, upper,
-                    alone);
+                    alone, slopes);
             steps[residue] = range;
             if (range == EMPTY) {
                 continue;
@@ -244,7 +255,7 @@ public final class TwoIntegerConstraints<A> {
      */
     private static BigInteger[] stepsOfClass(BigInteger residue, BigInteger period,
                                              List<Bound> lower, List<Bound> upper,
-                                             List<Bound> alone) {
+                                             List<Bound> alone, BigInteger[][] slopes) {
         BigInteger[] steps = {null, null};
         for (Bound each : alone) {
             // a·x <= c.
@@ -253,23 +264,44 @@ public final class TwoIntegerConstraints<A> {
                 return EMPTY;
             }
         }
-        for (Bound low : lower) {
-            for (Bound up : upper) {
-                // ceil((a_l·x - c_l) / beta) <= floor((c_u - a_u·x) / gamma), beta and gamma the
-                // coefficients of y, with x = residue + period·t.
-                BigInteger beta = low.b().negate();
-                BigInteger gamma = up.b();
-                BigInteger floorUp = floorDivide(up.c().subtract(up.a().multiply(residue)), gamma);
-                BigInteger ceilLow = ceilDivide(
-                        low.a().multiply(residue).subtract(low.c()), beta);
-                BigInteger slope = up.a().multiply(period.divide(gamma))
-                        .add(low.a().multiply(period.divide(beta)));
-                if (!narrow(steps, slope, floorUp.subtract(ceilLow))) {
+        // Each bound at the class once, and not once for every pair it is in:
+        // ceil((a_l·x - c_l) / beta) <= floor((c_u - a_u·x) / gamma), beta and gamma the
+        // coefficients of y, with x = residue + period·t.
+        BigInteger[] ceilLow = new BigInteger[lower.size()];
+        for (int at = 0; at < ceilLow.length; at++) {
+            Bound low = lower.get(at);
+            ceilLow[at] = ceilDivide(low.a().multiply(residue).subtract(low.c()),
+                    low.b().negate());
+        }
+        BigInteger[] floorUp = new BigInteger[upper.size()];
+        for (int at = 0; at < floorUp.length; at++) {
+            Bound up = upper.get(at);
+            floorUp[at] = floorDivide(up.c().subtract(up.a().multiply(residue)), up.b());
+        }
+        for (int low = 0; low < ceilLow.length; low++) {
+            for (int up = 0; up < floorUp.length; up++) {
+                if (!narrow(steps, slopes[low][up], floorUp[up].subtract(ceilLow[low]))) {
                     return EMPTY;
                 }
             }
         }
         return steps;
+    }
+
+    /** How the step along a class moves the condition of each pair of a lower and an upper bound:
+     *  the same at every class, so worked out once. */
+    private static BigInteger[][] slopesOf(BigInteger period, List<Bound> lower,
+                                           List<Bound> upper) {
+        BigInteger[][] slopes = new BigInteger[lower.size()][upper.size()];
+        for (int low = 0; low < slopes.length; low++) {
+            for (int up = 0; up < slopes[low].length; up++) {
+                Bound below = lower.get(low);
+                Bound above = upper.get(up);
+                slopes[low][up] = above.a().multiply(period.divide(above.b()))
+                        .add(below.a().multiply(period.divide(below.b().negate())));
+            }
+        }
+        return slopes;
     }
 
     /** {@code steps} held to {@code slope·t <= limit}; false where that leaves no step. */
