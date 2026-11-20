@@ -164,7 +164,7 @@ final class AValueOfTheInput {
         boolean aDate = view.shape() instanceof Shape.Scalar(Type.Prim prim)
                 && prim == Type.Prim.DATE;
         if (view.wrappers().stream().allMatch(name -> writesNoClause(name, read.rules()))) {
-            return aNumber || aDate || anEnumeration(view) ? WholeRun.OPEN : null;
+            return (aNumber || aDate || anEnumeration(view)) ? WholeRun.OPEN : null;
         }
         NumericDomain.Bounds run = aNumber ? DeclaredBounds.wholeRunOf(view, read.ruleReading())
                 : null;
