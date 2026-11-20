@@ -496,6 +496,77 @@ class AValueTheOtherDatesBoundSettlesIsAClassOfItsOwnTest {
                 "Date.year(p.birthday) RULE_RELATING_TWO_VALUES")), unread.toString());
     }
 
+    /** The comparison of ages read again along a way that also states {@code ofOtherNumbers} of
+     *  {@code b}, from 2000 to 2099, {@code d}, a date of this century, and {@code x}, which
+     *  nothing ties to the person or the day. */
+    private static String readAgainBesideNumbers(String ofOtherNumbers) {
+        return """
+                module d
+
+                data Big = Int
+                    invariant value >= 2000 && value <= 2099
+                data Century = Date
+                    invariant value >= Date("2000-01-01") && value <= Date("2099-12-31")
+
+                data P = { birthday: Date, disabled: Bool }
+                    invariant birthday >= Date("1900-01-01")
+
+                let old (p: P, on: Date): Int =
+                    if Date.year(on) - Date.year(p.birthday) >= 60 || p.disabled
+                    then 1800 else 1300
+
+                behavior ceiling : (p: P, on: Date, b: Big, d: Century, x: Int, r: Int) -> Int
+                let ceiling (p, on, b, d, x, r) =
+                    if %s then
+                        (if r >= old(p, on) then old(p, on) else 3)
+                    else 4
+                """.formatted(ofOtherNumbers);
+    }
+
+    /** The positions the comparisons in {@code old} left unread along a way stating
+     *  {@code ofOtherNumbers}. */
+    private static List<String> unreadOfTheAgesBeside(String ofOtherNumbers) {
+        return unreadOfTheComparisonsIn(divided(readAgainBesideNumbers(ofOtherNumbers)), "old")
+                .stream().map(each -> each.substring(0, each.indexOf(' '))).toList();
+    }
+
+    /**
+     * A product no values hold, as no number from 2000 to 2099 divides seven. The region does not
+     * take the statement in, and nothing else names its places, but that is not that some values
+     * hold it: no row comes along the way, and the ages are not read off what the region shows.
+     */
+    @Test
+    void aProductOfOtherNumbersNoValuesHoldLeavesTheAgesUnread() {
+        List<String> unread = unreadOfTheAgesBeside("b.value * x == 7");
+
+        assertTrue(unread.containsAll(List.of("Date.year(on)", "Date.year(p.birthday)")),
+                unread.toString());
+    }
+
+    /** The same of the year of a date of this century, which the calendar is not asked of in a
+     *  product. */
+    @Test
+    void aProductOfTheYearOfAnotherDateNoValuesHoldLeavesTheAgesUnread() {
+        List<String> unread = unreadOfTheAgesBeside("Date.year(d.value) * x == 7");
+
+        assertTrue(unread.containsAll(List.of("Date.year(on)", "Date.year(p.birthday)")),
+                unread.toString());
+    }
+
+    /**
+     * A product {@code b} at 2000 and {@code x} at 2 hold. Nothing answers some values of a
+     * statement the run says whether it held: the region does not take it in and the calendar
+     * answers forms of parts of dates. So the ages are unread here too, for want of that owner and
+     * not because no row comes along.
+     */
+    @Test
+    void aProductSomeValuesHoldIsUnreadForWantOfAnOwnerOfStatementsTheRunSaysHeld() {
+        List<String> unread = unreadOfTheAgesBeside("b.value * x == 4000");
+
+        assertTrue(unread.containsAll(List.of("Date.year(on)", "Date.year(p.birthday)")),
+                unread.toString());
+    }
+
     /** The same comparison over whole numbers, which is how the section reads it. */
     @Test
     void aBoundOnOneNumberSettlesTheOtherWhereItIsAWholeNumber() {
