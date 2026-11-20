@@ -474,8 +474,14 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          *  its part, a difference, a remainder or quotient, and the lines drawn from them), whose
          *  form is the program's own expression and not a sum the walk composed. A relation read
          *  by the affine walk carries what that walk told instead. */
-        static final Working NOTHING =
+        static final Working AS_THE_FORM =
                 new Working(List.of(), WhatARelationLeavesUndivided.Told.NOTHING_SAID);
+
+        /** Every operation that can stop a run was told, and none can: a row gets past nothing,
+         *  and the sizes of the form say nothing of it. Not the same as {@link #AS_THE_FORM},
+         *  where no reading was made and the sizes of the form are what stops a row. */
+        static final Working NO_STOPS =
+                new Working(List.of(), WhatARelationLeavesUndivided.Told.EVERY);
 
         /** A comparison was read and nothing it told is known to belong to this relation: no row
          *  is shown computed. */
@@ -550,10 +556,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * worked out what decided the arm before it works out the arm.
          */
         Working after(Working earlier) {
-            if (earlier.equals(NOTHING)) {
+            // Every operation told and none can stop a run: it adds no operation, and what it
+            // is put beside keeps what it said, on either side.
+            if (equals(NO_STOPS)) {
+                return earlier;
+            }
+            if (earlier.equals(NO_STOPS)) {
                 return this;
             }
-            if (equals(NOTHING)) {
+            if (earlier.equals(AS_THE_FORM)) {
+                return this;
+            }
+            if (equals(AS_THE_FORM)) {
                 return earlier;
             }
             List<IntOperation> both = new ArrayList<>(earlier.operations);
@@ -599,7 +613,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                          List<FilingCoordinate> amongThemselves, Kind kind,
                          RemainderSide remainder) {
-        this(sides, constant, relation, amongThemselves, kind, remainder, Working.NOTHING, null);
+        this(sides, constant, relation, amongThemselves, kind, remainder, Working.AS_THE_FORM, null);
     }
 
     /** The same relation, read from a comparison that works out {@code working}. */
@@ -2850,9 +2864,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return false;
     }
 
-    /** Whether {@link #aRunMayStopIn} says no run stops in {@code working} on any region: it
-     *  tells no operation, so whatever regions it is asked over do not need working out. */
-    static boolean noRunMayStopIn(Working working) {
+    /** Whether {@code working} tells no operation, so that {@link #aRunMayStopIn} is false of it
+     *  on any region and the regions it is asked over do not need working out. That is no
+     *  claim that a run stops nowhere ({@link Working#NO_STOPS}). */
+    static boolean tellsNoOperation(Working working) {
         return working.operations().isEmpty();
     }
 
@@ -4728,6 +4743,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 partnerOfThis = ValuesWithin.all(ValueSet.matching(both));
                 partnerLengths = LengthRuns.EVERY;
             }
+            // A side that is a piece the way holds to a language gets to the relation only where
+            // the piece is one of that language's strings, and a string with no such piece is one
+            // no run gets here with. What the declarations leave the sides does not show such a
+            // string undivided here: it is shown as that language parts it, where the strings
+            // below are worked out, and is left as the declarations showed it where they are not.
+            boolean shownUndivided = undivided && !(ofThePieces != null && here.piece() != null);
             StringsAPartnerCanHold strings = partnerCanHold(at == 0, here, there, partnerOfThis,
                     partnerLengths, mineHolds, called);
             if (strings != null && ofThePieces != null && !heldThere) {
@@ -4746,7 +4767,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             if (strings == null || strings.mayBe().isEmpty()
                     || strings.mayBe() instanceof ValueSet.WholeRuns
                     || strings.mayBe() instanceof ValueSet.WholeSteps
-                    || (!undivided && strings.mayBe().isAny() && strings.leavesNoneOpen())) {
+                    || (!shownUndivided && strings.mayBe().isAny() && strings.leavesNoneOpen())) {
                 continue;
             }
             // A side shown undivided says nothing of its own, unless the way keeps some of its
@@ -4754,10 +4775,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             // them.
             if (!reaches.test(mine.subjectPath(),
                     room.place() == null ? Set.of() : Set.of(room.place()))
-                    || (undivided && room.counts() == null)) {
+                    || (shownUndivided && room.counts() == null)) {
                 continue;
             }
-            if (!(undivided && strings.leavesNoneOpen())) {
+            if (!(shownUndivided && strings.leavesNoneOpen())) {
                 out.put(mine, strings);
             }
         }
@@ -5312,11 +5333,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return through == null || theirLengths.isEvery() ? through
                     : through.shownAt(theirLengths);
         }
-        if (there.piece() != null) {
-            return stringsThatAreThePiece(there.piece(), theirStrings, mine, called);
-        }
-        if (here.piece() != null) {
-            return stringsWithAPiece(here.piece(), theirStrings, mine, called);
+        // A function of the piece and the strings of the two sides alone, asked again of every way
+        // the relation is read along: worked out once in a reading ({@link
+        // OneReading#besideAPiece}).
+        if (there.piece() != null || here.piece() != null) {
+            boolean ofThePiece = there.piece() != null;
+            PiecesOfAString piece = ofThePiece ? there.piece() : here.piece();
+            return OneReading.besideAPiece(new OneReading.BesideAPiece(ofThePiece, piece,
+                    theirStrings, mine, called), () -> ofThePiece
+                            ? stringsThatAreThePiece(piece, theirStrings, mine, called)
+                            : stringsWithAPiece(piece, theirStrings, mine, called));
         }
         if (theirStrings.isEmpty()) {
             return null;
@@ -5600,21 +5626,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (seen != null) {
             return seen;
         }
-        // A function of the piece's separator and window, the conversion and the strings alone,
-        // read against an allowance of its own: what a reading asked once it is handed back
-        // ({@link OneReading#piecesAConversionAnswers}).
-        Optional<OneReading.PiecesAnswered> read = OneReading.piecesAConversionAnswers(
-                piece.separator(), piece.window(), conversion, whole,
-                () -> piecesAnswered(piece, conversion, whole));
-        if (read.isEmpty()) {
+        // Otherwise the pieces of what the conversion answers of the strings it is exactly a map
+        // on, and what a piece may be besides: any string of the code points it leaves alone.
+        Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
+        CodeMap map = CaseMaps.of(conversion);
+        Language exact = map.strings(meter);
+        Language kept = exact == null ? null : whole.and(exact, meter);
+        Language answers = kept == null ? null : map.answersTo(kept, meter);
+        StringsOfAPiece.Shown shown = answers == null ? null
+                : StringsOfAPiece.piecesOfValuesIn(answers, piece.separator(),
+                        piece.window().from(), piece.until(), meter);
+        Language alone = CodeMap.stringsOf(map.leftAlone(), meter);
+        Language mayBe = (shown == null || alone == null) ? null
+                : alone.or(shown.ofTheValues(), meter);
+        if (mayBe == null) {
             return null;
         }
-        StringsOfAPiece.Shown shown = read.get().shown();
-        Language mayBe = read.get().mayBe();
-        List<String> notShown = operationsNotExactOver(conversion, whole);
         return StringsAPartnerCanHold.unreached(ValueSet.matching(shown.ofTheValues()),
                 ValueSet.matching(mayBe), called)
-                .withTheImagesNotShownOf(notShown);
+                .withTheImagesNotShownOf(operationsNotExactOver(conversion, whole));
     }
 
     /**
@@ -5667,27 +5697,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 ValueSet.matching(mayBeAtAll), called);
         return canBe.equals(mayBeAtAll) ? out
                 : out.withTheImagesNotShownOf(conversion.operations());
-    }
-
-    /**
-     * The pieces of what {@code conversion} answers of the strings of {@code whole} that are pieces
-     * of its values, and what a piece may be besides — or empty past the allowance.
-     */
-    private static Optional<OneReading.PiecesAnswered> piecesAnswered(
-            PiecesOfAString piece, CaseMapping conversion, Language whole) {
-        Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
-        CodeMap map = CaseMaps.of(conversion);
-        Language exact = map.strings(meter);
-        Language kept = exact == null ? null : whole.and(exact, meter);
-        Language answers = kept == null ? null : map.answersTo(kept, meter);
-        StringsOfAPiece.Shown shown = answers == null ? null
-                : StringsOfAPiece.piecesOfValuesIn(answers, piece.separator(),
-                        piece.window().from(), piece.until(), meter);
-        Language alone = CodeMap.stringsOf(map.leftAlone(), meter);
-        Language mayBe = shown == null || alone == null ? null
-                : alone.or(shown.ofTheValues(), meter);
-        return mayBe == null ? Optional.empty()
-                : Optional.of(new OneReading.PiecesAnswered(shown, mayBe));
     }
 
     /**

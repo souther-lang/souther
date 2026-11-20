@@ -108,7 +108,28 @@ class ThePiecesThatReachARelationAreHeldToTheLanguageTheWayHoldsThemToTest {
                 classes::toString);
     }
 
-    private static final String LOWERED = MODEL.replace("String.split(\"@\", s)",
+    /** {@code model} with the comparison read in a flatMap over what the arm wrote, rather than in
+     *  the arm itself. */
+    private static String comparedAfterTheArm(String model) {
+        String inTheArm = "List.flatMap(d -> if Letters(d) as n then (if n.value == r.value then"
+                + " [ n ] else [ ]) else [ ], String.split(\"@\", s))";
+        assertTrue(model.contains(inTheArm), model);
+        return model.replace(inTheArm, "List.flatMap(v -> if v == r.value then [ v ] else [ ],"
+                + " List.flatMap(d -> if Letters(d) as n then [ n.value ] else [ ],"
+                + " String.split(\"@\", s)))");
+    }
+
+    /**
+     * A piece the arm wrote reaches a comparison after it only where the arm was taken, as one in
+     * the arm does: a string with none of the language's pieces is in no class of its own there
+     * either.
+     */
+    @Test
+    void aComparisonOfWhatTheArmWroteTellsTheStringsApartAsOneInTheArmDoes() {
+        assertEquals(classesOf(MODEL).get("s"), classesOf(comparedAfterTheArm(MODEL)).get("s"));
+    }
+
+    private static final String LOWERED =MODEL.replace("String.split(\"@\", s)",
             "String.split(\"@\", String.lowercase(s))");
 
     /** The partner holds fewer strings than the language, as it does for the string as it stands. */

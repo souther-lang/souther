@@ -126,7 +126,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
          * comparison is read again with the stopped value held aside ({@link Stopped#apart}).
          * Where neither working that value out nor anything beside it can stop a row the lines
          * are answered for their rows by the form's sizes
-         * ({@link UndividedByARelation.Working#NOTHING}); where something can, the operations
+         * ({@link UndividedByARelation.Working#AS_THE_FORM}); where something can, the operations
          * told are kept and the rest is not told. That analysis reads the number the value comes
          * to, which says nothing of whether working it out gets there.
          */
@@ -3190,7 +3190,7 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
                                                               WhatTheAnalysisAnswersFor answersFor,
                                                               WorkedOutToReachIt reached) {
         if (reached.endsNoRun(new Denotation(expression, at))) {
-            return UndividedByARelation.Working.NOTHING;
+            return UndividedByARelation.Working.NO_STOPS;
         }
         return toldEvaluating(expression, at, ofTheInput, answersFor).workedOut().stops()
                 .operations();
@@ -3597,8 +3597,10 @@ record AffineReading(LinearForm<NumericTerm> form, ExactRatio cut, ComparisonCla
         WorkedOut worksOut(WhatTheAnalysisAnswersFor answersFor) {
             WorkedOut beside = beside(new StoppedValues(node, nodeAt, false, ofTheInput,
                     answersFor));
+            // Beside the stop there is no operation, and the stop itself is no operation this
+            // tells: its sizes are what answer for it, so no run is shown to stop nowhere.
             return beside.toGetPast().operations().isEmpty() && beside.toGetPast().exact()
-                    ? new WorkedOut(UndividedByARelation.Working.NOTHING, beside.stops())
+                    ? new WorkedOut(UndividedByARelation.Working.AS_THE_FORM, beside.stops())
                     : beside;
         }
 

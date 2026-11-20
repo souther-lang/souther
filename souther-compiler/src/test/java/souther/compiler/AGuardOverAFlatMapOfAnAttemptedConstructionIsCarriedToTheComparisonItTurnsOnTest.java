@@ -69,15 +69,29 @@ class AGuardOverAFlatMapOfAnAttemptedConstructionIsCarriedToTheComparisonItTurns
     }
 
     /**
-     * A known limit, held so that lifting it is seen. The newtype holds only some strings, so the
-     * equality divides the string the pieces are of as well. That is not read yet: the relation
-     * reads the attempt's value through to the piece and keeps nothing of what the attempt asked
-     * of it, so it reads the equality as it does where the piece is not made into one. Once it
-     * keeps that, this fails: assert the division here instead.
+     * The newtype holds only some strings, so a piece reaches the equality only where it is one of
+     * them, and the equality divides the string the pieces are of by whether it has such a piece.
      */
     @Test
-    void theStringThePiecesAreOfIsNotYetDividedByWhatTheAttemptAsksOfAPiece() {
+    void theStringThePiecesAreOfIsDividedByWhatTheAttemptAsksOfAPiece() {
         String report = reported("p -> if D(p) as n then [ n.value ] else []");
+
+        assertTrue(report.contains("email is divided by comparison"), report);
+    }
+
+    /** Where both arms write the piece, a piece reaches the equality whichever is taken, and
+     *  neither arm's statement is on the way to it. */
+    @Test
+    void theStringThePiecesAreOfIsNotDividedWhereEveryArmWritesThePiece() {
+        String report = reported("p -> if D(p) as n then [ p ] else [ p ]");
+
+        assertFalse(report.contains("email is divided by comparison"), report);
+    }
+
+    /** Where every piece reaches the equality, it divides nothing of the string. */
+    @Test
+    void theStringThePiecesAreOfIsNotDividedWhereEveryPieceReachesTheEquality() {
+        String report = reported("p -> [ p ]");
 
         assertFalse(report.contains("email is divided by comparison"), report);
     }

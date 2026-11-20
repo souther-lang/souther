@@ -3428,8 +3428,8 @@ final class Pullback {
 
         /**
          * What a run taking each way of {@code ways}, read where {@code reached} holds, works out
-         * making the total the way comes to, at where the way is taken. A way where no run may stop
-         * ({@link StopEvidence#noRunMayStopAnywhere}) is not said; one whose total is no form of
+         * making the total the way comes to, at where the way is taken. A way that tells no
+         * operation ({@link StopEvidence#tellsNoOperation}) is not said; one whose total is no form of
          * the input's numbers, or whose sum cannot be held, leaves its stop untold. Ways too many
          * to write out are not taken one by one: what a run reaching them works out is left untold
          * where they are read.
@@ -3451,7 +3451,7 @@ final class Pullback {
                 };
                 StopEvidence stops = StopEvidence.ofWhatIsToldOf(
                         worked == null ? A_TOTAL_UNTOLD : worked);
-                if (!stops.noRunMayStopAnywhere()) {
+                if (!stops.tellsNoOperation()) {
                     out.add(StopEvidence.OnAnArm.takenWhere(taken, stops));
                 }
             });
@@ -7660,34 +7660,14 @@ final class Pullback {
          */
         private Located emittingBeneath(Denotation container, List<Kept> pending,
                                         List<Kept> located) {
-            ElementBindings.PiecesOfEachElement assembled =
-                    ElementBindings.piecesOfEachElement(container.value(), blockIn(container));
-            if (assembled == null
-                    || assembled.piece() != PieceOfAnElement.WHAT_THE_CLOSURE_ANSWERS) {
+            WrittenByOneArm written = writtenByOneArm(container, blockIn(container));
+            if (written == null) {
                 return null;
             }
-            Core chosen = Core.withoutStanding(assembled.step().body());
-            Choice choice = Choice.of(chosen);
-            if (choice == null || choice.kind() == Choice.Kind.THE_ARGUMENTS) {
-                return null;
-            }
-            int writing = -1;
-            for (int i = 0; i < choice.arms().size(); i++) {
-                if (!(Core.withoutStanding(choice.arms().get(i).answers())
-                        instanceof Core.ListLit list) || list.elements().size() > 1) {
-                    return null;
-                }
-                if (list.elements().size() == 1) {
-                    if (writing >= 0) {
-                        return null;
-                    }
-                    writing = i;
-                }
-            }
-            if (writing < 0) {
-                return null;
-            }
-            Choice.Arm arm = choice.arms().get(writing);
+            ElementBindings.PiecesOfEachElement assembled = written.assembled();
+            Core chosen = written.choice();
+            int writing = written.arm();
+            Choice.Arm arm = Choice.of(chosen).arms().get(writing);
             Core element = ((Core.ListLit) Core.withoutStanding(arm.answers())).elements()
                     .getFirst();
             Denotation walked = container.at().standing(assembled.walked(),
@@ -10536,6 +10516,57 @@ final class Pullback {
         return blocksAt(container, read.rules().symbols(), read.rules().newtypes());
     }
 
+    /**
+     * A container that is the lists a closure answered of each element of another put end to end,
+     * where the closure's body is a choice with one arm writing one element and every other arm
+     * writing none: an element of it exists where that arm is taken, and only there.
+     *
+     * @param assembled how the container is put together
+     * @param choice    the closure's body, the choice
+     * @param arm       which of its arms writes the element, as {@link Choice} numbers them
+     */
+    record WrittenByOneArm(ElementBindings.PiecesOfEachElement assembled, Core choice, int arm) {}
+
+    /**
+     * {@link WrittenByOneArm} of {@code container}, its closures read through {@code blocks} — or
+     * null where it is not so put together. Two arms writing, or an arm writing more than one, is
+     * a container whose elements' existence turns on more than one arm, and is not one.
+     */
+    static WrittenByOneArm writtenByOneArm(Denotation container,
+                                           Function<Core, Core.Block> blocks) {
+        ElementBindings.PiecesOfEachElement assembled =
+                ElementBindings.piecesOfEachElement(container.value(), blocks);
+        if (assembled == null
+                || assembled.piece() != PieceOfAnElement.WHAT_THE_CLOSURE_ANSWERS) {
+            return null;
+        }
+        Core chosen = Core.withoutStanding(assembled.step().body());
+        Choice choice = Choice.of(chosen);
+        if (choice == null || choice.kind() == Choice.Kind.THE_ARGUMENTS) {
+            return null;
+        }
+        int writing = -1;
+        for (int i = 0; i < choice.arms().size(); i++) {
+            if (!(Core.withoutStanding(choice.arms().get(i).answers())
+                    instanceof Core.ListLit list) || list.elements().size() > 1) {
+                return null;
+            }
+            if (list.elements().size() == 1) {
+                if (writing >= 0) {
+                    return null;
+                }
+                writing = i;
+            }
+        }
+        return writing < 0 ? null : new WrittenByOneArm(assembled, chosen, writing);
+    }
+
+    /** {@link WrittenByOneArm} of {@code container}, its closures read where it stands. */
+    static WrittenByOneArm writtenByOneArm(Denotation container, Symbols symbols,
+                                           DeclarationNewtypes newtypes) {
+        return writtenByOneArm(container, blocksAt(container, symbols, newtypes));
+    }
+
     private static Function<Core, Core.Block> blocksAt(Denotation container, Symbols symbols,
                                                        DeclarationNewtypes newtypes) {
         return closure -> Core.withoutStanding(container.at().standing(closure, symbols, newtypes)
@@ -11895,10 +11926,10 @@ final class Pullback {
         List<UndividedByARelation.Working> decided = whatDecidedTheArm();
         trial().readOnAnArm(new ArmRead.OfAWayOfATotal(read),
                 new OnThisArm(() -> AffineReading.WorkedOut.ofWhatIsToldOf(worked),
-                        () -> UndividedByARelation.Working.NOTHING, decided));
+                        () -> UndividedByARelation.Working.AS_THE_FORM, decided));
         OnThisArm forTheRows = new OnThisArm(() -> new AffineReading.WorkedOut(worked,
-                StopEvidence.ofWhatIsToldOf(UndividedByARelation.Working.NOTHING)),
-                () -> UndividedByARelation.Working.NOTHING, decided);
+                StopEvidence.ofWhatIsToldOf(UndividedByARelation.Working.AS_THE_FORM)),
+                () -> UndividedByARelation.Working.AS_THE_FORM, decided);
         for (ArmRead each : ArmRead.in(read)) {
             trial().readOnAnArm(each, forTheRows);
         }
@@ -11919,7 +11950,7 @@ final class Pullback {
             return null;
         }
         if (FormRange.liesWithin(ofTheInput, read, Map.of(), held.least(), held.greatest())) {
-            return UndividedByARelation.Working.NOTHING;
+            return UndividedByARelation.Working.NO_STOPS;
         }
         return new UndividedByARelation.Working(List.of(UndividedByARelation.IntOperation
                 .overTheInput(ofTheInput, held.least(), held.greatest(), List.of())),
@@ -13677,7 +13708,7 @@ final class Pullback {
         Once<AffineReading.WorkedOut> worksOut =
                 new Once<>(() -> worksOut(theRule, arithmeticOf(stated, there)));
         Once<UndividedByARelation.Working> evaluated = new Once<>(() -> answered == null
-                ? UndividedByARelation.Working.NOTHING
+                ? UndividedByARelation.Working.AS_THE_FORM
                 : AffineReading.workedOutByEvaluating(answered.value(), answered.at(), this.read,
                         answersOf(theRule), onTheArmItAnswers(answered, fork, forkAt)));
         OnThisArm arm = new OnThisArm(worksOut, evaluated,

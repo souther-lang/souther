@@ -633,6 +633,11 @@ class AProjectionIsReadAsTheAccessesItStandsForTest {
                 + "partition/ConditionNumbering;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
         row(out, c + "partition/ComparisonReadings", "comparisonsIn",
                 "(" + core + "Ljava/util/List;)V", Reading.STRUCTURE, CHOICES_AND_CALLS);
+        row(out, c + "partition/ComparisonReadings", "writtenUnder", "(L" + CORE + "$Block;"
+                + reads + "L" + c + "partition/ComparisonReadings$Body;L" + c
+                + "partition/ConditionNumbering;)Ljava/util/List;", Reading.STRUCTURE,
+                "steps from a closure to its body, the one child the names it binds are read"
+                        + " in, and no projection is below that step");
         // The way to a call of a helper that calls itself, whether a call stands somewhere, and
         // whether a body builds a value: each looks for a choice, a call or a build.
         row(out, c + "partition/ComparisonReadings", "wayTo", "(" + core + core + reads + "L" + c
