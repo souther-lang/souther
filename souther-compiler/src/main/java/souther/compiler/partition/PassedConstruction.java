@@ -34,6 +34,8 @@ public final class PassedConstruction {
     private final int hash;
 
     /**
+     * One clause of a construction a way goes through.
+     *
      * @param states what getting past the clause states, in the words a composer of a row works
      *               from
      * @param at     where the construction is written, or null where the code it stands in was
