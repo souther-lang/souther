@@ -4223,6 +4223,13 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                             overlapping, independent,
                             granularityOf(carriers.get(at)), greatestOf(carriers.get(at)),
                             supports, operations);
+            // Where the way ties the two sides no side runs apart from the other, and what the
+            // relation leaves it is asked of the rows of the way.
+            if (each == null && !offItsLine && sides.size() == 2 && !standApart(0, 1, independent)) {
+                each = WhatARelationLeavesUndivided.leavesAlongATie(beside.along(),
+                        sides.stream().map(Side::number).toList(), terms, at, constant, relation,
+                        greatestOf(carriers.get(at)), operations);
+            }
             leaves.add(each);
             if (settledAtEveryValue(each)) {
                 return comesOutOneWay(out, settled, countsRead);

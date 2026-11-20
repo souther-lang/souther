@@ -1,6 +1,8 @@
 package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import souther.compiler.ACompiledModel;
 import souther.compiler.diag.SourceRendering;
@@ -74,14 +76,39 @@ class AConditionTheDeclarationsSettleDoesNotTieTheComparisonBesideItTest {
 
     /**
      * {@code eaches >= pack} keeps rows off {@code eaches < 2 * pack}, so it is a statement of the
-     * way and ties the two: the comparison after it is read alone as {@code eaches < 2 * pack} is,
-     * which would say of every value of {@code eaches} what only some rows hold.
+     * way and ties the two. What the comparison leaves each is then asked of the rows of the way:
+     * {@code eaches = 1} has only {@code pack = 1} and settles it, and every other value of either
+     * has a row each way.
+     */
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+            "eaches.value >= pack.value && eaches.value < 2 * pack.value | 12",
+            "eaches.value > pack.value && eaches.value <= 2 * pack.value | 13"})
+    void aConditionTheDeclarationsDoNotSettleTiesTheComparisonAfterItAndIsReadOverTheRowsOfTheWay(
+            String guard, String whole) {
+        JsonNode report = reportOf(BOUND, guard, whole, "0");
+        assertTrue(List.of(READ).containsAll(reasonsNotRead(report)), report::toString);
+    }
+
+    /**
+     * Where {@code eaches < 2 * pack} comes first, what the way leaves {@code pack} at an
+     * {@code eaches} is {@code ceil((eaches + 1) / 2)} and up: ends that step by one and then stay
+     * for a value, on no line. A row each way is shown only along a line, so the comparison after
+     * it is not read, and asking more values does not change that.
      */
     @Test
-    void aConditionTheDeclarationsDoNotSettleStillTiesTheComparisonAfterIt() {
+    void endsThatStepOnAWholeLatticeAreOnNoLineAndTheComparisonIsNotRead() {
+        JsonNode report = reportOf(BOUND,
+                "Rational.toInt(DOWN, eaches.value / pack.value) == 1", "12", "0");
+        assertTrue(reasonsNotRead(report).contains(NOT_SHOWN_TO_REACH), report::toString);
+    }
+
+    /** Over the whole of {@code Int} {@code 2 * pack} stops a run, so no row is shown there. */
+    @Test
+    void whereTheTiedComparisonMayStopARunItIsNotRead() {
         JsonNode report = reportOf("",
                 "eaches.value >= pack.value && eaches.value < 2 * pack.value", "12", "0");
-        assertTrue(reasonsNotRead(report).contains(NOT_SHOWN_TO_REACH), report::toString);
+        assertFalse(reasonsNotRead(report).equals(List.of(READ)), report::toString);
     }
 
     /** The reasons of the places not read, each as many times as it is said. */
