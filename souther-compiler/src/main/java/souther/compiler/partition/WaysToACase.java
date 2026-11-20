@@ -93,6 +93,12 @@ final class WaysToACase {
         return ways.answer(decides, asked -> reading.apply(put.apply(asked)));
     }
 
+    /** What taking {@code decides} in puts on the way at the comparison, the entries
+     *  {@link #apply} reads beside the way to it. */
+    List<OnTheWay> putOn(Proposition decides) {
+        return put.apply(decides);
+    }
+
     /**
      * Whether the way to the comparison with {@code decides} taken in is one a row may take: not
      * one some two conditions on it close, and not one whose numbers leave nothing

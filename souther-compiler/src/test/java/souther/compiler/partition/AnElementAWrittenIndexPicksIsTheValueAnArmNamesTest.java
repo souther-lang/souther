@@ -18,6 +18,7 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -55,12 +56,31 @@ class AnElementAWrittenIndexPicksIsTheValueAnArmNamesTest {
     }
 
     /** The issue's own report: neither the comparison nor the fork it stands under is left unread,
-     *  where both were. */
+     *  where both were. A run at the least {@code x} stops in {@code c - zero} on the arm every
+     *  run takes, which is said as a stop not told, and is all that is said of x. */
     @Test
     void neitherTheComparisonNorItsForkIsLeftUnread() {
-        assertEquals(List.of(), unreadAt(reportOf(guarded("List.get(0, String.codePoints(\"0\"))")),
-                        "x"),
+        assertEquals(List.of(STOPS_NOT_ALL_TOLD),
+                reasonsAt(reportOf(guarded("List.get(0, String.codePoints(\"0\"))")), "x"),
                 "what the guard states about x is read, through the arm the match takes");
+    }
+
+    /** An arm no run takes works nothing out: what it would stop in is said nowhere. An index
+     *  past the list takes the None arm, so the Some arm's {@code c + 1} is worked out on no
+     *  run. */
+    @Test
+    void aStopOnTheArmNoRunTakesIsNotSaid() {
+        assertFalse(reasonsAt(reportOf(guarded("List.get(1, [48])")
+                        .replace("Some zero -> c - zero", "Some zero -> c + 1 - zero + zero")), "x")
+                .contains(STOPS_NOT_ALL_TOLD));
+    }
+
+    private static final String STOPS_NOT_ALL_TOLD = "evaluation_stops_not_fully_read";
+
+    /** The reasons {@link #unreadAt} gives, without the rule each is given for. */
+    private static List<String> reasonsAt(JsonNode report, String position) {
+        return unreadAt(report, position).stream()
+                .map(each -> each.substring(each.lastIndexOf(": ") + 2)).toList();
     }
 
     /** Which arm is taken is the library's law on List.get and not the element: an index past the
@@ -264,7 +284,7 @@ class AnElementAWrittenIndexPicksIsTheValueAnArmNamesTest {
     private static void reasons(JsonNode node, String position, List<String> out) {
         if (node.isObject() && node.has("ruleId") && node.has("reason")
                 && position.equals(node.path("position").asString())) {
-            out.add(node.path("ruleId").asString() + ": " + node.path("reason").asString());
+            out.add(node.path("ruleId") + ": " + node.path("reason").asString());
         }
         node.forEach(child -> reasons(child, position, out));
     }

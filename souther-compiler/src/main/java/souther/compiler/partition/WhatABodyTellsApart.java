@@ -98,7 +98,8 @@ final class WhatABodyTellsApart {
         this.armsNamed = armsNamed;
         this.dependencies = dependencies;
         this.arrives = arrives;
-        this.coexistence = ClassCoexistence.among(axes);
+        this.coexistence = ClassCoexistence.among(axes,
+                measured.subject().quantities().region());
         this.unread = new boolean[axes.size()];
         for (int at = 0; at < axes.size(); at++) {
             splits.add(new ArrayList<>());

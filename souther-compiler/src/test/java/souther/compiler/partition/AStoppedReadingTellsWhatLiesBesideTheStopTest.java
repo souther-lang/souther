@@ -171,12 +171,13 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
     /**
      * The sizes of the addends answer for a row only where the program adds the addends up. A sum
      * that cancels in the form, or weighs the product otherwise, is an operation of its own: at
-     * the greatest product the run stops in the sum that adds one.
+     * the greatest product the run stops in the sum that adds one. It is told over what the
+     * product comes to, which no row of the input is placed at.
      */
     @Test
     void anOperationThatIsNoSumOfTheAddendsIsNotTheOwnersToAnswerFor() {
-        assertUnread(workingOfTheStop("((m * m) + 1) - 1 >= 100"));
-        assertUnread(workingOfTheStop("m * m + 5 >= 100"));
+        assertToldOverWhatTheStopComesTo(workingOfTheStop("((m * m) + 1) - 1 >= 100"));
+        assertToldOverWhatTheStopComesTo(workingOfTheStop("m * m + 5 >= 100"));
         assertEquals(UndividedByARelation.Working.AS_THE_FORM,
                 workingOfTheStop("m * m + n >= 100"));
         assertEquals(UndividedByARelation.Working.AS_THE_FORM,
@@ -194,6 +195,12 @@ class AStoppedReadingTellsWhatLiesBesideTheStopTest {
                 "(if p then 0 else 1) + (if q then 1 else 0) >= k"));
         assertUnread(workingOfTheStop(OVER_CHOICES,
                 "(if p then 0 else 1) + (if q then 9223372036854775807 else 0) >= k"));
+    }
+
+    /** An operation is told over the value the stopped expression comes to, which no row of the
+     *  input is placed at. */
+    private static void assertToldOverWhatTheStopComesTo(UndividedByARelation.Working working) {
+        assertTrue(!working.overValuesWorkedOut().isEmpty(), working::toString);
     }
 
     /** No row is shown computed, and no operation is told. */

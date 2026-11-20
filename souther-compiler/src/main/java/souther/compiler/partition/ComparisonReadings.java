@@ -378,17 +378,7 @@ record ComparisonReadings(List<Reading> comparisons, List<ForkMet> forks,
              *  whichever arm is taken. */
             Proposition takenWhere() {
                 return onAnArm == null ? null : onAnArm.reached();
-            }
-
-            /** Where a run works it out: where the application is made and the arm taken, or
-             *  null where it is worked out wherever the comparison is reached. */
-            Proposition workedOutWhere() {
-                Proposition taken = takenWhere();
-                return taken == null ? madeWhere
-                        : madeWhere == null ? taken
-                        : WhereAnApplicationIsMade.past(madeWhere, taken);
-            }
-        }
+            }        }
 
         /**
          * Every stop evidence a run getting to the comparison works out, each with where it is

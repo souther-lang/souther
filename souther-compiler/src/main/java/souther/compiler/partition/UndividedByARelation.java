@@ -306,6 +306,12 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                     && over.coefs().keySet().stream().noneMatch(FormRange::aTotal);
         }
 
+        /** Whether this is over a value a run works out ({@link IntOperand.OfAValueWorkedOut}). */
+        boolean overAValueWorkedOut() {
+            return form.coefs().keySet().stream()
+                    .anyMatch(IntOperand.OfAValueWorkedOut.class::isInstance);
+        }
+
         /**
          * The form at the least it comes to over the values each bound number takes, or at the
          * greatest: each bound number put at the end of its values that weighs the form down, or
@@ -325,13 +331,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * A number an operation of whole numbers is over: a number of the input, or the value of a
-     * name read off a container, whose values are what the container holds there.
+     * A number an operation of whole numbers is over: a number of the input, the value of a
+     * name read off a container, whose values are what the container holds there, or a value a
+     * run works out whose numbers are known and stand at no row.
      *
      * <p>A bound number is one only where what the container hands the name says the values it
      * takes, as two forms of the input's numbers: where an element a walk hands its step stands,
-     * and the element of a list of every whole number between two. Any other value an operation
-     * reads is not told of here, and the operation is not told.
+     * and the element of a list of every whole number between two. A value worked out is one only
+     * where the numbers it comes to are known. Any other value an operation reads is not told of
+     * here, and the operation is not told.
      */
     sealed interface IntOperand {
 
@@ -426,6 +434,38 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             @Override
             public String toString() {
                 return name;
+            }
+        }
+
+        /**
+         * A value a run works out that is no number of the input and no name read off a
+         * container, as the reading of the comparison held it aside ({@code atom}), and where the
+         * numbers it is known to come to come from. No row of the input says which of them a run
+         * gets, so no row is placed at an operation over it, and that some of them take the
+         * operation past its type says no run stops in it: only that a way that keeps them all
+         * within shows none does ({@link WhatAWayLeavesOfAValue}).
+         */
+        record OfAValueWorkedOut(NumericTerm atom, WhereAValueComesFrom origin) implements IntOperand {
+
+            public OfAValueWorkedOut {
+                Objects.requireNonNull(atom, "the value as the reading held it aside");
+                Objects.requireNonNull(origin, "an operation over a value is told where what it "
+                        + "comes to is known");
+            }
+
+            @Override
+            public LinearForm<NumericTerm> atItsEnd(boolean greatest) {
+                return null;
+            }
+
+            @Override
+            public FormRange range(InputReading read) {
+                return origin.range();
+            }
+
+            @Override
+            public String toString() {
+                return atom.toString();
             }
         }
     }
@@ -606,7 +646,18 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
          * does.
          */
         boolean aRunMayStopOverABoundValue() {
-            return operations.stream().anyMatch(each -> !each.stopsOnRowsOfTheInput());
+            return operations.stream().anyMatch(each -> !each.stopsOnRowsOfTheInput()
+                    && !each.overAValueWorkedOut());
+        }
+
+        /**
+         * The operations told over a value a run works out
+         * ({@link IntOperand.OfAValueWorkedOut}): what those values may come to shows where no
+         * run stops in them, and never that one does, so each is a stop left untold unless the
+         * way to it keeps it within its type.
+         */
+        List<IntOperation> overValuesWorkedOut() {
+            return operations.stream().filter(IntOperation::overAValueWorkedOut).toList();
         }
     }
 
@@ -2179,6 +2230,8 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         return switch (operand) {
             case IntOperand.OfTheInput(NumericTerm term) -> term;
             case IntOperand.OfABinding(Quantity.OfABinding value, String _) -> value;
+            // A value worked out stands at no row, so it is a side of no relation.
+            case IntOperand.OfAValueWorkedOut worked -> worked;
         };
     }
 
@@ -2430,7 +2483,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     private Optional<Map<NumericTerm, EachWayItComesOut>> comingOutOn(InputReading read,
                                                                       SidesAsDeclared declared,
                                                                       Reachability.Reaching way) {
-        List<OnAWay> written = conditionsOf(way, remainder);
+        List<OnAWay> written = conditionsOf(way, remainder, read.quantities().region());
         if (leavesNoRow(WhatStatementsOfOneFormDecide.of(
                 written.stream().map(OnAWay::affine).toList(), askedAsAStatement()), written,
                 datesTheWayStates(written, read), read)) {
@@ -2559,7 +2612,7 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 out = out == null ? none : out.alongBoth(none);
                 continue;
             }
-            List<OnAWay> conditions = conditionsOf(each, remainder);
+            List<OnAWay> conditions = conditionsOf(each, remainder, read.quantities().region());
             boolean heldWhole = nothingUnreadBearsOnIt(each);
             Optional<Set<String>> declined = parametersDeclined(each);
             DemandReading.Answered past = each.gotPastAsAsked();
@@ -3657,10 +3710,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
     }
 
     /**
-     * What a way states, as what each statement turns on: what it took in, each as the demand it
-     * is, and each case it requires.
+     * What a way states beside what {@code declared} leaves, as what each statement turns on: what
+     * it took in, each as the demand it is, and each case it requires.
+     *
+     * <p>A relation of numbers that every row {@code declared} leaves meets is no statement of the
+     * way: it keeps no row off the relation asked of it. Kept, it ties the numbers it names to one
+     * another, so that no value of either is shown to be reached whatever the other holds.
      */
-    private static List<OnAWay> conditionsOf(Reachability.Reaching way, RemainderSide remainder) {
+    private static List<OnAWay> conditionsOf(Reachability.Reaching way, RemainderSide remainder,
+                                             SearchRegion declared) {
         List<OnAWay> out = new ArrayList<>();
         way.boundedOnTheWay().forEach(taken -> {
             // Where the relation's remainder lies, which is read apart ({@link
@@ -3671,6 +3729,10 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             }
             TakenConstraint relation = taken.demand() instanceof RowDemand.Relational(
                     TakenConstraint constraint) ? constraint : null;
+            if (relation instanceof TakenConstraint.Affine affine
+                    && leavesNoRowOff(declared, affine)) {
+                return;
+            }
             out.add(new OnAWay(positionsADemandTurnsOn(taken.demand()),
                     relation instanceof TakenConstraint.Affine(var form, var rel, var _)
                             && rel != Rel.NE && form.coefs().size() == 1
@@ -3693,6 +3755,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         way.requirements().atANameTheCasesShare()
                 .forEach(at -> out.add(new OnAWay(Set.of(at), true, null, null)));
         return out;
+    }
+
+    /**
+     * Whether {@code declared} taking the denial of {@code relation} in leaves no row: a region
+     * that refuses it, or that cannot be shown empty, shows nothing. What the operations in the
+     * relation may stop a run at is said where the ways' ends are, and not by this.
+     */
+    private static boolean leavesNoRowOff(SearchRegion declared, TakenConstraint.Affine relation) {
+        return declared.assuming(relation.form(), relation.rel().denied())
+                instanceof SearchRegion.Assumption.Taken(SearchRegion off)
+                && off.emptiness().isPresent();
     }
 
     /**
