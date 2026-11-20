@@ -5267,11 +5267,16 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
             return through == null || theirLengths.isEvery() ? through
                     : through.shownAt(theirLengths);
         }
-        if (there.piece() != null) {
-            return stringsThatAreThePiece(there.piece(), theirStrings, mine, called);
-        }
-        if (here.piece() != null) {
-            return stringsWithAPiece(here.piece(), theirStrings, mine, called);
+        // A function of the piece and the strings of the two sides alone, asked again of every way
+        // the relation is read along: worked out once in a reading ({@link
+        // OneReading#besideAPiece}).
+        if (there.piece() != null || here.piece() != null) {
+            boolean ofThePiece = there.piece() != null;
+            PiecesOfAString piece = ofThePiece ? there.piece() : here.piece();
+            return OneReading.besideAPiece(new OneReading.BesideAPiece(ofThePiece, piece,
+                    theirStrings, mine, called), () -> ofThePiece
+                            ? stringsThatAreThePiece(piece, theirStrings, mine, called)
+                            : stringsWithAPiece(piece, theirStrings, mine, called));
         }
         if (theirStrings.isEmpty()) {
             return null;
@@ -5555,21 +5560,25 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         if (seen != null) {
             return seen;
         }
-        // A function of the piece's separator and window, the conversion and the strings alone,
-        // read against an allowance of its own: what a reading asked once it is handed back
-        // ({@link OneReading#piecesAConversionAnswers}).
-        Optional<OneReading.PiecesAnswered> read = OneReading.piecesAConversionAnswers(
-                piece.separator(), piece.window(), conversion, whole,
-                () -> piecesAnswered(piece, conversion, whole));
-        if (read.isEmpty()) {
+        // Otherwise the pieces of what the conversion answers of the strings it is exactly a map
+        // on, and what a piece may be besides: any string of the code points it leaves alone.
+        Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
+        CodeMap map = CaseMaps.of(conversion);
+        Language exact = map.strings(meter);
+        Language kept = exact == null ? null : whole.and(exact, meter);
+        Language answers = kept == null ? null : map.answersTo(kept, meter);
+        StringsOfAPiece.Shown shown = answers == null ? null
+                : StringsOfAPiece.piecesOfValuesIn(answers, piece.separator(),
+                        piece.window().from(), piece.until(), meter);
+        Language alone = CodeMap.stringsOf(map.leftAlone(), meter);
+        Language mayBe = (shown == null || alone == null) ? null
+                : alone.or(shown.ofTheValues(), meter);
+        if (mayBe == null) {
             return null;
         }
-        StringsOfAPiece.Shown shown = read.get().shown();
-        Language mayBe = read.get().mayBe();
-        List<String> notShown = operationsNotExactOver(conversion, whole);
         return StringsAPartnerCanHold.unreached(ValueSet.matching(shown.ofTheValues()),
                 ValueSet.matching(mayBe), called)
-                .withTheImagesNotShownOf(notShown);
+                .withTheImagesNotShownOf(operationsNotExactOver(conversion, whole));
     }
 
     /**
@@ -5622,27 +5631,6 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 ValueSet.matching(mayBeAtAll), called);
         return canBe.equals(mayBeAtAll) ? out
                 : out.withTheImagesNotShownOf(conversion.operations());
-    }
-
-    /**
-     * The pieces of what {@code conversion} answers of the strings of {@code whole} that are pieces
-     * of its values, and what a piece may be besides — or empty past the allowance.
-     */
-    private static Optional<OneReading.PiecesAnswered> piecesAnswered(
-            PiecesOfAString piece, CaseMapping conversion, Language whole) {
-        Meter meter = PatternPlan.Budget.OF_THE_PIECES_OF_A_LANGUAGE.meter();
-        CodeMap map = CaseMaps.of(conversion);
-        Language exact = map.strings(meter);
-        Language kept = exact == null ? null : whole.and(exact, meter);
-        Language answers = kept == null ? null : map.answersTo(kept, meter);
-        StringsOfAPiece.Shown shown = answers == null ? null
-                : StringsOfAPiece.piecesOfValuesIn(answers, piece.separator(),
-                        piece.window().from(), piece.until(), meter);
-        Language alone = CodeMap.stringsOf(map.leftAlone(), meter);
-        Language mayBe = shown == null || alone == null ? null
-                : alone.or(shown.ofTheValues(), meter);
-        return mayBe == null ? Optional.empty()
-                : Optional.of(new OneReading.PiecesAnswered(shown, mayBe));
     }
 
     /**

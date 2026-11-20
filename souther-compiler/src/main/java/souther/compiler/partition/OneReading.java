@@ -3,7 +3,6 @@ package souther.compiler.partition;
 import souther.compiler.inputs.SearchRegion;
 import souther.compiler.inputs.TermPath;
 import souther.compiler.regex.Language;
-import souther.compiler.regex.StringsOfAPiece;
 import souther.compiler.semantics.CaseMapping;
 import souther.compiler.values.ValueSet;
 
@@ -22,8 +21,8 @@ import java.util.function.Supplier;
  * says of its remainder ({@link ARemainderMoved#saidBy}), how a choice is parted for a relation
  * ({@link AWayReadForARelation.ChoiceRead#of}), which operations of a case conversion
  * are not exact over the strings it is done to ({@link #notExactOver}), what it answers of them
- * ({@link #conversionAnswers}), which pieces of what
- * it answers are pieces of its values ({@link #piecesAConversionAnswers}), whether the strings
+ * ({@link #conversionAnswers}), the strings either side of an equality with a piece of a string
+ * holds ({@link #besideAPiece}), whether the strings
  * a position admits are every string of the lengths its rules leave it ({@link #everyStringOf}),
  * and those strings made into one set ({@link #stringsAsOneSet}).
  *
@@ -63,8 +62,9 @@ final class OneReading {
     /** By value: a conversion is a value, and a language is its strings, hashed off the table it
      *  was made into when it was made. */
     private final Map<ConvertedOver, List<String>> notExact = new HashMap<>();
-    /** By value, for the same reason. */
-    private final Map<PiecesAsked, Optional<PiecesAnswered>> piecesAnswered = new HashMap<>();
+    /** By value, for the same reason: a piece and the strings either side of an equality holds. */
+    private final Map<BesideAPiece, Optional<UndividedByARelation.StringsAPartnerCanHold>>
+            besideAPiece = new HashMap<>();
     /** By value, for the same reason: what a conversion answers of the strings of a language. */
     private final Map<ConvertedOver, Optional<WhatAConversionAnswers>> conversionAnswers =
             new HashMap<>();
@@ -141,14 +141,14 @@ final class OneReading {
                 : working.get();
     }
 
-    /** The pieces of what {@code conversion} answers of {@code whole} at {@code separator} in
-     *  {@code window}: as this reading worked them out already, or {@code working}'s, now. */
-    static Optional<PiecesAnswered> piecesAConversionAnswers(
-            int separator, PieceWindow window, CaseMapping conversion, Language whole,
-            Supplier<Optional<PiecesAnswered>> working) {
+    /** The strings a side of an equality holds of a piece, or null where they are not worked out
+     *  ({@link BesideAPiece}): as this reading worked them out already, or {@code working}'s,
+     *  now. */
+    static UndividedByARelation.StringsAPartnerCanHold besideAPiece(
+            BesideAPiece asked, Supplier<UndividedByARelation.StringsAPartnerCanHold> working) {
         return READING.isBound()
-                ? kept(READING.get().piecesAnswered,
-                        new PiecesAsked(separator, window, conversion, whole), working)
+                ? kept(READING.get().besideAPiece, asked,
+                        () -> Optional.ofNullable(working.get())).orElse(null)
                 : working.get();
     }
 
@@ -170,10 +170,6 @@ final class OneReading {
                         .orElse(null)
                 : working.get();
     }
-
-    /** The pieces of a conversion's answers that are pieces of its values, and what a piece may be
-     *  besides. */
-    record PiecesAnswered(StringsOfAPiece.Shown shown, Language mayBe) {}
 
     /** The answer kept in {@code in} for {@code asked}, or {@code working}'s, kept from now on.
      *  Looked up and put in apart, so working one out may ask for another. */
@@ -260,7 +256,18 @@ final class OneReading {
     /** Some strings and the lengths they are asked to be every string of. */
     private record LengthsOver(Language strings, LengthsPastTheWay.Lengths lengths) {}
 
-    /** Which pieces of what a conversion answers of some strings are asked for. */
-    private record PiecesAsked(int separator, PieceWindow window, CaseMapping conversion,
-                               Language whole) {}
+    /**
+     * What is asked of an equality between a piece of a string and another string: the strings of
+     * one side the other can hold, each side read off its strings alone. The piece is told apart
+     * by which pieces of which string they are and not by the statement it is read in
+     * ({@link PiecesOfAString#equals}).
+     *
+     * @param ofThePiece whether the side asked of is the other string, the partner being the piece
+     * @param piece      the piece, of whichever side it is
+     * @param partner   the strings the partner holds
+     * @param mine       the strings the side asked of holds
+     * @param called     what the partner is called in what is said of it
+     */
+    record BesideAPiece(boolean ofThePiece, PiecesOfAString piece, ValueSet partner,
+                        ValueSet mine, String called) {}
 }
