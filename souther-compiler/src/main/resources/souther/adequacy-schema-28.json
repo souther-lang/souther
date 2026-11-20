@@ -4264,10 +4264,7 @@
                 "if": {
                   "properties": {
                     "kind": {
-                      "enum": [
-                        "rule_may_stop_a_run",
-                        "rule_stop_not_shown"
-                      ]
+                      "const": "rule_may_stop_a_run"
                     }
                   },
                   "required": [
@@ -4280,10 +4277,27 @@
                   ]
                 },
                 "else": {
-                  "not": {
+                  "if": {
+                    "properties": {
+                      "kind": {
+                        "const": "rule_stop_not_shown"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "then": {
                     "required": [
                       "ruleId"
                     ]
+                  },
+                  "else": {
+                    "not": {
+                      "required": [
+                        "ruleId"
+                      ]
+                    }
                   }
                 }
               }

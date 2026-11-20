@@ -15,7 +15,6 @@ import souther.compiler.query.Compilation;
 
 import java.util.Comparator;
 import java.util.List;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -53,8 +52,8 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
                 "if (if q > 5 then q + 1 else 3) >= q then 1 else 2");
         List<WhatIsShownOfAStop> shown = stopsShown(compilation);
         assertEquals(List.of(RuleWhereAStopIsNotShown.class), kinds(shown));
-        assertEquals(Set.of(WhyAStopIsNotShown.ON_AN_ARM),
-                ((RuleWhereAStopIsNotShown) shown.getFirst()).notShown());
+        assertEquals(List.of(WhyAStopIsNotShown.ON_AN_ARM),
+                ((RuleWhereAStopIsNotShown) shown.getFirst()).notShown().written());
         assertFalse(holdsABorderOpen(compilation));
     }
 
@@ -135,7 +134,7 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
         assertEquals(List.of(RuleWhereAStopIsNotShown.class), kinds(shown));
         RuleWhereAStopIsNotShown open = (RuleWhereAStopIsNotShown) shown.getFirst();
         assertFalse(open.asks().isEmpty());
-        assertEquals(Set.of(), open.notShown());
+        assertEquals(List.of(), open.notShown().written());
     }
 
     /** A rule read at two calls of the helper it is written in: at the first, nothing comes
@@ -182,7 +181,8 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
         RuleWhereAStopIsNotShown open = shown.stream()
                 .filter(RuleWhereAStopIsNotShown.class::isInstance)
                 .map(RuleWhereAStopIsNotShown.class::cast).findFirst().orElseThrow();
-        assertEquals(Set.of(WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP), open.notShown());
+        assertEquals(List.of(WhyAStopIsNotShown.SOMETHING_BEFORE_IT_MAY_STOP),
+                open.notShown().written());
     }
 
     /** Whether what a run works out to evaluate a rule holds the border of a place it is filed

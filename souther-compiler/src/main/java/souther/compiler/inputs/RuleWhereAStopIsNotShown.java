@@ -3,14 +3,15 @@ package souther.compiler.inputs;
 import souther.compiler.check.RuleCitation;
 import souther.compiler.check.RuleRef;
 import souther.compiler.check.RuleReportAnchor;
+import souther.compiler.publish.CanonicalSelection;
+import souther.compiler.publish.PublicationOrders;
 import souther.compiler.types.ModelOccurrences;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -29,8 +30,9 @@ import java.util.Set;
  * @param rule      which rule
  * @param reachedBy every question a reader was offered for the rule, as for a rule with no line
  * @param readAt    every copy of the model's code the rule was read at here
- * @param notShown  why neither is shown of what it works out, each once; empty where all of that
- *                  is shown one way or the other
+ * @param notShown  why neither is shown of what it works out, each once and in the order they are
+ *                  published in ({@link PublicationOrders#WHY_A_STOP_IS_NOT_SHOWN}); empty where
+ *                  all of that is shown one way or the other
  * @param asks      what each construction on the way asks of a run, each once and as written;
  *                  empty where none asks anything
  * @param everyRunStops the values at which every run getting to the rule stops, each once, where
@@ -39,7 +41,8 @@ import java.util.Set;
  *                  no run gets to is no stop left unresolved
  */
 public record RuleWhereAStopIsNotShown(RuleRef rule, Set<RuleReportAnchor> reachedBy,
-                                       ModelOccurrences readAt, Set<WhyAStopIsNotShown> notShown,
+                                       ModelOccurrences readAt,
+                                       CanonicalSelection<WhyAStopIsNotShown> notShown,
                                        List<WhatAConstructionAsks> asks,
                                        List<EveryRunStops> everyRunStops)
         implements WhatIsShownOfAStop {
@@ -50,8 +53,7 @@ public record RuleWhereAStopIsNotShown(RuleRef rule, Set<RuleReportAnchor> reach
         }
         reachedBy = reachedBy == null ? Set.of() : Set.copyOf(reachedBy);
         RuleCitation.requireReached(rule, reachedBy);
-        notShown = notShown.isEmpty() ? Set.of()
-                : Collections.unmodifiableSet(EnumSet.copyOf(notShown));
+        Objects.requireNonNull(notShown, "why a stop is not shown, if only for no reason");
         asks = List.copyOf(new LinkedHashSet<>(asks));
         everyRunStops = List.copyOf(new LinkedHashSet<>(everyRunStops));
         if (notShown.isEmpty() && asks.isEmpty()) {
@@ -65,7 +67,7 @@ public record RuleWhereAStopIsNotShown(RuleRef rule, Set<RuleReportAnchor> reach
                                               List<WhatAConstructionAsks> asks,
                                               List<EveryRunStops> everyRunStops) {
         return new RuleWhereAStopIsNotShown(cited.rule(), RuleCitation.anchorOf(cited), readAt,
-                notShown, asks, everyRunStops);
+                PublicationOrders.WHY_A_STOP_IS_NOT_SHOWN.keep(notShown), asks, everyRunStops);
     }
 
     /** How a reader finds the rule, as for a rule with no line ({@link RuleWithoutALine#cited}). */
@@ -83,9 +85,10 @@ public record RuleWhereAStopIsNotShown(RuleRef rule, Set<RuleReportAnchor> reach
         }
         Set<RuleReportAnchor> both = new HashSet<>(reachedBy);
         both.addAll(that.reachedBy);
-        Set<WhyAStopIsNotShown> why = EnumSet.noneOf(WhyAStopIsNotShown.class);
-        why.addAll(notShown);
-        why.addAll(that.notShown);
+        List<WhyAStopIsNotShown> reasons = new ArrayList<>(notShown.written());
+        reasons.addAll(that.notShown.written());
+        CanonicalSelection<WhyAStopIsNotShown> why =
+                PublicationOrders.WHY_A_STOP_IS_NOT_SHOWN.keep(reasons);
         List<WhatAConstructionAsks> asked = new ArrayList<>(asks);
         asked.addAll(that.asks);
         List<EveryRunStops> stops = new ArrayList<>(everyRunStops);
