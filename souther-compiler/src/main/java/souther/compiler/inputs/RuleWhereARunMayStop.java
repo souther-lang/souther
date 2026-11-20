@@ -12,13 +12,15 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * One rule of the model that some run reaching it stops in: an operation it is read through ends
- * the run, such as a number worked out past its type.
+ * One rule of the model that some run on its way stops in: an operation it is read through ends
+ * the run, such as a number worked out past its type, or a construction on the way to it does, a
+ * run not meeting what the construction asks.
  *
  * <p>Shown and not a possibility. Said only where a value of the input is shown to exist that gets
  * to the operation, has nothing before it end the run, and works the operation out past its ends;
- * what the ways to the rule leave a number holds rows that never arrive, and is never what shows
- * one does. Where neither a stop nor that there is none is shown, that is said apart
+ * or one that takes the way to the rule, gets to the construction with nothing before it ending
+ * the run, and does not meet what the construction asks. What the ways to the rule leave a number
+ * holds rows that never arrive, and is never what shows one does. Where neither a stop nor that there is none is shown, that is said apart
  * ({@link RuleWhereAStopIsNotShown}), and of the same rule as this where one operation of it is
  * shown to stop a run and another is not resolved.
  *
@@ -36,13 +38,17 @@ import java.util.Set;
  * @param rule      which rule
  * @param reachedBy every question a reader was offered for the rule, as for a rule with no line
  * @param readAt    every copy of the model's code the rule was read at here
- * @param shown     what shows a run stops in it, each once: never none, since a stop no value of
- *                  the input is shown to come to is not this
+ * @param shown     what shows a run stops in an operation of it, each once; none where no such
+ *                  stop is shown
+ * @param constructions what shows a run on the way to it stops at a construction, each once;
+ *                  none where no such stop is shown. Not both none, since a stop no value of the
+ *                  input is shown to come to is not this
  * @param everyRunStops the runs of the values at the rule's places at which every run getting to
  *                  it stops, each once; empty where none is known
  */
 public record RuleWhereARunMayStop(RuleRef rule, Set<RuleReportAnchor> reachedBy,
                                    ModelOccurrences readAt, List<AStopShown> shown,
+                                   List<AConstructionStopShown> constructions,
                                    List<EveryRunStops> everyRunStops)
         implements WhatIsShownOfAStop {
 
@@ -53,20 +59,23 @@ public record RuleWhereARunMayStop(RuleRef rule, Set<RuleReportAnchor> reachedBy
         reachedBy = reachedBy == null ? Set.of() : Set.copyOf(reachedBy);
         RuleCitation.requireReached(rule, reachedBy);
         shown = List.copyOf(new LinkedHashSet<>(shown));
-        if (shown.isEmpty()) {
+        constructions = List.copyOf(new LinkedHashSet<>(constructions));
+        if (shown.isEmpty() && constructions.isEmpty()) {
             throw new IllegalArgumentException("a stop said of " + rule
                     + " is shown by some value of the input");
         }
         everyRunStops = List.copyOf(new LinkedHashSet<>(everyRunStops));
     }
 
-    /** One reader's finding about a rule a run is shown to stop in, as {@code shown} shows it,
-     *  with the values at which every run getting to the rule stops. */
+    /** One reader's finding about a rule a run is shown to stop in, as {@code shown} and
+     *  {@code constructions} show it, with the values at which every run getting to the rule
+     *  stops. */
     public static RuleWhereARunMayStop of(RuleCitation cited, ModelOccurrences readAt,
                                           List<AStopShown> shown,
+                                          List<AConstructionStopShown> constructions,
                                           List<EveryRunStops> everyRunStops) {
         return new RuleWhereARunMayStop(cited.rule(), RuleCitation.anchorOf(cited), readAt,
-                shown, everyRunStops);
+                shown, constructions, everyRunStops);
     }
 
     /** How a reader finds the rule, as for a rule with no line ({@link RuleWithoutALine#cited}). */
@@ -85,8 +94,11 @@ public record RuleWhereARunMayStop(RuleRef rule, Set<RuleReportAnchor> reachedBy
         both.addAll(that.reachedBy);
         List<AStopShown> shownBoth = new ArrayList<>(shown);
         shownBoth.addAll(that.shown);
+        List<AConstructionStopShown> constructionsBoth = new ArrayList<>(constructions);
+        constructionsBoth.addAll(that.constructions);
         List<EveryRunStops> stops = new ArrayList<>(everyRunStops);
         stops.addAll(that.everyRunStops);
-        return new RuleWhereARunMayStop(rule, both, readAt.and(that.readAt), shownBoth, stops);
+        return new RuleWhereARunMayStop(rule, both, readAt.and(that.readAt), shownBoth,
+                constructionsBoth, stops);
     }
 }

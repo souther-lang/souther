@@ -153,10 +153,10 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
         assertEquals(List.of(), kinds(compiled("q: Int", "if q < 0 && q + 10 > 3 then 1 else 2")));
     }
 
-    /** What a construction on the way asks of a run, which no run is shown not to meet, is said
-     *  as not resolved and never as a stop, where nothing the rule works out is unresolved. */
+    /** What a construction on the way asks of a run, which an admissible value on the way does
+     *  not meet, is a stop shown, resting on that value, and nothing is left unresolved. */
     @Test
-    void whatAConstructionAsksIsNotResolvedAndNoStop() {
+    void whatAConstructionAsksThatAValueOnTheWayDoesNotMeetIsAStop() {
         Compilation compilation = ACompiledModel.answered("""
                 module w1
                 data Refund = Decimal invariant value >= 0.0m
@@ -166,6 +166,64 @@ class WhatIsShownOfAStopIsSaidOfTheRuleTest {
                     refund = Refund(gross),
                     within = Decimal.compare(gross, limit) <= 0
                 }
+                """);
+        List<WhatIsShownOfAStop> shown = stopsShown(compilation);
+        assertEquals(List.of(RuleWhereARunMayStop.class), kinds(shown));
+        RuleWhereARunMayStop stops = (RuleWhereARunMayStop) shown.getFirst();
+        assertTrue(stops.shown().isEmpty());
+        assertEquals(1, stops.constructions().size());
+        assertEquals(List.of(new AStopShown.NumberAt(TermPath.of("gross"),
+                BigInteger.ONE.negate())), stops.constructions().getFirst().at());
+    }
+
+    private static final String AN_ATTEMPT_FIRST = """
+            module w1
+            data Count = Int invariant value >= 0
+            data Out = { n: Count, ok: Bool, within: Bool }
+            behavior m : (q: Int) -> Out constructs Out, Count
+            let m (q) = {
+                let ok = if Count(q) as made then true else false
+                Out { n = MADE, ok = ok, within = RULE }
+            }
+            """;
+
+    /**
+     * An attempt that is refused takes the other arm, and a run going on from it has met none of
+     * what the type asks: a construction after it asking the same stops the run at a value the
+     * attempt refused, and is a stop shown there.
+     */
+    @Test
+    void anAttemptRefusedIsNoConstructionARunGotPast() {
+        List<WhatIsShownOfAStop> shown = stopsShown(ACompiledModel.answered(AN_ATTEMPT_FIRST
+                .replace("MADE", "Count(q)").replace("RULE", "q <= 3")));
+        assertEquals(List.of(RuleWhereARunMayStop.class), kinds(shown));
+        RuleWhereARunMayStop stops = (RuleWhereARunMayStop) shown.getFirst();
+        assertEquals(List.of(new AStopShown.NumberAt(TermPath.of("q"), BigInteger.ONE.negate())),
+                stops.constructions().getFirst().at());
+    }
+
+    /**
+     * Nor are the rows that get to a rule after an attempt narrowed by what the type asks: the
+     * values it refuses go on down the other arm, and a rule below them draws its line there.
+     */
+    @Test
+    void anAttemptRefusedNarrowsNoRowOfTheRulesAfterIt() {
+        Compilation compilation = ACompiledModel.answered(AN_ATTEMPT_FIRST
+                .replace("MADE", "Count(0)").replace("RULE", "q < -5"));
+        assertEquals(List.of(), divided(compilation).rulesWithoutALine());
+        assertEquals(List.of(), stopsShown(compilation));
+    }
+
+    /** What a construction on the way asks of a run, where something worked out before it may
+     *  end the run first, is said as not resolved and never as a stop. */
+    @Test
+    void whatAConstructionAsksAfterSomethingThatMayEndTheRunIsNotResolved() {
+        Compilation compilation = ACompiledModel.answered("""
+                module w1
+                data Count = Int invariant value >= 0
+                data Out = { n: Count, within: Bool }
+                behavior m : (x: Int, c: Int) -> Out constructs Out, Count
+                let m (x, c) = Out { n = Count(x + 1), within = x <= c }
                 """);
         List<WhatIsShownOfAStop> shown = stopsShown(compilation);
         assertEquals(List.of(RuleWhereAStopIsNotShown.class), kinds(shown));

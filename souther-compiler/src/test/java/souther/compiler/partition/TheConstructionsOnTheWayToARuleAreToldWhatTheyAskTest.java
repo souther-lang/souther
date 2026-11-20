@@ -22,7 +22,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * A construction a run works out on the way to a rule asks something of the run: the numbers it is
  * made of have to lie where the clauses of its type leave them, and a run that does not meet that
  * stops there. The rows the rule is read over are narrowed by the condition, and the report says
- * what it was, from the same condition, once for each construction as the model wrote it.
+ * what it was, from the same condition, once for each construction as the model wrote it: as a
+ * stop shown where some admissible run on the way does not meet it, and as not resolved where
+ * that is not shown.
  *
  * <p>Where the declarations already hold the condition nothing is asked of a run, and nothing is
  * said.
@@ -78,11 +80,43 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
     }
 
     private static void collect(JsonNode node, List<JsonNode> out) {
-        if (node.isObject() && node.path("kind").asString().equals("rule_stop_not_shown")
-                && node.has("asks")) {
-            node.get("asks").forEach(out::add);
+        JsonNode said = toldOf(node);
+        if (said != null) {
+            said.forEach(out::add);
         }
         node.forEach(child -> collect(child, out));
+    }
+
+    /**
+     * What a finding says the constructions on the way ask, whether a run is shown to stop at
+     * them ({@code constructions} of {@code rule_may_stop_a_run}) or that is not resolved
+     * ({@code asks} of {@code rule_stop_not_shown}); null where it says none.
+     */
+    private static JsonNode toldOf(JsonNode node) {
+        if (!node.isObject()) {
+            return null;
+        }
+        return switch (node.path("kind").asString()) {
+            case "rule_stop_not_shown" -> node.get("asks");
+            case "rule_may_stop_a_run" -> node.get("constructions");
+            default -> null;
+        };
+    }
+
+    /** What the findings of {@code kind} say the constructions on the way ask. */
+    private static List<JsonNode> toldIn(Compilation compilation, String kind) {
+        JsonNode report = JSON.readTree(AdequacyReport.of(compilation)
+                .json(SourceRendering.namedByIdentity(compilation.texts())));
+        List<JsonNode> out = new ArrayList<>();
+        collectOfKind(report, kind, out);
+        return out;
+    }
+
+    private static void collectOfKind(JsonNode node, String kind, List<JsonNode> out) {
+        if (node.isObject() && node.path("kind").asString().equals(kind) && toldOf(node) != null) {
+            toldOf(node).forEach(out::add);
+        }
+        node.forEach(child -> collectOfKind(child, kind, out));
     }
 
     private static Compilation compiled(String model) {
@@ -167,9 +201,13 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                 human(compilation));
     }
 
-    /** Two constructions that ask the same are two places a run may stop, and are two. */
+    /**
+     * Of two constructions that ask the same, a run stops at the first, and the second asks
+     * nothing of a run that gets to it, which got past the first: the first is said, and the
+     * second is not.
+     */
     @Test
-    void twoConstructionsThatAskTheSameAreTwo() {
+    void ofTwoConstructionsThatAskTheSameOnlyTheFirstStopsARun() {
         Compilation compilation = compiled("""
                 module demo
 
@@ -185,10 +223,10 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
                     within = Decimal.compare(x, c) <= 0
                 }
                 """);
-        List<JsonNode> asks = asksOf(compilation);
-        assertEquals(2, asks.size(), asks.toString());
-        assertTrue(!asks.get(0).path("at").equals(asks.get(1).path("at")), asks.toString());
-        assertEquals(asks.get(0).path("asked"), asks.get(1).path("asked"));
+        List<JsonNode> asks = toldIn(compilation, "rule_may_stop_a_run");
+        assertEquals(1, asks.size(), asks.toString());
+        assertEquals(10, asks.getFirst().path("at").path("line").asInt(), asks.toString());
+        assertEquals(List.of(), toldIn(compilation, "rule_stop_not_shown"));
     }
 
     /**
@@ -227,9 +265,9 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
     }
 
     private static void collectPerFinding(JsonNode node, List<List<JsonNode>> out) {
-        if (node.isObject() && node.path("kind").asString().equals("rule_stop_not_shown")
-                && node.has("asks")) {
-            out.add(List.copyOf(node.get("asks").values()));
+        JsonNode said = toldOf(node);
+        if (said != null) {
+            out.add(List.copyOf(said.values()));
         }
         node.forEach(child -> collectPerFinding(child, out));
     }
@@ -368,6 +406,35 @@ class TheConstructionsOnTheWayToARuleAreToldWhatTheyAskTest {
         assertEquals(1, asks.size(), asks.toString());
         assertTrue(!asks.getFirst().path("asked").path("than").asString().matches(
                 "^-?[0-9]+(\\.[0-9]+)?$"), asks.toString());
+    }
+
+    /**
+     * A construction some admissible run on the way does not meet is a stop shown: said of the
+     * rule as one a run may stop on the way to, with what it asks, and not as one whose stop is
+     * not resolved.
+     */
+    @Test
+    void aConstructionSomeAdmissibleRunDoesNotMeetIsAStopShown() {
+        Compilation compilation = compiled(madeOf("x"));
+        assertEquals(List.of(is("x", "at_least", "0")),
+                toldIn(compilation, "rule_may_stop_a_run").stream()
+                        .map(one -> one.path("asked")).toList());
+        assertEquals(List.of(), toldIn(compilation, "rule_stop_not_shown"));
+        assertTrue(Pattern.compile("may stop a run: [^\\n]* some admissible run stops at a "
+                        + "construction on the way to this rule[^\\n]*; a run gets past Held at "
+                        + "[0-9]+:[0-9]+ only where x is at least 0")
+                .matcher(human(compilation)).find(), human(compilation));
+    }
+
+    /**
+     * A construction after one whose condition is not read is not shown to stop a run, since the
+     * one before may end it first, and is said as not resolved.
+     */
+    @Test
+    void aConstructionAfterOneNotReadIsNotResolved() {
+        Compilation compilation = compiled(UNTYPED);
+        assertEquals(1, toldIn(compilation, "rule_stop_not_shown").size());
+        assertEquals(List.of(), toldIn(compilation, "rule_may_stop_a_run"));
     }
 
     /** What an {@code Int} construction asks is asked as a decimal number too. */
