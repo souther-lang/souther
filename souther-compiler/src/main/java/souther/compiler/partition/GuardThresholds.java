@@ -29,6 +29,7 @@ import souther.compiler.inputs.AStopShown;
 import souther.compiler.inputs.AStopNotShown;
 import souther.compiler.inputs.WhatAConstructionAsks;
 import souther.compiler.inputs.WhatKeepsEveryRunGoing;
+import souther.compiler.inputs.Position;
 import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputNumber;
 import souther.compiler.inputs.InputReading;
@@ -439,7 +440,8 @@ public final class GuardThresholds {
                             List<AStopNotShown> stopsNotShown =
                                     StopAssessment.stopsNotShown(judged);
                             // And the region of the input that keeps every run getting to it from
-                            // stopping in what it works out, wherever it works it out.
+                            // taking a number past its type in what it works out, wherever it
+                            // works it out.
                             Optional<WhatKeepsEveryRunGoing> keeping = !stopsAsked
                                     ? Optional.empty()
                                     : UndividedByARelation.boundsThatKeepEveryRunGoing(
@@ -447,7 +449,7 @@ public final class GuardThresholds {
                                                     .map(ComparisonReadings.Reading
                                                             .WorkedOutAt::stops)
                                                     .toList(), read)
-                                            .map(bounds -> theRegion(each, places, bounds,
+                                            .map(region -> theRegion(each, places, region,
                                                     read));
                             // And, apart from that, whether what a run works out to get past it
                             // is read far enough to say where a line of it lies: a stop no
@@ -1434,35 +1436,50 @@ public final class GuardThresholds {
     }
 
     /**
-     * The region {@code bounds} make, with each said as far out as it can be where a run with its
-     * place one step past it and every other bound holding is shown to stop in what
-     * {@code each} works out at {@code places} ({@link StopAssessment#aRunStopsWithin}): a claim
-     * about the region, asked once it is whole.
+     * {@code region}, with each bound said as far out as it can be where a run with it declared
+     * one step further out, every other declaration holding, is shown to stop in what {@code each}
+     * works out at {@code places} ({@link StopAssessment#aRunStopsWithin}): a claim about the
+     * region, asked once it is whole. A declaration holds every place of the input what it is
+     * declared on holds, so each is asked of all of them; one inside a container is held by a
+     * value that holds nothing there. The region itself keeps every run going, so a run shown to
+     * stop where one is moved out is one that moving it lets in.
      */
     private static WhatKeepsEveryRunGoing theRegion(ComparisonReadings.Reading each,
                                                     List<StopAssessment.Place> places,
-                                                    List<ABoundThatKeepsEveryRunGoing> bounds,
+                                                    WhatKeepsEveryRunGoing region,
                                                     InputReading read) {
         Set<ABoundThatKeepsEveryRunGoing> farOut = new LinkedHashSet<>();
-        for (ABoundThatKeepsEveryRunGoing bound : bounds) {
+        for (ABoundThatKeepsEveryRunGoing bound : region.bounds()) {
             List<TakenConstraint.Affine> within = new ArrayList<>();
-            for (ABoundThatKeepsEveryRunGoing other : bounds) {
-                if (other != bound) {
+            for (ABoundThatKeepsEveryRunGoing other : region.bounds()) {
+                BigInteger at = other != bound ? other.at() : other.atMost()
+                        ? other.at().add(BigInteger.ONE) : other.at().subtract(BigInteger.ONE);
+                for (TermPath place : placesHeldBy(other.holder(), read)) {
                     within.add(new TakenConstraint.Affine(new LinearForm<>(
-                            ExactRatio.of(other.at()).negated(),
-                            Map.of(new NumericTerm.ValueOf(other.place()), ExactRatio.ONE)),
+                            ExactRatio.of(at).negated(),
+                            Map.of(new NumericTerm.ValueOf(place), ExactRatio.ONE)),
                             other.atMost() ? Rel.LE : Rel.GE));
                 }
             }
-            BigInteger past = bound.atMost() ? bound.at().add(BigInteger.ONE)
-                    : bound.at().subtract(BigInteger.ONE);
-            within.add(new TakenConstraint.Affine(new LinearForm<>(ExactRatio.of(past).negated(),
-                    Map.of(new NumericTerm.ValueOf(bound.place()), ExactRatio.ONE)), Rel.EQ));
             if (StopAssessment.aRunStopsWithin(each, places, within, read)) {
                 farOut.add(bound);
             }
         }
-        return new WhatKeepsEveryRunGoing(bounds, farOut);
+        return region.asFarOutAsCanBe(farOut);
+    }
+
+    /** The places of the input, reached from a parameter through fields alone, whose values an
+     *  invariant declared on {@code holder} bounds ({@link UndividedByARelation#holderOf}). */
+    private static List<TermPath> placesHeldBy(ABoundThatKeepsEveryRunGoing.Holder holder,
+                                               InputReading read) {
+        List<TermPath> out = new ArrayList<>();
+        for (Position each : read.domain().positions()) {
+            if (each.path().steps().stream().allMatch(TermPath.Step.Field.class::isInstance)
+                    && holder.equals(UndividedByARelation.holderOf(each.path(), read))) {
+                out.add(each.path());
+            }
+        }
+        return out;
     }
 
     /**

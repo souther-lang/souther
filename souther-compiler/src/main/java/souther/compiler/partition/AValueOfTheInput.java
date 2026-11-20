@@ -13,16 +13,17 @@ import souther.compiler.inputs.InputDomain;
 import souther.compiler.inputs.InputReading;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.TermPath;
-import souther.compiler.numeric.Count;
-import souther.compiler.numeric.Endpoint;
+import souther.compiler.numeric.ExactRatio;
 import souther.compiler.numeric.LinearForm;
 import souther.compiler.numeric.NumericDomain;
 import souther.compiler.numeric.Rel;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeSymbol;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -60,30 +61,74 @@ final class AValueOfTheInput {
      */
     static Optional<List<TakenConstraint.Affine>> whatAValueAtThemMeets(InputReading read,
                                                                        Collection<TermPath> places) {
+        Optional<Map<TermPath, WholeRun>> runs = runsAt(read, places);
+        if (runs.isEmpty()) {
+            return Optional.empty();
+        }
         List<TakenConstraint.Affine> out = new ArrayList<>();
-        int found = 0;
+        runs.get().forEach((place, run) -> {
+            NumericTerm number = new NumericTerm.ValueOf(place);
+            if (run.least() != null) {
+                out.add(new TakenConstraint.Affine(LinearForm.atomMinusConstant(number,
+                        ExactRatio.of(run.least())), Rel.GE));
+            }
+            if (run.greatest() != null) {
+                out.add(new TakenConstraint.Affine(LinearForm.atomMinusConstant(number,
+                        ExactRatio.of(run.greatest())), Rel.LE));
+            }
+        });
+        return Optional.of(List.copyOf(out));
+    }
+
+    /**
+     * The whole numbers a value of the input {@code read} reads holds at {@code place}, every one
+     * of which some value holds there, what the rest of it holds aside ({@link #whatAValueAtThemMeets}
+     * of the one place): within the ends of what the place holds, and within those this says,
+     * each none where there is none. Nothing where that is not shown.
+     */
+    static Optional<WholeRun> wholeNumbersAt(InputReading read, TermPath place) {
+        return runsAt(read, List.of(place)).map(runs -> runs.get(place));
+    }
+
+    /**
+     * The least and greatest whole number of a run, every one between them in it: each null where
+     * the run has no end there beside what the place holds.
+     */
+    record WholeRun(BigInteger least, BigInteger greatest) {
+
+        static final WholeRun OPEN = new WholeRun(null, null);
+    }
+
+    /** What {@code places} each hold, as the walk of the input finds it, or nothing where a value
+     *  holding any whole number within that at each is not shown. */
+    private static Optional<Map<TermPath, WholeRun>> runsAt(InputReading read,
+                                                            Collection<TermPath> places) {
+        Map<TermPath, WholeRun> out = new LinkedHashMap<>();
+        Set<TermPath> asked = Set.copyOf(places);
         for (InputDomain.Parameter each : read.domain().parameters()) {
-            int here = walk(TermPath.of(each.name()), each.type(), Set.copyOf(places), read, out);
-            if (here < 0) {
+            if (walk(TermPath.of(each.name()), each.type(), asked, read, out) < 0) {
                 return Optional.empty();
             }
-            found += here;
         }
-        return found == Set.copyOf(places).size() ? Optional.of(List.copyOf(out))
-                : Optional.empty();
+        return out.size() == asked.size() ? Optional.of(out) : Optional.empty();
     }
 
     /**
      * The walk of the part at {@code at}, of {@code type}: how many of {@code places} it found
-     * there, what each asks put on {@code out}, or -1 where no value is shown.
+     * there, what each holds put on {@code out}, or -1 where no value is shown.
      */
     private static int walk(TermPath at, Type type, Set<TermPath> places, InputReading read,
-                            List<TakenConstraint.Affine> out) {
+                            Map<TermPath, WholeRun> out) {
         RuleReadingSource rules = read.rules();
         TypeView view = TypeView.of(type, rules.inners(), rules.symbols(), rules.kinds(),
                 rules.sums());
         if (places.contains(at)) {
-            return asked(at, view, read, out) ? 1 : -1;
+            WholeRun run = held(view, read);
+            if (run == null) {
+                return -1;
+            }
+            out.put(at, run);
+            return 1;
         }
         boolean onTheWay = places.stream().anyMatch(place -> place.steps().size()
                 > at.steps().size() && place.prefix(at.steps().size()).equals(at));
@@ -107,43 +152,32 @@ final class AValueOfTheInput {
     }
 
     /**
-     * Whether the place {@code at}, of {@code view}, holds any whole number within what it is
-     * asked, which is put on {@code out}: a number, a date or a case of an enumeration wearing no
-     * name, which asks nothing, or a number wearing names whose rules leave it a run every number of
-     * which they leave it.
+     * What a place of {@code view} holds: any whole number, where it is a number, a date or a case
+     * of an enumeration wearing no name that writes a clause; the whole numbers of the run a number
+     * wearing names that do is
+     * left by their rules, every number of which they leave it; and null for anything else, or a
+     * run holding no whole number.
      */
-    private static boolean asked(TermPath at, TypeView view, InputReading read,
-                                 List<TakenConstraint.Affine> out) {
+    private static WholeRun held(TypeView view, InputReading read) {
         boolean aNumber = view.shape() instanceof Shape.Scalar(Type.Prim prim)
                 && (prim == Type.Prim.INT || prim == Type.Prim.DECIMAL);
         boolean aDate = view.shape() instanceof Shape.Scalar(Type.Prim prim)
                 && prim == Type.Prim.DATE;
-        if (view.wrappers().isEmpty()) {
-            return aNumber || aDate || anEnumeration(view);
+        if (view.wrappers().stream().allMatch(name -> writesNoClause(name, read.rules()))) {
+            return aNumber || aDate || anEnumeration(view) ? WholeRun.OPEN : null;
         }
         NumericDomain.Bounds run = aNumber ? DeclaredBounds.wholeRunOf(view, read.ruleReading())
                 : null;
         if (run == null || !run.holdsAValue()) {
-            return false;
+            return null;
         }
-        NumericTerm number = new NumericTerm.ValueOf(at);
-        return heldTo(number, run.min(), Rel.GE, Rel.GT, out)
-                && heldTo(number, run.max(), Rel.LE, Rel.LT, out);
-    }
-
-    /** {@code number rel end}, {@code inclusive} or {@code exclusive} as the end is, put on
-     *  {@code out}: nothing where there is no end, and false where it is no number. */
-    private static boolean heldTo(NumericTerm number, Endpoint end, Rel inclusive, Rel exclusive,
-                                  List<TakenConstraint.Affine> out) {
-        if (end == null) {
-            return true;
+        BigInteger least = run.min() == null ? null : run.min().wholeAdmitted(true);
+        BigInteger greatest = run.max() == null ? null : run.max().wholeAdmitted(false);
+        if ((run.min() != null && least == null) || (run.max() != null && greatest == null)
+                || (least != null && greatest != null && least.compareTo(greatest) > 0)) {
+            return null;
         }
-        if (!(end.at() instanceof Count count)) {
-            return false;
-        }
-        out.add(new TakenConstraint.Affine(LinearForm.atomMinusConstant(number, count.exactly()),
-                end.inclusive() ? inclusive : exclusive));
-        return true;
+        return new WholeRun(least, greatest);
     }
 
     /**

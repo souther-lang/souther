@@ -1,38 +1,45 @@
 package souther.compiler.inputs;
 
-import java.util.ArrayList;
+import java.math.BigInteger;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 /**
- * The bounds on the input that together keep every run getting to a rule from stopping in what it
- * works out, where every stop is past where the representation of a number stops: one region of
- * the input, a bound for each place and side the stops ask one on. Within all of them no run stops
- * there.
+ * The declarations that together keep every run getting to a rule from taking a number past where
+ * its type stops in what the rule works out: one region of the input, as the invariants an author
+ * declares make it. Within all of them no run stops so there. A stop of any other kind, such as a
+ * construction on the way refusing what it is handed, is none of what this keeps a run from.
+ *
+ * <p>Said of what the invariants are declared on, and not of the places of the input: a data's
+ * invariant holds every value of it, so two places one data holds are bounded by one declaration,
+ * the tighter of what each asks, and the region is the declarations whatever order they were met
+ * in. Made only where each data keeps a value under them: what its rules already leave it, met
+ * with both sides declared, holds a whole number, every one of which is a value.
  *
  * <p>How far out the region goes is a second fact, said of each bound apart: a bound is as far out
- * as one can be where a run with its place one step past it, every other bound of the region
+ * as one can be where a run with it declared one step further out, every other declaration
  * holding, is shown to stop ({@code asFarOutAsCanBe}). That is a claim about the region, so it is
  * made once the region is whole and never of a bound alone.
  *
- * @param bounds          the bounds, each place and side once
+ * @param bounds          the declarations, each data and side once
  * @param asFarOutAsCanBe the bounds of {@code bounds} as far out as one can be
  */
-public record WhatKeepsEveryRunGoing(List<ABoundThatKeepsEveryRunGoing> bounds,
+public record WhatKeepsEveryRunGoing(Set<ABoundThatKeepsEveryRunGoing> bounds,
                                      Set<ABoundThatKeepsEveryRunGoing> asFarOutAsCanBe) {
 
     public WhatKeepsEveryRunGoing {
-        bounds = List.copyOf(bounds);
+        bounds = Collections.unmodifiableSequencedSet(new LinkedHashSet<>(bounds));
         asFarOutAsCanBe = Set.copyOf(asFarOutAsCanBe);
-        for (int at = 0; at < bounds.size(); at++) {
-            for (int other = at + 1; other < bounds.size(); other++) {
-                if (bounds.get(at).onTheSameSideAs(bounds.get(other))) {
-                    throw new IllegalArgumentException("a region bounds a place on a side once: "
-                            + bounds);
-                }
-            }
+        if (bounds.stream().map(ABoundThatKeepsEveryRunGoing::side).distinct().count()
+                != bounds.size() || !keepsEveryDataAValue(bounds)) {
+            throw new IllegalArgumentException("a region declares each data and side once, and"
+                    + " leaves each a value: " + bounds);
         }
         if (!bounds.containsAll(asFarOutAsCanBe)) {
             throw new IllegalArgumentException("as far out as can be is said of a bound of the"
@@ -41,14 +48,51 @@ public record WhatKeepsEveryRunGoing(List<ABoundThatKeepsEveryRunGoing> bounds,
     }
 
     /**
-     * What two readings of one rule say of the region, as one: the two together where each says
-     * one ({@link #together}), and none where either says none — a run of that reading would be
-     * one no bound said keeps going.
+     * The region {@code asked} declare, each data and side bounded by the tightest of them, with
+     * nothing yet said of how far out — or none where that leaves some data no value.
+     */
+    public static Optional<WhatKeepsEveryRunGoing> of(
+            Collection<ABoundThatKeepsEveryRunGoing> asked) {
+        Map<ABoundThatKeepsEveryRunGoing.Side, ABoundThatKeepsEveryRunGoing> tightest =
+                new LinkedHashMap<>();
+        for (ABoundThatKeepsEveryRunGoing each : asked) {
+            tightest.merge(each.side(), each, (one, other) -> one.within(other) ? one : other);
+        }
+        return keepsEveryDataAValue(tightest.values())
+                ? Optional.of(new WhatKeepsEveryRunGoing(new LinkedHashSet<>(tightest.values()),
+                        Set.of()))
+                : Optional.empty();
+    }
+
+    /** The same region, with {@code farOut}, bounds of it, said as far out as each can be. */
+    public WhatKeepsEveryRunGoing asFarOutAsCanBe(Set<ABoundThatKeepsEveryRunGoing> farOut) {
+        return new WhatKeepsEveryRunGoing(bounds, farOut);
+    }
+
+    /**
+     * What two readings of one rule say of the region, as one: the declarations of both, each data
+     * and side bounded by the tighter, so that a run within it is within each — and none where
+     * either says none, a run of that reading being one no declaration said keeps going, or where
+     * the two together leave some data no value. How far out a bound goes is shown of one region,
+     * and stands only where the two together are that region, whatever order either met its
+     * declarations in.
      */
     public static Optional<WhatKeepsEveryRunGoing> together(Optional<WhatKeepsEveryRunGoing> one,
                                                             Optional<WhatKeepsEveryRunGoing> other) {
-        return one.isPresent() && other.isPresent()
-                ? Optional.of(one.get().together(other.get())) : Optional.empty();
+        if (one.isEmpty() || other.isEmpty()) {
+            return Optional.empty();
+        }
+        Set<ABoundThatKeepsEveryRunGoing> both = new LinkedHashSet<>(one.get().bounds);
+        both.addAll(other.get().bounds);
+        return of(both).map(region -> {
+            Set<ABoundThatKeepsEveryRunGoing> farOut = new LinkedHashSet<>();
+            for (WhatKeepsEveryRunGoing each : List.of(one.get(), other.get())) {
+                if (each.bounds.equals(region.bounds)) {
+                    farOut.addAll(each.asFarOutAsCanBe);
+                }
+            }
+            return region.asFarOutAsCanBe(farOut);
+        });
     }
 
     /** Whether {@code bound} is as far out as a bound of this region can be. */
@@ -56,32 +100,29 @@ public record WhatKeepsEveryRunGoing(List<ABoundThatKeepsEveryRunGoing> bounds,
         return asFarOutAsCanBe.contains(bound);
     }
 
-    /**
-     * The region that keeps the runs of both every run getting to one rule read twice: each place
-     * and side bounded by the tighter of the two, so that a run within it is within each. How far
-     * out each bound goes is shown of one region and not of the other's, so it stands only where
-     * the two are one region; anywhere else nothing is said of it.
-     */
-    public WhatKeepsEveryRunGoing together(WhatKeepsEveryRunGoing other) {
-        if (equals(other)) {
-            return this;
-        }
-        if (bounds.equals(other.bounds)) {
-            Set<ABoundThatKeepsEveryRunGoing> either = new LinkedHashSet<>(asFarOutAsCanBe);
-            either.addAll(other.asFarOutAsCanBe);
-            return new WhatKeepsEveryRunGoing(bounds, either);
-        }
-        List<ABoundThatKeepsEveryRunGoing> out = new ArrayList<>();
+    /** Whether every data {@code bounds} declare on keeps a whole number under them, within what
+     *  its rules already leave it, every one of which is a value. */
+    private static boolean keepsEveryDataAValue(
+            Collection<ABoundThatKeepsEveryRunGoing> bounds) {
+        Map<ABoundThatKeepsEveryRunGoing.Holder, BigInteger[]> left = new LinkedHashMap<>();
         for (ABoundThatKeepsEveryRunGoing each : bounds) {
-            ABoundThatKeepsEveryRunGoing theirs = other.bounds.stream()
-                    .filter(each::onTheSameSideAs).findFirst().orElse(null);
-            out.add((theirs != null && theirs.within(each)) ? theirs : each);
+            BigInteger[] ends = left.computeIfAbsent(each.holder(),
+                    _ -> new BigInteger[] {each.held().least(), each.held().greatest()});
+            ends[0] = tighter(ends[0], each.held().least(), true);
+            ends[1] = tighter(ends[1], each.held().greatest(), false);
+            ends[each.atMost() ? 1 : 0] = tighter(ends[each.atMost() ? 1 : 0], each.at(),
+                    !each.atMost());
         }
-        for (ABoundThatKeepsEveryRunGoing theirs : other.bounds) {
-            if (out.stream().noneMatch(theirs::onTheSameSideAs)) {
-                out.add(theirs);
-            }
+        return left.values().stream().allMatch(ends -> ends[0] == null || ends[1] == null
+                || ends[0].compareTo(ends[1]) <= 0);
+    }
+
+    /** The tighter of two ends of one side, a least where {@code least}: either where the other
+     *  is none. */
+    private static BigInteger tighter(BigInteger one, BigInteger other, boolean least) {
+        if (one == null || other == null) {
+            return one == null ? other : one;
         }
-        return new WhatKeepsEveryRunGoing(out, Set.of());
+        return least ? one.max(other) : one.min(other);
     }
 }

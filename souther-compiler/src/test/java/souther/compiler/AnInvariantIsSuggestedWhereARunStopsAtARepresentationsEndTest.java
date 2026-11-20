@@ -59,8 +59,9 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
         String report = report(ABOVE.formatted(""));
 
         assertEquals(List.of("· declaring `invariant x <= 9223372036854775797` on P keeps every"
-                + " run from stopping there; a bound one step further out lets in a run that stops"
-                + " there, and the value to declare is the one the domain has"), suggested(report),
+                + " run from taking a number past its type there; a bound one step further out lets"
+                + " in a run that does, and the value to declare is the one the domain has"),
+                suggested(report),
                 report);
     }
 
@@ -90,8 +91,9 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
         String report = report(A_DAY_BACK.formatted(""));
 
         assertEquals(List.of("· declaring `invariant birthday >= Date(\"-999999999-01-02\")` on P"
-                + " keeps every run from stopping there; a bound one step further out lets in a run"
-                + " that stops there, and the value to declare is the one the domain has"),
+                + " keeps every run from taking a number past its type there; a bound one step"
+                + " further out lets in a run that does, and the value to declare is the one the"
+                + " domain has"),
                 suggested(report), report);
     }
 
@@ -129,8 +131,9 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 """);
 
         assertTrue(suggested(report).contains("· declaring `invariant birthday >="
-                + " Date(\"-999999999-01-02\")` on P keeps every run from stopping there; a bound one"
-                + " step further out lets in a run that stops there, and the value to declare is the"
+                + " Date(\"-999999999-01-02\")` on P keeps every run from taking a number past its"
+                + " type there; a bound one step further out lets in a run that does, and the value"
+                + " to declare is the"
                 + " one the domain has"), report);
     }
 
@@ -150,8 +153,9 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 """);
 
         assertTrue(suggested(report).contains("· declaring `invariant birthday >="
-                + " Date(\"-999999999-01-03\")` on P keeps every run from stopping there; a bound one"
-                + " step further out lets in a run that stops there, and the value to declare is the"
+                + " Date(\"-999999999-01-03\")` on P keeps every run from taking a number past its"
+                + " type there; a bound one step further out lets in a run that does, and the value"
+                + " to declare is the"
                 + " one the domain has"), report);
     }
 
@@ -173,8 +177,8 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 """);
 
         assertTrue(suggested(report).stream().anyMatch(line -> line.startsWith(
-                "· declaring `invariant x <= 9223372036854775806` on P keeps every run from stopping"
-                        + " there; a bound one step further out")), report);
+                "· declaring `invariant x <= 9223372036854775806` on P keeps every run from taking"
+                        + " a number past its type there; a bound one step further out")), report);
     }
 
     /** A number wearing a name holds the numbers its rules leave it, every one a value: the value
@@ -194,8 +198,9 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 """);
 
         assertEquals(List.of("· declaring `invariant value <= 4611686018427387903` on Amount keeps"
-                + " every run from stopping there; a bound one step further out lets in a run that"
-                + " stops there, and the value to declare is the one the domain has"),
+                + " every run from taking a number past its type there; a bound one step further"
+                + " out lets in a run that does, and the value to declare is the one the domain"
+                + " has"),
                 suggested(report), report);
     }
 
@@ -218,6 +223,81 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
         assertTrue(suggested(report).getFirst().contains("one step further out"), report);
     }
 
+    /** Two places one data holds are bounded by one declaration on it, the tighter of what each
+     *  asks: with it one step further out on both, the place that asked it is past. */
+    @Test
+    void twoPlacesOneDataHoldsAreBoundedByTheTighterDeclarationOnce() {
+        String report = report("""
+                module m
+
+                data Amount = { value: Int }
+
+                data P = { a: Amount, b: Amount }
+
+                behavior f : (p: P) -> Bool
+                let f (p) = p.a.value + 10 > p.b.value + 20
+                """);
+
+        assertEquals(List.of("· declaring `invariant value <= 9223372036854775787` on Amount keeps"
+                + " every run from taking a number past its type there; a bound one step further"
+                + " out lets in a run that does, and the value to declare is the one the domain"
+                + " has"), suggested(report), report);
+    }
+
+    /** Bounds two places one data holds ask that leave the data no value are no region. */
+    @Test
+    void boundsThatLeaveTheDataTwoPlacesShareNoValueAreNoRegion() {
+        String report = report("""
+                module m
+
+                data Day = { on: Date }
+
+                data P = { a: Day, b: Day }
+
+                behavior f : (p: P) -> Bool
+                let f (p) = Date.addDays(400000000000, p.a.on)
+                    > Date.addDays(0 - 400000000000, p.b.on)
+                """);
+
+        assertEquals(List.of(), suggested(report), report);
+    }
+
+    /** A bound the rules the data already states leave no value beside is no region. */
+    @Test
+    void aBoundTheRulesAlreadyWrittenLeaveNoValueBesideIsNoRegion() {
+        String report = report("""
+                module m
+
+                data Amount = Int
+                    invariant value >= 1
+
+                data P = { a: Amount }
+
+                behavior f : (p: P) -> Bool
+                let f (p) = p.a.value + 9223372036854775807 > 0
+                """);
+
+        assertEquals(List.of(), suggested(report), report);
+    }
+
+    /** Readings of one rule that together leave a place no value say no region. */
+    @Test
+    void readingsOfOneRuleThatTogetherLeaveNoValueSayNoRegion() {
+        String report = report("""
+                module m
+
+                data P = { on: Date }
+
+                let h (d: Date, k: Int): Bool = Date.addDays(k, d) > Date("2000-01-01")
+
+                behavior f : (p: P) -> Bool
+                let f (p) = h(p.on, 400000000000) && h(p.on, 0 - 400000000000)
+                """);
+
+        assertTrue(report.contains("in h@8:13") && report.contains("in h@8:38"), report);
+        assertEquals(List.of(), suggested(report), report);
+    }
+
     /** Where every value past the bound stops a run in what is worked out before the comparison,
      *  no run gets to the move past its ends: the bound keeps every run from it, and is not said
      *  to be as far out as it can be. */
@@ -234,8 +314,8 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 """);
 
         assertTrue(suggested(report).contains("· declaring `invariant birthday >="
-                + " Date(\"-999999999-01-03\")` on P keeps every run from stopping there, and the"
-                + " value to declare is the one the domain has"), report);
+                + " Date(\"-999999999-01-03\")` on P keeps every run from taking a number past its"
+                + " type there, and the value to declare is the one the domain has"), report);
     }
 
     /** The year of a date shifted by days is a number of the date it is shifted from, which a run
@@ -347,8 +427,9 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
                 .replace(" then 1 else 2", ""));
 
         assertEquals(List.of("· declaring `invariant issuedOn <= Date(\"+999999999-11-30\")` on"
-                + " Invoice keeps every run from stopping there; a bound one step further out lets"
-                + " in a run that stops there, and the value to declare is the one the domain has"),
+                + " Invoice keeps every run from taking a number past its type there; a bound one"
+                + " step further out lets in a run that does, and the value to declare is the one"
+                + " the domain has"),
                 suggested(report), report);
     }
 
@@ -434,8 +515,9 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
 
         assertTrue(report.contains("· may stop a run:"), report);
         assertEquals(List.of("· declaring `invariant issuedOn <= Date(\"+999999999-11-30\")` on"
-                + " Invoice keeps every run from stopping there; a bound one step further out lets"
-                + " in a run that stops there, and the value to declare is the one the domain has"),
+                + " Invoice keeps every run from taking a number past its type there; a bound one"
+                + " step further out lets in a run that does, and the value to declare is the one"
+                + " the domain has"),
                 suggested(report), report);
     }
 
@@ -531,8 +613,9 @@ class AnInvariantIsSuggestedWhereARunStopsAtARepresentationsEndTest {
 
         assertEquals(List.of("· no data holds `x`, whose type is `Int`: introducing a data of"
                 + " `Int` that declares `invariant value <= 9223372036854775797`, and taking `x`"
-                + " as it, keeps every run from stopping there; a bound one step further out lets"
-                + " in a run that stops there, and the value to declare is the one the domain has"),
+                + " as it, keeps every run from taking a number past its type there; a bound one"
+                + " step further out lets in a run that does, and the value to declare is the one"
+                + " the domain has"),
                 introduced(report), report);
     }
 

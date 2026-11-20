@@ -38,6 +38,7 @@ import souther.compiler.inputs.InputReads;
 import souther.compiler.inputs.NameReach;
 import souther.compiler.inputs.NumericTerm;
 import souther.compiler.inputs.Position;
+import souther.compiler.inputs.WhatKeepsEveryRunGoing;
 import souther.compiler.inputs.WhereAnEquationHolds;
 import souther.compiler.inputs.PositionBounds;
 import souther.compiler.inputs.Quantities;
@@ -2847,14 +2848,17 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
      * clauses of a type a construction makes leave the number, which the model states and no
      * bound on the input is suggested for.
      *
-     * <p>The bounds are one region: within all of them no run stops in what is told, wherever it
-     * is worked out, and a bound needed and not said leaves the region unsaid, since the rest keep
-     * no run from the stop it would. How far out each goes is asked of the region once it is whole
-     * ({@code GuardThresholds}), and not here. Not said past every value the place holds.
+     * <p>The bounds are one region, of what they are declared on ({@link WhatKeepsEveryRunGoing}):
+     * within all of them no run stops in what is told, wherever it is worked out, and a bound
+     * needed and not said leaves the region unsaid, since the rest keep no run from the stop it
+     * would. Each is declared beside what the rules already leave what it is declared on, as a
+     * value of the input is shown to hold it ({@link AValueOfTheInput#wholeNumbersAt}), and where
+     * that is not shown no region is said. How far out each goes is asked of the region once it is
+     * whole ({@code GuardThresholds}), and not here. Not said past every value the place holds.
      *
-     * @return the bounds, none where no stop asks one; empty where the region is not said
+     * @return the region, of no bound where no stop asks one; empty where it is not said
      */
-    static Optional<List<ABoundThatKeepsEveryRunGoing>> boundsThatKeepEveryRunGoing(
+    static Optional<WhatKeepsEveryRunGoing> boundsThatKeepEveryRunGoing(
             List<StopEvidence> worked, InputReading read) {
         Map<TermPath, BigInteger[]> kept = new LinkedHashMap<>();
         for (StopEvidence each : worked) {
@@ -2897,7 +2901,35 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
                 out.add(one);
             }
         }
-        return Optional.of(List.copyOf(out));
+        return WhatKeepsEveryRunGoing.of(out);
+    }
+
+    /**
+     * What an invariant bounding the values at {@code place} is declared on, or null where it is
+     * held by nothing one can be: the place's own type where it is written under a name
+     * ({@code data Today = Date}), whose invariant names it as its value, and otherwise the record
+     * the place is a field of. A parameter whose type is a primitive is held by no data, and the
+     * bound is on a data of that type the author introduces for it.
+     */
+    static ABoundThatKeepsEveryRunGoing.Holder holderOf(TermPath place, InputReading read) {
+        Position position = read.domain().at(place);
+        if (position != null && position.view().outermostName() != null) {
+            return new ABoundThatKeepsEveryRunGoing.Holder.AData(
+                    position.view().outermostName().name(), "value");
+        }
+        if (place.steps().isEmpty()) {
+            return read.domain().typeAt(place, read.rules()) instanceof Type.Prim primitive
+                    ? new ABoundThatKeepsEveryRunGoing.Holder.AParameter(place.head(),
+                            primitive.shown())
+                    : null;
+        }
+        if (!(place.steps().getLast() instanceof TermPath.Step.Field(String field))) {
+            return null;
+        }
+        TermPath record = TermPath.of(place.head(),
+                place.steps().subList(0, place.steps().size() - 1));
+        return read.domain().typeAt(record, read.rules()) instanceof Type.Ref(TypeSymbol data)
+                ? new ABoundThatKeepsEveryRunGoing.Holder.AData(data.name(), field) : null;
     }
 
     /**
@@ -2949,13 +2981,9 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
 
     /**
      * {@code bound} on the values of {@code value}'s place, from above where {@code atMost}, as
-     * the invariant an author declares it — or null where the place is held by nothing an
-     * invariant can be declared on, or its values are no whole numbers or dates.
-     *
-     * <p>The data is the place's own type where it is written under a name ({@code data Today =
-     * Date}), whose invariant names it as its value, and otherwise the record the place is a field
-     * of. A parameter whose type is a primitive is held by no data, and the bound is on a data of
-     * that type the author introduces for it.
+     * the invariant an author declares it ({@link #holderOf}), beside the whole numbers a value of
+     * the input is shown to hold there — or null where the place is held by nothing an invariant
+     * can be declared on, its values are no whole numbers or dates, or what it holds is not shown.
      */
     private static ABoundThatKeepsEveryRunGoing aBoundOn(NumericTerm.ValueOf value,
                                                          BigInteger bound, boolean atMost,
@@ -2964,32 +2992,15 @@ record UndividedByARelation(List<Side> sides, ExactRatio constant, Rel relation,
         Carrier carrier = orders == null ? null : orders.answered();
         ObservedValue at = carrier == null ? null
                 : carrier.valueOf(Count.of(new BigDecimal(bound)));
-        if (!(at instanceof ObservedValue.Integer || at instanceof ObservedValue.Temporal)) {
+        ABoundThatKeepsEveryRunGoing.Holder holder = holderOf(value.position(), read);
+        Optional<AValueOfTheInput.WholeRun> held =
+                AValueOfTheInput.wholeNumbersAt(read, value.position());
+        if (!(at instanceof ObservedValue.Integer || at instanceof ObservedValue.Temporal)
+                || holder == null || held.isEmpty()) {
             return null;
         }
-        TermPath place = value.position();
-        Position position = read.domain().at(place);
-        if (position != null && position.view().outermostName() != null) {
-            return new ABoundThatKeepsEveryRunGoing(new ABoundThatKeepsEveryRunGoing.Holder.AData(
-                    position.view().outermostName().name(), "value"), place, atMost, bound, at);
-        }
-        if (place.steps().isEmpty()) {
-            return read.domain().typeAt(place, read.rules()) instanceof Type.Prim primitive
-                    ? new ABoundThatKeepsEveryRunGoing(
-                            new ABoundThatKeepsEveryRunGoing.Holder.AParameter(place.head(),
-                                    primitive.shown()), place, atMost, bound, at)
-                    : null;
-        }
-        if (!(place.steps().getLast() instanceof TermPath.Step.Field(String field))) {
-            return null;
-        }
-        TermPath record = TermPath.of(place.head(),
-                place.steps().subList(0, place.steps().size() - 1));
-        return read.domain().typeAt(record, read.rules()) instanceof Type.Ref(TypeSymbol data)
-                ? new ABoundThatKeepsEveryRunGoing(
-                        new ABoundThatKeepsEveryRunGoing.Holder.AData(data.name(), field),
-                        place, atMost, bound, at)
-                : null;
+        return new ABoundThatKeepsEveryRunGoing(holder, atMost, bound, at,
+                new ABoundThatKeepsEveryRunGoing.Held(held.get().least(), held.get().greatest()));
     }
 
     /**
